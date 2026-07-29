@@ -90,7 +90,7 @@ export class InMemoryVectorIndex {
   }
 }
 
-export class BlackBoxMemory {
+export class TideproofMemory {
   #available = true;
   #checkpoints = [];
   #clock;

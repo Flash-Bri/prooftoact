@@ -1,8 +1,8 @@
 {
-  "name": "highwater-blackbox-protocol",
+  "name": "tideproof-admissibility-memory",
   "version": "0.1.0",
   "private": true,
-  "description": "Clean-room proof of evidence-governed memory for high-stakes agents.",
+  "description": "Clean-room proof of admissibility memory for high-stakes agents.",
   "type": "module",
   "engines": {
     "node": ">=22"

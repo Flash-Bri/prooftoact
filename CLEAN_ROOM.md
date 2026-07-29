@@ -35,6 +35,12 @@ products.
 - No account was registered, repository published, cloud resource created, or
   paid service invoked by this scaffold.
 
+The initial local commit used the working names “Highwater” and “BlackBox.”
+Public prior-art research performed immediately afterward found unrelated or
+overlapping uses, so those names were retired before registration or
+publication. The synthetic exercise may still be called the “Highwater Drill,”
+but it is not the product or protocol name.
+
 Every future dependency, generated asset, model, dataset, cloud resource, and
 pre-existing component must be added to a provenance inventory before public
 submission.

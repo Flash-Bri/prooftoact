@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BlackBoxMemory,
   EvidenceStatus,
-  MemoryUnavailableError
+  MemoryUnavailableError,
+  TideproofMemory
 } from "../src/protocol.js";
 
 const NOW = "2026-08-01T12:00:00.000Z";
@@ -29,7 +29,7 @@ function record(overrides) {
 }
 
 test("filters provenance, validity, and scope before vector ranking", () => {
-  const memory = new BlackBoxMemory({ clock: () => NOW });
+  const memory = new TideproofMemory({ clock: () => NOW });
 
   memory.ingestEvidence(
     record({
@@ -78,7 +78,7 @@ test("filters provenance, validity, and scope before vector ranking", () => {
 });
 
 test("preserves conflict and denies action authorization", () => {
-  const memory = new BlackBoxMemory({ clock: () => NOW });
+  const memory = new TideproofMemory({ clock: () => NOW });
   const open = memory.ingestEvidence(
     record({
       id: "road-open",
@@ -121,7 +121,7 @@ test("preserves conflict and denies action authorization", () => {
 });
 
 test("allows exactly one local resource-race winner", async () => {
-  const memory = new BlackBoxMemory({ clock: () => NOW });
+  const memory = new TideproofMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
 
   const attempts = await Promise.all(
@@ -152,7 +152,7 @@ test("allows exactly one local resource-race winner", async () => {
 });
 
 test("successor recovers context without authority and replay is denied", () => {
-  const memory = new BlackBoxMemory({ clock: () => NOW });
+  const memory = new TideproofMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
   const original = memory.reserveResource({
     operationId: "operation-alpha",
@@ -193,7 +193,7 @@ test("successor recovers context without authority and replay is denied", () => 
 });
 
 test("fails closed when memory is unavailable", () => {
-  const memory = new BlackBoxMemory({ clock: () => NOW });
+  const memory = new TideproofMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
   memory.setAvailable(false);
 

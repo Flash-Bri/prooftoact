@@ -9,12 +9,27 @@ Bedrock calls, static assets, and short-retention CloudWatch logs.
 
 - Local scaffold and tests: **$0**
 - Low case with applicable free allowances: **$0–$3**
-- Expected build plus judge-access period through 2026-09-15: **$25–$35**
+- Expected metered spend through 2026-09-15: **$3–$12**
+- Conservative operating envelope: **$25–$35**
 - Hard monthly planning cap before separate approval: **$50**
 - High-risk ceiling for estimating exposure, not authorization: **$125**
 
-Bedrock cost depends on the final model and actual input/output token volume;
-it must be recalculated from official pricing before provisioning.
+Price inputs checked on 2026-07-29:
+
+- CockroachDB Basic includes 50 million RUs and 10 GiB storage free monthly.
+- Lambda includes 1 million requests and 400,000 GB-seconds free monthly.
+- API Gateway HTTP APIs start at $1 per million requests; its one-million-call
+  free tier is account-age dependent.
+- Amazon Nova Micro was listed at $0.035 per million input tokens and $0.14 per
+  million output tokens. Final model availability, region, and pricing must be
+  rechecked before provisioning.
+
+Sources:
+
+- https://www.cockroachlabs.com/pricing/
+- https://aws.amazon.com/lambda/pricing/
+- https://aws.amazon.com/api-gateway/pricing/
+- https://aws.amazon.com/bedrock/pricing/
 
 ## Automatic stop conditions
 

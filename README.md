@@ -1,16 +1,16 @@
-# Highwater
+# Tideproof
 
 **Working title. Private, local clean-room build. Not yet a contest submission.**
 
-Highwater is a synthetic multi-agency response exercise demonstrating a
-BlackBox Evidence Memory Protocol: shared agent memory that preserves
-attributable evidence, filters what is no longer admissible, exposes
-conflicts, gives exactly one local contender a scarce resource, lets a
+Tideproof is an admissibility-memory demonstration for high-stakes agents.
+Its “Highwater Drill” is a synthetic multi-agency response exercise: shared
+memory preserves attributable evidence, filters what is no longer admissible,
+exposes conflicts, gives exactly one local contender a scarce resource, lets a
 successor reconstruct prior state, and refuses to replay an operation.
 
 The thesis is deliberately narrower than “AI remembers better”:
 
-> Most memory systems optimize what an agent should remember. BlackBox governs
+> Most memory systems optimize what an agent should remember. Tideproof governs
 > what an agent is still allowed to believe and act upon.
 
 ## What exists now
@@ -59,11 +59,11 @@ The target implementation will use:
    early feasibility gate;
 3. AWS Lambda/API Gateway and Amazon Bedrock for a bounded agent runtime.
 
-See `docs/CONTEST_MATRIX.md`, `docs/ARCHITECTURE.md`, and
-`docs/WINNING_PLAN.md`.
+See `docs/CONTEST_MATRIX.md`, `docs/ARCHITECTURE.md`,
+`docs/PRIOR_ART.md`, and `docs/WINNING_PLAN.md`.
 
 ## Safety and provenance
 
-Highwater is a synthetic demonstration, not operational emergency software.
+Tideproof is a synthetic demonstration, not operational emergency software.
 No Conversate source, proprietary Northstar engine, private customer data, or
 OpenClaw OAuth credential may enter this project. See `CLEAN_ROOM.md`.

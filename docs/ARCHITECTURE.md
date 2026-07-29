@@ -2,8 +2,9 @@
 
 ## Product claim
 
-Highwater demonstrates that an agent can retrieve useful memory without
-treating retrieval as authority. The BlackBox protocol separates four steps:
+Tideproof demonstrates that an agent can retrieve useful memory without
+treating retrieval as authority. Its admissibility-memory protocol separates
+four steps:
 
 1. Preserve evidence and its provenance.
 2. Filter by validity, scope, and unresolved conflict.
@@ -19,7 +20,7 @@ The model may propose; deterministic policy and the database decide.
 Synthetic event stream
         |
         v
-BlackBoxMemory
+TideproofMemory
   - provenance and time gates
   - scope gate
   - conflict gate

@@ -1,6 +1,6 @@
 import {
-  BlackBoxMemory,
-  MemoryUnavailableError
+  MemoryUnavailableError,
+  TideproofMemory
 } from "./protocol.js";
 
 const INCIDENT_ID = "incident-highwater-001";
@@ -22,7 +22,7 @@ function evidence(overrides) {
 }
 
 export function runScenario() {
-  const memory = new BlackBoxMemory({ clock: () => FIXED_NOW });
+  const memory = new TideproofMemory({ clock: () => FIXED_NOW });
   const timeline = [];
 
   const admitted = memory.ingestEvidence(
@@ -208,7 +208,7 @@ export function runScenario() {
   });
 
   return {
-    title: "Highwater — BlackBox Evidence Memory Protocol",
+    title: "Tideproof — Admissibility Memory for High-Stakes Agents",
     disclosure: "Synthetic scenario; not operational emergency software.",
     fixedTime: FIXED_NOW,
     incidentId: INCIDENT_ID,

@@ -2,18 +2,18 @@
 
 ## Submission concept
 
-**Highwater — a BlackBox Evidence Memory Protocol demonstration**
+**Tideproof — Admissibility Memory for High-Stakes Agents**
 
-Highwater is a synthetic multi-agency response exercise proving that
+Tideproof uses a synthetic multi-agency “Highwater Drill” to prove that
 autonomous agents can coordinate a scarce resource without trusting shared
-memory blindly. BlackBox preserves attributable evidence, admits only what is
+memory blindly. Tideproof preserves attributable evidence, admits only what is
 current, scoped, and authorized, resolves one contested resource
 transactionally, lets a successor recover durable context, and rejects replay.
 
 ## Why this can stand out
 
 The crowded category is an assistant with embeddings, chat history, or a
-generic “memory” label. Highwater makes four less common memory failures
+generic “memory” label. Tideproof makes four less common memory failures
 visible in one short story:
 
 1. a highly similar report can still be stale or forged;

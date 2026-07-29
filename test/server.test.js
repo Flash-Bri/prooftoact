@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createHighwaterServer } from "../src/server.js";
+import { createTideproofServer } from "../src/server.js";
 
 test("serves the local health and scenario surfaces", async (context) => {
-  const server = createHighwaterServer();
+  const server = createTideproofServer();
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
