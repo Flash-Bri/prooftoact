@@ -1,0 +1,16 @@
+{
+  "name": "highwater-blackbox-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clean-room proof of evidence-governed memory for high-stakes agents.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "demo": "node src/demo.js",
+    "dev": "node src/server.js",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
