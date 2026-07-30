@@ -86,9 +86,10 @@ The implementation uses or is planned to use:
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and
-`docs/WINNING_PLAN.md`. The canonical cross-surface design, asset, rights, and
-publish gates live in `docs/VISUAL_RELEASE_SYSTEM.md`; final marketing art has
-not been produced or approved.
+`docs/WINNING_PLAN.md`. The fail-closed Devpost copy and release checklist
+live in `docs/SUBMISSION_PACKET.md`. The canonical cross-surface design,
+asset, rights, and publish gates live in `docs/VISUAL_RELEASE_SYSTEM.md`;
+final marketing art has not been produced or approved.
 
 ## Safety and provenance
 

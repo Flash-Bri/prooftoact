@@ -1,12 +1,13 @@
 # Contest conformance matrix
 
-Checked against the official competition pages on 2026-07-29:
+Checked against the official competition pages on 2026-07-30:
 
 - https://cockroachdb-ai.devpost.com/
 - https://cockroachdb-ai.devpost.com/rules
 - https://cockroachdb-ai.devpost.com/resources
 
 Deadline: 2026-08-18 at 5:00 PM ET.
+Internal submission target: 2026-08-16 at 5:00 PM ET.
 
 ## Requirements
 
@@ -19,8 +20,12 @@ Deadline: 2026-08-18 at 5:00 PM ET.
 | Functional AWS-hosted demo | Judge-accessible synthetic scenario | Not deployed |
 | Public open-source repository and license | MIT-licensed repository with reproducible setup | Public source and hosted CI verified |
 | Public video under three minutes | 175-second evidence-led demonstration | Script drafted |
+| English text description and testing instructions | Fail-closed submission packet with reviewed copy blocks | Drafted; final URLs and AWS copy blocked |
 | Free judge access through judging | Budgeted low-volume environment through 2026-09-15 | Not provisioned |
 | Pre-existing work disclosed | Clean-room statement and dependency inventory | Maintained; final audit pending |
+
+The canonical field copy and no-submit gates live in
+`docs/SUBMISSION_PACKET.md`.
 
 ## Judging alignment
 
