@@ -52,13 +52,19 @@ visible in one short story:
 - build the three-act judge interface, evidence drill-down, and safe reset;
 - run accessibility, browser, security, abuse, and concurrency checks;
 - capture real database and AWS evidence;
+- implement the canonical `VISUAL_RELEASE_SYSTEM.md` across the product,
+  README, video, icons, and submission without weakening proof readability;
 - complete a dependency/license/provenance audit.
 
 ### Gate 4 — submission
 
 - publish only after brand, legal, secret, and claim review;
 - record a human-paced video under three minutes;
+- require a complete visual-rights ledger and explicit private-review and
+  publish-readiness receipts;
 - verify unrestricted judge access in a signed-out browser;
+- add the restrained TrustAgentic.ai launch link only after Tideproof's public
+  destination and repository are exact and every release gate is green;
 - freeze the evidence matrix and submit at least 48 hours before deadline.
 
 ## Internal odds

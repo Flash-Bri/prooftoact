@@ -1,5 +1,9 @@
 # Demonstration script — target 175 seconds
 
+`VISUAL_RELEASE_SYSTEM.md` is authoritative for palette, imagery, brand
+attribution, asset rights, readability, private review, and publish readiness.
+This timed map must be locked against the exact release commit before editing.
+
 The visual language stays calm and technical. The persistent proof strip keeps
 the synthetic safety disclosure plus these exact evidence states visible:
 
