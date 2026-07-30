@@ -113,6 +113,82 @@ async function explainVectorSearch(client) {
     .join("\n");
 }
 
+async function expectVectorRejected(client, label, query, values) {
+  try {
+    await client.query(query, values);
+  } catch (error) {
+    return {
+      label,
+      applicationCode: "VECTOR_INPUT_INVALID",
+      sqlstate: error.code ?? null,
+      rejected: true
+    };
+  }
+  throw new Error(`${label} vector input was unexpectedly accepted`);
+}
+
+async function proveInvalidVectorsFailClosed(client) {
+  const before = await client.query(
+    `SELECT count(*)::INT8 AS count FROM ${TABLE_NAME}`
+  );
+  const malformed = [
+    ["zero-dimension", "[]"],
+    ["two-dimension", "[0.1,0.2]"],
+    ["four-dimension", "[0.1,0.2,0.3,0.4]"],
+    ["not-a-number", "[NaN,0.2,0.3]"],
+    ["positive-infinity", "[Infinity,0.2,0.3]"],
+    ["malformed", "definitely-not-a-vector"]
+  ];
+  const ingest = [];
+  const query = [];
+
+  for (let index = 0; index < malformed.length; index += 1) {
+    const [label, value] = malformed[index];
+    ingest.push(
+      await expectVectorRejected(
+        client,
+        `ingest-${label}`,
+        `
+          INSERT INTO ${TABLE_NAME}
+            (tenant_id, incident_id, ordinal, admitted, embedding)
+          VALUES ($1::UUID, $2::UUID, $3::INT8, true, $4::VECTOR(3))
+        `,
+        [TENANT_ID, INCIDENT_ID, -(index + 1), value]
+      )
+    );
+    query.push(
+      await expectVectorRejected(
+        client,
+        `query-${label}`,
+        `
+          SELECT evidence_id
+          FROM ${TABLE_NAME}
+          WHERE tenant_id = $1::UUID
+            AND incident_id = $2::UUID
+            AND admitted = true
+          ORDER BY embedding <=> $3::VECTOR(3)
+          LIMIT 5
+        `,
+        [TENANT_ID, INCIDENT_ID, value]
+      )
+    );
+  }
+
+  const after = await client.query(
+    `SELECT count(*)::INT8 AS count FROM ${TABLE_NAME}`
+  );
+  if (before.rows[0].count !== after.rows[0].count) {
+    throw new Error("invalid vector ingest left a partial evidence row");
+  }
+  return {
+    ingest,
+    query,
+    rowCountBefore: before.rows[0].count,
+    rowCountAfter: after.rows[0].count,
+    fallbackRankingOccurred: false
+  };
+}
+
 async function run() {
   const baseUrl = requiredDatabaseUrl();
   await ensureDatabase(baseUrl);
@@ -130,6 +206,7 @@ async function run() {
     const indexes = await client.query(
       `SHOW INDEXES FROM ${TABLE_NAME}`
     );
+    const invalidVectors = await proveInvalidVectorsFailClosed(client);
     const plan = await explainVectorSearch(client);
 
     const vectorIndexPresent = indexes.rows.some(
@@ -147,6 +224,7 @@ async function run() {
       indexName: INDEX_NAME,
       vectorIndexPresent,
       vectorSearchUsed,
+      invalidVectors,
       plan
     };
 

@@ -1,0 +1,545 @@
+import { createHash, randomUUID } from "node:crypto";
+import { Client } from "pg";
+import {
+  recoveryQueryTemplateDigest,
+  renderRecoveryQuery,
+  validateRecoveryRow
+} from "./recovery-store.js";
+
+const FIXED_DATABASE = "tideproof_recovery";
+const FIXED_TOOL = "select_query";
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function requireText(value, name) {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new TypeError(`${name} must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function requireUuid(value, name) {
+  const text = requireText(value, name).toLowerCase();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      text
+    )
+  ) {
+    throw new TypeError(`${name} must be a UUID`);
+  }
+  return text;
+}
+
+function requireSha256(value, name) {
+  const text = requireText(value, name).toLowerCase();
+  if (!/^[a-f0-9]{64}$/u.test(text)) {
+    throw new TypeError(`${name} must be a SHA-256 digest`);
+  }
+  return text;
+}
+
+function errorCodeFor(error) {
+  const value =
+    typeof error?.code === "string"
+      ? error.code
+      : typeof error?.message === "string"
+        ? error.message
+        : "RECOVERY_UNKNOWN_ERROR";
+  return value
+    .replace(/[^A-Z0-9_]/giu, "_")
+    .toUpperCase()
+    .slice(0, 128);
+}
+
+function rowsFromMcpResult(result) {
+  if (result && Array.isArray(result.rows)) {
+    return result.rows;
+  }
+  const content = result?.content;
+  if (!Array.isArray(content) || content.length !== 1) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+  }
+  const text = content[0]?.text;
+  if (typeof text !== "string") {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("RECOVERY_MCP_RESPONSE_JSON_INVALID");
+  }
+  if (!Array.isArray(parsed?.rows)) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+  }
+  return parsed.rows;
+}
+
+export function principalBindingHash(authenticatedPrincipal) {
+  return sha256(
+    `tideproof-recovery-principal-v1\n${requireText(
+      authenticatedPrincipal,
+      "authenticatedPrincipal"
+    )}`
+  );
+}
+
+export function assertSeparatedDatabaseEndpoints({
+  primaryConnectionString,
+  recoveryConnectionString,
+  expectedPrimaryHostname,
+  expectedRecoveryHostname,
+  primaryClusterId,
+  recoveryClusterId
+}) {
+  const primary = new URL(primaryConnectionString);
+  const recovery = new URL(recoveryConnectionString);
+  const expectedPrimary = requireText(
+    expectedPrimaryHostname,
+    "expectedPrimaryHostname"
+  ).toLowerCase();
+  const expectedRecovery = requireText(
+    expectedRecoveryHostname,
+    "expectedRecoveryHostname"
+  ).toLowerCase();
+  const boundPrimaryClusterId = requireUuid(
+    primaryClusterId,
+    "primaryClusterId"
+  );
+  const boundRecoveryClusterId = requireUuid(
+    recoveryClusterId,
+    "recoveryClusterId"
+  );
+  if (
+    primary.hostname.toLowerCase() !== expectedPrimary ||
+    recovery.hostname.toLowerCase() !== expectedRecovery
+  ) {
+    throw new Error("RECOVERY_DATABASE_HOST_MISMATCH");
+  }
+  if (
+    primary.hostname.toLowerCase() === recovery.hostname.toLowerCase() ||
+    boundPrimaryClusterId === boundRecoveryClusterId
+  ) {
+    throw new Error("RECOVERY_CLUSTER_SEPARATION_REQUIRED");
+  }
+  return {
+    primaryHostname: primary.hostname.toLowerCase(),
+    recoveryHostname: recovery.hostname.toLowerCase(),
+    primaryClusterId: boundPrimaryClusterId,
+    recoveryClusterId: boundRecoveryClusterId
+  };
+}
+
+export function recoveryBrokerConfigDigest({
+  recoveryClusterId,
+  expectedSourceClusterId,
+  buildIdentity,
+  trustedPublisherKeys
+}) {
+  return sha256(
+    canonicalJson({
+      auditSchema: "g1_recovery_audit_events_v3",
+      buildIdentity: requireText(buildIdentity, "buildIdentity"),
+      client: "tideproof-managed-mcp-client-v1",
+      database: FIXED_DATABASE,
+      expectedSourceClusterId: requireUuid(
+        expectedSourceClusterId,
+        "expectedSourceClusterId"
+      ),
+      mcpProtocolVersion: "2025-03-26",
+      queryTemplateDigest: recoveryQueryTemplateDigest(),
+      recoveryClusterId: requireUuid(recoveryClusterId, "recoveryClusterId"),
+      tool: FIXED_TOOL,
+      trustedPublisherKeysDigest:
+        trustedPublisherKeysDigest(trustedPublisherKeys),
+      validator: "tideproof-recovery-row-v2-p256",
+      version: "tideproof-deterministic-recovery-broker-v2"
+    })
+  );
+}
+
+export function trustedPublisherKeysDigest(trustedPublisherKeys) {
+  if (
+    !trustedPublisherKeys ||
+    typeof trustedPublisherKeys !== "object" ||
+    Array.isArray(trustedPublisherKeys)
+  ) {
+    throw new TypeError("trustedPublisherKeys must be an object");
+  }
+  const normalized = Object.entries(trustedPublisherKeys)
+    .map(([keyId, publicKeySpkiBase64]) => {
+      const encoded = requireText(
+        publicKeySpkiBase64,
+        `trustedPublisherKeys.${keyId}`
+      );
+      const bytes = Buffer.from(encoded, "base64");
+      if (
+        bytes.length === 0 ||
+        bytes.toString("base64").replace(/=+$/u, "") !==
+          encoded.replace(/=+$/u, "")
+      ) {
+        throw new TypeError(
+          `trustedPublisherKeys.${keyId} must be canonical base64`
+        );
+      }
+      return {
+        keyId: requireText(keyId, "trustedPublisherKeys keyId"),
+        publicKeyDigest: sha256(bytes)
+      };
+    })
+    .sort(({ keyId: left }, { keyId: right }) => left.localeCompare(right));
+  if (normalized.length === 0) {
+    throw new TypeError("trustedPublisherKeys must not be empty");
+  }
+  return sha256(canonicalJson(normalized));
+}
+
+export function recoveryAuditEventDigest(event) {
+  return sha256(
+    canonicalJson({
+      eventId: requireUuid(event.eventId, "event.eventId"),
+      interactionId: requireUuid(event.interactionId, "event.interactionId"),
+      tenantId: requireUuid(event.tenantId, "event.tenantId"),
+      recoverySessionId: requireUuid(
+        event.recoverySessionId,
+        "event.recoverySessionId"
+      ),
+      callerSubjectHash: requireSha256(
+        event.callerSubjectHash,
+        "event.callerSubjectHash"
+      ),
+      phase: requireText(event.phase, "event.phase"),
+      toolName: FIXED_TOOL,
+      recoveryClusterId: requireUuid(
+        event.recoveryClusterId,
+        "event.recoveryClusterId"
+      ),
+      brokerConfigDigest: requireSha256(
+        event.brokerConfigDigest,
+        "event.brokerConfigDigest"
+      ),
+      queryTemplateDigest: requireSha256(
+        event.queryTemplateDigest,
+        "event.queryTemplateDigest"
+      ),
+      boundInputDigest: requireSha256(
+        event.boundInputDigest,
+        "event.boundInputDigest"
+      ),
+      resultDigest:
+        event.resultDigest === null
+          ? null
+          : requireSha256(event.resultDigest, "event.resultDigest"),
+      sourceWatermark:
+        event.sourceWatermark === null
+          ? null
+          : new Date(event.sourceWatermark).toISOString(),
+      outcome: requireText(event.outcome, "event.outcome"),
+      errorCode:
+        event.errorCode === null
+          ? null
+          : requireText(event.errorCode, "event.errorCode"),
+      startedAt: new Date(event.startedAt).toISOString(),
+      completedAt: new Date(event.completedAt).toISOString()
+    })
+  );
+}
+
+export class RecoveryAuditSink {
+  #connectionString;
+
+  constructor({ connectionString } = {}) {
+    if (!connectionString) {
+      throw new Error("connectionString is required");
+    }
+    this.#connectionString = connectionString;
+  }
+
+  async append(event) {
+    const eventDigest = recoveryAuditEventDigest(event);
+    const client = new Client({ connectionString: this.#connectionString });
+    try {
+      await client.connect();
+      const result = await client.query(
+        `
+          SELECT tp_api.g1_append_recovery_audit_event_v3(
+            $1::UUID, $2::UUID, $3::UUID, $4::UUID, $5, $6, $7, $8::UUID,
+            $9, $10, $11, $12, $13::TIMESTAMPTZ, $14, $15, $16,
+            $17::TIMESTAMPTZ, $18::TIMESTAMPTZ
+          ) AS event_id
+        `,
+        [
+          event.eventId,
+          event.tenantId,
+          event.interactionId,
+          event.recoverySessionId,
+          event.callerSubjectHash,
+          event.phase,
+          FIXED_TOOL,
+          event.recoveryClusterId,
+          event.brokerConfigDigest,
+          event.queryTemplateDigest,
+          event.boundInputDigest,
+          event.resultDigest,
+          event.sourceWatermark,
+          event.outcome,
+          event.errorCode,
+          eventDigest,
+          event.startedAt,
+          event.completedAt
+        ]
+      );
+      if (
+        result.rowCount !== 1 ||
+        result.rows[0].event_id !== event.eventId
+      ) {
+        throw new Error("RECOVERY_AUDIT_RECEIPT_MISMATCH");
+      }
+      return { eventId: event.eventId, eventDigest };
+    } finally {
+      await client.end().catch(() => {});
+    }
+  }
+}
+
+export class DeterministicRecoveryBroker {
+  #auditSink;
+  #buildIdentity;
+  #expectedSourceClusterId;
+  #mcpClient;
+  #recoveryClusterId;
+  #sessionResolver;
+  #trustedPublisherKeys;
+
+  constructor({
+    mcpClient,
+    sessionResolver,
+    auditSink,
+    buildIdentity,
+    recoveryClusterId,
+    expectedSourceClusterId,
+    trustedPublisherKeys
+  } = {}) {
+    if (typeof mcpClient?.selectQuery !== "function") {
+      throw new TypeError("mcpClient.selectQuery is required");
+    }
+    if (typeof sessionResolver?.resolve !== "function") {
+      throw new TypeError("sessionResolver.resolve is required");
+    }
+    if (typeof auditSink?.append !== "function") {
+      throw new TypeError("auditSink.append is required");
+    }
+    this.#mcpClient = mcpClient;
+    this.#sessionResolver = sessionResolver;
+    this.#auditSink = auditSink;
+    this.#buildIdentity = requireText(buildIdentity, "buildIdentity");
+    this.#recoveryClusterId = requireUuid(
+      recoveryClusterId,
+      "recoveryClusterId"
+    );
+    this.#expectedSourceClusterId = requireUuid(
+      expectedSourceClusterId,
+      "expectedSourceClusterId"
+    );
+    this.#trustedPublisherKeys = trustedPublisherKeys;
+  }
+
+  async recover(input = {}) {
+    const { authenticatedPrincipal } = input ?? {};
+    const startedAt = new Date();
+    let callerSubjectHash;
+    try {
+      callerSubjectHash = principalBindingHash(authenticatedPrincipal);
+    } catch (error) {
+      return {
+        status: "UNKNOWN_DO_NOT_ACT",
+        reason: errorCodeFor(error),
+        authorityTransferred: false,
+        requiresFreshAuthorization: true
+      };
+    }
+    let auditContext = null;
+    let observedResultDigest = null;
+    let observedSourceWatermark = null;
+    let preReadCommitted = false;
+    try {
+      const binding = await this.#sessionResolver.resolve({
+        authenticatedPrincipal
+      });
+      const tenantId = requireUuid(binding.tenantId, "binding.tenantId");
+      const recoverySessionId = requireUuid(
+        binding.recoverySessionId,
+        "binding.recoverySessionId"
+      );
+      if (
+        requireSha256(
+          binding.subjectBindingHash,
+          "binding.subjectBindingHash"
+        ) !== callerSubjectHash
+      ) {
+        throw new Error("RECOVERY_PRINCIPAL_BINDING_MISMATCH");
+      }
+      const boundInputDigest = sha256(
+        canonicalJson({
+          tenantId,
+          recoverySessionId,
+          subjectBindingHash: callerSubjectHash
+        })
+      );
+      const brokerConfigDigest = recoveryBrokerConfigDigest({
+        recoveryClusterId: this.#recoveryClusterId,
+        expectedSourceClusterId: this.#expectedSourceClusterId,
+        buildIdentity: this.#buildIdentity,
+        trustedPublisherKeys: this.#trustedPublisherKeys
+      });
+      const query = renderRecoveryQuery({
+        tenantId,
+        recoverySessionId,
+        subjectBindingHash: callerSubjectHash
+      });
+      const interactionId = randomUUID();
+      const preReadEventId = randomUUID();
+      auditContext = {
+        tenantId,
+        recoverySessionId,
+        callerSubjectHash,
+        recoveryClusterId: this.#recoveryClusterId,
+        brokerConfigDigest,
+        queryTemplateDigest: recoveryQueryTemplateDigest(),
+        boundInputDigest,
+        interactionId,
+        preReadEventId
+      };
+      try {
+        await this.#auditSink.append({
+          ...auditContext,
+          eventId: preReadEventId,
+          phase: "pre_read",
+          resultDigest: null,
+          sourceWatermark: null,
+          startedAt,
+          completedAt: new Date(),
+          outcome: "read_authorized",
+          errorCode: null
+        });
+      } catch {
+        return {
+          status: "UNKNOWN_DO_NOT_ACT",
+          reason: "recovery_audit_unavailable",
+          authorityTransferred: false,
+          requiresFreshAuthorization: true
+        };
+      }
+      preReadCommitted = true;
+      const rawResult = await this.#mcpClient.selectQuery({
+        clusterId: this.#recoveryClusterId,
+        database: FIXED_DATABASE,
+        query
+      });
+      observedResultDigest = sha256(canonicalJson(rawResult));
+      const rows = rowsFromMcpResult(rawResult);
+      if (rows.length === 1) {
+        observedResultDigest = sha256(canonicalJson(rows[0]));
+        const sourceCommitMs = new Date(
+          rows[0]?.source_commit_ts
+        ).getTime();
+        if (Number.isFinite(sourceCommitMs)) {
+          observedSourceWatermark = new Date(sourceCommitMs).toISOString();
+        }
+      }
+      if (rows.length !== 1) {
+        throw new Error("RECOVERY_MCP_RESULT_CARDINALITY_INVALID");
+      }
+      const validated = validateRecoveryRow(
+        rows[0],
+        {
+          tenantId,
+          recoverySessionId,
+          subjectBindingHash: callerSubjectHash,
+          expectedSourceClusterId: this.#expectedSourceClusterId,
+          trustedPublisherKeys: this.#trustedPublisherKeys
+        },
+        new Date()
+      );
+      const resultDigest = observedResultDigest;
+      const completedAt = new Date();
+      const terminalEventId = randomUUID();
+      await this.#auditSink.append({
+        ...auditContext,
+        eventId: terminalEventId,
+        phase: "terminal",
+        resultDigest,
+        sourceWatermark: validated.row.source_commit_ts,
+        startedAt,
+        completedAt,
+        outcome: "recovered_context_only",
+        errorCode: null
+      });
+      return {
+        status: "RECOVERED_CONTEXT_ONLY",
+        auditId: terminalEventId,
+        auditInteractionId: interactionId,
+        preReadAuditId: preReadEventId,
+        recoverySessionId,
+        tenantId,
+        sourceDigest: validated.sourceDigest,
+        bundleDigest: validated.bundleDigest,
+        context: {
+          checkpoint: validated.row.checkpoint_summary,
+          evidence: validated.row.evidence_summary,
+          conflicts: validated.row.conflict_summary,
+          receipt: validated.row.receipt_summary
+        },
+        authorityTransferred: false,
+        requiresFreshAuthorization: true
+      };
+    } catch (error) {
+      const completedAt = new Date();
+      const errorCode = errorCodeFor(error);
+      if (preReadCommitted && auditContext) {
+        try {
+          await this.#auditSink.append({
+            ...auditContext,
+            eventId: randomUUID(),
+            phase: "terminal",
+            resultDigest:
+              observedResultDigest ?? sha256(canonicalJson({ errorCode })),
+            sourceWatermark: observedSourceWatermark ?? completedAt,
+            startedAt,
+            completedAt,
+            outcome: "unknown_do_not_act",
+            errorCode
+          });
+        } catch {
+          return {
+            status: "UNKNOWN_DO_NOT_ACT",
+            reason: "recovery_audit_unavailable",
+            authorityTransferred: false,
+            requiresFreshAuthorization: true
+          };
+        }
+      }
+      return {
+        status: "UNKNOWN_DO_NOT_ACT",
+        reason: errorCode,
+        authorityTransferred: false,
+        requiresFreshAuthorization: true
+      };
+    }
+  }
+}

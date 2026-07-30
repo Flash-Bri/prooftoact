@@ -10,6 +10,17 @@
   "scripts": {
     "demo": "node src/demo.js",
     "dev": "node src/server.js",
+    "gate1:ambiguity": "node scripts/gate1-ambiguity.js",
+    "gate1:ambiguity:full": "AMBIGUITY_RUNS=100 node scripts/gate1-ambiguity.js",
+    "gate1:authority": "node scripts/gate1-authority.js",
+    "gate1:authority:full": "RACE_RUNS=100 CONTENDERS=50 node scripts/gate1-authority.js",
+    "gate1:capability-race": "node scripts/gate1-capability-race.js",
+    "gate1:lease": "node scripts/gate1-lease.js",
+    "gate1:provenance": "node scripts/gate1-provenance.js",
+    "gate1:recovery": "node scripts/gate1-recovery.js",
+    "gate1:recovery-broker": "node scripts/gate1-recovery-broker.js",
+    "gate1:security": "node scripts/gate1-security.js",
+    "gate1:temporal": "node scripts/gate1-temporal.js",
     "gate1:vector": "node scripts/gate1-vector.js",
     "test": "node --test"
   },
