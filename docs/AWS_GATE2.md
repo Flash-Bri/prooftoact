@@ -101,6 +101,36 @@ private, versioned S3 `TemplateURL` and preserve that object version and
 digest. Compact JSON currently fits inline, but ad hoc minification is not the
 accepted evidence path.
 
+## Read-only live preflight
+
+Run the account-safety preflight from a clean checkout in an authenticated
+AWS CloudShell before any repaired-candidate upload or main-stack mutation:
+
+```sh
+npm run gate2:aws-preflight
+```
+
+The command is read-only and fail closed. It binds the observation to the
+clean Git commit and tree, omits the AWS account, caller ARN, private bucket
+name, and alert addresses from its output, and accepts only:
+
+- `us-east-1` and active on-demand catalog metadata for
+  `amazon.nova-micro-v1:0`;
+- the stable `tideproof-gate2-artifacts` bootstrap stack;
+- its exact account-wide monthly `$15` budget, `$1`/`$5`/`$10` actual alerts,
+  `$15` forecast alert, and at least one email subscriber per alert;
+- both the budget-reported actual spend and Cost Explorer's month-to-date
+  unblended cost below `$15`;
+- an encrypted, versioned, bucket-owner-enforced private artifact bucket with
+  all public-access blocks and the TLS-only deny policy intact; and
+- no active `tideproof-gate2` main stack.
+
+A `PASS` receipt is necessary but deliberately insufficient. The catalog call
+does not prove model invocation access or current Nova pricing, Cost Explorer
+data may be estimated and delayed, and the command does not upload, deploy,
+invoke, sign, or prove IAM denial. Recheck official Nova pricing separately
+and keep the receipt private until its release redaction is reviewed.
+
 ## Live acceptance sequence
 
 1. Re-run all local tests, syntax checks, dependency audit, secret scan,
@@ -110,36 +140,39 @@ accepted evidence path.
 4. Create or update the prerequisite bootstrap stack. Verify its account-wide
    $15 budget and $1/$5/$10 actual plus $15 forecast notifications are present
    before its private, encrypted, versioned artifact bucket is accepted.
-5. Upload each artifact once and record its exact S3 version ID and both
+5. Run `npm run gate2:aws-preflight` and require `PASS`; independently
+   revalidate current Nova Micro pricing. If CloudShell, billing data, or any
+   required read is unavailable, stop without uploading.
+6. Upload each artifact once and record its exact S3 version ID and both
    digests.
-6. Hash the full effective nonsecret deployment configuration.
+7. Hash the full effective nonsecret deployment configuration.
 
 The sanitized historical receipt in
 `evidence/gate2-historical-upload-receipt-0ef4dba-2026-07-30.json` anchors the
 private receipt for the superseded `0ef4dba` upload without publishing AWS
 account, bucket, notification, or object-version identifiers. It is historical
 evidence only and must not be used to deploy the repaired candidate.
-7. Upload the reviewed template to the private versioned bucket and deploy the
+8. Upload the reviewed template to the private versioned bucket and deploy the
    main stack from its exact `TemplateURL` with probes left at their default
    `false`.
-8. Verify every Lambda version's reported `CodeSha256`, alias target, role,
+9. Verify every Lambda version's reported `CodeSha256`, alias target, role,
    reserved concurrency, and access-log destination.
-9. Temporarily update `EnableProbeFunctions` to `true`. Prove the exact allowed
+10. Temporarily update `EnableProbeFunctions` to `true`. Prove the exact allowed
    capability and required denials for every role. Probe concurrency is one;
    the probe canary and functions exist only during this phase. Label all
    probe-phase receipts non-final because the signer-role probe uses the
    evidence key outside the receipt schema.
-10. Update probes back to `false`; verify all probe functions, probe log
+11. Update probes back to `false`; verify all probe functions, probe log
     groups, and the canary secret are removed. Recompute the final
     configuration digest and reverify aliases and roles.
-11. Assume only the dedicated advisory caller role. Record a denied direct
+12. Assume only the dedicated advisory caller role. Record a denied direct
     invocation attempt for every Lambda, then invoke the exact IAM-signed API
     route.
-12. Preserve and reconcile the signed receipt with the asynchronous API access
+13. Preserve and reconcile the signed receipt with the asynchronous API access
     log by request ID, request time, route, status, and caller. Preserve the
     model, KMS key ARN/public-key fingerprint, signature, source, artifact,
     configuration, token, and latency bindings.
-13. Re-run Gate One state hashes to prove Bedrock changed no authority,
+14. Re-run Gate One state hashes to prove Bedrock changed no authority,
     outbox, fence, or protected synthetic-effect state.
 
 Ambiguous, malformed, unsigned, or unavailable application state returns

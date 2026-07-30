@@ -10,6 +10,7 @@
   "scripts": {
     "build:gate2": "node scripts/build-gate2-template.js",
     "generate:gate2": "node scripts/build-gate2-template.js --templates-only",
+    "gate2:aws-preflight": "node scripts/gate2-aws-preflight.js",
     "gate2:config-digest": "node scripts/gate2-config-digest.js",
     "demo": "node src/demo.js",
     "dev": "node src/server.js",
