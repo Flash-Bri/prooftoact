@@ -36,12 +36,12 @@
     },
     "EnableProbeFunctions": {
       "Type": "String",
-      "Default": "true",
+      "Default": "false",
       "AllowedValues": [
         "true",
         "false"
       ],
-      "Description": "Deploy same-role evidence probes temporarily; update to false after receipts are captured."
+      "Description": "Opt in to same-role evidence probes temporarily; update to false after non-final probe receipts are captured."
     },
     "AgentArtifactKey": {
       "Type": "String",
@@ -250,6 +250,7 @@
     },
     "CapabilityCanarySecret": {
       "Type": "AWS::SecretsManager::Secret",
+      "Condition": "ShouldDeployProbes",
       "DeletionPolicy": "Delete",
       "UpdateReplacePolicy": "Delete",
       "Properties": {
@@ -289,6 +290,24 @@
       }
     },
     "BoundaryLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "ApiAccessLogGroup": {
       "Type": "AWS::Logs::LogGroup",
       "DeletionPolicy": "Delete",
       "UpdateReplacePolicy": "Delete",
@@ -1282,6 +1301,19 @@
                   ]
                 },
                 {
+                  "Sid": "ReadReceiptSigningPublicKey",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:GetPublicKey"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReceiptSigningKey",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
@@ -1355,27 +1387,118 @@
         "Description": "IAM-authenticated synthetic Tideproof advisory endpoint.",
         "ProtocolType": "HTTP",
         "DisableExecuteApiEndpoint": false,
-        "CorsConfiguration": {
-          "AllowHeaders": [
-            "content-type",
-            "x-amz-content-sha256",
-            "x-amz-date",
-            "authorization",
-            "x-amz-security-token"
-          ],
-          "AllowMethods": [
-            "POST"
-          ],
-          "AllowOrigins": [
-            "https://tideproof.net",
-            "https://www.tideproof.net"
-          ],
-          "MaxAge": 300
-        },
         "Tags": {
           "Project": "Tideproof",
           "Gate": "Two"
         }
+      }
+    },
+    "AdvisoryCallerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Short-lived human-assumed caller for one exact IAM-authenticated advisory route; direct Lambda invocation is denied.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "InvokeOneAdvisoryRoute",
+                  "Effect": "Allow",
+                  "Action": [
+                    "execute-api:Invoke"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/POST/advisory"
+                  }
+                },
+                {
+                  "Sid": "DenyLambdaInvoke",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyBedrock",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretAccess",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:PutResourcePolicy",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyKmsSigning",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:Sign"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPrivilegeEscalation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
       }
     },
     "BoundaryFunction": {
@@ -1633,7 +1756,8 @@
             "Key": "Gate",
             "Value": "Two"
           }
-        ]
+        ],
+        "ReservedConcurrentExecutions": 1
       },
       "Condition": "ShouldDeployProbes"
     },
@@ -1755,7 +1879,8 @@
             "Key": "Gate",
             "Value": "Two"
           }
-        ]
+        ],
+        "ReservedConcurrentExecutions": 1
       },
       "Condition": "ShouldDeployProbes"
     },
@@ -1877,7 +2002,8 @@
             "Key": "Gate",
             "Value": "Two"
           }
-        ]
+        ],
+        "ReservedConcurrentExecutions": 1
       },
       "Condition": "ShouldDeployProbes"
     },
@@ -1999,7 +2125,8 @@
             "Key": "Gate",
             "Value": "Two"
           }
-        ]
+        ],
+        "ReservedConcurrentExecutions": 1
       },
       "Condition": "ShouldDeployProbes"
     },
@@ -2064,6 +2191,15 @@
         },
         "StageName": "$default",
         "AutoDeploy": true,
+        "AccessLogSettings": {
+          "DestinationArn": {
+            "Fn::GetAtt": [
+              "ApiAccessLogGroup",
+              "Arn"
+            ]
+          },
+          "Format": "{\"apiId\":\"$context.apiId\",\"backendStatus\":\"$context.integration.status\",\"callerArn\":\"$context.identity.userArn\",\"lambdaServiceStatus\":\"$context.integration.integrationStatus\",\"requestId\":\"$context.requestId\",\"requestTimeEpoch\":\"$context.requestTimeEpoch\",\"routeKey\":\"$context.routeKey\",\"status\":\"$context.status\"}"
+        },
         "DefaultRouteSettings": {
           "ThrottlingBurstLimit": 1,
           "ThrottlingRateLimit": 0.1
@@ -2205,6 +2341,19 @@
         "Fn::Sub": "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
       }
     },
+    "AdvisoryCallerRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "AdvisoryCallerRole",
+          "Arn"
+        ]
+      }
+    },
+    "ApiAccessLogGroupName": {
+      "Value": {
+        "Ref": "ApiAccessLogGroup"
+      }
+    },
     "AgentAliasArn": {
       "Value": {
         "Fn::GetAtt": [
@@ -2290,6 +2439,7 @@
       }
     },
     "CapabilityCanarySecretArn": {
+      "Condition": "ShouldDeployProbes",
       "Value": {
         "Ref": "CapabilityCanarySecret"
       }

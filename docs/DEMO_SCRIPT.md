@@ -18,8 +18,9 @@ The visual language stays calm and technical. A persistent label reads:
 - **116–134:** Terminate the winning agent after its checkpoint.
 - **134–155:** A successor reconstructs evidence, receipt, and lease state
   through the bounded recovery path, but receives no inherited authority.
-- **155–166:** Replay the original operation ID. The external action is not
-  repeated; the original receipt is returned as the reason.
+- **155–166:** Replay the original operation ID. CockroachDB returns the
+  original durable receipt and creates no second authority or outbox intent.
+  State plainly that the protected effect is a synthetic database sink.
 - **166–175:** Show named CockroachDB/AWS integrations, public repository,
   tests, cost controls, synthetic-data disclosure, and live link.
 

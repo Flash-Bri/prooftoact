@@ -38,9 +38,12 @@ products.
   identity were created under trial credits with finite monthly caps.
 - Project secrets remain in the macOS Keychain and are excluded from source,
   fixtures, evidence, and generated bundles.
-- No AWS resource has been created by Gate Two yet. The AWS candidate remains
-  local until its clean commit, immutable artifact versions, and live
-  capability evidence pass review.
+- The prerequisite AWS bootstrap stack now exists with an account-wide
+  monthly budget and a private, encrypted, versioned artifact bucket. It
+  contains historical superseded artifact versions only. The main Gate Two
+  stack has not been deployed; the repaired candidate remains local until its
+  clean commit, immutable artifact versions, and live capability evidence pass
+  review.
 - The repository remains private and no contest submission has been
   published.
 

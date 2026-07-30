@@ -9,24 +9,55 @@ The candidate deliberately keeps Amazon Bedrock outside the authority
 boundary:
 
 - API Gateway accepts only an AWS IAM-signed `POST /advisory` request.
-- Boundary Lambda binds the API request ID and a hash of the authenticated
-  principal to the receipt.
+- A dedicated short-lived caller role can invoke only that exact route and is
+  explicitly denied direct Lambda invocation.
+- Boundary Lambda binds the API request ID, API request time, and a hash of
+  the authenticated principal to the receipt.
+- Private, seven-day API access logs record the corresponding request ID,
+  request time, route, status, and caller ARN. A receipt is accepted as
+  API-path evidence only after reconciliation with that independent log.
 - Agent Lambda invokes only `amazon.nova-micro-v1:0` over one exact,
   Gate-One-digest-bound synthetic fixture.
 - The model may return only a proposal requesting fresh authorization.
 - Boundary Lambda independently validates the proposal and recomputes its
   digest.
 - Signer Lambda signs one exact advisory-receipt schema with one KMS P-256 key.
-- Boundary Lambda checks the exact receipt echo, recomputes its digest,
-  validates the signing-key ARN and envelope, and locally verifies the P-256
-  signature before returning success.
+- Boundary Lambda independently calls `kms:GetPublicKey` on the exact receipt
+  key, compares that DER key with the signer envelope, and verifies the P-256
+  signature. The key ARN and DER-key SHA-256 are inside the signed receipt.
 - Authority Lambda is an isolated fail-closed placeholder with no model,
-  database, MCP, secret, signing, or external-effect capability.
+  database, MCP, secret, signing, or IAM-granted operational capability.
 
 The strongest current claim is that this software and generated
 CloudFormation passed local review. Do not claim live Bedrock inference,
 KMS-backed evidence, IAM denial, API authentication, or CockroachDB-to-AWS
 handoff until their cloud receipts exist.
+
+The Lambda event alone cannot prove that API Gateway created it: a separate
+same-account principal with direct `lambda:InvokeFunction` permission could
+fabricate API-shaped fields. The intended caller role is explicitly denied
+that permission, and final evidence must pair the receipt with the API access
+log. A missing or mismatched log means `UNVERIFIED`, not proof of the API
+path.
+
+## Proof limits
+
+- None of the Lambda functions has a VPC or egress restriction. The claim is
+  limited to the reviewed immutable code and IAM policy; it is not a claim
+  that arbitrarily altered or compromised code could cause no network effect.
+- Execution roles have no permissions boundary. Final evidence must include
+  live policy capture and drift inspection; a later administrator can change
+  account policy outside this template.
+- A KMS signature proves use of the evidence key, not exclusive execution of
+  the receipt validator. Probe-phase signatures are non-final because the
+  signer-role probe can sign a fixed test digest.
+- CloudFormation enforces each Lambda Version's ZIP through `CodeSha256`, but
+  source hashes, commit/tree IDs, artifact hex hashes, and configuration
+  digests are deployment parameters. Acceptance therefore requires the
+  independent clean-build and versioned-upload receipts.
+- The caller-principal SHA-256 is pseudonymous, not anonymous. Keep the raw
+  access log and full signed receipt private; publish a redacted evidence
+  anchor rather than a dictionary-testable identity binding.
 
 ## Build boundary
 
@@ -34,8 +65,11 @@ handoff until their cloud receipts exist.
 tree is under development. It emits no Lambda artifact and labels its receipt
 unbound.
 
-`npm run build:gate2` refuses to create artifacts unless Git is clean. On a
-clean commit it bundles each runtime role separately and records:
+`npm run build:gate2` refuses to create artifacts unless Git is clean and
+rechecks cleanliness after regenerating the tracked templates. On a clean
+commit it bundles each runtime role separately into a single-file, stored ZIP
+with fixed metadata, so artifact bytes are independent of host timezone. It
+records:
 
 - Git commit and tree;
 - package-lock digest;
@@ -46,6 +80,12 @@ clean commit it bundles each runtime role separately and records:
 
 Each Lambda Version uses CloudFormation `CodeSha256`, so a version cannot be
 published when the deployed code hash differs from the reviewed artifact.
+
+The reviewed JSON is pretty printed for auditability and is larger than
+CloudFormation's 51,200-byte inline `TemplateBody` limit. Deploy it through a
+private, versioned S3 `TemplateURL` and preserve that object version and
+digest. Compact JSON currently fits inline, but ad hoc minification is not the
+accepted evidence path.
 
 ## Live acceptance sequence
 
@@ -65,18 +105,32 @@ The sanitized historical receipt in
 private receipt for the superseded `0ef4dba` upload without publishing AWS
 account, bucket, notification, or object-version identifiers. It is historical
 evidence only and must not be used to deploy the repaired candidate.
-7. Deploy the main stack with temporary same-role capability probes enabled.
-8. Verify every Lambda version's reported `CodeSha256` and alias target.
-9. Prove the exact allowed capability and all required denials for every role.
-10. Invoke the IAM-signed boundary and preserve the model, KMS, request,
-    signature, source, artifact, configuration, token, and latency bindings.
-11. Re-run Gate One state hashes to prove Bedrock changed no authority,
-    outbox, fence, or protected-effect state.
-12. Update the stack with probes disabled, recompute the configuration digest,
-    and reverify final aliases and roles.
+7. Upload the reviewed template to the private versioned bucket and deploy the
+   main stack from its exact `TemplateURL` with probes left at their default
+   `false`.
+8. Verify every Lambda version's reported `CodeSha256`, alias target, role,
+   reserved concurrency, and access-log destination.
+9. Temporarily update `EnableProbeFunctions` to `true`. Prove the exact allowed
+   capability and required denials for every role. Probe concurrency is one;
+   the probe canary and functions exist only during this phase. Label all
+   probe-phase receipts non-final because the signer-role probe uses the
+   evidence key outside the receipt schema.
+10. Update probes back to `false`; verify all probe functions, probe log
+    groups, and the canary secret are removed. Recompute the final
+    configuration digest and reverify aliases and roles.
+11. Assume only the dedicated advisory caller role. Record a denied direct
+    invocation attempt for every Lambda, then invoke the exact IAM-signed API
+    route.
+12. Preserve and reconcile the signed receipt with the asynchronous API access
+    log by request ID, request time, route, status, and caller. Preserve the
+    model, KMS key ARN/public-key fingerprint, signature, source, artifact,
+    configuration, token, and latency bindings.
+13. Re-run Gate One state hashes to prove Bedrock changed no authority,
+    outbox, fence, or protected synthetic-effect state.
 
-Any ambiguous, malformed, unsigned, over-budget, or unavailable state returns
-`UNKNOWN_DO_NOT_ACT`.
+Ambiguous, malformed, unsigned, or unavailable application state returns
+`UNKNOWN_DO_NOT_ACT`. Cost limits are operator stop gates and AWS Budget
+alerts; this software does not implement a runtime budget check or shutdown.
 
 ## Stop conditions
 
@@ -94,6 +148,15 @@ Stop instead of weakening the proof if:
 ## Teardown
 
 Capability probes are temporary and must be removed after evidence capture.
-CloudFormation owns Gate Two resources. The artifact bucket is intentionally
-retained to prevent accidental evidence loss; its exact object versions must
-be inventoried before any later deletion decision.
+CloudFormation owns Gate Two resources. Before deleting the main stack,
+preserve the signed receipts, KMS public key DER/fingerprint, access-log
+records, template object version, and exact artifact versions outside the
+stack. Main-stack deletion removes log groups and schedules the KMS key for
+deletion after seven days.
+
+The bootstrap artifact bucket is intentionally retained, but its TLS-only
+bucket policy and the account budget are not retained if the bootstrap stack
+is deleted. Inventory exact object versions and restore equivalent bucket
+protection before any bootstrap-stack teardown. Versioning is evidence
+retention, not Object Lock: an authorized principal can still delete exact
+versions.

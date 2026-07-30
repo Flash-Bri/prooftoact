@@ -60,6 +60,87 @@ function sha256Hex(value) {
     .digest("hex");
 }
 
+function sha256BytesHex(value) {
+  if (!Buffer.isBuffer(value) && !(value instanceof Uint8Array)) {
+    throw new Error("SIGNING_PUBLIC_KEY_REJECTED");
+  }
+  return crypto
+    .createHash("sha256")
+    .update(Buffer.from(value))
+    .digest("hex");
+}
+
+function validateExpectedSigningKey(value) {
+  if (
+    !exactKeys(value, ["keyArn", "publicKeyDer", "publicKeyDigest"]) ||
+    value.keyArn !== process.env.SIGNING_KEY_ARN ||
+    !Buffer.isBuffer(value.publicKeyDer) ||
+    value.publicKeyDer.length < 80 ||
+    value.publicKeyDer.length > 160 ||
+    !/^[0-9a-f]{64}$/.test(value.publicKeyDigest) ||
+    sha256BytesHex(value.publicKeyDer) !== value.publicKeyDigest
+  ) {
+    throw new Error("SIGNING_PUBLIC_KEY_REJECTED");
+  }
+  let publicKey;
+  try {
+    publicKey = crypto.createPublicKey({
+      key: value.publicKeyDer,
+      format: "der",
+      type: "spki"
+    });
+  } catch {
+    throw new Error("SIGNING_PUBLIC_KEY_REJECTED");
+  }
+  if (
+    publicKey.asymmetricKeyType !== "ec" ||
+    publicKey.asymmetricKeyDetails?.namedCurve !== "prime256v1"
+  ) {
+    throw new Error("SIGNING_PUBLIC_KEY_REJECTED");
+  }
+  return {
+    keyArn: value.keyArn,
+    publicKeyDer: Buffer.from(value.publicKeyDer),
+    publicKeyDigest: value.publicKeyDigest
+  };
+}
+
+function validateKmsPublicKey(value) {
+  const publicKeyDer = Buffer.from(value?.PublicKey || []);
+  if (
+    value?.KeyId !== process.env.SIGNING_KEY_ARN ||
+    value?.KeySpec !== "ECC_NIST_P256" ||
+    value?.KeyUsage !== "SIGN_VERIFY" ||
+    !Array.isArray(value?.SigningAlgorithms) ||
+    !value.SigningAlgorithms.includes("ECDSA_SHA_256")
+  ) {
+    throw new Error("KMS_SIGNING_KEY_METADATA_REJECTED");
+  }
+  return validateExpectedSigningKey({
+    keyArn: value.KeyId,
+    publicKeyDer,
+    publicKeyDigest: sha256BytesHex(publicKeyDer)
+  });
+}
+
+async function loadSigningPublicKey() {
+  const { GetPublicKeyCommand, KMSClient } = require("@aws-sdk/client-kms");
+  const { NodeHttpHandler } = require("@smithy/node-http-handler");
+  const kms = new KMSClient({
+    region: process.env.AWS_REGION,
+    maxAttempts: 1,
+    requestHandler: new NodeHttpHandler({
+      connectionTimeout: 1_000,
+      socketTimeout: 5_000
+    })
+  });
+  return validateKmsPublicKey(
+    await kms.send(
+      new GetPublicKeyCommand({ KeyId: process.env.SIGNING_KEY_ARN })
+    )
+  );
+}
+
 function buildContext() {
   const context = JSON.parse(JSON.stringify(FIXED_CONTEXT));
   return {
@@ -139,6 +220,7 @@ function isHttpEvent(event) {
 function validateHttpCaller(event) {
   const context = event?.requestContext;
   const iam = context?.authorizer?.iam;
+  const now = Date.now();
   if (
     !isHttpEvent(event) ||
     context.accountId !== process.env.EXPECTED_ACCOUNT_ID ||
@@ -148,6 +230,9 @@ function validateHttpCaller(event) {
     context.http.method !== "POST" ||
     context.http.path !== "/advisory" ||
     !boundedString(context.requestId, 160) ||
+    !Number.isSafeInteger(context.timeEpoch) ||
+    context.timeEpoch < now - 300_000 ||
+    context.timeEpoch > now + 300_000 ||
     typeof iam?.userArn !== "string" ||
     iam.userArn.length < 20 ||
     iam.userArn.length > 300
@@ -163,6 +248,7 @@ function requestBinding(event, publicRequest) {
       event.requestContext.authorizer.iam.userArn
     ),
     apiRequestId: event.requestContext.requestId,
+    apiRequestTimeEpoch: event.requestContext.timeEpoch,
     publicRequestDigest: sha256Hex(publicRequest)
   };
 }
@@ -201,6 +287,7 @@ function unsignedReceipt({
   outcome,
   proposalDigest,
   request,
+  signingKey,
   advisory = null
 }) {
   return {
@@ -215,6 +302,7 @@ function unsignedReceipt({
     invocationMode: request.invocationMode,
     callerPrincipalHash: request.callerPrincipalHash,
     apiRequestId: request.apiRequestId,
+    apiRequestTimeEpoch: request.apiRequestTimeEpoch,
     publicRequestDigest: request.publicRequestDigest,
     contextDigest,
     gateOneSourceDigest:
@@ -233,6 +321,8 @@ function unsignedReceipt({
     agentArtifactDigest: process.env.AGENT_ARTIFACT_DIGEST,
     boundaryArtifactDigest: process.env.BOUNDARY_ARTIFACT_DIGEST,
     signerArtifactDigest: process.env.SIGNER_ARTIFACT_DIGEST,
+    signingKeyArn: signingKey.keyArn,
+    signingPublicKeyDigest: signingKey.publicKeyDigest,
     agentFunctionVersion: process.env.AGENT_FUNCTION_VERSION,
     boundaryFunctionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
     promptTemplateDigest: process.env.PROMPT_TEMPLATE_DIGEST,
@@ -243,6 +333,8 @@ function unsignedReceipt({
     boundaryRuntimeVersion: process.version,
     boundaryAwsSdkVersion:
       require("@aws-sdk/client-lambda/package.json").version,
+    boundaryKmsSdkVersion:
+      require("@aws-sdk/client-kms/package.json").version,
     authorityTransferred: false,
     requiresFreshAuthorization: true
   };
@@ -272,7 +364,12 @@ function canonicalBase64(value, minimumBytes, maximumBytes) {
   return decoded;
 }
 
-function validateSignedEnvelope(value, expectedUnsignedReceipt) {
+function validateSignedEnvelope(
+  value,
+  expectedUnsignedReceipt,
+  expectedSigningKey
+) {
+  const signingKey = validateExpectedSigningKey(expectedSigningKey);
   if (
     !exactKeys(value, [
       "publicKeyDerBase64",
@@ -285,7 +382,7 @@ function validateSignedEnvelope(value, expectedUnsignedReceipt) {
     ]) ||
     value.signatureVerified !== true ||
     value.signingAlgorithm !== "ECDSA_SHA_256" ||
-    value.signingKeyArn !== process.env.SIGNING_KEY_ARN ||
+    value.signingKeyArn !== signingKey.keyArn ||
     !exactKeys(value.receipt, [
       ...Object.keys(expectedUnsignedReceipt),
       "generatedAt",
@@ -326,6 +423,12 @@ function validateSignedEnvelope(value, expectedUnsignedReceipt) {
     80,
     160
   );
+  if (
+    publicKeyDer.length !== signingKey.publicKeyDer.length ||
+    !crypto.timingSafeEqual(publicKeyDer, signingKey.publicKeyDer)
+  ) {
+    throw new Error("SIGNER_PUBLIC_KEY_BINDING_REJECTED");
+  }
   let publicKey;
   try {
     publicKey = crypto.createPublicKey({
@@ -377,21 +480,36 @@ function publicFailure(code, signedReceipt = null) {
 async function runAdvisory({
   request,
   invokeChild = invokeFunction,
-  signReceipt = sign
+  signReceipt = sign,
+  getSigningPublicKey = loadSigningPublicKey
 } = {}) {
   if (
     !exactKeys(request, [
       "apiRequestId",
+      "apiRequestTimeEpoch",
       "callerPrincipalHash",
       "invocationMode",
       "publicRequestDigest"
     ]) ||
     request.invocationMode !== "SIGNED_HTTP_API" ||
     !boundedString(request.apiRequestId, 160) ||
+    !Number.isSafeInteger(request.apiRequestTimeEpoch) ||
+    request.apiRequestTimeEpoch < 1_600_000_000_000 ||
     !/^[0-9a-f]{64}$/.test(request.callerPrincipalHash) ||
     !/^[0-9a-f]{64}$/.test(request.publicRequestDigest)
   ) {
     throw new Error("REQUEST_BINDING_REJECTED");
+  }
+  let signingKey;
+  try {
+    signingKey = validateExpectedSigningKey(
+      await getSigningPublicKey()
+    );
+  } catch {
+    return {
+      statusCode: 503,
+      body: publicFailure("SIGNING_KEY_UNAVAILABLE")
+    };
   }
   const context = buildContext();
   try {
@@ -455,11 +573,13 @@ async function runAdvisory({
       outcome: "ADVISORY_READY",
       proposalDigest: advisory.proposalDigest,
       request,
+      signingKey,
       advisory
     });
     const signedReceipt = validateSignedEnvelope(
       await signReceipt(receipt),
-      receipt
+      receipt,
+      signingKey
     );
     return {
       statusCode: 200,
@@ -479,11 +599,13 @@ async function runAdvisory({
         contextDigest: context.contextDigest,
         outcome: "UNKNOWN_DO_NOT_ACT",
         proposalDigest: null,
-        request
+        request,
+        signingKey
       });
       const signedReceipt = validateSignedEnvelope(
         await signReceipt(receipt),
-        receipt
+        receipt,
+        signingKey
       );
       return {
         statusCode: 503,
@@ -533,8 +655,11 @@ exports.__test = {
   runAdvisory,
   requestBinding,
   sha256Hex,
+  sha256BytesHex,
   unsignedReceipt,
+  validateExpectedSigningKey,
   validateHttpCaller,
+  validateKmsPublicKey,
   validateProposal,
   validateSignedEnvelope
 };

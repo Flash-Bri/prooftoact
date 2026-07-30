@@ -38,6 +38,28 @@ const TEST_SIGNING_KEY = crypto.generateKeyPairSync("ec", {
   namedCurve: "P-256"
 });
 
+function signingKeyBinding(keyPair = TEST_SIGNING_KEY) {
+  const publicKeyDer = keyPair.publicKey.export({
+    type: "spki",
+    format: "der"
+  });
+  return {
+    keyArn: process.env.SIGNING_KEY_ARN,
+    publicKeyDer,
+    publicKeyDigest: crypto
+      .createHash("sha256")
+      .update(publicKeyDer)
+      .digest("hex")
+  };
+}
+
+async function runAdvisory(options) {
+  return boundary.runAdvisory({
+    ...options,
+    getSigningPublicKey: async () => signingKeyBinding()
+  });
+}
+
 function configureTestEnvironment() {
   Object.assign(process.env, {
     SOURCE_COMMIT: HEX_40,
@@ -65,11 +87,15 @@ function validRequestBinding() {
     invocationMode: "SIGNED_HTTP_API",
     callerPrincipalHash: "e".repeat(64),
     apiRequestId: "api-request-1",
+    apiRequestTimeEpoch: Date.now(),
     publicRequestDigest: "f".repeat(64)
   };
 }
 
-function validSignedEnvelope(unsignedReceipt) {
+function validSignedEnvelope(
+  unsignedReceipt,
+  signingKey = TEST_SIGNING_KEY
+) {
   const receipt = {
     ...structuredClone(unsignedReceipt),
     signerFunctionVersion: process.env.SIGNER_FUNCTION_VERSION,
@@ -80,13 +106,13 @@ function validSignedEnvelope(unsignedReceipt) {
   const signature = crypto.sign(
     "sha256",
     Buffer.from(boundary.canonicalJson(receipt)),
-    TEST_SIGNING_KEY.privateKey
+    signingKey.privateKey
   );
   return {
     receipt,
     receiptDigest: boundary.sha256Hex(receipt),
     signatureDerBase64: signature.toString("base64"),
-    publicKeyDerBase64: TEST_SIGNING_KEY.publicKey
+    publicKeyDerBase64: signingKey.publicKey
       .export({ type: "spki", format: "der" })
       .toString("base64"),
     signingKeyArn: process.env.SIGNING_KEY_ARN,
@@ -253,6 +279,7 @@ test("agent prompt treats the fixed fixture as data and remains bounded", () => 
 
 test("boundary rejects unsigned or shape-expanded public requests", () => {
   configureTestEnvironment();
+  const requestTime = Date.now();
   const validEvent = {
     version: "2.0",
     body: JSON.stringify({ scenarioId: "highwater-v1" }),
@@ -262,6 +289,7 @@ test("boundary rejects unsigned or shape-expanded public requests", () => {
       routeKey: "POST /advisory",
       stage: "$default",
       requestId: "api-request-1",
+      timeEpoch: requestTime,
       http: { method: "POST", path: "/advisory" },
       authorizer: {
         iam: {
@@ -286,6 +314,7 @@ test("boundary rejects unsigned or shape-expanded public requests", () => {
         validEvent.requestContext.authorizer.iam.userArn
       ),
       apiRequestId: "api-request-1",
+      apiRequestTimeEpoch: requestTime,
       publicRequestDigest: boundary.sha256Hex({
         scenarioId: "highwater-v1"
       })
@@ -302,6 +331,12 @@ test("boundary rejects unsigned or shape-expanded public requests", () => {
   wrongApi.requestContext.apiId = "other";
   assert.throws(
     () => boundary.validateHttpCaller(wrongApi),
+    /SIGNED_CALLER_REJECTED/
+  );
+  const stale = structuredClone(validEvent);
+  stale.requestContext.timeEpoch -= 600_000;
+  assert.throws(
+    () => boundary.validateHttpCaller(stale),
     /SIGNED_CALLER_REJECTED/
   );
   const injected = {
@@ -322,7 +357,7 @@ test("boundary returns a signed advisory or fail-closed receipt without authorit
   const context = boundary.buildContext();
   let childCalls = 0;
   let signerCalls = 0;
-  const success = await boundary.runAdvisory({
+  const success = await runAdvisory({
     request: validRequestBinding(),
     invokeChild: async (functionName, payload) => {
       childCalls += 1;
@@ -343,7 +378,7 @@ test("boundary returns a signed advisory or fail-closed receipt without authorit
   assert.equal(childCalls, 1);
   assert.equal(signerCalls, 1);
 
-  const unavailable = await boundary.runAdvisory({
+  const unavailable = await runAdvisory({
     request: validRequestBinding(),
     invokeChild: async () => {
       throw new Error("BEDROCK_DOWN");
@@ -394,7 +429,7 @@ test("boundary rejects authority expansion and malformed signer output", async (
   ]) {
     const advisory = validAdvisory(context.contextDigest);
     mutate(advisory);
-    const result = await boundary.runAdvisory({
+    const result = await runAdvisory({
       request: validRequestBinding(),
       invokeChild: async () => advisory,
       signReceipt: async (receipt) => validSignedEnvelope(receipt)
@@ -430,7 +465,7 @@ test("boundary rejects authority expansion and malformed signer output", async (
     }
   ]) {
     let signCalls = 0;
-    const result = await boundary.runAdvisory({
+    const result = await runAdvisory({
       request: validRequestBinding(),
       invokeChild: async () => validAdvisory(context.contextDigest),
       signReceipt: async (receipt) => {
@@ -451,7 +486,7 @@ test("boundary rejects authority expansion and malformed signer output", async (
     );
   }
 
-  const doublyCorrupted = await boundary.runAdvisory({
+  const doublyCorrupted = await runAdvisory({
     request: validRequestBinding(),
     invokeChild: async () => validAdvisory(context.contextDigest),
     signReceipt: async (receipt) => ({
@@ -465,6 +500,41 @@ test("boundary rejects authority expansion and malformed signer output", async (
     "ADVISORY_AND_RECEIPT_UNAVAILABLE"
   );
   assert.equal(doublyCorrupted.body.signedReceipt, null);
+
+  const substitutedKey = crypto.generateKeyPairSync("ec", {
+    namedCurve: "P-256"
+  });
+  const substituted = await runAdvisory({
+    request: validRequestBinding(),
+    invokeChild: async () => validAdvisory(context.contextDigest),
+    signReceipt: async (receipt) =>
+      validSignedEnvelope(
+        receipt,
+        receipt.outcome === "ADVISORY_READY"
+          ? substitutedKey
+          : TEST_SIGNING_KEY
+      )
+  });
+  assert.equal(substituted.statusCode, 503);
+  assert.equal(substituted.body.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(
+    substituted.body.signedReceipt.receipt.outcome,
+    "UNKNOWN_DO_NOT_ACT"
+  );
+
+  let childCalled = false;
+  const keyUnavailable = await boundary.runAdvisory({
+    request: validRequestBinding(),
+    getSigningPublicKey: async () => {
+      throw new Error("KMS_UNAVAILABLE");
+    },
+    invokeChild: async () => {
+      childCalled = true;
+    }
+  });
+  assert.equal(childCalled, false);
+  assert.equal(keyUnavailable.statusCode, 503);
+  assert.equal(keyUnavailable.body.code, "SIGNING_KEY_UNAVAILABLE");
 });
 
 test("signer rejects changed receipt bindings and authority transfer", () => {
@@ -475,9 +545,49 @@ test("signer rejects changed receipt bindings and authority transfer", () => {
     outcome: "ADVISORY_READY",
     proposalDigest: "9".repeat(64),
     request: validRequestBinding(),
+    signingKey: signingKeyBinding(),
     advisory: validAdvisory(context.contextDigest)
   });
   assert.deepEqual(signer.validateUnsignedReceipt(receipt), receipt);
+  const keyBinding = signingKeyBinding();
+  const kmsPublicKey = {
+    KeyId: process.env.SIGNING_KEY_ARN,
+    KeySpec: "ECC_NIST_P256",
+    KeyUsage: "SIGN_VERIFY",
+    SigningAlgorithms: ["ECDSA_SHA_256"],
+    PublicKey: keyBinding.publicKeyDer
+  };
+  assert.deepEqual(signer.validateKmsPublicKey(kmsPublicKey), keyBinding);
+  assert.deepEqual(
+    boundary.validateKmsPublicKey(kmsPublicKey),
+    keyBinding
+  );
+  assert.deepEqual(
+    signer.validateReceiptSigningKey(receipt, keyBinding),
+    keyBinding
+  );
+  assert.throws(
+    () =>
+      signer.validateReceiptSigningKey(
+        {
+          ...receipt,
+          signingPublicKeyDigest: "0".repeat(64)
+        },
+        keyBinding
+      ),
+    /RECEIPT_SIGNING_KEY_BINDING_REJECTED/
+  );
+  assert.throws(
+    () =>
+      signer.validateKmsPublicKey({
+        KeyId: process.env.SIGNING_KEY_ARN,
+        KeySpec: "ECC_NIST_P256",
+        KeyUsage: "SIGN_VERIFY",
+        SigningAlgorithms: ["ECDSA_SHA_384"],
+        PublicKey: keyBinding.publicKeyDer
+      }),
+    /KMS_SIGNING_KEY_METADATA_REJECTED/
+  );
 
   for (const mutate of [
     (value) => {
@@ -593,6 +703,15 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       .ThrottlingRateLimit,
     0.1
   );
+  assert.deepEqual(
+    resources.DefaultStage.Properties.AccessLogSettings.DestinationArn,
+    { "Fn::GetAtt": ["ApiAccessLogGroup", "Arn"] }
+  );
+  assert.match(
+    resources.DefaultStage.Properties.AccessLogSettings.Format,
+    /requestTimeEpoch/
+  );
+  assert.equal(resources.HttpApi.Properties.CorsConfiguration, undefined);
   assert.equal(
     resources.AgentFunction.Properties.ReservedConcurrentExecutions,
     1
@@ -644,6 +763,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     "logs:PutLogEvents"
   ]);
   assert.deepEqual(allowedActions(resources.BoundaryRole).sort(), [
+    "kms:GetPublicKey",
     "lambda:InvokeFunction",
     "logs:CreateLogStream",
     "logs:PutLogEvents"
@@ -659,12 +779,26 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     "logs:CreateLogStream",
     "logs:PutLogEvents"
   ]);
+  assert.deepEqual(allowedActions(resources.AdvisoryCallerRole), [
+    "execute-api:Invoke"
+  ]);
+  const callerStatements =
+    resources.AdvisoryCallerRole.Properties.Policies[0].PolicyDocument
+      .Statement;
+  assert.ok(
+    callerStatements.some(
+      ({ Effect, Action }) =>
+        Effect === "Deny" &&
+        Action.includes?.("lambda:InvokeFunction")
+    )
+  );
 
   for (const roleName of [
     "AgentRole",
     "BoundaryRole",
     "SignerRole",
-    "AuthorityRole"
+    "AuthorityRole",
+    "AdvisoryCallerRole"
   ]) {
     const allowed =
       resources[roleName].Properties.Policies[0].PolicyDocument.Statement
@@ -685,6 +819,7 @@ test("Gate Two template binds retention, probes, and artifacts after the cost gu
   const template = buildGate2Template();
   const { Resources: resources, Parameters: parameters } = template;
 
+  assert.equal(parameters.EnableProbeFunctions.Default, "false");
   for (const [name, resource] of Object.entries(resources)) {
     if (resource.Type === "AWS::Logs::LogGroup") {
       assert.equal(
@@ -705,6 +840,14 @@ test("Gate Two template binds retention, probes, and artifacts after the cost gu
       .PasswordLength,
     32
   );
+  assert.equal(
+    resources.CapabilityCanarySecret.Condition,
+    "ShouldDeployProbes"
+  );
+  assert.equal(
+    template.Outputs.CapabilityCanarySecretArn.Condition,
+    "ShouldDeployProbes"
+  );
   for (const name of [
     "AgentProbeFunction",
     "BoundaryProbeFunction",
@@ -719,6 +862,11 @@ test("Gate Two template binds retention, probes, and artifacts after the cost gu
         S3ObjectVersion: { Ref: "ProbeArtifactVersion" }
       }
     );
+    assert.equal(
+      resources[name].Properties.ReservedConcurrentExecutions,
+      1
+    );
+    assert.equal(resources[name].Condition, "ShouldDeployProbes");
   }
   for (const name of [
     "Agent",
@@ -766,10 +914,12 @@ test("production Lambda sources contain only their intended capability SDK", () 
     /client-(kms|lambda|secrets-manager)|require\(["']pg["']\)|managed-mcp/
   );
   assert.match(sources.boundary, /client-lambda/);
+  assert.match(sources.boundary, /client-kms/);
   assert.doesNotMatch(
     sources.boundary,
-    /client-(bedrock-runtime|kms|secrets-manager)|require\(["']pg["']\)|managed-mcp/
+    /client-(bedrock-runtime|secrets-manager)|require\(["']pg["']\)|managed-mcp/
   );
+  assert.doesNotMatch(sources.boundary, /new SignCommand|kms:Sign/);
   assert.match(sources.signer, /client-kms/);
   assert.doesNotMatch(
     sources.signer,

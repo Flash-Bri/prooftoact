@@ -36,6 +36,23 @@ function assumeLambdaRolePolicy() {
   };
 }
 
+function assumeAccountRolePolicy() {
+  return {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: {
+          AWS: sub(
+            "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+          )
+        },
+        Action: "sts:AssumeRole"
+      }
+    ]
+  };
+}
+
 function artifactCode(name) {
   const title = `${name[0].toUpperCase()}${name.slice(1)}`;
   return {
@@ -121,12 +138,16 @@ function denyLambdaInvoke() {
   };
 }
 
-function roleResource({ description, statements }) {
+function roleResource({
+  description,
+  statements,
+  assumeRolePolicy = assumeLambdaRolePolicy()
+}) {
   return {
     Type: "AWS::IAM::Role",
     Properties: {
       Description: description,
-      AssumeRolePolicyDocument: assumeLambdaRolePolicy(),
+      AssumeRolePolicyDocument: assumeRolePolicy,
       MaxSessionDuration: 3600,
       Policies: [
         {
@@ -306,6 +327,7 @@ function probeFunction(role, logGroup, roleClass) {
     code: artifactCode("probe"),
     logGroup,
     timeout: 25,
+    concurrency: 1,
     environment: commonProbeEnvironment(roleClass)
   });
 }
@@ -476,10 +498,10 @@ export function buildGate2Template() {
     },
     EnableProbeFunctions: {
       Type: "String",
-      Default: "true",
+      Default: "false",
       AllowedValues: ["true", "false"],
       Description:
-        "Deploy same-role evidence probes temporarily; update to false after receipts are captured."
+        "Opt in to same-role evidence probes temporarily; update to false after non-final probe receipts are captured."
     },
     ...artifactParameters("agent"),
     ...artifactParameters("boundary"),
@@ -537,6 +559,7 @@ export function buildGate2Template() {
     },
     CapabilityCanarySecret: {
       Type: "AWS::SecretsManager::Secret",
+      Condition: "ShouldDeployProbes",
       DeletionPolicy: "Delete",
       UpdateReplacePolicy: "Delete",
       Properties: {
@@ -555,6 +578,7 @@ export function buildGate2Template() {
 
     AgentLogGroup: logGroup(),
     BoundaryLogGroup: logGroup(),
+    ApiAccessLogGroup: logGroup(),
     SignerLogGroup: logGroup(),
     AuthorityLogGroup: logGroup(),
     AgentProbeLogGroup: logGroup(),
@@ -775,6 +799,12 @@ export function buildGate2Template() {
           getAtt("SignerAlias", "AliasArn")
         ]
       },
+      {
+        Sid: "ReadReceiptSigningPublicKey",
+        Effect: "Allow",
+        Action: ["kms:GetPublicKey"],
+        Resource: getAtt("ReceiptSigningKey", "Arn")
+      },
       denyBedrock(),
       denySecretAccess(),
       denySecretMutation(),
@@ -791,24 +821,31 @@ export function buildGate2Template() {
         "IAM-authenticated synthetic Tideproof advisory endpoint.",
       ProtocolType: "HTTP",
       DisableExecuteApiEndpoint: false,
-      CorsConfiguration: {
-        AllowHeaders: [
-          "content-type",
-          "x-amz-content-sha256",
-          "x-amz-date",
-          "authorization",
-          "x-amz-security-token"
-        ],
-        AllowMethods: ["POST"],
-        AllowOrigins: [
-          "https://tideproof.net",
-          "https://www.tideproof.net"
-        ],
-        MaxAge: 300
-      },
       Tags: { Project: "Tideproof", Gate: "Two" }
     }
   };
+
+  resources.AdvisoryCallerRole = roleResource({
+    description:
+      "Short-lived human-assumed caller for one exact IAM-authenticated advisory route; direct Lambda invocation is denied.",
+    assumeRolePolicy: assumeAccountRolePolicy(),
+    statements: [
+      {
+        Sid: "InvokeOneAdvisoryRoute",
+        Effect: "Allow",
+        Action: ["execute-api:Invoke"],
+        Resource: sub(
+          "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/POST/advisory"
+        )
+      },
+      denyLambdaInvoke(),
+      denyBedrock(),
+      denySecretAccess(),
+      denySecretMutation(),
+      denyKmsSigning(),
+      denyPrivilegeEscalation()
+    ]
+  });
 
   const promptTemplateDigest = sha256Hex(PROMPT_TEMPLATE_VERSION);
   const validatorDigest = sha256Hex(VALIDATOR_VERSION);
@@ -942,6 +979,20 @@ export function buildGate2Template() {
       ApiId: ref("HttpApi"),
       StageName: "$default",
       AutoDeploy: true,
+      AccessLogSettings: {
+        DestinationArn: getAtt("ApiAccessLogGroup", "Arn"),
+        Format: JSON.stringify({
+          apiId: "$context.apiId",
+          backendStatus: "$context.integration.status",
+          callerArn: "$context.identity.userArn",
+          lambdaServiceStatus:
+            "$context.integration.integrationStatus",
+          requestId: "$context.requestId",
+          requestTimeEpoch: "$context.requestTimeEpoch",
+          routeKey: "$context.routeKey",
+          status: "$context.status"
+        })
+      },
       DefaultRouteSettings: {
         ThrottlingBurstLimit: 1,
         ThrottlingRateLimit: 0.1
@@ -1010,6 +1061,12 @@ export function buildGate2Template() {
           "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
         )
       },
+      AdvisoryCallerRoleArn: {
+        Value: getAtt("AdvisoryCallerRole", "Arn")
+      },
+      ApiAccessLogGroupName: {
+        Value: ref("ApiAccessLogGroup")
+      },
       AgentAliasArn: { Value: getAtt("AgentAlias", "AliasArn") },
       BoundaryAliasArn: {
         Value: getAtt("BoundaryAlias", "AliasArn")
@@ -1050,6 +1107,7 @@ export function buildGate2Template() {
         Value: getAtt("ReceiptSigningKey", "Arn")
       },
       CapabilityCanarySecretArn: {
+        Condition: "ShouldDeployProbes",
         Value: ref("CapabilityCanarySecret")
       },
       BedrockModel: { Value: ref("BedrockModelId") },

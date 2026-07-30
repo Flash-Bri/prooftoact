@@ -36,8 +36,9 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
   boundary, with no invariant violation;
 - a generated AWS CloudFormation candidate with private versioned artifacts,
   IAM-separated Lambda roles, one bounded Amazon Nova Micro proposal path,
-  P-256 KMS receipt signing, exact Lambda code hashes, and temporary same-role
-  capability probes;
+  P-256 KMS receipt signing with independently pinned public-key evidence,
+  exact Lambda code hashes, a dedicated exact-route caller, private API access
+  logs, and opt-in temporary same-role capability probes;
 - a local browser demonstration and deterministic unit tests.
 
 It does **not** yet contain or claim:

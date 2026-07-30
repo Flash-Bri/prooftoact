@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { writeSingleFileZip } from "./lib/deterministic-zip.js";
 import {
   buildAwsBootstrapTemplate,
   buildGate2Template,
@@ -55,6 +56,17 @@ function gitValue(args) {
   return result.stdout.trim();
 }
 
+function gitStatus() {
+  const result = spawnSync("git", ["status", "--short"], {
+    cwd: root,
+    encoding: "utf8"
+  });
+  if (result.status !== 0) {
+    throw new Error("git status --short failed");
+  }
+  return result.stdout.trim();
+}
+
 function buildArtifact(name, sourceCommit) {
   const sourcePath = path.join(lambdaRoot, `${name}.cjs`);
   const sourceDigest = sha256File(sourcePath);
@@ -88,21 +100,11 @@ function buildArtifact(name, sourceCommit) {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
     throw new Error(`esbuild failed for ${name}: ${bundle.stderr}`);
   }
-  fs.chmodSync(stagedPath, 0o644);
-  fs.utimesSync(
-    stagedPath,
-    new Date("2026-07-30T00:00:00.000Z"),
-    new Date("2026-07-30T00:00:00.000Z")
+  writeSingleFileZip(
+    provisionalPath,
+    "index.js",
+    fs.readFileSync(stagedPath)
   );
-  const result = spawnSync(
-    "/usr/bin/zip",
-    ["-q", "-X", path.basename(provisionalPath), "index.js"],
-    { cwd: temporaryDirectory, encoding: "utf8" }
-  );
-  if (result.status !== 0) {
-    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
-    throw new Error(`zip failed for ${name}: ${result.stderr}`);
-  }
   const artifactDigest = sha256File(provisionalPath);
   const artifactPath = path.join(
     distRoot,
@@ -132,12 +134,8 @@ function buildArtifact(name, sourceCommit) {
 
 const sourceCommit = gitValue(["rev-parse", "HEAD"]);
 const treeDigest = gitValue(["rev-parse", "HEAD^{tree}"]);
-const gitStatus = spawnSync("git", ["status", "--short"], {
-  cwd: root,
-  encoding: "utf8"
-}).stdout.trim();
-const workingTreeClean = gitStatus.length === 0;
-if (!templatesOnly && !workingTreeClean) {
+const workingTreeCleanBeforeGeneration = gitStatus().length === 0;
+if (!templatesOnly && !workingTreeCleanBeforeGeneration) {
   throw new Error(
     "GATE2_ARTIFACT_BUILD_REQUIRES_CLEAN_GIT_TREE"
   );
@@ -158,6 +156,13 @@ fs.writeFileSync(
   "utf8"
 );
 
+const workingTreeClean = gitStatus().length === 0;
+if (!templatesOnly && !workingTreeClean) {
+  throw new Error(
+    "GATE2_GENERATED_TEMPLATE_DRIFT_REQUIRES_COMMIT"
+  );
+}
+
 let artifacts = [];
 if (!templatesOnly) {
   fs.mkdirSync(distRoot, { recursive: true });
@@ -167,11 +172,13 @@ if (!templatesOnly) {
 }
 
 const receipt = {
-  schemaVersion: "tideproof.gate2-build.v1",
+  schemaVersion: "tideproof.gate2-build.v2",
   mode: templatesOnly ? "TEMPLATES_ONLY_UNBOUND" : "CLEAN_ARTIFACT_BUILD",
   sourceCommit,
   treeDigest,
   workingTreeClean,
+  workingTreeCleanBeforeGeneration,
+  archiveFormat: "ZIP_STORED_SINGLE_FILE_V1",
   packageLockDigest: sha256File(path.join(root, "package-lock.json")),
   bootstrapTemplate: {
     path: path.relative(root, bootstrapPath),

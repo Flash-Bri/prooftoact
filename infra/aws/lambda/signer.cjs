@@ -11,10 +11,12 @@ const RECEIPT_KEYS = [
   "agentSourceDigest",
   "authorityTransferred",
   "apiRequestId",
+  "apiRequestTimeEpoch",
   "bedrockInvocation",
   "boundaryAwsSdkVersion",
   "boundaryArtifactDigest",
   "boundaryFunctionVersion",
+  "boundaryKmsSdkVersion",
   "boundaryRuntimeVersion",
   "boundarySourceDigest",
   "callerPrincipalHash",
@@ -37,6 +39,8 @@ const RECEIPT_KEYS = [
   "scenarioId",
   "signerSourceDigest",
   "signerArtifactDigest",
+  "signingKeyArn",
+  "signingPublicKeyDigest",
   "sourceCommit",
   "treeDigest",
   "validatorDigest"
@@ -60,6 +64,13 @@ function sha256(value) {
     .createHash("sha256")
     .update(typeof value === "string" ? value : canonicalJson(value))
     .digest();
+}
+
+function sha256BytesHex(value) {
+  return crypto
+    .createHash("sha256")
+    .update(Buffer.from(value))
+    .digest("hex");
 }
 
 function isHex(value, length) {
@@ -135,6 +146,9 @@ function validateUnsignedReceipt(value) {
     value.fixtureType !== "GATE_ONE_DIGEST_BOUND_FIXTURE" ||
     value.invocationMode !== "SIGNED_HTTP_API" ||
     !boundedString(value.apiRequestId, 160) ||
+    !Number.isSafeInteger(value.apiRequestTimeEpoch) ||
+    value.apiRequestTimeEpoch < Date.now() - 600_000 ||
+    value.apiRequestTimeEpoch > Date.now() + 300_000 ||
     !isHex(value.callerPrincipalHash, 64) ||
     !isHex(value.publicRequestDigest, 64) ||
     value.modelId !== process.env.BEDROCK_MODEL_ID ||
@@ -157,6 +171,8 @@ function validateUnsignedReceipt(value) {
     !isHex(value.agentArtifactDigest, 64) ||
     !isHex(value.boundaryArtifactDigest, 64) ||
     !isHex(value.signerArtifactDigest, 64) ||
+    value.signingKeyArn !== process.env.SIGNING_KEY_ARN ||
+    !isHex(value.signingPublicKeyDigest, 64) ||
     value.agentSourceDigest !== process.env.AGENT_SOURCE_DIGEST ||
     value.boundarySourceDigest !== process.env.BOUNDARY_SOURCE_DIGEST ||
     value.signerSourceDigest !== process.env.SIGNER_SOURCE_DIGEST ||
@@ -169,6 +185,7 @@ function validateUnsignedReceipt(value) {
     !boundedString(value.boundaryFunctionVersion, 12) ||
     !boundedString(value.boundaryRuntimeVersion, 40) ||
     !boundedString(value.boundaryAwsSdkVersion, 40) ||
+    !boundedString(value.boundaryKmsSdkVersion, 40) ||
     value.authorityTransferred !== false ||
     value.requiresFreshAuthorization !== true
   ) {
@@ -196,6 +213,52 @@ function validateUnsignedReceipt(value) {
   return { ...value };
 }
 
+function validateKmsPublicKey(value) {
+  const publicKeyDer = Buffer.from(value?.PublicKey || []);
+  if (
+    value?.KeyId !== process.env.SIGNING_KEY_ARN ||
+    value?.KeySpec !== "ECC_NIST_P256" ||
+    value?.KeyUsage !== "SIGN_VERIFY" ||
+    !Array.isArray(value?.SigningAlgorithms) ||
+    !value.SigningAlgorithms.includes("ECDSA_SHA_256") ||
+    publicKeyDer.length < 80 ||
+    publicKeyDer.length > 160
+  ) {
+    throw new Error("KMS_SIGNING_KEY_METADATA_REJECTED");
+  }
+  let publicKey;
+  try {
+    publicKey = crypto.createPublicKey({
+      key: publicKeyDer,
+      format: "der",
+      type: "spki"
+    });
+  } catch {
+    throw new Error("KMS_SIGNING_PUBLIC_KEY_REJECTED");
+  }
+  if (
+    publicKey.asymmetricKeyType !== "ec" ||
+    publicKey.asymmetricKeyDetails?.namedCurve !== "prime256v1"
+  ) {
+    throw new Error("KMS_SIGNING_PUBLIC_KEY_REJECTED");
+  }
+  return {
+    keyArn: value.KeyId,
+    publicKeyDer,
+    publicKeyDigest: sha256BytesHex(publicKeyDer)
+  };
+}
+
+function validateReceiptSigningKey(receipt, signingKey) {
+  if (
+    receipt.signingKeyArn !== signingKey.keyArn ||
+    receipt.signingPublicKeyDigest !== signingKey.publicKeyDigest
+  ) {
+    throw new Error("RECEIPT_SIGNING_KEY_BINDING_REJECTED");
+  }
+  return signingKey;
+}
+
 async function signReceipt(unsignedReceipt) {
   const {
     GetPublicKeyCommand,
@@ -212,8 +275,15 @@ async function signReceipt(unsignedReceipt) {
       socketTimeout: 5_000
     })
   });
+  const validatedReceipt = validateUnsignedReceipt(unsignedReceipt);
+  const signingKey = validateKmsPublicKey(
+    await kms.send(
+      new GetPublicKeyCommand({ KeyId: process.env.SIGNING_KEY_ARN })
+    )
+  );
+  validateReceiptSigningKey(validatedReceipt, signingKey);
   const receipt = {
-    ...validateUnsignedReceipt(unsignedReceipt),
+    ...validatedReceipt,
     signerFunctionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
     signerRuntimeVersion: process.version,
     signerAwsSdkVersion: require("@aws-sdk/client-kms/package.json").version,
@@ -221,7 +291,7 @@ async function signReceipt(unsignedReceipt) {
   };
   const digest = sha256(receipt);
   const signInput = {
-    KeyId: process.env.SIGNING_KEY_ARN,
+    KeyId: signingKey.keyArn,
     Message: digest,
     MessageType: "DIGEST",
     SigningAlgorithm: "ECDSA_SHA_256"
@@ -236,15 +306,12 @@ async function signReceipt(unsignedReceipt) {
   if (verified.SignatureValid !== true) {
     throw new Error("KMS_SIGNATURE_VERIFICATION_FAILED");
   }
-  const publicKey = await kms.send(
-    new GetPublicKeyCommand({ KeyId: process.env.SIGNING_KEY_ARN })
-  );
   return {
     receipt,
     receiptDigest: digest.toString("hex"),
     signatureDerBase64: Buffer.from(signed.Signature).toString("base64"),
-    publicKeyDerBase64: Buffer.from(publicKey.PublicKey).toString("base64"),
-    signingKeyArn: process.env.SIGNING_KEY_ARN,
+    publicKeyDerBase64: signingKey.publicKeyDer.toString("base64"),
+    signingKeyArn: signingKey.keyArn,
     signingAlgorithm: "ECDSA_SHA_256",
     signatureVerified: true
   };
@@ -257,5 +324,7 @@ async function handler(event) {
 exports.handler = handler;
 exports.__test = {
   canonicalJson,
+  validateKmsPublicKey,
+  validateReceiptSigningKey,
   validateUnsignedReceipt
 };
