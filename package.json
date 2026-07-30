@@ -10,7 +10,11 @@
   "scripts": {
     "demo": "node src/demo.js",
     "dev": "node src/server.js",
+    "gate1:vector": "node scripts/gate1-vector.js",
     "test": "node --test"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "pg": "8.22.0"
+  }
 }
