@@ -55,6 +55,11 @@ path.
   source hashes, commit/tree IDs, artifact hex hashes, and configuration
   digests are deployment parameters. Acceptance therefore requires the
   independent clean-build and versioned-upload receipts.
+- The Boundary Lambda has a 25-second timeout behind a 29-second HTTP API
+  integration. At external-service tail latency, the caller may receive a
+  transport timeout instead of Tideproof's structured signed failure body.
+  A timeout or missing receipt is still `UNKNOWN_DO_NOT_ACT`; the project does
+  not claim that every fail-closed path produces a signed receipt.
 - The caller-principal SHA-256 is pseudonymous, not anonymous. Keep the raw
   access log and full signed receipt private; publish a redacted evidence
   anchor rather than a dictionary-testable identity binding.
@@ -80,6 +85,10 @@ records:
 
 Each Lambda Version uses CloudFormation `CodeSha256`, so a version cannot be
 published when the deployed code hash differs from the reviewed artifact.
+The build rechecks Git cleanliness after template generation but does not lock
+the repository against a concurrent edit during bundling. Run accepted builds
+in an isolated one-writer checkout and preserve the emitted source and
+artifact digests.
 
 The reviewed JSON is pretty printed for auditability and is larger than
 CloudFormation's 51,200-byte inline `TemplateBody` limit. Deploy it through a
