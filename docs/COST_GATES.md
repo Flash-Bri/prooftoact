@@ -14,8 +14,21 @@ Bedrock calls, static assets, and short-retention CloudWatch logs.
 - Expected metered spend through 2026-09-15: **$3–$12**
 - Approved AWS project ceiling: **$15**
 - Approved total Tideproof ceiling: **$25**
+- Recorded non-AWS spend: **$11.86** for the owner-authorized
+  `tideproof.net` registration
+- Remaining total-project envelope before AWS or any other new spend:
+  **$13.14**
 - CockroachDB: two Basic clusters, each configured with a **$5 monthly cap**,
   currently covered by trial credit
+
+The domain purchase is a sunk project cost and is included in the $25 total
+ceiling. Auto-renew is owner-reported as disabled. The sanitized owner record
+is `evidence/domain-cost-owner-record-2026-07-30.md`; no registrar receipt or
+renewal-state export has been independently inspected. The account-wide $15
+AWS Budget remains a useful alert boundary, but it no longer represents the
+effective amount available to spend. The live preflight must reject observed
+AWS spend at or above **$13.14**, and any later non-AWS expense reduces that
+effective AWS ceiling dollar for dollar.
 
 Price inputs checked on 2026-07-29:
 
@@ -39,13 +52,16 @@ Sources:
 Stop new cloud work and investigate if:
 
 - daily cost exceeds $5;
-- cumulative AWS Tideproof spend approaches $15;
+- conservative account-wide AWS spend approaches the current effective
+  **$13.14** project envelope;
 - total Tideproof spend approaches $25;
 - unexplained spend exceeds $3;
 - a free allowance is exhausted unexpectedly;
 - a loop, public abuse, or log-volume anomaly appears;
 - any architecture change introduces NAT Gateway, always-on EC2/ECS, an
   Application Load Balancer, or another material fixed charge.
+- another domain purchase or `tideproof.net` renewal is proposed without
+  fresh approval.
 
 ## Controls before first deployment
 
@@ -62,6 +78,12 @@ Stop new cloud work and investigate if:
    CloudFormation uses `GREATER_THAN`, so notifications trigger after—not
    at—the listed amounts. The application has no runtime budget check or
    automatic shutdown.
+   Because the domain registration consumed $11.86 of the separate $25 total
+   exposure envelope, the preflight applies a stricter **$13.14** ceiling to
+   both budget-reported and Cost Explorer observed AWS spend. Cost Explorer
+   is summed account-wide from 2026-07-01 through the current UTC day rather
+   than resetting at a month boundary. This is intentionally conservative
+   because those AWS reads are account-wide.
    The live bootstrap verification is recorded in
    `evidence/gate2-cost-guard-2026-07-30.json`; it intentionally makes no AWS
    spend claim while first-use cost data is still maturing. It cannot evidence
@@ -71,3 +93,7 @@ Stop new cloud work and investigate if:
 6. Record every temporary resource, owner, creation time, cost class, and
    teardown command.
 7. Set a teardown or keep-alive decision for the end of judging.
+
+The domain registration does not authorize a second domain, paid DNS or
+hosting add-on, privacy upsell, transfer, renewal, or auto-renew change.
+Public DNS mutation remains a separate launch action.

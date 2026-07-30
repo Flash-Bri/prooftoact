@@ -1,6 +1,15 @@
 const EXPECTED_REGION = "us-east-1";
 const EXPECTED_MODEL_ID = "amazon.nova-micro-v1:0";
 const EXPECTED_BUDGET_USD = 15;
+const TOTAL_PROJECT_EXPOSURE_CEILING_USD = 25;
+const RECORDED_NON_AWS_SPEND_USD = 11.86;
+const PROJECT_COST_WINDOW_START = "2026-07-01";
+const EFFECTIVE_AWS_SPEND_CEILING_USD = Number(
+  (
+    TOTAL_PROJECT_EXPOSURE_CEILING_USD -
+    RECORDED_NON_AWS_SPEND_USD
+  ).toFixed(2)
+);
 const EXPECTED_BUDGET_COST_BASIS = "UnblendedCost";
 const MINIMUM_BUDGET_COVERAGE_END =
   "2026-09-16T00:00:00.000Z";
@@ -96,18 +105,17 @@ export function awsCostExplorerPeriod(observedAt) {
     Number.isFinite(now.getTime()),
     "CURRENT_COST_OBSERVED_AT"
   );
-  const start = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    1
-  ));
   const end = new Date(Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate() + 1
   ));
+  requireCondition(
+    PROJECT_COST_WINDOW_START < isoDate(end),
+    "CURRENT_COST_OBSERVED_AT_WINDOW"
+  );
   return {
-    periodStart: isoDate(start),
+    periodStart: PROJECT_COST_WINDOW_START,
     periodEndExclusive: isoDate(end)
   };
 }
@@ -308,15 +316,37 @@ function validateCost(cost, ceilingUsd, expectedPeriod) {
     "CURRENT_COST_PERIOD_END"
   );
   const rows = asArray(cost?.response?.ResultsByTime);
-  requireCondition(rows.length === 1, "CURRENT_COST_ROWS");
+  const expectedRows = [];
+  let cursor = new Date(`${expectedPeriod.periodStart}T00:00:00.000Z`);
+  const end = new Date(
+    `${expectedPeriod.periodEndExclusive}T00:00:00.000Z`
+  );
+  while (cursor < end) {
+    const nextMonth = new Date(Date.UTC(
+      cursor.getUTCFullYear(),
+      cursor.getUTCMonth() + 1,
+      1
+    ));
+    const rowEnd = nextMonth < end ? nextMonth : end;
+    expectedRows.push({
+      periodStart: isoDate(cursor),
+      periodEndExclusive: isoDate(rowEnd)
+    });
+    cursor = rowEnd;
+  }
+  requireCondition(
+    rows.length === expectedRows.length,
+    "CURRENT_COST_ROWS"
+  );
 
   let total = 0;
   let estimated = false;
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
     requireCondition(
-      row?.TimePeriod?.Start === expectedPeriod.periodStart &&
+      row?.TimePeriod?.Start ===
+        expectedRows[index].periodStart &&
         row?.TimePeriod?.End ===
-          expectedPeriod.periodEndExclusive,
+          expectedRows[index].periodEndExclusive,
       "CURRENT_COST_ROW_PERIOD"
     );
     total += moneyAmount(
@@ -328,7 +358,7 @@ function validateCost(cost, ceilingUsd, expectedPeriod) {
   requireCondition(total < ceilingUsd, "CURRENT_COST_CEILING");
 
   return {
-    scope: "ACCOUNT_WIDE_MONTH_TO_DATE",
+    scope: "ACCOUNT_WIDE_PROJECT_WINDOW_TO_DATE",
     periodStart: cost.periodStart,
     periodEndExclusive: cost.periodEndExclusive,
     amountUsd: total.toFixed(6),
@@ -375,6 +405,14 @@ export function validateAwsGate2Preflight(
       MINIMUM_BUDGET_COVERAGE_END
   } = {}
 ) {
+  requireCondition(
+    Number.isFinite(budgetCeilingUsd) && budgetCeilingUsd > 0,
+    "BUDGET_CEILING_CONFIG"
+  );
+  const effectiveAwsSpendCeilingUsd = Math.min(
+    budgetCeilingUsd,
+    EFFECTIVE_AWS_SPEND_CEILING_USD
+  );
   const observedAtMilliseconds = Date.parse(snapshot?.observedAt);
   requireCondition(
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(
@@ -488,7 +526,7 @@ export function validateAwsGate2Preflight(
     "BUDGET_ACTUAL"
   );
   requireCondition(
-    budgetActual < budgetCeilingUsd,
+    budgetActual < effectiveAwsSpendCeilingUsd,
     "BUDGET_ACTUAL_CEILING"
   );
   const notifications = validateNotifications(
@@ -508,7 +546,7 @@ export function validateAwsGate2Preflight(
   );
   const currentCost = validateCost(
     snapshot?.currentCost,
-    budgetCeilingUsd,
+    effectiveAwsSpendCeilingUsd,
     awsCostExplorerPeriod(snapshot.observedAt)
   );
   const conservativeActual = Math.max(
@@ -516,16 +554,26 @@ export function validateAwsGate2Preflight(
     Number(currentCost.amountUsd)
   );
   requireCondition(
-    conservativeActual < budgetCeilingUsd,
+    conservativeActual < effectiveAwsSpendCeilingUsd,
     "CONSERVATIVE_COST_CEILING"
   );
+  const conservativeObservedTotalExposure =
+    RECORDED_NON_AWS_SPEND_USD + conservativeActual;
+  requireCondition(
+    conservativeObservedTotalExposure <
+      TOTAL_PROJECT_EXPOSURE_CEILING_USD,
+    "TOTAL_PROJECT_EXPOSURE_CEILING"
+  );
+  const remainingExposure =
+    TOTAL_PROJECT_EXPOSURE_CEILING_USD -
+    conservativeObservedTotalExposure;
   const bedrock = validateModel(
     snapshot?.foundationModel,
     expectedModelId
   );
 
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v2",
+    schemaVersion: "tideproof.gate2.aws-preflight.v3",
     status: "PASS",
     observedAt: snapshot.observedAt,
     sourceCommit: snapshot.sourceCommit,
@@ -554,6 +602,22 @@ export function validateAwsGate2Preflight(
         notifications
       },
       currentCost,
+      projectExposure: {
+        scope: "TIDEPROOF_TOTAL_APPROVED_EXPOSURE",
+        ceilingUsd: TOTAL_PROJECT_EXPOSURE_CEILING_USD.toFixed(6),
+        recordedNonAwsSpendUsd:
+          RECORDED_NON_AWS_SPEND_USD.toFixed(6),
+        effectiveAwsSpendCeilingUsd:
+          effectiveAwsSpendCeilingUsd.toFixed(6),
+        conservativeObservedTotalExposureUsd:
+          conservativeObservedTotalExposure.toFixed(6),
+        remainingExposureUsd: remainingExposure.toFixed(6),
+        awsCostWindowStart: PROJECT_COST_WINDOW_START,
+        recordedSpendBasis:
+          "OWNER_REPORTED_TIDEPROOF_NET_REGISTRATION",
+        registrarReceiptVerified: false,
+        autoRenewReportedEnabled: false
+      },
       artifactBucket,
       mainGateTwoStack: {
         name: snapshot.mainStackName,
@@ -564,7 +628,7 @@ export function validateAwsGate2Preflight(
     privacy:
       "AWS account, caller ARN, bucket name, and subscriber addresses were validated but omitted.",
     claimBoundary:
-      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
+      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
   };
 }
 
@@ -574,6 +638,12 @@ export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({
   bootstrapStackName: "tideproof-gate2-artifacts",
   mainStackName: "tideproof-gate2",
   budgetCeilingUsd: EXPECTED_BUDGET_USD,
+  totalProjectExposureCeilingUsd:
+    TOTAL_PROJECT_EXPOSURE_CEILING_USD,
+  recordedNonAwsSpendUsd: RECORDED_NON_AWS_SPEND_USD,
+  effectiveAwsSpendCeilingUsd:
+    EFFECTIVE_AWS_SPEND_CEILING_USD,
+  projectCostWindowStart: PROJECT_COST_WINDOW_START,
   budgetCostBasis: EXPECTED_BUDGET_COST_BASIS,
   minimumBudgetCoverageEnd: MINIMUM_BUDGET_COVERAGE_END
 });

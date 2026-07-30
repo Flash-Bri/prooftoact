@@ -122,8 +122,10 @@ name, and alert addresses from its output, and accepts only:
 - a budget period active at observation time and extending through
   September 15, 2026, plus `$1`/`$5`/`$10` actual alerts, a `$15` forecast
   alert, and at least one email subscriber per alert;
-- both the budget-reported actual spend and Cost Explorer's month-to-date
-  unblended cost through the current UTC day below `$15`;
+- both the budget-reported actual spend and Cost Explorer's cumulative
+  account-wide unblended cost from 2026-07-01 through the current UTC day
+  below the stricter `$13.14` effective AWS ceiling left by the recorded
+  `$11.86` domain expense under the `$25` total-project cap;
 - an encrypted, versioned, bucket-owner-enforced private artifact bucket with
   all public-access blocks and exactly the reviewed TLS-only deny policy,
   with no additional delegated bucket-policy statements; and
@@ -134,6 +136,10 @@ does not prove model invocation access or current Nova pricing, Cost Explorer
 data may be estimated and delayed, and the command does not upload, deploy,
 invoke, sign, or prove IAM denial. Recheck official Nova pricing separately
 and keep the receipt private until its release redaction is reviewed.
+The total-exposure calculation relies on the owner-reported domain-cost and
+auto-renew state recorded in
+`evidence/domain-cost-owner-record-2026-07-30.md`; it does not independently
+verify registrar billing or renewal settings.
 
 The budget read explicitly requests modern `FilterExpression` visibility.
 Absence of that request is not equivalent evidence because AWS can otherwise
@@ -204,7 +210,9 @@ Stop instead of weakening the proof if:
 - a Lambda version's code hash differs;
 - a model response can introduce an operation ID, fencing token, effect key,
   or authority-bearing field;
-- live cost approaches the approved AWS or total-project ceiling.
+- live cost approaches the approved AWS or total-project ceiling;
+- another non-AWS expense would reduce the recorded `$13.14` effective AWS
+  envelope without a corresponding reviewed preflight update.
 
 ## Teardown
 

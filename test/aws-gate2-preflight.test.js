@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AWS_GATE2_PREFLIGHT_DEFAULTS,
   awsBudgetDescribeArguments,
   awsCostExplorerPeriod,
   validateAwsGate2Preflight
@@ -179,6 +180,10 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
 
   assert.equal(receipt.status, "PASS");
   assert.equal(
+    receipt.schemaVersion,
+    "tideproof.gate2.aws-preflight.v3"
+  );
+  assert.equal(
     receipt.controls.budget.conservativeObservedActualUsd,
     "0.250000"
   );
@@ -192,6 +197,35 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   );
   assert.equal(receipt.controls.budget.defaultCostTypes, true);
   assert.equal(receipt.controls.budget.fixedLimit, true);
+  assert.equal(
+    receipt.controls.projectExposure.ceilingUsd,
+    "25.000000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure.recordedNonAwsSpendUsd,
+    "11.860000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure.effectiveAwsSpendCeilingUsd,
+    "13.140000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure
+      .conservativeObservedTotalExposureUsd,
+    "12.110000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure.remainingExposureUsd,
+    "12.890000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure.registrarReceiptVerified,
+    false
+  );
+  assert.equal(
+    AWS_GATE2_PREFLIGHT_DEFAULTS.effectiveAwsSpendCeilingUsd,
+    13.14
+  );
 
   const serialized = JSON.stringify(receipt);
   assert.doesNotMatch(serialized, new RegExp(ACCOUNT_ID));
@@ -224,7 +258,7 @@ test("AWS Gate Two preflight binds Cost Explorer through today", () => {
   assert.deepEqual(
     awsCostExplorerPeriod("2026-08-31T12:00:00.000Z"),
     {
-      periodStart: "2026-08-01",
+      periodStart: "2026-07-01",
       periodEndExclusive: "2026-09-01"
     }
   );
@@ -396,6 +430,46 @@ test("AWS Gate Two preflight binds the Cost Explorer response period", () => {
   );
 });
 
+test("AWS Gate Two preflight totals every month in the project window", () => {
+  const snapshot = validSnapshot();
+  snapshot.observedAt = "2026-08-31T12:00:00.000Z";
+  snapshot.currentCost.periodEndExclusive = "2026-09-01";
+  snapshot.currentCost.response.ResultsByTime = [
+    {
+      TimePeriod: {
+        Start: "2026-07-01",
+        End: "2026-08-01"
+      },
+      Estimated: false,
+      Total: {
+        UnblendedCost: { Amount: "0.20", Unit: "USD" }
+      }
+    },
+    {
+      TimePeriod: {
+        Start: "2026-08-01",
+        End: "2026-09-01"
+      },
+      Estimated: true,
+      Total: {
+        UnblendedCost: { Amount: "0.30", Unit: "USD" }
+      }
+    }
+  ];
+
+  const receipt = validateAwsGate2Preflight(snapshot);
+  assert.equal(receipt.controls.currentCost.amountUsd, "0.500000");
+  assert.equal(
+    receipt.controls.currentCost.scope,
+    "ACCOUNT_WIDE_PROJECT_WINDOW_TO_DATE"
+  );
+  assert.equal(
+    receipt.controls.projectExposure
+      .conservativeObservedTotalExposureUsd,
+    "12.360000"
+  );
+});
+
 test("AWS Gate Two preflight rejects a different region", () => {
   const snapshot = validSnapshot();
   snapshot.region = "us-west-2";
@@ -471,13 +545,22 @@ test("AWS Gate Two preflight rejects an existing main stack", () => {
   );
 });
 
-test("AWS Gate Two preflight rejects spend at the approved ceiling", () => {
+test("AWS Gate Two preflight rejects spend at the effective project ceiling", () => {
   const snapshot = validSnapshot();
   snapshot.currentCost.response.ResultsByTime[0]
-    .Total.UnblendedCost.Amount = "15";
+    .Total.UnblendedCost.Amount = "13.14";
   assert.throws(
     () => validateAwsGate2Preflight(snapshot),
     /CURRENT_COST_CEILING/
+  );
+});
+
+test("AWS Gate Two preflight applies the effective ceiling to budget spend", () => {
+  const snapshot = validSnapshot();
+  snapshot.budget.CalculatedSpend.ActualSpend.Amount = "13.14";
+  assert.throws(
+    () => validateAwsGate2Preflight(snapshot),
+    /BUDGET_ACTUAL_CEILING/
   );
 });
 

@@ -18,8 +18,10 @@ The proposed submission name is therefore:
 **Tideproof — Admissibility Memory for High-Stakes Agents**
 
 “Highwater Drill” is retained only as the name of the synthetic demonstration
-scenario. “Tideproof” still requires a formal trademark, package, domain,
-repository, and competition-name check before publication.
+scenario. The owner has registered `tideproof.net`, but registration is not a
+trademark clearance or release approval. “Tideproof” still requires formal
+trademark, package, repository, and competition-name checks before
+publication.
 
 ## Relevant neighboring work
 
