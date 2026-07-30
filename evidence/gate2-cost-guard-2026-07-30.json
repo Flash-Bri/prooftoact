@@ -1,0 +1,66 @@
+{
+  "schema": "tideproof.gate2.cost-guard-receipt.v1",
+  "observedAt": "2026-07-30T08:58:30-04:00",
+  "sourceCommit": "67710a870beb193f993eca7ad169f53f3d7ed32c",
+  "sourceTree": "fdb66334656829d7f2f79e3e44d1e41550e1398b",
+  "bootstrapTemplateDigest": "63b7fdb71319df83dfae2b14eeb3df5f77d386a5c8a6166f7cad3e4a3443c95c",
+  "stack": {
+    "name": "tideproof-gate2-artifacts",
+    "status": "UPDATE_COMPLETE"
+  },
+  "changeSet": {
+    "name": "tideproof-cost-guard-67710a8",
+    "deploymentValidationsPassed": true,
+    "resourceChanges": [
+      {
+        "logicalId": "AccountBudget",
+        "action": "Add",
+        "resourceType": "AWS::Budgets::Budget",
+        "replacement": null
+      }
+    ],
+    "existingArtifactBucketChanged": false
+  },
+  "budget": {
+    "name": "tideproof-gate2-artifacts-account-safety",
+    "type": "COST",
+    "timeUnit": "MONTHLY",
+    "limit": {
+      "amount": 15,
+      "unit": "USD"
+    },
+    "alerts": [
+      {
+        "metric": "ACTUAL",
+        "comparison": "GREATER_THAN",
+        "threshold": 1,
+        "thresholdType": "ABSOLUTE_VALUE",
+        "emailRecipientCount": 1
+      },
+      {
+        "metric": "ACTUAL",
+        "comparison": "GREATER_THAN",
+        "threshold": 5,
+        "thresholdType": "ABSOLUTE_VALUE",
+        "emailRecipientCount": 1
+      },
+      {
+        "metric": "ACTUAL",
+        "comparison": "GREATER_THAN",
+        "threshold": 10,
+        "thresholdType": "ABSOLUTE_VALUE",
+        "emailRecipientCount": 1
+      },
+      {
+        "metric": "FORECASTED",
+        "comparison": "GREATER_THAN",
+        "threshold": 15,
+        "thresholdType": "ABSOLUTE_VALUE",
+        "emailRecipientCount": 1
+      }
+    ]
+  },
+  "mainGateTwoStackDeployed": false,
+  "awsSpendClaim": "not_asserted_cost_data_not_yet_mature",
+  "claimBoundary": "This receipt proves the prerequisite AWS Budget and alert configuration only. It does not prove Gate Two deployment, Lambda execution, Bedrock behavior, race behavior, recovery behavior, or final project cost."
+}

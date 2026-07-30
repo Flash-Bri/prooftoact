@@ -57,6 +57,9 @@ Stop new cloud work and investigate if:
    notifications at $1, $5, and $10 actual spend and $15 forecast spend,
    before deploying the main Gate Two stack. This is an alert boundary, not a
    hard service cap.
+   The live bootstrap verification is recorded in
+   `evidence/gate2-cost-guard-2026-07-30.json`; it intentionally makes no AWS
+   spend claim while first-use cost data is still maturing.
 4. Cap model requests, input size, output tokens, retries, and concurrency.
 5. Use short log retention and synthetic data only.
 6. Record every temporary resource, owner, creation time, cost class, and
