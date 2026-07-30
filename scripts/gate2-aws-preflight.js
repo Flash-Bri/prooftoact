@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   AWS_GATE2_PREFLIGHT_DEFAULTS,
+  awsBudgetDescribeArguments,
+  awsCostExplorerPeriod,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
 
@@ -76,31 +78,6 @@ function notificationInput(notification) {
     ComparisonOperator: notification.ComparisonOperator,
     Threshold: notification.Threshold,
     ThresholdType: notification.ThresholdType
-  };
-}
-
-function isoDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function costPeriod(now) {
-  const start = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    1
-  ));
-  let end = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate()
-  ));
-  if (end <= start) {
-    end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
-  }
-  return {
-    periodStart: isoDate(start),
-    periodEndExclusive: isoDate(end)
   };
 }
 
@@ -179,12 +156,7 @@ function collectSnapshot(now = new Date()) {
     region,
     "budgets",
     "describe-budget",
-    [
-      "--account-id",
-      accountId,
-      "--budget-name",
-      budgetName
-    ]
+    awsBudgetDescribeArguments(accountId, budgetName)
   ).Budget;
   const notifications = awsJson(
     region,
@@ -215,7 +187,7 @@ function collectSnapshot(now = new Date()) {
       ).Subscribers ?? []
   }));
 
-  const period = costPeriod(now);
+  const period = awsCostExplorerPeriod(now);
   const currentCostResponse = awsJson(
     region,
     "ce",

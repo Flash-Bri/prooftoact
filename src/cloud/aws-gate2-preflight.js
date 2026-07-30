@@ -1,6 +1,22 @@
 const EXPECTED_REGION = "us-east-1";
 const EXPECTED_MODEL_ID = "amazon.nova-micro-v1:0";
 const EXPECTED_BUDGET_USD = 15;
+const EXPECTED_BUDGET_COST_BASIS = "UnblendedCost";
+const MINIMUM_BUDGET_COVERAGE_END =
+  "2026-09-16T00:00:00.000Z";
+const EXPECTED_COST_TYPES = Object.freeze({
+  IncludeCredit: true,
+  IncludeDiscount: true,
+  IncludeOtherSubscription: true,
+  IncludeRecurring: true,
+  IncludeRefund: true,
+  IncludeSubscription: true,
+  IncludeSupport: true,
+  IncludeTax: true,
+  IncludeUpfront: true,
+  UseAmortized: false,
+  UseBlended: false
+});
 const REQUIRED_NOTIFICATIONS = [
   {
     notificationType: "ACTUAL",
@@ -44,6 +60,66 @@ function moneyAmount(value, code) {
   requireCondition(Number.isFinite(amount), `${code}_AMOUNT`);
   requireCondition(amount >= 0, `${code}_NEGATIVE`);
   return amount;
+}
+
+function isAbsentOrEmptyObject(value) {
+  return (
+    value == null ||
+    (
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).length === 0
+    )
+  );
+}
+
+function timestampMilliseconds(value, code) {
+  let milliseconds = Number.NaN;
+  if (typeof value === "number") {
+    milliseconds = value < 1_000_000_000_000
+      ? value * 1000
+      : value;
+  } else if (typeof value === "string" && value.length > 0) {
+    milliseconds = Date.parse(value);
+  }
+  requireCondition(Number.isFinite(milliseconds), code);
+  return milliseconds;
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function awsCostExplorerPeriod(observedAt) {
+  const now = new Date(observedAt);
+  requireCondition(
+    Number.isFinite(now.getTime()),
+    "CURRENT_COST_OBSERVED_AT"
+  );
+  const start = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    1
+  ));
+  const end = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1
+  ));
+  return {
+    periodStart: isoDate(start),
+    periodEndExclusive: isoDate(end)
+  };
+}
+
+export function awsBudgetDescribeArguments(accountId, budgetName) {
+  return [
+    "--account-id",
+    accountId,
+    "--budget-name",
+    budgetName,
+    "--show-filter-expression"
+  ];
 }
 
 function exactStackOutput(stack, key) {
@@ -102,44 +178,70 @@ function validateNotifications(entries) {
   return accepted;
 }
 
-function actionsContainS3Wildcard(action) {
-  return asArray(
-    typeof action === "string" ? [action] : action
-  ).includes("s3:*");
+function hasExactObjectKeys(value, expectedKeys) {
+  if (
+    value == null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    return false;
+  }
+  return JSON.stringify(Object.keys(value).sort()) ===
+    JSON.stringify([...expectedKeys].sort());
 }
 
-function principalIsWildcard(principal) {
+function hasExpectedCostTypes(value) {
+  if (value == null) {
+    return true;
+  }
   return (
-    principal === "*" ||
-    principal?.AWS === "*" ||
-    asArray(principal?.AWS).includes("*")
+    hasExactObjectKeys(value, Object.keys(EXPECTED_COST_TYPES)) &&
+    Object.entries(EXPECTED_COST_TYPES).every(
+      ([key, expected]) => value[key] === expected
+    )
   );
 }
 
-function hasTlsOnlyDeny(policy, bucketName) {
+function hasExactTlsOnlyDenyPolicy(policy, bucketName) {
   const expectedResources = new Set([
     `arn:aws:s3:::${bucketName}`,
     `arn:aws:s3:::${bucketName}/*`
   ]);
+  const statements = asArray(policy?.Statement);
+  if (
+    policy?.Version !== "2012-10-17" ||
+    statements.length !== 1
+  ) {
+    return false;
+  }
 
-  return asArray(policy?.Statement).some((statement) => {
-    const resources = new Set(
-      asArray(
-        typeof statement?.Resource === "string"
-          ? [statement.Resource]
-          : statement?.Resource
-      )
-    );
-    const secureTransport =
-      statement?.Condition?.Bool?.["aws:SecureTransport"];
-    return (
-      statement?.Effect === "Deny" &&
-      principalIsWildcard(statement?.Principal) &&
-      actionsContainS3Wildcard(statement?.Action) &&
-      [...expectedResources].every((resource) => resources.has(resource)) &&
-      (secureTransport === "false" || secureTransport === false)
-    );
-  });
+  const statement = statements[0];
+  const resources = asArray(statement?.Resource);
+  return (
+    hasExactObjectKeys(
+      statement,
+      [
+        "Sid",
+        "Effect",
+        "Principal",
+        "Action",
+        "Resource",
+        "Condition"
+      ]
+    ) &&
+    statement.Sid === "DenyInsecureTransport" &&
+    statement.Effect === "Deny" &&
+    statement.Principal === "*" &&
+    statement.Action === "s3:*" &&
+    resources.length === expectedResources.size &&
+    resources.every((resource) => expectedResources.has(resource)) &&
+    hasExactObjectKeys(statement.Condition, ["Bool"]) &&
+    hasExactObjectKeys(
+      statement.Condition.Bool,
+      ["aws:SecureTransport"]
+    ) &&
+    statement.Condition.Bool["aws:SecureTransport"] === "false"
+  );
 }
 
 function validateArtifactBucket(bucket, bucketName) {
@@ -182,7 +284,7 @@ function validateArtifactBucket(bucket, bucketName) {
     "ARTIFACT_BUCKET_PUBLIC_POLICY"
   );
   requireCondition(
-    hasTlsOnlyDeny(bucket?.policy, bucketName),
+    hasExactTlsOnlyDenyPolicy(bucket?.policy, bucketName),
     "ARTIFACT_BUCKET_TLS_POLICY"
   );
 
@@ -195,13 +297,28 @@ function validateArtifactBucket(bucket, bucketName) {
   };
 }
 
-function validateCost(cost, ceilingUsd) {
+function validateCost(cost, ceilingUsd, expectedPeriod) {
+  requireCondition(
+    cost?.periodStart === expectedPeriod.periodStart,
+    "CURRENT_COST_PERIOD_START"
+  );
+  requireCondition(
+    cost?.periodEndExclusive ===
+      expectedPeriod.periodEndExclusive,
+    "CURRENT_COST_PERIOD_END"
+  );
   const rows = asArray(cost?.response?.ResultsByTime);
-  requireCondition(rows.length >= 1, "CURRENT_COST_ROWS");
+  requireCondition(rows.length === 1, "CURRENT_COST_ROWS");
 
   let total = 0;
   let estimated = false;
   for (const row of rows) {
+    requireCondition(
+      row?.TimePeriod?.Start === expectedPeriod.periodStart &&
+        row?.TimePeriod?.End ===
+          expectedPeriod.periodEndExclusive,
+      "CURRENT_COST_ROW_PERIOD"
+    );
     total += moneyAmount(
       row?.Total?.UnblendedCost,
       "CURRENT_COST_UNBLENDED"
@@ -209,14 +326,6 @@ function validateCost(cost, ceilingUsd) {
     estimated ||= row?.Estimated === true;
   }
   requireCondition(total < ceilingUsd, "CURRENT_COST_CEILING");
-  requireCondition(
-    /^\d{4}-\d{2}-\d{2}$/.test(cost?.periodStart),
-    "CURRENT_COST_PERIOD_START"
-  );
-  requireCondition(
-    /^\d{4}-\d{2}-\d{2}$/.test(cost?.periodEndExclusive),
-    "CURRENT_COST_PERIOD_END"
-  );
 
   return {
     scope: "ACCOUNT_WIDE_MONTH_TO_DATE",
@@ -261,13 +370,16 @@ export function validateAwsGate2Preflight(
   {
     expectedRegion = EXPECTED_REGION,
     expectedModelId = EXPECTED_MODEL_ID,
-    budgetCeilingUsd = EXPECTED_BUDGET_USD
+    budgetCeilingUsd = EXPECTED_BUDGET_USD,
+    minimumBudgetCoverageEnd =
+      MINIMUM_BUDGET_COVERAGE_END
   } = {}
 ) {
+  const observedAtMilliseconds = Date.parse(snapshot?.observedAt);
   requireCondition(
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(
       snapshot?.observedAt
-    ),
+    ) && Number.isFinite(observedAtMilliseconds),
     "OBSERVED_AT"
   );
   requireCondition(snapshot?.region === expectedRegion, "AWS_REGION");
@@ -314,6 +426,61 @@ export function validateAwsGate2Preflight(
   requireCondition(budget?.BudgetName === budgetName, "BUDGET_NAME");
   requireCondition(budget?.BudgetType === "COST", "BUDGET_TYPE");
   requireCondition(budget?.TimeUnit === "MONTHLY", "BUDGET_TIME_UNIT");
+  requireCondition(
+    isAbsentOrEmptyObject(budget?.CostFilters),
+    "BUDGET_COST_FILTERS_ACCOUNT_WIDE"
+  );
+  requireCondition(
+    isAbsentOrEmptyObject(budget?.FilterExpression),
+    "BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE"
+  );
+  requireCondition(
+    budget?.BillingViewArn == null,
+    "BUDGET_BILLING_VIEW_ACCOUNT_WIDE"
+  );
+  requireCondition(
+    budget?.AutoAdjustData == null,
+    "BUDGET_AUTO_ADJUST_NOT_FIXED"
+  );
+  requireCondition(
+    isAbsentOrEmptyObject(budget?.PlannedBudgetLimits),
+    "BUDGET_PLANNED_LIMITS_NOT_FIXED"
+  );
+  requireCondition(
+    budget?.Metrics == null,
+    "BUDGET_METRICS_MODEL"
+  );
+  requireCondition(
+    hasExpectedCostTypes(budget?.CostTypes),
+    "BUDGET_COST_TYPES"
+  );
+  const budgetPeriodStart = timestampMilliseconds(
+    budget?.TimePeriod?.Start,
+    "BUDGET_TIME_PERIOD_START"
+  );
+  const budgetPeriodEnd = timestampMilliseconds(
+    budget?.TimePeriod?.End,
+    "BUDGET_TIME_PERIOD_END"
+  );
+  requireCondition(
+    budgetPeriodStart < budgetPeriodEnd,
+    "BUDGET_TIME_PERIOD_ORDER"
+  );
+  requireCondition(
+    observedAtMilliseconds >= budgetPeriodStart,
+    "BUDGET_TIME_PERIOD_NOT_STARTED"
+  );
+  requireCondition(
+    observedAtMilliseconds < budgetPeriodEnd,
+    "BUDGET_TIME_PERIOD_EXPIRED"
+  );
+  requireCondition(
+    budgetPeriodEnd >= timestampMilliseconds(
+      minimumBudgetCoverageEnd,
+      "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
+    ),
+    "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
+  );
   const limit = moneyAmount(budget?.BudgetLimit, "BUDGET_LIMIT");
   requireCondition(limit === budgetCeilingUsd, "BUDGET_LIMIT_VALUE");
   const budgetActual = moneyAmount(
@@ -341,7 +508,8 @@ export function validateAwsGate2Preflight(
   );
   const currentCost = validateCost(
     snapshot?.currentCost,
-    budgetCeilingUsd
+    budgetCeilingUsd,
+    awsCostExplorerPeriod(snapshot.observedAt)
   );
   const conservativeActual = Math.max(
     budgetActual,
@@ -357,7 +525,7 @@ export function validateAwsGate2Preflight(
   );
 
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v1",
+    schemaVersion: "tideproof.gate2.aws-preflight.v2",
     status: "PASS",
     observedAt: snapshot.observedAt,
     sourceCommit: snapshot.sourceCommit,
@@ -371,9 +539,15 @@ export function validateAwsGate2Preflight(
       },
       budget: {
         name: budgetName,
+        scope: "ACCOUNT_WIDE",
         type: "COST",
         timeUnit: "MONTHLY",
+        costBasis: EXPECTED_BUDGET_COST_BASIS,
+        defaultCostTypes: true,
+        fixedLimit: true,
         limitUsd: limit,
+        coverageStart: new Date(budgetPeriodStart).toISOString(),
+        coverageEnd: new Date(budgetPeriodEnd).toISOString(),
         budgetReportedActualUsd: budgetActual.toFixed(6),
         conservativeObservedActualUsd:
           conservativeActual.toFixed(6),
@@ -399,5 +573,7 @@ export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({
   modelId: EXPECTED_MODEL_ID,
   bootstrapStackName: "tideproof-gate2-artifacts",
   mainStackName: "tideproof-gate2",
-  budgetCeilingUsd: EXPECTED_BUDGET_USD
+  budgetCeilingUsd: EXPECTED_BUDGET_USD,
+  budgetCostBasis: EXPECTED_BUDGET_COST_BASIS,
+  minimumBudgetCoverageEnd: MINIMUM_BUDGET_COVERAGE_END
 });

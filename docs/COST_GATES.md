@@ -56,13 +56,16 @@ Stop new cloud work and investigate if:
    $15 AWS Budget reaches `CREATE_COMPLETE`, with absolute-dollar
    notifications at $1, $5, and $10 actual spend and $15 forecast spend,
    before deploying the main Gate Two stack. This is a monthly, account-wide
-   alert boundary, not a project ledger or hard service cap. CloudFormation
-   uses `GREATER_THAN`, so notifications trigger after—not at—the listed
-   amounts. The application has no runtime budget check or automatic
-   shutdown.
+   unblended-cost alert boundary, not a project ledger or hard service cap.
+   The live preflight rejects filters, billing views, auto-adjustment, planned
+   limits, inactive periods, and periods ending before September 16, 2026.
+   CloudFormation uses `GREATER_THAN`, so notifications trigger after—not
+   at—the listed amounts. The application has no runtime budget check or
+   automatic shutdown.
    The live bootstrap verification is recorded in
    `evidence/gate2-cost-guard-2026-07-30.json`; it intentionally makes no AWS
-   spend claim while first-use cost data is still maturing.
+   spend claim while first-use cost data is still maturing. It cannot evidence
+   the hardened live preflight or the main-stack candidate.
 4. Cap model requests, input size, output tokens, retries, and concurrency.
 5. Use short log retention and synthetic data only.
 6. Record every temporary resource, owner, creation time, cost class, and

@@ -117,12 +117,16 @@ name, and alert addresses from its output, and accepts only:
 - `us-east-1` and active on-demand catalog metadata for
   `amazon.nova-micro-v1:0`;
 - the stable `tideproof-gate2-artifacts` bootstrap stack;
-- its exact account-wide monthly `$15` budget, `$1`/`$5`/`$10` actual alerts,
-  `$15` forecast alert, and at least one email subscriber per alert;
+- its exact fixed, account-wide monthly `$15` unblended-cost budget, with no
+  legacy or modern filter, billing view, auto-adjustment, or planned limits;
+- a budget period active at observation time and extending through
+  September 15, 2026, plus `$1`/`$5`/`$10` actual alerts, a `$15` forecast
+  alert, and at least one email subscriber per alert;
 - both the budget-reported actual spend and Cost Explorer's month-to-date
-  unblended cost below `$15`;
+  unblended cost through the current UTC day below `$15`;
 - an encrypted, versioned, bucket-owner-enforced private artifact bucket with
-  all public-access blocks and the TLS-only deny policy intact; and
+  all public-access blocks and exactly the reviewed TLS-only deny policy,
+  with no additional delegated bucket-policy statements; and
 - no active `tideproof-gate2` main stack.
 
 A `PASS` receipt is necessary but deliberately insufficient. The catalog call
@@ -130,6 +134,16 @@ does not prove model invocation access or current Nova pricing, Cost Explorer
 data may be estimated and delayed, and the command does not upload, deploy,
 invoke, sign, or prove IAM denial. Recheck official Nova pricing separately
 and keep the receipt private until its release redaction is reviewed.
+
+The budget read explicitly requests modern `FilterExpression` visibility.
+Absence of that request is not equivalent evidence because AWS can otherwise
+omit modern service, tag, region, or linked-account filters from the response.
+The bootstrap uses AWS's documented account-wide cost-budget defaults; the
+preflight accepts either an omitted `CostTypes` response or the exact complete
+default object, whose nonblended, nonamortized settings bind the
+`UnblendedCost` basis. Any custom cost-type value or partial object fails.
+The sanitized manual console observation and its mandatory stop are recorded
+in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 
 ## Live acceptance sequence
 

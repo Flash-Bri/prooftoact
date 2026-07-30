@@ -620,6 +620,12 @@ test("bootstrap establishes the cost guard before the private artifact bucket", 
   const budget = template.Resources.AccountBudget.Properties;
   assert.equal(budget.Budget.BudgetLimit.Amount, 15);
   assert.equal(budget.Budget.CostFilters, undefined);
+  assert.equal(budget.Budget.FilterExpression, undefined);
+  assert.equal(budget.Budget.BillingViewArn, undefined);
+  assert.equal(budget.Budget.AutoAdjustData, undefined);
+  assert.equal(budget.Budget.PlannedBudgetLimits, undefined);
+  assert.equal(budget.Budget.CostTypes, undefined);
+  assert.equal(budget.Budget.Metrics, undefined);
   assert.deepEqual(
     budget.NotificationsWithSubscribers.map(
       ({ Notification }) => Notification

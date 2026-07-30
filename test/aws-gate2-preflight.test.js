@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  awsBudgetDescribeArguments,
+  awsCostExplorerPeriod,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
 
@@ -61,7 +63,24 @@ function validSnapshot() {
       BudgetName: BUDGET_NAME,
       BudgetType: "COST",
       TimeUnit: "MONTHLY",
+      CostTypes: {
+        IncludeCredit: true,
+        IncludeDiscount: true,
+        IncludeOtherSubscription: true,
+        IncludeRecurring: true,
+        IncludeRefund: true,
+        IncludeSubscription: true,
+        IncludeSupport: true,
+        IncludeTax: true,
+        IncludeUpfront: true,
+        UseAmortized: false,
+        UseBlended: false
+      },
       BudgetLimit: { Amount: "15", Unit: "USD" },
+      TimePeriod: {
+        Start: "2026-07-01T00:00:00.000Z",
+        End: "2087-06-15T00:00:00.000Z"
+      },
       CalculatedSpend: {
         ActualSpend: { Amount: "0.25", Unit: "USD" }
       }
@@ -103,6 +122,7 @@ function validSnapshot() {
         Version: "2012-10-17",
         Statement: [
           {
+            Sid: "DenyInsecureTransport",
             Effect: "Deny",
             Principal: "*",
             Action: "s3:*",
@@ -126,10 +146,14 @@ function validSnapshot() {
     ],
     currentCost: {
       periodStart: "2026-07-01",
-      periodEndExclusive: "2026-07-30",
+      periodEndExclusive: "2026-07-31",
       response: {
         ResultsByTime: [
           {
+            TimePeriod: {
+              Start: "2026-07-01",
+              End: "2026-07-31"
+            },
             Estimated: true,
             Total: {
               UnblendedCost: { Amount: "0.20", Unit: "USD" }
@@ -161,12 +185,215 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   assert.equal(receipt.controls.mainGateTwoStack.state, "ABSENT");
   assert.equal(receipt.controls.bedrock.catalogStatus, "ACTIVE");
   assert.equal(receipt.controls.artifactBucket.tlsOnlyPolicy, true);
+  assert.equal(receipt.controls.budget.scope, "ACCOUNT_WIDE");
+  assert.equal(
+    receipt.controls.budget.costBasis,
+    "UnblendedCost"
+  );
+  assert.equal(receipt.controls.budget.defaultCostTypes, true);
+  assert.equal(receipt.controls.budget.fixedLimit, true);
 
   const serialized = JSON.stringify(receipt);
   assert.doesNotMatch(serialized, new RegExp(ACCOUNT_ID));
   assert.doesNotMatch(serialized, new RegExp(BUCKET_NAME));
   assert.doesNotMatch(serialized, /private@example\.invalid/);
   assert.doesNotMatch(serialized, /tideproof-deployer/);
+});
+
+test("AWS Gate Two preflight requests modern filter visibility", () => {
+  assert.deepEqual(
+    awsBudgetDescribeArguments("111111111111", "account-safety"),
+    [
+      "--account-id",
+      "111111111111",
+      "--budget-name",
+      "account-safety",
+      "--show-filter-expression"
+    ]
+  );
+});
+
+test("AWS Gate Two preflight binds Cost Explorer through today", () => {
+  assert.deepEqual(
+    awsCostExplorerPeriod("2026-07-30T23:59:59.000Z"),
+    {
+      periodStart: "2026-07-01",
+      periodEndExclusive: "2026-07-31"
+    }
+  );
+  assert.deepEqual(
+    awsCostExplorerPeriod("2026-08-31T12:00:00.000Z"),
+    {
+      periodStart: "2026-08-01",
+      periodEndExclusive: "2026-09-01"
+    }
+  );
+});
+
+test("AWS Gate Two preflight accepts explicit empty filter maps", () => {
+  const snapshot = validSnapshot();
+  snapshot.budget.CostFilters = {};
+  snapshot.budget.FilterExpression = {};
+  assert.equal(validateAwsGate2Preflight(snapshot).status, "PASS");
+
+  delete snapshot.budget.CostTypes;
+  assert.equal(validateAwsGate2Preflight(snapshot).status, "PASS");
+});
+
+test("AWS Gate Two preflight rejects non-account-wide budgets", () => {
+  for (const [mutate, expectedCode] of [
+    [
+      (snapshot) => {
+        snapshot.budget.CostFilters = {
+          Service: ["Amazon Simple Storage Service"]
+        };
+      },
+      "BUDGET_COST_FILTERS_ACCOUNT_WIDE"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.FilterExpression = {
+          Dimensions: {
+            Key: "SERVICE",
+            Values: ["Amazon Simple Storage Service"]
+          }
+        };
+      },
+      "BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.BillingViewArn =
+          "arn:aws:billing::111111111111:billingview/private";
+      },
+      "BUDGET_BILLING_VIEW_ACCOUNT_WIDE"
+    ]
+  ]) {
+    const snapshot = validSnapshot();
+    mutate(snapshot);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      new RegExp(expectedCode)
+    );
+  }
+});
+
+test("AWS Gate Two preflight rejects non-fixed budget models", () => {
+  for (const [mutate, expectedCode] of [
+    [
+      (snapshot) => {
+        snapshot.budget.AutoAdjustData = {
+          AutoAdjustType: "HISTORICAL"
+        };
+      },
+      "BUDGET_AUTO_ADJUST_NOT_FIXED"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.PlannedBudgetLimits = {
+          "1785542400": { Amount: "15", Unit: "USD" }
+        };
+      },
+      "BUDGET_PLANNED_LIMITS_NOT_FIXED"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.Metrics = ["AmortizedCost"];
+      },
+      "BUDGET_METRICS_MODEL"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.CostTypes.UseBlended = true;
+      },
+      "BUDGET_COST_TYPES"
+    ],
+    [
+      (snapshot) => {
+        delete snapshot.budget.CostTypes.IncludeCredit;
+      },
+      "BUDGET_COST_TYPES"
+    ]
+  ]) {
+    const snapshot = validSnapshot();
+    mutate(snapshot);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      new RegExp(expectedCode)
+    );
+  }
+});
+
+test("AWS Gate Two preflight requires an active release-long budget", () => {
+  for (const [mutate, expectedCode] of [
+    [
+      (snapshot) => {
+        snapshot.budget.TimePeriod.Start = "not-a-timestamp";
+      },
+      "BUDGET_TIME_PERIOD_START"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.TimePeriod.End = "not-a-timestamp";
+      },
+      "BUDGET_TIME_PERIOD_END"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.TimePeriod.Start =
+          "2026-09-17T00:00:00.000Z";
+        snapshot.budget.TimePeriod.End =
+          "2026-09-16T00:00:00.000Z";
+      },
+      "BUDGET_TIME_PERIOD_ORDER"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.TimePeriod.Start =
+          "2026-08-01T00:00:00.000Z";
+      },
+      "BUDGET_TIME_PERIOD_NOT_STARTED"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.TimePeriod.End = snapshot.observedAt;
+      },
+      "BUDGET_TIME_PERIOD_EXPIRED"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.TimePeriod.End =
+          "2026-09-15T23:59:59.999Z";
+      },
+      "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
+    ]
+  ]) {
+    const snapshot = validSnapshot();
+    mutate(snapshot);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      new RegExp(expectedCode)
+    );
+  }
+});
+
+test("AWS Gate Two preflight rejects a stale Cost Explorer window", () => {
+  const snapshot = validSnapshot();
+  snapshot.currentCost.periodEndExclusive = "2026-07-30";
+  assert.throws(
+    () => validateAwsGate2Preflight(snapshot),
+    /CURRENT_COST_PERIOD_END/
+  );
+});
+
+test("AWS Gate Two preflight binds the Cost Explorer response period", () => {
+  const snapshot = validSnapshot();
+  snapshot.currentCost.response.ResultsByTime[0].TimePeriod.End =
+    "2026-07-30";
+  assert.throws(
+    () => validateAwsGate2Preflight(snapshot),
+    /CURRENT_COST_ROW_PERIOD/
+  );
 });
 
 test("AWS Gate Two preflight rejects a different region", () => {
@@ -210,6 +437,17 @@ test("AWS Gate Two preflight rejects unsafe artifact-bucket controls", () => {
     },
     (snapshot) => {
       snapshot.artifactBucket.policy.Statement = [];
+    },
+    (snapshot) => {
+      snapshot.artifactBucket.policy.Statement.push({
+        Sid: "DelegatePrivateRead",
+        Effect: "Allow",
+        Principal: {
+          AWS: "arn:aws:iam::222222222222:root"
+        },
+        Action: "s3:GetObject",
+        Resource: `arn:aws:s3:::${BUCKET_NAME}/*`
+      });
     }
   ]) {
     const snapshot = validSnapshot();
