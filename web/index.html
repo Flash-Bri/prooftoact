@@ -5,56 +5,323 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="A synthetic clean-room demonstration of evidence-governed agent memory."
+      content="Tideproof is a synthetic, evidence-governed agent-memory demonstration with recorded CockroachDB proof and a bounded local AWS candidate."
     >
     <title>Tideproof — Admissibility Memory</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <header class="hero">
-      <p class="eyebrow">Tideproof Admissibility Memory</p>
-      <h1>Shared memory that fails closed when the evidence fails.</h1>
-      <p class="lede">
-        The Highwater Drill is a deterministic proof that retrieved memory is
-        evidence, not authority.
-      </p>
-      <p class="disclosure">
+    <a class="skip-link" href="#judge-path">Skip to the judge path</a>
+
+    <aside class="proof-ribbon" aria-label="Proof environment status">
+      <span class="safety-state">
         Synthetic scenario · Not operational emergency software
+      </span>
+      <span class="proof-state local">LOCAL DETERMINISTIC REPLAY</span>
+      <span class="proof-state recorded">
+        RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30
+      </span>
+      <span class="proof-state pending">
+        GATE TWO — local AWS candidate; live AWS evidence pending
+      </span>
+    </aside>
+
+    <header class="hero">
+      <p class="eyebrow">Tideproof · Admissibility Memory</p>
+      <h1>Memory should preserve evidence—not inherit authority.</h1>
+      <p class="lede">
+        A three-act proof that filters stale, invalid, and out-of-scope memory;
+        commits one scarce authorization; and recovers context without
+        transferring the right to act.
       </p>
+      <div class="hero-facts" aria-label="Current proof summary">
+        <p><strong>100 × 50</strong><span>recorded cloud races</span></p>
+        <p><strong>1</strong><span>winner per race</span></p>
+        <p><strong>0</strong><span>invariant violations</span></p>
+      </div>
     </header>
 
     <main>
-      <section aria-labelledby="invariants-title">
+      <section class="architecture" aria-labelledby="architecture-title">
         <div class="section-heading">
-          <p class="step-label">Proof surface</p>
-          <h2 id="invariants-title">Seven visible invariants</h2>
+          <div>
+            <p class="step-label">Trust boundary</p>
+            <h2 id="architecture-title">
+              Relevance can suggest. Only admissibility can authorize.
+            </h2>
+          </div>
+          <p class="section-note">
+            Recorded Gate One architecture · synthetic scope
+          </p>
         </div>
-        <div id="invariants" class="invariant-grid" aria-live="polite">
-          <p>Running deterministic scenario…</p>
+
+        <div
+          class="architecture-shell"
+          role="region"
+          aria-label="Scrollable Tideproof trust-boundary diagram"
+          tabindex="0"
+        >
+          <svg
+            viewBox="0 0 1100 360"
+            role="img"
+            aria-labelledby="architecture-svg-title architecture-svg-desc"
+          >
+            <title id="architecture-svg-title">
+              Tideproof evidence, proposal, authority, and recovery boundaries
+            </title>
+            <desc id="architecture-svg-desc">
+              Untrusted evidence passes through CockroachDB provenance,
+              validity, scope, and conflict checks before vector ranking. An
+              agent can propose but cannot authorize. A separate serializable
+              transaction issues one fenced receipt. Managed MCP returns
+              context only and never authority.
+            </desc>
+            <defs>
+              <marker
+                id="arrow"
+                markerWidth="8"
+                markerHeight="8"
+                refX="7"
+                refY="4"
+                orient="auto"
+              >
+                <path d="M0,0 L8,4 L0,8 Z" class="arrowhead"></path>
+              </marker>
+            </defs>
+
+            <rect
+              class="diagram-zone"
+              x="205"
+              y="32"
+              width="470"
+              height="305"
+              rx="18"
+            ></rect>
+            <text class="zone-label" x="229" y="62">COCKROACHDB MEMORY</text>
+            <rect
+              class="diagram-zone"
+              x="690"
+              y="12"
+              width="220"
+              height="132"
+              rx="18"
+            ></rect>
+            <text class="zone-label" x="714" y="40">AGENT RUNTIME</text>
+            <rect
+              class="diagram-zone authority-zone"
+              x="690"
+              y="178"
+              width="392"
+              height="159"
+              rx="18"
+            ></rect>
+            <text class="zone-label" x="714" y="207">
+              DETERMINISTIC AUTHORITY
+            </text>
+
+            <path class="diagram-edge" d="M180 155 H230"></path>
+            <path class="diagram-edge" d="M450 155 H500"></path>
+            <path class="diagram-edge" d="M660 155 C690 155 690 92 720 92"></path>
+            <path class="diagram-edge" d="M450 178 C560 230 610 258 720 258"></path>
+            <path class="diagram-edge proposal-edge" d="M810 132 V228"></path>
+            <path class="diagram-edge" d="M900 258 H945"></path>
+            <path
+              class="diagram-edge context-edge"
+              d="M580 282 C640 282 660 112 720 112"
+            ></path>
+
+            <g class="diagram-node input-node">
+              <rect x="30" y="112" width="150" height="86" rx="14"></rect>
+              <text x="54" y="144">Untrusted</text>
+              <text x="54" y="167">evidence</text>
+              <text class="node-small" x="54" y="186">
+                attributable · expiring
+              </text>
+            </g>
+            <g class="diagram-node process-node">
+              <rect x="230" y="92" width="220" height="126" rx="14"></rect>
+              <text x="254" y="127">Admit or refuse</text>
+              <text class="node-small" x="254" y="153">provenance · validity</text>
+              <text class="node-small" x="254" y="174">scope · conflict</text>
+              <text class="node-small" x="254" y="198">
+                before similarity
+              </text>
+            </g>
+            <g class="diagram-node storage-node">
+              <rect x="500" y="112" width="160" height="86" rx="14"></rect>
+              <text x="524" y="145">Vector rank</text>
+              <text class="node-small" x="524" y="171">
+                eligible IDs only
+              </text>
+            </g>
+            <g class="diagram-node agent-node">
+              <rect x="720" y="54" width="170" height="78" rx="14"></rect>
+              <text x="744" y="85">Agent proposal</text>
+              <text class="node-small" x="744" y="108">
+                no fence · no effect key
+              </text>
+            </g>
+            <g class="diagram-node storage-node">
+              <rect x="500" y="246" width="160" height="72" rx="14"></rect>
+              <text x="524" y="275">Managed MCP</text>
+              <text class="node-small" x="524" y="298">context only</text>
+            </g>
+            <g class="diagram-node authority-node">
+              <rect x="720" y="220" width="180" height="82" rx="14"></rect>
+              <text x="744" y="251">Commit one</text>
+              <text class="node-small" x="744" y="275">
+                serializable · fenced
+              </text>
+            </g>
+            <g class="diagram-node receipt-node">
+              <rect x="945" y="220" width="116" height="82" rx="14"></rect>
+              <text x="969" y="250">Durable</text>
+              <text x="969" y="272">receipt</text>
+              <text class="node-small" x="969" y="291">DB sink</text>
+            </g>
+
+            <text class="edge-label" x="723" y="170">proposal only</text>
+            <text class="edge-label" x="602" y="241">fresh authorization</text>
+            <text class="edge-label" x="626" y="314">no inherited authority</text>
+          </svg>
+          <p class="diagram-caption">
+            The model never receives an operation ID, fencing token, or effect
+            key. The protected effect shown here is a synthetic database sink,
+            not a claim about exactly-once real-world action.
+          </p>
         </div>
       </section>
 
-      <section aria-labelledby="timeline-title">
+      <section id="judge-path" class="judge-path" aria-labelledby="judge-title">
         <div class="section-heading">
-          <p class="step-label">Synthetic incident timeline</p>
-          <h2 id="timeline-title">What the memory admits—and refuses</h2>
+          <div>
+            <p class="step-label">Three-act judge path</p>
+            <h2 id="judge-title">Watch the authority boundary hold.</h2>
+          </div>
+          <p class="section-note">Use arrow keys or the presenter controls</p>
         </div>
-        <ol id="timeline" class="timeline" aria-live="polite"></ol>
+
+        <nav class="act-nav" aria-label="Choose a demonstration act">
+          <button type="button" data-act="0" aria-pressed="true">
+            <span>Act I</span> Admit / Refuse
+          </button>
+          <button type="button" data-act="1" aria-pressed="false">
+            <span>Act II</span> Commit One
+          </button>
+          <button type="button" data-act="2" aria-pressed="false">
+            <span>Act III</span> Recover Safely
+          </button>
+        </nav>
+
+        <article
+          id="step-stage"
+          class="step-stage"
+          aria-label="Current demonstration step"
+          tabindex="-1"
+        >
+          <div class="loading-state">
+            <p class="step-kicker">Loading local deterministic replay</p>
+            <h3>Verifying the proof surface…</h3>
+          </div>
+        </article>
+
+        <div class="presenter-controls" aria-label="Presenter controls">
+          <button id="previous-step" type="button">← Previous</button>
+          <button id="play-pause" type="button" aria-pressed="false">
+            Play
+          </button>
+          <button id="next-step" type="button">Next →</button>
+          <button id="restart-demo" type="button">Restart</button>
+          <p id="step-progress" aria-live="off">Loading proof…</p>
+        </div>
+        <p id="load-status" class="sr-only" role="status" aria-live="polite">
+          Loading the local proof.
+        </p>
+      </section>
+
+      <section class="verification" aria-labelledby="verification-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Local verification</p>
+            <h2 id="verification-title">Checks are not claims.</h2>
+          </div>
+          <p class="section-note">
+            Green means the stated local invariant was checked
+          </p>
+        </div>
+        <details class="verification-details">
+          <summary>
+            <span id="verification-count">Loading checks…</span>
+            <span>View every invariant</span>
+          </summary>
+          <ul id="invariants" class="invariant-list"></ul>
+        </details>
+      </section>
+
+      <section class="evidence-ledger" aria-labelledby="evidence-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Evidence ledger</p>
+            <h2 id="evidence-title">Every claim carries its boundary.</h2>
+          </div>
+          <a class="text-link" href="/claims">Open the full claims ledger</a>
+        </div>
+        <div class="evidence-grid">
+          <article>
+            <span class="proof-state recorded">RECORDED GATE ONE</span>
+            <h3>CockroachDB Cloud · synthetic scope</h3>
+            <p>
+              100 live 50-contender races, Distributed Vector Indexing plan
+              evidence, ambiguity boundaries, and a bounded Managed MCP
+              recovery broker.
+            </p>
+            <dl>
+              <div><dt>Date</dt><dd>2026-07-30</dd></div>
+              <div><dt>Source</dt><dd><code>55892bf</code></dd></div>
+              <div><dt>Limit</dt><dd>No real emergency or external effect</dd></div>
+            </dl>
+            <p class="evidence-links">
+              <a href="/evidence/gate1-authority">Authority receipt</a>
+              <a href="/evidence/gate1-recovery">Recovery receipt</a>
+              <a href="/evidence/gate1-ambiguity">Ambiguity receipt</a>
+            </p>
+          </article>
+          <article>
+            <span class="proof-state pending">GATE TWO · LOCAL</span>
+            <h3>AWS proposal boundary · live evidence pending</h3>
+            <p>
+              The candidate binds receipts to one exact KMS public key,
+              separates proposal from authority, logs the API path, and fails
+              closed. It is not a live AWS claim.
+            </p>
+            <dl>
+              <div><dt>Candidate</dt><dd><code>9aa7f2e</code></dd></div>
+              <div><dt>Cloud state</dt><dd>Main stack not deployed</dd></div>
+              <div><dt>Limit</dt><dd>Bedrock, KMS, IAM, and API unverified live</dd></div>
+            </dl>
+          </article>
+        </div>
       </section>
 
       <section class="boundary" aria-labelledby="boundary-title">
         <p class="step-label">Current boundary</p>
-        <h2 id="boundary-title">Local behavioral specification only</h2>
+        <h2 id="boundary-title">Strong recorded proof. Narrow claims.</h2>
         <p>
-          CockroachDB transactions, Distributed Vector Indexing, Managed MCP,
-          AWS, and Bedrock are gated future integrations. This page makes no
-          distributed or production claim.
+          CockroachDB transactions, Distributed Vector Indexing, and Managed
+          MCP are recorded Gate One evidence in synthetic scope. The AWS path
+          is a locally verified candidate awaiting live Gate Two receipts.
+          Tideproof makes no production, disaster-readiness, truth-detection,
+          or exactly-once real-world-effect claim.
         </p>
       </section>
     </main>
 
     <footer>
-      <p>Private clean-room build · Synthetic data · No credentials required</p>
+      <p>
+        Private clean-room build · Synthetic data · Local replay needs no
+        credentials
+      </p>
     </footer>
 
     <script type="module" src="/app.js"></script>

@@ -31,7 +31,7 @@ TideproofMemory
         |
         +--> deterministic scenario JSON
         |
-        +--> local timeline UI
+        +--> local three-act judge UI
 ```
 
 The in-memory implementation is a behavioral specification. Distributed

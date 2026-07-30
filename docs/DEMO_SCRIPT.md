@@ -1,7 +1,16 @@
 # Demonstration script — target 175 seconds
 
-The visual language stays calm and technical. A persistent label reads:
-“Synthetic scenario — not operational emergency software.”
+The visual language stays calm and technical. The persistent proof strip keeps
+the synthetic safety disclosure plus these exact evidence states visible:
+
+- `LOCAL DETERMINISTIC REPLAY`
+- `RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30`
+- `GATE TWO — local AWS candidate; live AWS evidence pending`
+
+Use the keyboard-operable Previous, Play/Pause, Next, and Restart controls.
+Every displayed event remains labeled as a local replay; where a provider
+receipt exists, the separate recorded backing and its limitation appear beside
+the event.
 
 - **0–12 seconds:** A responder agent receives shared memory. Explain that
   retrieved memory is evidence, not truth.

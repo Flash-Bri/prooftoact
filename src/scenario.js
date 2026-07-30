@@ -76,6 +76,25 @@ export function runScenario() {
     detail: invalid
   });
 
+  const outOfScope = memory.ingestEvidence(
+    evidence({
+      id: "ev-medical-private",
+      claimKey: "medical-private-status",
+      claimValue: "restricted",
+      assertion:
+        "A synthetic medical status exists outside the rescue scope.",
+      issuer: "synthetic-medical-agency",
+      scopes: ["medical"],
+      confidence: 0.99,
+      embedding: [1, 0, 0]
+    })
+  );
+  timeline.push({
+    step: "out-of-scope",
+    label: "Current but out-of-scope evidence excluded before ranking",
+    detail: outOfScope
+  });
+
   const roadOpen = memory.ingestEvidence(
     evidence({
       id: "ev-road-open",
@@ -113,7 +132,7 @@ export function runScenario() {
     label: "Admissibility filters run before vector ranking",
     detail: {
       returnedIds: retrieved.map(({ id }) => id),
-      excludedIds: [expired.id, invalid.id]
+      excludedIds: [expired.id, invalid.id, outOfScope.id]
     }
   });
 
@@ -154,12 +173,23 @@ export function runScenario() {
     detail: race
   });
 
-  memory.checkpointAgent({
+  const checkpoint = memory.checkpointAgent({
     checkpointId: "checkpoint-before-handoff",
     incidentId: INCIDENT_ID,
     agentId: winner.agentId,
     lastEvidenceIds: [admitted.id],
     state: { phase: "resource-reserved", operationId: winner.operationId }
+  });
+  timeline.push({
+    step: "checkpoint-termination",
+    label: "Winning agent checkpoints, then terminates",
+    detail: {
+      checkpoint,
+      termination: {
+        agentId: winner.agentId,
+        status: "PROCESS_TERMINATED_AFTER_CHECKPOINT"
+      }
+    }
   });
 
   const recovery = memory.recoverSuccessor({
@@ -215,6 +245,8 @@ export function runScenario() {
     invariants: {
       expiredEvidenceExcluded: !retrieved.some(({ id }) => id === expired.id),
       invalidProvenanceExcluded: !retrieved.some(({ id }) => id === invalid.id),
+      outOfScopeEvidenceExcluded:
+        !retrieved.some(({ id }) => id === outOfScope.id),
       unresolvedConflictDenied: conflictDecision.allowed === false,
       exactlyOneLocalWinner:
         race.filter(({ outcome }) => outcome === "resource_reserved").length === 1,
@@ -222,6 +254,28 @@ export function runScenario() {
       replayDenied: replay.outcome === "duplicate_operation_denied",
       outageFailsClosed: outage?.code === "MEMORY_UNAVAILABLE_FAIL_CLOSED"
     },
-    timeline
+    timeline,
+    proofStates: {
+      local: {
+        label: "LOCAL DETERMINISTIC REPLAY",
+        scope: "Synthetic in-memory specification",
+        limitation: "No live cloud claim"
+      },
+      gateOne: {
+        label:
+          "RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30",
+        sourceCommit: "55892bf25a5286af30e30908ab5711e24f106629",
+        authorityEvidence: "/evidence/gate1-authority",
+        recoveryEvidence: "/evidence/gate1-recovery",
+        ambiguityEvidence: "/evidence/gate1-ambiguity"
+      },
+      gateTwo: {
+        label:
+          "GATE TWO — local AWS candidate; live AWS evidence pending",
+        sourceCommit: "9aa7f2e7409e4eedb8e386ec9c18440670505fa6",
+        limitation:
+          "No live Bedrock, KMS, IAM, API Gateway, or CloudFormation claim"
+      }
+    }
   };
 }

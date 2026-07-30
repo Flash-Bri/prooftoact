@@ -39,7 +39,9 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
   P-256 KMS receipt signing with independently pinned public-key evidence,
   exact Lambda code hashes, a dedicated exact-route caller, private API access
   logs, and opt-in temporary same-role capability probes;
-- a local browser demonstration and deterministic unit tests.
+- a keyboard-operable three-act local browser demonstration with persistent
+  proof-state labels, exact evidence details, receipt links, safe reset, and
+  deterministic unit tests.
 
 It does **not** yet contain or claim:
 

@@ -26,7 +26,7 @@ visible in one short story:
 
 ### Gate 0 — local invariant proof
 
-- deterministic fixtures and browser timeline;
+- deterministic fixtures and three-act browser proof;
 - provenance, validity, scope, conflict, race, recovery, and replay tests;
 - clean-room, claim, cost, and teardown boundaries.
 
@@ -49,7 +49,7 @@ visible in one short story:
 
 ### Gate 3 — product proof
 
-- build the single-timeline interface and judge-safe reset;
+- build the three-act judge interface, evidence drill-down, and safe reset;
 - run accessibility, browser, security, abuse, and concurrency checks;
 - capture real database and AWS evidence;
 - complete a dependency/license/provenance audit.

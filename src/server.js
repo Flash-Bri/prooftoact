@@ -4,9 +4,32 @@ import { pathToFileURL } from "node:url";
 import { runScenario } from "./scenario.js";
 
 const assets = new Map([
-  ["/", ["index.html", "text/html; charset=utf-8"]],
-  ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
-  ["/styles.css", ["styles.css", "text/css; charset=utf-8"]]
+  ["/", ["../web/index.html", "text/html; charset=utf-8"]],
+  ["/app.js", ["../web/app.js", "text/javascript; charset=utf-8"]],
+  ["/styles.css", ["../web/styles.css", "text/css; charset=utf-8"]],
+  ["/favicon.svg", ["../web/favicon.svg", "image/svg+xml"]],
+  [
+    "/evidence/gate1-authority",
+    [
+      "../evidence/gate1-authority-2026-07-30.md",
+      "text/markdown; charset=utf-8"
+    ]
+  ],
+  [
+    "/evidence/gate1-recovery",
+    [
+      "../evidence/gate1-recovery-broker-2026-07-30.md",
+      "text/markdown; charset=utf-8"
+    ]
+  ],
+  [
+    "/evidence/gate1-ambiguity",
+    [
+      "../evidence/gate1-ambiguity-2026-07-30.md",
+      "text/markdown; charset=utf-8"
+    ]
+  ],
+  ["/claims", ["../CLAIMS.md", "text/markdown; charset=utf-8"]]
 ]);
 
 function sendJson(response, statusCode, body) {
@@ -45,7 +68,7 @@ export function createTideproofServer() {
 
     try {
       const [fileName, contentType] = asset;
-      const body = await readFile(new URL(`../web/${fileName}`, import.meta.url));
+      const body = await readFile(new URL(fileName, import.meta.url));
       response.writeHead(200, {
         "content-type": contentType,
         "cache-control": "no-store",

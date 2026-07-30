@@ -32,9 +32,48 @@ test("serves the local health and scenario surfaces", async (context) => {
 
   const pageResponse = await fetch(`http://127.0.0.1:${port}/`);
   assert.equal(pageResponse.status, 200);
-  assert.match(await pageResponse.text(), /Shared memory that fails closed/);
+  const page = await pageResponse.text();
+  assert.match(
+    page,
+    /Memory should preserve evidence—not inherit authority/
+  );
+  assert.match(page, /LOCAL DETERMINISTIC REPLAY/);
+  assert.match(
+    page,
+    /RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30/
+  );
+  assert.match(
+    page,
+    /GATE TWO — local AWS candidate; live AWS evidence pending/
+  );
+  assert.match(page, /data-act="0"/);
+  assert.match(page, /id="previous-step"/);
+  assert.match(page, /id="restart-demo"/);
+  assert.match(page, /Tideproof evidence, proposal, authority, and recovery boundaries/);
   assert.match(
     pageResponse.headers.get("content-security-policy"),
     /default-src 'self'/
+  );
+
+  const evidenceResponse = await fetch(
+    `http://127.0.0.1:${port}/evidence/gate1-authority`
+  );
+  assert.equal(evidenceResponse.status, 200);
+  assert.match(
+    evidenceResponse.headers.get("content-type"),
+    /^text\/markdown/
+  );
+  assert.match(
+    await evidenceResponse.text(),
+    /100 independent races of 50 concurrent database sessions/
+  );
+
+  const faviconResponse = await fetch(
+    `http://127.0.0.1:${port}/favicon.svg`
+  );
+  assert.equal(faviconResponse.status, 200);
+  assert.equal(
+    faviconResponse.headers.get("content-type"),
+    "image/svg+xml"
   );
 });
