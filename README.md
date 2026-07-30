@@ -1,6 +1,6 @@
 # Tideproof
 
-**Working title. Private, local clean-room build. Not yet a contest submission.**
+**Private clean-room build. Not yet a contest submission.**
 
 Tideproof is an admissibility-memory demonstration for high-stakes agents.
 Its “Highwater Drill” is a synthetic multi-agency response exercise: shared
@@ -15,20 +15,31 @@ The thesis is deliberately narrower than “AI remembers better”:
 
 ## What exists now
 
-This repository currently contains a deterministic local vertical slice:
+This repository contains a deterministic local vertical slice plus a
+credential-gated CockroachDB Cloud Gate One candidate:
 
 - provenance, validity-window, and scope checks before vector ranking;
 - unresolved-conflict detection and fail-closed authorization;
-- one-winner resource reservation with monotonic fencing tokens;
-- durable-shaped receipts, checkpoints, successor recovery, and replay denial;
-- an intentionally in-memory vector adapter and local browser demonstration;
-- tests for every claim above.
+- CockroachDB-backed signed evidence, validity, revocation, scope, and conflict
+  checks before vector ranking and inside authorization;
+- serializable one-winner resource reservation with durable denial receipts,
+  semantic replay protection, monotonic fencing tokens, and a transactional
+  outbox;
+- a protected synthetic effect boundary that rejects stale, future, expired,
+  cross-scope, and changed-payload requests;
+- CockroachDB Distributed Vector Indexing with named-index plan evidence and
+  fail-closed dimension validation;
+- an isolated CockroachDB recovery cluster and deterministic Managed MCP
+  fixed-query broker with signed context-only bundles;
+- separate pre-read and terminal recovery-audit events on the primary cluster;
+- a local browser demonstration and deterministic unit tests.
 
 It does **not** yet contain or claim:
 
-- a CockroachDB deployment or distributed transaction proof;
-- CockroachDB Managed MCP or Distributed Vector Index integration;
 - AWS deployment or Bedrock model use;
+- production caller authentication, KMS-backed signing, or deployed IAM
+  separation;
+- full 100-run concurrency and ambiguity acceptance;
 - exactly-once external effects, regional survival, or disaster readiness;
 - production security, availability, or suitability for real emergencies.
 
@@ -36,8 +47,10 @@ Those are explicit build gates, not implied capabilities.
 
 ## Run locally
 
-Requires Node.js 22 or newer. There are no package dependencies and no
-credentials are needed.
+Requires Node.js 22 or newer. Local tests and the browser demo need no cloud
+credentials. Live Gate One scripts use the `pg` dependency and explicit
+project credentials supplied through the environment; secrets must remain in
+a secret store and never enter the repository.
 
 ```sh
 npm test
@@ -51,16 +64,19 @@ synthetic.
 ## Contest target
 
 The intended entry is for CockroachDB × AWS “Build with Agentic Memory.”
-The target implementation will use:
+The implementation uses or is planned to use:
 
 1. CockroachDB Distributed Vector Indexing for relevance ranking after
    admissibility filters;
-2. CockroachDB Managed MCP as a meaningful recovery/audit path, subject to an
-   early feasibility gate;
-3. AWS Lambda/API Gateway and Amazon Bedrock for a bounded agent runtime.
+2. CockroachDB Managed MCP through a deterministic context-only recovery
+   broker;
+3. CockroachDB serializable transactions, immutable-shaped receipts, fencing,
+   and transactional outbox;
+4. AWS Lambda/API Gateway, KMS, and Amazon Bedrock for separated bounded
+   runtime roles.
 
-See `docs/CONTEST_MATRIX.md`, `docs/ARCHITECTURE.md`,
-`docs/PRIOR_ART.md`, and `docs/WINNING_PLAN.md`.
+See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
+`docs/ARCHITECTURE.md`, `docs/PRIOR_ART.md`, and `docs/WINNING_PLAN.md`.
 
 ## Safety and provenance
 
