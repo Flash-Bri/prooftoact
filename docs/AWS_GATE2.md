@@ -5,6 +5,11 @@
 Gate Two is a locally tested deployment candidate. It is not yet evidence of
 live AWS behavior.
 
+The exact `4acafa9` release build and the current AWS account-verification
+handoff block are recorded in
+`evidence/gate2-release-build-4acafa9-2026-07-30.md`. No main Gate Two stack
+or live-service claim resulted from that check.
+
 The candidate deliberately keeps Amazon Bedrock outside the authority
 boundary:
 
