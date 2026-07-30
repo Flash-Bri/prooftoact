@@ -12,12 +12,12 @@ Deadline: 2026-08-18 at 5:00 PM ET.
 
 | Requirement | Planned proof | Current status |
 | --- | --- | --- |
-| New project during submission period | Clean-room repository and provenance receipts | Verified locally; private |
+| New project during submission period | Clean-room repository and provenance receipts | Verified; public source |
 | Agentic memory application | Evidence memory controls retrieval and action authority | Gate One verified, synthetic scope |
 | At least two named CockroachDB tools | Distributed Vector Index + meaningful Managed MCP recovery/audit path | Gate One verified |
 | At least one AWS service | Lambda/API Gateway, KMS, and bounded Bedrock use | Local candidate passed; live deployment pending |
 | Functional AWS-hosted demo | Judge-accessible synthetic scenario | Not deployed |
-| Public open-source repository and license | MIT-licensed repository with reproducible setup | Local/private only |
+| Public open-source repository and license | MIT-licensed repository with reproducible setup | Public source prepared; external receipt pending |
 | Public video under three minutes | 175-second evidence-led demonstration | Script drafted |
 | Free judge access through judging | Budgeted low-volume environment through 2026-09-15 | Not provisioned |
 | Pre-existing work disclosed | Clean-room statement and dependency inventory | Maintained; final audit pending |

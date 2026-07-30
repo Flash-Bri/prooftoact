@@ -1,6 +1,6 @@
 # Tideproof
 
-**Private clean-room build. Not yet a contest submission.**
+**Public clean-room source. Not yet a contest submission or live AWS claim.**
 
 Tideproof is an admissibility-memory demonstration for high-stakes agents.
 Its “Highwater Drill” is a synthetic multi-agency response exercise: shared
@@ -95,3 +95,5 @@ not been produced or approved.
 Tideproof is a synthetic demonstration, not operational emergency software.
 No Conversate source, proprietary Northstar engine, private customer data, or
 OpenClaw OAuth credential may enter this project. See `CLEAN_ROOM.md`.
+Report security concerns privately through GitHub's security-advisory flow;
+see `SECURITY.md`.
