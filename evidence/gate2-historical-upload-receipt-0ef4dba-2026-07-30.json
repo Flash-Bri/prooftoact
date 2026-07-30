@@ -1,0 +1,42 @@
+{
+  "schema": "tideproof.gate2.historical-upload-receipt.v1",
+  "status": "historical_only_not_deployable",
+  "capturedAt": "2026-07-30T02:48:50-04:00",
+  "claimBoundary": "This receipt proves only that the five artifacts built from source commit 0ef4dba were hash-checked against private versioned objects during the July 30 audit. It does not prove that the repaired candidate was uploaded, that the main Gate Two stack was deployed, or that live AWS behavior passed.",
+  "privateReceiptPath": "artifacts/private/gate2-deployment-config-probes-2026-07-30.json",
+  "privateReceiptSha256": "5c520d921dea700e78bd7e9a7e6f8f14b6918b2aee5f9ee2ea5473236a774f77",
+  "sourceCommit": "0ef4dba85e8b07aad3d73a08510c51dfa7d3d9c8",
+  "treeDigest": "1ab8dce966ed8c0ced9c21cfe7fcf83fa5109ef8",
+  "packageLockDigest": "fe1e765145a7bb2e0ee0cadce2e646b7d792c447aee37f010d40453405fd08d9",
+  "templateDigest": "2572489d907d02c1073a6530d76feaecc09d72c5736b2b7426fcb2b35dfab591",
+  "deploymentConfigDigest": "e54b45e52cb3b4c72e0cb9ef36b56f24829ce7f9a5fa2aa893fd380bc5812c6f",
+  "artifactSourceDigests": {
+    "agent": "53a847be7c14a5ce9b8fb5005df995bad772c850ed20b6f3fd02d0e5358b0aac",
+    "authority": "51a48b43870076f916bff7ea991119fc28a4a19cae2250c877ba1efd03818f8d",
+    "boundary": "2e2ee6097eff97074cb7905074f6deb6650f175c327f3b035bfd1c889376d6bb",
+    "probe": "d8b20214d03d889204255d435c35a22f83f3c39faa0235826f37573c942fcd25",
+    "signer": "f50d8e86c084be9ddada0f32ea3c4ee678f43362f6a4c4bfd5b779035f34e036"
+  },
+  "artifactDigests": {
+    "agent": "beed83004ff9d41248f52947fd6330205cdc23cebe8e006991b118ff98f66a01",
+    "authority": "b0022b2da6b335bc33df7d57c5a91c580cbd19c3d97b457ee0a6a13d6cfc50ae",
+    "boundary": "4a2e078006590d8056f09c0151c2ead87056c85bf38e917ff140a0788ae57b60",
+    "probe": "c9b1a455edc0d497aeb6fc905000b614961a2a8279a3de268393bfc2db3be96c",
+    "signer": "0367b71a3e609cd23a3020dae116094302b3675bb727db4671328b63c9c1a4f3"
+  },
+  "artifactCodeSha256": {
+    "agent": "vu2DAE/51BJI9SlH/WMwIFzcI86+jgBpkbEY/5j2agE=",
+    "authority": "sAIrLaazNbwz331XxakcWAy9GcPZe0V+4KahPWz8UK4=",
+    "boundary": "Si4HgAZZDYBW8JwBUcLq2HBWyFvzjpF/8UCgeIrle2A=",
+    "probe": "ybGkVe3A1JeutvyQUAC2FJYaKoJ5o94mg5O/wts76Ww=",
+    "signer": "A2e3Gj5gnNI6MCDa4RYJQwKzZ1u3J9tGcTKLY8nBpPM="
+  },
+  "verification": {
+    "privateVersionedObjectCount": 5,
+    "localSourceHashesMatched": true,
+    "localZipHashesMatched": true,
+    "lambdaCodeHashesMatched": true,
+    "liveObjectVersionsMatchedPrivateReceipt": true,
+    "costControlEvidence": false
+  }
+}

@@ -1,9 +1,100 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Private versioned artifact bucket for Tideproof Gate Two Lambda proofs.",
+  "Description": "Predeployment cost guard and private artifact bucket for Tideproof Gate Two.",
+  "Parameters": {
+    "NotificationEmail": {
+      "Type": "String",
+      "Description": "Private deployment parameter used only for account-wide AWS Budget alerts.",
+      "AllowedPattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+      "NoEcho": true
+    }
+  },
   "Resources": {
+    "AccountBudget": {
+      "Type": "AWS::Budgets::Budget",
+      "Properties": {
+        "Budget": {
+          "BudgetName": {
+            "Fn::Sub": "${AWS::StackName}-account-safety"
+          },
+          "BudgetLimit": {
+            "Amount": 15,
+            "Unit": "USD"
+          },
+          "BudgetType": "COST",
+          "TimeUnit": "MONTHLY"
+        },
+        "NotificationsWithSubscribers": [
+          {
+            "Notification": {
+              "ComparisonOperator": "GREATER_THAN",
+              "NotificationType": "FORECASTED",
+              "Threshold": 15,
+              "ThresholdType": "ABSOLUTE_VALUE"
+            },
+            "Subscribers": [
+              {
+                "Address": {
+                  "Ref": "NotificationEmail"
+                },
+                "SubscriptionType": "EMAIL"
+              }
+            ]
+          },
+          {
+            "Notification": {
+              "ComparisonOperator": "GREATER_THAN",
+              "NotificationType": "ACTUAL",
+              "Threshold": 1,
+              "ThresholdType": "ABSOLUTE_VALUE"
+            },
+            "Subscribers": [
+              {
+                "Address": {
+                  "Ref": "NotificationEmail"
+                },
+                "SubscriptionType": "EMAIL"
+              }
+            ]
+          },
+          {
+            "Notification": {
+              "ComparisonOperator": "GREATER_THAN",
+              "NotificationType": "ACTUAL",
+              "Threshold": 5,
+              "ThresholdType": "ABSOLUTE_VALUE"
+            },
+            "Subscribers": [
+              {
+                "Address": {
+                  "Ref": "NotificationEmail"
+                },
+                "SubscriptionType": "EMAIL"
+              }
+            ]
+          },
+          {
+            "Notification": {
+              "ComparisonOperator": "GREATER_THAN",
+              "NotificationType": "ACTUAL",
+              "Threshold": 10,
+              "ThresholdType": "ABSOLUTE_VALUE"
+            },
+            "Subscribers": [
+              {
+                "Address": {
+                  "Ref": "NotificationEmail"
+                },
+                "SubscriptionType": "EMAIL"
+              }
+            ]
+          }
+        ]
+      }
+    },
     "ArtifactBucket": {
       "Type": "AWS::S3::Bucket",
+      "DependsOn": "AccountBudget",
       "DeletionPolicy": "Retain",
       "UpdateReplacePolicy": "Retain",
       "Properties": {
@@ -99,6 +190,11 @@
     }
   },
   "Outputs": {
+    "AccountBudgetName": {
+      "Value": {
+        "Fn::Sub": "${AWS::StackName}-account-safety"
+      }
+    },
     "ArtifactBucketName": {
       "Value": {
         "Ref": "ArtifactBucket"

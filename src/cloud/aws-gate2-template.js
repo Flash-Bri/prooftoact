@@ -310,14 +310,64 @@ function probeFunction(role, logGroup, roleClass) {
   });
 }
 
+function notificationEmailParameter() {
+  return {
+    Type: "String",
+    Description:
+      "Private deployment parameter used only for account-wide AWS Budget alerts.",
+    AllowedPattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+    NoEcho: true
+  };
+}
+
+function accountBudgetResource() {
+  const notification = (notificationType, threshold) => ({
+    Notification: {
+      ComparisonOperator: "GREATER_THAN",
+      NotificationType: notificationType,
+      Threshold: threshold,
+      ThresholdType: "ABSOLUTE_VALUE"
+    },
+    Subscribers: [
+      {
+        Address: ref("NotificationEmail"),
+        SubscriptionType: "EMAIL"
+      }
+    ]
+  });
+
+  return {
+    Type: "AWS::Budgets::Budget",
+    Properties: {
+      Budget: {
+        BudgetName: sub("${AWS::StackName}-account-safety"),
+        BudgetLimit: { Amount: 15, Unit: "USD" },
+        BudgetType: "COST",
+        TimeUnit: "MONTHLY"
+      },
+      NotificationsWithSubscribers: [
+        notification("FORECASTED", 15),
+        notification("ACTUAL", 1),
+        notification("ACTUAL", 5),
+        notification("ACTUAL", 10)
+      ]
+    }
+  };
+}
+
 export function buildAwsBootstrapTemplate() {
   return {
     AWSTemplateFormatVersion: "2010-09-09",
     Description:
-      "Private versioned artifact bucket for Tideproof Gate Two Lambda proofs.",
+      "Predeployment cost guard and private artifact bucket for Tideproof Gate Two.",
+    Parameters: {
+      NotificationEmail: notificationEmailParameter()
+    },
     Resources: {
+      AccountBudget: accountBudgetResource(),
       ArtifactBucket: {
         Type: "AWS::S3::Bucket",
+        DependsOn: "AccountBudget",
         DeletionPolicy: "Retain",
         UpdateReplacePolicy: "Retain",
         Properties: {
@@ -390,6 +440,9 @@ export function buildAwsBootstrapTemplate() {
       }
     },
     Outputs: {
+      AccountBudgetName: {
+        Value: sub("${AWS::StackName}-account-safety")
+      },
       ArtifactBucketName: { Value: ref("ArtifactBucket") },
       ArtifactBucketArn: { Value: getAtt("ArtifactBucket", "Arn") }
     }
@@ -420,13 +473,6 @@ export function buildGate2Template() {
       Type: "String",
       Default: "amazon.nova-micro-v1:0",
       AllowedValues: ["amazon.nova-micro-v1:0"]
-    },
-    NotificationEmail: {
-      Type: "String",
-      Description:
-        "Private deployment parameter used only for account-wide AWS Budget alerts.",
-      AllowedPattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
-      NoEcho: true
     },
     EnableProbeFunctions: {
       Type: "String",
@@ -932,62 +978,6 @@ export function buildGate2Template() {
     "AuthorityFunction",
     "authority"
   );
-  resources.AccountBudget = {
-    Type: "AWS::Budgets::Budget",
-    Properties: {
-      Budget: {
-        BudgetName: sub("${AWS::StackName}-account-safety"),
-        BudgetLimit: { Amount: 15, Unit: "USD" },
-        BudgetType: "COST",
-        TimeUnit: "MONTHLY"
-      },
-      NotificationsWithSubscribers: [
-        {
-          Notification: {
-            ComparisonOperator: "GREATER_THAN",
-            NotificationType: "FORECASTED",
-            Threshold: 50,
-            ThresholdType: "PERCENTAGE"
-          },
-          Subscribers: [
-            {
-              Address: ref("NotificationEmail"),
-              SubscriptionType: "EMAIL"
-            }
-          ]
-        },
-        {
-          Notification: {
-            ComparisonOperator: "GREATER_THAN",
-            NotificationType: "ACTUAL",
-            Threshold: 80,
-            ThresholdType: "PERCENTAGE"
-          },
-          Subscribers: [
-            {
-              Address: ref("NotificationEmail"),
-              SubscriptionType: "EMAIL"
-            }
-          ]
-        },
-        {
-          Notification: {
-            ComparisonOperator: "GREATER_THAN",
-            NotificationType: "ACTUAL",
-            Threshold: 100,
-            ThresholdType: "PERCENTAGE"
-          },
-          Subscribers: [
-            {
-              Address: ref("NotificationEmail"),
-              SubscriptionType: "EMAIL"
-            }
-          ]
-        }
-      ]
-    }
-  };
-
   return {
     AWSTemplateFormatVersion: "2010-09-09",
     Description:

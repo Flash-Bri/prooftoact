@@ -34,12 +34,6 @@
         "amazon.nova-micro-v1:0"
       ]
     },
-    "NotificationEmail": {
-      "Type": "String",
-      "Description": "Private deployment parameter used only for account-wide AWS Budget alerts.",
-      "AllowedPattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
-      "NoEcho": true
-    },
     "EnableProbeFunctions": {
       "Type": "String",
       "Default": "true",
@@ -2199,72 +2193,6 @@
             "Value": {
               "Ref": "AuthorityFunction"
             }
-          }
-        ]
-      }
-    },
-    "AccountBudget": {
-      "Type": "AWS::Budgets::Budget",
-      "Properties": {
-        "Budget": {
-          "BudgetName": {
-            "Fn::Sub": "${AWS::StackName}-account-safety"
-          },
-          "BudgetLimit": {
-            "Amount": 15,
-            "Unit": "USD"
-          },
-          "BudgetType": "COST",
-          "TimeUnit": "MONTHLY"
-        },
-        "NotificationsWithSubscribers": [
-          {
-            "Notification": {
-              "ComparisonOperator": "GREATER_THAN",
-              "NotificationType": "FORECASTED",
-              "Threshold": 50,
-              "ThresholdType": "PERCENTAGE"
-            },
-            "Subscribers": [
-              {
-                "Address": {
-                  "Ref": "NotificationEmail"
-                },
-                "SubscriptionType": "EMAIL"
-              }
-            ]
-          },
-          {
-            "Notification": {
-              "ComparisonOperator": "GREATER_THAN",
-              "NotificationType": "ACTUAL",
-              "Threshold": 80,
-              "ThresholdType": "PERCENTAGE"
-            },
-            "Subscribers": [
-              {
-                "Address": {
-                  "Ref": "NotificationEmail"
-                },
-                "SubscriptionType": "EMAIL"
-              }
-            ]
-          },
-          {
-            "Notification": {
-              "ComparisonOperator": "GREATER_THAN",
-              "NotificationType": "ACTUAL",
-              "Threshold": 100,
-              "ThresholdType": "PERCENTAGE"
-            },
-            "Subscribers": [
-              {
-                "Address": {
-                  "Ref": "NotificationEmail"
-                },
-                "SubscriptionType": "EMAIL"
-              }
-            ]
           }
         ]
       }

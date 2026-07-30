@@ -52,8 +52,11 @@ Stop new cloud work and investigate if:
 1. Confirm official price inputs for the selected region and Bedrock model.
 2. Create project-specific least-privilege identities; never reuse OpenClaw
    OAuth or another product credential.
-3. Create an account-wide $15 AWS Budget with forecasted 50% and actual
-   80%/100% notifications. This is an alert boundary, not a hard service cap.
+3. Update the prerequisite bootstrap stack first and verify its account-wide
+   $15 AWS Budget reaches `CREATE_COMPLETE`, with absolute-dollar
+   notifications at $1, $5, and $10 actual spend and $15 forecast spend,
+   before deploying the main Gate Two stack. This is an alert boundary, not a
+   hard service cap.
 4. Cap model requests, input size, output tokens, retries, and concurrency.
 5. Use short log retention and synthetic data only.
 6. Record every temporary resource, owner, creation time, cost class, and

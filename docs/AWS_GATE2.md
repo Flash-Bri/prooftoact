@@ -53,10 +53,18 @@ published when the deployed code hash differs from the reviewed artifact.
    CloudFormation lint, and generated-template equality.
 2. Commit the accepted local candidate.
 3. Build from that clean commit.
-4. Create the private, encrypted, versioned S3 artifact bucket.
+4. Create or update the prerequisite bootstrap stack. Verify its account-wide
+   $15 budget and $1/$5/$10 actual plus $15 forecast notifications are present
+   before its private, encrypted, versioned artifact bucket is accepted.
 5. Upload each artifact once and record its exact S3 version ID and both
    digests.
 6. Hash the full effective nonsecret deployment configuration.
+
+The sanitized historical receipt in
+`evidence/gate2-historical-upload-receipt-0ef4dba-2026-07-30.json` anchors the
+private receipt for the superseded `0ef4dba` upload without publishing AWS
+account, bucket, notification, or object-version identifiers. It is historical
+evidence only and must not be used to deploy the repaired candidate.
 7. Deploy the main stack with temporary same-role capability probes enabled.
 8. Verify every Lambda version's reported `CodeSha256` and alias target.
 9. Prove the exact allowed capability and all required denials for every role.

@@ -505,8 +505,47 @@ test("signer rejects changed receipt bindings and authority transfer", () => {
   }
 });
 
-test("bootstrap bucket is private, encrypted, versioned, and TLS-only", () => {
+test("bootstrap establishes the cost guard before the private artifact bucket", () => {
   const template = buildAwsBootstrapTemplate();
+  const budget = template.Resources.AccountBudget.Properties;
+  assert.equal(budget.Budget.BudgetLimit.Amount, 15);
+  assert.equal(budget.Budget.CostFilters, undefined);
+  assert.deepEqual(
+    budget.NotificationsWithSubscribers.map(
+      ({ Notification }) => Notification
+    ),
+    [
+      {
+        ComparisonOperator: "GREATER_THAN",
+        NotificationType: "FORECASTED",
+        Threshold: 15,
+        ThresholdType: "ABSOLUTE_VALUE"
+      },
+      {
+        ComparisonOperator: "GREATER_THAN",
+        NotificationType: "ACTUAL",
+        Threshold: 1,
+        ThresholdType: "ABSOLUTE_VALUE"
+      },
+      {
+        ComparisonOperator: "GREATER_THAN",
+        NotificationType: "ACTUAL",
+        Threshold: 5,
+        ThresholdType: "ABSOLUTE_VALUE"
+      },
+      {
+        ComparisonOperator: "GREATER_THAN",
+        NotificationType: "ACTUAL",
+        Threshold: 10,
+        ThresholdType: "ABSOLUTE_VALUE"
+      }
+    ]
+  );
+  assert.equal(
+    template.Resources.ArtifactBucket.DependsOn,
+    "AccountBudget"
+  );
+  assert.equal(template.Parameters.NotificationEmail.NoEcho, true);
   const bucket = template.Resources.ArtifactBucket.Properties;
   assert.equal(bucket.VersioningConfiguration.Status, "Enabled");
   assert.equal(
@@ -642,7 +681,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   );
 });
 
-test("Gate Two template binds cost, retention, probes, and artifacts", () => {
+test("Gate Two template binds retention, probes, and artifacts after the cost guard", () => {
   const template = buildGate2Template();
   const { Resources: resources, Parameters: parameters } = template;
 
@@ -655,14 +694,8 @@ test("Gate Two template binds cost, retention, probes, and artifacts", () => {
       );
     }
   }
-  assert.equal(
-    resources.AccountBudget.Properties.Budget.BudgetLimit.Amount,
-    15
-  );
-  assert.equal(
-    resources.AccountBudget.Properties.Budget.CostFilters,
-    undefined
-  );
+  assert.equal(resources.AccountBudget, undefined);
+  assert.equal(parameters.NotificationEmail, undefined);
   assert.equal(
     resources.ReceiptSigningKey.Properties.KeySpec,
     "ECC_NIST_P256"
