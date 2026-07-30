@@ -828,7 +828,10 @@ body > footer p {
   .proof-ribbon {
     gap: 0.28rem;
     justify-content: flex-start;
+    max-height: 32vh;
     padding: 0.35rem 0.55rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .proof-ribbon > span {
