@@ -31,6 +31,7 @@
 html {
   background: var(--page);
   scroll-behavior: smooth;
+  scroll-padding-top: 6rem;
 }
 
 body {
@@ -49,6 +50,8 @@ a {
 
 button {
   font: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 a {
@@ -234,6 +237,10 @@ section {
   min-width: 0;
   padding: clamp(3rem, 7vw, 5.5rem) 0;
   border-bottom: 1px solid var(--line);
+}
+
+.judge-path {
+  scroll-margin-top: 6rem;
 }
 
 .section-heading {
@@ -488,6 +495,7 @@ button:disabled {
   line-height: 1.55;
 }
 
+.step-summary,
 .step-detail {
   min-width: 0;
   margin-top: 2rem;
@@ -495,6 +503,28 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   background: var(--page);
+}
+
+.step-summary {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+.step-detail {
+  margin-top: 0.8rem;
+}
+
+.step-detail > summary {
+  color: var(--blue);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.step-detail-body {
+  min-width: 0;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
 }
 
 .detail-grid {
@@ -590,9 +620,12 @@ button:disabled {
 }
 
 .presenter-controls {
-  display: flex;
+  display: grid;
   min-width: 0;
-  flex-wrap: wrap;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(9rem, 100%), 1fr)
+  );
   align-items: center;
   gap: 0.55rem;
   margin-top: 0.9rem;
@@ -604,7 +637,7 @@ button:disabled {
 }
 
 #step-progress {
-  flex: 1 1 13rem;
+  grid-column: 1 / -1;
   min-width: 0;
   margin: 0;
   color: var(--muted);
@@ -825,6 +858,14 @@ body > footer p {
 }
 
 @media (max-width: 34rem) {
+  html {
+    scroll-padding-top: 11rem;
+  }
+
+  .judge-path {
+    scroll-margin-top: 11rem;
+  }
+
   .proof-ribbon {
     gap: 0.28rem;
     justify-content: flex-start;
@@ -855,12 +896,7 @@ body > footer p {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .presenter-controls button {
-    flex: 1 1 calc(50% - 0.55rem);
-  }
-
   #step-progress {
-    flex-basis: 100%;
     text-align: left;
   }
 

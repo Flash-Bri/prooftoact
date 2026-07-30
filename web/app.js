@@ -63,7 +63,7 @@ const eventPresentation = {
   "replay-denied": {
     state: "DUPLICATE_DENIED",
     claim:
-      "CockroachDB returns the original durable receipt and creates no second authority intent."
+      "This local replay returns the original durable receipt and creates no second authority intent; the linked Gate One receipt proves the CockroachDB boundary."
   },
   "memory-outage": {
     state: "UNKNOWN_DO_NOT_ACT",
@@ -137,6 +137,10 @@ const evidenceForStep = {
   "successor-recovery": {
     href: "/evidence/gate1-recovery",
     label: "Recorded Gate One recovery receipt"
+  },
+  "replay-denied": {
+    href: "/evidence/gate1-authority",
+    label: "Recorded Gate One authority receipt"
   }
 };
 
@@ -154,6 +158,7 @@ const nextButton = document.querySelector("#next-step");
 const playButton = document.querySelector("#play-pause");
 const restartButton = document.querySelector("#restart-demo");
 const actButtons = [...document.querySelectorAll("[data-act]")];
+const judgePath = document.querySelector("#judge-path");
 
 function humanKey(key) {
   return key
@@ -211,6 +216,134 @@ function valueNode(value, key = "") {
   return element;
 }
 
+function stepHighlights(step) {
+  const detail = step.detail;
+  switch (step.step) {
+    case "fresh-evidence":
+      return {
+        evidenceId: detail.id,
+        status: detail.status,
+        scope: detail.scopes,
+        signatureValid: detail.signatureValid,
+        actionEligible: detail.actionEligible
+      };
+    case "expired-evidence":
+      return {
+        evidenceId: detail.id,
+        status: detail.status,
+        validUntil: detail.validUntil,
+        actionEligible: detail.actionEligible
+      };
+    case "invalid-provenance":
+      return {
+        evidenceId: detail.id,
+        issuer: detail.issuer,
+        signatureValid: detail.signatureValid,
+        status: detail.status,
+        actionEligible: detail.actionEligible
+      };
+    case "out-of-scope":
+      return {
+        evidenceId: detail.id,
+        evidenceScope: detail.scopes,
+        requestedScope: "rescue",
+        result: "EXCLUDED_BEFORE_RANKING"
+      };
+    case "conflict-preserved":
+      return {
+        conflictingEvidenceIds: detail,
+        result: "CONFLICT_RETAINED"
+      };
+    case "policy-before-vector":
+      return {
+        returnedIds: detail.returnedIds,
+        excludedIds: detail.excludedIds
+      };
+    case "conflict-fails-closed":
+      return {
+        allowed: detail.allowed,
+        reason: detail.reason,
+        evidenceId: detail.evidenceId
+      };
+    case "one-winner-race": {
+      const winner = detail.find(
+        ({ outcome }) => outcome === "resource_reserved"
+      );
+      const denied = detail.find(
+        ({ outcome }) => outcome !== "resource_reserved"
+      );
+      return {
+        resourceId: winner?.resourceId,
+        winningOperationId: winner?.operationId,
+        winningAgentId: winner?.agentId,
+        winningOutcome: winner?.outcome,
+        deniedOperationId: denied?.operationId,
+        deniedOutcome: denied?.outcome,
+        fencingToken: winner?.fencingToken
+      };
+    }
+    case "checkpoint-termination":
+      return {
+        checkpointId: detail.checkpoint.checkpointId,
+        operationId: detail.checkpoint.state.operationId,
+        agentId: detail.checkpoint.agentId,
+        terminationStatus: detail.termination.status
+      };
+    case "successor-recovery": {
+      const receipt = detail.receipts[0];
+      return {
+        failedAgentId: detail.failedAgentId,
+        successorAgentId: detail.successorAgentId,
+        checkpointId: detail.checkpoint.checkpointId,
+        originalOperationId: receipt?.operationId,
+        originalReceiptOutcome: receipt?.outcome,
+        resourceId: receipt?.resourceId,
+        fencingToken: receipt?.fencingToken,
+        authorityTransferred: detail.authorityTransferred,
+        requiresFreshAuthorization: detail.requiresFreshAuthorization
+      };
+    }
+    case "replay-denied":
+      return {
+        operationId: detail.operationId,
+        replayOutcome: detail.outcome,
+        originalReceiptOutcome: detail.originalReceipt.outcome,
+        resourceId: detail.originalReceipt.resourceId,
+        fencingToken: detail.originalReceipt.fencingToken
+      };
+    case "memory-outage":
+      return {
+        code: detail.code,
+        result: "UNKNOWN_DO_NOT_ACT"
+      };
+    default:
+      return detail;
+  }
+}
+
+function renderStepDetails(step) {
+  if (step.kind === "intro") {
+    const detail = document.createElement("div");
+    detail.className = "step-detail";
+    detail.append(valueNode(step.detail));
+    return [detail];
+  }
+
+  const summary = document.createElement("div");
+  summary.className = "step-summary";
+  summary.append(valueNode(stepHighlights(step)));
+
+  const disclosure = document.createElement("details");
+  disclosure.className = "step-detail";
+  const control = document.createElement("summary");
+  control.textContent = "View exact event payload";
+  const body = document.createElement("div");
+  body.className = "step-detail-body";
+  body.append(valueNode(step.detail));
+  disclosure.append(control, body);
+  return [summary, disclosure];
+}
+
 function proofMetadata(mode) {
   if (mode === "recorded") {
     return {
@@ -258,8 +391,7 @@ function buildActs() {
         ...eventPresentation[stepId],
         mode:
           definition.mode === "recorded" &&
-          stepId !== "memory-outage" &&
-          stepId !== "replay-denied"
+          stepId !== "memory-outage"
             ? "recorded"
             : "local"
       };
@@ -318,9 +450,7 @@ function renderStep({ focus = false } = {}) {
   claim.className = "step-claim";
   claim.textContent = step.claim;
 
-  const detail = document.createElement("div");
-  detail.className = "step-detail";
-  detail.append(valueNode(step.detail));
+  const details = renderStepDetails(step);
 
   const footer = document.createElement("footer");
   footer.className = "step-proof";
@@ -348,7 +478,7 @@ function renderStep({ focus = false } = {}) {
   }
   renderEvidenceLink(footer, step.step);
 
-  stage.replaceChildren(header, title, claim, detail, footer);
+  stage.replaceChildren(header, title, claim, ...details, footer);
 
   for (const [index, button] of actButtons.entries()) {
     button.setAttribute("aria-pressed", String(index === activeAct));
@@ -391,6 +521,11 @@ function nextStep({ fromAutoplay = false, focus = false } = {}) {
     return;
   }
   renderStep({ focus });
+  if (fromAutoplay) {
+    const step = acts[activeAct].renderedSteps[activeStep];
+    status.textContent =
+      `${progress.textContent}. ${step.label}. Outcome ${step.state}.`;
+  }
 }
 
 function previousStep() {
@@ -411,6 +546,7 @@ function play() {
   }
   playButton.textContent = "Pause";
   playButton.setAttribute("aria-pressed", "true");
+  status.textContent = "Automatic presentation started.";
   playTimer = window.setInterval(
     () => nextStep({ fromAutoplay: true }),
     8_500
@@ -457,28 +593,62 @@ function renderInvariants() {
     `${passed} of ${checks.length} scoped local checks passed`;
 }
 
+function renderFailedInvariants(keys) {
+  const container = document.querySelector("#invariants");
+  container.replaceChildren();
+  for (const key of keys) {
+    const item = document.createElement("li");
+    const state = document.createElement("span");
+    state.className = "check-failed";
+    state.textContent = "CHECK FAILED";
+    const label = document.createElement("strong");
+    label.textContent =
+      key === "NO_INVARIANTS"
+        ? "No local invariants were supplied"
+        : invariantLabels[key] ?? humanKey(key);
+    item.append(state, label);
+    container.append(item);
+  }
+}
+
 function showLoadFailure(error) {
   pause();
+  acts = [];
+  const failedInvariantKeys = Array.isArray(error?.failedInvariantKeys)
+    ? error.failedInvariantKeys
+    : [];
+  const verificationRejected = failedInvariantKeys.length > 0;
   const wrapper = document.createElement("div");
   wrapper.className = "load-error";
   const kicker = document.createElement("p");
   kicker.className = "step-kicker";
   kicker.textContent = "UNKNOWN_DO_NOT_ACT";
   const heading = document.createElement("h3");
-  heading.textContent = "The local proof could not be loaded.";
+  heading.textContent = verificationRejected
+    ? "The local proof failed verification."
+    : "The local proof could not be loaded.";
   const explanation = document.createElement("p");
-  explanation.textContent =
-    "No PASS state is shown when the proof surface is unavailable.";
+  explanation.textContent = verificationRejected
+    ? "One or more local invariants did not pass. Playback is disabled and no PASS state is shown."
+    : "No PASS state is shown when the proof surface is unavailable.";
   const retry = document.createElement("button");
   retry.type = "button";
   retry.textContent = "Retry local proof";
   retry.addEventListener("click", loadScenario);
   wrapper.append(kicker, heading, explanation, retry);
   stage.replaceChildren(wrapper);
-  document.querySelector("#invariants").replaceChildren();
-  document.querySelector("#verification-count").textContent =
-    "Verification unavailable";
-  progress.textContent = "Proof unavailable";
+  if (verificationRejected) {
+    renderFailedInvariants(failedInvariantKeys);
+    document.querySelector("#verification-count").textContent =
+      `Proof rejected · ${failedInvariantKeys.length} failed local ` +
+      `${failedInvariantKeys.length === 1 ? "check" : "checks"}`;
+    progress.textContent = "Proof rejected";
+  } else {
+    document.querySelector("#invariants").replaceChildren();
+    document.querySelector("#verification-count").textContent =
+      "Verification unavailable";
+    progress.textContent = "Proof unavailable";
+  }
   previousButton.disabled = true;
   nextButton.disabled = true;
   playButton.disabled = true;
@@ -486,8 +656,10 @@ function showLoadFailure(error) {
   actButtons.forEach((button) => {
     button.disabled = true;
   });
-  status.textContent =
-    "The local proof is unavailable. No invariant is represented as passing.";
+  status.textContent = verificationRejected
+    ? `The local proof was rejected. ${failedInvariantKeys.length} local ` +
+      `${failedInvariantKeys.length === 1 ? "check failed" : "checks failed"}.`
+    : "The local proof is unavailable. No invariant is represented as passing.";
   console.error(error);
 }
 
@@ -508,6 +680,18 @@ async function loadScenario() {
       !scenario.invariants
     ) {
       throw new Error("scenario shape rejected");
+    }
+    const invariantEntries = Object.entries(scenario.invariants);
+    const failedInvariantKeys = invariantEntries
+      .filter(([, passed]) => passed !== true)
+      .map(([key]) => key);
+    if (invariantEntries.length === 0 || failedInvariantKeys.length > 0) {
+      const error = new Error("LOCAL_INVARIANT_REJECTED");
+      error.failedInvariantKeys =
+        failedInvariantKeys.length > 0
+          ? failedInvariantKeys
+          : ["NO_INVARIANTS"];
+      throw error;
     }
     acts = buildActs();
     activeAct = 0;
@@ -541,11 +725,9 @@ actButtons.forEach((button, index) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (
-    !acts.length ||
-    (event.target instanceof Element &&
-      event.target.closest("button, a, summary, input, textarea, select"))
-  ) {
+  const ownsPresenterShortcuts =
+    event.target === stage || event.target === judgePath;
+  if (!acts.length || !ownsPresenterShortcuts) {
     return;
   }
   if (event.key === "ArrowRight") {

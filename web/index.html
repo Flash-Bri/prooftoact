@@ -14,7 +14,11 @@
   <body>
     <a class="skip-link" href="#judge-path">Skip to the judge path</a>
 
-    <aside class="proof-ribbon" aria-label="Proof environment status">
+    <aside
+      class="proof-ribbon"
+      aria-label="Proof environment status"
+      tabindex="0"
+    >
       <span class="safety-state">
         Synthetic scenario · Not operational emergency software
       </span>
@@ -193,13 +197,20 @@
         </div>
       </section>
 
-      <section id="judge-path" class="judge-path" aria-labelledby="judge-title">
+      <section
+        id="judge-path"
+        class="judge-path"
+        aria-labelledby="judge-title"
+        tabindex="-1"
+      >
         <div class="section-heading">
           <div>
             <p class="step-label">Three-act judge path</p>
             <h2 id="judge-title">Watch the authority boundary hold.</h2>
           </div>
-          <p class="section-note">Use arrow keys or the presenter controls</p>
+          <p class="section-note">
+            Focus this judge path, then use arrow keys or the presenter controls
+          </p>
         </div>
 
         <nav class="act-nav" aria-label="Choose a demonstration act">
@@ -218,6 +229,7 @@
           id="step-stage"
           class="step-stage"
           aria-label="Current demonstration step"
+          aria-keyshortcuts="ArrowLeft ArrowRight Space Home"
           tabindex="-1"
         >
           <div class="loading-state">

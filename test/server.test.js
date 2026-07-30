@@ -49,6 +49,18 @@ test("serves the local health and scenario surfaces", async (context) => {
   assert.match(page, /data-act="0"/);
   assert.match(page, /id="previous-step"/);
   assert.match(page, /id="restart-demo"/);
+  assert.match(
+    page,
+    /class="proof-ribbon"[\s\S]*?tabindex="0"/
+  );
+  assert.match(
+    page,
+    /id="judge-path"[\s\S]*?tabindex="-1"/
+  );
+  assert.match(
+    page,
+    /aria-keyshortcuts="ArrowLeft ArrowRight Space Home"/
+  );
   assert.match(page, /Tideproof evidence, proposal, authority, and recovery boundaries/);
   assert.match(
     pageResponse.headers.get("content-security-policy"),
