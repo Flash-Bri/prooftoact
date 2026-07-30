@@ -1,6 +1,8 @@
 # Cost and resource gates
 
-No cloud resource is authorized by this document. It is a planning envelope.
+The active Tideproof goal authorizes only the bounded resources described
+here. Any higher cap, fixed-charge service, purchase, or unrelated resource
+requires new approval.
 
 ## Expected contest-period cost
 
@@ -10,9 +12,10 @@ Bedrock calls, static assets, and short-retention CloudWatch logs.
 - Local scaffold and tests: **$0**
 - Low case with applicable free allowances: **$0–$3**
 - Expected metered spend through 2026-09-15: **$3–$12**
-- Conservative operating envelope: **$25–$35**
-- Hard monthly planning cap before separate approval: **$50**
-- High-risk ceiling for estimating exposure, not authorization: **$125**
+- Approved AWS project ceiling: **$15**
+- Approved total Tideproof ceiling: **$25**
+- CockroachDB: two Basic clusters, each configured with a **$5 monthly cap**,
+  currently covered by trial credit
 
 Price inputs checked on 2026-07-29:
 
@@ -36,8 +39,9 @@ Sources:
 Stop new cloud work and investigate if:
 
 - daily cost exceeds $5;
-- cumulative Bedrock cost exceeds $20;
-- unexplained spend exceeds $10;
+- cumulative AWS Tideproof spend approaches $15;
+- total Tideproof spend approaches $25;
+- unexplained spend exceeds $3;
 - a free allowance is exhausted unexpectedly;
 - a loop, public abuse, or log-volume anomaly appears;
 - any architecture change introduces NAT Gateway, always-on EC2/ECS, an
@@ -46,8 +50,10 @@ Stop new cloud work and investigate if:
 ## Controls before first deployment
 
 1. Confirm official price inputs for the selected region and Bedrock model.
-2. Create project-specific least-privilege credentials.
-3. Set $10, $25, and $40 budget notifications.
+2. Create project-specific least-privilege identities; never reuse OpenClaw
+   OAuth or another product credential.
+3. Create an account-wide $15 AWS Budget with forecasted 50% and actual
+   80%/100% notifications. This is an alert boundary, not a hard service cap.
 4. Cap model requests, input size, output tokens, retries, and concurrency.
 5. Use short log retention and synthetic data only.
 6. Record every temporary resource, owner, creation time, cost class, and

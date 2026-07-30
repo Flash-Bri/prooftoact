@@ -12,15 +12,15 @@ Deadline: 2026-08-18 at 5:00 PM ET.
 
 | Requirement | Planned proof | Current status |
 | --- | --- | --- |
-| New project during submission period | Clean-room repository and provenance receipts | Started locally |
-| Agentic memory application | Evidence memory controls retrieval and action authority | Local behavioral proof |
-| At least two named CockroachDB tools | Distributed Vector Index + meaningful Managed MCP recovery/audit path | Not integrated |
-| At least one AWS service | Lambda/API Gateway plus bounded Bedrock use | Not deployed |
+| New project during submission period | Clean-room repository and provenance receipts | Verified locally; private |
+| Agentic memory application | Evidence memory controls retrieval and action authority | Gate One verified, synthetic scope |
+| At least two named CockroachDB tools | Distributed Vector Index + meaningful Managed MCP recovery/audit path | Gate One verified |
+| At least one AWS service | Lambda/API Gateway, KMS, and bounded Bedrock use | Local candidate passed; live deployment pending |
 | Functional AWS-hosted demo | Judge-accessible synthetic scenario | Not deployed |
 | Public open-source repository and license | MIT-licensed repository with reproducible setup | Local/private only |
 | Public video under three minutes | 175-second evidence-led demonstration | Script drafted |
 | Free judge access through judging | Budgeted low-volume environment through 2026-09-15 | Not provisioned |
-| Pre-existing work disclosed | Clean-room statement and dependency inventory | Initial receipt written |
+| Pre-existing work disclosed | Clean-room statement and dependency inventory | Maintained; final audit pending |
 
 ## Judging alignment
 
@@ -31,7 +31,8 @@ also the first tie-breaker.
   conflicts, scope, and spent authority instead of storing unqualified facts.
 - **Technological Implementation:** the final proof must show a real
   serializable CockroachDB race, SQL-before-vector filtering, a meaningful
-  second Cockroach tool, AWS runtime evidence, and reproducible tests.
+  second Cockroach tool, AWS runtime evidence, and reproducible tests. Gate
+  One is accepted; live AWS evidence remains pending.
 - **Real-World Impact:** the synthetic response scenario makes stale or
   contradictory shared memory legible without claiming operational readiness.
 - **Product Readiness:** one-command fixtures, judge-safe reset, cost alarms,

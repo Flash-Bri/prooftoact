@@ -15,8 +15,8 @@ The thesis is deliberately narrower than “AI remembers better”:
 
 ## What exists now
 
-This repository contains a deterministic local vertical slice plus a
-credential-gated CockroachDB Cloud Gate One candidate:
+This repository contains a deterministic local vertical slice, an accepted
+CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
 
 - provenance, validity-window, and scope checks before vector ranking;
 - unresolved-conflict detection and fail-closed authorization;
@@ -32,14 +32,19 @@ credential-gated CockroachDB Cloud Gate One candidate:
 - an isolated CockroachDB recovery cluster and deterministic Managed MCP
   fixed-query broker with signed context-only bundles;
 - separate pre-read and terminal recovery-audit events on the primary cluster;
+- 100 live 50-contender races and 100 ambiguity runs at each transaction
+  boundary, with no invariant violation;
+- a generated AWS CloudFormation candidate with private versioned artifacts,
+  IAM-separated Lambda roles, one bounded Amazon Nova Micro proposal path,
+  P-256 KMS receipt signing, exact Lambda code hashes, and temporary same-role
+  capability probes;
 - a local browser demonstration and deterministic unit tests.
 
 It does **not** yet contain or claim:
 
-- AWS deployment or Bedrock model use;
-- production caller authentication, KMS-backed signing, or deployed IAM
-  separation;
-- full 100-run concurrency and ambiguity acceptance;
+- live AWS deployment, Bedrock inference, KMS signatures, or IAM denial
+  evidence;
+- a live CockroachDB-to-AWS handoff;
 - exactly-once external effects, regional survival, or disaster readiness;
 - production security, availability, or suitability for real emergencies.
 
@@ -54,6 +59,7 @@ a secret store and never enter the repository.
 
 ```sh
 npm test
+npm run generate:gate2
 npm run demo
 npm run dev
 ```
@@ -73,10 +79,11 @@ The implementation uses or is planned to use:
 3. CockroachDB serializable transactions, immutable-shaped receipts, fencing,
    and transactional outbox;
 4. AWS Lambda/API Gateway, KMS, and Amazon Bedrock for separated bounded
-   runtime roles.
+   runtime roles; the local candidate is not a live-cloud claim.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
-`docs/ARCHITECTURE.md`, `docs/PRIOR_ART.md`, and `docs/WINNING_PLAN.md`.
+`docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and
+`docs/WINNING_PLAN.md`.
 
 ## Safety and provenance
 

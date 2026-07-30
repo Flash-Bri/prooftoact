@@ -34,8 +34,47 @@ TideproofMemory
         +--> local timeline UI
 ```
 
-The in-memory implementation is a behavioral specification. Its one-process
-race result is not evidence of distributed correctness.
+The in-memory implementation is a behavioral specification. Distributed
+correctness is supported separately by the accepted CockroachDB Gate One
+evidence; the local model alone is not that evidence.
+
+## Accepted CockroachDB Gate One
+
+```text
+Primary CockroachDB cluster
+  - verified evidence + revocation/conflict state
+  - SQL admissibility before Distributed Vector Index ranking
+  - SERIALIZABLE authority transaction + monotonic fence
+  - durable winner/denial receipts + transactional outbox
+  - protected synthetic database effect
+        |
+        +--> sanitized signed recovery bundles
+                 |
+                 v
+Separate recovery cluster --> fixed-query Managed MCP broker
+                                context only; no authority transfer
+```
+
+## Local AWS Gate Two candidate
+
+```text
+IAM-signed HTTP request
+        |
+        v
+API Gateway --> Boundary Lambda
+                  | exact request/caller binding
+                  +--> Agent Lambda --> Amazon Nova Micro
+                  |                  proposal only
+                  +--> Signer Lambda --> KMS P-256
+                  |                   signed advisory receipt
+                  X--> Authority Lambda (isolated fail-closed placeholder)
+```
+
+Gate Two currently uses one Gate One digest-bound synthetic fixture. It proves
+the intended software and IAM shape locally, not a live CockroachDB-to-AWS
+handoff. The boundary independently validates the model proposal and signer
+envelope, verifies the P-256 signature locally, and rejects direct or
+authority-bearing output.
 
 ## Target contest architecture
 
@@ -61,11 +100,11 @@ CockroachDB
 Managed MCP recovery/audit agent
 ```
 
-The Managed MCP path must do real work visible in the demonstration—ideally
-recovering the successor's incident context and verifying the committed
-receipt. If that is not feasible or safe, the team must either implement a
-meaningful CockroachDB Agent Skill as the second named tool or stop the entry;
-checkbox integration is not acceptable.
+The Managed MCP path already performs one fixed-query, context-only recovery
+read through a deterministic broker. The final integration must replace the
+Gate Two fixture with a freshly validated recovery bundle and route any
+proposed operation through the real CockroachDB authorizer. Bedrock must never
+receive or mint operation IDs, fences, effect keys, or database credentials.
 
 ## Minimal data model
 

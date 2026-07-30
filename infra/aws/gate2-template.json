@@ -1,0 +1,2385 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Tideproof Gate Two: immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
+  "Parameters": {
+    "ArtifactBucket": {
+      "Type": "String",
+      "MinLength": 3,
+      "Description": "Private, versioned bucket from the reviewed bootstrap stack."
+    },
+    "SourceCommit": {
+      "Type": "String",
+      "Description": "Exact clean Git commit deployed by this stack.",
+      "AllowedPattern": "^[0-9a-f]{40}$"
+    },
+    "ConfigDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the effective nonsecret deployment configuration.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "TreeDigest": {
+      "Type": "String",
+      "Description": "Exact clean Git tree object identifier.",
+      "AllowedPattern": "^[0-9a-f]{40}$"
+    },
+    "PackageLockDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of package-lock.json.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "BedrockModelId": {
+      "Type": "String",
+      "Default": "amazon.nova-micro-v1:0",
+      "AllowedValues": [
+        "amazon.nova-micro-v1:0"
+      ]
+    },
+    "NotificationEmail": {
+      "Type": "String",
+      "Description": "Private deployment parameter used only for account-wide AWS Budget alerts.",
+      "AllowedPattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+      "NoEcho": true
+    },
+    "EnableProbeFunctions": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Deploy same-role evidence probes temporarily; update to false after receipts are captured."
+    },
+    "AgentArtifactKey": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Versioned S3 key for the agent artifact."
+    },
+    "AgentArtifactVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Exact S3 object version for the agent artifact."
+    },
+    "AgentArtifactDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the uploaded agent ZIP.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "AgentArtifactCodeSha256": {
+      "Type": "String",
+      "Description": "Base64 SHA-256 of the uploaded agent ZIP, enforced by Lambda Version.",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$"
+    },
+    "AgentSourceDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the reviewed agent source.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "BoundaryArtifactKey": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Versioned S3 key for the boundary artifact."
+    },
+    "BoundaryArtifactVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Exact S3 object version for the boundary artifact."
+    },
+    "BoundaryArtifactDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the uploaded boundary ZIP.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "BoundaryArtifactCodeSha256": {
+      "Type": "String",
+      "Description": "Base64 SHA-256 of the uploaded boundary ZIP, enforced by Lambda Version.",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$"
+    },
+    "BoundarySourceDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the reviewed boundary source.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "SignerArtifactKey": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Versioned S3 key for the signer artifact."
+    },
+    "SignerArtifactVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Exact S3 object version for the signer artifact."
+    },
+    "SignerArtifactDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the uploaded signer ZIP.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "SignerArtifactCodeSha256": {
+      "Type": "String",
+      "Description": "Base64 SHA-256 of the uploaded signer ZIP, enforced by Lambda Version.",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$"
+    },
+    "SignerSourceDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the reviewed signer source.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "AuthorityArtifactKey": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Versioned S3 key for the authority artifact."
+    },
+    "AuthorityArtifactVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Exact S3 object version for the authority artifact."
+    },
+    "AuthorityArtifactDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the uploaded authority ZIP.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "AuthorityArtifactCodeSha256": {
+      "Type": "String",
+      "Description": "Base64 SHA-256 of the uploaded authority ZIP, enforced by Lambda Version.",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$"
+    },
+    "AuthoritySourceDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the reviewed authority source.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "ProbeArtifactKey": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Versioned S3 key for the probe artifact."
+    },
+    "ProbeArtifactVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Exact S3 object version for the probe artifact."
+    },
+    "ProbeArtifactDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the uploaded probe ZIP.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "ProbeArtifactCodeSha256": {
+      "Type": "String",
+      "Description": "Base64 SHA-256 of the uploaded probe ZIP, enforced by Lambda Version.",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$"
+    },
+    "ProbeSourceDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the reviewed probe source.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "Rules": {
+    "UsEast1Only": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "us-east-1"
+            ]
+          },
+          "AssertDescription": "The reviewed Gate Two proof is approved only for us-east-1."
+        }
+      ]
+    }
+  },
+  "Conditions": {
+    "ShouldDeployProbes": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableProbeFunctions"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "ReceiptSigningKey": {
+      "Type": "AWS::KMS::Key",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "Description": "Synthetic advisory-receipt signer; not an authority or recovery-publisher key.",
+        "Enabled": true,
+        "KeySpec": "ECC_NIST_P256",
+        "KeyUsage": "SIGN_VERIFY",
+        "Origin": "AWS_KMS",
+        "MultiRegion": false,
+        "PendingWindowInDays": 7,
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "EnableAccountAdministration",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "kms:*",
+              "Resource": "*"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "SyntheticGateTwoEvidence"
+          }
+        ]
+      }
+    },
+    "ReceiptSigningAlias": {
+      "Type": "AWS::KMS::Alias",
+      "Properties": {
+        "AliasName": {
+          "Fn::Sub": "alias/${AWS::StackName}-advisory-receipts"
+        },
+        "TargetKeyId": {
+          "Ref": "ReceiptSigningKey"
+        }
+      }
+    },
+    "CapabilityCanarySecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "Description": "Inert synthetic canary used only to prove runtime secret-read denial.",
+        "GenerateSecretString": {
+          "PasswordLength": 32,
+          "ExcludePunctuation": true
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "CapabilityDenialCanary"
+          }
+        ]
+      }
+    },
+    "AgentLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "BoundaryLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "SignerLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "AuthorityLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "AgentProbeLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "BoundaryProbeLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "SignerProbeLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "AuthorityProbeLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "AgentRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Proposal-only Bedrock role; no database, MCP, secrets, signing, Lambda invoke, or effect capability.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "WriteAgentLogGroup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${AgentLogGroup.Arn}:*"
+                  }
+                },
+                {
+                  "Fn::If": [
+                    "ShouldDeployProbes",
+                    {
+                      "Sid": "WriteAgentProbeLogGroup",
+                      "Effect": "Allow",
+                      "Action": [
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "${AgentProbeLogGroup.Arn}:*"
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "InvokeOneBedrockModel",
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+                  }
+                },
+                {
+                  "Sid": "DenyOtherBedrockModels",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream"
+                  ],
+                  "NotResource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+                  }
+                },
+                {
+                  "Sid": "DenySecretAccess",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:PutResourcePolicy",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyKmsSigning",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:Sign"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyLambdaInvoke",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPrivilegeEscalation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "SignerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Signs software-validated synthetic advisory receipts with one P-256 key; no Bedrock, secrets, Lambda invoke, database, MCP, or effect capability.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "WriteSignerLogGroup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${SignerLogGroup.Arn}:*"
+                  }
+                },
+                {
+                  "Fn::If": [
+                    "ShouldDeployProbes",
+                    {
+                      "Sid": "WriteSignerProbeLogGroup",
+                      "Effect": "Allow",
+                      "Action": [
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "${SignerProbeLogGroup.Arn}:*"
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadOneAdvisorySigningKey",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:GetPublicKey",
+                    "kms:Verify"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReceiptSigningKey",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "SignWithOneAdvisoryKey",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:Sign"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReceiptSigningKey",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "kms:MessageType": "DIGEST",
+                      "kms:SigningAlgorithm": "ECDSA_SHA_256"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyRawSigning",
+                  "Effect": "Deny",
+                  "Action": "kms:Sign",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReceiptSigningKey",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringNotEquals": {
+                      "kms:MessageType": "DIGEST"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyOtherSigningAlgorithms",
+                  "Effect": "Deny",
+                  "Action": "kms:Sign",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReceiptSigningKey",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringNotEquals": {
+                      "kms:SigningAlgorithm": "ECDSA_SHA_256"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyBedrock",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretAccess",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:PutResourcePolicy",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyLambdaInvoke",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPrivilegeEscalation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "AuthorityRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Fail-closed placeholder for the deterministic Cockroach authority path; no Bedrock or operational credential is connected in Gate Two.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "WriteAuthorityLogGroup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${AuthorityLogGroup.Arn}:*"
+                  }
+                },
+                {
+                  "Fn::If": [
+                    "ShouldDeployProbes",
+                    {
+                      "Sid": "WriteAuthorityProbeLogGroup",
+                      "Effect": "Allow",
+                      "Action": [
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "${AuthorityProbeLogGroup.Arn}:*"
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyBedrock",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretAccess",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:PutResourcePolicy",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyKmsSigning",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:Sign"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyLambdaInvoke",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPrivilegeEscalation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "SignerFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "KMS-signs one exact synthetic advisory receipt schema.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "SignerRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 8,
+        "Environment": {
+          "Variables": {
+            "SIGNING_KEY_ARN": {
+              "Fn::GetAtt": [
+                "ReceiptSigningKey",
+                "Arn"
+              ]
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "AGENT_SOURCE_DIGEST": {
+              "Ref": "AgentSourceDigest"
+            },
+            "BOUNDARY_SOURCE_DIGEST": {
+              "Ref": "BoundarySourceDigest"
+            },
+            "SIGNER_SOURCE_DIGEST": {
+              "Ref": "SignerSourceDigest"
+            },
+            "AGENT_ARTIFACT_DIGEST": {
+              "Ref": "AgentArtifactDigest"
+            },
+            "BOUNDARY_ARTIFACT_DIGEST": {
+              "Ref": "BoundaryArtifactDigest"
+            },
+            "SIGNER_ARTIFACT_DIGEST": {
+              "Ref": "SignerArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "SignerLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "SignerArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "SignerArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "ReservedConcurrentExecutions": 1
+      }
+    },
+    "SignerVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "SignerFunction"
+        },
+        "CodeSha256": {
+          "Ref": "SignerArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+        }
+      }
+    },
+    "SignerAlias": {
+      "Type": "AWS::Lambda::Alias",
+      "Properties": {
+        "Name": "proof",
+        "FunctionName": {
+          "Ref": "SignerFunction"
+        },
+        "FunctionVersion": {
+          "Fn::GetAtt": [
+            "SignerVersion",
+            "Version"
+          ]
+        },
+        "Description": "Immutable Gate Two proof alias."
+      }
+    },
+    "AgentFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Invokes one Bedrock model over one exact Gate One digest-bound synthetic fixture and returns an untrusted proposal.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "AgentRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 15,
+        "Environment": {
+          "Variables": {
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "AGENT_SOURCE_DIGEST": {
+              "Ref": "AgentSourceDigest"
+            },
+            "AGENT_ARTIFACT_DIGEST": {
+              "Ref": "AgentArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "AgentLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "AgentArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "AgentArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "ReservedConcurrentExecutions": 1
+      }
+    },
+    "AgentVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "AgentFunction"
+        },
+        "CodeSha256": {
+          "Ref": "AgentArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+        }
+      }
+    },
+    "AgentAlias": {
+      "Type": "AWS::Lambda::Alias",
+      "Properties": {
+        "Name": "proof",
+        "FunctionName": {
+          "Ref": "AgentFunction"
+        },
+        "FunctionVersion": {
+          "Fn::GetAtt": [
+            "AgentVersion",
+            "Version"
+          ]
+        },
+        "Description": "Immutable Gate Two proof alias."
+      }
+    },
+    "AuthorityFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Deterministic fail-closed authority placeholder with no Bedrock or database permission.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "AuthorityRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 5,
+        "Environment": {
+          "Variables": {
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "AUTHORITY_SOURCE_DIGEST": {
+              "Ref": "AuthoritySourceDigest"
+            },
+            "AUTHORITY_ARTIFACT_DIGEST": {
+              "Ref": "AuthorityArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "AuthorityLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "AuthorityArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "AuthorityArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "ReservedConcurrentExecutions": 1
+      }
+    },
+    "AuthorityVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "AuthorityFunction"
+        },
+        "CodeSha256": {
+          "Ref": "AuthorityArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+        }
+      }
+    },
+    "AuthorityAlias": {
+      "Type": "AWS::Lambda::Alias",
+      "Properties": {
+        "Name": "proof",
+        "FunctionName": {
+          "Ref": "AuthorityFunction"
+        },
+        "FunctionVersion": {
+          "Fn::GetAtt": [
+            "AuthorityVersion",
+            "Version"
+          ]
+        },
+        "Description": "Immutable Gate Two proof alias."
+      }
+    },
+    "BoundaryRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Signed-caller coordinator that invokes only the immutable proposal and receipt-signing aliases.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "WriteBoundaryLogGroup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${BoundaryLogGroup.Arn}:*"
+                  }
+                },
+                {
+                  "Fn::If": [
+                    "ShouldDeployProbes",
+                    {
+                      "Sid": "WriteBoundaryProbeLogGroup",
+                      "Effect": "Allow",
+                      "Action": [
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "${BoundaryProbeLogGroup.Arn}:*"
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "InvokeOnlyBoundedChildren",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "AgentAlias",
+                        "AliasArn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "SignerAlias",
+                        "AliasArn"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyOtherLambdaTargets",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "NotResource": [
+                    {
+                      "Fn::GetAtt": [
+                        "AgentAlias",
+                        "AliasArn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "SignerAlias",
+                        "AliasArn"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyBedrock",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretAccess",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:PutResourcePolicy",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyKmsSigning",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:Sign"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPrivilegeEscalation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "HttpApi": {
+      "Type": "AWS::ApiGatewayV2::Api",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-api"
+        },
+        "Description": "IAM-authenticated synthetic Tideproof advisory endpoint.",
+        "ProtocolType": "HTTP",
+        "DisableExecuteApiEndpoint": false,
+        "CorsConfiguration": {
+          "AllowHeaders": [
+            "content-type",
+            "x-amz-content-sha256",
+            "x-amz-date",
+            "authorization",
+            "x-amz-security-token"
+          ],
+          "AllowMethods": [
+            "POST"
+          ],
+          "AllowOrigins": [
+            "https://tideproof.net",
+            "https://www.tideproof.net"
+          ],
+          "MaxAge": 300
+        },
+        "Tags": {
+          "Project": "Tideproof",
+          "Gate": "Two"
+        }
+      }
+    },
+    "BoundaryFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Validates the signed API context and fixed synthetic request before invoking immutable children.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "BoundaryRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 25,
+        "Environment": {
+          "Variables": {
+            "AGENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AgentAlias",
+                "AliasArn"
+              ]
+            },
+            "SIGNER_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "SignerAlias",
+                "AliasArn"
+              ]
+            },
+            "AGENT_FUNCTION_VERSION": {
+              "Fn::GetAtt": [
+                "AgentVersion",
+                "Version"
+              ]
+            },
+            "SIGNER_FUNCTION_VERSION": {
+              "Fn::GetAtt": [
+                "SignerVersion",
+                "Version"
+              ]
+            },
+            "SIGNING_KEY_ARN": {
+              "Fn::GetAtt": [
+                "ReceiptSigningKey",
+                "Arn"
+              ]
+            },
+            "EXPECTED_API_ID": {
+              "Ref": "HttpApi"
+            },
+            "EXPECTED_ACCOUNT_ID": {
+              "Ref": "AWS::AccountId"
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "AGENT_SOURCE_DIGEST": {
+              "Ref": "AgentSourceDigest"
+            },
+            "BOUNDARY_SOURCE_DIGEST": {
+              "Ref": "BoundarySourceDigest"
+            },
+            "SIGNER_SOURCE_DIGEST": {
+              "Ref": "SignerSourceDigest"
+            },
+            "AGENT_ARTIFACT_DIGEST": {
+              "Ref": "AgentArtifactDigest"
+            },
+            "BOUNDARY_ARTIFACT_DIGEST": {
+              "Ref": "BoundaryArtifactDigest"
+            },
+            "SIGNER_ARTIFACT_DIGEST": {
+              "Ref": "SignerArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            },
+            "PROMPT_TEMPLATE_DIGEST": "dff062493e6e60654ff61ac5f360b8f0b525c026786341eef2bd9cca5c74bc60",
+            "AGENT_VALIDATOR_DIGEST": "c2ae14cbb9c7feda02159a7699fb930bc6d5fa244edab782a085ea5889304672"
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "BoundaryLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "BoundaryArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "BoundaryArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "ReservedConcurrentExecutions": 2
+      }
+    },
+    "BoundaryVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "BoundaryFunction"
+        },
+        "CodeSha256": {
+          "Ref": "BoundaryArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+        }
+      }
+    },
+    "BoundaryAlias": {
+      "Type": "AWS::Lambda::Alias",
+      "Properties": {
+        "Name": "proof",
+        "FunctionName": {
+          "Ref": "BoundaryFunction"
+        },
+        "FunctionVersion": {
+          "Fn::GetAtt": [
+            "BoundaryVersion",
+            "Version"
+          ]
+        },
+        "Description": "Immutable Gate Two proof alias."
+      }
+    },
+    "AgentProbeFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Disposable Gate Two capability probe using the exact production execution role.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "AgentRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 25,
+        "Environment": {
+          "Variables": {
+            "PROBE_ROLE_CLASS": "agent",
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "PROBE_OTHER_MODEL_ID": "amazon.nova-lite-v1:0",
+            "PROBE_KMS_KEY_ARN": {
+              "Fn::GetAtt": [
+                "ReceiptSigningKey",
+                "Arn"
+              ]
+            },
+            "PROBE_SECRET_ARN": {
+              "Ref": "CapabilityCanarySecret"
+            },
+            "PROBE_AGENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AgentAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_BOUNDARY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "BoundaryAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_SIGNER_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "SignerAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_AUTHORITY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AuthorityAlias",
+                "AliasArn"
+              ]
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "PROBE_SOURCE_DIGEST": {
+              "Ref": "ProbeSourceDigest"
+            },
+            "PROBE_ARTIFACT_DIGEST": {
+              "Ref": "ProbeArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "AgentProbeLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "ProbeArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "ProbeArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "AgentProbeVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "AgentProbeFunction"
+        },
+        "CodeSha256": {
+          "Ref": "ProbeArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Disposable agent-role probe ${SourceCommit} ${ConfigDigest}"
+        }
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "BoundaryProbeFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Disposable Gate Two capability probe using the exact production execution role.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "BoundaryRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 25,
+        "Environment": {
+          "Variables": {
+            "PROBE_ROLE_CLASS": "boundary",
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "PROBE_OTHER_MODEL_ID": "amazon.nova-lite-v1:0",
+            "PROBE_KMS_KEY_ARN": {
+              "Fn::GetAtt": [
+                "ReceiptSigningKey",
+                "Arn"
+              ]
+            },
+            "PROBE_SECRET_ARN": {
+              "Ref": "CapabilityCanarySecret"
+            },
+            "PROBE_AGENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AgentAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_BOUNDARY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "BoundaryAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_SIGNER_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "SignerAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_AUTHORITY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AuthorityAlias",
+                "AliasArn"
+              ]
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "PROBE_SOURCE_DIGEST": {
+              "Ref": "ProbeSourceDigest"
+            },
+            "PROBE_ARTIFACT_DIGEST": {
+              "Ref": "ProbeArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "BoundaryProbeLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "ProbeArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "ProbeArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "BoundaryProbeVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "BoundaryProbeFunction"
+        },
+        "CodeSha256": {
+          "Ref": "ProbeArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Disposable boundary-role probe ${SourceCommit} ${ConfigDigest}"
+        }
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "SignerProbeFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Disposable Gate Two capability probe using the exact production execution role.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "SignerRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 25,
+        "Environment": {
+          "Variables": {
+            "PROBE_ROLE_CLASS": "signer",
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "PROBE_OTHER_MODEL_ID": "amazon.nova-lite-v1:0",
+            "PROBE_KMS_KEY_ARN": {
+              "Fn::GetAtt": [
+                "ReceiptSigningKey",
+                "Arn"
+              ]
+            },
+            "PROBE_SECRET_ARN": {
+              "Ref": "CapabilityCanarySecret"
+            },
+            "PROBE_AGENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AgentAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_BOUNDARY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "BoundaryAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_SIGNER_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "SignerAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_AUTHORITY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AuthorityAlias",
+                "AliasArn"
+              ]
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "PROBE_SOURCE_DIGEST": {
+              "Ref": "ProbeSourceDigest"
+            },
+            "PROBE_ARTIFACT_DIGEST": {
+              "Ref": "ProbeArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "SignerProbeLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "ProbeArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "ProbeArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "SignerProbeVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "SignerProbeFunction"
+        },
+        "CodeSha256": {
+          "Ref": "ProbeArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Disposable signer-role probe ${SourceCommit} ${ConfigDigest}"
+        }
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "AuthorityProbeFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Disposable Gate Two capability probe using the exact production execution role.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "AuthorityRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 25,
+        "Environment": {
+          "Variables": {
+            "PROBE_ROLE_CLASS": "authority",
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "PROBE_OTHER_MODEL_ID": "amazon.nova-lite-v1:0",
+            "PROBE_KMS_KEY_ARN": {
+              "Fn::GetAtt": [
+                "ReceiptSigningKey",
+                "Arn"
+              ]
+            },
+            "PROBE_SECRET_ARN": {
+              "Ref": "CapabilityCanarySecret"
+            },
+            "PROBE_AGENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AgentAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_BOUNDARY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "BoundaryAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_SIGNER_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "SignerAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_AUTHORITY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AuthorityAlias",
+                "AliasArn"
+              ]
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "PROBE_SOURCE_DIGEST": {
+              "Ref": "ProbeSourceDigest"
+            },
+            "PROBE_ARTIFACT_DIGEST": {
+              "Ref": "ProbeArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "AuthorityProbeLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "ProbeArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "ProbeArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "AuthorityProbeVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "AuthorityProbeFunction"
+        },
+        "CodeSha256": {
+          "Ref": "ProbeArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Disposable authority-role probe ${SourceCommit} ${ConfigDigest}"
+        }
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "BoundaryIntegration": {
+      "Type": "AWS::ApiGatewayV2::Integration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "IntegrationType": "AWS_PROXY",
+        "IntegrationUri": {
+          "Fn::GetAtt": [
+            "BoundaryAlias",
+            "AliasArn"
+          ]
+        },
+        "PayloadFormatVersion": "2.0",
+        "TimeoutInMillis": 29000
+      }
+    },
+    "AdvisoryRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /advisory",
+        "AuthorizationType": "AWS_IAM",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BoundaryIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DefaultStage": {
+      "Type": "AWS::ApiGatewayV2::Stage",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "StageName": "$default",
+        "AutoDeploy": true,
+        "DefaultRouteSettings": {
+          "ThrottlingBurstLimit": 1,
+          "ThrottlingRateLimit": 0.1
+        },
+        "Tags": {
+          "Project": "Tideproof",
+          "Gate": "Two"
+        }
+      }
+    },
+    "BoundaryInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "BoundaryAlias",
+            "AliasArn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/POST/advisory"
+        }
+      }
+    },
+    "AgentErrorAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-agent-errors"
+        },
+        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Errors",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "AgentFunction"
+            }
+          }
+        ]
+      }
+    },
+    "BoundaryErrorAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-boundary-errors"
+        },
+        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Errors",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "BoundaryFunction"
+            }
+          }
+        ]
+      }
+    },
+    "SignerErrorAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-signer-errors"
+        },
+        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Errors",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "SignerFunction"
+            }
+          }
+        ]
+      }
+    },
+    "AuthorityErrorAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-authority-errors"
+        },
+        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Errors",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "AuthorityFunction"
+            }
+          }
+        ]
+      }
+    },
+    "AccountBudget": {
+      "Type": "AWS::Budgets::Budget",
+      "Properties": {
+        "Budget": {
+          "BudgetName": {
+            "Fn::Sub": "${AWS::StackName}-account-safety"
+          },
+          "BudgetLimit": {
+            "Amount": 15,
+            "Unit": "USD"
+          },
+          "BudgetType": "COST",
+          "TimeUnit": "MONTHLY"
+        },
+        "NotificationsWithSubscribers": [
+          {
+            "Notification": {
+              "ComparisonOperator": "GREATER_THAN",
+              "NotificationType": "FORECASTED",
+              "Threshold": 50,
+              "ThresholdType": "PERCENTAGE"
+            },
+            "Subscribers": [
+              {
+                "Address": {
+                  "Ref": "NotificationEmail"
+                },
+                "SubscriptionType": "EMAIL"
+              }
+            ]
+          },
+          {
+            "Notification": {
+              "ComparisonOperator": "GREATER_THAN",
+              "NotificationType": "ACTUAL",
+              "Threshold": 80,
+              "ThresholdType": "PERCENTAGE"
+            },
+            "Subscribers": [
+              {
+                "Address": {
+                  "Ref": "NotificationEmail"
+                },
+                "SubscriptionType": "EMAIL"
+              }
+            ]
+          },
+          {
+            "Notification": {
+              "ComparisonOperator": "GREATER_THAN",
+              "NotificationType": "ACTUAL",
+              "Threshold": 100,
+              "ThresholdType": "PERCENTAGE"
+            },
+            "Subscribers": [
+              {
+                "Address": {
+                  "Ref": "NotificationEmail"
+                },
+                "SubscriptionType": "EMAIL"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ApiEndpoint": {
+      "Description": "IAM-authenticated synthetic advisory endpoint; not public judge access.",
+      "Value": {
+        "Fn::Sub": "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+      }
+    },
+    "AgentAliasArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "AgentAlias",
+          "AliasArn"
+        ]
+      }
+    },
+    "BoundaryAliasArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "BoundaryAlias",
+          "AliasArn"
+        ]
+      }
+    },
+    "SignerAliasArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "SignerAlias",
+          "AliasArn"
+        ]
+      }
+    },
+    "AuthorityAliasArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "AuthorityAlias",
+          "AliasArn"
+        ]
+      }
+    },
+    "AgentProbeVersionArn": {
+      "Condition": "ShouldDeployProbes",
+      "Value": {
+        "Ref": "AgentProbeVersion"
+      }
+    },
+    "BoundaryProbeVersionArn": {
+      "Condition": "ShouldDeployProbes",
+      "Value": {
+        "Ref": "BoundaryProbeVersion"
+      }
+    },
+    "SignerProbeVersionArn": {
+      "Condition": "ShouldDeployProbes",
+      "Value": {
+        "Ref": "SignerProbeVersion"
+      }
+    },
+    "AuthorityProbeVersionArn": {
+      "Condition": "ShouldDeployProbes",
+      "Value": {
+        "Ref": "AuthorityProbeVersion"
+      }
+    },
+    "AuthoritySourceDigest": {
+      "Value": {
+        "Ref": "AuthoritySourceDigest"
+      }
+    },
+    "AuthorityArtifactDigest": {
+      "Value": {
+        "Ref": "AuthorityArtifactDigest"
+      }
+    },
+    "ProbeSourceDigest": {
+      "Value": {
+        "Ref": "ProbeSourceDigest"
+      }
+    },
+    "ProbeArtifactDigest": {
+      "Value": {
+        "Ref": "ProbeArtifactDigest"
+      }
+    },
+    "ReceiptSigningKeyArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReceiptSigningKey",
+          "Arn"
+        ]
+      }
+    },
+    "CapabilityCanarySecretArn": {
+      "Value": {
+        "Ref": "CapabilityCanarySecret"
+      }
+    },
+    "BedrockModel": {
+      "Value": {
+        "Ref": "BedrockModelId"
+      }
+    },
+    "SourceCommit": {
+      "Value": {
+        "Ref": "SourceCommit"
+      }
+    },
+    "ConfigDigest": {
+      "Value": {
+        "Ref": "ConfigDigest"
+      }
+    }
+  }
+}

@@ -31,9 +31,18 @@ products.
 
 - All files in the initial scaffold were newly authored on 2026-07-29.
 - The scenario uses invented agencies, resources, evidence, and timestamps.
-- The local proof has no third-party runtime or package dependency.
-- No account was registered, repository published, cloud resource created, or
-  paid service invoked by this scaffold.
+- Runtime dependencies are pinned: `pg`, role-specific AWS SDK clients, and
+  the Smithy Node HTTP handler. `esbuild` is a pinned development dependency
+  used only to create deterministic Lambda bundles.
+- Two project-only CockroachDB Basic clusters and a cluster-scoped Managed MCP
+  identity were created under trial credits with finite monthly caps.
+- Project secrets remain in the macOS Keychain and are excluded from source,
+  fixtures, evidence, and generated bundles.
+- No AWS resource has been created by Gate Two yet. The AWS candidate remains
+  local until its clean commit, immutable artifact versions, and live
+  capability evidence pass review.
+- The repository remains private and no contest submission has been
+  published.
 
 The initial local commit used the working names “Highwater” and “BlackBox.”
 Public prior-art research performed immediately afterward found unrelated or

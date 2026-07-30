@@ -8,6 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
+    "build:gate2": "node scripts/build-gate2-template.js",
+    "generate:gate2": "node scripts/build-gate2-template.js --templates-only",
+    "gate2:config-digest": "node scripts/gate2-config-digest.js",
     "demo": "node src/demo.js",
     "dev": "node src/server.js",
     "gate1:ambiguity": "node scripts/gate1-ambiguity.js",
@@ -26,6 +29,14 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "3.1098.0",
+    "@aws-sdk/client-kms": "3.1098.0",
+    "@aws-sdk/client-lambda": "3.1098.0",
+    "@aws-sdk/client-secrets-manager": "3.1098.0",
+    "@smithy/node-http-handler": "4.9.13",
     "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
   }
 }
