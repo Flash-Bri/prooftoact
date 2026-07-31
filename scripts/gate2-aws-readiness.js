@@ -573,6 +573,8 @@ export function validateReleaseProvenance(
   const accessibilitySummary = accessibility?.summary;
   const security = receipt?.security;
   const securityChecks = security?.checks;
+  const submission = receipt?.submission;
+  const submissionChecks = submission?.checks;
   const dependencies = receipt?.dependencies;
   const installedTree = dependencies?.installedTree;
   const inventory = dependencies?.inventory;
@@ -592,6 +594,7 @@ export function validateReleaseProvenance(
       "security",
       "source",
       "status",
+      "submission",
       "trackedTree"
     ]) &&
       exactKeys(source, [
@@ -788,6 +791,37 @@ export function validateReleaseProvenance(
         "sourceSecurityMarkersPresent",
         "throttlesAndConcurrencyBounded"
       ]) &&
+      exactKeys(submission, [
+        "checklistItemCount",
+        "checks",
+        "claimBoundary",
+        "finalReleaseReady",
+        "finalReleaseRequirements",
+        "manifestPath",
+        "manifestSha256",
+        "officialCoordinateCount",
+        "reviewedOn",
+        "schemaVersion",
+        "status",
+        "stopTokenOccurrenceCount",
+        "surfaceCount",
+        "uncheckedChecklistItemCount",
+        "uniqueStopTokenCount"
+      ]) &&
+      exactKeys(submissionChecks, [
+        "allHardPublishGatesUnchecked",
+        "canonicalDraftStatus",
+        "canonicalManifest",
+        "contestMatrixRemainsBlocked",
+        "exactStopTokenVocabulary",
+        "exactSurfaceHashes",
+        "liveAndOwnerFieldsUnresolved",
+        "officialScheduleInternallyConsistent",
+        "releaseClaimsPacketBindingExact",
+        "releasePlanRemainsFailClosed",
+        "rightsAndClaimsRemainNonfinal",
+        "submissionCoordinatesExact"
+      ]) &&
       exactKeys(dependencies, [
         "bundledThirdPartyNotices",
         "installedTree",
@@ -846,9 +880,10 @@ export function validateReleaseProvenance(
         "releasePrivacyVerified",
         "staticAccessibilityVerified",
         "submodulesAbsent",
+        "submissionDraftFailClosed",
         "trackedSymlinksAbsent"
       ]) &&
-      receipt.schemaVersion === "tideproof.release-provenance.v5" &&
+      receipt.schemaVersion === "tideproof.release-provenance.v6" &&
       receipt.status === "PASS" &&
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
@@ -1048,6 +1083,24 @@ export function validateReleaseProvenance(
       Object.values(securityChecks).every((value) => value === true) &&
       typeof security.claimBoundary === "string" &&
       security.claimBoundary.length > 0 &&
+      submission.schemaVersion ===
+        "tideproof.release-submission-verification.v1" &&
+      submission.status === "DRAFT_SAFELY_BLOCKED" &&
+      submission.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(submission.reviewedOn) &&
+      submission.manifestPath === "RELEASE_SUBMISSION_MANIFEST.json" &&
+      HEX_64.test(submission.manifestSha256) &&
+      submission.surfaceCount === 7 &&
+      submission.checklistItemCount === 14 &&
+      submission.uncheckedChecklistItemCount === 14 &&
+      submission.stopTokenOccurrenceCount === 13 &&
+      submission.uniqueStopTokenCount === 12 &&
+      submission.officialCoordinateCount === 11 &&
+      Array.isArray(submission.finalReleaseRequirements) &&
+      submission.finalReleaseRequirements.length === 4 &&
+      Object.values(submissionChecks).every((value) => value === true) &&
+      typeof submission.claimBoundary === "string" &&
+      submission.claimBoundary.length > 0 &&
       installedTree.status === "PASS" &&
       HEX_64.test(installedTree.packageLockSha256) &&
       Number.isSafeInteger(installedTree.lockedPackageCount) &&
