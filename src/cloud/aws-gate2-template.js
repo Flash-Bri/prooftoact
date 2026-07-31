@@ -1,11 +1,25 @@
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
+import { PUBLIC_DEMO_PATHS } from "./public-demo.js";
 
 const require = createRequire(import.meta.url);
 const {
   PROMPT_TEMPLATE_VERSION,
   VALIDATOR_VERSION
 } = require("../../infra/aws/lambda/agent.cjs").__test;
+
+const PUBLIC_DEMO_ROUTE_IDS = Object.freeze({
+  "/": "DemoIndexRoute",
+  "/app.js": "DemoAppRoute",
+  "/styles.css": "DemoStylesRoute",
+  "/favicon.svg": "DemoFaviconRoute",
+  "/api/health": "DemoHealthRoute",
+  "/api/scenario": "DemoScenarioRoute",
+  "/evidence/gate1-authority": "DemoAuthorityEvidenceRoute",
+  "/evidence/gate1-recovery": "DemoRecoveryEvidenceRoute",
+  "/evidence/gate1-ambiguity": "DemoAmbiguityEvidenceRoute",
+  "/claims": "DemoClaimsRoute"
+});
 
 function ref(name) {
   return { Ref: name };
@@ -505,6 +519,7 @@ export function buildGate2Template() {
     },
     ...artifactParameters("agent"),
     ...artifactParameters("boundary"),
+    ...artifactParameters("demo"),
     ...artifactParameters("signer"),
     ...artifactParameters("authority"),
     ...artifactParameters("probe")
@@ -578,11 +593,13 @@ export function buildGate2Template() {
 
     AgentLogGroup: logGroup(),
     BoundaryLogGroup: logGroup(),
+    DemoLogGroup: logGroup(),
     ApiAccessLogGroup: logGroup(),
     SignerLogGroup: logGroup(),
     AuthorityLogGroup: logGroup(),
     AgentProbeLogGroup: logGroup(),
     BoundaryProbeLogGroup: logGroup(),
+    DemoProbeLogGroup: logGroup(),
     SignerProbeLogGroup: logGroup(),
     AuthorityProbeLogGroup: logGroup()
   };
@@ -689,6 +706,23 @@ export function buildGate2Template() {
       denyPrivilegeEscalation()
     ]
   });
+  resources.DemoRole = roleResource({
+    description:
+      "Public read-only synthetic demo role; bundled content only, with no Bedrock, Lambda invoke, KMS signing, secrets, database, MCP, or authority capability.",
+    statements: [
+      exactLogStatement("DemoLogGroup"),
+      fnIf(
+        "ShouldDeployProbes",
+        exactLogStatement("DemoProbeLogGroup")
+      ),
+      denyBedrock(),
+      denySecretAccess(),
+      denySecretMutation(),
+      denyKmsSigning(),
+      denyLambdaInvoke(),
+      denyPrivilegeEscalation()
+    ]
+  });
 
   resources.SignerFunction = lambdaFunction({
     description:
@@ -772,6 +806,31 @@ export function buildGate2Template() {
     "AuthorityVersion"
   );
 
+  resources.DemoFunction = lambdaFunction({
+    description:
+      "Serves the signed-out deterministic Tideproof judge path from bundled read-only assets.",
+    role: "DemoRole",
+    code: artifactCode("demo"),
+    logGroup: "DemoLogGroup",
+    timeout: 5,
+    concurrency: 8,
+    environment: {
+      EXPECTED_API_ID: ref("HttpApi"),
+      SOURCE_COMMIT: ref("SourceCommit"),
+      CONFIG_DIGEST: ref("ConfigDigest"),
+      DEMO_SOURCE_DIGEST: ref("DemoSourceDigest"),
+      DEMO_ARTIFACT_DIGEST: ref("DemoArtifactDigest"),
+      TREE_DIGEST: ref("TreeDigest"),
+      PACKAGE_LOCK_DIGEST: ref("PackageLockDigest")
+    }
+  });
+  resources.DemoVersion = version(
+    "DemoFunction",
+    sub("Tideproof public demo ${SourceCommit} ${ConfigDigest}"),
+    "demo"
+  );
+  resources.DemoAlias = alias("DemoFunction", "DemoVersion");
+
   resources.BoundaryRole = roleResource({
     description:
       "Signed-caller coordinator that invokes only the immutable proposal and receipt-signing aliases.",
@@ -818,7 +877,7 @@ export function buildGate2Template() {
     Properties: {
       Name: sub("${AWS::StackName}-api"),
       Description:
-        "IAM-authenticated synthetic Tideproof advisory endpoint.",
+        "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
       ProtocolType: "HTTP",
       DisableExecuteApiEndpoint: false,
       Tags: { Project: "Tideproof", Gate: "Two" }
@@ -911,6 +970,16 @@ export function buildGate2Template() {
     sub("Disposable boundary-role probe ${SourceCommit} ${ConfigDigest}"),
     "probe"
   );
+  resources.DemoProbeFunction = probeFunction(
+    "DemoRole",
+    "DemoProbeLogGroup",
+    "demo"
+  );
+  resources.DemoProbeVersion = version(
+    "DemoProbeFunction",
+    sub("Disposable demo-role probe ${SourceCommit} ${ConfigDigest}"),
+    "probe"
+  );
   resources.SignerProbeFunction = probeFunction(
     "SignerRole",
     "SignerProbeLogGroup",
@@ -935,12 +1004,15 @@ export function buildGate2Template() {
   for (const name of [
     "AgentProbeLogGroup",
     "BoundaryProbeLogGroup",
+    "DemoProbeLogGroup",
     "SignerProbeLogGroup",
     "AuthorityProbeLogGroup",
     "AgentProbeFunction",
     "AgentProbeVersion",
     "BoundaryProbeFunction",
     "BoundaryProbeVersion",
+    "DemoProbeFunction",
+    "DemoProbeVersion",
     "SignerProbeFunction",
     "SignerProbeVersion",
     "AuthorityProbeFunction",
@@ -973,6 +1045,36 @@ export function buildGate2Template() {
       }
     }
   };
+  resources.DemoIntegration = {
+    Type: "AWS::ApiGatewayV2::Integration",
+    Properties: {
+      ApiId: ref("HttpApi"),
+      IntegrationType: "AWS_PROXY",
+      IntegrationUri: getAtt("DemoAlias", "AliasArn"),
+      PayloadFormatVersion: "2.0",
+      TimeoutInMillis: 6_000
+    }
+  };
+  for (const path of PUBLIC_DEMO_PATHS) {
+    const logicalId = PUBLIC_DEMO_ROUTE_IDS[path];
+    if (!logicalId) {
+      throw new Error("PUBLIC_DEMO_ROUTE_ID_MISSING");
+    }
+    resources[logicalId] = {
+      Type: "AWS::ApiGatewayV2::Route",
+      Properties: {
+        ApiId: ref("HttpApi"),
+        RouteKey: `GET ${path}`,
+        AuthorizationType: "NONE",
+        Target: {
+          "Fn::Join": [
+            "/",
+            ["integrations", ref("DemoIntegration")]
+          ]
+        }
+      }
+    };
+  }
   resources.DefaultStage = {
     Type: "AWS::ApiGatewayV2::Stage",
     Properties: {
@@ -994,8 +1096,14 @@ export function buildGate2Template() {
         })
       },
       DefaultRouteSettings: {
-        ThrottlingBurstLimit: 1,
-        ThrottlingRateLimit: 0.1
+        ThrottlingBurstLimit: 8,
+        ThrottlingRateLimit: 0.05
+      },
+      RouteSettings: {
+        "POST /advisory": {
+          ThrottlingBurstLimit: 1,
+          ThrottlingRateLimit: 0.1
+        }
       },
       Tags: { Project: "Tideproof", Gate: "Two" }
     }
@@ -1012,6 +1120,30 @@ export function buildGate2Template() {
       )
     }
   };
+  resources.DemoRootInvokePermission = {
+    Type: "AWS::Lambda::Permission",
+    Properties: {
+      Action: "lambda:InvokeFunction",
+      FunctionName: getAtt("DemoAlias", "AliasArn"),
+      Principal: "apigateway.amazonaws.com",
+      SourceAccount: ref("AWS::AccountId"),
+      SourceArn: sub(
+        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/"
+      )
+    }
+  };
+  resources.DemoAssetInvokePermission = {
+    Type: "AWS::Lambda::Permission",
+    Properties: {
+      Action: "lambda:InvokeFunction",
+      FunctionName: getAtt("DemoAlias", "AliasArn"),
+      Principal: "apigateway.amazonaws.com",
+      SourceAccount: ref("AWS::AccountId"),
+      SourceArn: sub(
+        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/*"
+      )
+    }
+  };
 
   resources.AgentErrorAlarm = lambdaErrorAlarm(
     "AgentFunction",
@@ -1020,6 +1152,10 @@ export function buildGate2Template() {
   resources.BoundaryErrorAlarm = lambdaErrorAlarm(
     "BoundaryFunction",
     "boundary"
+  );
+  resources.DemoErrorAlarm = lambdaErrorAlarm(
+    "DemoFunction",
+    "demo"
   );
   resources.SignerErrorAlarm = lambdaErrorAlarm(
     "SignerFunction",
@@ -1032,7 +1168,7 @@ export function buildGate2Template() {
   return {
     AWSTemplateFormatVersion: "2010-09-09",
     Description:
-      "Tideproof Gate Two: immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
+      "Tideproof Gate Two: signed-out read-only judge path, immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
     Parameters: parameters,
     Rules: {
       UsEast1Only: {
@@ -1056,9 +1192,16 @@ export function buildGate2Template() {
     Outputs: {
       ApiEndpoint: {
         Description:
-          "IAM-authenticated synthetic advisory endpoint; not public judge access.",
+          "Base URL for the signed-out demo and isolated IAM advisory route.",
         Value: sub(
           "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+        )
+      },
+      PublicDemoUrl: {
+        Description:
+          "Signed-out read-only synthetic judge path; not evidence that the advisory path ran.",
+        Value: sub(
+          "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
         )
       },
       AdvisoryCallerRoleArn: {
@@ -1071,6 +1214,7 @@ export function buildGate2Template() {
       BoundaryAliasArn: {
         Value: getAtt("BoundaryAlias", "AliasArn")
       },
+      DemoAliasArn: { Value: getAtt("DemoAlias", "AliasArn") },
       SignerAliasArn: { Value: getAtt("SignerAlias", "AliasArn") },
       AuthorityAliasArn: {
         Value: getAtt("AuthorityAlias", "AliasArn")
@@ -1082,6 +1226,10 @@ export function buildGate2Template() {
       BoundaryProbeVersionArn: {
         Condition: "ShouldDeployProbes",
         Value: ref("BoundaryProbeVersion")
+      },
+      DemoProbeVersionArn: {
+        Condition: "ShouldDeployProbes",
+        Value: ref("DemoProbeVersion")
       },
       SignerProbeVersionArn: {
         Condition: "ShouldDeployProbes",
@@ -1160,6 +1308,7 @@ export function deploymentConfigDigest(configuration) {
     "notificationEmailDigest",
     "packageLockDigest",
     "probesEnabled",
+    "publicDemo",
     "region",
     "reservedConcurrency",
     "sourceCommit",

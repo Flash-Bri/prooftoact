@@ -7,7 +7,8 @@ requires new approval.
 ## Expected contest-period cost
 
 Target architecture: CockroachDB Basic, AWS Lambda, API Gateway, bounded
-Bedrock calls, static assets, and short-retention CloudWatch logs.
+Bedrock calls, a bundled signed-out read-only demo, and short-retention
+CloudWatch logs.
 
 - Local scaffold and tests: **$0**
 - Low case with applicable free allowances: **$0–$3**
@@ -89,6 +90,11 @@ Stop new cloud work and investigate if:
    spend claim while first-use cost data is still maturing. It cannot evidence
    the hardened live preflight or the main-stack candidate.
 4. Cap model requests, input size, output tokens, retries, and concurrency.
+   The local Gate Two candidate also caps its public demo at eight reserved
+   Lambda executions, a stage-default burst of eight, and a sustained rate of
+   `0.05` requests per second; the advisory route retains burst one and rate
+   `0.1`. These settings require live verification and are cost bounds, not an
+   availability or abuse-prevention claim.
 5. Use short log retention and synthetic data only.
 6. Record every temporary resource, owner, creation time, cost class, and
    teardown command.

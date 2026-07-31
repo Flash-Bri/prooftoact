@@ -46,6 +46,12 @@ test("serves the local health and scenario surfaces", async (context) => {
     page,
     /GATE TWO — local AWS candidate; live AWS evidence pending/
   );
+  assert.match(page, /id="gate-two-proof-state"/);
+  assert.match(page, /A TrustAgentic\.ai project/);
+  assert.match(
+    page,
+    /https:\/\/github\.com\/Flash-Bri\/tideproof/
+  );
   assert.match(page, /data-act="0"/);
   assert.match(page, /id="previous-step"/);
   assert.match(page, /id="restart-demo"/);

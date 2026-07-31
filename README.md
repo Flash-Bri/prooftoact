@@ -35,16 +35,18 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
 - 100 live 50-contender races and 100 ambiguity runs at each transaction
   boundary, with no invariant violation;
 - a generated AWS CloudFormation candidate with private versioned artifacts,
-  IAM-separated Lambda roles, one bounded Amazon Nova Micro proposal path,
-  P-256 KMS receipt signing with independently pinned public-key evidence,
-  exact Lambda code hashes, a dedicated exact-route caller, private API access
-  logs, and opt-in temporary same-role capability probes;
+  a signed-out content-only judge surface, IAM-separated Lambda roles, one bounded
+  Amazon Nova Micro proposal path, P-256 KMS receipt signing with independently
+  pinned public-key evidence, exact Lambda code hashes, a dedicated exact-route
+  caller, private API access logs, and opt-in temporary same-role capability
+  probes;
 - a keyboard-operable three-act local browser demonstration with persistent
   proof-state labels, exact evidence details, receipt links, safe reset, and
   deterministic unit tests.
 
 It does **not** yet contain or claim:
 
+- a deployed public AWS judge URL;
 - live AWS deployment, Bedrock inference, KMS signatures, or IAM denial
   evidence;
 - a live CockroachDB-to-AWS handoff;
@@ -81,8 +83,9 @@ The implementation uses or is planned to use:
    broker;
 3. CockroachDB serializable transactions, immutable-shaped receipts, fencing,
    and transactional outbox;
-4. AWS Lambda/API Gateway, KMS, and Amazon Bedrock for separated bounded
-   runtime roles; the local candidate is not a live-cloud claim.
+4. AWS Lambda/API Gateway for a capability-free signed-out judge surface plus
+   separated IAM-authenticated proposal roles, KMS, and Amazon Bedrock; the
+   local candidate is not a live-cloud claim.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and

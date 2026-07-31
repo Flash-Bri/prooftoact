@@ -4,12 +4,19 @@
 attribution, asset rights, readability, private review, and publish readiness.
 This timed map must be locked against the exact release commit before editing.
 
-The visual language stays calm and technical. The persistent proof strip keeps
-the synthetic safety disclosure plus these exact evidence states visible:
+The visual language stays calm and technical. Before deployment, the
+persistent proof strip keeps the synthetic safety disclosure plus these exact
+evidence states visible:
 
 - `LOCAL DETERMINISTIC REPLAY`
 - `RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30`
 - `GATE TWO — local AWS candidate; live AWS evidence pending`
+
+The signed-out AWS host may replace only the third label with
+`GATE TWO HOST — AWS Lambda + API Gateway; advisory evidence pending`, as
+bound by its public health receipt. That proves hosting only. The final video
+must not be recorded until the accepted advisory receipt supplies the exact
+final Gate Two wording and this scene map is relocked to the release commit.
 
 Use the keyboard-operable Previous, Play/Pause, Next, and Restart controls.
 Every displayed event remains labeled as a local replay; where a provider

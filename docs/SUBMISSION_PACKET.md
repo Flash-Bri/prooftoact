@@ -184,9 +184,10 @@ releases context. Operation IDs, effect keys, and fences are never returned.
 `[[FINAL_AWS_ARCHITECTURE_COPY_REQUIRED_FROM_LIVE_RECEIPT]]`
 
 The final AWS paragraph must name only deployed services and behavior proven
-by the exact release evidence. The local candidate currently separates an
-IAM-authenticated API boundary, proposal-only Bedrock path, isolated authority
-role, and KMS signer, but that is not yet a live-cloud claim.
+by the exact release evidence. The local candidate currently separates ten
+exact signed-out read-only demo routes and a logs-only Demo Lambda from
+an IAM-authenticated advisory boundary, proposal-only Bedrock path, isolated
+authority role, and KMS signer, but none of that is yet a live-cloud claim.
 
 ### Challenges
 

@@ -26,7 +26,7 @@
       <span class="proof-state recorded">
         RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30
       </span>
-      <span class="proof-state pending">
+      <span id="gate-two-proof-state" class="proof-state pending">
         GATE TWO — local AWS candidate; live AWS evidence pending
       </span>
     </aside>
@@ -300,17 +300,33 @@
             </p>
           </article>
           <article>
-            <span class="proof-state pending">GATE TWO · LOCAL</span>
-            <h3>AWS proposal boundary · live evidence pending</h3>
-            <p>
+            <span id="gate-two-evidence-state" class="proof-state pending">
+              GATE TWO · LOCAL
+            </span>
+            <h3 id="gate-two-heading">
+              AWS proposal boundary · live evidence pending
+            </h3>
+            <p id="gate-two-summary">
               The candidate binds receipts to one exact KMS public key,
               separates proposal from authority, logs the API path, and fails
               closed. It is not a live AWS claim.
             </p>
             <dl>
-              <div><dt>Candidate</dt><dd><code>9aa7f2e</code></dd></div>
-              <div><dt>Cloud state</dt><dd>Main stack not deployed</dd></div>
-              <div><dt>Limit</dt><dd>Bedrock, KMS, IAM, and API unverified live</dd></div>
+              <div>
+                <dt>Source</dt>
+                <dd><code id="gate-two-source">UNBOUND LOCAL</code></dd>
+              </div>
+              <div>
+                <dt>Cloud state</dt>
+                <dd id="gate-two-cloud-state">Main stack not deployed</dd>
+              </div>
+              <div>
+                <dt>Limit</dt>
+                <dd id="gate-two-limit">
+                  Bedrock, KMS, IAM, API Gateway, and CloudFormation are
+                  unverified live.
+                </dd>
+              </div>
             </dl>
           </article>
         </div>
@@ -319,7 +335,7 @@
       <section class="boundary" aria-labelledby="boundary-title">
         <p class="step-label">Current boundary</p>
         <h2 id="boundary-title">Strong recorded proof. Narrow claims.</h2>
-        <p>
+        <p id="current-boundary-copy">
           CockroachDB transactions, Distributed Vector Indexing, and Managed
           MCP are recorded Gate One evidence in synthetic scope. The AWS path
           is a locally verified candidate awaiting live Gate Two receipts.
@@ -331,8 +347,11 @@
 
     <footer>
       <p>
-        Private clean-room build · Synthetic data · Local replay needs no
-        credentials
+        A TrustAgentic.ai project · Public clean-room proof · Synthetic data ·
+        <a
+          href="https://github.com/Flash-Bri/tideproof"
+          rel="noreferrer"
+        >Public MIT source</a>
       </p>
     </footer>
 

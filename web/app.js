@@ -159,12 +159,42 @@ const playButton = document.querySelector("#play-pause");
 const restartButton = document.querySelector("#restart-demo");
 const actButtons = [...document.querySelectorAll("[data-act]")];
 const judgePath = document.querySelector("#judge-path");
+const gateTwoElements = {
+  badge: document.querySelector("#gate-two-evidence-state"),
+  label: document.querySelector("#gate-two-proof-state"),
+  heading: document.querySelector("#gate-two-heading"),
+  summary: document.querySelector("#gate-two-summary"),
+  sourceCommit: document.querySelector("#gate-two-source"),
+  cloudState: document.querySelector("#gate-two-cloud-state"),
+  limitation: document.querySelector("#gate-two-limit"),
+  boundarySummary: document.querySelector("#current-boundary-copy")
+};
 
 function humanKey(key) {
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replaceAll("_", " ")
     .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function renderGateTwoState() {
+  const gateTwo = scenario.proofStates.gateTwo;
+  const expectedKeys = Object.keys(gateTwoElements);
+  if (
+    !gateTwo ||
+    expectedKeys.some(
+      (key) =>
+        typeof gateTwo[key] !== "string" ||
+        gateTwo[key].length === 0 ||
+        gateTwo[key].length > 800 ||
+        !gateTwoElements[key]
+    )
+  ) {
+    throw new Error("gate two proof state rejected");
+  }
+  for (const [key, element] of Object.entries(gateTwoElements)) {
+    element.textContent = gateTwo[key];
+  }
 }
 
 function isExactValue(key, value) {
@@ -696,6 +726,7 @@ async function loadScenario() {
     acts = buildActs();
     activeAct = 0;
     activeStep = 0;
+    renderGateTwoState();
     previousButton.disabled = false;
     nextButton.disabled = false;
     playButton.disabled = false;

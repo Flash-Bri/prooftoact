@@ -146,6 +146,12 @@ Before/after treatments must be performed only on owned or licensed masters.
 | Icons | Derived from one Tideproof vector master; recognizable at 16 pixels and never confused with TrustAgentic |
 | TrustAgentic link | Subtle parent-project attribution; production homepage link is added only after the public destination and repository pass launch review |
 
+The current clean-room browser proof implements the approved relationship as
+plain footer text—`A TrustAgentic.ai project`—without a link, logo, recolor, or
+derived artwork. That interim text treatment is rights-reviewed in
+`docs/media/RIGHTS.md`; it does not clear V03 or authorize the production
+TrustAgentic homepage link.
+
 ## Exact production asset register
 
 No final marketing asset is authorized merely because it appears in this
