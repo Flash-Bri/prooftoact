@@ -571,6 +571,8 @@ export function validateReleaseProvenance(
   const accessibility = receipt?.accessibility;
   const accessibilityChecks = accessibility?.checks;
   const accessibilitySummary = accessibility?.summary;
+  const security = receipt?.security;
+  const securityChecks = security?.checks;
   const dependencies = receipt?.dependencies;
   const installedTree = dependencies?.installedTree;
   const inventory = dependencies?.inventory;
@@ -587,6 +589,7 @@ export function validateReleaseProvenance(
       "privacy",
       "rights",
       "schemaVersion",
+      "security",
       "source",
       "status",
       "trackedTree"
@@ -748,6 +751,43 @@ export function validateReleaseProvenance(
         "uniqueIdsAndAriaReferences",
         "unsafeDynamicHtmlAbsent"
       ]) &&
+      exactKeys(security, [
+        "boundedFunctionCount",
+        "checks",
+        "claimBoundary",
+        "finalReleaseReady",
+        "finalReleaseRequirements",
+        "iamRoleCount",
+        "lambdaPermissionCount",
+        "logGroupCount",
+        "manifestPath",
+        "manifestSha256",
+        "negativeProbeCount",
+        "publicPathCount",
+        "publicRouteCount",
+        "reviewedOn",
+        "schemaVersion",
+        "securityHeaderCount",
+        "status",
+        "surfaceCount"
+      ]) &&
+      exactKeys(securityChecks, [
+        "advisoryRouteIamAuthenticated",
+        "apiGatewayInvokePermissionsBounded",
+        "asymmetricSigningKeyBounded",
+        "canonicalManifest",
+        "criticalRoleDenialsPresent",
+        "exactPublicRouteSet",
+        "exactSurfaceHashes",
+        "generatedTemplateMatchesSource",
+        "immutableVersionedLambdaTargets",
+        "leastPrivilegeRoleActionsBounded",
+        "logsBoundedAndPrivacyMinimized",
+        "publicCorsAndLambdaUrlsAbsent",
+        "publicHeadersAndNegativeProbesBounded",
+        "sourceSecurityMarkersPresent",
+        "throttlesAndConcurrencyBounded"
+      ]) &&
       exactKeys(dependencies, [
         "bundledThirdPartyNotices",
         "installedTree",
@@ -794,6 +834,7 @@ export function validateReleaseProvenance(
         "bundledThirdPartyNoticesMatchInputs",
         "cleanBeforeAndAfter",
         "currentClaimSurfacesVerified",
+        "currentSourceSecurityVerified",
         "currentSurfaceRightsVerified",
         "dependencyInventoryMatchesLock",
         "fullSingleRootHistory",
@@ -807,7 +848,7 @@ export function validateReleaseProvenance(
         "submodulesAbsent",
         "trackedSymlinksAbsent"
       ]) &&
-      receipt.schemaVersion === "tideproof.release-provenance.v4" &&
+      receipt.schemaVersion === "tideproof.release-provenance.v5" &&
       receipt.status === "PASS" &&
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
@@ -986,6 +1027,27 @@ export function validateReleaseProvenance(
       Object.values(accessibilityChecks).every((value) => value === true) &&
       typeof accessibility.claimBoundary === "string" &&
       accessibility.claimBoundary.length > 0 &&
+      security.schemaVersion ===
+        "tideproof.release-security-verification.v1" &&
+      security.status === "CURRENT_SOURCE_SECURITY_PASS" &&
+      security.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(security.reviewedOn) &&
+      security.manifestPath === "RELEASE_SECURITY_MANIFEST.json" &&
+      HEX_64.test(security.manifestSha256) &&
+      security.surfaceCount === 18 &&
+      security.publicPathCount === 10 &&
+      security.securityHeaderCount === 9 &&
+      security.negativeProbeCount === 6 &&
+      security.publicRouteCount === 10 &&
+      security.iamRoleCount === 7 &&
+      security.lambdaPermissionCount === 3 &&
+      security.boundedFunctionCount === 5 &&
+      security.logGroupCount === 11 &&
+      Array.isArray(security.finalReleaseRequirements) &&
+      security.finalReleaseRequirements.length === 2 &&
+      Object.values(securityChecks).every((value) => value === true) &&
+      typeof security.claimBoundary === "string" &&
+      security.claimBoundary.length > 0 &&
       installedTree.status === "PASS" &&
       HEX_64.test(installedTree.packageLockSha256) &&
       Number.isSafeInteger(installedTree.lockedPackageCount) &&

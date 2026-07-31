@@ -35,7 +35,21 @@ blob reachable from the checked-out commit for a bounded set of high-confidence
 credential and privacy signatures. Exact reviewed exceptions live in
 `RELEASE_PRIVACY_MANIFEST.json`. This automated result is not an exhaustive
 secret or personal-data guarantee and does not replace the final private human
-release review documented in `docs/RELEASE_PRIVACY.md`.
+review documented in `docs/RELEASE_PRIVACY.md`.
+
+## Current source security gate
+
+`npm run security:verify` binds the reviewed public runtime, live public-demo
+verifier, Gate Two template and Lambda boundaries, CockroachDB security
+bootstrap, Managed MCP client, and release threat model to exact hashes. It
+also parses the generated CloudFormation and rejects drift in routes,
+authentication, throttles, concurrency, immutable aliases, versioned code,
+Lambda invoke permissions, and role action sets.
+
+Its `CURRENT_SOURCE_SECURITY_PASS` result is a bounded static review, not a
+vulnerability-free claim, penetration test, live IAM receipt, or publication
+authorization. The exact scope and remaining live/private review requirements
+are documented in `docs/RELEASE_SECURITY.md`.
 
 ## Safe research boundary
 

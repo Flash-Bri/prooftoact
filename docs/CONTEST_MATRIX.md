@@ -53,8 +53,8 @@ also the first tie-breaker.
 - **Real-World Impact:** the synthetic response scenario makes stale or
   contradictory shared memory legible without claiming operational readiness.
 - **Product Readiness:** one-command fixtures, judge-safe reset, cost alarms,
-  observability, enumerated signed-out routes, accessibility, threat model,
-  and teardown plan.
+  observability, enumerated signed-out routes, accessibility, a hash-bound
+  static security and abuse-boundary review, and teardown plan.
 - **Creativity and Originality:** the core demonstration is admissibility,
   authority transfer, and replay denial—not another RAG assistant.
 

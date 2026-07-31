@@ -46,6 +46,9 @@ jobs:
       - name: Verify bounded release privacy controls
         run: npm run privacy:verify
 
+      - name: Verify current source security boundaries
+        run: npm run security:verify
+
       - name: Verify bounded static accessibility controls
         run: npm run accessibility:verify
 

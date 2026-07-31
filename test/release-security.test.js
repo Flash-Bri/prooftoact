@@ -1,0 +1,132 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+import { buildGate2Template } from "../src/cloud/aws-gate2-template.js";
+import {
+  __test,
+  validateManifest,
+  verifyReleaseSecurity
+} from "../scripts/verify-release-security.js";
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const HEX = "a".repeat(64);
+
+function fixtureManifest(overrides = {}) {
+  return {
+    schema: __test.MANIFEST_SCHEMA,
+    status: __test.MANIFEST_STATUS,
+    reviewedOn: "2026-07-31",
+    claimBoundary: "Fixture static security boundary.",
+    finalReleaseRequirements: [
+      ...__test.EXPECTED_FINAL_RELEASE_REQUIREMENTS
+    ],
+    surfaces: Object.entries(__test.EXPECTED_SURFACES).map(
+      ([id, surface]) => ({
+        id,
+        path: surface.path,
+        role: surface.role,
+        sha256: HEX
+      })
+    ),
+    finalReleaseReady: false,
+    ...overrides
+  };
+}
+
+test("current source security and abuse boundaries match reviewed state", () => {
+  const receipt = verifyReleaseSecurity({ rootDir: ROOT });
+  assert.equal(receipt.status, "CURRENT_SOURCE_SECURITY_PASS");
+  assert.equal(receipt.finalReleaseReady, false);
+  assert.equal(receipt.surfaceCount, 18);
+  assert.equal(receipt.publicPathCount, 10);
+  assert.equal(receipt.securityHeaderCount, 9);
+  assert.equal(receipt.negativeProbeCount, 6);
+  assert.equal(receipt.publicRouteCount, 10);
+  assert.equal(receipt.iamRoleCount, 7);
+  assert.equal(receipt.lambdaPermissionCount, 3);
+  assert.equal(receipt.boundedFunctionCount, 5);
+  assert.equal(receipt.logGroupCount, 11);
+  assert.equal(
+    Object.values(receipt.checks).every((value) => value === true),
+    true
+  );
+});
+
+test("security manifest rejects final approval and changed surface contract", () => {
+  assert.equal(validateManifest(fixtureManifest()).finalReleaseReady, false);
+  assert.throws(
+    () => validateManifest(fixtureManifest({ finalReleaseReady: true })),
+    /RELEASE_SECURITY_MANIFEST_BOUNDARY/
+  );
+  const changed = fixtureManifest();
+  changed.surfaces[0].path = "infra/aws/lambda/other.cjs";
+  assert.throws(
+    () => validateManifest(changed),
+    /RELEASE_SECURITY_MANIFEST_SURFACE/
+  );
+});
+
+test("security template contract rejects public route or CORS expansion", () => {
+  const routeExpanded = structuredClone(buildGate2Template());
+  routeExpanded.Resources.UnreviewedRoute = {
+    Type: "AWS::ApiGatewayV2::Route",
+    Properties: {
+      ApiId: { Ref: "HttpApi" },
+      RouteKey: "GET /unreviewed",
+      AuthorizationType: "NONE"
+    }
+  };
+  assert.throws(
+    () => __test.assertTemplateContract(routeExpanded, routeExpanded),
+    /RELEASE_SECURITY_PUBLIC_ROUTES/
+  );
+
+  const corsExpanded = structuredClone(buildGate2Template());
+  corsExpanded.Resources.HttpApi.Properties.CorsConfiguration = {
+    AllowOrigins: ["*"]
+  };
+  assert.throws(
+    () => __test.assertTemplateContract(corsExpanded, corsExpanded),
+    /RELEASE_SECURITY_PUBLIC_API/
+  );
+});
+
+test("security template contract rejects new public-demo capability", () => {
+  const template = structuredClone(buildGate2Template());
+  template.Resources.DemoRole.Properties.Policies[0].PolicyDocument.Statement.push(
+    {
+      Sid: "UnreviewedCapability",
+      Effect: "Allow",
+      Action: "s3:GetObject",
+      Resource: "*"
+    }
+  );
+  assert.throws(
+    () => __test.assertTemplateContract(template, template),
+    /RELEASE_SECURITY_DemoRole_ALLOW/
+  );
+});
+
+test("security source contract rejects a removed fail-closed marker", () => {
+  const sources = new Map(
+    Object.entries(__test.SOURCE_MARKERS).map(([id, markers]) => [
+      id,
+      markers.join("\n")
+    ])
+  );
+  assert.equal(__test.assertSourceMarkers(sources), true);
+  sources.set("managed-mcp-client", "redirect: \"follow\"");
+  assert.throws(
+    () => __test.assertSourceMarkers(sources),
+    /RELEASE_SECURITY_MARKER_MANAGED_MCP_CLIENT/
+  );
+});
+
+test("public verifier contract remains exact", () => {
+  assert.deepEqual(__test.assertRuntimeContract(), {
+    publicPathCount: 10,
+    securityHeaderCount: 9,
+    negativeProbeCount: 6
+  });
+});

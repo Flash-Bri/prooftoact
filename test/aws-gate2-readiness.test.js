@@ -343,9 +343,51 @@ function releaseClaimsReceipt() {
   };
 }
 
+function releaseSecurityReceipt() {
+  return {
+    schemaVersion: "tideproof.release-security-verification.v1",
+    status: "CURRENT_SOURCE_SECURITY_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "RELEASE_SECURITY_MANIFEST.json",
+    manifestSha256: "9".repeat(64),
+    surfaceCount: 18,
+    publicPathCount: 10,
+    securityHeaderCount: 9,
+    negativeProbeCount: 6,
+    publicRouteCount: 10,
+    iamRoleCount: 7,
+    lambdaPermissionCount: 3,
+    boundedFunctionCount: 5,
+    logGroupCount: 11,
+    finalReleaseRequirements: [
+      "Exact-release live security receipts.",
+      "Separate private human security review."
+    ],
+    checks: {
+      canonicalManifest: true,
+      exactSurfaceHashes: true,
+      sourceSecurityMarkersPresent: true,
+      generatedTemplateMatchesSource: true,
+      exactPublicRouteSet: true,
+      advisoryRouteIamAuthenticated: true,
+      publicCorsAndLambdaUrlsAbsent: true,
+      throttlesAndConcurrencyBounded: true,
+      immutableVersionedLambdaTargets: true,
+      leastPrivilegeRoleActionsBounded: true,
+      criticalRoleDenialsPresent: true,
+      apiGatewayInvokePermissionsBounded: true,
+      asymmetricSigningKeyBounded: true,
+      logsBoundedAndPrivacyMinimized: true,
+      publicHeadersAndNegativeProbesBounded: true
+    },
+    claimBoundary: "Fixture current source security review only."
+  };
+}
+
 function releaseProvenanceReceipt() {
   return {
-    schemaVersion: "tideproof.release-provenance.v4",
+    schemaVersion: "tideproof.release-provenance.v5",
     status: "PASS",
     source: {
       commit: SOURCE_COMMIT,
@@ -380,6 +422,7 @@ function releaseProvenanceReceipt() {
     privacy: privacyReceipt(),
     rights: releaseRightsReceipt(),
     accessibility: accessibilityReceipt(),
+    security: releaseSecurityReceipt(),
     dependencies: {
       installedTree: {
         status: "PASS",
@@ -436,6 +479,7 @@ function releaseProvenanceReceipt() {
       releasePrivacyVerified: true,
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,
+      currentSourceSecurityVerified: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary: "Fixture provenance only."
@@ -749,6 +793,16 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
   assert.throws(
     () =>
       validateReleaseProvenance(inaccessible, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const insecure = releaseProvenanceReceipt();
+  insecure.security.checks.criticalRoleDenialsPresent = false;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(insecure, {
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),

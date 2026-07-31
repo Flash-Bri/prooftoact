@@ -48,7 +48,7 @@
       "id": "contest-matrix",
       "path": "docs/CONTEST_MATRIX.md",
       "role": "CONTEST_DRAFT",
-      "sha256": "10f1dd08448aecb2174be1afb02ccce3cf83ff93b9825995409b7c290b879e1d"
+      "sha256": "37c56302ef48c4b0cb14f1cb8e3420e38e73b078d00adef687d131c79e533fd3"
     },
     {
       "id": "demo-script",
@@ -84,7 +84,7 @@
       "id": "submission-packet",
       "path": "docs/SUBMISSION_PACKET.md",
       "role": "SUBMISSION_DRAFT",
-      "sha256": "16d2a857626ac8036f75bf0cca07abc09e5a56f3aa686b0be906e562a08a9f7a"
+      "sha256": "7ee9e2fc068effaae298f289a24d6a12dd9388756194f66903f978f790208f0f"
     }
   ],
   "finalReleaseReady": false
