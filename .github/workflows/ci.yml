@@ -34,6 +34,9 @@ jobs:
       - name: Verify proof manifest
         run: npm run proof:verify
 
+      - name: Verify locked dependency inventory
+        run: npm run dependencies:verify
+
       - name: Run deterministic tests
         run: npm test
 

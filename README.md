@@ -107,6 +107,13 @@ current claims-ledger row to exact evidence bytes and leaves incomplete live
 gates explicit. Run `npm run proof:verify` to reject changed evidence, missing
 claim coverage, unsafe paths, or a stale hash.
 
+The deterministic
+[`docs/DEPENDENCY_INVENTORY.md`](docs/DEPENDENCY_INVENTORY.md) enumerates all
+locked runtime and development packages, their package-lock license
+identifiers, optional state, and install-script flag. Run
+`npm run dependencies:verify` to reject drift, unreviewed license identifiers,
+non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
+
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and
 `docs/WINNING_PLAN.md`. The fail-closed Devpost copy and release checklist
