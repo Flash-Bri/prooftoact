@@ -1141,7 +1141,9 @@ export function validateReleaseProvenance(
       !Array.isArray(inventory.licenses) &&
       Object.entries(inventory.licenses).every(
         ([license, count]) =>
-          ["0BSD", "Apache-2.0", "ISC", "MIT"].includes(license) &&
+          ["0BSD", "Apache-2.0", "ISC", "MIT", "MPL-2.0"].includes(
+            license
+          ) &&
           Number.isSafeInteger(count) &&
           count > 0
       ) &&
