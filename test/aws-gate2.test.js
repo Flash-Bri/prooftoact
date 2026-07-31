@@ -11,6 +11,7 @@ import {
   deploymentConfigDigest,
   templateReceipt
 } from "../src/cloud/aws-gate2-template.js";
+import { PUBLIC_DEMO_PATHS } from "../src/cloud/public-demo.js";
 
 const require = createRequire(import.meta.url);
 const agent = require("../infra/aws/lambda/agent.cjs").__test;
@@ -702,12 +703,21 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   assert.equal(
     resources.DefaultStage.Properties.DefaultRouteSettings
       .ThrottlingBurstLimit,
-    1
+    8
   );
   assert.equal(
     resources.DefaultStage.Properties.DefaultRouteSettings
       .ThrottlingRateLimit,
-    0.1
+    0.05
+  );
+  assert.deepEqual(
+    resources.DefaultStage.Properties.RouteSettings[
+      "POST /advisory"
+    ],
+    {
+      ThrottlingBurstLimit: 1,
+      ThrottlingRateLimit: 0.1
+    }
   );
   assert.deepEqual(
     resources.DefaultStage.Properties.AccessLogSettings.DestinationArn,
@@ -716,6 +726,10 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   assert.match(
     resources.DefaultStage.Properties.AccessLogSettings.Format,
     /requestTimeEpoch/
+  );
+  assert.doesNotMatch(
+    resources.DefaultStage.Properties.AccessLogSettings.Format,
+    /sourceIp/
   );
   assert.equal(resources.HttpApi.Properties.CorsConfiguration, undefined);
   assert.equal(
@@ -734,10 +748,28 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     resources.AuthorityFunction.Properties.ReservedConcurrentExecutions,
     1
   );
+  assert.equal(
+    resources.DemoFunction.Properties.ReservedConcurrentExecutions,
+    8
+  );
+  assert.equal(resources.DemoFunction.Properties.Timeout, 5);
+  assert.deepEqual(
+    resources.DemoFunction.Properties.Environment.Variables,
+    {
+      EXPECTED_API_ID: { Ref: "HttpApi" },
+      SOURCE_COMMIT: { Ref: "SourceCommit" },
+      CONFIG_DIGEST: { Ref: "ConfigDigest" },
+      DEMO_SOURCE_DIGEST: { Ref: "DemoSourceDigest" },
+      DEMO_ARTIFACT_DIGEST: { Ref: "DemoArtifactDigest" },
+      TREE_DIGEST: { Ref: "TreeDigest" },
+      PACKAGE_LOCK_DIGEST: { Ref: "PackageLockDigest" }
+    }
+  );
 
   for (const name of [
     "AgentFunction",
     "BoundaryFunction",
+    "DemoFunction",
     "SignerFunction",
     "AuthorityFunction"
   ]) {
@@ -747,6 +779,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   for (const name of [
     "AgentAlias",
     "BoundaryAlias",
+    "DemoAlias",
     "SignerAlias",
     "AuthorityAlias"
   ]) {
@@ -756,11 +789,53 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     resources.BoundaryIntegration.Properties.IntegrationUri,
     { "Fn::GetAtt": ["BoundaryAlias", "AliasArn"] }
   );
+  assert.deepEqual(
+    resources.DemoIntegration.Properties.IntegrationUri,
+    { "Fn::GetAtt": ["DemoAlias", "AliasArn"] }
+  );
+  assert.equal(
+    resources.DemoIntegration.Properties.TimeoutInMillis,
+    6_000
+  );
   assert.equal(
     resources.BoundaryInvokePermission.Properties.FunctionName[
       "Fn::GetAtt"
     ][0],
     "BoundaryAlias"
+  );
+  assert.equal(
+    resources.DemoRootInvokePermission.Properties.FunctionName[
+      "Fn::GetAtt"
+    ][0],
+    "DemoAlias"
+  );
+  assert.equal(
+    resources.DemoAssetInvokePermission.Properties.FunctionName[
+      "Fn::GetAtt"
+    ][0],
+    "DemoAlias"
+  );
+  const publicRoutes = Object.values(resources)
+    .filter(
+      ({ Type, Properties }) =>
+        Type === "AWS::ApiGatewayV2::Route" &&
+        Properties.AuthorizationType === "NONE"
+    )
+    .map(({ Properties }) => Properties.RouteKey)
+    .sort();
+  assert.deepEqual(
+    publicRoutes,
+    PUBLIC_DEMO_PATHS.map((path) => `GET ${path}`).sort()
+  );
+  assert.ok(
+    Object.values(resources)
+      .filter(({ Type }) => Type === "AWS::ApiGatewayV2::Route")
+      .every(
+        ({ Properties }) =>
+          Properties.RouteKey === "POST /advisory" ||
+          Properties.Target["Fn::Join"][1][1].Ref ===
+            "DemoIntegration"
+      )
   );
 
   assert.deepEqual(allowedActions(resources.AgentRole).sort(), [
@@ -785,6 +860,26 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     "logs:CreateLogStream",
     "logs:PutLogEvents"
   ]);
+  assert.deepEqual(allowedActions(resources.DemoRole).sort(), [
+    "logs:CreateLogStream",
+    "logs:PutLogEvents"
+  ]);
+  const demoDenials =
+    resources.DemoRole.Properties.Policies[0].PolicyDocument.Statement
+      .filter(({ Effect }) => Effect === "Deny")
+      .flatMap(({ Action }) =>
+        Array.isArray(Action) ? Action : [Action]
+      );
+  for (const action of [
+    "bedrock:InvokeModel",
+    "iam:*",
+    "kms:Sign",
+    "lambda:InvokeFunction",
+    "secretsmanager:GetSecretValue",
+    "sts:AssumeRole"
+  ]) {
+    assert.ok(demoDenials.includes(action), action);
+  }
   assert.deepEqual(allowedActions(resources.AdvisoryCallerRole), [
     "execute-api:Invoke"
   ]);
@@ -802,6 +897,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   for (const roleName of [
     "AgentRole",
     "BoundaryRole",
+    "DemoRole",
     "SignerRole",
     "AuthorityRole",
     "AdvisoryCallerRole"
@@ -819,6 +915,8 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       ({ Type }) => Type === "AWS::Lambda::Url"
     )
   );
+  assert.ok(template.Outputs.PublicDemoUrl);
+  assert.ok(template.Outputs.DemoAliasArn);
 });
 
 test("Gate Two template binds retention, probes, and artifacts after the cost guard", () => {
@@ -857,6 +955,7 @@ test("Gate Two template binds retention, probes, and artifacts after the cost gu
   for (const name of [
     "AgentProbeFunction",
     "BoundaryProbeFunction",
+    "DemoProbeFunction",
     "SignerProbeFunction",
     "AuthorityProbeFunction"
   ]) {
@@ -877,6 +976,7 @@ test("Gate Two template binds retention, probes, and artifacts after the cost gu
   for (const name of [
     "Agent",
     "Boundary",
+    "Demo",
     "Signer",
     "Authority",
     "Probe"
@@ -895,6 +995,10 @@ test("Gate Two template binds retention, probes, and artifacts after the cost gu
     { Ref: "BoundaryArtifactCodeSha256" }
   );
   assert.deepEqual(
+    resources.DemoVersion.Properties.CodeSha256,
+    { Ref: "DemoArtifactCodeSha256" }
+  );
+  assert.deepEqual(
     resources.SignerVersion.Properties.CodeSha256,
     { Ref: "SignerArtifactCodeSha256" }
   );
@@ -906,13 +1010,18 @@ test("Gate Two template binds retention, probes, and artifacts after the cost gu
 
 test("production Lambda sources contain only their intended capability SDK", () => {
   const sources = Object.fromEntries(
-    ["agent", "authority", "boundary", "signer"].map((name) => [
-      name,
-      fs.readFileSync(
-        path.join(root, `infra/aws/lambda/${name}.cjs`),
-        "utf8"
-      )
-    ])
+    ["agent", "authority", "boundary", "demo", "signer"].map(
+      (name) => [
+        name,
+        fs.readFileSync(
+          path.join(
+            root,
+            `infra/aws/lambda/${name}.${name === "demo" ? "js" : "cjs"}`
+          ),
+          "utf8"
+        )
+      ]
+    )
   );
   assert.match(sources.agent, /client-bedrock-runtime/);
   assert.doesNotMatch(
@@ -934,6 +1043,10 @@ test("production Lambda sources contain only their intended capability SDK", () 
   assert.doesNotMatch(
     sources.authority,
     /@aws-sdk|@smithy|require\(["']pg["']\)|managed-mcp/
+  );
+  assert.doesNotMatch(
+    sources.demo,
+    /@aws-sdk|@smithy|require\(["']pg["']\)|managed-mcp|https?:\/\//
   );
 });
 
@@ -961,20 +1074,23 @@ test("effective config digest changes with every deployment control", () => {
       agent: Buffer.alloc(32, 1).toString("base64"),
       authority: Buffer.alloc(32, 2).toString("base64"),
       boundary: Buffer.alloc(32, 3).toString("base64"),
-      probe: Buffer.alloc(32, 4).toString("base64"),
-      signer: Buffer.alloc(32, 5).toString("base64")
+      demo: Buffer.alloc(32, 4).toString("base64"),
+      probe: Buffer.alloc(32, 5).toString("base64"),
+      signer: Buffer.alloc(32, 6).toString("base64")
     },
     artifactDigests: {
       agent: "a".repeat(64),
       authority: "b".repeat(64),
       boundary: "c".repeat(64),
-      probe: "d".repeat(64),
-      signer: "e".repeat(64)
+      demo: "d".repeat(64),
+      probe: "e".repeat(64),
+      signer: "f".repeat(64)
     },
     artifactKeys: {
       agent: "gate2/commit/agent.zip",
       authority: "gate2/commit/authority.zip",
       boundary: "gate2/commit/boundary.zip",
+      demo: "gate2/commit/demo.zip",
       probe: "gate2/commit/probe.zip",
       signer: "gate2/commit/signer.zip"
     },
@@ -982,15 +1098,17 @@ test("effective config digest changes with every deployment control", () => {
       agent: "1".repeat(64),
       authority: "2".repeat(64),
       boundary: "3".repeat(64),
-      probe: "4".repeat(64),
-      signer: "5".repeat(64)
+      demo: "4".repeat(64),
+      probe: "5".repeat(64),
+      signer: "6".repeat(64)
     },
     artifactVersions: {
       agent: "v1",
       authority: "v2",
       boundary: "v3",
-      probe: "v4",
-      signer: "v5"
+      demo: "v4",
+      probe: "v5",
+      signer: "v6"
     },
     bedrockModelId: "amazon.nova-micro-v1:0",
     budgetUsd: 15,
@@ -998,22 +1116,30 @@ test("effective config digest changes with every deployment control", () => {
     notificationEmailDigest: "6".repeat(64),
     packageLockDigest: "7".repeat(64),
     probesEnabled: true,
+    publicDemo: {
+      authorization: "NONE",
+      paths: PUBLIC_DEMO_PATHS
+    },
     region: "us-east-1",
     reservedConcurrency: {
       agent: 1,
       authority: 1,
       boundary: 2,
+      demo: 8,
       signer: 1
     },
     sourceCommit: HEX_40,
     stackName: "tideproof-gate2",
     templateDigest: templateReceipt(buildGate2Template()).templateDigest,
-    throttle: { burst: 1, rate: 0.1 },
+    throttle: {
+      advisory: { burst: 1, rate: 0.1 },
+      publicDemo: { burst: 8, rate: 0.05 }
+    },
     treeDigest: "f".repeat(40)
   };
   const first = deploymentConfigDigest(configuration);
   const changed = structuredClone(configuration);
-  changed.throttle.rate = 0.2;
+  changed.throttle.publicDemo.rate = 0.06;
   assert.match(first, /^[0-9a-f]{64}$/);
   assert.notEqual(first, deploymentConfigDigest(changed));
 });

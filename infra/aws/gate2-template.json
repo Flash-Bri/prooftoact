@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Tideproof Gate Two: immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
+  "Description": "Tideproof Gate Two: signed-out read-only judge path, immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
   "Parameters": {
     "ArtifactBucket": {
       "Type": "String",
@@ -91,6 +91,31 @@
     "BoundarySourceDigest": {
       "Type": "String",
       "Description": "SHA-256 of the reviewed boundary source.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "DemoArtifactKey": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Versioned S3 key for the demo artifact."
+    },
+    "DemoArtifactVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Exact S3 object version for the demo artifact."
+    },
+    "DemoArtifactDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the uploaded demo ZIP.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "DemoArtifactCodeSha256": {
+      "Type": "String",
+      "Description": "Base64 SHA-256 of the uploaded demo ZIP, enforced by Lambda Version.",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$"
+    },
+    "DemoSourceDigest": {
+      "Type": "String",
+      "Description": "SHA-256 of the reviewed demo source.",
       "AllowedPattern": "^[0-9a-f]{64}$"
     },
     "SignerArtifactKey": {
@@ -307,6 +332,24 @@
         ]
       }
     },
+    "DemoLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
     "ApiAccessLogGroup": {
       "Type": "AWS::Logs::LogGroup",
       "DeletionPolicy": "Delete",
@@ -381,6 +424,25 @@
       "Condition": "ShouldDeployProbes"
     },
     "BoundaryProbeLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "RetentionInDays": 7,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "DemoProbeLogGroup": {
       "Type": "AWS::Logs::LogGroup",
       "DeletionPolicy": "Delete",
       "UpdateReplacePolicy": "Delete",
@@ -884,6 +946,132 @@
         ]
       }
     },
+    "DemoRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Public read-only synthetic demo role; bundled content only, with no Bedrock, Lambda invoke, KMS signing, secrets, database, MCP, or authority capability.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "WriteDemoLogGroup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${DemoLogGroup.Arn}:*"
+                  }
+                },
+                {
+                  "Fn::If": [
+                    "ShouldDeployProbes",
+                    {
+                      "Sid": "WriteDemoProbeLogGroup",
+                      "Effect": "Allow",
+                      "Action": [
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                      ],
+                      "Resource": {
+                        "Fn::Sub": "${DemoProbeLogGroup.Arn}:*"
+                      }
+                    },
+                    {
+                      "Ref": "AWS::NoValue"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyBedrock",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretAccess",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:PutResourcePolicy",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyKmsSigning",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:Sign"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyLambdaInvoke",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPrivilegeEscalation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
     "SignerFunction": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
@@ -1205,6 +1393,108 @@
         "Description": "Immutable Gate Two proof alias."
       }
     },
+    "DemoFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Serves the signed-out deterministic Tideproof judge path from bundled read-only assets.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "DemoRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 5,
+        "Environment": {
+          "Variables": {
+            "EXPECTED_API_ID": {
+              "Ref": "HttpApi"
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "DEMO_SOURCE_DIGEST": {
+              "Ref": "DemoSourceDigest"
+            },
+            "DEMO_ARTIFACT_DIGEST": {
+              "Ref": "DemoArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "DemoLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "DemoArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "DemoArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "ReservedConcurrentExecutions": 8
+      }
+    },
+    "DemoVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "DemoFunction"
+        },
+        "CodeSha256": {
+          "Ref": "DemoArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Tideproof public demo ${SourceCommit} ${ConfigDigest}"
+        }
+      }
+    },
+    "DemoAlias": {
+      "Type": "AWS::Lambda::Alias",
+      "Properties": {
+        "Name": "proof",
+        "FunctionName": {
+          "Ref": "DemoFunction"
+        },
+        "FunctionVersion": {
+          "Fn::GetAtt": [
+            "DemoVersion",
+            "Version"
+          ]
+        },
+        "Description": "Immutable Gate Two proof alias."
+      }
+    },
     "BoundaryRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
@@ -1384,7 +1674,7 @@
         "Name": {
           "Fn::Sub": "${AWS::StackName}-api"
         },
-        "Description": "IAM-authenticated synthetic Tideproof advisory endpoint.",
+        "Description": "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
         "ProtocolType": "HTTP",
         "DisableExecuteApiEndpoint": false,
         "Tags": {
@@ -1899,6 +2189,129 @@
       },
       "Condition": "ShouldDeployProbes"
     },
+    "DemoProbeFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Disposable Gate Two capability probe using the exact production execution role.",
+        "Runtime": "nodejs22.x",
+        "Architectures": [
+          "arm64"
+        ],
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "DemoRole",
+            "Arn"
+          ]
+        },
+        "MemorySize": 128,
+        "Timeout": 25,
+        "Environment": {
+          "Variables": {
+            "PROBE_ROLE_CLASS": "demo",
+            "BEDROCK_MODEL_ID": {
+              "Ref": "BedrockModelId"
+            },
+            "PROBE_OTHER_MODEL_ID": "amazon.nova-lite-v1:0",
+            "PROBE_KMS_KEY_ARN": {
+              "Fn::GetAtt": [
+                "ReceiptSigningKey",
+                "Arn"
+              ]
+            },
+            "PROBE_SECRET_ARN": {
+              "Ref": "CapabilityCanarySecret"
+            },
+            "PROBE_AGENT_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AgentAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_BOUNDARY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "BoundaryAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_SIGNER_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "SignerAlias",
+                "AliasArn"
+              ]
+            },
+            "PROBE_AUTHORITY_FUNCTION_ARN": {
+              "Fn::GetAtt": [
+                "AuthorityAlias",
+                "AliasArn"
+              ]
+            },
+            "SOURCE_COMMIT": {
+              "Ref": "SourceCommit"
+            },
+            "CONFIG_DIGEST": {
+              "Ref": "ConfigDigest"
+            },
+            "PROBE_SOURCE_DIGEST": {
+              "Ref": "ProbeSourceDigest"
+            },
+            "PROBE_ARTIFACT_DIGEST": {
+              "Ref": "ProbeArtifactDigest"
+            },
+            "TREE_DIGEST": {
+              "Ref": "TreeDigest"
+            },
+            "PACKAGE_LOCK_DIGEST": {
+              "Ref": "PackageLockDigest"
+            }
+          }
+        },
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "DemoProbeLogGroup"
+          }
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "ArtifactBucket"
+          },
+          "S3Key": {
+            "Ref": "ProbeArtifactKey"
+          },
+          "S3ObjectVersion": {
+            "Ref": "ProbeArtifactVersion"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "ReservedConcurrentExecutions": 1
+      },
+      "Condition": "ShouldDeployProbes"
+    },
+    "DemoProbeVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "DemoProbeFunction"
+        },
+        "CodeSha256": {
+          "Ref": "ProbeArtifactCodeSha256"
+        },
+        "Description": {
+          "Fn::Sub": "Disposable demo-role probe ${SourceCommit} ${ConfigDigest}"
+        }
+      },
+      "Condition": "ShouldDeployProbes"
+    },
     "SignerProbeFunction": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
@@ -2183,6 +2596,233 @@
         }
       }
     },
+    "DemoIntegration": {
+      "Type": "AWS::ApiGatewayV2::Integration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "IntegrationType": "AWS_PROXY",
+        "IntegrationUri": {
+          "Fn::GetAtt": [
+            "DemoAlias",
+            "AliasArn"
+          ]
+        },
+        "PayloadFormatVersion": "2.0",
+        "TimeoutInMillis": 6000
+      }
+    },
+    "DemoIndexRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoAppRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /app.js",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoStylesRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /styles.css",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoFaviconRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /favicon.svg",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoHealthRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/health",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoScenarioRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/scenario",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoAuthorityEvidenceRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /evidence/gate1-authority",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoRecoveryEvidenceRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /evidence/gate1-recovery",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoAmbiguityEvidenceRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /evidence/gate1-ambiguity",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "DemoClaimsRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /claims",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
     "DefaultStage": {
       "Type": "AWS::ApiGatewayV2::Stage",
       "Properties": {
@@ -2201,8 +2841,14 @@
           "Format": "{\"apiId\":\"$context.apiId\",\"backendStatus\":\"$context.integration.status\",\"callerArn\":\"$context.identity.userArn\",\"lambdaServiceStatus\":\"$context.integration.integrationStatus\",\"requestId\":\"$context.requestId\",\"requestTimeEpoch\":\"$context.requestTimeEpoch\",\"routeKey\":\"$context.routeKey\",\"status\":\"$context.status\"}"
         },
         "DefaultRouteSettings": {
-          "ThrottlingBurstLimit": 1,
-          "ThrottlingRateLimit": 0.1
+          "ThrottlingBurstLimit": 8,
+          "ThrottlingRateLimit": 0.05
+        },
+        "RouteSettings": {
+          "POST /advisory": {
+            "ThrottlingBurstLimit": 1,
+            "ThrottlingRateLimit": 0.1
+          }
         },
         "Tags": {
           "Project": "Tideproof",
@@ -2226,6 +2872,44 @@
         },
         "SourceArn": {
           "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/POST/advisory"
+        }
+      }
+    },
+    "DemoRootInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "DemoAlias",
+            "AliasArn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/"
+        }
+      }
+    },
+    "DemoAssetInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "DemoAlias",
+            "AliasArn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/*"
         }
       }
     },
@@ -2276,6 +2960,32 @@
             "Name": "FunctionName",
             "Value": {
               "Ref": "BoundaryFunction"
+            }
+          }
+        ]
+      }
+    },
+    "DemoErrorAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-demo-errors"
+        },
+        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Errors",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "DemoFunction"
             }
           }
         ]
@@ -2336,9 +3046,15 @@
   },
   "Outputs": {
     "ApiEndpoint": {
-      "Description": "IAM-authenticated synthetic advisory endpoint; not public judge access.",
+      "Description": "Base URL for the signed-out demo and isolated IAM advisory route.",
       "Value": {
         "Fn::Sub": "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+      }
+    },
+    "PublicDemoUrl": {
+      "Description": "Signed-out read-only synthetic judge path; not evidence that the advisory path ran.",
+      "Value": {
+        "Fn::Sub": "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
       }
     },
     "AdvisoryCallerRoleArn": {
@@ -2370,6 +3086,14 @@
         ]
       }
     },
+    "DemoAliasArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "DemoAlias",
+          "AliasArn"
+        ]
+      }
+    },
     "SignerAliasArn": {
       "Value": {
         "Fn::GetAtt": [
@@ -2396,6 +3120,12 @@
       "Condition": "ShouldDeployProbes",
       "Value": {
         "Ref": "BoundaryProbeVersion"
+      }
+    },
+    "DemoProbeVersionArn": {
+      "Condition": "ShouldDeployProbes",
+      "Value": {
+        "Ref": "DemoProbeVersion"
       }
     },
     "SignerProbeVersionArn": {

@@ -270,11 +270,19 @@ export function runScenario() {
         ambiguityEvidence: "/evidence/gate1-ambiguity"
       },
       gateTwo: {
+        badge: "GATE TWO · LOCAL",
         label:
           "GATE TWO — local AWS candidate; live AWS evidence pending",
-        sourceCommit: "9aa7f2e7409e4eedb8e386ec9c18440670505fa6",
+        heading: "AWS proposal boundary · live evidence pending",
+        summary:
+          "The candidate binds receipts to one exact KMS public key, separates proposal from authority, logs the API path, and fails closed. It is not a live AWS claim.",
+        sourceCommit: "UNBOUND LOCAL",
+        cloudState: "Main stack not deployed",
         limitation:
-          "No live Bedrock, KMS, IAM, API Gateway, or CloudFormation claim"
+          "Bedrock, KMS, IAM, API Gateway, and CloudFormation are unverified live.",
+        boundarySummary:
+          "CockroachDB transactions, Distributed Vector Indexing, and Managed MCP are recorded Gate One evidence in synthetic scope. The AWS path is a locally verified candidate awaiting live Gate Two receipts. Tideproof makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim.",
+        hostReceipt: null
       }
     }
   };

@@ -24,4 +24,10 @@ test("the deterministic scenario satisfies every declared local invariant", () =
     scenario.proofStates.gateTwo.label,
     /live AWS evidence pending/
   );
+  assert.equal(scenario.proofStates.gateTwo.badge, "GATE TWO · LOCAL");
+  assert.equal(
+    scenario.proofStates.gateTwo.sourceCommit,
+    "UNBOUND LOCAL"
+  );
+  assert.equal(scenario.proofStates.gateTwo.hostReceipt, null);
 });

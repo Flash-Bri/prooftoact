@@ -13,9 +13,22 @@ or live-service claim resulted from that check.
 The candidate deliberately keeps Amazon Bedrock outside the authority
 boundary:
 
-- API Gateway accepts only an AWS IAM-signed `POST /advisory` request.
+- API Gateway exposes ten exact signed-out `GET` routes for the read-only
+  browser proof and one separate AWS IAM-signed `POST /advisory` route.
+- Demo Lambda serves only bundled HTML, JavaScript, CSS, the deterministic
+  scenario, approved Gate One evidence, claims, favicon, and a nonsecret health
+  binding. Its role can write only its exact log groups and explicitly denies
+  Bedrock, Lambda invocation, KMS signing, secrets, and privilege escalation.
+- Demo Lambda validates the API ID, `$default` stage, exact route key, method,
+  path, and empty body before serving anything. It returns strict
+  content-security, framing, referrer, permissions, and MIME headers; it
+  exposes no CORS policy and has no path to the advisory integration.
+- The signed-out health response binds source commit, tree, config, demo
+  source, demo artifact, package lock, and immutable Lambda version without
+  exposing account, role, bucket, or notification identifiers.
 - A dedicated short-lived caller role can invoke only that exact route and is
-  explicitly denied direct Lambda invocation.
+  explicitly denied direct Lambda invocation; this applies only to
+  `POST /advisory`, never to the public read-only routes.
 - Boundary Lambda binds the API request ID, API request time, and a hash of
   the authenticated principal to the receipt.
 - Private, seven-day API access logs record the corresponding request ID,
@@ -33,10 +46,11 @@ boundary:
 - Authority Lambda is an isolated fail-closed placeholder with no model,
   database, MCP, secret, signing, or IAM-granted operational capability.
 
-The strongest current claim is that this software and generated
-CloudFormation passed local review. Do not claim live Bedrock inference,
-KMS-backed evidence, IAM denial, API authentication, or CockroachDB-to-AWS
-handoff until their cloud receipts exist.
+The strongest current claim is that this software, the bundled public-demo
+artifact path, and generated CloudFormation passed local review. Do not claim
+live public hosting, Bedrock inference, KMS-backed evidence, IAM denial, API
+authentication, or CockroachDB-to-AWS handoff until their cloud receipts
+exist.
 
 The Lambda event alone cannot prove that API Gateway created it: a separate
 same-account principal with direct `lambda:InvokeFunction` permission could
@@ -47,6 +61,13 @@ path.
 
 ## Proof limits
 
+- A reachable public demo URL would prove only that the read-only AWS host
+  responded with the bound artifact. It would not prove that Bedrock, KMS, the
+  IAM advisory route, or CockroachDB handoff ran.
+- Public routes create an abuse and cost surface. The stage defaults to a burst
+  of eight and a sustained rate of `0.05` requests per second, Demo Lambda
+  reserved concurrency is eight, and the account budget remains the operator
+  stop. These controls are limits, not a DDoS or availability claim.
 - None of the Lambda functions has a VPC or egress restriction. The claim is
   limited to the reviewed immutable code and IAM policy; it is not a claim
   that arbitrarily altered or compromised code could cause no network effect.
@@ -77,9 +98,11 @@ unbound.
 
 `npm run build:gate2` refuses to create artifacts unless Git is clean and
 rechecks cleanliness after regenerating the tracked templates. On a clean
-commit it bundles each runtime role separately into a single-file, stored ZIP
-with fixed metadata, so artifact bytes are independent of host timezone. It
-records:
+commit it bundles each runtime role separately into six single-file, stored
+ZIPs with fixed metadata, so artifact bytes are independent of host timezone.
+The Demo artifact embeds the exact reviewed browser source, scenario
+implementation, claims ledger, and Gate One evidence through build-time raw
+imports. The receipt records:
 
 - Git commit and tree;
 - package-lock digest;
@@ -185,14 +208,19 @@ evidence only and must not be used to deploy the repaired candidate.
 11. Update probes back to `false`; verify all probe functions, probe log
     groups, and the canary secret are removed. Recompute the final
     configuration digest and reverify aliases and roles.
-12. Assume only the dedicated advisory caller role. Record a denied direct
+12. From a signed-out browser, request only the ten enumerated public `GET`
+    routes. Reconcile the health binding to the deployed Demo version and
+    artifact, verify headers and route throttles, confirm unknown and non-GET
+    routes cannot reach Demo Lambda, and complete the three-act path plus reset
+    on desktop and mobile.
+13. Assume only the dedicated advisory caller role. Record a denied direct
     invocation attempt for every Lambda, then invoke the exact IAM-signed API
     route.
-13. Preserve and reconcile the signed receipt with the asynchronous API access
+14. Preserve and reconcile the signed receipt with the asynchronous API access
     log by request ID, request time, route, status, and caller. Preserve the
     model, KMS key ARN/public-key fingerprint, signature, source, artifact,
     configuration, token, and latency bindings.
-14. Re-run Gate One state hashes to prove Bedrock changed no authority,
+15. Re-run Gate One state hashes to prove Bedrock changed no authority,
     outbox, fence, or protected synthetic-effect state.
 
 Ambiguous, malformed, unsigned, or unavailable application state returns
@@ -206,7 +234,9 @@ Stop instead of weakening the proof if:
 - the new AWS account cannot create a required service safely;
 - Nova Micro is unavailable in the reviewed region or request schema;
 - a runtime role obtains an undeclared capability;
-- a public or unsigned path reaches a receipt;
+- a public or unsigned path reaches the advisory Boundary/Signer execution
+  path or a live signed advisory receipt;
+- an unexplained public-route or log-volume anomaly appears;
 - a Lambda version's code hash differs;
 - a model response can introduce an operation ID, fencing token, effect key,
   or authority-bearing field;
@@ -219,9 +249,10 @@ Stop instead of weakening the proof if:
 Capability probes are temporary and must be removed after evidence capture.
 CloudFormation owns Gate Two resources. Before deleting the main stack,
 preserve the signed receipts, KMS public key DER/fingerprint, access-log
-records, template object version, and exact artifact versions outside the
-stack. Main-stack deletion removes log groups and schedules the KMS key for
-deletion after seven days.
+records, signed-out health binding, route inventory, reviewed browser captures,
+template object version, and exact artifact versions outside the stack.
+Main-stack deletion removes the public demo, log groups, and API routes and
+schedules the KMS key for deletion after seven days.
 
 The bootstrap artifact bucket is intentionally retained, but its TLS-only
 bucket policy and the account budget are not retained if the bootstrap stack

@@ -4,7 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 import { writeSingleFileZip } from "./lib/deterministic-zip.js";
+import { rawTextPlugin } from "./lib/raw-text-plugin.js";
 import {
   buildAwsBootstrapTemplate,
   buildGate2Template,
@@ -20,6 +22,7 @@ const artifactNames = [
   "agent",
   "authority",
   "boundary",
+  "demo",
   "probe",
   "signer"
 ];
@@ -67,8 +70,11 @@ function gitStatus() {
   return result.stdout.trim();
 }
 
-function buildArtifact(name, sourceCommit) {
-  const sourcePath = path.join(lambdaRoot, `${name}.cjs`);
+async function buildArtifact(name, sourceCommit) {
+  const sourcePath = path.join(
+    lambdaRoot,
+    `${name}.${name === "demo" ? "js" : "cjs"}`
+  );
   const sourceDigest = sha256File(sourcePath);
   const temporaryDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "tideproof-gate2-")
@@ -78,27 +84,22 @@ function buildArtifact(name, sourceCommit) {
     temporaryDirectory,
     `${name}-provisional.zip`
   );
-  const esbuildPath = path.join(
-    root,
-    "node_modules/.bin/esbuild"
-  );
-  const bundle = spawnSync(
-    esbuildPath,
-    [
-      sourcePath,
-      "--bundle",
-      "--platform=node",
-      "--target=node22",
-      "--format=cjs",
-      "--legal-comments=none",
-      "--log-level=error",
-      `--outfile=${stagedPath}`
-    ],
-    { cwd: root, encoding: "utf8" }
-  );
-  if (bundle.status !== 0) {
+  try {
+    await build({
+      absWorkingDir: root,
+      entryPoints: [sourcePath],
+      bundle: true,
+      platform: "node",
+      target: "node22",
+      format: "cjs",
+      legalComments: "none",
+      logLevel: "silent",
+      outfile: stagedPath,
+      plugins: [rawTextPlugin()]
+    });
+  } catch (error) {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
-    throw new Error(`esbuild failed for ${name}: ${bundle.stderr}`);
+    throw new Error(`esbuild failed for ${name}: ${error.message}`);
   }
   writeSingleFileZip(
     provisionalPath,
@@ -166,9 +167,9 @@ if (!templatesOnly && !workingTreeClean) {
 let artifacts = [];
 if (!templatesOnly) {
   fs.mkdirSync(distRoot, { recursive: true });
-  artifacts = artifactNames.map((name) =>
-    buildArtifact(name, sourceCommit)
-  );
+  for (const name of artifactNames) {
+    artifacts.push(await buildArtifact(name, sourceCommit));
+  }
 }
 
 const receipt = {

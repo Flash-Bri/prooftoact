@@ -58,38 +58,44 @@ Separate recovery cluster --> fixed-query Managed MCP broker
 ## Local AWS Gate Two candidate
 
 ```text
-IAM-signed HTTP request
+Signed-out GET requests
         |
-        v
-API Gateway --> Boundary Lambda
-                  | exact request/caller binding
-                  +--> Agent Lambda --> Amazon Nova Micro
-                  |                  proposal only
-                  +--> Signer Lambda --> KMS P-256
-                  |                   signed advisory receipt
-                  X--> Authority Lambda (isolated fail-closed placeholder)
+        +--> API Gateway --> Demo Lambda
+        |                     bundled deterministic replay only
+        |                     logs only; no model, signer, secret,
+        |                     database, MCP, or authority capability
+        |
+IAM-signed POST /advisory
+        |
+        +--> API Gateway --> Boundary Lambda
+                              | exact request/caller binding
+                              +--> Agent Lambda --> Amazon Nova Micro
+                              |                  proposal only
+                              +--> Signer Lambda --> KMS P-256
+                              |                   signed advisory receipt
+                              X--> Authority Lambda
+                                   isolated fail-closed placeholder
 ```
 
 Gate Two currently uses one Gate One digest-bound synthetic fixture. It proves
-the intended software and IAM shape locally, not a live CockroachDB-to-AWS
-handoff. The boundary independently validates the model proposal and signer
-envelope, verifies the P-256 signature locally, and rejects direct or
-authority-bearing output.
+the intended software and IAM shape locally, not live AWS hosting or a live
+CockroachDB-to-AWS handoff. The signed-out route set is read-only and
+enumerated; it never connects to the advisory integration. The boundary
+independently validates the model proposal and signer envelope, verifies the
+P-256 signature locally, and rejects direct or authority-bearing output.
 
 ## Target contest architecture
 
 ```text
-Static web demonstration
-        |
-        v
-Amazon API Gateway
-        |
-        v
-AWS Lambda agent orchestrator ----> Amazon Bedrock
-        |                              proposal only
-        |
-        v
-CockroachDB
+Signed-out judge browser --> API Gateway --> read-only Demo Lambda
+
+Authenticated agent request --> API Gateway --> agent orchestrator
+                                            |
+                                            +--> Amazon Bedrock
+                                            |    proposal only
+                                            |
+                                            v
+                                      CockroachDB
   - append-only evidence and receipts
   - SQL admissibility predicates
   - Distributed Vector Index

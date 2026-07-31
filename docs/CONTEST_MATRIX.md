@@ -17,7 +17,7 @@ Internal submission target: 2026-08-16 at 5:00 PM ET.
 | Agentic memory application | Evidence memory controls retrieval and action authority | Gate One verified, synthetic scope |
 | At least two named CockroachDB tools | Distributed Vector Index + meaningful Managed MCP recovery/audit path | Gate One verified |
 | At least one AWS service | Lambda/API Gateway, KMS, and bounded Bedrock use | Local candidate passed; live deployment pending |
-| Functional AWS-hosted demo | Judge-accessible synthetic scenario | Not deployed |
+| Functional AWS-hosted demo | Ten exact signed-out API Gateway `GET` routes to a logs-only Demo Lambda serving the deterministic scenario | Local candidate passed; not deployed |
 | Public open-source repository and license | MIT-licensed repository with reproducible setup | Public source and hosted CI verified |
 | Public video under three minutes | 175-second evidence-led demonstration | Script drafted |
 | English text description and testing instructions | Fail-closed submission packet with reviewed copy blocks | Drafted; final URLs and AWS copy blocked |
@@ -41,7 +41,8 @@ also the first tie-breaker.
 - **Real-World Impact:** the synthetic response scenario makes stale or
   contradictory shared memory legible without claiming operational readiness.
 - **Product Readiness:** one-command fixtures, judge-safe reset, cost alarms,
-  observability, accessibility, threat model, and teardown plan.
+  observability, enumerated signed-out routes, accessibility, threat model,
+  and teardown plan.
 - **Creativity and Originality:** the core demonstration is admissibility,
   authority transfer, and replay denial—not another RAG assistant.
 
