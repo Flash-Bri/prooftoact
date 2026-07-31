@@ -48,6 +48,12 @@ function assets() {
     "/styles.css": ":root { color-scheme: dark; }\n",
     "/favicon.svg":
       '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n',
+    "/architecture.svg": [
+      '<svg xmlns="http://www.w3.org/2000/svg" role="img">',
+      "<title>Tideproof trust boundaries</title>",
+      "</svg>",
+      ""
+    ].join("\n"),
     "/evidence/gate1-authority": "# Authority evidence\n",
     "/evidence/gate1-recovery": "# Recovery evidence\n",
     "/evidence/gate1-ambiguity": "# Ambiguity evidence\n",
@@ -196,7 +202,7 @@ test("public demo verifier binds every route and denial", async () => {
     assert.deepEqual(receipt.pacing, {
       initialBurstRequests: 8,
       refillDelayMs: 21_000,
-      waits: 7
+      waits: 8
     });
     assert.deepEqual(
       receipt.negativeProbes.map(

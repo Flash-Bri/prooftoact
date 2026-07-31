@@ -17,6 +17,7 @@ const CONTENT_TYPES = Object.freeze({
   "/app.js": "text/javascript; charset=utf-8",
   "/styles.css": "text/css; charset=utf-8",
   "/favicon.svg": "image/svg+xml",
+  "/architecture.svg": "image/svg+xml",
   "/api/health": "application/json; charset=utf-8",
   "/api/scenario": "application/json; charset=utf-8",
   "/evidence/gate1-authority": "text/markdown; charset=utf-8",
@@ -99,7 +100,8 @@ function sha256(value) {
 function cacheControl(path) {
   return path === "/app.js" ||
     path === "/styles.css" ||
-    path === "/favicon.svg"
+    path === "/favicon.svg" ||
+    path === "/architecture.svg"
     ? "public, max-age=300, must-revalidate"
     : "no-store";
 }

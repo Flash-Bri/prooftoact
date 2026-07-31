@@ -2890,6 +2890,27 @@
         }
       }
     },
+    "DemoArchitectureRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /architecture.svg",
+        "AuthorizationType": "NONE",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "DemoIntegration"
+              }
+            ]
+          ]
+        }
+      }
+    },
     "DemoHealthRoute": {
       "Type": "AWS::ApiGatewayV2::Route",
       "Properties": {

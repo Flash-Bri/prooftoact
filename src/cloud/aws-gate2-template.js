@@ -13,6 +13,7 @@ const PUBLIC_DEMO_ROUTE_IDS = Object.freeze({
   "/app.js": "DemoAppRoute",
   "/styles.css": "DemoStylesRoute",
   "/favicon.svg": "DemoFaviconRoute",
+  "/architecture.svg": "DemoArchitectureRoute",
   "/api/health": "DemoHealthRoute",
   "/api/scenario": "DemoScenarioRoute",
   "/evidence/gate1-authority": "DemoAuthorityEvidenceRoute",

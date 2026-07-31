@@ -1,4 +1,5 @@
 import appJs from "../../../web/app.js?raw";
+import architectureSvg from "../../../docs/media/architecture.svg?raw";
 import faviconSvg from "../../../web/favicon.svg?raw";
 import indexHtml from "../../../web/index.html?raw";
 import stylesCss from "../../../web/styles.css?raw";
@@ -15,6 +16,7 @@ export const handler = createPublicDemoHandler({
     "/app.js": appJs,
     "/styles.css": stylesCss,
     "/favicon.svg": faviconSvg,
+    "/architecture.svg": architectureSvg,
     "/evidence/gate1-authority": authorityEvidence,
     "/evidence/gate1-recovery": recoveryEvidence,
     "/evidence/gate1-ambiguity": ambiguityEvidence,

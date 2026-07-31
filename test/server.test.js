@@ -67,7 +67,7 @@ test("serves the local health and scenario surfaces", async (context) => {
     page,
     /aria-keyshortcuts="ArrowLeft ArrowRight Space Home"/
   );
-  assert.match(page, /Tideproof evidence, proposal, authority, and recovery boundaries/);
+  assert.match(page, /src="\/architecture\.svg"/);
   assert.match(
     pageResponse.headers.get("content-security-policy"),
     /default-src 'self'/
@@ -93,5 +93,18 @@ test("serves the local health and scenario surfaces", async (context) => {
   assert.equal(
     faviconResponse.headers.get("content-type"),
     "image/svg+xml"
+  );
+
+  const architectureResponse = await fetch(
+    `http://127.0.0.1:${port}/architecture.svg`
+  );
+  assert.equal(architectureResponse.status, 200);
+  assert.equal(
+    architectureResponse.headers.get("content-type"),
+    "image/svg+xml"
+  );
+  assert.match(
+    await architectureResponse.text(),
+    /Tideproof evidence, proposal, authority, and recovery boundaries/
   );
 });
