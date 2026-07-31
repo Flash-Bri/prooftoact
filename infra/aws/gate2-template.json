@@ -1353,7 +1353,7 @@
     "AuthorityFunction": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
-        "Description": "Runs one exact synthetic two-contender authority request through the least-privilege CockroachDB SECURITY DEFINER surface.",
+        "Description": "Runs one exact synthetic two-contender authority request and later read-only durable proof through least-privilege CockroachDB SECURITY DEFINER surfaces.",
         "Runtime": "nodejs22.x",
         "Architectures": [
           "arm64"

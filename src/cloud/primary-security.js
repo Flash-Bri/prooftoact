@@ -1082,6 +1082,246 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_observe_authority_race_v1(
+      p_tenant_id UUID,
+      p_run_id UUID,
+      p_resource_id STRING,
+      p_alpha_operation_id UUID,
+      p_alpha_request_digest STRING,
+      p_bravo_operation_id UUID,
+      p_bravo_request_digest STRING
+    )
+    RETURNS TABLE(
+      active_run_id UUID,
+      current_fence INT8,
+      holder_operation_id UUID,
+      race_receipt_count INT8,
+      resource_receipt_count INT8,
+      reserved_count INT8,
+      held_denial_count INT8,
+      pending_count INT8,
+      outbox_count INT8,
+      outbox_operation_id UUID,
+      protected_effect_count INT8,
+      alpha_outcome STRING,
+      alpha_reason STRING,
+      alpha_fencing_token INT8,
+      alpha_observed_holder_operation_id UUID,
+      alpha_observed_fence INT8,
+      bravo_outcome STRING,
+      bravo_reason STRING,
+      bravo_fencing_token INT8,
+      bravo_observed_holder_operation_id UUID,
+      bravo_observed_fence INT8,
+      observed_at TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        resource.active_run_id,
+        resource.current_fence,
+        resource.holder_operation_id,
+        (
+          SELECT count(*)::INT8
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND (
+              (
+                receipt.operation_id = p_alpha_operation_id
+                AND receipt.request_digest = p_alpha_request_digest
+              )
+              OR
+              (
+                receipt.operation_id = p_bravo_operation_id
+                AND receipt.request_digest = p_bravo_request_digest
+              )
+            )
+        ),
+        (
+          SELECT count(*)::INT8
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+        ),
+        (
+          SELECT count(*)::INT8
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.outcome = 'resource_reserved'
+        ),
+        (
+          SELECT count(*)::INT8
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.outcome = 'resource_held_denied'
+        ),
+        (
+          SELECT count(*)::INT8
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.outcome = 'pending'
+        ),
+        (
+          SELECT count(*)::INT8
+          FROM tp_ledger.g1_outbox_intents AS outbox
+          WHERE outbox.tenant_id = p_tenant_id
+            AND outbox.run_id = p_run_id
+            AND outbox.resource_id = p_resource_id
+        ),
+        (
+          SELECT outbox.operation_id
+          FROM tp_ledger.g1_outbox_intents AS outbox
+          WHERE outbox.tenant_id = p_tenant_id
+            AND outbox.run_id = p_run_id
+            AND outbox.resource_id = p_resource_id
+          ORDER BY outbox.operation_id
+          LIMIT 1
+        ),
+        (
+          SELECT count(*)::INT8
+          FROM tp_ledger.g1_protected_effects AS effect
+          WHERE effect.tenant_id = p_tenant_id
+            AND effect.run_id = p_run_id
+            AND effect.resource_id = p_resource_id
+        ),
+        (
+          SELECT receipt.outcome
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_alpha_operation_id
+            AND receipt.request_digest = p_alpha_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.reason
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_alpha_operation_id
+            AND receipt.request_digest = p_alpha_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.fencing_token
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_alpha_operation_id
+            AND receipt.request_digest = p_alpha_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.observed_holder_operation_id
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_alpha_operation_id
+            AND receipt.request_digest = p_alpha_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.observed_fence
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_alpha_operation_id
+            AND receipt.request_digest = p_alpha_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.outcome
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_bravo_operation_id
+            AND receipt.request_digest = p_bravo_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.reason
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_bravo_operation_id
+            AND receipt.request_digest = p_bravo_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.fencing_token
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_bravo_operation_id
+            AND receipt.request_digest = p_bravo_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.observed_holder_operation_id
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_bravo_operation_id
+            AND receipt.request_digest = p_bravo_request_digest
+          LIMIT 1
+        ),
+        (
+          SELECT receipt.observed_fence
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_bravo_operation_id
+            AND receipt.request_digest = p_bravo_request_digest
+          LIMIT 1
+        ),
+        transaction_timestamp()
+      FROM tp_private.g1_resources AS resource
+      WHERE resource.tenant_id = p_tenant_id
+        AND resource.resource_id = p_resource_id
+        AND resource.active_run_id = p_run_id
+        AND EXISTS (
+          SELECT 1
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_alpha_operation_id
+            AND receipt.request_digest = p_alpha_request_digest
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.run_id = p_run_id
+            AND receipt.resource_id = p_resource_id
+            AND receipt.operation_id = p_bravo_operation_id
+            AND receipt.request_digest = p_bravo_request_digest
+        )
+      LIMIT 1
+    $$
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_append_recovery_audit_v1(
       p_audit_id UUID,
       p_recovery_session_id UUID,
@@ -1440,6 +1680,7 @@ async function transferOwnership(client) {
     "tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
     "tp_api.g1_spend_authority_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
     "tp_api.g1_resolve_request_v1(UUID, UUID, STRING)",
+    "tp_api.g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)",
     "tp_api.g1_append_recovery_audit_v1(UUID, UUID, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING)",
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
@@ -1501,7 +1742,10 @@ async function applyGrants(client) {
         UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, STRING,
         UUID, UUID, JSONB, STRING, STRING, INT8
       ),
-      tp_api.g1_resolve_request_v1(UUID, UUID, STRING)
+      tp_api.g1_resolve_request_v1(UUID, UUID, STRING),
+      tp_api.g1_observe_authority_race_v1(
+        UUID, UUID, STRING, UUID, STRING, UUID, STRING
+      )
     TO tp_authorizer_role
   `);
   await client.query(`

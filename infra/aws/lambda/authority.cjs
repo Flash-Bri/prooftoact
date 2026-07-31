@@ -2,8 +2,10 @@
 
 const crypto = require("node:crypto");
 
-const REQUEST_SCHEMA = "tideproof.aws-authority-request.v1";
+const REQUEST_SCHEMA = "tideproof.aws-authority-request.v2";
 const RESPONSE_SCHEMA = "tideproof.aws-authority-boundary.v2";
+const PROOF_RESPONSE_SCHEMA =
+  "tideproof.aws-authority-durable-proof.v1";
 const POLICY_VERSION = "gate1-policy-v2";
 const LEASE_MS = 300_000;
 const MAX_TRANSACTION_RETRIES = 6;
@@ -34,6 +36,14 @@ const RESOLVE_SQL = `
   SELECT *
   FROM tp_api.g1_resolve_request_v1(
     $1::UUID, $2::UUID, $3
+  )
+`;
+
+const PROOF_SQL = `
+  SELECT *
+  FROM tp_api.g1_observe_authority_race_v1(
+    $1::UUID, $2::UUID, $3,
+    $4::UUID, $5, $6::UUID, $7
   )
 `;
 
@@ -168,6 +178,21 @@ function parseReserveEvent(event, config) {
   return {
     raceId: event.raceId,
     contender: event.contender
+  };
+}
+
+function parseProofEvent(event, config) {
+  if (
+    !exactKeys(event, ["mode", "raceId", "schemaVersion"]) ||
+    event.schemaVersion !== REQUEST_SCHEMA ||
+    event.mode !== "proof" ||
+    event.raceId !== config.raceId
+  ) {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
+  return {
+    raceId: event.raceId,
+    contender: null
   };
 }
 
@@ -425,6 +450,136 @@ function normalizeResolvedRow(row, request) {
   };
 }
 
+function normalizeProofRow(row, config, requests) {
+  const rowKeys = [
+    "active_run_id",
+    "alpha_fencing_token",
+    "alpha_observed_fence",
+    "alpha_observed_holder_operation_id",
+    "alpha_outcome",
+    "alpha_reason",
+    "bravo_fencing_token",
+    "bravo_observed_fence",
+    "bravo_observed_holder_operation_id",
+    "bravo_outcome",
+    "bravo_reason",
+    "current_fence",
+    "held_denial_count",
+    "holder_operation_id",
+    "observed_at",
+    "outbox_count",
+    "outbox_operation_id",
+    "pending_count",
+    "protected_effect_count",
+    "race_receipt_count",
+    "reserved_count",
+    "resource_receipt_count"
+  ];
+  if (!exactKeys(row, rowKeys)) {
+    throw new Error("AUTHORITY_PROOF_REJECTED");
+  }
+  const counts = {
+    raceReceiptCount: String(row.race_receipt_count),
+    resourceReceiptCount: String(row.resource_receipt_count),
+    reservedCount: String(row.reserved_count),
+    heldDenialCount: String(row.held_denial_count),
+    pendingCount: String(row.pending_count),
+    outboxCount: String(row.outbox_count),
+    protectedEffectCount: String(row.protected_effect_count)
+  };
+  const outcomes = {
+    alpha: {
+      operationId: requests.alpha.operationId,
+      requestDigest: requests.alpha.requestDigest,
+      outcome: row.alpha_outcome,
+      reason: row.alpha_reason ?? null,
+      fencingToken:
+        row.alpha_fencing_token === null ||
+        row.alpha_fencing_token === undefined
+          ? null
+          : String(row.alpha_fencing_token),
+      observedHolderOperationId:
+        row.alpha_observed_holder_operation_id ?? null,
+      observedFence:
+        row.alpha_observed_fence === null ||
+        row.alpha_observed_fence === undefined
+          ? null
+          : String(row.alpha_observed_fence)
+    },
+    bravo: {
+      operationId: requests.bravo.operationId,
+      requestDigest: requests.bravo.requestDigest,
+      outcome: row.bravo_outcome,
+      reason: row.bravo_reason ?? null,
+      fencingToken:
+        row.bravo_fencing_token === null ||
+        row.bravo_fencing_token === undefined
+          ? null
+          : String(row.bravo_fencing_token),
+      observedHolderOperationId:
+        row.bravo_observed_holder_operation_id ?? null,
+      observedFence:
+        row.bravo_observed_fence === null ||
+        row.bravo_observed_fence === undefined
+          ? null
+          : String(row.bravo_observed_fence)
+    }
+  };
+  const winner = Object.values(outcomes).find(
+    ({ outcome }) => outcome === "resource_reserved"
+  );
+  const denial = Object.values(outcomes).find(
+    ({ outcome }) => outcome === "resource_held_denied"
+  );
+  const currentFence = String(row.current_fence);
+  const observedAt = normalizeTimestamp(row.observed_at);
+  if (
+    row.active_run_id !== config.runId ||
+    !winner ||
+    !denial ||
+    winner === denial ||
+    winner.reason !== null ||
+    !/^[1-9][0-9]*$/.test(winner.fencingToken ?? "") ||
+    winner.observedHolderOperationId !== null ||
+    winner.observedFence !== null ||
+    denial.reason !== "active_holder" ||
+    denial.fencingToken !== null ||
+    denial.observedHolderOperationId !== winner.operationId ||
+    denial.observedFence !== winner.fencingToken ||
+    currentFence !== winner.fencingToken ||
+    row.holder_operation_id !== winner.operationId ||
+    row.outbox_operation_id !== winner.operationId ||
+    observedAt === null ||
+    !exactKeys(counts, [
+      "heldDenialCount",
+      "outboxCount",
+      "pendingCount",
+      "protectedEffectCount",
+      "raceReceiptCount",
+      "reservedCount",
+      "resourceReceiptCount"
+    ]) ||
+    counts.raceReceiptCount !== "2" ||
+    counts.resourceReceiptCount !== "2" ||
+    counts.reservedCount !== "1" ||
+    counts.heldDenialCount !== "1" ||
+    counts.pendingCount !== "0" ||
+    counts.outboxCount !== "1" ||
+    counts.protectedEffectCount !== "0"
+  ) {
+    throw new Error("AUTHORITY_PROOF_REJECTED");
+  }
+  return {
+    activeRunId: row.active_run_id,
+    currentFence,
+    holderOperationId: row.holder_operation_id,
+    outboxOperationId: row.outbox_operation_id,
+    observedAt,
+    counts,
+    outcomes
+  };
+}
+
 async function closeQuietly(client) {
   await client?.end?.().catch(() => {});
 }
@@ -454,6 +609,74 @@ async function reconcile({
       throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
     }
     return normalizeResolvedRow(result.rows[0], request);
+  } catch (error) {
+    await rollbackQuietly(client);
+    throw error;
+  } finally {
+    await closeQuietly(client);
+  }
+}
+
+async function observeAuthorityRace({
+  connectionString,
+  config,
+  createClient
+}) {
+  const requests = Object.fromEntries(
+    ["alpha", "bravo"].map((contender) => [
+      contender,
+      authorityRequestFor(
+        {
+          schemaVersion: REQUEST_SCHEMA,
+          mode: "reserve",
+          raceId: config.raceId,
+          contender
+        },
+        config
+      )
+    ])
+  );
+  const client = createClient(connectionString);
+  try {
+    await client.connect();
+    await client.query(
+      "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY"
+    );
+    const isolation = await client.query(
+      "SHOW TRANSACTION ISOLATION LEVEL"
+    );
+    const backend = await client.query(
+      "SELECT pg_backend_pid()::STRING AS backend_id"
+    );
+    const result = await client.query(PROOF_SQL, [
+      config.tenantId,
+      config.runId,
+      config.resourceId,
+      requests.alpha.operationId,
+      requests.alpha.requestDigest,
+      requests.bravo.operationId,
+      requests.bravo.requestDigest
+    ]);
+    await client.query("COMMIT");
+    if (
+      result.rowCount !== 1 ||
+      result.rows.length !== 1 ||
+      isolation.rows?.[0]?.transaction_isolation !== "serializable" ||
+      typeof backend.rows?.[0]?.backend_id !== "string"
+    ) {
+      throw new Error("AUTHORITY_PROOF_REJECTED");
+    }
+    const state = normalizeProofRow(result.rows[0], config, requests);
+    return {
+      state,
+      transaction: {
+        isolation: "serializable",
+        databaseObservedAt: state.observedAt,
+        databaseSessionDigest: sha256Hex(
+          `${config.raceId}:${backend.rows[0].backend_id}`
+        )
+      }
+    };
   } catch (error) {
     await rollbackQuietly(client);
     throw error;
@@ -595,6 +818,7 @@ function safeCode(error) {
     [
       "AUTHORITY_CONFIGURATION_REJECTED",
       "AUTHORITY_DATABASE_RESPONSE_REJECTED",
+      "AUTHORITY_PROOF_REJECTED",
       "AUTHORITY_RECONCILIATION_REJECTED",
       "AUTHORITY_REQUEST_REJECTED",
       "AUTHORITY_RETRY_EXHAUSTED",
@@ -623,6 +847,41 @@ async function runAuthority({
         config,
         null
       );
+    }
+    if (event?.mode === "proof") {
+      parsed = parseProofEvent(event, config);
+      const connectionString = await getConnectionString(config);
+      const clientFactory =
+        createClient ??
+        ((value) => {
+          const { Client } = require("pg");
+          return new Client({
+            connectionString: value,
+            application_name: "tideproof-aws-authority-proof"
+          });
+        });
+      const proof = await observeAuthorityRace({
+        connectionString,
+        config,
+        createClient: clientFactory
+      });
+      return {
+        schemaVersion: PROOF_RESPONSE_SCHEMA,
+        status: "OBSERVED",
+        raceId: parsed.raceId,
+        transaction: proof.transaction,
+        state: proof.state,
+        invocationRequestId:
+          typeof context?.awsRequestId === "string"
+            ? context.awsRequestId.slice(0, 160)
+            : null,
+        functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
+        readOnly: true,
+        authorityTransferred: false,
+        requiresFreshAuthorization: true,
+        modelAccess: false,
+        ...buildBindings(config)
+      };
     }
     parsed = parseReserveEvent(event, config);
     const request = authorityRequestFor(event, config);
@@ -678,6 +937,8 @@ async function handler(event, context) {
 exports.handler = handler;
 exports.__test = {
   AUTHORITY_NAMESPACE,
+  PROOF_RESPONSE_SCHEMA,
+  PROOF_SQL,
   REQUEST_SCHEMA,
   RESPONSE_SCHEMA,
   SPEND_SQL,
@@ -688,7 +949,10 @@ exports.__test = {
   connectionStringFromSecret,
   exactKeys,
   normalizeResolvedRow,
+  normalizeProofRow,
   normalizeSpendRow,
+  observeAuthorityRace,
+  parseProofEvent,
   parseReserveEvent,
   runAuthority,
   safeCode,

@@ -1115,6 +1115,10 @@ test("production Lambda sources contain only their intended capability SDK", () 
   );
   assert.match(sources.authority, /client-secrets-manager/);
   assert.match(sources.authority, /require\(["']pg["']\)/);
+  assert.match(
+    sources.authority,
+    /tp_api\.g1_observe_authority_race_v1/
+  );
   assert.doesNotMatch(
     sources.authority,
     /client-(bedrock-runtime|kms|lambda)|managed-mcp/
@@ -1122,6 +1126,33 @@ test("production Lambda sources contain only their intended capability SDK", () 
   assert.doesNotMatch(
     sources.demo,
     /@aws-sdk|@smithy|require\(["']pg["']\)|managed-mcp|https?:\/\//
+  );
+});
+
+test("primary security owns and grants only the typed durable race observer", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/cloud/primary-security.js"),
+    "utf8"
+  );
+  assert.match(
+    source,
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_observe_authority_race_v1/
+  );
+  assert.match(
+    source,
+    /tp_api\.g1_observe_authority_race_v1\(UUID, UUID, STRING, UUID, STRING, UUID, STRING\)/
+  );
+  assert.match(
+    source,
+    /GRANT EXECUTE ON FUNCTION[\s\S]*tp_api\.g1_observe_authority_race_v1\([\s\S]*\)[\s\S]*TO tp_authorizer_role/
+  );
+  assert.match(
+    source,
+    /resource\.active_run_id = p_run_id[\s\S]*AND EXISTS \([\s\S]*receipt\.operation_id = p_alpha_operation_id[\s\S]*AND EXISTS \([\s\S]*receipt\.operation_id = p_bravo_operation_id/
+  );
+  assert.doesNotMatch(
+    source,
+    /GRANT SELECT ON tp_(?:private|ledger)\.[^\n]+ TO tp_authorizer_role/
   );
 });
 

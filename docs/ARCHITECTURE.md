@@ -76,13 +76,20 @@ IAM-signed POST /advisory
 
 Private authority-race proof caller
         |
-        +--> Authority Lambda (two reserved executions)
-                              | exact race + contender schema
-                              | derives operation/effect IDs itself
-                              | reads one exact project secret
-                              v
-                         CockroachDB
-                         tp_api.g1_spend_authority_v1 only
+        +-- concurrent reserve x2 --> Authority Lambda
+        |                              | exact race + contender schema
+        |                              | derives operation/effect IDs itself
+        |                              | reads one exact project secret
+        |                              v
+        |                         CockroachDB
+        |                         tp_api.g1_spend_authority_v1
+        |
+        +-- after both return: proof --> Authority Lambda
+                                       | one read-only transaction
+                                       v
+                                  CockroachDB
+                                  tp_api.g1_observe_authority_race_v1
+                                  2 receipts · 1 outbox · 0 effects
 ```
 
 Gate Two currently uses one Gate One digest-bound synthetic fixture. It proves
@@ -97,7 +104,8 @@ only two named contenders for one configured synthetic race, derives every
 operation-bearing field without model input, reads only one exact
 Tideproof-owned Secrets Manager ARN, and calls only the CockroachDB
 authorizer's typed `SECURITY DEFINER` functions. None of those cloud or
-database boundaries are proven live until the accepted race receipts exist.
+database boundaries are proven live until the accepted race receipt includes
+the later durable-state observation and its private database evidence.
 
 ## Target contest architecture
 
