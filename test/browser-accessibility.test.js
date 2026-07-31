@@ -124,7 +124,7 @@ test("browser profile cleanup retries transient directory races", () => {
       options: {
         recursive: true,
         force: true,
-        maxRetries: 10,
+        maxRetries: 20,
         retryDelay: 100
       }
     }

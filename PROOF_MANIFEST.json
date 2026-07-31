@@ -13,13 +13,13 @@
     {
       "id": "accessibility-browser-tests",
       "path": "test/browser-accessibility.test.js",
-      "sha256": "9478dbd42dd38632b9a299d30886e0bacd14596887948681cb583a83c573f3bc",
+      "sha256": "a603f1124619f01a829c088fa1e8bcbb46cd5632912d1e8a6566acc2791b11ed",
       "kind": "verification-code"
     },
     {
       "id": "accessibility-browser-verifier",
       "path": "scripts/verify-browser-accessibility.js",
-      "sha256": "573f26e3ea5fe02617a50bd356b01ebf6c50b1cd01a17d530ae9c8d895737771",
+      "sha256": "d804ee22e129e39e5c379fdd979e9e93ef466f6b45cd9a8faae4122761175ebf",
       "kind": "verification-code"
     },
     {
