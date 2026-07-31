@@ -49,6 +49,9 @@ jobs:
       - name: Verify current source security boundaries
         run: npm run security:verify
 
+      - name: Verify fail-closed submission draft
+        run: npm run submission:verify
+
       - name: Verify bounded static accessibility controls
         run: npm run accessibility:verify
 

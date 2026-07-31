@@ -11,12 +11,13 @@ import { verifyReleaseClaims } from "./verify-release-claims.js";
 import { verifyReleasePrivacy } from "./verify-release-privacy.js";
 import { verifyReleaseRights } from "./verify-release-rights.js";
 import { verifyReleaseSecurity } from "./verify-release-security.js";
+import { verifyReleaseSubmission } from "./verify-release-submission.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/tideproof.git";
 const EXPECTED_BRANCH = "main";
 const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
-const SCHEMA = "tideproof.release-provenance.v5";
+const SCHEMA = "tideproof.release-provenance.v6";
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
 
@@ -522,7 +523,8 @@ export async function runReleaseProvenance({
   verifyNotices = verifyCurrentBundledThirdPartyNotices,
   verifyPrivacy = verifyReleasePrivacy,
   verifyRights = verifyReleaseRights,
-  verifySecurity = verifyReleaseSecurity
+  verifySecurity = verifyReleaseSecurity,
+  verifySubmission = verifyReleaseSubmission
 } = {}) {
   const source = verifyRepositoryHistory({ run, projectRoot });
   const claims = verifyClaims({ rootDir: projectRoot });
@@ -674,6 +676,29 @@ export async function runReleaseProvenance({
       security.claimBoundary.length > 0,
     "RELEASE_PROVENANCE_SECURITY"
   );
+  const submission = verifySubmission({ rootDir: projectRoot });
+  assert(
+    submission?.schemaVersion ===
+      "tideproof.release-submission-verification.v1" &&
+      submission.status === "DRAFT_SAFELY_BLOCKED" &&
+      submission.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(submission.reviewedOn) &&
+      submission.manifestPath === "RELEASE_SUBMISSION_MANIFEST.json" &&
+      HEX_64.test(submission.manifestSha256) &&
+      submission.surfaceCount === 7 &&
+      submission.checklistItemCount === 14 &&
+      submission.uncheckedChecklistItemCount === 14 &&
+      submission.stopTokenOccurrenceCount === 13 &&
+      submission.uniqueStopTokenCount === 12 &&
+      submission.officialCoordinateCount === 11 &&
+      Array.isArray(submission.finalReleaseRequirements) &&
+      submission.finalReleaseRequirements.length === 4 &&
+      submission.checks &&
+      Object.values(submission.checks).every((value) => value === true) &&
+      typeof submission.claimBoundary === "string" &&
+      submission.claimBoundary.length > 0,
+    "RELEASE_PROVENANCE_SUBMISSION"
+  );
   const lockBytes = fs.readFileSync(path.join(projectRoot, "package-lock.json"));
   const packageLock = readJson(
     path.join(projectRoot, "package-lock.json"),
@@ -729,6 +754,7 @@ export async function runReleaseProvenance({
     rights,
     accessibility,
     security,
+    submission,
     dependencies: {
       installedTree,
       inventory,
@@ -762,10 +788,11 @@ export async function runReleaseProvenance({
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,
       currentSourceSecurityVerified: true,
+      submissionDraftFailClosed: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary:
-      "This receipt binds Git ancestry, tracked file modes, the reviewed pending-state public claim surfaces, the bounded current-history privacy scan, the current-surface rights inventory, the bounded static accessibility receipt, the current source security and abuse-boundary receipt, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The claims, privacy, rights, accessibility, and security controls remain explicitly non-final; they do not prove claim truth, exhaustive secret or personal-data absence, grant rights, establish WCAG conformance, or establish vulnerability absence. This receipt does not independently prove originality, legal clearance, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
+      "This receipt binds Git ancestry, tracked file modes, the reviewed pending-state public claim surfaces, the bounded current-history privacy scan, the current-surface rights inventory, the bounded static accessibility receipt, the current source security and abuse-boundary receipt, the fail-closed submission draft, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The claims, privacy, rights, accessibility, security, and submission controls remain explicitly non-final; they do not prove claim truth, exhaustive secret or personal-data absence, grant rights, establish WCAG conformance, establish vulnerability absence, determine eligibility, verify entrant authority, or authorize submission. This receipt does not independently prove originality, legal clearance, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
   };
 }
 

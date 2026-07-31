@@ -112,23 +112,51 @@ test("unexpected browser diagnostics are bounded and sanitized", () => {
   assert.equal(__test.formatUnexpectedFailure(undefined), "UnknownError");
 });
 
-test("browser profile cleanup retries transient directory races", () => {
+test("browser profile cleanup retries repeated late directory entries", async () => {
   const calls = [];
-  __test.removeProfileDirectory(
+  const waits = [];
+  let remainingLateEntries = 4;
+  await __test.removeProfileDirectory(
     "/tmp/tideproof-browser-profile-fixture",
-    (profileDir, options) => calls.push({ profileDir, options })
+    (profileDir, options) => {
+      calls.push({ profileDir, options });
+      if (remainingLateEntries > 0) {
+        remainingLateEntries -= 1;
+        const error = new Error("late profile entry");
+        error.code = "ENOTEMPTY";
+        throw error;
+      }
+    },
+    async (milliseconds) => waits.push(milliseconds)
   );
-  assert.deepEqual(calls, [
-    {
+  assert.equal(calls.length, 5);
+  assert.deepEqual(
+    calls,
+    Array.from({ length: 5 }, () => ({
       profileDir: "/tmp/tideproof-browser-profile-fixture",
       options: {
         recursive: true,
         force: true,
-        maxRetries: 20,
+        maxRetries: 2,
         retryDelay: 100
       }
-    }
-  ]);
+    }))
+  );
+  assert.deepEqual(waits, [100, 100, 100, 100]);
+});
+
+test("browser teardown signals the full Unix process group", () => {
+  const signals = [];
+  const chrome = {
+    pid: 43117,
+    exitCode: null,
+    kill: (signal) => signals.push(["child", signal])
+  };
+  __test.signalChrome(chrome, "SIGTERM", {
+    kill: (pid, signal) => signals.push([pid, signal]),
+    platform: "linux"
+  });
+  assert.deepEqual(signals, [[-43117, "SIGTERM"]]);
 });
 
 test("accessibility tree summary exposes names, roles, and disabled state", () => {
