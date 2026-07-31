@@ -48,7 +48,8 @@ Every item must have a dated receipt tied to the final release commit:
   least-privilege boundaries, the one bounded model call, KMS verification,
   exact API traversal, direct-Lambda denial, cost controls, and teardown path.
 - [ ] The live demo is free, stable, signed-out, resettable, synthetic-only,
-  and available without credentials through 2026-09-15 at 5:00 PM ET.
+  and available without credentials through 2026-09-15 at 5:00 PM ET; the
+  exact-head public-demo verifier has a preserved `PASS` receipt.
 - [ ] A separate signed-out reviewer completes the complete three-act judge
   path on desktop and mobile at the final URL.
 - [ ] The video is under three minutes, public on YouTube or Vimeo, shows the

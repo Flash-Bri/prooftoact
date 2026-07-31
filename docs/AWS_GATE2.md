@@ -21,8 +21,9 @@ boundary:
   Bedrock, Lambda invocation, KMS signing, secrets, and privilege escalation.
 - Demo Lambda validates the API ID, `$default` stage, exact route key, method,
   path, and empty body before serving anything. It returns strict
-  content-security, framing, referrer, permissions, and MIME headers; it
-  exposes no CORS policy and has no path to the advisory integration.
+  content-security, transport-security, framing, referrer, permissions,
+  cross-domain-policy, and MIME headers; it exposes no CORS policy and has no
+  path to the advisory integration.
 - The signed-out health response binds source commit, tree, config, demo
   source, demo artifact, package lock, and immutable Lambda version without
   exposing account, role, bucket, or notification identifiers.
@@ -45,6 +46,12 @@ boundary:
   signature. The key ARN and DER-key SHA-256 are inside the signed receipt.
 - Authority Lambda is an isolated fail-closed placeholder with no model,
   database, MCP, secret, signing, or IAM-granted operational capability.
+- The post-deployment verifier rebuilds the exact clean head, compares every
+  public static response byte-for-byte with that checkout, reconciles the
+  health and scenario bindings, checks browser headers, and probes unknown,
+  non-GET, and signed-out advisory denials. It emits a sanitized receipt but
+  cannot prove availability, route throttling, IAM policy shape, or advisory
+  traversal by itself.
 
 The strongest current claim is that this software, the bundled public-demo
 artifact path, and generated CloudFormation passed local review. Do not claim
@@ -123,6 +130,19 @@ CloudFormation's 51,200-byte inline `TemplateBody` limit. Deploy it through a
 private, versioned S3 `TemplateURL` and preserve that object version and
 digest. Compact JSON currently fits inline, but ad hoc minification is not the
 accepted evidence path.
+
+After deployment, `npm run gate2:verify-public-demo` accepts only an HTTPS
+origin and a 64-character expected configuration digest. It requires a clean
+checkout, performs a fresh deterministic Gate Two build, verifies the local
+Demo ZIP and source hashes, then makes exactly fifteen signed-out requests:
+the ten positive routes plus unknown-route, `HEAD`, non-GET scenario,
+wrong-method advisory, and unauthenticated advisory probes. A pass binds the
+served public bytes, browser headers, health receipt, scenario host receipt,
+immutable function version, and denials to the exact checkout. It remains a
+host-surface receipt, not Bedrock, KMS, CockroachDB handoff, or authenticated
+API-path evidence. To stay within the reviewed stage throttle, it uses the
+initial burst of eight and then waits 21 seconds before each of the seven
+remaining requests; a normal run therefore takes at least 147 seconds.
 
 ## Read-only live preflight
 
@@ -209,10 +229,18 @@ evidence only and must not be used to deploy the repaired candidate.
     groups, and the canary secret are removed. Recompute the final
     configuration digest and reverify aliases and roles.
 12. From a signed-out browser, request only the ten enumerated public `GET`
-    routes. Reconcile the health binding to the deployed Demo version and
-    artifact, verify headers and route throttles, confirm unknown and non-GET
-    routes cannot reach Demo Lambda, and complete the three-act path plus reset
-    on desktop and mobile.
+    routes. From the exact clean deployment checkout, run:
+
+    ```sh
+    npm run gate2:verify-public-demo -- \
+      --url "$PUBLIC_DEMO_URL" \
+      --config-digest "$CONFIG_DIGEST"
+    ```
+
+    Preserve its `PASS` receipt, reconcile the health binding to the deployed
+    Demo version and artifact, independently verify route throttles, and
+    complete the three-act path plus reset on desktop and mobile. A failed or
+    missing verifier receipt blocks publication.
 13. Assume only the dedicated advisory caller role. Record a denied direct
     invocation attempt for every Lambda, then invoke the exact IAM-signed API
     route.
