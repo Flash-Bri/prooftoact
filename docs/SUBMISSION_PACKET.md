@@ -68,8 +68,9 @@ Every item must have a dated receipt tied to the final release commit:
 - [ ] `CLAIMS.md`, `CLEAN_ROOM.md`, the evidence matrix, dependency inventory,
   bundled third-party notices, `PROOF_MANIFEST.json`, and pre-existing-work
   disclosure receive a final exact-commit and deployed-bundle audit;
-  `npm run proof:verify`, `npm run dependencies:verify`, and
-  `npm run licenses:verify` pass, and official `main` emits a
+  `npm run proof:verify`, `npm run privacy:verify`,
+  `npm run dependencies:verify`, and `npm run licenses:verify` pass, and
+  official `main` emits a
   `npm run release:provenance` `PASS` receipt.
 - [ ] The Devpost preview contains no secrets, personal data, internal URLs,
   unsupported superlatives, operational-emergency implication, or unresolved
@@ -99,7 +100,7 @@ demo, repository, claims, rights, and release receipts are all green.
 | Identify CockroachDB tools and what the agent did | Exact tool copy below | Drafted from Gate One evidence |
 | Identify AWS services and what they did | Exact tool copy must be generated from live receipts | Blocked by live AWS gate |
 | Free unrestricted judging access through 2026-09-15 | Low-volume public environment, no login | Not deployed |
-| Original work and authorized third-party material | Clean-room and rights ledgers plus dependency, bundle-notice, full-history, and installed-tree controls | Automated technical controls current; final deployed-bundle and rights audit pending |
+| Original work and authorized third-party material | Clean-room, privacy, and rights ledgers plus dependency, bundle-notice, full-history, and installed-tree controls | Automated technical controls current; final private, deployed-bundle, and rights audits pending |
 | English submission materials | English copy, captions, and testing instructions | Planned |
 
 ## Internal evidence map

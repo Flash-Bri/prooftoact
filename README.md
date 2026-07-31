@@ -143,6 +143,14 @@ route drift. Its `CURRENT_SURFACES_PASS` result is explicitly not final-rights
 approval: final production assets or deliberate omissions and an exact-release
 private-review receipt remain required.
 
+The bounded [`docs/RELEASE_PRIVACY.md`](docs/RELEASE_PRIVACY.md) control scans
+every current tracked file and every size-bounded Git blob reachable from the
+checked-out commit for high-confidence credential and privacy signatures. Run
+`npm run privacy:verify` to reject credential-like paths, unreviewed findings,
+unreviewed commit identities, shallow history, or stale exact-hash allowances.
+Its `CURRENT_PUBLIC_HISTORY_PASS` result is not proof that no secret or personal
+data exists; an exact-release private human review remains mandatory.
+
 The bounded [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) control checks the
 rights-bound browser source and architecture SVG for targeted semantics,
 keyboard operation, focus, reduced motion, reflow guards, safe dynamic text,

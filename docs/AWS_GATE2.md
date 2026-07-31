@@ -287,7 +287,8 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 
 ## Live acceptance sequence
 
-1. Re-run all local tests, syntax checks, dependency audit, secret scan,
+1. Re-run all local tests, syntax checks, dependency audit,
+   `npm run privacy:verify`,
    CloudFormation lint, and generated-template equality.
 2. Commit the accepted local candidate.
 3. Build from that clean commit.

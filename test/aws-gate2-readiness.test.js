@@ -269,6 +269,40 @@ function accessibilityReceipt() {
   };
 }
 
+function privacyReceipt() {
+  return {
+    schemaVersion: "tideproof.release-privacy-verification.v1",
+    status: "CURRENT_PUBLIC_HISTORY_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST,
+    manifestPath: "RELEASE_PRIVACY_MANIFEST.json",
+    manifestSha256: "4".repeat(64),
+    commitCount: 50,
+    commitIdentityCount: 3,
+    trackedFileCount: 120,
+    reachableBlobCount: 300,
+    scannedBytes: 1_000_000,
+    findingCount: 10,
+    allowanceCount: 4,
+    checks: {
+      canonicalManifest: true,
+      cleanBeforeAndAfter: true,
+      fullReachableHistory: true,
+      trackedPathPolicy: true,
+      everyReachableBlobScanned: true,
+      highConfidenceSignaturesReviewed: true,
+      commitIdentitiesReviewed: true
+    },
+    finalReleaseRequirements: [
+      "Rerun on the exact final official-main commit and bind the PASS receipt to hosted CI and deployed artifact hashes.",
+      "Complete a private human review for secrets, personal data, internal URLs, metadata, screenshots, video, and submission fields."
+    ],
+    claimBoundary: "Fixture bounded privacy review only."
+  };
+}
+
 function releaseProvenanceReceipt() {
   return {
     schemaVersion: "tideproof.release-provenance.v3",
@@ -302,6 +336,7 @@ function releaseProvenanceReceipt() {
       symlinkCount: 0,
       gitlinkCount: 0
     },
+    privacy: privacyReceipt(),
     rights: releaseRightsReceipt(),
     accessibility: accessibilityReceipt(),
     dependencies: {
@@ -356,6 +391,7 @@ function releaseProvenanceReceipt() {
       installedTreeMatchesLock: true,
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
+      releasePrivacyVerified: true,
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,
       cleanBeforeAndAfter: true

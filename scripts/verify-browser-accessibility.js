@@ -458,6 +458,15 @@ async function stopChrome(chrome) {
   }
 }
 
+function removeProfileDirectory(profileDir, remove = fs.rmSync) {
+  remove(profileDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 100
+  });
+}
+
 async function dispatchKey(client, key, code, virtualKeyCode) {
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
@@ -784,7 +793,7 @@ export async function verifyBrowserAccessibility({ chromePath } = {}) {
     client?.close();
     await stopChrome(chrome);
     await stopServer(server);
-    fs.rmSync(profileDir, { recursive: true, force: true });
+    removeProfileDirectory(profileDir);
   }
 }
 
@@ -795,6 +804,7 @@ export const __test = Object.freeze({
   STANDARD_TARGET,
   formatUnexpectedFailure,
   parseDevToolsActivePort,
+  removeProfileDirectory,
   summarizeAxTree,
   validateBrowserSnapshot
 });

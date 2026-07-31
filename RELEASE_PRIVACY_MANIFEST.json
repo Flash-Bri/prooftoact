@@ -1,0 +1,47 @@
+{
+  "schema": "tideproof.release-privacy-manifest.v1",
+  "status": "CURRENT_PUBLIC_HISTORY_REVIEWED_FINAL_RELEASE_PENDING",
+  "reviewedOn": "2026-07-31",
+  "allowedFindings": [
+    {
+      "rule": "basic-auth-url",
+      "path": "test/aws-authority-lambda.test.js",
+      "matchSha256": "ec5b7569923e2d470d35870d83f61243c1f7db6488e224615077e71c543a0ba0",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "matchSha256": "2dd1e217e885ac11b2ea782579eb499ac771fd1dcef83b15ee147f0e0f4543c3",
+      "classification": "PUBLIC_UPSTREAM_ATTRIBUTION"
+    },
+    {
+      "rule": "email-address",
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "matchSha256": "690f4c6c980dbb44683092eb398a6339311642351247d0559b24854c4be34d35",
+      "classification": "PUBLIC_UPSTREAM_ATTRIBUTION"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/aws-gate2-preflight.test.js",
+      "matchSha256": "a09ad6a9cefa1f5ee357366df4ab6939182f4cf23d68ed606f7744321c1d8330",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/aws-gate2-readiness.test.js",
+      "matchSha256": "3de132cd98be7bf26b6f08e81c31c799a891bc32046b61f0b6fe3671ca2e44b5",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    }
+  ],
+  "allowedCommitIdentityDigests": [
+    "3c205d8fc749f72977b9331e3179773c315bb1f4860c366de2abe9ec9337730b",
+    "8d990abc1feca0189d41748806ea0dcc8ca47ed86e2ddad935d40f0dd36f92a8",
+    "96a450a08b20000dd8c082697bf2899201f5da4522ed9a5f60f21c4573e8cce9"
+  ],
+  "syntheticAwsAccountIds": [
+    "111111111111",
+    "222222222222"
+  ],
+  "finalReleaseReady": false
+}

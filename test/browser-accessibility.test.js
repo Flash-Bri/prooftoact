@@ -112,6 +112,25 @@ test("unexpected browser diagnostics are bounded and sanitized", () => {
   assert.equal(__test.formatUnexpectedFailure(undefined), "UnknownError");
 });
 
+test("browser profile cleanup retries transient directory races", () => {
+  const calls = [];
+  __test.removeProfileDirectory(
+    "/tmp/tideproof-browser-profile-fixture",
+    (profileDir, options) => calls.push({ profileDir, options })
+  );
+  assert.deepEqual(calls, [
+    {
+      profileDir: "/tmp/tideproof-browser-profile-fixture",
+      options: {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100
+      }
+    }
+  ]);
+});
+
 test("accessibility tree summary exposes names, roles, and disabled state", () => {
   const disabled = [
     {
