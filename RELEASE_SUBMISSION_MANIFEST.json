@@ -1,0 +1,100 @@
+{
+  "schema": "tideproof.release-submission-manifest.v1",
+  "status": "DRAFT_SAFELY_BLOCKED_FINAL_RELEASE_RECEIPTS_PENDING",
+  "reviewedOn": "2026-07-31",
+  "claimBoundary": "This manifest binds only the current source draft and its fail-closed release dependencies. It does not query Devpost or official competition pages, determine eligibility, verify entrant identity or authority, prove live services, or authorize deployment, publication, or submission.",
+  "coordinates": {
+    "competitionOverview": "https://cockroachdb-ai.devpost.com/",
+    "competitionResources": "https://cockroachdb-ai.devpost.com/resources",
+    "competitionRules": "https://cockroachdb-ai.devpost.com/rules",
+    "internalDeadline": "2026-08-16 at 5:00 PM ET",
+    "judgeAccessThrough": "2026-09-15 at 5:00 PM ET",
+    "license": "MIT",
+    "officialDeadline": "2026-08-18 at 5:00 PM ET",
+    "officialPageCheckDate": "2026-07-30",
+    "projectName": "Tideproof",
+    "publicSource": "https://github.com/Flash-Bri/tideproof",
+    "subtitle": "Admissibility memory for high-stakes agents"
+  },
+  "finalReleaseRequirements": [
+    "Accepted live AWS, public-demo, public-video, cost, and teardown receipts bound to the exact official-main commit and deployed artifact hashes.",
+    "Exact-release private human review of claims, privacy, security, accessibility, rights, URLs, repository metadata, video, and every submitted field.",
+    "Explicit authorized-entrant confirmation of eligibility, identity, representation, registration, and final submission authority.",
+    "Timestamped final preview, submission, submitted-field, public-URL, and signed-out post-submit verification receipts."
+  ],
+  "gateMarkers": [
+    "The public repository, MIT license",
+    "Hosted CI passes at the exact final source commit",
+    "The AWS application is deployed",
+    "Live evidence proves the named AWS services actually used",
+    "The live demo is free, stable, signed-out, resettable, synthetic-only",
+    "A separate signed-out reviewer completes",
+    "The video is under three minutes",
+    "Every visual, font, trademark, music track, voice",
+    "The architecture diagram, screenshots, README, website, video",
+    "`CLAIMS.md`, `CLEAN_ROOM.md`",
+    "The Devpost preview contains no secrets",
+    "Brian or the authorized entrant confirms eligibility",
+    "A private preview is approved",
+    "A final timestamped receipt records every submitted URL and field"
+  ],
+  "stopTokens": [
+    "ACCEPTED_LIVE_AUTHORITY_RACE_RECEIPT_REQUIRED",
+    "ACCEPTED_LIVE_AWS_RECEIPT_REQUIRED",
+    "ALL_REQUIRED_ROWS_RELEASE_CLEARED",
+    "FINAL_AWS_ARCHITECTURE_COPY_REQUIRED_FROM_LIVE_RECEIPT",
+    "FINAL_RELEASE_COMMIT_REQUIRED",
+    "LIVE_AWS_EVIDENCE_REQUIRED",
+    "LIVE_AWS_SERVICE_COPY_REQUIRED",
+    "OWNER_CONFIRMATION_REQUIRED",
+    "PUBLIC_DEMO_REQUIRED",
+    "PUBLIC_SIGNED_OUT_DEMO_URL_REQUIRED",
+    "PUBLIC_YOUTUBE_OR_VIMEO_URL_REQUIRED",
+    "REPLACE_WITH_POST_RELEASE_ROADMAP_AFTER_FINAL_SCOPE_AUDIT"
+  ],
+  "surfaces": [
+    {
+      "id": "claims-ledger",
+      "path": "CLAIMS.md",
+      "role": "CLAIMS_BOUNDARY",
+      "sha256": "4a3fd2b7e0e7d1cc4f86081bbe8a36ad28760e116eccaad7bbef7b7dcb1f1a5e"
+    },
+    {
+      "id": "contest-matrix",
+      "path": "docs/CONTEST_MATRIX.md",
+      "role": "CONTEST_REQUIREMENT_MATRIX",
+      "sha256": "37c56302ef48c4b0cb14f1cb8e3420e38e73b078d00adef687d131c79e533fd3"
+    },
+    {
+      "id": "release-claims-manifest",
+      "path": "RELEASE_CLAIMS_MANIFEST.json",
+      "role": "PUBLIC_CLAIM_INVENTORY",
+      "sha256": "45c6cb9f09a8137c47cfd510ffec64666565780a46695415fb8fb405c666d8e7"
+    },
+    {
+      "id": "release-submission-ledger",
+      "path": "docs/RELEASE_SUBMISSION.md",
+      "role": "SUBMISSION_CONTROL_LEDGER",
+      "sha256": "aa4207838410686f949638044de0ddf7f5a3d8d7b06244b1362355928b10dc13"
+    },
+    {
+      "id": "rights-ledger",
+      "path": "docs/media/RIGHTS.md",
+      "role": "MEDIA_RIGHTS_BOUNDARY",
+      "sha256": "1100fe2538b92e34c143b9690d0264f04b67416aad40a35579540f5a2027f005"
+    },
+    {
+      "id": "submission-packet",
+      "path": "docs/SUBMISSION_PACKET.md",
+      "role": "DEVPOST_DRAFT",
+      "sha256": "7ee9e2fc068effaae298f289a24d6a12dd9388756194f66903f978f790208f0f"
+    },
+    {
+      "id": "winning-plan",
+      "path": "docs/WINNING_PLAN.md",
+      "role": "RELEASE_PLAN",
+      "sha256": "119d2ae62316fcc658238fac29c15103f7efab79aa1f2142e106aff489e69c2f"
+    }
+  ],
+  "finalReleaseReady": false
+}

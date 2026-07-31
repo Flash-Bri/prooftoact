@@ -263,6 +263,31 @@ function securityReceipt() {
   };
 }
 
+function submissionReceipt() {
+  return {
+    schemaVersion: "tideproof.release-submission-verification.v1",
+    status: "DRAFT_SAFELY_BLOCKED",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "RELEASE_SUBMISSION_MANIFEST.json",
+    manifestSha256: "6".repeat(64),
+    surfaceCount: 7,
+    checklistItemCount: 14,
+    uncheckedChecklistItemCount: 14,
+    stopTokenOccurrenceCount: 13,
+    uniqueStopTokenCount: 12,
+    officialCoordinateCount: 11,
+    finalReleaseRequirements: [
+      "Accepted live receipts.",
+      "Exact-release private review.",
+      "Authorized-entrant confirmation.",
+      "Timestamped final submission receipt."
+    ],
+    checks: { fixtureSubmissionBlocked: true },
+    claimBoundary: "Fixture fail-closed submission draft only."
+  };
+}
+
 function treeOutput() {
   return [
     `100644 blob ${"c".repeat(40)}\tREADME.md`,
@@ -494,9 +519,10 @@ test("complete provenance receipt binds source, install, inventory, and notices"
       verifyClaims: () => claimsReceipt(),
       verifyPrivacy: () => privacyReceipt(),
       verifyRights: () => rightsReceipt(),
-      verifySecurity: () => securityReceipt()
+      verifySecurity: () => securityReceipt(),
+      verifySubmission: () => submissionReceipt()
     });
-    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v5");
+    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v6");
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.match(
@@ -509,11 +535,13 @@ test("complete provenance receipt binds source, install, inventory, and notices"
     assert.equal(receipt.checks.currentSurfaceRightsVerified, true);
     assert.equal(receipt.checks.staticAccessibilityVerified, true);
     assert.equal(receipt.checks.currentSourceSecurityVerified, true);
+    assert.equal(receipt.checks.submissionDraftFailClosed, true);
     assert.equal(receipt.rights.finalReleaseReady, false);
     assert.equal(receipt.privacy.finalReleaseReady, false);
     assert.equal(receipt.accessibility.finalReleaseReady, false);
     assert.equal(receipt.claims.finalReleaseReady, false);
     assert.equal(receipt.security.finalReleaseReady, false);
+    assert.equal(receipt.submission.finalReleaseReady, false);
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);
   } finally {
     fixture.cleanup();

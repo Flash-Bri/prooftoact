@@ -223,7 +223,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "fc45cda1d145fc4ea60abf59967a230d619ad163275bc3d7f554de5ce679d980",
+      "sha256": "f14e0dabc97e8ecc5be91e551ca465bea93118e10eee2a8d1497948611f47bf1",
       "kind": "verification-code"
     },
     {
@@ -241,7 +241,7 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "d89be9749b840553184d32ac6cab59ec96f5fd374b1caac521ccd0990abd7e3c",
+      "sha256": "11086df6573d6cc9de304c0ec5501dd355f35eabdf7890ae76a0dd7ea2bc6fee",
       "kind": "verification-code"
     },
     {
@@ -295,13 +295,13 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "ba5535adb1be9ed3029dd141e380e14723db0f73e04e337ec3ffb9a65f27e25d",
+      "sha256": "044036518722e801a0d7b1024d4fd3fa4e6f7fd79851b5a5716e9d908d471cfc",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "7d89b62371c93d48e8e93af807b3ed7383c1eb1fb7517bf9ec26e84c2e0b2a65",
+      "sha256": "220e070e946b4f40b172b3a1b2f33e0f5e69c39b590070d6e7ef95c52d34312e",
       "kind": "verification-code"
     },
     {
@@ -344,6 +344,30 @@
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
       "sha256": "848267597e8d05ce414f9d2e1c2640d6d4aac9f48876109a7711704f27b56dbd",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-submission-ledger",
+      "path": "docs/RELEASE_SUBMISSION.md",
+      "sha256": "aa4207838410686f949638044de0ddf7f5a3d8d7b06244b1362355928b10dc13",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-submission-manifest",
+      "path": "RELEASE_SUBMISSION_MANIFEST.json",
+      "sha256": "e67835a40b98320550ec204b705c223096f3e33a44282cc90ed4df29d7dd145c",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-submission-tests",
+      "path": "test/release-submission.test.js",
+      "sha256": "1fa029901035543ae866f787ee63be8b7080601414a0bd902f4c44c7b16c50ae",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-submission-verifier",
+      "path": "scripts/verify-release-submission.js",
+      "sha256": "458e57714883d5fd6dc58f06679831e32d395d5906131068890deb5a47684a10",
       "kind": "verification-code"
     },
     {
@@ -647,9 +671,13 @@
         "release-security-ledger",
         "release-security-manifest",
         "release-security-tests",
-        "release-security-verifier"
+        "release-security-verifier",
+        "release-submission-ledger",
+        "release-submission-manifest",
+        "release-submission-tests",
+        "release-submission-verifier"
       ],
-      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, bounded privacy, current-surface rights, static accessibility, and current-source security receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, or submission approval.",
+      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, bounded privacy, current-surface rights, static accessibility, current-source security, and fail-closed submission-draft receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, entrant eligibility or authority, or submission approval.",
       "remainingRequirements": [
         "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
       ]
@@ -680,6 +708,20 @@
       "boundary": "The exact current-source verifier hash-binds 18 reviewed security surfaces and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, immutable Lambda aliases, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, database bootstrap markers, and Managed MCP client markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind exact-release live security receipts and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
+      ]
+    },
+    {
+      "id": "release-submission-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "release-submission-ledger",
+        "release-submission-manifest",
+        "release-submission-tests",
+        "release-submission-verifier"
+      ],
+      "boundary": "The exact current-source verifier hash-binds seven submission, contest, release-plan, rights, and claim-control surfaces; requires the canonical project and repository coordinates; preserves all 14 unchecked hard publish gates and the exact 13 unresolved stop-token occurrences; cross-checks the release-claims packet binding; and returns DRAFT_SAFELY_BLOCKED with finalReleaseReady false. It does not query Devpost or official competition pages, determine eligibility, verify entrant identity or authority, prove live behavior, or authorize deployment, publication, or submission.",
+      "remainingRequirements": [
+        "Bind accepted live AWS, demo, video, cost, rights, private-review, authorized-entrant, final-preview, submission, and post-submit signed-out receipts to the exact final release."
       ]
     },
     {

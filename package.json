@@ -27,6 +27,7 @@
     "privacy:verify": "node scripts/verify-release-privacy.js",
     "rights:verify": "node scripts/verify-release-rights.js",
     "security:verify": "node scripts/verify-release-security.js",
+    "submission:verify": "node scripts/verify-release-submission.js",
     "release:provenance": "node scripts/verify-release-provenance.js",
     "gate1:ambiguity": "node scripts/gate1-ambiguity.js",
     "gate1:ambiguity:full": "AMBIGUITY_RUNS=100 node scripts/gate1-ambiguity.js",
