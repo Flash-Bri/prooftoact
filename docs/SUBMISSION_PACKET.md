@@ -66,7 +66,8 @@ Every item must have a dated receipt tied to the final release commit:
 - [ ] The architecture diagram, screenshots, README, website, video, and
   submission use one reviewed visual system and the same verified vocabulary.
 - [ ] `CLAIMS.md`, `CLEAN_ROOM.md`, the evidence matrix, dependency inventory,
-  and pre-existing-work disclosure receive a final exact-commit audit.
+  `PROOF_MANIFEST.json`, and pre-existing-work disclosure receive a final
+  exact-commit audit; `npm run proof:verify` passes.
 - [ ] The Devpost preview contains no secrets, personal data, internal URLs,
   unsupported superlatives, operational-emergency implication, or unresolved
   stop token.
@@ -114,6 +115,10 @@ demo:
 | Live AWS services and behavior | `[[ACCEPTED_LIVE_AWS_RECEIPT_REQUIRED]]` |
 | Overlapping AWS Lambda/CockroachDB authority race | `[[ACCEPTED_LIVE_AUTHORITY_RACE_RECEIPT_REQUIRED]]` |
 | Visual, trademark, and media permission | `docs/media/RIGHTS.md`; `[[ALL_REQUIRED_ROWS_RELEASE_CLEARED]]` |
+
+`PROOF_MANIFEST.json` is the machine-checked index for the current claims and
+exact evidence bytes. Its `INCOMPLETE_LIVE_GATES_PENDING` status is a stop
+state, not a publish authorization.
 
 ## One-sentence pitch
 
