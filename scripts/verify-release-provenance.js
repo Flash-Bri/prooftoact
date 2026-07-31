@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyDependencyInventory } from "./verify-dependency-inventory.js";
 import { verifyCurrentBundledThirdPartyNotices } from "./verify-bundled-third-party-notices.js";
 import { verifyAccessibility } from "./verify-accessibility.js";
+import { verifyReleasePrivacy } from "./verify-release-privacy.js";
 import { verifyReleaseRights } from "./verify-release-rights.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -62,12 +63,15 @@ function childEnvironment(source) {
 }
 
 function defaultRunner(projectRoot) {
-  return (command, args) =>
+  return (command, args, options = {}) =>
     spawnSync(command, args, {
       cwd: projectRoot,
-      encoding: "utf8",
+      encoding: Object.hasOwn(options, "encoding")
+        ? options.encoding
+        : "utf8",
       env: childEnvironment(process.env),
-      maxBuffer: 32 * 1024 * 1024
+      input: options.input,
+      maxBuffer: options.maxBuffer ?? 32 * 1024 * 1024
     });
 }
 
@@ -513,9 +517,43 @@ export async function runReleaseProvenance({
   verifyAccessibilityReceipt = verifyAccessibility,
   verifyInventory = verifyDependencyInventory,
   verifyNotices = verifyCurrentBundledThirdPartyNotices,
+  verifyPrivacy = verifyReleasePrivacy,
   verifyRights = verifyReleaseRights
 } = {}) {
   const source = verifyRepositoryHistory({ run, projectRoot });
+  const privacy = verifyPrivacy({ rootDir: projectRoot, run });
+  assert(
+    privacy?.schemaVersion ===
+      "tideproof.release-privacy-verification.v1" &&
+      privacy.status === "CURRENT_PUBLIC_HISTORY_PASS" &&
+      privacy.finalReleaseReady === false &&
+      privacy.sourceCommit === source.checkout.commit &&
+      privacy.treeDigest === source.checkout.tree &&
+      /^\d{4}-\d{2}-\d{2}$/.test(privacy.reviewedOn) &&
+      privacy.manifestPath === "RELEASE_PRIVACY_MANIFEST.json" &&
+      HEX_64.test(privacy.manifestSha256) &&
+      Number.isSafeInteger(privacy.commitCount) &&
+      privacy.commitCount > 0 &&
+      Number.isSafeInteger(privacy.commitIdentityCount) &&
+      privacy.commitIdentityCount > 0 &&
+      Number.isSafeInteger(privacy.trackedFileCount) &&
+      privacy.trackedFileCount > 0 &&
+      Number.isSafeInteger(privacy.reachableBlobCount) &&
+      privacy.reachableBlobCount >= privacy.trackedFileCount &&
+      Number.isSafeInteger(privacy.scannedBytes) &&
+      privacy.scannedBytes > 0 &&
+      Number.isSafeInteger(privacy.findingCount) &&
+      privacy.findingCount >= 0 &&
+      Number.isSafeInteger(privacy.allowanceCount) &&
+      privacy.allowanceCount > 0 &&
+      Array.isArray(privacy.finalReleaseRequirements) &&
+      privacy.finalReleaseRequirements.length === 2 &&
+      privacy.checks &&
+      Object.values(privacy.checks).every((value) => value === true) &&
+      typeof privacy.claimBoundary === "string" &&
+      privacy.claimBoundary.length > 0,
+    "RELEASE_PROVENANCE_PRIVACY"
+  );
   const rights = verifyRights({ rootDir: projectRoot });
   assert(
     rights?.schemaVersion ===
@@ -629,6 +667,7 @@ export async function runReleaseProvenance({
     },
     history: source.history,
     trackedTree: source.trackedTree,
+    privacy,
     rights,
     accessibility,
     dependencies: {
@@ -659,12 +698,13 @@ export async function runReleaseProvenance({
       installedTreeMatchesLock: true,
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
+      releasePrivacyVerified: true,
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary:
-      "This receipt binds Git ancestry, tracked file modes, the current-surface rights inventory, the bounded static accessibility receipt, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The rights and accessibility controls remain explicitly non-final; neither grants rights nor establishes WCAG conformance. This receipt does not independently prove originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
+      "This receipt binds Git ancestry, tracked file modes, the bounded current-history privacy scan, the current-surface rights inventory, the bounded static accessibility receipt, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The privacy, rights, and accessibility controls remain explicitly non-final; they do not prove exhaustive secret or personal-data absence, grant rights, or establish WCAG conformance. This receipt does not independently prove originality, legal clearance, vulnerability status, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
   };
 }
 

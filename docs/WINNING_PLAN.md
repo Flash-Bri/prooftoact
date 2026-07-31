@@ -56,7 +56,8 @@ visible in one short story:
 ### Gate 3 — product proof
 
 - build the three-act judge interface, evidence drill-down, and safe reset;
-- run accessibility, browser, security, abuse, and concurrency checks;
+- run accessibility, browser, bounded repository privacy, security, abuse, and
+  concurrency checks;
 - capture real database and AWS evidence;
 - implement the canonical `VISUAL_RELEASE_SYSTEM.md` across the product,
   README, video, icons, and submission without weakening proof readability;

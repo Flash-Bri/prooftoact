@@ -67,7 +67,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "2d407c59e5d19b5ae19045c98593254c042d389df0335722289d1c1d3a9286c6",
+      "sha256": "3e673ff85a88e587b7ff9439c3d3d91adcb7d654f54e7ebf74cf1706cda6022c",
       "kind": "boundary-ledger"
     },
     {
@@ -199,13 +199,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "f6f4e97f1a19f53dfb588b4a1402f836e01d0deffaf907e854bf6eed55077126",
+      "sha256": "16b8406da70d7f0ec8b17d5ef2a0ed83d3a1a8ea37f0cac9382368598e7296f0",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "e204fc63019bd0ff128da61e8359ede0a98858b93be08924ddb929dca7cc9dc7",
+      "sha256": "051358ab94a4da8643d717cac8c8e6888d2a67cff5f7d7423e2af9a92c304a20",
       "kind": "verification-code"
     },
     {
@@ -223,7 +223,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "e8b867ea8790cfcf9903664e786573c1f7cc6fb51a289d6ede5b561ff2214fcd",
+      "sha256": "8f17d7a767f7c13400cb91557998a95bec5272a57546e8a4f210b6f33c56cfc9",
       "kind": "verification-code"
     },
     {
@@ -241,25 +241,49 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "1a38475dcbc292f6b53585e5de63d7f2e87e306606b768028d0d7741ff9638bb",
+      "sha256": "2cc117acf9f4b379c07d23f27192ed6d0466c7668cedfbf35c820259ccf211e2",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-privacy-ledger",
+      "path": "docs/RELEASE_PRIVACY.md",
+      "sha256": "ca693d6547ecb67a5f7731ea32d80acc7100d3945ed3280db76d29aef5f0ff12",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-privacy-manifest",
+      "path": "RELEASE_PRIVACY_MANIFEST.json",
+      "sha256": "dd15f84e91e749224bc12250ed389d7d3ca48f6137e6d571110308a54e8fc753",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-privacy-tests",
+      "path": "test/release-privacy.test.js",
+      "sha256": "4fde31278f989b909aa7f698075a138d0b03d89f2a9ec110c633dee771c68cd3",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-privacy-verifier",
+      "path": "scripts/verify-release-privacy.js",
+      "sha256": "1d19f703445c38855eb37237f891f3f5f715abc52107fde6cc1196eda6437bf9",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "a0912b973e0a249e2daeefbb85cfd63025b118f6d5722e6b3c1013f1aab9ec7e",
+      "sha256": "389a569ef8ed7f600202f0b10c6f9e03a3313df606b6eea8d27b3d320334f4f1",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "5d34774e729330dcc53074c4eee4013e7a7b4a90904bef8b5b9e6d6705a4c0db",
+      "sha256": "7ba1a748a77d94e5a134c687d9f000a1b8740d1c4a18e599fc9910c94d9f4d5a",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "798d5608c456bd13f5ff7a6851f498d6fb999b8b78e1d01f245a848946cf5061",
+      "sha256": "0237acdb7cf0a4c73f25cb8f4c0513603341cb5439b076b715cb49593728473a",
       "kind": "boundary-ledger"
     },
     {
@@ -277,7 +301,7 @@
     {
       "id": "security-policy",
       "path": "SECURITY.md",
-      "sha256": "ac9905b7537cf2ff21c236868bc47dcfad33b3608657170b5f72eca7c357d3fd",
+      "sha256": "99e7078f0f5df0de05c4468872255bb3a35abf46a59ecbc917068aaeeb79ad18",
       "kind": "boundary-ledger"
     }
   ],
@@ -540,14 +564,32 @@
       ]
     },
     {
+      "id": "release-privacy-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "release-privacy-ledger",
+        "release-privacy-manifest",
+        "release-privacy-tests",
+        "release-privacy-verifier"
+      ],
+      "boundary": "The exact current-history verifier rejects credential-like tracked paths, scans every current tracked file and every size-bounded blob reachable from HEAD for a bounded set of high-confidence credential and privacy signatures, and requires exact-hash review of upstream attribution, synthetic fixtures, and commit identities. It returns CURRENT_PUBLIC_HISTORY_PASS with finalReleaseReady false. This bounded automated control cannot prove exhaustive secret or personal-data absence and does not replace the exact-release private human review.",
+      "remainingRequirements": [
+        "Rerun on the exact final official-main commit, bind the PASS receipt to hosted CI and deployed hashes, and complete the private repository, metadata, live-receipt, screenshot, video, URL, and submission-field review."
+      ]
+    },
+    {
       "id": "release-provenance-control",
       "proofState": "PARTIAL",
       "artifacts": [
         "release-ci-workflow",
+        "release-privacy-ledger",
+        "release-privacy-manifest",
+        "release-privacy-tests",
+        "release-privacy-verifier",
         "release-provenance-tests",
         "release-provenance-verifier"
       ],
-      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final current-surface rights and bounded static accessibility receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of originality, legal clearance, WCAG conformance, secrets absence, vulnerability status, deployed bytes, live behavior, or submission approval.",
+      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final bounded privacy, current-surface rights, and static accessibility receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, or submission approval.",
       "remainingRequirements": [
         "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
       ]

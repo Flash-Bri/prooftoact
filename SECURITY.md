@@ -28,6 +28,15 @@ before sharing diagnostic detail.
 Only the current `main` branch is maintained during the competition build.
 Security fixes are not backported to earlier commits.
 
+## Release privacy gate
+
+`npm run privacy:verify` scans every current tracked file and every size-bounded
+blob reachable from the checked-out commit for a bounded set of high-confidence
+credential and privacy signatures. Exact reviewed exceptions live in
+`RELEASE_PRIVACY_MANIFEST.json`. This automated result is not an exhaustive
+secret or personal-data guarantee and does not replace the final private human
+release review documented in `docs/RELEASE_PRIVACY.md`.
+
 ## Safe research boundary
 
 Testing must stay within locally owned fixtures or explicitly authorized

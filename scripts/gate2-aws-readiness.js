@@ -561,6 +561,8 @@ export function validateReleaseProvenance(
   const source = receipt?.source;
   const history = receipt?.history;
   const trackedTree = receipt?.trackedTree;
+  const privacy = receipt?.privacy;
+  const privacyChecks = privacy?.checks;
   const rights = receipt?.rights;
   const rightsChecks = rights?.checks;
   const accessibility = receipt?.accessibility;
@@ -578,6 +580,7 @@ export function validateReleaseProvenance(
       "claimBoundary",
       "dependencies",
       "history",
+      "privacy",
       "rights",
       "schemaVersion",
       "source",
@@ -612,6 +615,35 @@ export function validateReleaseProvenance(
         "gitlinkCount",
         "regularFileCount",
         "symlinkCount"
+      ]) &&
+      exactKeys(privacy, [
+        "allowanceCount",
+        "checks",
+        "claimBoundary",
+        "commitCount",
+        "commitIdentityCount",
+        "finalReleaseReady",
+        "finalReleaseRequirements",
+        "findingCount",
+        "manifestPath",
+        "manifestSha256",
+        "reachableBlobCount",
+        "reviewedOn",
+        "scannedBytes",
+        "schemaVersion",
+        "sourceCommit",
+        "status",
+        "trackedFileCount",
+        "treeDigest"
+      ]) &&
+      exactKeys(privacyChecks, [
+        "canonicalManifest",
+        "cleanBeforeAndAfter",
+        "commitIdentitiesReviewed",
+        "everyReachableBlobScanned",
+        "fullReachableHistory",
+        "highConfidenceSignaturesReviewed",
+        "trackedPathPolicy"
       ]) &&
       exactKeys(rights, [
         "checks",
@@ -736,6 +768,7 @@ export function validateReleaseProvenance(
         "objectIntegrity",
         "officialCleanCheckout",
         "replaceRefsAbsent",
+        "releasePrivacyVerified",
         "staticAccessibilityVerified",
         "submodulesAbsent",
         "trackedSymlinksAbsent"
@@ -775,6 +808,34 @@ export function validateReleaseProvenance(
       trackedTree.executableFileCount <= trackedTree.fileCount &&
       trackedTree.symlinkCount === 0 &&
       trackedTree.gitlinkCount === 0 &&
+      privacy.schemaVersion ===
+        "tideproof.release-privacy-verification.v1" &&
+      privacy.status === "CURRENT_PUBLIC_HISTORY_PASS" &&
+      privacy.finalReleaseReady === false &&
+      privacy.sourceCommit === sourceCommit &&
+      privacy.treeDigest === treeDigest &&
+      /^\d{4}-\d{2}-\d{2}$/.test(privacy.reviewedOn) &&
+      privacy.manifestPath === "RELEASE_PRIVACY_MANIFEST.json" &&
+      HEX_64.test(privacy.manifestSha256) &&
+      Number.isSafeInteger(privacy.commitCount) &&
+      privacy.commitCount > 0 &&
+      Number.isSafeInteger(privacy.commitIdentityCount) &&
+      privacy.commitIdentityCount > 0 &&
+      Number.isSafeInteger(privacy.trackedFileCount) &&
+      privacy.trackedFileCount > 0 &&
+      Number.isSafeInteger(privacy.reachableBlobCount) &&
+      privacy.reachableBlobCount >= privacy.trackedFileCount &&
+      Number.isSafeInteger(privacy.scannedBytes) &&
+      privacy.scannedBytes > 0 &&
+      Number.isSafeInteger(privacy.findingCount) &&
+      privacy.findingCount >= 0 &&
+      Number.isSafeInteger(privacy.allowanceCount) &&
+      privacy.allowanceCount > 0 &&
+      Array.isArray(privacy.finalReleaseRequirements) &&
+      privacy.finalReleaseRequirements.length === 2 &&
+      Object.values(privacyChecks).every((value) => value === true) &&
+      typeof privacy.claimBoundary === "string" &&
+      privacy.claimBoundary.length > 0 &&
       rights.schemaVersion ===
         "tideproof.release-rights-verification.v1" &&
       rights.status === "CURRENT_SURFACES_PASS" &&
@@ -1448,6 +1509,7 @@ export async function runAwsReadiness({
       lockedInstall: true,
       dependencyLifecycleScripts: false,
       releaseProvenance: true,
+      releasePrivacy: true,
       staticAccessibility: true,
       testsPassed: true,
       dependencyAudit: audit,

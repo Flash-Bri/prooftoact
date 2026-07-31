@@ -23,6 +23,7 @@
     "demo": "node src/demo.js",
     "dev": "node src/server.js",
     "proof:verify": "node scripts/verify-proof-manifest.js",
+    "privacy:verify": "node scripts/verify-release-privacy.js",
     "rights:verify": "node scripts/verify-release-rights.js",
     "release:provenance": "node scripts/verify-release-provenance.js",
     "gate1:ambiguity": "node scripts/gate1-ambiguity.js",

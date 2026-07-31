@@ -133,6 +133,32 @@ function rightsReceipt() {
   };
 }
 
+function privacyReceipt() {
+  return {
+    schemaVersion: "tideproof.release-privacy-verification.v1",
+    status: "CURRENT_PUBLIC_HISTORY_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST,
+    manifestPath: "RELEASE_PRIVACY_MANIFEST.json",
+    manifestSha256: "2".repeat(64),
+    commitCount: 50,
+    commitIdentityCount: 3,
+    trackedFileCount: 120,
+    reachableBlobCount: 300,
+    scannedBytes: 1_000_000,
+    findingCount: 10,
+    allowanceCount: 4,
+    checks: { fixturePrivacyPass: true },
+    finalReleaseRequirements: [
+      "Rerun on the exact final official-main commit and bind the PASS receipt to hosted CI and deployed artifact hashes.",
+      "Complete a private human review for secrets, personal data, internal URLs, metadata, screenshots, video, and submission fields."
+    ],
+    claimBoundary: "Fixture bounded privacy review only."
+  };
+}
+
 function accessibilityReceipt() {
   return {
     schemaVersion: "tideproof.accessibility-static.v1",
@@ -399,6 +425,7 @@ test("complete provenance receipt binds source, install, inventory, and notices"
         artifactPackages: { demo: ["required"] }
       }),
       verifyAccessibilityReceipt: () => accessibilityReceipt(),
+      verifyPrivacy: () => privacyReceipt(),
       verifyRights: () => rightsReceipt()
     });
     assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v3");
@@ -409,9 +436,11 @@ test("complete provenance receipt binds source, install, inventory, and notices"
       PACKAGE_LOCK_SHA
     );
     assert.equal(receipt.checks.installedTreeMatchesLock, true);
+    assert.equal(receipt.checks.releasePrivacyVerified, true);
     assert.equal(receipt.checks.currentSurfaceRightsVerified, true);
     assert.equal(receipt.checks.staticAccessibilityVerified, true);
     assert.equal(receipt.rights.finalReleaseReady, false);
+    assert.equal(receipt.privacy.finalReleaseReady, false);
     assert.equal(receipt.accessibility.finalReleaseReady, false);
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);
   } finally {
