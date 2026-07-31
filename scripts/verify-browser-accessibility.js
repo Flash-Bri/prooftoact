@@ -24,6 +24,21 @@ const REMAINING_REQUIREMENTS = Object.freeze([
   "Complete keyboard-only, 200% zoom, mobile reflow, and reduced-motion private review on the exact public release.",
   "Complete screen-reader review on the exact public release."
 ]);
+const PROFILE_REMOVE_ATTEMPTS = 20;
+const PROFILE_REMOVE_OPTIONS = Object.freeze({
+  recursive: true,
+  force: true,
+  maxRetries: 2,
+  retryDelay: 100
+});
+const PROFILE_REMOVE_RETRY_DELAY_MS = 100;
+const RETRYABLE_PROFILE_REMOVE_CODES = new Set([
+  "EBUSY",
+  "EMFILE",
+  "ENFILE",
+  "ENOTEMPTY",
+  "EPERM"
+]);
 
 function invariant(condition, code) {
   if (!condition) {
@@ -433,11 +448,37 @@ async function stopServer(server) {
   );
 }
 
+function signalChrome(
+  chrome,
+  signal,
+  { kill = process.kill, platform = process.platform } = {}
+) {
+  let processGroupSignaled = false;
+  if (
+    platform !== "win32" &&
+    Number.isSafeInteger(chrome.pid) &&
+    chrome.pid > 0
+  ) {
+    try {
+      kill(-chrome.pid, signal);
+      processGroupSignaled = true;
+    } catch (error) {
+      if (error?.code !== "ESRCH") {
+        throw error;
+      }
+    }
+  }
+  if (!processGroupSignaled && chrome.exitCode === null) {
+    chrome.kill(signal);
+  }
+}
+
 async function stopChrome(chrome) {
   if (chrome.exitCode !== null) {
+    signalChrome(chrome, "SIGTERM");
     return;
   }
-  chrome.kill("SIGTERM");
+  signalChrome(chrome, "SIGTERM");
   const exited = await Promise.race([
     new Promise((resolve) => chrome.once("exit", () => resolve(true))),
     delay(2_000).then(() => false)
@@ -446,7 +487,7 @@ async function stopChrome(chrome) {
     const killedPromise = new Promise((resolve) =>
       chrome.once("exit", () => resolve(true))
     );
-    chrome.kill("SIGKILL");
+    signalChrome(chrome, "SIGKILL");
     const killed = await Promise.race([
       killedPromise,
       delay(2_000).then(() => false)
@@ -458,13 +499,25 @@ async function stopChrome(chrome) {
   }
 }
 
-function removeProfileDirectory(profileDir, remove = fs.rmSync) {
-  remove(profileDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 20,
-    retryDelay: 100
-  });
+async function removeProfileDirectory(
+  profileDir,
+  remove = fs.rmSync,
+  wait = delay
+) {
+  for (let attempt = 1; attempt <= PROFILE_REMOVE_ATTEMPTS; attempt += 1) {
+    try {
+      remove(profileDir, { ...PROFILE_REMOVE_OPTIONS });
+      return;
+    } catch (error) {
+      if (
+        !RETRYABLE_PROFILE_REMOVE_CODES.has(error?.code) ||
+        attempt === PROFILE_REMOVE_ATTEMPTS
+      ) {
+        throw error;
+      }
+      await wait(PROFILE_REMOVE_RETRY_DELAY_MS);
+    }
+  }
 }
 
 async function dispatchKey(client, key, code, virtualKeyCode) {
@@ -741,7 +794,11 @@ export async function verifyBrowserAccessibility({ chromePath } = {}) {
       "--window-size=1440,900",
       "about:blank"
     ],
-    { stdio: "ignore", windowsHide: true }
+    {
+      detached: process.platform !== "win32",
+      stdio: "ignore",
+      windowsHide: true
+    }
   );
   let client;
   try {
@@ -793,7 +850,7 @@ export async function verifyBrowserAccessibility({ chromePath } = {}) {
     client?.close();
     await stopChrome(chrome);
     await stopServer(server);
-    removeProfileDirectory(profileDir);
+    await removeProfileDirectory(profileDir);
   }
 }
 
@@ -805,6 +862,7 @@ export const __test = Object.freeze({
   formatUnexpectedFailure,
   parseDevToolsActivePort,
   removeProfileDirectory,
+  signalChrome,
   summarizeAxTree,
   validateBrowserSnapshot
 });
