@@ -43,7 +43,8 @@ Every item must have a dated receipt tied to the final release commit:
   configuration, and local setup path are visible in a signed-out browser.
 - [ ] Hosted CI passes at the exact final source commit.
 - [ ] The AWS application is deployed from freshly built exact-head artifacts
-  only after `npm run gate2:aws-preflight` passes in the authenticated lane.
+  only after `npm run gate2:aws-readiness` emits a combined exact-head and
+  read-only AWS `PASS` receipt in the authenticated lane.
 - [ ] Live evidence proves the named AWS services actually used, their
   least-privilege boundaries, the one bounded model call, KMS verification,
   exact API traversal, direct-Lambda denial, cost controls, and teardown path.

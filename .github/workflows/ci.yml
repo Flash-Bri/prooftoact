@@ -29,13 +29,17 @@ jobs:
           cache: npm
 
       - name: Install locked dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run deterministic tests
         run: npm test
 
-      - name: Audit production dependencies
-        run: npm audit --audit-level=high
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=low
 
       - name: Rebuild Gate Two artifacts
         run: npm run build:gate2
+
+      - name: Verify official-main release readiness wrapper
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npm run gate2:aws-readiness:local

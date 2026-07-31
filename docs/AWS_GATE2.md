@@ -146,8 +146,51 @@ remaining requests; a normal run therefore takes at least 147 seconds.
 
 ## Read-only live preflight
 
-Run the account-safety preflight from a clean checkout in an authenticated
-AWS CloudShell before any repaired-candidate upload or main-stack mutation:
+The release-level entrypoint is:
+
+```sh
+npm run gate2:aws-readiness
+```
+
+Run it only from a fresh official checkout in the authenticated AWS lane,
+before any candidate upload or main-stack mutation. It is read-only with
+respect to AWS. The gate:
+
+- requires the exact public Tideproof origin, `main`, a clean tree, and
+  `HEAD == origin/main`, fetching `origin/main` again before and after the
+  checks so a moving release target fails closed;
+- performs a lockfile install with dependency lifecycle scripts disabled,
+  the full test suite, and a zero-vulnerability dependency audit;
+- creates a fresh exact-head Gate Two build and independently rechecks the
+  package lock, tracked templates, six source files, six artifact hashes,
+  Lambda `CodeSha256` values, sizes, immutable key recommendations, and
+  one-entry stored-ZIP structure;
+- invokes the account-safety preflight below and binds its `PASS` receipt to
+  the same commit and tree; and
+- rechecks the official upstream and clean tree before emitting
+  `tideproof.gate2.aws-readiness.v1` with status `PASS`.
+
+It executes only reviewed `git` and `npm` command families. The nested AWS
+preflight uses read-only service calls; the readiness gate cannot upload,
+create a change set, deploy, invoke, sign, or delete. A failed command emits a
+bounded error code rather than forwarding command output that could contain
+private account context. The install, tests, audit, build, and Git checks run
+with AWS and application credentials removed and AWS credential-file and
+metadata discovery disabled. Only the exact nested preflight receives the
+authenticated AWS environment, and unrelated application credentials remain
+removed there too.
+
+Local maintainers can exercise every non-AWS part with:
+
+```sh
+npm run gate2:aws-readiness:local
+```
+
+That mode emits `LOCAL_ONLY_PASS`, records `awsPreflight: NOT_RUN`, and is
+never authorization to upload or deploy.
+
+The underlying account-safety command remains independently runnable from a
+clean checkout:
 
 ```sh
 npm run gate2:aws-preflight
@@ -203,9 +246,10 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 4. Create or update the prerequisite bootstrap stack. Verify its account-wide
    $15 budget and $1/$5/$10 actual plus $15 forecast notifications are present
    before its private, encrypted, versioned artifact bucket is accepted.
-5. Run `npm run gate2:aws-preflight` and require `PASS`; independently
-   revalidate current Nova Micro pricing. If CloudShell, billing data, or any
-   required read is unavailable, stop without uploading.
+5. Run `npm run gate2:aws-readiness` and require the combined
+   `tideproof.gate2.aws-readiness.v1` `PASS`; independently revalidate current
+   Nova Micro pricing. If CloudShell, billing data, the official upstream, or
+   any required read is unavailable, stop without uploading.
 6. Upload each artifact once and record its exact S3 version ID and both
    digests.
 7. Hash the full effective nonsecret deployment configuration.
