@@ -133,6 +133,44 @@ function rightsReceipt() {
   };
 }
 
+function accessibilityReceipt() {
+  return {
+    schemaVersion: "tideproof.accessibility-static.v1",
+    status: "STATIC_SOURCE_PASS",
+    finalReleaseReady: false,
+    standardTarget: "WCAG_2_2_AA",
+    rightsManifestSha256: "3".repeat(64),
+    reviewedFiles: [
+      "architecture-svg",
+      "browser-app",
+      "browser-document",
+      "browser-styles"
+    ].map((id, index) => ({
+      id,
+      path: `fixture/${id}`,
+      sha256: String(index + 5).repeat(64)
+    })),
+    contrast: Array.from({ length: 11 }, (_, index) => ({
+      id: `pair-${index}`,
+      minimumRatio: 4.5,
+      ratio: 7
+    })),
+    summary: {
+      headingCount: 9,
+      imageCount: 1,
+      buttonCount: 7,
+      landmarkSectionCount: 5
+    },
+    remainingRequirements: [
+      "Automated browser accessibility scan on the exact public release.",
+      "Keyboard-only, 200% zoom, mobile reflow, and reduced-motion private review on the exact public release.",
+      "Screen-reader review on the exact public release."
+    ],
+    checks: { fixtureAccessibilityPass: true },
+    claimBoundary: "Fixture static accessibility only."
+  };
+}
+
 function treeOutput() {
   return [
     `100644 blob ${"c".repeat(40)}\tREADME.md`,
@@ -360,9 +398,10 @@ test("complete provenance receipt binds source, install, inventory, and notices"
         licenses: { MIT: 1 },
         artifactPackages: { demo: ["required"] }
       }),
+      verifyAccessibilityReceipt: () => accessibilityReceipt(),
       verifyRights: () => rightsReceipt()
     });
-    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v2");
+    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v3");
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.match(
@@ -371,7 +410,9 @@ test("complete provenance receipt binds source, install, inventory, and notices"
     );
     assert.equal(receipt.checks.installedTreeMatchesLock, true);
     assert.equal(receipt.checks.currentSurfaceRightsVerified, true);
+    assert.equal(receipt.checks.staticAccessibilityVerified, true);
     assert.equal(receipt.rights.finalReleaseReady, false);
+    assert.equal(receipt.accessibility.finalReleaseReady, false);
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);
   } finally {
     fixture.cleanup();

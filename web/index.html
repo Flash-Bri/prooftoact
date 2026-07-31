@@ -96,13 +96,31 @@
         </div>
 
         <nav class="act-nav" aria-label="Choose a demonstration act">
-          <button type="button" data-act="0" aria-pressed="true">
+          <button
+            type="button"
+            data-act="0"
+            aria-controls="step-stage"
+            aria-pressed="true"
+            disabled
+          >
             <span>Act I</span> Admit / Refuse
           </button>
-          <button type="button" data-act="1" aria-pressed="false">
+          <button
+            type="button"
+            data-act="1"
+            aria-controls="step-stage"
+            aria-pressed="false"
+            disabled
+          >
             <span>Act II</span> Commit One
           </button>
-          <button type="button" data-act="2" aria-pressed="false">
+          <button
+            type="button"
+            data-act="2"
+            aria-controls="step-stage"
+            aria-pressed="false"
+            disabled
+          >
             <span>Act III</span> Recover Safely
           </button>
         </nav>
@@ -121,15 +139,42 @@
         </article>
 
         <div class="presenter-controls" aria-label="Presenter controls">
-          <button id="previous-step" type="button">← Previous</button>
-          <button id="play-pause" type="button" aria-pressed="false">
+          <button
+            id="previous-step"
+            type="button"
+            aria-controls="step-stage"
+            disabled
+          >← Previous</button>
+          <button
+            id="play-pause"
+            type="button"
+            aria-controls="step-stage"
+            aria-pressed="false"
+            disabled
+          >
             Play
           </button>
-          <button id="next-step" type="button">Next →</button>
-          <button id="restart-demo" type="button">Restart</button>
+          <button
+            id="next-step"
+            type="button"
+            aria-controls="step-stage"
+            disabled
+          >Next →</button>
+          <button
+            id="restart-demo"
+            type="button"
+            aria-controls="step-stage"
+            disabled
+          >Restart</button>
           <p id="step-progress" aria-live="off">Loading proof…</p>
         </div>
-        <p id="load-status" class="sr-only" role="status" aria-live="polite">
+        <p
+          id="load-status"
+          class="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           Loading the local proof.
         </p>
       </section>

@@ -563,6 +563,9 @@ export function validateReleaseProvenance(
   const trackedTree = receipt?.trackedTree;
   const rights = receipt?.rights;
   const rightsChecks = rights?.checks;
+  const accessibility = receipt?.accessibility;
+  const accessibilityChecks = accessibility?.checks;
+  const accessibilitySummary = accessibility?.summary;
   const dependencies = receipt?.dependencies;
   const installedTree = dependencies?.installedTree;
   const inventory = dependencies?.inventory;
@@ -570,6 +573,7 @@ export function validateReleaseProvenance(
   const checks = receipt?.checks;
   requireCondition(
     exactKeys(receipt, [
+      "accessibility",
       "checks",
       "claimBoundary",
       "dependencies",
@@ -640,6 +644,45 @@ export function validateReleaseProvenance(
         "redistributedFontsAbsent",
         "remoteEmbeddedMediaAbsent"
       ]) &&
+      exactKeys(accessibility, [
+        "checks",
+        "claimBoundary",
+        "contrast",
+        "finalReleaseReady",
+        "remainingRequirements",
+        "reviewedFiles",
+        "rightsManifestSha256",
+        "schemaVersion",
+        "standardTarget",
+        "status",
+        "summary"
+      ]) &&
+      exactKeys(accessibilitySummary, [
+        "buttonCount",
+        "headingCount",
+        "imageCount",
+        "landmarkSectionCount"
+      ]) &&
+      exactKeys(accessibilityChecks, [
+        "architectureAlternativePresent",
+        "contrastPairsPass",
+        "controlsFailClosedDuringLoad",
+        "documentLanguageAndMetadata",
+        "exactRightsBoundSources",
+        "focusVisibility",
+        "hiddenPageAutoplayPause",
+        "keyboardPresenterPath",
+        "landmarksAndHeadingOrder",
+        "liveStatusAnnouncements",
+        "minimumControlHeight",
+        "namedImagesAndControls",
+        "reducedMotionSourceSupport",
+        "responsiveReflowGuards",
+        "skipNavigation",
+        "textualStatusLabelsPresent",
+        "uniqueIdsAndAriaReferences",
+        "unsafeDynamicHtmlAbsent"
+      ]) &&
       exactKeys(dependencies, [
         "bundledThirdPartyNotices",
         "installedTree",
@@ -693,10 +736,11 @@ export function validateReleaseProvenance(
         "objectIntegrity",
         "officialCleanCheckout",
         "replaceRefsAbsent",
+        "staticAccessibilityVerified",
         "submodulesAbsent",
         "trackedSymlinksAbsent"
       ]) &&
-      receipt.schemaVersion === "tideproof.release-provenance.v2" &&
+      receipt.schemaVersion === "tideproof.release-provenance.v3" &&
       receipt.status === "PASS" &&
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
@@ -762,6 +806,64 @@ export function validateReleaseProvenance(
       typeof rights.claimBoundary === "string" &&
       rights.claimBoundary.length > 0 &&
       Object.values(rightsChecks).every((value) => value === true) &&
+      accessibility.schemaVersion ===
+        "tideproof.accessibility-static.v1" &&
+      accessibility.status === "STATIC_SOURCE_PASS" &&
+      accessibility.finalReleaseReady === false &&
+      accessibility.standardTarget === "WCAG_2_2_AA" &&
+      accessibility.rightsManifestSha256 === rights.manifestSha256 &&
+      Array.isArray(accessibility.reviewedFiles) &&
+      accessibility.reviewedFiles.length === 4 &&
+      accessibility.reviewedFiles.every(
+        (file) =>
+          exactKeys(file, ["id", "path", "sha256"]) &&
+          HEX_64.test(file.sha256)
+      ) &&
+      accessibility.reviewedFiles
+        .map((file) => `${file.id}:${file.path}`)
+        .join("\n") ===
+        [
+          "architecture-svg:docs/media/architecture.svg",
+          "browser-app:web/app.js",
+          "browser-document:web/index.html",
+          "browser-styles:web/styles.css"
+        ].join("\n") &&
+      Array.isArray(accessibility.contrast) &&
+      accessibility.contrast.length === 11 &&
+      accessibility.contrast.every(
+        (pair) =>
+          exactKeys(pair, [
+            "background",
+            "backgroundToken",
+            "foreground",
+            "foregroundToken",
+            "id",
+            "minimumRatio",
+            "ratio"
+          ]) &&
+          /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(pair.id) &&
+          /^#[0-9a-f]{6}$/.test(pair.foreground) &&
+          /^#[0-9a-f]{6}$/.test(pair.background) &&
+          [3, 4.5].includes(pair.minimumRatio) &&
+          Number.isFinite(pair.ratio) &&
+          pair.ratio >= pair.minimumRatio
+      ) &&
+      new Set(accessibility.contrast.map((pair) => pair.id)).size === 11 &&
+      accessibilitySummary.headingCount === 9 &&
+      accessibilitySummary.imageCount === 1 &&
+      accessibilitySummary.buttonCount === 7 &&
+      accessibilitySummary.landmarkSectionCount === 5 &&
+      Array.isArray(accessibility.remainingRequirements) &&
+      accessibility.remainingRequirements.length === 3 &&
+      accessibility.remainingRequirements[0] ===
+        "Automated browser accessibility scan on the exact public release." &&
+      accessibility.remainingRequirements[1] ===
+        "Keyboard-only, 200% zoom, mobile reflow, and reduced-motion private review on the exact public release." &&
+      accessibility.remainingRequirements[2] ===
+        "Screen-reader review on the exact public release." &&
+      Object.values(accessibilityChecks).every((value) => value === true) &&
+      typeof accessibility.claimBoundary === "string" &&
+      accessibility.claimBoundary.length > 0 &&
       installedTree.status === "PASS" &&
       HEX_64.test(installedTree.packageLockSha256) &&
       Number.isSafeInteger(installedTree.lockedPackageCount) &&
@@ -1346,6 +1448,7 @@ export async function runAwsReadiness({
       lockedInstall: true,
       dependencyLifecycleScripts: false,
       releaseProvenance: true,
+      staticAccessibility: true,
       testsPassed: true,
       dependencyAudit: audit,
       exactHeadBuild: true,

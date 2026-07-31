@@ -205,7 +205,8 @@ respect to AWS. The gate:
   then runs the exact-release provenance control over the full single-root Git
   ancestry, object integrity, replacement refs, legacy grafts, alternate object
   databases, tracked file modes, installed package identities, dependency
-  inventory, and bundle notice inputs;
+  inventory, bundle notice inputs, the current-surface rights receipt, and the
+  bounded static accessibility receipt;
 - runs the full test suite and a zero-vulnerability dependency audit;
 - creates a fresh exact-head Gate Two build and independently rechecks the
   package lock, tracked templates, six source files, six artifact hashes,
