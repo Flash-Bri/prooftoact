@@ -1,0 +1,213 @@
+{
+  "schema": "tideproof.release-rights.v1",
+  "status": "CURRENT_SURFACES_REVIEWED_FINAL_RELEASE_PENDING",
+  "reviewedOn": "2026-07-31",
+  "claimBoundary": "This inventory binds only the current repository, README, and browser surfaces to the reviewed ledger. It grants no rights, clears no future asset, and does not replace the exact-release private review.",
+  "finalReleaseRequirements": [
+    "Exact-release private rights review receipt.",
+    "Final-production asset decision recorded as cleared exact hashes or deliberate omission."
+  ],
+  "distributedFiles": [
+    {
+      "id": "architecture-png",
+      "ledgerRowId": "C08 / V09",
+      "path": "docs/media/architecture.png",
+      "sha256": "6228172f7a5a462940a05543ee455e0de21aa53c805e9466076b9e33fed1f168",
+      "rightsState": "CLEARED_CURRENT",
+      "roles": [
+        "repository-media"
+      ]
+    },
+    {
+      "id": "architecture-svg",
+      "ledgerRowId": "C08 / V09",
+      "path": "docs/media/architecture.svg",
+      "sha256": "5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c",
+      "rightsState": "CLEARED_CURRENT",
+      "roles": [
+        "browser-media",
+        "readme-media",
+        "repository-media"
+      ]
+    },
+    {
+      "id": "browser-app",
+      "ledgerRowId": "C04",
+      "path": "web/app.js",
+      "sha256": "a0d5fdc25c580738cd93cbf1b8b83d4cea9f8571ed9266d7cfa452d48760713f",
+      "rightsState": "CLEARED_CURRENT",
+      "roles": [
+        "browser-source"
+      ]
+    },
+    {
+      "id": "browser-document",
+      "ledgerRowId": "C04",
+      "path": "web/index.html",
+      "sha256": "56e93f9f9065b0495813b6080b71cb75590be6abd98bf7fca4d129f757598899",
+      "rightsState": "CLEARED_CURRENT",
+      "roles": [
+        "browser-source"
+      ]
+    },
+    {
+      "id": "browser-styles",
+      "ledgerRowId": "C03",
+      "path": "web/styles.css",
+      "sha256": "c33554b39142780f662d9ec5fa8b8c8fd5832eb9c0e4ec5c305ee3a53fd86e9e",
+      "rightsState": "CLEARED_CURRENT",
+      "roles": [
+        "browser-source"
+      ]
+    },
+    {
+      "id": "interim-favicon",
+      "ledgerRowId": "C01",
+      "path": "web/favicon.svg",
+      "sha256": "437fc6278bfb358432cf1b30636dc8f0194351e4fb8f4be77c9c67f79ff02a69",
+      "rightsState": "CLEARED_INTERIM_ONLY",
+      "roles": [
+        "browser-media",
+        "repository-media"
+      ]
+    }
+  ],
+  "controlFiles": [
+    {
+      "id": "aws-demo-entry",
+      "path": "infra/aws/lambda/demo.js",
+      "sha256": "e4ccfe6e3333fd4badbc5fd68e8a2ab03c8be8085db5ec83b81305f8b776745d"
+    },
+    {
+      "id": "aws-demo-runtime",
+      "path": "src/cloud/public-demo.js",
+      "sha256": "0a1a0239a636535e4f374e6cdc5af1bef1d42ef7f0e0435503fd73d7578f7de7"
+    },
+    {
+      "id": "aws-demo-verifier",
+      "path": "scripts/gate2-public-demo-verify.js",
+      "sha256": "aa8f2b5ef90137b967707f0ab99352c698b9dd8a6c409c960319c1b7d4e44546"
+    },
+    {
+      "id": "media-rights-ledger",
+      "path": "docs/media/RIGHTS.md",
+      "sha256": "7afe088e4aadf06f586986969ca916c5e34e5e7ab65d93e73a75cc7f025d28e3"
+    },
+    {
+      "id": "public-demo-response-verifier",
+      "path": "src/cloud/public-demo-verifier.js",
+      "sha256": "de0e21301572c821ea4ff5c708929b1f8ced062dc3b0eac06aac243189fb01e7"
+    },
+    {
+      "id": "readme-surface",
+      "path": "README.md",
+      "sha256": "c6f08a3a922a88647ece5366e3c7270302d77bf142b9873673249e699f203f8f"
+    },
+    {
+      "id": "server-surface",
+      "path": "src/server.js",
+      "sha256": "36e0ccf156ce0bfda72a7e1306fb0ccbbcf64cb12d6ed8d412702592cb59dce5"
+    },
+    {
+      "id": "visual-release-system",
+      "path": "docs/VISUAL_RELEASE_SYSTEM.md",
+      "sha256": "7f9ed354a30e816d2bc2127f2f99867744e262022a0cff41bbecff4bf9a48a0b"
+    }
+  ],
+  "surfaceBindings": {
+    "awsDemoEntryPath": "infra/aws/lambda/demo.js",
+    "awsDemoRuntimePath": "src/cloud/public-demo.js",
+    "awsDemoVerifierPath": "scripts/gate2-public-demo-verify.js",
+    "browserDocumentPath": "web/index.html",
+    "browserLocalAssetUrls": [
+      "/app.js",
+      "/architecture.svg",
+      "/favicon.svg",
+      "/styles.css"
+    ],
+    "browserNavigationUrls": [
+      "/claims",
+      "/evidence/gate1-ambiguity",
+      "/evidence/gate1-authority",
+      "/evidence/gate1-recovery",
+      "#judge-path",
+      "https://github.com/Flash-Bri/tideproof"
+    ],
+    "readmePath": "README.md",
+    "readmeImagePaths": [
+      "docs/media/architecture.svg"
+    ],
+    "publicDemoResponseVerifierPath": "src/cloud/public-demo-verifier.js",
+    "serverPath": "src/server.js",
+    "publicAssetRoutes": [
+      {
+        "route": "/",
+        "path": "web/index.html",
+        "contentType": "text/html; charset=utf-8"
+      },
+      {
+        "route": "/app.js",
+        "path": "web/app.js",
+        "contentType": "text/javascript; charset=utf-8"
+      },
+      {
+        "route": "/architecture.svg",
+        "path": "docs/media/architecture.svg",
+        "contentType": "image/svg+xml"
+      },
+      {
+        "route": "/claims",
+        "path": "CLAIMS.md",
+        "contentType": "text/markdown; charset=utf-8"
+      },
+      {
+        "route": "/evidence/gate1-ambiguity",
+        "path": "evidence/gate1-ambiguity-2026-07-30.md",
+        "contentType": "text/markdown; charset=utf-8"
+      },
+      {
+        "route": "/evidence/gate1-authority",
+        "path": "evidence/gate1-authority-2026-07-30.md",
+        "contentType": "text/markdown; charset=utf-8"
+      },
+      {
+        "route": "/evidence/gate1-recovery",
+        "path": "evidence/gate1-recovery-broker-2026-07-30.md",
+        "contentType": "text/markdown; charset=utf-8"
+      },
+      {
+        "route": "/favicon.svg",
+        "path": "web/favicon.svg",
+        "contentType": "image/svg+xml"
+      },
+      {
+        "route": "/styles.css",
+        "path": "web/styles.css",
+        "contentType": "text/css; charset=utf-8"
+      }
+    ],
+    "stylesheetFontFamilies": [
+      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      "ui-monospace, SFMono-Regular, Menlo, monospace",
+      "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    ],
+    "svgFontFamilies": [
+      "Helvetica, Arial, sans-serif",
+      "Menlo, Monaco, monospace"
+    ]
+  },
+  "prohibitedSourceDigests": [
+    {
+      "id": "trustagentic-source-board",
+      "sha256": "fdb14d41236a6eac106887ce05be85bd8cc1da910135d9ffcf2b6f9c80f42c7c"
+    },
+    {
+      "id": "trustagentic-symbol-candidate",
+      "sha256": "e6693445d91e63aa5a84a54d58273a792bdacce88ae8caae15d3872b165c320f"
+    },
+    {
+      "id": "trustagentic-wordmark-candidate",
+      "sha256": "1d1aec3649f161d7e706c941baa763f73ff480b7ef09072a290373ebf2544b44"
+    }
+  ]
+}

@@ -561,6 +561,8 @@ export function validateReleaseProvenance(
   const source = receipt?.source;
   const history = receipt?.history;
   const trackedTree = receipt?.trackedTree;
+  const rights = receipt?.rights;
+  const rightsChecks = rights?.checks;
   const dependencies = receipt?.dependencies;
   const installedTree = dependencies?.installedTree;
   const inventory = dependencies?.inventory;
@@ -572,6 +574,7 @@ export function validateReleaseProvenance(
       "claimBoundary",
       "dependencies",
       "history",
+      "rights",
       "schemaVersion",
       "source",
       "status",
@@ -605,6 +608,37 @@ export function validateReleaseProvenance(
         "gitlinkCount",
         "regularFileCount",
         "symlinkCount"
+      ]) &&
+      exactKeys(rights, [
+        "checks",
+        "claimBoundary",
+        "currentClearedFileCount",
+        "distributedFileCount",
+        "finalReleaseReady",
+        "finalReleaseRequirements",
+        "interimOnlyFileCount",
+        "ledgerSha256",
+        "manifestPath",
+        "manifestSha256",
+        "prohibitedSourceDigestCount",
+        "repositoryMediaFileCount",
+        "reviewedOn",
+        "schemaVersion",
+        "status",
+        "trackedFileCount"
+      ]) &&
+      exactKeys(rightsChecks, [
+        "awsDistributionBindingsExact",
+        "blockedPlannedPathsAbsent",
+        "canonicalManifest",
+        "completeRepositoryMediaInventory",
+        "exactFileHashes",
+        "ledgerBindings",
+        "localServerBindingsExact",
+        "prohibitedReferenceBytesAbsent",
+        "publicDemoCspRejectsDataImages",
+        "redistributedFontsAbsent",
+        "remoteEmbeddedMediaAbsent"
       ]) &&
       exactKeys(dependencies, [
         "bundledThirdPartyNotices",
@@ -651,6 +685,7 @@ export function validateReleaseProvenance(
         "alternateObjectDatabasesAbsent",
         "bundledThirdPartyNoticesMatchInputs",
         "cleanBeforeAndAfter",
+        "currentSurfaceRightsVerified",
         "dependencyInventoryMatchesLock",
         "fullSingleRootHistory",
         "installedTreeMatchesLock",
@@ -661,7 +696,7 @@ export function validateReleaseProvenance(
         "submodulesAbsent",
         "trackedSymlinksAbsent"
       ]) &&
-      receipt.schemaVersion === "tideproof.release-provenance.v1" &&
+      receipt.schemaVersion === "tideproof.release-provenance.v2" &&
       receipt.status === "PASS" &&
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
@@ -696,6 +731,37 @@ export function validateReleaseProvenance(
       trackedTree.executableFileCount <= trackedTree.fileCount &&
       trackedTree.symlinkCount === 0 &&
       trackedTree.gitlinkCount === 0 &&
+      rights.schemaVersion ===
+        "tideproof.release-rights-verification.v1" &&
+      rights.status === "CURRENT_SURFACES_PASS" &&
+      rights.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(rights.reviewedOn) &&
+      rights.manifestPath === "docs/media/RIGHTS_MANIFEST.json" &&
+      HEX_64.test(rights.manifestSha256) &&
+      HEX_64.test(rights.ledgerSha256) &&
+      Number.isSafeInteger(rights.distributedFileCount) &&
+      rights.distributedFileCount > 0 &&
+      Number.isSafeInteger(rights.currentClearedFileCount) &&
+      rights.currentClearedFileCount > 0 &&
+      Number.isSafeInteger(rights.interimOnlyFileCount) &&
+      rights.interimOnlyFileCount > 0 &&
+      rights.currentClearedFileCount + rights.interimOnlyFileCount ===
+        rights.distributedFileCount &&
+      Number.isSafeInteger(rights.repositoryMediaFileCount) &&
+      rights.repositoryMediaFileCount > 0 &&
+      Number.isSafeInteger(rights.trackedFileCount) &&
+      rights.trackedFileCount >= rights.distributedFileCount &&
+      Number.isSafeInteger(rights.prohibitedSourceDigestCount) &&
+      rights.prohibitedSourceDigestCount > 0 &&
+      Array.isArray(rights.finalReleaseRequirements) &&
+      rights.finalReleaseRequirements.length === 2 &&
+      rights.finalReleaseRequirements[0] ===
+        "Exact-release private rights review receipt." &&
+      rights.finalReleaseRequirements[1] ===
+        "Final-production asset decision recorded as cleared exact hashes or deliberate omission." &&
+      typeof rights.claimBoundary === "string" &&
+      rights.claimBoundary.length > 0 &&
+      Object.values(rightsChecks).every((value) => value === true) &&
       installedTree.status === "PASS" &&
       HEX_64.test(installedTree.packageLockSha256) &&
       Number.isSafeInteger(installedTree.lockedPackageCount) &&

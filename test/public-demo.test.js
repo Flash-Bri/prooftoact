@@ -95,6 +95,14 @@ test("public demo serves only the bounded signed-out proof surface", async () =>
       result.headers["content-security-policy"],
       /default-src 'self'/
     );
+    assert.match(
+      result.headers["content-security-policy"],
+      /img-src 'self'/
+    );
+    assert.doesNotMatch(
+      result.headers["content-security-policy"],
+      /img-src 'self' data:/
+    );
     assert.equal(
       result.headers["x-content-type-options"],
       "nosniff"

@@ -97,6 +97,42 @@ function dependencyFixture() {
   };
 }
 
+function rightsReceipt() {
+  return {
+    schemaVersion: "tideproof.release-rights-verification.v1",
+    status: "CURRENT_SURFACES_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "docs/media/RIGHTS_MANIFEST.json",
+    manifestSha256: "3".repeat(64),
+    ledgerSha256: "4".repeat(64),
+    distributedFileCount: 6,
+    currentClearedFileCount: 5,
+    interimOnlyFileCount: 1,
+    repositoryMediaFileCount: 3,
+    trackedFileCount: 120,
+    prohibitedSourceDigestCount: 3,
+    finalReleaseRequirements: [
+      "Exact-release private rights review receipt.",
+      "Final-production asset decision recorded as cleared exact hashes or deliberate omission."
+    ],
+    checks: {
+      canonicalManifest: true,
+      exactFileHashes: true,
+      ledgerBindings: true,
+      completeRepositoryMediaInventory: true,
+      blockedPlannedPathsAbsent: true,
+      prohibitedReferenceBytesAbsent: true,
+      remoteEmbeddedMediaAbsent: true,
+      redistributedFontsAbsent: true,
+      localServerBindingsExact: true,
+      awsDistributionBindingsExact: true,
+      publicDemoCspRejectsDataImages: true
+    },
+    claimBoundary: "Fixture current-surface rights only."
+  };
+}
+
 function treeOutput() {
   return [
     `100644 blob ${"c".repeat(40)}\tREADME.md`,
@@ -323,9 +359,10 @@ test("complete provenance receipt binds source, install, inventory, and notices"
         fallbackCount: 0,
         licenses: { MIT: 1 },
         artifactPackages: { demo: ["required"] }
-      })
+      }),
+      verifyRights: () => rightsReceipt()
     });
-    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v1");
+    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v2");
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.match(
@@ -333,6 +370,8 @@ test("complete provenance receipt binds source, install, inventory, and notices"
       PACKAGE_LOCK_SHA
     );
     assert.equal(receipt.checks.installedTreeMatchesLock, true);
+    assert.equal(receipt.checks.currentSurfaceRightsVerified, true);
+    assert.equal(receipt.rights.finalReleaseReady, false);
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);
   } finally {
     fixture.cleanup();
