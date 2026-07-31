@@ -462,7 +462,7 @@ function removeProfileDirectory(profileDir, remove = fs.rmSync) {
   remove(profileDir, {
     recursive: true,
     force: true,
-    maxRetries: 10,
+    maxRetries: 20,
     retryDelay: 100
   });
 }

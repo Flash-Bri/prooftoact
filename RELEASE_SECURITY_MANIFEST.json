@@ -1,0 +1,121 @@
+{
+  "schema": "tideproof.release-security-manifest.v1",
+  "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
+  "reviewedOn": "2026-07-31",
+  "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
+  "finalReleaseRequirements": [
+    "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
+    "Separate private human security and abuse review of the exact deployed application, repository metadata, CloudFormation change set, IAM policies, database grants, logs, receipts, media, public URLs, and submission fields."
+  ],
+  "surfaces": [
+    {
+      "id": "authority-runtime",
+      "path": "infra/aws/lambda/authority.cjs",
+      "role": "AWS_AUTHORITY_RUNTIME",
+      "sha256": "3a9bc56fb6a083a4d6ce1f1e29955a4f5028be2cfeec90a64744261ba20aa5c7"
+    },
+    {
+      "id": "aws-boundary-ledger",
+      "path": "docs/AWS_GATE2.md",
+      "role": "AWS_SECURITY_BOUNDARY",
+      "sha256": "37a36965b7a50121bd31367c20f7b5e00b2e47f85d3015669c01560cb7c8e694"
+    },
+    {
+      "id": "aws-preflight",
+      "path": "scripts/gate2-aws-preflight.js",
+      "role": "READ_ONLY_AWS_PREFLIGHT",
+      "sha256": "4eb00f49c18fd4c786a6a5066093c563a8f063c2f77f5a448d4ca7009ec051ed"
+    },
+    {
+      "id": "aws-readiness",
+      "path": "scripts/gate2-aws-readiness.js",
+      "role": "EXACT_CHECKOUT_READINESS",
+      "sha256": "7bd9918148e6c11394e31c79714b52b3fadbe9c12d163fbe68990927fd2ef70a"
+    },
+    {
+      "id": "aws-template-generated",
+      "path": "infra/aws/gate2-template.json",
+      "role": "GENERATED_CLOUDFORMATION",
+      "sha256": "85dbefe09712aa3d76437544543c7ff7d11c2e5f3abe9e69e2e061f1b8300782"
+    },
+    {
+      "id": "aws-template-source",
+      "path": "src/cloud/aws-gate2-template.js",
+      "role": "CLOUDFORMATION_SOURCE",
+      "sha256": "8bf6095103567116f639614f5fabebc148a688fb43053c433de2f421e74b45ba"
+    },
+    {
+      "id": "boundary-runtime",
+      "path": "infra/aws/lambda/boundary.cjs",
+      "role": "AWS_COORDINATOR_RUNTIME",
+      "sha256": "1461d3b0ab14c24b56552e633032f1ee07e8159329c5a1121c594b5d2285b2a3"
+    },
+    {
+      "id": "demo-entry",
+      "path": "infra/aws/lambda/demo.js",
+      "role": "AWS_PUBLIC_ENTRY",
+      "sha256": "eb64e2417358101ca02e95ee847c231ed0c12c30e04ce23407c88362ca8c6536"
+    },
+    {
+      "id": "local-server",
+      "path": "src/server.js",
+      "role": "LOOPBACK_DEVELOPMENT_SERVER",
+      "sha256": "9cda2d50db1e5c564ffd45e77cef6b2fa5eab8d7a5a12554791b4ae7ccde0b4a"
+    },
+    {
+      "id": "managed-mcp-client",
+      "path": "src/cloud/managed-mcp-client.js",
+      "role": "RECOVERY_MCP_CLIENT",
+      "sha256": "39eaf691a5ebab32d7d48e3aed5cf9ad6752f423356cf9324be9b08c214091e6"
+    },
+    {
+      "id": "primary-security-bootstrap",
+      "path": "src/cloud/primary-security.js",
+      "role": "PRIMARY_DATABASE_SECURITY",
+      "sha256": "463432dd085dd34dc3ad47d8bb10ef752e557c4ee50ac74c693b4601c6126414"
+    },
+    {
+      "id": "proposal-runtime",
+      "path": "infra/aws/lambda/agent.cjs",
+      "role": "AWS_PROPOSAL_RUNTIME",
+      "sha256": "53a847be7c14a5ce9b8fb5005df995bad772c850ed20b6f3fd02d0e5358b0aac"
+    },
+    {
+      "id": "public-demo-runtime",
+      "path": "src/cloud/public-demo.js",
+      "role": "AWS_PUBLIC_RUNTIME",
+      "sha256": "ad80c8225a543e93af5b59195f730609cb4e79112035b1cbbc78908e0b202273"
+    },
+    {
+      "id": "public-demo-verifier",
+      "path": "src/cloud/public-demo-verifier.js",
+      "role": "LIVE_PUBLIC_VERIFIER",
+      "sha256": "47e97fe67aea67d155233ae1956c7e43fd22db5fc8c907b229685c68e55f4b9e"
+    },
+    {
+      "id": "recovery-security-bootstrap",
+      "path": "src/cloud/recovery-security.js",
+      "role": "RECOVERY_DATABASE_SECURITY",
+      "sha256": "d92bb585424085ab3562c8c910ac25f8e06dba6ea2d5a0fc084d45a968ebe166"
+    },
+    {
+      "id": "release-security-ledger",
+      "path": "docs/RELEASE_SECURITY.md",
+      "role": "SECURITY_CONTROL_LEDGER",
+      "sha256": "fadb47c628c17a1a7c0511138f1e90331d4781a09c7a5e326980b352094a3e56"
+    },
+    {
+      "id": "security-policy",
+      "path": "SECURITY.md",
+      "role": "VULNERABILITY_POLICY",
+      "sha256": "4141eadb0a9a106724bbeb27167c9340944a65424feced81a3203313118b7828"
+    },
+    {
+      "id": "signer-runtime",
+      "path": "infra/aws/lambda/signer.cjs",
+      "role": "AWS_SIGNING_RUNTIME",
+      "sha256": "d9f907adb1582a5064562349d7f472829461fd15cd74200da13b1a92641a88ea"
+    }
+  ],
+  "finalReleaseReady": false
+}

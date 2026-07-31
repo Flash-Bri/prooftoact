@@ -69,8 +69,8 @@ Every item must have a dated receipt tied to the final release commit:
   bundled third-party notices, `PROOF_MANIFEST.json`, and pre-existing-work
   disclosure receive a final exact-commit and deployed-bundle audit;
   `npm run proof:verify`, `npm run privacy:verify`,
-  `npm run claims:verify`, `npm run dependencies:verify`, and
-  `npm run licenses:verify` pass, and
+  `npm run claims:verify`, `npm run security:verify`,
+  `npm run dependencies:verify`, and `npm run licenses:verify` pass, and
   official `main` emits a
   `npm run release:provenance` `PASS` receipt.
 - [ ] The Devpost preview contains no secrets, personal data, internal URLs,
