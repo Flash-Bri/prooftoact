@@ -78,6 +78,8 @@ a secret store and never enter the repository.
 
 ```sh
 npm run proof:verify
+npm run dependencies:verify
+npm run licenses:verify
 npm test
 npm run generate:gate2
 npm run demo
@@ -113,6 +115,14 @@ locked runtime and development packages, their package-lock license
 identifiers, optional state, and install-script flag. Run
 `npm run dependencies:verify` to reject drift, unreviewed license identifiers,
 non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
+The generated [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) separately
+binds the 42-package union whose source is actually present in the six Gate
+Two bundles, including exact license-text hashes and five explicit fallbacks
+for published packages that omit a standalone license file. Run
+`npm run licenses:verify` to rebuild the esbuild input graph and reject package,
+version, integrity, license-source, fallback, or notice-byte drift. Every Gate
+Two ZIP embeds that verified notice file byte-for-byte; the final deployed
+bundle and exact-release audit is still a release gate.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and

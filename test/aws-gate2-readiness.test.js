@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { singleFileZip } from "../scripts/lib/deterministic-zip.js";
+import { deterministicZip } from "../scripts/lib/deterministic-zip.js";
 import {
   __test,
   parseArguments,
@@ -41,7 +41,16 @@ function fixture() {
     '{"Resources":{}}\n',
     "utf8"
   );
+  const thirdPartyNotices = Buffer.from(
+    "Fixture bundled third-party notices.\n",
+    "utf8"
+  );
   writeFile(projectRoot, "package-lock.json", packageLock);
+  writeFile(
+    projectRoot,
+    "THIRD_PARTY_NOTICES.txt",
+    thirdPartyNotices
+  );
   writeFile(
     projectRoot,
     "infra/aws/bootstrap-template.json",
@@ -62,7 +71,13 @@ function fixture() {
       "utf8"
     );
     writeFile(projectRoot, sourcePath, source);
-    const archive = singleFileZip("index.js", source);
+    const archive = deterministicZip([
+      {
+        fileName: "THIRD_PARTY_NOTICES.txt",
+        content: thirdPartyNotices
+      },
+      { fileName: "index.js", content: source }
+    ]);
     const artifactDigest = sha256(archive);
     const artifactFile = `${name}-${artifactDigest}.zip`;
     const artifactPath = `dist/aws/${artifactFile}`;
@@ -76,20 +91,34 @@ function fixture() {
       artifactDigest,
       artifactCodeSha256: sha256(archive, "base64"),
       artifactBytes: archive.length,
+      bundledPackages: ["@fixture/runtime"],
       suggestedS3Key:
         `gate2/${SOURCE_COMMIT}/${artifactFile}`
     });
   }
 
   const buildReceipt = {
-    schemaVersion: "tideproof.gate2-build.v2",
+    schemaVersion: "tideproof.gate2-build.v3",
     mode: "CLEAN_ARTIFACT_BUILD",
     sourceCommit: SOURCE_COMMIT,
     treeDigest: TREE_DIGEST,
     workingTreeClean: true,
     workingTreeCleanBeforeGeneration: true,
-    archiveFormat: "ZIP_STORED_SINGLE_FILE_V1",
+    archiveFormat: "ZIP_STORED_TWO_FILE_V2",
     packageLockDigest: sha256(packageLock),
+    thirdPartyNotices: {
+      schema: "tideproof.bundled-third-party-notices.v1",
+      status: "PASS",
+      noticePath: "THIRD_PARTY_NOTICES.txt",
+      noticeSha256: sha256(thirdPartyNotices),
+      noticeBytes: thirdPartyNotices.length,
+      packageLockSha256: sha256(packageLock),
+      packageNames: ["@fixture/runtime"],
+      packageCount: 1,
+      licenseTextCount: 1,
+      fallbackCount: 0,
+      licenses: { MIT: 1 }
+    },
     bootstrapTemplate: {
       path: "infra/aws/bootstrap-template.json",
       templateDigest: sha256(bootstrapTemplate),
@@ -295,6 +324,62 @@ test("AWS readiness rejects an artifact changed after the build", () => {
           treeDigest: TREE_DIGEST
         }),
       /AWS_READINESS_ARTIFACT_DIGEST/
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects changed third-party notice bytes", () => {
+  const current = fixture();
+  try {
+    fs.appendFileSync(
+      path.join(current.projectRoot, "THIRD_PARTY_NOTICES.txt"),
+      "tamper\n"
+    );
+    assert.throws(
+      () =>
+        validateBuildReceipt(current.buildReceipt, {
+          projectRoot: current.projectRoot,
+          sourceCommit: SOURCE_COMMIT,
+          treeDigest: TREE_DIGEST
+        }),
+      /AWS_READINESS_THIRD_PARTY_NOTICE_DIGEST/
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects a hash-valid ZIP without bundled notices", () => {
+  const current = fixture();
+  try {
+    const artifact = current.buildReceipt.artifacts[0];
+    const source = fs.readFileSync(
+      path.join(current.projectRoot, artifact.sourcePath)
+    );
+    const archive = deterministicZip([
+      { fileName: "index.js", content: source }
+    ]);
+    const artifactDigest = sha256(archive);
+    const artifactFile = `${artifact.name}-${artifactDigest}.zip`;
+    artifact.artifactDigest = artifactDigest;
+    artifact.artifactFile = artifactFile;
+    artifact.artifactPath = `dist/aws/${artifactFile}`;
+    artifact.artifactCodeSha256 = sha256(archive, "base64");
+    artifact.artifactBytes = archive.length;
+    artifact.suggestedS3Key =
+      `gate2/${SOURCE_COMMIT}/${artifactFile}`;
+    writeFile(current.projectRoot, artifact.artifactPath, archive);
+
+    assert.throws(
+      () =>
+        validateBuildReceipt(current.buildReceipt, {
+          projectRoot: current.projectRoot,
+          sourceCommit: SOURCE_COMMIT,
+          treeDigest: TREE_DIGEST
+        }),
+      /AWS_READINESS_ZIP_END/
     );
   } finally {
     current.cleanup();

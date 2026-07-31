@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { singleFileZip } from "../scripts/lib/deterministic-zip.js";
+import {
+  deterministicZip,
+  singleFileZip,
+} from "../scripts/lib/deterministic-zip.js";
 
 test("single-file ZIP output is byte-identical across host timezones", () => {
   const originalTimezone = process.env.TZ;
@@ -65,6 +68,62 @@ test("single-file ZIP rejects unsafe or ambiguous inputs", () => {
   );
   assert.throws(
     () => singleFileZip("index.js", Buffer.alloc(0)),
+    /DETERMINISTIC_ZIP_INPUT_REJECTED/
+  );
+});
+
+test("multi-file ZIP is sorted, stored, and deterministic", () => {
+  const entries = [
+    {
+      fileName: "THIRD_PARTY_NOTICES.txt",
+      content: Buffer.from("notices\n"),
+    },
+    {
+      fileName: "index.js",
+      content: Buffer.from("module.exports = 7;\n"),
+    },
+  ];
+  const first = deterministicZip(entries);
+  const second = deterministicZip(entries);
+  assert.deepEqual(first, second);
+
+  const endOffset = first.length - 22;
+  const centralOffset = first.readUInt32LE(endOffset + 16);
+  assert.equal(first.readUInt16LE(endOffset + 8), 2);
+  assert.equal(first.readUInt16LE(endOffset + 10), 2);
+
+  const names = [];
+  let offset = 0;
+  while (offset < centralOffset) {
+    assert.equal(first.readUInt32LE(offset), 0x04034b50);
+    assert.equal(first.readUInt16LE(offset + 8), 0);
+    const contentBytes = first.readUInt32LE(offset + 18);
+    const nameBytes = first.readUInt16LE(offset + 26);
+    const extraBytes = first.readUInt16LE(offset + 28);
+    names.push(
+      first.subarray(offset + 30, offset + 30 + nameBytes).toString("utf8")
+    );
+    offset += 30 + nameBytes + extraBytes + contentBytes;
+  }
+  assert.deepEqual(names, ["THIRD_PARTY_NOTICES.txt", "index.js"]);
+});
+
+test("multi-file ZIP rejects duplicate or unsorted entries", () => {
+  const content = Buffer.from("x");
+  assert.throws(
+    () =>
+      deterministicZip([
+        { fileName: "index.js", content },
+        { fileName: "THIRD_PARTY_NOTICES.txt", content },
+      ]),
+    /DETERMINISTIC_ZIP_INPUT_REJECTED/
+  );
+  assert.throws(
+    () =>
+      deterministicZip([
+        { fileName: "index.js", content },
+        { fileName: "index.js", content },
+      ]),
     /DETERMINISTIC_ZIP_INPUT_REJECTED/
   );
 });

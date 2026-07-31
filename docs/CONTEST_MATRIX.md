@@ -22,7 +22,7 @@ Internal submission target: 2026-08-16 at 5:00 PM ET.
 | Public video under three minutes | 175-second evidence-led demonstration | Script drafted |
 | English text description and testing instructions | Fail-closed submission packet with reviewed copy blocks | Drafted; final URLs and AWS copy blocked |
 | Free judge access through judging | Budgeted low-volume environment through 2026-09-15 | Not provisioned |
-| Pre-existing work disclosed | Clean-room statement and dependency inventory | Maintained; final audit pending |
+| Pre-existing work disclosed | Clean-room statement, dependency inventory, and bundle-derived third-party notices | Maintained; exact-release audit pending |
 
 The canonical field copy and no-submit gates live in
 `docs/SUBMISSION_PACKET.md`.

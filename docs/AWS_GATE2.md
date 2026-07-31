@@ -143,14 +143,18 @@ unbound.
 
 `npm run build:gate2` refuses to create artifacts unless Git is clean and
 rechecks cleanliness after regenerating the tracked templates. On a clean
-commit it bundles each runtime role separately into six single-file, stored
-ZIPs with fixed metadata, so artifact bytes are independent of host timezone.
+commit it bundles each runtime role separately into six two-entry, stored ZIPs
+with fixed metadata, so artifact bytes are independent of host timezone. Every
+ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
+the 42-package union present across the six esbuild input graphs.
 The Demo artifact embeds the exact reviewed browser source, scenario
 implementation, claims ledger, and Gate One evidence through build-time raw
 imports. The receipt records:
 
 - Git commit and tree;
 - package-lock digest;
+- bundled-package sets and the notice-file digest, size, source fallbacks, and
+  normalized license-text counts;
 - source SHA-256;
 - ZIP SHA-256 in hexadecimal and base64;
 - immutable S3 key recommendation;
@@ -201,8 +205,8 @@ respect to AWS. The gate:
   the full test suite, and a zero-vulnerability dependency audit;
 - creates a fresh exact-head Gate Two build and independently rechecks the
   package lock, tracked templates, six source files, six artifact hashes,
-  Lambda `CodeSha256` values, sizes, immutable key recommendations, and
-  one-entry stored-ZIP structure;
+  Lambda `CodeSha256` values, sizes, immutable key recommendations, exact
+  bundled-package union, notice bytes, and two-entry stored-ZIP structure;
 - invokes the account-safety preflight below and binds its `PASS` receipt to
   the same commit and tree; and
 - rechecks the official upstream and clean tree before emitting

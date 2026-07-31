@@ -37,6 +37,9 @@ jobs:
       - name: Verify locked dependency inventory
         run: npm run dependencies:verify
 
+      - name: Verify bundled third-party notices
+        run: npm run licenses:verify
+
       - name: Run deterministic tests
         run: npm test
 

@@ -25,8 +25,32 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "7c3db344c57c1f146a53d121ca97a2842022ae28c21ccac08d9f675c161133fd",
+      "sha256": "b92cdf7667083601897c1c97e900d6e31b59d27d1403409097492f81057ffcb0",
       "kind": "boundary-ledger"
+    },
+    {
+      "id": "bundle-license-notice",
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "sha256": "5c8a48b792687d615793877b9620760b8edeb816030a2cfd6104c91c6e22fbb8",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "bundle-license-notice-library",
+      "path": "scripts/lib/bundled-third-party-notices.js",
+      "sha256": "e69c1347741825fe27d614ae1228a29bfd2977f4326a7140f6e9d7e0c0e21479",
+      "kind": "verification-code"
+    },
+    {
+      "id": "bundle-license-notice-tests",
+      "path": "test/bundled-third-party-notices.test.js",
+      "sha256": "012cf42a7d44dd4e5f47c62908ee092e7118a9313bfae650115be553f9618f95",
+      "kind": "verification-code"
+    },
+    {
+      "id": "bundle-license-notice-verifier",
+      "path": "scripts/verify-bundled-third-party-notices.js",
+      "sha256": "01ff28113ac017c9f98f6051469610b910f26c682a7939164d8786e9547e19ce",
+      "kind": "verification-code"
     },
     {
       "id": "claims-ledger",
@@ -37,7 +61,7 @@
     {
       "id": "clean-room-ledger",
       "path": "CLEAN_ROOM.md",
-      "sha256": "8df5ef43eb06432c8d2d8acd5b4377628f49fe76d5d0191f7a66f58d3dc68ca3",
+      "sha256": "690c8b24d7fea054e4e4f734c75c6723b2bdc5d780a604962e72b5bd3972d98b",
       "kind": "boundary-ledger"
     },
     {
@@ -49,7 +73,7 @@
     {
       "id": "dependency-inventory",
       "path": "docs/DEPENDENCY_INVENTORY.md",
-      "sha256": "574a5e0d2381d30326f1df10ffeeac636340a269de65a790eda8119e1462cbd9",
+      "sha256": "b3f4882791d1a7a07d9969e44090c18e03f24d966f10e45c66b67287b7c1d6b0",
       "kind": "boundary-ledger"
     },
     {
@@ -61,7 +85,7 @@
     {
       "id": "dependency-inventory-verifier",
       "path": "scripts/verify-dependency-inventory.js",
-      "sha256": "3edff449d59695181ac24420f8dcb848dbbdf9f180a90fc88319d20cc8f2e76c",
+      "sha256": "a7e69574959c98a2795e6ea5c942e9dca94c110a87234cffe8745cbb78c30e37",
       "kind": "verification-code"
     },
     {
@@ -69,6 +93,18 @@
       "path": "package-lock.json",
       "sha256": "fe1e765145a7bb2e0ee0cadce2e646b7d792c447aee37f010d40453405fd08d9",
       "kind": "boundary-ledger"
+    },
+    {
+      "id": "deterministic-zip-library",
+      "path": "scripts/lib/deterministic-zip.js",
+      "sha256": "a4516260b5ea4143803c3eeeb97d1372478402a30e6355ebd756fd01ed6cd9c5",
+      "kind": "verification-code"
+    },
+    {
+      "id": "deterministic-zip-tests",
+      "path": "test/deterministic-zip.test.js",
+      "sha256": "05f963e9f0cfc3edb7162c8abedc8b98a7383e14eeb7ca7e60815ea8a4b7a2ee",
+      "kind": "verification-code"
     },
     {
       "id": "gate1-ambiguity-evidence",
@@ -95,6 +131,12 @@
       "kind": "accepted-evidence"
     },
     {
+      "id": "gate2-artifact-builder",
+      "path": "scripts/build-gate2-template.js",
+      "sha256": "aece1e656c619981930c1a08ffd54cb7bd0fa13f76593d536fe105793741ec01",
+      "kind": "verification-code"
+    },
+    {
       "id": "gate2-authority-local-validation",
       "path": "evidence/gate2-authority-local-validation-79476df-2026-07-31.md",
       "sha256": "2f6fa495ec54e36bb858477c264f8100358bbc772f43c49a93c37daf7e83ad8b",
@@ -113,6 +155,18 @@
       "kind": "local-validation"
     },
     {
+      "id": "gate2-readiness-tests",
+      "path": "test/aws-gate2-readiness.test.js",
+      "sha256": "e085c8c0b98b3989fcf23c16d83a96b537a73be3b7f8ea67365bf3573c8307d5",
+      "kind": "verification-code"
+    },
+    {
+      "id": "gate2-readiness-verifier",
+      "path": "scripts/gate2-aws-readiness.js",
+      "sha256": "c6cb7dc6a4032b1d2a1f61b26dfdd606be71deba34be392132275973c1b4f724",
+      "kind": "verification-code"
+    },
+    {
       "id": "local-judge-path-evidence",
       "path": "evidence/local-judge-path-e2b247a-2026-07-30.md",
       "sha256": "b3ed9414195b224482228e1ea22a4fcf513766551c5d082f976376e69b7f026e",
@@ -127,7 +181,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "a2856fd0baec3d9b9c3e2e1340fb1fc23cdcf66191dfb74cad1f9c1a23da00f3",
+      "sha256": "1c4407b1f6bd8815da8d9faea0db6e47b22aa5db4c3c6ec3d0344dc83e8d7bab",
       "kind": "verification-code"
     },
     {
@@ -301,6 +355,25 @@
       "remainingRequirements": []
     },
     {
+      "id": "bundle-license-notice-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "bundle-license-notice",
+        "bundle-license-notice-library",
+        "bundle-license-notice-tests",
+        "bundle-license-notice-verifier",
+        "deterministic-zip-library",
+        "deterministic-zip-tests",
+        "gate2-artifact-builder",
+        "gate2-readiness-tests",
+        "gate2-readiness-verifier"
+      ],
+      "boundary": "The exact verifier derives the current 42-package union from all six esbuild input graphs, validates 17 normalized license texts and five explicit version-pinned fallbacks, and the clean builder embeds the hash-bound notice bytes in every two-entry ZIP. Readiness independently validates ZIP structure, CRCs, package-union count, and notice bytes. This is not legal advice or proof of the final deployed artifacts.",
+      "remainingRequirements": [
+        "Rerun the notice verifier after a clean exact-release install and bind its receipt to the final repository history, vulnerability report, build receipt, uploaded object versions, and deployed Lambda CodeSha256 values."
+      ]
+    },
+    {
       "id": "claim-ledger-control",
       "proofState": "PARTIAL",
       "artifacts": [
@@ -343,9 +416,9 @@
         "dependency-inventory-verifier",
         "dependency-lock"
       ],
-      "boundary": "The exact current package lock, complete 71-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata and do not replace the final exact-release history, bundle, license-text, vulnerability, and provenance audit.",
+      "boundary": "The exact current package lock, complete 71-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts. Neither control replaces the final exact-release history, installed-tree, deployed-bundle, vulnerability, and provenance audit.",
       "remainingRequirements": [
-        "Rerun the verifier and complete the dependency audit against the final release commit and exact deployed bundles."
+        "Rerun both dependency verifiers and complete the audit against the final release commit, clean installed tree, repository history, and exact deployed bundles."
       ]
     },
     {
