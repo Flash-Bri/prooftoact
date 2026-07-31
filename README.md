@@ -121,8 +121,12 @@ Two bundles, including exact license-text hashes and five explicit fallbacks
 for published packages that omit a standalone license file. Run
 `npm run licenses:verify` to rebuild the esbuild input graph and reject package,
 version, integrity, license-source, fallback, or notice-byte drift. Every Gate
-Two ZIP embeds that verified notice file byte-for-byte; the final deployed
-bundle and exact-release audit is still a release gate.
+Two ZIP embeds that verified notice file byte-for-byte. On official `main`,
+`npm run release:provenance` now binds the full single-root Git ancestry,
+tracked file modes, clean installed package identities, dependency inventory,
+and bundle notice inputs to the exact public checkout. The final release must
+rerun that control with the zero-vulnerability and exact-head build gates, then
+bind the uploaded object versions and deployed Lambda `CodeSha256` values.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and

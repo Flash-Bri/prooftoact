@@ -29,6 +29,10 @@ npm run build:gate2
 ```
 
 The Gate Two build is credential-free and produces ignored local artifacts.
+After a change reaches a clean official `main` checkout, run
+`npm run release:provenance`; it intentionally rejects feature branches,
+shallow history, and a moving or nonofficial upstream. The local AWS readiness
+wrapper includes the same exact-checkout control.
 Live Gate One or AWS evidence commands require separate project-only
 authorization and must not run in pull-request automation.
 

@@ -69,7 +69,8 @@ Every item must have a dated receipt tied to the final release commit:
   bundled third-party notices, `PROOF_MANIFEST.json`, and pre-existing-work
   disclosure receive a final exact-commit and deployed-bundle audit;
   `npm run proof:verify`, `npm run dependencies:verify`, and
-  `npm run licenses:verify` pass.
+  `npm run licenses:verify` pass, and official `main` emits a
+  `npm run release:provenance` `PASS` receipt.
 - [ ] The Devpost preview contains no secrets, personal data, internal URLs,
   unsupported superlatives, operational-emergency implication, or unresolved
   stop token.
@@ -86,7 +87,7 @@ demo, repository, claims, rights, and release receipts are all green.
 
 | Official requirement | Tideproof response | Current state |
 | --- | --- | --- |
-| New project built during the submission period | Clean-room repository, dated provenance, and pre-existing-work disclosure | Verified; final audit pending |
+| New project built during the submission period | Clean-room repository, dated provenance, pre-existing-work disclosure, and exact-checkout history control | Verified; final freeze rerun pending |
 | Agentic application with CockroachDB as persistent memory, deployed on AWS | CockroachDB stores evidence, vector memory, authority state, receipts, and recovery state; AWS hosts the bounded agent path | CockroachDB verified; live AWS pending |
 | At least two meaningfully integrated CockroachDB tools | Distributed Vector Indexing and Managed MCP Server | Gate One verified |
 | At least one meaningfully integrated AWS service | Final entry will name only services proven by live receipts | `[[LIVE_AWS_EVIDENCE_REQUIRED]]` |
@@ -98,7 +99,7 @@ demo, repository, claims, rights, and release receipts are all green.
 | Identify CockroachDB tools and what the agent did | Exact tool copy below | Drafted from Gate One evidence |
 | Identify AWS services and what they did | Exact tool copy must be generated from live receipts | Blocked by live AWS gate |
 | Free unrestricted judging access through 2026-09-15 | Low-volume public environment, no login | Not deployed |
-| Original work and authorized third-party material | Clean-room and rights ledgers | Maintained; final audit pending |
+| Original work and authorized third-party material | Clean-room and rights ledgers plus dependency, bundle-notice, full-history, and installed-tree controls | Automated technical controls current; final deployed-bundle and rights audit pending |
 | English submission materials | English copy, captions, and testing instructions | Planned |
 
 ## Internal evidence map

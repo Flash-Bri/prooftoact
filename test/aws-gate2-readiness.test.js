@@ -11,7 +11,8 @@ import {
   runAwsReadiness,
   validateAuditReport,
   validateBuildReceipt,
-  validatePreflightReceipt
+  validatePreflightReceipt,
+  validateReleaseProvenance
 } from "../scripts/gate2-aws-readiness.js";
 
 const SOURCE_COMMIT = "a".repeat(40);
@@ -158,6 +159,97 @@ function cleanAuditReport() {
   };
 }
 
+function releaseProvenanceReceipt() {
+  return {
+    schemaVersion: "tideproof.release-provenance.v1",
+    status: "PASS",
+    source: {
+      commit: SOURCE_COMMIT,
+      tree: TREE_DIGEST,
+      branch: "main",
+      originMain: SOURCE_COMMIT,
+      officialRemote: __test.OFFICIAL_REMOTE,
+      cleanRoomRoot: __test.CLEAN_ROOM_ROOT
+    },
+    history: {
+      rootCommit: __test.CLEAN_ROOM_ROOT,
+      commitCount: 41,
+      mergeCommitCount: 9,
+      rootAuthorTime: "2026-07-29T07:21:03-04:00",
+      rootCommitterTime: "2026-07-29T07:21:03-04:00",
+      headAuthorTime: "2026-07-31T10:00:00-04:00",
+      headCommitterTime: "2026-07-31T10:00:00-04:00",
+      shallow: false,
+      replaceRefCount: 0,
+      legacyGraftFilePresent: false,
+      alternateObjectDatabaseCount: 0,
+      objectIntegrity: true
+    },
+    trackedTree: {
+      fileCount: 100,
+      regularFileCount: 100,
+      executableFileCount: 0,
+      symlinkCount: 0,
+      gitlinkCount: 0
+    },
+    dependencies: {
+      installedTree: {
+        status: "PASS",
+        lockedPackageCount: 71,
+        installedPackageCount: 46,
+        installedRuntimeCount: 44,
+        installedDevelopmentOnlyCount: 2,
+        installedOptionalCount: 2,
+        omittedOptionalCount: 25,
+        extraPackageCount: 0,
+        mismatchedPackageCount: 0,
+        packageLockSha256: "1".repeat(64)
+      },
+      inventory: {
+        schema: "tideproof.dependency-inventory-verification.v1",
+        status: "PASS",
+        sourceLockSha256: "1".repeat(64),
+        inventorySha256: "3".repeat(64),
+        packageCount: 71,
+        runtimeCount: 44,
+        developmentOnlyCount: 27,
+        optionalCount: 27,
+        installScriptCount: 1,
+        licenses: { MIT: 71 }
+      },
+      bundledThirdPartyNotices: {
+        status: "PASS",
+        noticePath: "THIRD_PARTY_NOTICES.txt",
+        noticeSha256: "2".repeat(64),
+        noticeBytes: 100,
+        packageLockSha256: "1".repeat(64),
+        packageCount: 42,
+        licenseTextCount: 17,
+        fallbackCount: 5,
+        licenses: { MIT: 42 },
+        artifactPackages: Object.fromEntries(
+          __test.ARTIFACT_NAMES.map((name) => [name, []])
+        )
+      }
+    },
+    checks: {
+      officialCleanCheckout: true,
+      fullSingleRootHistory: true,
+      objectIntegrity: true,
+      replaceRefsAbsent: true,
+      legacyGraftsAbsent: true,
+      alternateObjectDatabasesAbsent: true,
+      trackedSymlinksAbsent: true,
+      submodulesAbsent: true,
+      installedTreeMatchesLock: true,
+      dependencyInventoryMatchesLock: true,
+      bundledThirdPartyNoticesMatchInputs: true,
+      cleanBeforeAndAfter: true
+    },
+    claimBoundary: "Fixture provenance only."
+  };
+}
+
 function preflightReceipt() {
   return {
     schemaVersion: "tideproof.gate2.aws-preflight.v3",
@@ -263,6 +355,10 @@ function successfulRunner(buildReceipt, calls) {
       stdout = `${SOURCE_COMMIT}\n`;
     } else if (shape === "git rev-parse HEAD^{tree}") {
       stdout = `${TREE_DIGEST}\n`;
+    } else if (
+      shape === "npm run --silent release:provenance"
+    ) {
+      stdout = JSON.stringify(releaseProvenanceReceipt());
     } else if (
       shape === "npm audit --json --audit-level=low"
     ) {
@@ -419,6 +515,25 @@ test("AWS readiness binds the preflight to the exact checkout", () => {
   );
 });
 
+test("AWS readiness binds release provenance to the exact checkout", () => {
+  const receipt = releaseProvenanceReceipt();
+  assert.equal(
+    validateReleaseProvenance(receipt, {
+      sourceCommit: SOURCE_COMMIT,
+      treeDigest: TREE_DIGEST
+    }),
+    receipt
+  );
+  assert.throws(
+    () =>
+      validateReleaseProvenance(receipt, {
+        sourceCommit: "e".repeat(40),
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+});
+
 test("AWS readiness full mode performs only reviewed command families", async () => {
   const current = fixture();
   const calls = [];
@@ -429,6 +544,7 @@ test("AWS readiness full mode performs only reviewed command families", async ()
     });
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.checks.awsPreflight, "PASS");
+    assert.equal(receipt.checks.releaseProvenance, true);
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.equal(
       calls.some(
@@ -554,6 +670,9 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
     AWS_ACCESS_KEY_ID: "temporary-access",
     AWS_SESSION_TOKEN: "temporary-session",
     DATABASE_URL: "postgresql://private",
+    GIT_OBJECT_DIRECTORY: "/tmp/objects",
+    NODE_OPTIONS: "--require=/tmp/inject.js",
+    npm_config_userconfig: "/tmp/npmrc",
     OPENAI_API_KEY: "private-model-key",
     SAFE_VALUE: "retained"
   };
@@ -563,6 +682,8 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(isolated.AWS_ACCESS_KEY_ID, undefined);
   assert.equal(isolated.AWS_SESSION_TOKEN, undefined);
   assert.equal(isolated.DATABASE_URL, undefined);
+  assert.equal(isolated.GIT_OBJECT_DIRECTORY, undefined);
+  assert.equal(isolated.NODE_OPTIONS, undefined);
   assert.equal(isolated.OPENAI_API_KEY, undefined);
   assert.equal(
     isolated.AWS_SHARED_CREDENTIALS_FILE,

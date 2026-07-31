@@ -60,7 +60,8 @@ visible in one short story:
 - capture real database and AWS evidence;
 - implement the canonical `VISUAL_RELEASE_SYSTEM.md` across the product,
   README, video, icons, and submission without weakening proof readability;
-- complete a dependency/license/provenance audit.
+- rerun the automated exact-checkout dependency/license/provenance control at
+  the final freeze and bind it to the uploaded and deployed bundle hashes.
 
 ### Gate 4 — submission
 
