@@ -43,6 +43,9 @@ jobs:
       - name: Verify bounded static accessibility controls
         run: npm run accessibility:verify
 
+      - name: Verify rendered browser accessibility controls
+        run: npm run accessibility:browser
+
       - name: Verify locked dependency inventory
         run: npm run dependencies:verify
 

@@ -80,6 +80,7 @@ a secret store and never enter the repository.
 npm run proof:verify
 npm run rights:verify
 npm run accessibility:verify
+npm run accessibility:browser
 npm run dependencies:verify
 npm run licenses:verify
 npm test
@@ -146,9 +147,12 @@ The bounded [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) control checks the
 rights-bound browser source and architecture SVG for targeted semantics,
 keyboard operation, focus, reduced motion, reflow guards, safe dynamic text,
 and eleven WCAG-formula contrast pairs. Run
-`npm run accessibility:verify` to reproduce its `STATIC_SOURCE_PASS` receipt.
-That result is not a WCAG conformance claim; exact-release browser scanning,
-keyboard and zoom review, reduced-motion review, and screen-reader review are
+`npm run accessibility:verify` to reproduce its `STATIC_SOURCE_PASS` receipt,
+then `npm run accessibility:browser` to exercise the rendered accessibility
+tree, skip path, presenter state, reduced-motion response, and mobile reflow in
+an isolated local Chromium profile. `LOCAL_BROWSER_PASS` is not a WCAG
+conformance claim or deployed-release scan; an exact-public-release rules
+engine plus keyboard, zoom, reduced-motion, and screen-reader human review are
 still required.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,

@@ -6,7 +6,7 @@
 - Standard target: `WCAG_2_2_AA`
 - Final release ready: `false`
 - Rights manifest SHA-256:
-  `d95aeb38ba937a25e4a4fed1b1e77081e06b6aaf0507ed457262a987c8ac2a0e`
+  `798d5608c456bd13f5ff7a6851f498d6fb999b8b78e1d01f245a848946cf5061`
 
 ## Exact reviewed files
 
@@ -37,5 +37,5 @@ to `18.010:1`.
 This is a deterministic static-source receipt tied to the current rights
 manifest. It is not a WCAG conformance claim and does not prove rendered
 browser behavior, assistive-technology behavior, or human usability.
-Automated browser scanning plus exact-release keyboard, zoom, reflow,
+A maintained rules-engine scan plus exact-release keyboard, zoom, reflow,
 reduced-motion, and screen-reader review remain required.
