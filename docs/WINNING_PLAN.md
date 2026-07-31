@@ -44,6 +44,9 @@ visible in one short story:
 - deploy a bounded Lambda/API Gateway runtime;
 - use Bedrock only to interpret a synthetic request or summarize admitted
   evidence;
+- invoke two isolated Authority Lambda contenders against the least-privilege
+  CockroachDB authorizer and require overlapping database intervals with one
+  serializable winner;
 - keep every decision gate deterministic and server-side;
 - add quotas, alarms, structured receipts, and fail-closed outage behavior.
 

@@ -73,8 +73,16 @@ IAM-signed POST /advisory
                               |                  proposal only
                               +--> Signer Lambda --> KMS P-256
                               |                   signed advisory receipt
-                              X--> Authority Lambda
-                                   isolated fail-closed placeholder
+
+Private authority-race proof caller
+        |
+        +--> Authority Lambda (two reserved executions)
+                              | exact race + contender schema
+                              | derives operation/effect IDs itself
+                              | reads one exact project secret
+                              v
+                         CockroachDB
+                         tp_api.g1_spend_authority_v1 only
 ```
 
 Gate Two currently uses one Gate One digest-bound synthetic fixture. It proves
@@ -82,7 +90,14 @@ the intended software and IAM shape locally, not live AWS hosting or a live
 CockroachDB-to-AWS handoff. The signed-out route set is read-only and
 enumerated; it never connects to the advisory integration. The boundary
 independently validates the model proposal and signer envelope, verifies the
-P-256 signature locally, and rejects direct or authority-bearing output.
+P-256 signature locally, and rejects direct or authority-bearing output. The
+authority proof path is separately invokable only through its exact immutable
+alias; the advisory Boundary does not call it. Its local candidate accepts
+only two named contenders for one configured synthetic race, derives every
+operation-bearing field without model input, reads only one exact
+Tideproof-owned Secrets Manager ARN, and calls only the CockroachDB
+authorizer's typed `SECURITY DEFINER` functions. None of those cloud or
+database boundaries are proven live until the accepted race receipts exist.
 
 ## Target contest architecture
 

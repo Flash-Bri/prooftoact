@@ -38,8 +38,10 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
   a signed-out content-only judge surface, IAM-separated Lambda roles, one bounded
   Amazon Nova Micro proposal path, P-256 KMS receipt signing with independently
   pinned public-key evidence, exact Lambda code hashes, a dedicated exact-route
-  caller, private API access logs, and opt-in temporary same-role capability
-  probes;
+  caller, private API access logs, an isolated two-concurrency CockroachDB
+  authority candidate that derives capability fields outside the model and
+  calls only the least-privilege `SECURITY DEFINER` surface, and opt-in
+  temporary same-role capability probes;
 - an exact-head signed-out demo verifier that compares every static and
   dynamic public response with the clean checkout, binds the health receipt to
   the built Demo artifact, checks strict browser headers, and probes route and
@@ -53,7 +55,7 @@ It does **not** yet contain or claim:
 - a deployed public AWS judge URL;
 - live AWS deployment, Bedrock inference, KMS signatures, or IAM denial
   evidence;
-- a live CockroachDB-to-AWS handoff;
+- a live CockroachDB-to-AWS handoff or overlapping Lambda authority race;
 - exactly-once external effects, regional survival, or disaster readiness;
 - production security, availability, or suitability for real emergencies.
 

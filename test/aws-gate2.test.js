@@ -746,7 +746,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   );
   assert.equal(
     resources.AuthorityFunction.Properties.ReservedConcurrentExecutions,
-    1
+    2
   );
   assert.equal(
     resources.DemoFunction.Properties.ReservedConcurrentExecutions,
@@ -765,6 +765,29 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       PACKAGE_LOCK_DIGEST: { Ref: "PackageLockDigest" }
     }
   );
+  assert.deepEqual(
+    resources.AuthorityFunction.Properties.Environment.Variables,
+    {
+      AUTHORITY_DATABASE_SECRET_ARN: {
+        Ref: "AuthorityDatabaseSecretArn"
+      },
+      AUTHORITY_TENANT_ID: { Ref: "AuthorityTenantId" },
+      AUTHORITY_RUN_ID: { Ref: "AuthorityRunId" },
+      AUTHORITY_INCIDENT_ID: { Ref: "AuthorityIncidentId" },
+      AUTHORITY_EVIDENCE_ID: { Ref: "AuthorityEvidenceId" },
+      AUTHORITY_RACE_ID: { Ref: "AuthorityRaceId" },
+      AUTHORITY_RESOURCE_ID: { Ref: "AuthorityResourceId" },
+      SOURCE_COMMIT: { Ref: "SourceCommit" },
+      CONFIG_DIGEST: { Ref: "ConfigDigest" },
+      AUTHORITY_SOURCE_DIGEST: { Ref: "AuthoritySourceDigest" },
+      AUTHORITY_ARTIFACT_DIGEST: {
+        Ref: "AuthorityArtifactDigest"
+      },
+      TREE_DIGEST: { Ref: "TreeDigest" },
+      PACKAGE_LOCK_DIGEST: { Ref: "PackageLockDigest" }
+    }
+  );
+  assert.equal(resources.AuthorityFunction.Properties.Timeout, 25);
 
   for (const name of [
     "AgentFunction",
@@ -858,7 +881,8 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   ]);
   assert.deepEqual(allowedActions(resources.AuthorityRole).sort(), [
     "logs:CreateLogStream",
-    "logs:PutLogEvents"
+    "logs:PutLogEvents",
+    "secretsmanager:GetSecretValue"
   ]);
   assert.deepEqual(allowedActions(resources.DemoRole).sort(), [
     "logs:CreateLogStream",
@@ -883,6 +907,34 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   assert.deepEqual(allowedActions(resources.AdvisoryCallerRole), [
     "execute-api:Invoke"
   ]);
+  assert.deepEqual(allowedActions(resources.AuthorityRaceCallerRole), [
+    "lambda:InvokeFunction"
+  ]);
+  const authorityStatements =
+    resources.AuthorityRole.Properties.Policies[0].PolicyDocument
+      .Statement;
+  assert.ok(
+    authorityStatements.some(
+      ({ Sid, Resource }) =>
+        Sid === "ReadOneAuthorityDatabaseSecret" &&
+        Resource.Ref === "AuthorityDatabaseSecretArn"
+    )
+  );
+  assert.ok(
+    authorityStatements.some(
+      ({ Sid, NotResource }) =>
+        Sid === "DenyOtherSecretReads" &&
+        NotResource.Ref === "AuthorityDatabaseSecretArn"
+    )
+  );
+  assert.ok(
+    authorityStatements.some(
+      ({ Sid, Action }) =>
+        Sid === "DenySecretEnumeration" &&
+        Action.includes("secretsmanager:ListSecrets") &&
+        Action.includes("secretsmanager:BatchGetSecretValue")
+    )
+  );
   const callerStatements =
     resources.AdvisoryCallerRole.Properties.Policies[0].PolicyDocument
       .Statement;
@@ -893,6 +945,25 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
         Action.includes?.("lambda:InvokeFunction")
     )
   );
+  const authorityCallerStatements =
+    resources.AuthorityRaceCallerRole.Properties.Policies[0]
+      .PolicyDocument.Statement;
+  assert.ok(
+    authorityCallerStatements.some(
+      ({ Sid, Effect, Resource }) =>
+        Sid === "InvokeOnlyAuthorityProof" &&
+        Effect === "Allow" &&
+        Resource["Fn::GetAtt"][0] === "AuthorityAlias"
+    )
+  );
+  assert.ok(
+    authorityCallerStatements.some(
+      ({ Sid, Effect, NotResource }) =>
+        Sid === "DenyOtherLambdaTargets" &&
+        Effect === "Deny" &&
+        NotResource["Fn::GetAtt"][0] === "AuthorityAlias"
+    )
+  );
 
   for (const roleName of [
     "AgentRole",
@@ -900,7 +971,8 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     "DemoRole",
     "SignerRole",
     "AuthorityRole",
-    "AdvisoryCallerRole"
+    "AdvisoryCallerRole",
+    "AuthorityRaceCallerRole"
   ]) {
     const allowed =
       resources[roleName].Properties.Policies[0].PolicyDocument.Statement
@@ -917,6 +989,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   );
   assert.ok(template.Outputs.PublicDemoUrl);
   assert.ok(template.Outputs.DemoAliasArn);
+  assert.ok(template.Outputs.AuthorityRaceCallerRoleArn);
 });
 
 test("Gate Two template binds retention, probes, and artifacts after the cost guard", () => {
@@ -1040,9 +1113,11 @@ test("production Lambda sources contain only their intended capability SDK", () 
     sources.signer,
     /client-(bedrock-runtime|lambda|secrets-manager)|require\(["']pg["']\)|managed-mcp/
   );
+  assert.match(sources.authority, /client-secrets-manager/);
+  assert.match(sources.authority, /require\(["']pg["']\)/);
   assert.doesNotMatch(
     sources.authority,
-    /@aws-sdk|@smithy|require\(["']pg["']\)|managed-mcp/
+    /client-(bedrock-runtime|kms|lambda)|managed-mcp/
   );
   assert.doesNotMatch(
     sources.demo,
@@ -1110,6 +1185,16 @@ test("effective config digest changes with every deployment control", () => {
       probe: "v5",
       signer: "v6"
     },
+    authority: {
+      databaseSecretArn:
+        "arn:aws:secretsmanager:us-east-1:111111111111:secret:tideproof/authorizer-AbCd12",
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      runId: "22222222-2222-4222-8222-222222222222",
+      incidentId: "33333333-3333-4333-8333-333333333333",
+      evidenceId: "44444444-4444-4444-8444-444444444444",
+      raceId: "55555555-5555-4555-8555-555555555555",
+      resourceId: "synthetic-rescue-unit-aws-proof"
+    },
     bedrockModelId: "amazon.nova-micro-v1:0",
     budgetUsd: 15,
     logRetentionDays: 7,
@@ -1123,7 +1208,7 @@ test("effective config digest changes with every deployment control", () => {
     region: "us-east-1",
     reservedConcurrency: {
       agent: 1,
-      authority: 1,
+      authority: 2,
       boundary: 2,
       demo: 8,
       signer: 1
@@ -1140,6 +1225,16 @@ test("effective config digest changes with every deployment control", () => {
   const first = deploymentConfigDigest(configuration);
   const changed = structuredClone(configuration);
   changed.throttle.publicDemo.rate = 0.06;
+  const changedAuthority = structuredClone(configuration);
+  changedAuthority.authority.raceId =
+    "66666666-6666-4666-8666-666666666666";
+  const incompleteAuthority = structuredClone(configuration);
+  delete incompleteAuthority.authority.databaseSecretArn;
   assert.match(first, /^[0-9a-f]{64}$/);
   assert.notEqual(first, deploymentConfigDigest(changed));
+  assert.notEqual(first, deploymentConfigDigest(changedAuthority));
+  assert.throws(
+    () => deploymentConfigDigest(incompleteAuthority),
+    /DEPLOYMENT_CONFIG_SHAPE_REJECTED/
+  );
 });
