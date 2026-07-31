@@ -159,9 +159,45 @@ function cleanAuditReport() {
   };
 }
 
+function releaseRightsReceipt() {
+  return {
+    schemaVersion: "tideproof.release-rights-verification.v1",
+    status: "CURRENT_SURFACES_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "docs/media/RIGHTS_MANIFEST.json",
+    manifestSha256: "5".repeat(64),
+    ledgerSha256: "6".repeat(64),
+    distributedFileCount: 6,
+    currentClearedFileCount: 5,
+    interimOnlyFileCount: 1,
+    repositoryMediaFileCount: 3,
+    trackedFileCount: 120,
+    prohibitedSourceDigestCount: 3,
+    finalReleaseRequirements: [
+      "Exact-release private rights review receipt.",
+      "Final-production asset decision recorded as cleared exact hashes or deliberate omission."
+    ],
+    checks: {
+      canonicalManifest: true,
+      exactFileHashes: true,
+      ledgerBindings: true,
+      completeRepositoryMediaInventory: true,
+      blockedPlannedPathsAbsent: true,
+      prohibitedReferenceBytesAbsent: true,
+      remoteEmbeddedMediaAbsent: true,
+      redistributedFontsAbsent: true,
+      localServerBindingsExact: true,
+      awsDistributionBindingsExact: true,
+      publicDemoCspRejectsDataImages: true
+    },
+    claimBoundary: "Fixture current-surface rights only."
+  };
+}
+
 function releaseProvenanceReceipt() {
   return {
-    schemaVersion: "tideproof.release-provenance.v1",
+    schemaVersion: "tideproof.release-provenance.v2",
     status: "PASS",
     source: {
       commit: SOURCE_COMMIT,
@@ -192,6 +228,7 @@ function releaseProvenanceReceipt() {
       symlinkCount: 0,
       gitlinkCount: 0
     },
+    rights: releaseRightsReceipt(),
     dependencies: {
       installedTree: {
         status: "PASS",
@@ -244,6 +281,7 @@ function releaseProvenanceReceipt() {
       installedTreeMatchesLock: true,
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
+      currentSurfaceRightsVerified: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary: "Fixture provenance only."
@@ -528,6 +566,16 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
     () =>
       validateReleaseProvenance(receipt, {
         sourceCommit: "e".repeat(40),
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const overstated = releaseProvenanceReceipt();
+  overstated.rights.finalReleaseReady = true;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(overstated, {
+        sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),
     /AWS_READINESS_RELEASE_PROVENANCE/

@@ -32,7 +32,7 @@ const SECURITY_HEADERS = Object.freeze({
     "script-src 'self'",
     "style-src 'self'",
     "connect-src 'self'",
-    "img-src 'self' data:",
+    "img-src 'self'",
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",

@@ -157,13 +157,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "5342f26cf690c67cc865539dca04b8f0ce4e536742c66c476c1b012cd649e8f0",
+      "sha256": "bbdc3b5b814b6be08940c01fe14649dab6cfdb2b05c51c98e240e562c98c0dc8",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "d0cb2cf857186f248b24e3628569f3132f6c70fb669dd8ff1ddbceb49fd5f61a",
+      "sha256": "34502f45ca7b8d8c81bd5446c19e510422dbcbebb4326508a0723ffeae23415e",
       "kind": "verification-code"
     },
     {
@@ -175,13 +175,13 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "ae4779f31f0a6ba4743d6edafb97180f512f87de4ffd77011201919b46badb06",
+      "sha256": "7afe088e4aadf06f586986969ca916c5e34e5e7ab65d93e73a75cc7f025d28e3",
       "kind": "boundary-ledger"
     },
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "f11945e75564c11ebc55efc5cf67dd1f77e51d563722443090fd8127555e514e",
+      "sha256": "82e553aa6f2a8d9958edc257dee7b2587b66c86a66009d16276fc91bf72089ac",
       "kind": "verification-code"
     },
     {
@@ -199,19 +199,37 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "85897f4bbff65a18be0e30702bfdb4695c5f68d952a5655e2b75be5671697ae2",
+      "sha256": "a7d56c976577a836c3cf81a3c7fa86f16fddb0fe6661ad9a8431f12b38b59601",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "ab53beb16c07b8ea04bbfa28b4261693de480667e21e0b1e245c38ee75bbbacf",
+      "sha256": "f3c980afb1d28ec2dad334ac9ab0280786ee9cb1b6ec9ada807b71fea1dc161d",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "9cad85dbdd282194cc77158d8f0bc155de1d95c742054d2665928d656d883ae1",
+      "sha256": "0fb7fd5c4e2dd39421a4586ca5e20e2e8a5abe989f3ae2c8d41e585dfeeeb5d8",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-rights-manifest",
+      "path": "docs/media/RIGHTS_MANIFEST.json",
+      "sha256": "9143d1647e10e336796e04d46f981dd51da19b5b649a770b853bc97ad5b36e98",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-rights-tests",
+      "path": "test/release-rights.test.js",
+      "sha256": "53e919e87a75fab0e5531934393e3739225d4344547fecf118ef34c3746b0e79",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-rights-verifier",
+      "path": "scripts/verify-release-rights.js",
+      "sha256": "1026f507d5237f5dc69966b323f5345bfd7e4eee977e7810fce5cbdb54cb365a",
       "kind": "verification-code"
     },
     {
@@ -468,9 +486,23 @@
         "release-provenance-tests",
         "release-provenance-verifier"
       ],
-      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live behavior, or submission approval.",
+      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final current-surface rights receipt, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live behavior, or submission approval.",
       "remainingRequirements": [
         "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
+      ]
+    },
+    {
+      "id": "release-rights-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "media-rights-ledger",
+        "release-rights-manifest",
+        "release-rights-tests",
+        "release-rights-verifier"
+      ],
+      "boundary": "The exact current-surface verifier hash-binds six distributed source/media files and eight control files; inventories the three tracked media files by extension and content signature; requires same-row ledger classifications; reconciles README, browser, local-server, AWS-demo, and public-verifier routes; rejects remote/data/blob media, unreviewed font families, blocked planned-asset paths, and the three known TrustAgentic reference hashes. It returns CURRENT_SURFACES_PASS with finalReleaseReady false because the favicon remains interim and no exact-release private-review receipt exists. This technical control grants no rights and cannot prove ownership, derivative identity, trademark permission, or final marketing approval.",
+      "remainingRequirements": [
+        "Record every final-production asset as a cleared exact hash or deliberate omission, complete the exact-release private rights review, and rerun this control at the final official-main commit."
       ]
     },
     {

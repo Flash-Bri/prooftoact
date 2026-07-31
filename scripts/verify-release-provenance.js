@@ -6,12 +6,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { verifyDependencyInventory } from "./verify-dependency-inventory.js";
 import { verifyCurrentBundledThirdPartyNotices } from "./verify-bundled-third-party-notices.js";
+import { verifyReleaseRights } from "./verify-release-rights.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/tideproof.git";
 const EXPECTED_BRANCH = "main";
 const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
-const SCHEMA = "tideproof.release-provenance.v1";
+const SCHEMA = "tideproof.release-provenance.v2";
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
 
@@ -509,9 +510,38 @@ export async function runReleaseProvenance({
   projectRoot = DEFAULT_ROOT,
   run = defaultRunner(projectRoot),
   verifyInventory = verifyDependencyInventory,
-  verifyNotices = verifyCurrentBundledThirdPartyNotices
+  verifyNotices = verifyCurrentBundledThirdPartyNotices,
+  verifyRights = verifyReleaseRights
 } = {}) {
   const source = verifyRepositoryHistory({ run, projectRoot });
+  const rights = verifyRights({ rootDir: projectRoot });
+  assert(
+    rights?.schemaVersion ===
+      "tideproof.release-rights-verification.v1" &&
+      rights.status === "CURRENT_SURFACES_PASS" &&
+      rights.finalReleaseReady === false &&
+      HEX_64.test(rights.manifestSha256) &&
+      HEX_64.test(rights.ledgerSha256) &&
+      Number.isSafeInteger(rights.distributedFileCount) &&
+      rights.distributedFileCount > 0 &&
+      Number.isSafeInteger(rights.currentClearedFileCount) &&
+      rights.currentClearedFileCount > 0 &&
+      Number.isSafeInteger(rights.interimOnlyFileCount) &&
+      rights.interimOnlyFileCount > 0 &&
+      rights.currentClearedFileCount + rights.interimOnlyFileCount ===
+        rights.distributedFileCount &&
+      Number.isSafeInteger(rights.repositoryMediaFileCount) &&
+      rights.repositoryMediaFileCount > 0 &&
+      Number.isSafeInteger(rights.trackedFileCount) &&
+      rights.trackedFileCount >= rights.distributedFileCount &&
+      Number.isSafeInteger(rights.prohibitedSourceDigestCount) &&
+      rights.prohibitedSourceDigestCount > 0 &&
+      Array.isArray(rights.finalReleaseRequirements) &&
+      rights.finalReleaseRequirements.length > 0 &&
+      rights.checks &&
+      Object.values(rights.checks).every((value) => value === true),
+    "RELEASE_PROVENANCE_RIGHTS"
+  );
   const lockBytes = fs.readFileSync(path.join(projectRoot, "package-lock.json"));
   const packageLock = readJson(
     path.join(projectRoot, "package-lock.json"),
@@ -562,6 +592,7 @@ export async function runReleaseProvenance({
     },
     history: source.history,
     trackedTree: source.trackedTree,
+    rights,
     dependencies: {
       installedTree,
       inventory,
@@ -590,10 +621,11 @@ export async function runReleaseProvenance({
       installedTreeMatchesLock: true,
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
+      currentSurfaceRightsVerified: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary:
-      "This receipt binds Git ancestry, tracked file modes, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. It does not independently prove originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live AWS behavior, or final submission approval."
+      "This receipt binds Git ancestry, tracked file modes, the current-surface rights inventory, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The rights control remains explicitly non-final and grants no rights. This receipt does not independently prove originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live AWS behavior, or final submission approval."
   };
 }
 
