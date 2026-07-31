@@ -164,7 +164,7 @@ the source may not enter the public repository or published media.
 | `V08 docs/media/demo-title.png` and `demo-end.png` | `1920 × 1080`, sRGB, lossless masters; title card identifies a synthetic demo, end card carries verified public URLs and exact evidence state | Demo video | `SPEC_ONLY`; URLs and claims are filled only at release freeze |
 | `V09 docs/media/architecture.svg` | Vector source matching the browser trust-boundary diagram; accessible text counterpart; `2200 × 720` PNG export for non-SVG surfaces | Website, README, video | `SPEC_ONLY`; project-created and checked against `ARCHITECTURE.md` |
 | `V10 evidence/release/screenshots/` | Browser captures at `1440 × 900` and mobile `390 × 844`, plus `200%` zoom and reduced-motion states; no browser profile data | README, submission, private review | `SPEC_ONLY`; capture only from the exact public-release commit |
-| `V11 docs/media/RIGHTS.md` | One row per public visual with source hash, owner, creator, license/grant, allowed channels, attribution, modification status, and reviewer/date | Release evidence | `REQUIRED`; every other visual asset fails closed until its row is complete |
+| `V11 docs/media/RIGHTS.md` | One row per public visual with source hash, owner, creator, license/grant, allowed channels, attribution, modification status, and reviewer/date | Release evidence | `ACTIVE BASELINE`; current clean-room surfaces are inventoried, but every pending production asset still fails closed until its row is complete |
 
 The Brian-provided TrustAgentic source board is a reference asset, not a
 transparent master: `1448 × 1086`, SHA-256
