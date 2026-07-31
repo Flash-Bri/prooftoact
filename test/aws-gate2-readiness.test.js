@@ -465,10 +465,10 @@ function releaseProvenanceReceipt() {
     dependencies: {
       installedTree: {
         status: "PASS",
-        lockedPackageCount: 71,
-        installedPackageCount: 46,
+        lockedPackageCount: 72,
+        installedPackageCount: 47,
         installedRuntimeCount: 44,
-        installedDevelopmentOnlyCount: 2,
+        installedDevelopmentOnlyCount: 3,
         installedOptionalCount: 2,
         omittedOptionalCount: 25,
         extraPackageCount: 0,
@@ -480,12 +480,12 @@ function releaseProvenanceReceipt() {
         status: "PASS",
         sourceLockSha256: "1".repeat(64),
         inventorySha256: "3".repeat(64),
-        packageCount: 71,
+        packageCount: 72,
         runtimeCount: 44,
-        developmentOnlyCount: 27,
+        developmentOnlyCount: 28,
         optionalCount: 27,
         installScriptCount: 1,
-        licenses: { MIT: 71 }
+        licenses: { MIT: 71, "MPL-2.0": 1 }
       },
       bundledThirdPartyNotices: {
         status: "PASS",
@@ -853,6 +853,19 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
   assert.throws(
     () =>
       validateReleaseProvenance(submissionReady, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const unsupportedInventoryLicense = releaseProvenanceReceipt();
+  unsupportedInventoryLicense.dependencies.inventory.licenses = {
+    MIT: 71,
+    "GPL-3.0": 1
+  };
+  assert.throws(
+    () =>
+      validateReleaseProvenance(unsupportedInventoryLicense, {
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),
