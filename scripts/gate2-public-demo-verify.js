@@ -16,7 +16,6 @@ const ASSET_FILES = Object.freeze({
   "/": "web/index.html",
   "/app.js": "web/app.js",
   "/styles.css": "web/styles.css",
-  "/favicon.svg": "web/favicon.svg",
   "/architecture.svg": "docs/media/architecture.svg",
   "/evidence/gate1-authority":
     "evidence/gate1-authority-2026-07-30.md",

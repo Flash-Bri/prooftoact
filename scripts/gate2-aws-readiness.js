@@ -744,7 +744,7 @@ export function validateReleaseProvenance(
       Number.isSafeInteger(rights.currentClearedFileCount) &&
       rights.currentClearedFileCount > 0 &&
       Number.isSafeInteger(rights.interimOnlyFileCount) &&
-      rights.interimOnlyFileCount > 0 &&
+      rights.interimOnlyFileCount === 0 &&
       rights.currentClearedFileCount + rights.interimOnlyFileCount ===
         rights.distributedFileCount &&
       Number.isSafeInteger(rights.repositoryMediaFileCount) &&

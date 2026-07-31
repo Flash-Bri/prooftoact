@@ -46,8 +46,6 @@ function assets() {
     ].join("\n"),
     "/app.js": "export const tideproof = true;\n",
     "/styles.css": ":root { color-scheme: dark; }\n",
-    "/favicon.svg":
-      '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n',
     "/architecture.svg": [
       '<svg xmlns="http://www.w3.org/2000/svg" role="img">',
       "<title>Tideproof trust boundaries</title>",
@@ -210,6 +208,7 @@ test("public demo verifier binds every route and denial", async () => {
       ),
       [
         "GET /__tideproof_not_found__ 404",
+        "GET /favicon.svg 404",
         "HEAD / 404",
         "POST /api/scenario 404",
         "GET /advisory 404",

@@ -25,7 +25,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "6582b12db4aa300b77cb5943a74c6e3e4f366f1696732c2f4c3f6b9c7f2fd273",
+      "sha256": "d32818d528af57870334244ce9b892aeba4ae8439b2ea720e44e835b501eae09",
       "kind": "boundary-ledger"
     },
     {
@@ -157,13 +157,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "bbdc3b5b814b6be08940c01fe14649dab6cfdb2b05c51c98e240e562c98c0dc8",
+      "sha256": "1481c3563e74a1f99c65216ab84a770af37aa736e37c34a467f46893521bd970",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "34502f45ca7b8d8c81bd5446c19e510422dbcbebb4326508a0723ffeae23415e",
+      "sha256": "e34418488a4d828e5ab31cb206b9faaeee849b89cd4b71553cc12a1c1b8a4fbd",
       "kind": "verification-code"
     },
     {
@@ -175,7 +175,7 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "7afe088e4aadf06f586986969ca916c5e34e5e7ab65d93e73a75cc7f025d28e3",
+      "sha256": "37b6bb4b58a5468491aa748d8e7a5876dfeb2433dfd851e25e94704e2daf80d1",
       "kind": "boundary-ledger"
     },
     {
@@ -205,31 +205,31 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "f3c980afb1d28ec2dad334ac9ab0280786ee9cb1b6ec9ada807b71fea1dc161d",
+      "sha256": "8bd4b252de4b81db01c5492632bcd04f6d9a0bf0c060cd3d2299ef17bd8b1515",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "0fb7fd5c4e2dd39421a4586ca5e20e2e8a5abe989f3ae2c8d41e585dfeeeb5d8",
+      "sha256": "5b091a0b28199bdc62d88535f9c5a77aaa5f4b2f4f98b634e514ca67ca8a1ad1",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "9143d1647e10e336796e04d46f981dd51da19b5b649a770b853bc97ad5b36e98",
+      "sha256": "cc40c6953ba0c054ddd0278d164833783208fb95474dcd4c1de523835b2bdffe",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-rights-tests",
       "path": "test/release-rights.test.js",
-      "sha256": "53e919e87a75fab0e5531934393e3739225d4344547fecf118ef34c3746b0e79",
+      "sha256": "e1565d2b958f69b5dde39f631a82bc088cd94bebc61935f2f3dfdb3389322ad1",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-verifier",
       "path": "scripts/verify-release-rights.js",
-      "sha256": "1026f507d5237f5dc69966b323f5345bfd7e4eee977e7810fce5cbdb54cb365a",
+      "sha256": "cc9396897e855ac1e55eaa6c4aef477efe532771a2f5b77b276b7b7a0055d641",
       "kind": "verification-code"
     },
     {
@@ -500,7 +500,7 @@
         "release-rights-tests",
         "release-rights-verifier"
       ],
-      "boundary": "The exact current-surface verifier hash-binds six distributed source/media files and eight control files; inventories the three tracked media files by extension and content signature; requires same-row ledger classifications; reconciles README, browser, local-server, AWS-demo, and public-verifier routes; rejects remote/data/blob media, unreviewed font families, blocked planned-asset paths, and the three known TrustAgentic reference hashes. It returns CURRENT_SURFACES_PASS with finalReleaseReady false because the favicon remains interim and no exact-release private-review receipt exists. This technical control grants no rights and cannot prove ownership, derivative identity, trademark permission, or final marketing approval.",
+      "boundary": "The exact current-surface verifier hash-binds five distributed source/media files and eight control files; inventories the two tracked media files by extension and content signature; requires same-row ledger classifications; reconciles README, browser, local-server, AWS-demo, and public-verifier routes; rejects remote/data/blob media, unreviewed font families, blocked planned-asset paths, and the three known TrustAgentic reference hashes. It returns CURRENT_SURFACES_PASS with zero interim-only files and finalReleaseReady false because final-production asset decisions and the exact-release private-review receipt remain pending. This technical control grants no rights and cannot prove ownership, derivative identity, trademark permission, or final marketing approval.",
       "remainingRequirements": [
         "Record every final-production asset as a cleared exact hash or deliberate omission, complete the exact-release private rights review, and rerun this control at the final official-main commit."
       ]

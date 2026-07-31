@@ -16,7 +16,6 @@ const CONTENT_TYPES = Object.freeze({
   "/": "text/html; charset=utf-8",
   "/app.js": "text/javascript; charset=utf-8",
   "/styles.css": "text/css; charset=utf-8",
-  "/favicon.svg": "image/svg+xml",
   "/architecture.svg": "image/svg+xml",
   "/api/health": "application/json; charset=utf-8",
   "/api/scenario": "application/json; charset=utf-8",
@@ -55,6 +54,11 @@ const NEGATIVE_PROBES = Object.freeze([
   Object.freeze({
     method: "GET",
     path: "/__tideproof_not_found__",
+    acceptedStatuses: Object.freeze([404])
+  }),
+  Object.freeze({
+    method: "GET",
+    path: "/favicon.svg",
     acceptedStatuses: Object.freeze([404])
   }),
   Object.freeze({
@@ -100,7 +104,6 @@ function sha256(value) {
 function cacheControl(path) {
   return path === "/app.js" ||
     path === "/styles.css" ||
-    path === "/favicon.svg" ||
     path === "/architecture.svg"
     ? "public, max-age=300, must-revalidate"
     : "no-store";

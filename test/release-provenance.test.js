@@ -106,10 +106,10 @@ function rightsReceipt() {
     manifestPath: "docs/media/RIGHTS_MANIFEST.json",
     manifestSha256: "3".repeat(64),
     ledgerSha256: "4".repeat(64),
-    distributedFileCount: 6,
+    distributedFileCount: 5,
     currentClearedFileCount: 5,
-    interimOnlyFileCount: 1,
-    repositoryMediaFileCount: 3,
+    interimOnlyFileCount: 0,
+    repositoryMediaFileCount: 2,
     trackedFileCount: 120,
     prohibitedSourceDigestCount: 3,
     finalReleaseRequirements: [

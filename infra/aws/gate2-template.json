@@ -2869,27 +2869,6 @@
         }
       }
     },
-    "DemoFaviconRoute": {
-      "Type": "AWS::ApiGatewayV2::Route",
-      "Properties": {
-        "ApiId": {
-          "Ref": "HttpApi"
-        },
-        "RouteKey": "GET /favicon.svg",
-        "AuthorizationType": "NONE",
-        "Target": {
-          "Fn::Join": [
-            "/",
-            [
-              "integrations",
-              {
-                "Ref": "DemoIntegration"
-              }
-            ]
-          ]
-        }
-      }
-    },
     "DemoArchitectureRoute": {
       "Type": "AWS::ApiGatewayV2::Route",
       "Properties": {

@@ -36,10 +36,6 @@ function assets() {
       path.join(root, "web/styles.css"),
       "utf8"
     ),
-    "/favicon.svg": fs.readFileSync(
-      path.join(root, "web/favicon.svg"),
-      "utf8"
-    ),
     "/architecture.svg": fs.readFileSync(
       path.join(root, "docs/media/architecture.svg"),
       "utf8"
@@ -127,6 +123,7 @@ test("public demo serves only the bounded signed-out proof surface", async () =>
     page.body,
     /https:\/\/github\.com\/Flash-Bri\/tideproof/
   );
+  assert.doesNotMatch(page.body, /rel="icon"|favicon/i);
   const architecture = await handler(event("/architecture.svg"));
   assert.equal(architecture.statusCode, 200);
   assert.equal(
@@ -183,6 +180,7 @@ test("public demo rejects direct, expanded, and non-GET events", async () => {
   const invalidEvents = [
     {},
     { ...event("/"), rawPath: "/missing" },
+    event("/favicon.svg"),
     {
       ...event("/"),
       body: JSON.stringify({ prompt: "expand authority" })

@@ -5,7 +5,6 @@ export const PUBLIC_DEMO_PATHS = Object.freeze([
   "/",
   "/app.js",
   "/styles.css",
-  "/favicon.svg",
   "/architecture.svg",
   "/api/health",
   "/api/scenario",
@@ -37,7 +36,6 @@ const CONTENT_TYPES = Object.freeze({
   "/": "text/html; charset=utf-8",
   "/app.js": "text/javascript; charset=utf-8",
   "/styles.css": "text/css; charset=utf-8",
-  "/favicon.svg": "image/svg+xml",
   "/architecture.svg": "image/svg+xml",
   "/evidence/gate1-authority": "text/markdown; charset=utf-8",
   "/evidence/gate1-recovery": "text/markdown; charset=utf-8",
@@ -257,7 +255,6 @@ export function createPublicDemoHandler({
     const cacheControl =
       path === "/app.js" ||
       path === "/styles.css" ||
-      path === "/favicon.svg" ||
       path === "/architecture.svg"
         ? "public, max-age=300, must-revalidate"
         : "no-store";
