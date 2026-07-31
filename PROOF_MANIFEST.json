@@ -47,6 +47,30 @@
       "kind": "release-receipt"
     },
     {
+      "id": "dependency-inventory",
+      "path": "docs/DEPENDENCY_INVENTORY.md",
+      "sha256": "574a5e0d2381d30326f1df10ffeeac636340a269de65a790eda8119e1462cbd9",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "dependency-inventory-tests",
+      "path": "test/dependency-inventory.test.js",
+      "sha256": "dca65473091befe0496bcfadcaf5912a212fbc7d24a3dff0d51ff4c22c23c5c0",
+      "kind": "verification-code"
+    },
+    {
+      "id": "dependency-inventory-verifier",
+      "path": "scripts/verify-dependency-inventory.js",
+      "sha256": "3edff449d59695181ac24420f8dcb848dbbdf9f180a90fc88319d20cc8f2e76c",
+      "kind": "verification-code"
+    },
+    {
+      "id": "dependency-lock",
+      "path": "package-lock.json",
+      "sha256": "fe1e765145a7bb2e0ee0cadce2e646b7d792c447aee37f010d40453405fd08d9",
+      "kind": "boundary-ledger"
+    },
+    {
       "id": "gate1-ambiguity-evidence",
       "path": "evidence/gate1-ambiguity-2026-07-30.md",
       "sha256": "6ce3446ce19c82ecb52b178c4d00d080fa9281a11bfecefdd5fb8050a3ae0a1b",
@@ -103,7 +127,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "5ec5ad13c4c5aaaaa04cfb9c9bca9c09a6c880384dcb5f403292ebf970e7bbc0",
+      "sha256": "a2856fd0baec3d9b9c3e2e1340fb1fc23cdcf66191dfb74cad1f9c1a23da00f3",
       "kind": "verification-code"
     },
     {
@@ -308,6 +332,20 @@
       "boundary": "The receipts document the budget prerequisite and the read-only stop condition only; they do not prove current spend or authorize deployment.",
       "remainingRequirements": [
         "Machine-verifiable clean authenticated AWS preflight PASS and current-spend receipt under the effective 13.14 USD remaining project envelope."
+      ]
+    },
+    {
+      "id": "dependency-inventory-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "dependency-inventory",
+        "dependency-inventory-tests",
+        "dependency-inventory-verifier",
+        "dependency-lock"
+      ],
+      "boundary": "The exact current package lock, complete 71-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata and do not replace the final exact-release history, bundle, license-text, vulnerability, and provenance audit.",
+      "remainingRequirements": [
+        "Rerun the verifier and complete the dependency audit against the final release commit and exact deployed bundles."
       ]
     },
     {

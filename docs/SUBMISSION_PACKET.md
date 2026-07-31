@@ -67,7 +67,8 @@ Every item must have a dated receipt tied to the final release commit:
   submission use one reviewed visual system and the same verified vocabulary.
 - [ ] `CLAIMS.md`, `CLEAN_ROOM.md`, the evidence matrix, dependency inventory,
   `PROOF_MANIFEST.json`, and pre-existing-work disclosure receive a final
-  exact-commit audit; `npm run proof:verify` passes.
+  exact-commit audit; `npm run proof:verify` and
+  `npm run dependencies:verify` pass.
 - [ ] The Devpost preview contains no secrets, personal data, internal URLs,
   unsupported superlatives, operational-emergency implication, or unresolved
   stop token.
