@@ -13,6 +13,12 @@ The thesis is deliberately narrower than “AI remembers better”:
 > Most memory systems optimize what an agent should remember. Tideproof governs
 > what an agent is still allowed to believe and act upon.
 
+![Tideproof trust boundaries: evidence is admitted before vector ranking, agents propose without authority, CockroachDB commits one fenced receipt, and Managed MCP returns context only.](docs/media/architecture.svg)
+
+The diagram is synthetic and claim-bounded. Its accessible text counterpart
+and the fuller Gate One and Gate Two topology are in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## What exists now
 
 This repository contains a deterministic local vertical slice, an accepted
