@@ -22,9 +22,9 @@ live IAM enforcement, or permission to deploy or publish.
 | Asset or boundary | Current protection | Remaining release proof |
 | --- | --- | --- |
 | Signed-out judge surface | Ten enumerated `GET` routes, exact API event validation, no ambient credentials, no CORS, no cookies, strict browser headers, bounded response size, and a logs-only Demo role | Exact deployed-byte, route, header, throttle, IAM, abuse, and signed-out review |
-| Advisory proposal | One `AWS_IAM` `POST /advisory` route, one immutable coordinator alias, schema-bound input, one bounded Bedrock model, and an explicitly untrusted proposal | Live signed-caller denial/allow receipts, model invocation receipt, and private payload/log review |
+| Advisory proposal | One `AWS_IAM` `POST /advisory` route, one immutable coordinator alias, exact dedicated-role STS principal validation, schema-bound input, one bounded Bedrock model, and an explicitly untrusted proposal | Live dedicated-role allow plus alternate-principal denial receipts, model invocation receipt, and private payload/log review |
 | Receipt signing | One P-256 `SIGN_VERIFY` KMS key, digest-only ECDSA signing, one immutable signer alias, and no model, secret, or arbitrary Lambda capability | Live key-policy, public-key, sign/verify, direct-invoke-denial, and teardown receipts |
-| Authority spend | One exact project secret, `sslmode=verify-full`, derived operation fields, typed `SECURITY DEFINER` surfaces, serializable one-winner logic, and no model/signing/arbitrary-Lambda capability | Live secret/IAM audit, overlapping two-Lambda race, ambiguous-commit behavior, and later read-only durable-state reconciliation |
+| Authority spend | One exact project secret ARN and `AWSCURRENT` VersionId, exact Cockroach host/port, `sslmode=verify-full`, bounded database timeouts, derived operation fields, a two-contender typed `SECURITY DEFINER` wrapper, serializable one-winner logic, and no model/signing/arbitrary-Lambda capability | Live secret/version/endpoint/IAM audit, overlapping two-Lambda race, ambiguous-commit behavior, and later read-only durable-state reconciliation |
 | CockroachDB memory and recovery | Public privileges revoked, default privileges constrained, typed APIs, fixed recovery query, response identity binding, redirect rejection, timeouts, and context-only recovery | Final exact-release database grants, MCP audit, credential isolation, and private human review |
 | Repository and evidence | Exact dependency lock, bundle notices, full-history provenance, bounded privacy scan, claim ledger, and proof manifest | Final official-main rerun plus private review of repository, receipts, screenshots, video, URLs, and submission fields |
 
@@ -51,9 +51,22 @@ enforcement:
   denials. Published versions and `proof` aliases prevent mutable `$LATEST`
   targets from being the intended path.
 - **Secret or transport weakening:** the authority runtime accepts one exact
-  secret shape and a `tp_authorizer_user` CockroachDB URL with only
+  secret shape, exact `AWSCURRENT` VersionId, and a
+  `tp_gate2_authorizer_user`
+  CockroachDB URL with the configured host/port and only
   `sslmode=verify-full`; the Managed MCP client uses the fixed Cockroach Cloud
   endpoint, rejects redirects, bounds requests, and validates response IDs.
+- **Database actor and name resolution:** Gate One and Gate Two use separate
+  database users and roles. The Gate Two role can execute only its fixed-two-
+  contender wrapper plus the exact read-only resolver/observer, while explicit
+  cross-grant and cross-membership revocations deny direct Gate One spend; the
+  Gate One role cannot execute the Gate Two wrapper. Both spend contracts use
+  `session_user`, not a caller-supplied authenticated-agent duplicate. All
+  application relations and nested application functions in primary/recovery
+  `SECURITY DEFINER` bodies are schema-qualified. CockroachDB v26.2 has no
+  documented function-level `SET search_path`, so each database credential
+  remains an authority capability within its grant surface and live
+  grant/session review remains required.
 - **Replay, ambiguous commit, and inherited authority:** these are enforced by
   the accepted Gate One transaction/recovery controls and the local Gate Two
   candidate. The static security gate binds those sources but does not upgrade

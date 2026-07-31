@@ -217,13 +217,35 @@ function isHttpEvent(event) {
   return event?.version === "2.0" && Boolean(event?.requestContext?.http);
 }
 
+function expectedAssumedRoleArnPattern(roleArn, expectedAccountId) {
+  const match = /^arn:(aws(?:-[a-z0-9-]+)?):iam::(\d{12}):role\/([A-Za-z0-9+=,.@_-]{1,64})$/.exec(
+    roleArn
+  );
+  if (!match || match[2] !== expectedAccountId) {
+    throw new Error("SIGNED_CALLER_CONFIGURATION_REJECTED");
+  }
+  const [, partition, accountId, roleName] = match;
+  const escapedRoleName = roleName.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+  return new RegExp(
+    `^arn:${partition}:sts::${accountId}:assumed-role/${escapedRoleName}/[A-Za-z0-9+=,.@_-]{2,64}$`
+  );
+}
+
 function validateHttpCaller(event) {
   const context = event?.requestContext;
   const iam = context?.authorizer?.iam;
   const now = Date.now();
+  const expectedAccountId = process.env.EXPECTED_ACCOUNT_ID;
+  const expectedCaller = expectedAssumedRoleArnPattern(
+    process.env.EXPECTED_ADVISORY_CALLER_ROLE_ARN,
+    expectedAccountId
+  );
   if (
     !isHttpEvent(event) ||
-    context.accountId !== process.env.EXPECTED_ACCOUNT_ID ||
+    context.accountId !== expectedAccountId ||
     context.apiId !== process.env.EXPECTED_API_ID ||
     context.routeKey !== "POST /advisory" ||
     context.stage !== "$default" ||
@@ -234,8 +256,7 @@ function validateHttpCaller(event) {
     context.timeEpoch < now - 300_000 ||
     context.timeEpoch > now + 300_000 ||
     typeof iam?.userArn !== "string" ||
-    iam.userArn.length < 20 ||
-    iam.userArn.length > 300
+    !expectedCaller.test(iam.userArn)
   ) {
     throw new Error("SIGNED_CALLER_REJECTED");
   }
@@ -658,6 +679,7 @@ exports.__test = {
   sha256BytesHex,
   unsignedReceipt,
   validateExpectedSigningKey,
+  expectedAssumedRoleArnPattern,
   validateHttpCaller,
   validateKmsPublicKey,
   validateProposal,

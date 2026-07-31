@@ -67,7 +67,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "37a36965b7a50121bd31367c20f7b5e00b2e47f85d3015669c01560cb7c8e694",
+      "sha256": "25061fd425b0d5b67d269ee822dbc010231f234192b329daf3b746d469774f3a",
       "kind": "boundary-ledger"
     },
     {
@@ -253,7 +253,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "c6ce0c9da155ec26571f167562f465b801cf38d83dcab007b982f9cf9668b87f",
+      "sha256": "415000902918348fcfe4f9b47d86fcda7128c78e6be043ecf5a78207ed3c3734",
       "kind": "boundary-ledger"
     },
     {
@@ -277,7 +277,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "dd15f84e91e749224bc12250ed389d7d3ca48f6137e6d571110308a54e8fc753",
+      "sha256": "7433de62ab846d3f1cd66208fb55de0455c404a7c1492644a067c5a40ad6f932",
       "kind": "boundary-ledger"
     },
     {
@@ -325,13 +325,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "fadb47c628c17a1a7c0511138f1e90331d4781a09c7a5e326980b352094a3e56",
+      "sha256": "584712bd074316c8efbb65e3d189457108a165d3278abf64d5232fbe535b5184",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "25ceb70e44b14651e3e652b5c54f16357787db62bc0b3f7705f770b3c6f2e83d",
+      "sha256": "786c0db1d3a6e9aa2b773e70ed623b2b0d9fecbaba53645cfafab9984dbfcc1f",
       "kind": "boundary-ledger"
     },
     {
@@ -343,7 +343,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "848267597e8d05ce414f9d2e1c2640d6d4aac9f48876109a7711704f27b56dbd",
+      "sha256": "4aec849cb35017a8c087edb6e148d3e81a871481075ec5ced3f48ecc89ccb5cc",
       "kind": "verification-code"
     },
     {
@@ -355,7 +355,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "3e161811c775ad280283a8f956c9970dcbdbc686daed9a904cbfcfd1fa27045c",
+      "sha256": "da4f3af6fa18cec85be73d83bf401029f2068260aa76a2e71278211a36d4f34b",
       "kind": "boundary-ledger"
     },
     {

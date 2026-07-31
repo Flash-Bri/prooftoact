@@ -14,6 +14,7 @@ import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 const USERS = [
   "tp_ingest_user",
   "tp_authorizer_user",
+  "tp_gate2_authorizer_user",
   "tp_dispatch_user",
   "tp_recovery_audit_user",
   "tp_audit_user"
@@ -31,15 +32,19 @@ const SPEND_AUTHORITY_SQL = `
     $7,
     $8,
     $9,
-    $10,
+    $10::UUID,
     $11::UUID,
-    $12::UUID,
-    $13::JSONB,
+    $12::JSONB,
+    $13,
     $14,
-    $15,
-    $16::INT8
+    $15::INT8
   )
 `;
+
+const GATE2_SPEND_AUTHORITY_SQL = SPEND_AUTHORITY_SQL.replace(
+  "tp_api.g1_spend_authority_v1",
+  "tp_api.g2_spend_authority_race_v1"
+);
 
 const OBSERVE_AUTHORITY_RACE_SQL = `
   SELECT *
@@ -49,7 +54,7 @@ const OBSERVE_AUTHORITY_RACE_SQL = `
   )
 `;
 
-function spendAuthorityValues(request, authenticatedAgentId) {
+function spendAuthorityValues(request) {
   return [
     request.tenantId,
     request.operationId,
@@ -59,7 +64,6 @@ function spendAuthorityValues(request, authenticatedAgentId) {
     request.incidentId,
     request.resourceId,
     request.agentId,
-    authenticatedAgentId,
     request.agency,
     request.evidenceId,
     request.effectKey,
@@ -92,16 +96,20 @@ async function withClient(connectionString, work) {
   }
 }
 
-async function expectPrivilegeDenied(client, query, values = []) {
+async function expectSqlState(client, query, values, sqlstate) {
   try {
     await client.query(query, values);
   } catch (error) {
-    if (error.code === "42501") {
+    if (error.code === sqlstate) {
       return { denied: true, sqlstate: error.code };
     }
     throw error;
   }
-  throw new Error("expected SQLSTATE 42501 privilege denial");
+  throw new Error(`expected SQLSTATE ${sqlstate}`);
+}
+
+async function expectPrivilegeDenied(client, query, values = []) {
+  return expectSqlState(client, query, values, "42501");
 }
 
 async function main() {
@@ -363,10 +371,7 @@ async function main() {
       try {
         spent = await client.query(
           SPEND_AUTHORITY_SQL,
-          spendAuthorityValues(
-            normalizedCapabilityRequest,
-            normalizedCapabilityRequest.agentId
-          )
+          spendAuthorityValues(normalizedCapabilityRequest)
         );
         await client.query("COMMIT");
       } catch (error) {
@@ -375,17 +380,11 @@ async function main() {
       }
       const replay = await client.query(
         SPEND_AUTHORITY_SQL,
-        spendAuthorityValues(
-          normalizedCapabilityRequest,
-          normalizedCapabilityRequest.agentId
-        )
+        spendAuthorityValues(normalizedCapabilityRequest)
       );
       const denied = await client.query(
         SPEND_AUTHORITY_SQL,
-        spendAuthorityValues(
-          normalizedDeniedRequest,
-          normalizedDeniedRequest.agentId
-        )
+        spendAuthorityValues(normalizedDeniedRequest)
       );
       const durableProof = await client.query(
         OBSERVE_AUTHORITY_RACE_SQL,
@@ -399,19 +398,10 @@ async function main() {
           normalizedDeniedRequest.requestDigest
         ]
       );
-      const wrongActorRequest = normalizedAuthorityRequestFor({
-        ...capabilityRequest,
-        operationId: randomUUID(),
-        intentNonce: randomUUID(),
-        effectKey: randomUUID()
-      });
-      const wrongActor = await expectPrivilegeDenied(
+      const gateTwoDirect = await expectPrivilegeDenied(
         client,
-        SPEND_AUTHORITY_SQL,
-        spendAuthorityValues(
-          wrongActorRequest,
-          "synthetic-capability-impostor"
-        )
+        GATE2_SPEND_AUTHORITY_SQL,
+        spendAuthorityValues(normalizedCapabilityRequest)
       );
       return {
         directRead,
@@ -423,8 +413,38 @@ async function main() {
         replayKind: replay.rows[0]?.decision_replay_kind,
         deniedOutcome: denied.rows[0]?.decision_outcome,
         durableProof: durableProof.rows[0],
-        wrongActor
+        gateTwoDirect
       };
+    }
+  );
+  const gateTwoProbeRequest = normalizedAuthorityRequestFor({
+    ...capabilityRequest,
+    operationId: randomUUID(),
+    agentId: "aws-authority-alpha",
+    intentNonce: randomUUID(),
+    effectKey: randomUUID()
+  });
+  const gateTwoAuthorizer = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_gate2_authorizer_user",
+      passwords.tp_gate2_authorizer_user
+    ),
+    async (client) => {
+      const gateOneDirect = await expectPrivilegeDenied(
+        client,
+        SPEND_AUTHORITY_SQL,
+        spendAuthorityValues(gateTwoProbeRequest)
+      );
+      const invalidDigestValues = spendAuthorityValues(gateTwoProbeRequest);
+      invalidDigestValues[2] = "invalid-digest";
+      const nestedGateOneReached = await expectSqlState(
+        client,
+        GATE2_SPEND_AUTHORITY_SQL,
+        invalidDigestValues,
+        "22023"
+      );
+      return { gateOneDirect, nestedGateOneReached };
     }
   );
   const capabilitySnapshot = await authorityStore.snapshot({
@@ -437,6 +457,9 @@ async function main() {
     authorizer.spendFence !== "1" ||
     authorizer.replayKind !== "operation_replay" ||
     authorizer.deniedOutcome !== "resource_held_denied" ||
+    authorizer.gateTwoDirect?.denied !== true ||
+    gateTwoAuthorizer.gateOneDirect?.denied !== true ||
+    gateTwoAuthorizer.nestedGateOneReached?.sqlstate !== "22023" ||
     authorizer.durableProof?.race_receipt_count !== "2" ||
     authorizer.durableProof?.resource_receipt_count !== "2" ||
     authorizer.durableProof?.reserved_count !== "1" ||
@@ -910,6 +933,7 @@ async function main() {
         roles: bootstrap.roles,
         ingest,
         authorizer,
+        gateTwoAuthorizer,
         dispatch,
         recoveryAudit,
         audit,
@@ -920,7 +944,7 @@ async function main() {
           resourceFence: capabilitySnapshot.resource.current_fence
         },
         claimBoundary:
-          "The signed-ingest and authority runtimes can execute only typed SECURITY DEFINER surfaces while direct base-table reads and writes are denied. The 50-session capability race and deployed AWS IAM remain separate evidence gates."
+          "The signed-ingest, Gate One authority, and separate Gate Two authority identities can execute only their typed SECURITY DEFINER surfaces while direct base-table reads, writes, and cross-gate spend calls are denied. The 50-session capability race and deployed AWS IAM remain separate evidence gates."
       },
       null,
       2

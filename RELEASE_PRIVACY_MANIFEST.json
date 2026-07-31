@@ -6,7 +6,7 @@
     {
       "rule": "basic-auth-url",
       "path": "test/aws-authority-lambda.test.js",
-      "matchSha256": "ec5b7569923e2d470d35870d83f61243c1f7db6488e224615077e71c543a0ba0",
+      "matchSha256": "45e01dec8dc41714cde6a6be35f16806b4f95c5e7ddffaef9ec18a3a8a8109c8",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {

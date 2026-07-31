@@ -10,6 +10,12 @@ const POLICY_VERSION = "gate1-policy-v2";
 const LEASE_MS = 300_000;
 const MAX_TRANSACTION_RETRIES = 6;
 const MAX_TRANSACTION_WINDOW_MS = 20_000;
+const DATABASE_TIMEOUTS = Object.freeze({
+  connectionTimeoutMillis: 2_000,
+  query_timeout: 4_500,
+  statement_timeout: 4_000,
+  idle_in_transaction_session_timeout: 3_000
+});
 const CONTENDERS = new Set(["alpha", "bravo"]);
 const AUTHORITY_NAMESPACE = "7c952e66-76b8-5b66-8d13-20ef81e86241";
 const RETRYABLE_TRANSACTION_CODES = new Set(["40001"]);
@@ -25,10 +31,10 @@ const AMBIGUOUS_TRANSACTION_CODES = new Set([
 
 const SPEND_SQL = `
   SELECT *
-  FROM tp_api.g1_spend_authority_v1(
+  FROM tp_api.g2_spend_authority_race_v1(
     $1::UUID, $2::UUID, $3, $4::JSONB,
-    $5::UUID, $6::UUID, $7, $8, $9, $10,
-    $11::UUID, $12::UUID, $13::JSONB, $14, $15, $16::INT8
+    $5::UUID, $6::UUID, $7, $8, $9,
+    $10::UUID, $11::UUID, $12::JSONB, $13, $14, $15::INT8
   )
 `;
 
@@ -125,9 +131,40 @@ function requiredUuidEnvironment(name) {
   return value;
 }
 
+function requiredDatabaseHostEnvironment(name) {
+  const value = requiredEnvironment(name, 253).toLowerCase();
+  if (
+    !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+cockroachlabs\.cloud$/.test(
+      value
+    )
+  ) {
+    throw new Error("AUTHORITY_CONFIGURATION_REJECTED");
+  }
+  return value;
+}
+
+function requiredDatabasePortEnvironment(name) {
+  const value = requiredEnvironment(name, 5);
+  const port = Number(value);
+  if (!/^[1-9][0-9]{0,4}$/.test(value) || port > 65_535) {
+    throw new Error("AUTHORITY_CONFIGURATION_REJECTED");
+  }
+  return value;
+}
+
 function configuration() {
   const config = {
     secretArn: requiredEnvironment("AUTHORITY_DATABASE_SECRET_ARN", 2_048),
+    secretVersionId: requiredEnvironment(
+      "AUTHORITY_DATABASE_SECRET_VERSION_ID",
+      64
+    ),
+    databaseHost: requiredDatabaseHostEnvironment(
+      "AUTHORITY_DATABASE_HOST"
+    ),
+    databasePort: requiredDatabasePortEnvironment(
+      "AUTHORITY_DATABASE_PORT"
+    ),
     tenantId: requiredUuidEnvironment("AUTHORITY_TENANT_ID"),
     runId: requiredUuidEnvironment("AUTHORITY_RUN_ID"),
     incidentId: requiredUuidEnvironment("AUTHORITY_INCIDENT_ID"),
@@ -151,6 +188,7 @@ function configuration() {
     !/^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:\d{12}:secret:[A-Za-z0-9/_+=.@-]+$/.test(
       config.secretArn
     ) ||
+    !/^[A-Za-z0-9-]{32,64}$/.test(config.secretVersionId) ||
     !/^[0-9a-f]{40}$/.test(config.sourceCommit) ||
     !/^[0-9a-f]{40}$/.test(config.treeDigest) ||
     ![
@@ -251,7 +289,7 @@ function authorityRequestFor(event, config) {
   return request;
 }
 
-function validateConnectionString(value) {
+function validateConnectionString(value, expectedHost, expectedPort) {
   let parsed;
   try {
     parsed = new URL(value);
@@ -261,9 +299,10 @@ function validateConnectionString(value) {
   const queryKeys = [...parsed.searchParams.keys()].sort();
   if (
     !["postgres:", "postgresql:"].includes(parsed.protocol) ||
-    parsed.username !== "tp_authorizer_user" ||
+    parsed.username !== "tp_gate2_authorizer_user" ||
     parsed.password.length < 16 ||
-    parsed.hostname.length === 0 ||
+    parsed.hostname !== expectedHost ||
+    parsed.port !== expectedPort ||
     parsed.pathname !== "/tideproof" ||
     parsed.hash !== "" ||
     queryKeys.join("\n") !== "sslmode" ||
@@ -274,10 +313,11 @@ function validateConnectionString(value) {
   return parsed.toString();
 }
 
-function connectionStringFromSecret(response, expectedArn) {
+function connectionStringFromSecret(response, config) {
   if (
     !response ||
-    response.ARN !== expectedArn ||
+    response.ARN !== config.secretArn ||
+    response.VersionId !== config.secretVersionId ||
     typeof response.SecretString !== "string" ||
     response.SecretBinary !== undefined ||
     !Array.isArray(response.VersionStages) ||
@@ -294,7 +334,19 @@ function connectionStringFromSecret(response, expectedArn) {
   if (!exactKeys(secret, ["connectionString"])) {
     throw new Error("AUTHORITY_SECRET_REJECTED");
   }
-  return validateConnectionString(secret.connectionString);
+  return validateConnectionString(
+    secret.connectionString,
+    config.databaseHost,
+    config.databasePort
+  );
+}
+
+function secretRequestFor(config) {
+  return {
+    SecretId: config.secretArn,
+    VersionId: config.secretVersionId,
+    VersionStage: "AWSCURRENT"
+  };
 }
 
 async function loadConnectionString(config) {
@@ -312,9 +364,9 @@ async function loadConnectionString(config) {
     })
   });
   const response = await client.send(
-    new GetSecretValueCommand({ SecretId: config.secretArn })
+    new GetSecretValueCommand(secretRequestFor(config))
   );
-  return connectionStringFromSecret(response, config.secretArn);
+  return connectionStringFromSecret(response, config);
 }
 
 function spendValues(request) {
@@ -327,7 +379,6 @@ function spendValues(request) {
     request.incidentId,
     request.resourceId,
     request.agentId,
-    request.agentId,
     request.agency,
     request.evidenceId,
     request.effectKey,
@@ -336,6 +387,24 @@ function spendValues(request) {
     request.policyVersion,
     request.leaseMs
   ];
+}
+
+function databaseClientConfiguration(connectionString, applicationName) {
+  if (
+    typeof connectionString !== "string" ||
+    connectionString.length === 0 ||
+    ![
+      "tideproof-aws-authority",
+      "tideproof-aws-authority-proof"
+    ].includes(applicationName)
+  ) {
+    throw new Error("AUTHORITY_CONFIGURATION_REJECTED");
+  }
+  return {
+    connectionString,
+    application_name: applicationName,
+    ...DATABASE_TIMEOUTS
+  };
 }
 
 function normalizeTimestamp(value) {
@@ -855,10 +924,12 @@ async function runAuthority({
         createClient ??
         ((value) => {
           const { Client } = require("pg");
-          return new Client({
-            connectionString: value,
-            application_name: "tideproof-aws-authority-proof"
-          });
+          return new Client(
+            databaseClientConfiguration(
+              value,
+              "tideproof-aws-authority-proof"
+            )
+          );
         });
       const proof = await observeAuthorityRace({
         connectionString,
@@ -891,10 +962,12 @@ async function runAuthority({
       createClient ??
       ((value) => {
         const { Client } = require("pg");
-        return new Client({
-          connectionString: value,
-          application_name: "tideproof-aws-authority"
-        });
+        return new Client(
+          databaseClientConfiguration(
+            value,
+            "tideproof-aws-authority"
+          )
+        );
       });
     const result = await spendAuthority({
       connectionString,
@@ -937,6 +1010,7 @@ async function handler(event, context) {
 exports.handler = handler;
 exports.__test = {
   AUTHORITY_NAMESPACE,
+  DATABASE_TIMEOUTS,
   PROOF_RESPONSE_SCHEMA,
   PROOF_SQL,
   REQUEST_SCHEMA,
@@ -947,6 +1021,7 @@ exports.__test = {
   canonicalJson,
   configuration,
   connectionStringFromSecret,
+  databaseClientConfiguration,
   exactKeys,
   normalizeResolvedRow,
   normalizeProofRow,
@@ -956,6 +1031,7 @@ exports.__test = {
   parseReserveEvent,
   runAuthority,
   safeCode,
+  secretRequestFor,
   sha256Hex,
   spendAuthority,
   uuidV5,

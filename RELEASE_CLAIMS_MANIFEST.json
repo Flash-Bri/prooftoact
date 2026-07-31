@@ -18,7 +18,7 @@
       "id": "aws-boundary",
       "path": "docs/AWS_GATE2.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "37a36965b7a50121bd31367c20f7b5e00b2e47f85d3015669c01560cb7c8e694"
+      "sha256": "25061fd425b0d5b67d269ee822dbc010231f234192b329daf3b746d469774f3a"
     },
     {
       "id": "aws-demo-entry",

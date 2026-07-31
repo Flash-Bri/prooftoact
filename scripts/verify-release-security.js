@@ -232,11 +232,24 @@ const REQUIRED_DENY_ACTIONS = Object.freeze({
 
 const SOURCE_MARKERS = Object.freeze({
   "authority-runtime": Object.freeze([
-    "parsed.username !== \"tp_authorizer_user\"",
+    "parsed.username !== \"tp_gate2_authorizer_user\"",
+    "parsed.hostname !== expectedHost",
+    "parsed.port !== expectedPort",
     "parsed.searchParams.get(\"sslmode\") !== \"verify-full\"",
+    "response.VersionId !== config.secretVersionId",
+    "VersionStage: \"AWSCURRENT\"",
+    "connectionTimeoutMillis: 2_000",
+    "query_timeout: 4_500",
+    "statement_timeout: 4_000",
+    "idle_in_transaction_session_timeout: 3_000",
     "AUTHORITY_SECRET_REJECTED",
     "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY",
     "authorityTransferred: false"
+  ]),
+  "boundary-runtime": Object.freeze([
+    "EXPECTED_ADVISORY_CALLER_ROLE_ARN",
+    "assumed-role/${escapedRoleName}",
+    "SIGNED_CALLER_REJECTED"
   ]),
   "aws-preflight": Object.freeze([
     "sts",
@@ -267,7 +280,15 @@ const SOURCE_MARKERS = Object.freeze({
     "REVOKE ALL ON DATABASE tideproof FROM public",
     "REVOKE CREATE ON SCHEMA public FROM public",
     "ALTER DEFAULT PRIVILEGES FOR ROLE",
-    "SECURITY DEFINER"
+    "SECURITY DEFINER",
+    "session_user <> 'tp_gate2_authorizer_user'",
+    "REVOKE tp_authorizer_role FROM tp_gate2_authorizer_user",
+    "REVOKE tp_gate2_authorizer_role FROM tp_authorizer_user",
+    "FROM tp_authorizer_role",
+    "FROM tp_gate2_authorizer_role",
+    "TO tp_gate2_authorizer_role",
+    "p_agent_id NOT IN ('aws-authority-alpha', 'aws-authority-bravo')",
+    "tp_api.g2_spend_authority_race_v1"
   ]),
   "public-demo-runtime": Object.freeze([
     "event?.requestContext?.apiId !== expectedApiId",
@@ -511,6 +532,34 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
       `RELEASE_SECURITY_${name}_BOUNDARY`
     );
   }
+  assert(
+    template.Parameters?.AuthorityDatabaseSecretVersionId?.MinLength === 32 &&
+      template.Parameters.AuthorityDatabaseSecretVersionId.MaxLength === 64 &&
+      template.Parameters.AuthorityDatabaseHost?.MaxLength === 253 &&
+      template.Parameters.AuthorityDatabasePort?.MaxLength === 5,
+    "RELEASE_SECURITY_AUTHORITY_BINDING_PARAMETERS"
+  );
+  const authorityEnvironment =
+    resources.AuthorityFunction.Properties.Environment?.Variables;
+  assert(
+    authorityEnvironment?.AUTHORITY_DATABASE_SECRET_ARN?.Ref ===
+      "AuthorityDatabaseSecretArn" &&
+      authorityEnvironment.AUTHORITY_DATABASE_SECRET_VERSION_ID?.Ref ===
+        "AuthorityDatabaseSecretVersionId" &&
+      authorityEnvironment.AUTHORITY_DATABASE_HOST?.Ref ===
+        "AuthorityDatabaseHost" &&
+      authorityEnvironment.AUTHORITY_DATABASE_PORT?.Ref ===
+        "AuthorityDatabasePort",
+    "RELEASE_SECURITY_AUTHORITY_RUNTIME_BINDINGS"
+  );
+  assert(
+    sameJson(
+      resources.BoundaryFunction.Properties.Environment?.Variables
+        ?.EXPECTED_ADVISORY_CALLER_ROLE_ARN,
+      { "Fn::GetAtt": ["AdvisoryCallerRole", "Arn"] }
+    ),
+    "RELEASE_SECURITY_ADVISORY_CALLER_BINDING"
+  );
   for (const name of [
     "AgentAlias",
     "AuthorityAlias",

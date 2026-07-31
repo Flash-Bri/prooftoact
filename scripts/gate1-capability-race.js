@@ -11,8 +11,8 @@ const SPEND_SQL = `
   SELECT *
   FROM tp_api.g1_spend_authority_v1(
     $1::UUID, $2::UUID, $3, $4::JSONB,
-    $5::UUID, $6::UUID, $7, $8, $9, $10,
-    $11::UUID, $12::UUID, $13::JSONB, $14, $15, $16::INT8
+    $5::UUID, $6::UUID, $7, $8, $9,
+    $10::UUID, $11::UUID, $12::JSONB, $13, $14, $15::INT8
   )
 `;
 
@@ -68,7 +68,6 @@ function valuesFor(request) {
     request.runId,
     request.incidentId,
     request.resourceId,
-    request.agentId,
     request.agentId,
     request.agency,
     request.evidenceId,
