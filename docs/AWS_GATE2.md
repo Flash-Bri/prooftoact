@@ -202,7 +202,11 @@ respect to AWS. The gate:
   `HEAD == origin/main`, fetching `origin/main` again before and after the
   checks so a moving release target fails closed;
 - performs a lockfile install with dependency lifecycle scripts disabled,
-  the full test suite, and a zero-vulnerability dependency audit;
+  then runs the exact-release provenance control over the full single-root Git
+  ancestry, object integrity, replacement refs, legacy grafts, alternate object
+  databases, tracked file modes, installed package identities, dependency
+  inventory, and bundle notice inputs;
+- runs the full test suite and a zero-vulnerability dependency audit;
 - creates a fresh exact-head Gate Two build and independently rechecks the
   package lock, tracked templates, six source files, six artifact hashes,
   Lambda `CodeSha256` values, sizes, immutable key recommendations, exact
@@ -216,11 +220,12 @@ It executes only reviewed `git` and `npm` command families. The nested AWS
 preflight uses read-only service calls; the readiness gate cannot upload,
 create a change set, deploy, invoke, sign, or delete. A failed command emits a
 bounded error code rather than forwarding command output that could contain
-private account context. The install, tests, audit, build, and Git checks run
-with AWS and application credentials removed and AWS credential-file and
-metadata discovery disabled. Only the exact nested preflight receives the
-authenticated AWS environment, and unrelated application credentials remain
-removed there too.
+private account context. The install, release-provenance, tests, audit, build,
+and Git checks run with AWS and application credentials removed and AWS
+credential-file and metadata discovery disabled. Git, Node, npm, dynamic
+loader, and shell-startup environment overrides are removed before child
+commands. Only the exact nested preflight receives the authenticated AWS
+environment, and unrelated application credentials remain removed there too.
 
 Local maintainers can exercise every non-AWS part with:
 

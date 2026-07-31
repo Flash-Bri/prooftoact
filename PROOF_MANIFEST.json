@@ -25,7 +25,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "b92cdf7667083601897c1c97e900d6e31b59d27d1403409097492f81057ffcb0",
+      "sha256": "6582b12db4aa300b77cb5943a74c6e3e4f366f1696732c2f4c3f6b9c7f2fd273",
       "kind": "boundary-ledger"
     },
     {
@@ -61,7 +61,7 @@
     {
       "id": "clean-room-ledger",
       "path": "CLEAN_ROOM.md",
-      "sha256": "690c8b24d7fea054e4e4f734c75c6723b2bdc5d780a604962e72b5bd3972d98b",
+      "sha256": "2ba1cd16ec814faa485dd2b8d36c34dd880e57f3565fed1eb29436578461203f",
       "kind": "boundary-ledger"
     },
     {
@@ -73,7 +73,7 @@
     {
       "id": "dependency-inventory",
       "path": "docs/DEPENDENCY_INVENTORY.md",
-      "sha256": "b3f4882791d1a7a07d9969e44090c18e03f24d966f10e45c66b67287b7c1d6b0",
+      "sha256": "0598775ac84579a42472210eeaecb05b7694b6d3ba96225990eb3d87d8a37899",
       "kind": "boundary-ledger"
     },
     {
@@ -85,7 +85,7 @@
     {
       "id": "dependency-inventory-verifier",
       "path": "scripts/verify-dependency-inventory.js",
-      "sha256": "a7e69574959c98a2795e6ea5c942e9dca94c110a87234cffe8745cbb78c30e37",
+      "sha256": "792b637caebb64aa58af46fd940bbdbd43fca102075207db22ff1e76c1e227c5",
       "kind": "verification-code"
     },
     {
@@ -157,13 +157,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "e085c8c0b98b3989fcf23c16d83a96b537a73be3b7f8ea67365bf3573c8307d5",
+      "sha256": "5342f26cf690c67cc865539dca04b8f0ce4e536742c66c476c1b012cd649e8f0",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "c6cb7dc6a4032b1d2a1f61b26dfdd606be71deba34be392132275973c1b4f724",
+      "sha256": "d0cb2cf857186f248b24e3628569f3132f6c70fb669dd8ff1ddbceb49fd5f61a",
       "kind": "verification-code"
     },
     {
@@ -181,7 +181,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "1c4407b1f6bd8815da8d9faea0db6e47b22aa5db4c3c6ec3d0344dc83e8d7bab",
+      "sha256": "f11945e75564c11ebc55efc5cf67dd1f77e51d563722443090fd8127555e514e",
       "kind": "verification-code"
     },
     {
@@ -195,6 +195,24 @@
       "path": "evidence/public-source-release-081b580-2026-07-30.md",
       "sha256": "2b1d58371034fc394ff5ca203391529a15c039f91f7dab691ec2b7b07c8f238a",
       "kind": "release-receipt"
+    },
+    {
+      "id": "release-ci-workflow",
+      "path": ".github/workflows/ci.yml",
+      "sha256": "85897f4bbff65a18be0e30702bfdb4695c5f68d952a5655e2b75be5671697ae2",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-provenance-tests",
+      "path": "test/release-provenance.test.js",
+      "sha256": "ab53beb16c07b8ea04bbfa28b4261693de480667e21e0b1e245c38ee75bbbacf",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-provenance-verifier",
+      "path": "scripts/verify-release-provenance.js",
+      "sha256": "9cad85dbdd282194cc77158d8f0bc155de1d95c742054d2665928d656d883ae1",
+      "kind": "verification-code"
     },
     {
       "id": "security-policy",
@@ -370,7 +388,7 @@
       ],
       "boundary": "The exact verifier derives the current 42-package union from all six esbuild input graphs, validates 17 normalized license texts and five explicit version-pinned fallbacks, and the clean builder embeds the hash-bound notice bytes in every two-entry ZIP. Readiness independently validates ZIP structure, CRCs, package-union count, and notice bytes. This is not legal advice or proof of the final deployed artifacts.",
       "remainingRequirements": [
-        "Rerun the notice verifier after a clean exact-release install and bind its receipt to the final repository history, vulnerability report, build receipt, uploaded object versions, and deployed Lambda CodeSha256 values."
+        "Rerun release:provenance and the readiness wrapper after a clean final install, then bind the receipts to the final vulnerability report, build receipt, uploaded object versions, and deployed Lambda CodeSha256 values."
       ]
     },
     {
@@ -390,9 +408,9 @@
       "artifacts": [
         "clean-room-ledger"
       ],
-      "boundary": "The current public clean-room policy is hash-bound; this does not replace the final history, dependency, secret, privacy, and pre-existing-work audit.",
+      "boundary": "The current public clean-room policy is hash-bound and the separate release-provenance control verifies the technical Git-history and installed-tree boundary. Neither is independent proof of originality or legal clearance, and neither replaces the final secret, privacy, rights, pre-existing-work, deployed-bundle, and submission-freeze review.",
       "remainingRequirements": [
-        "Complete and receipt the final exact-commit clean-room and dependency audit."
+        "Rerun the exact-checkout control at the final commit and complete the human clean-room, rights, secret, privacy, and pre-existing-work review."
       ]
     },
     {
@@ -416,9 +434,9 @@
         "dependency-inventory-verifier",
         "dependency-lock"
       ],
-      "boundary": "The exact current package lock, complete 71-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts. Neither control replaces the final exact-release history, installed-tree, deployed-bundle, vulnerability, and provenance audit.",
+      "boundary": "The exact current package lock, complete 71-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. These controls do not prove the final deployed bundle or independent legal clearance.",
       "remainingRequirements": [
-        "Rerun both dependency verifiers and complete the audit against the final release commit, clean installed tree, repository history, and exact deployed bundles."
+        "Rerun all dependency, provenance, vulnerability, and artifact controls at the final release commit and reconcile the exact uploaded and deployed bundles."
       ]
     },
     {
@@ -440,6 +458,19 @@
       "boundary": "The checkpoint proves a public MIT repository and hosted CI at its recorded commit; it is not the final release receipt.",
       "remainingRequirements": [
         "Signed-out repository review and hosted CI success at the final release commit."
+      ]
+    },
+    {
+      "id": "release-provenance-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "release-ci-workflow",
+        "release-provenance-tests",
+        "release-provenance-verifier"
+      ],
+      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live behavior, or submission approval.",
+      "remainingRequirements": [
+        "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
       ]
     },
     {

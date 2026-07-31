@@ -38,7 +38,15 @@ products.
   in those bundles, records integrity and license-text provenance, and is
   embedded byte-for-byte in every Gate Two ZIP. Five packages whose published
   tarballs omit a standalone license file use explicit, version-pinned family
-  or published-README fallbacks; final exact-release review remains required.
+  or published-README fallbacks.
+- The official-main `release:provenance` control binds the complete,
+  non-shallow Git ancestry to the initial clean-room root, rejects replacement
+  refs, legacy grafts, alternate object databases, tracked symlinks and
+  submodules, verifies Git object integrity, and
+  compares the clean installed package identities with the exact lock before
+  rechecking the inventory and bundle notices. It is an auditable technical
+  boundary, not independent proof of originality or legal clearance; the final
+  deployed-bundle and submission-freeze review remains required.
 - Two project-only CockroachDB Basic clusters and a cluster-scoped Managed MCP
   identity were created under trial credits with finite monthly caps.
 - Project secrets remain in the macOS Keychain and are excluded from source,

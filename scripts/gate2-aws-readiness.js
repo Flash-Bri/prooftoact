@@ -10,6 +10,7 @@ const OFFICIAL_REMOTE =
   "https://github.com/Flash-Bri/tideproof.git";
 const EXPECTED_BRANCH = "main";
 const EXPECTED_REGION = "us-east-1";
+const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
 const ARTIFACT_NAMES = Object.freeze([
   "agent",
   "authority",
@@ -50,6 +51,8 @@ const APPLICATION_ENVIRONMENT_NAME = new RegExp(
   ].join(""),
   "i"
 );
+const TOOL_OVERRIDE_ENVIRONMENT_NAME =
+  /^(?:BASH_ENV|CDPATH|DYLD_.+|ENV|GIT_.+|LD_PRELOAD|NODE_OPTIONS|NODE_PATH|NPM_CONFIG_.+)$/i;
 
 function requireCondition(condition, code) {
   if (!condition) {
@@ -551,6 +554,245 @@ export function validateAuditReport(report) {
   };
 }
 
+export function validateReleaseProvenance(
+  receipt,
+  { sourceCommit, treeDigest }
+) {
+  const source = receipt?.source;
+  const history = receipt?.history;
+  const trackedTree = receipt?.trackedTree;
+  const dependencies = receipt?.dependencies;
+  const installedTree = dependencies?.installedTree;
+  const inventory = dependencies?.inventory;
+  const notices = dependencies?.bundledThirdPartyNotices;
+  const checks = receipt?.checks;
+  requireCondition(
+    exactKeys(receipt, [
+      "checks",
+      "claimBoundary",
+      "dependencies",
+      "history",
+      "schemaVersion",
+      "source",
+      "status",
+      "trackedTree"
+    ]) &&
+      exactKeys(source, [
+        "branch",
+        "cleanRoomRoot",
+        "commit",
+        "officialRemote",
+        "originMain",
+        "tree"
+      ]) &&
+      exactKeys(history, [
+        "alternateObjectDatabaseCount",
+        "commitCount",
+        "headAuthorTime",
+        "headCommitterTime",
+        "legacyGraftFilePresent",
+        "mergeCommitCount",
+        "objectIntegrity",
+        "replaceRefCount",
+        "rootAuthorTime",
+        "rootCommit",
+        "rootCommitterTime",
+        "shallow"
+      ]) &&
+      exactKeys(trackedTree, [
+        "executableFileCount",
+        "fileCount",
+        "gitlinkCount",
+        "regularFileCount",
+        "symlinkCount"
+      ]) &&
+      exactKeys(dependencies, [
+        "bundledThirdPartyNotices",
+        "installedTree",
+        "inventory"
+      ]) &&
+      exactKeys(installedTree, [
+        "extraPackageCount",
+        "installedDevelopmentOnlyCount",
+        "installedOptionalCount",
+        "installedPackageCount",
+        "installedRuntimeCount",
+        "lockedPackageCount",
+        "mismatchedPackageCount",
+        "omittedOptionalCount",
+        "packageLockSha256",
+        "status"
+      ]) &&
+      exactKeys(inventory, [
+        "developmentOnlyCount",
+        "installScriptCount",
+        "inventorySha256",
+        "licenses",
+        "optionalCount",
+        "packageCount",
+        "runtimeCount",
+        "schema",
+        "sourceLockSha256",
+        "status"
+      ]) &&
+      exactKeys(notices, [
+        "artifactPackages",
+        "fallbackCount",
+        "licenseTextCount",
+        "licenses",
+        "noticeBytes",
+        "noticePath",
+        "noticeSha256",
+        "packageCount",
+        "packageLockSha256",
+        "status"
+      ]) &&
+      exactKeys(checks, [
+        "alternateObjectDatabasesAbsent",
+        "bundledThirdPartyNoticesMatchInputs",
+        "cleanBeforeAndAfter",
+        "dependencyInventoryMatchesLock",
+        "fullSingleRootHistory",
+        "installedTreeMatchesLock",
+        "legacyGraftsAbsent",
+        "objectIntegrity",
+        "officialCleanCheckout",
+        "replaceRefsAbsent",
+        "submodulesAbsent",
+        "trackedSymlinksAbsent"
+      ]) &&
+      receipt.schemaVersion === "tideproof.release-provenance.v1" &&
+      receipt.status === "PASS" &&
+      typeof receipt.claimBoundary === "string" &&
+      receipt.claimBoundary.length > 0 &&
+      source.commit === sourceCommit &&
+      source.tree === treeDigest &&
+      source.originMain === sourceCommit &&
+      source.branch === EXPECTED_BRANCH &&
+      isOfficialRemote(source.officialRemote) &&
+      source.cleanRoomRoot === CLEAN_ROOM_ROOT &&
+      history.rootCommit === CLEAN_ROOM_ROOT &&
+      Number.isSafeInteger(history.commitCount) &&
+      history.commitCount > 0 &&
+      Number.isSafeInteger(history.mergeCommitCount) &&
+      history.mergeCommitCount >= 0 &&
+      history.mergeCommitCount < history.commitCount &&
+      history.shallow === false &&
+      history.replaceRefCount === 0 &&
+      history.legacyGraftFilePresent === false &&
+      history.alternateObjectDatabaseCount === 0 &&
+      history.objectIntegrity === true &&
+      [
+        history.rootAuthorTime,
+        history.rootCommitterTime,
+        history.headAuthorTime,
+        history.headCommitterTime
+      ].every((value) => Number.isFinite(Date.parse(value))) &&
+      Number.isSafeInteger(trackedTree.fileCount) &&
+      trackedTree.fileCount > 0 &&
+      trackedTree.regularFileCount === trackedTree.fileCount &&
+      Number.isSafeInteger(trackedTree.executableFileCount) &&
+      trackedTree.executableFileCount >= 0 &&
+      trackedTree.executableFileCount <= trackedTree.fileCount &&
+      trackedTree.symlinkCount === 0 &&
+      trackedTree.gitlinkCount === 0 &&
+      installedTree.status === "PASS" &&
+      HEX_64.test(installedTree.packageLockSha256) &&
+      Number.isSafeInteger(installedTree.lockedPackageCount) &&
+      installedTree.lockedPackageCount > 0 &&
+      Number.isSafeInteger(installedTree.installedPackageCount) &&
+      installedTree.installedPackageCount > 0 &&
+      Number.isSafeInteger(installedTree.installedRuntimeCount) &&
+      installedTree.installedRuntimeCount > 0 &&
+      Number.isSafeInteger(installedTree.installedDevelopmentOnlyCount) &&
+      installedTree.installedDevelopmentOnlyCount >= 0 &&
+      Number.isSafeInteger(installedTree.installedOptionalCount) &&
+      installedTree.installedOptionalCount >= 0 &&
+      Number.isSafeInteger(installedTree.omittedOptionalCount) &&
+      installedTree.omittedOptionalCount >= 0 &&
+      installedTree.installedRuntimeCount +
+        installedTree.installedDevelopmentOnlyCount ===
+        installedTree.installedPackageCount &&
+      installedTree.installedPackageCount +
+        installedTree.omittedOptionalCount ===
+        installedTree.lockedPackageCount &&
+      installedTree.extraPackageCount === 0 &&
+      installedTree.mismatchedPackageCount === 0 &&
+      inventory.schema ===
+        "tideproof.dependency-inventory-verification.v1" &&
+      inventory.status === "PASS" &&
+      inventory.sourceLockSha256 === installedTree.packageLockSha256 &&
+      HEX_64.test(inventory.inventorySha256) &&
+      inventory.packageCount === installedTree.lockedPackageCount &&
+      inventory.runtimeCount + inventory.developmentOnlyCount ===
+        inventory.packageCount &&
+      inventory.optionalCount ===
+        installedTree.installedOptionalCount +
+          installedTree.omittedOptionalCount &&
+      Number.isSafeInteger(inventory.installScriptCount) &&
+      inventory.installScriptCount >= 0 &&
+      inventory.licenses &&
+      typeof inventory.licenses === "object" &&
+      !Array.isArray(inventory.licenses) &&
+      Object.entries(inventory.licenses).every(
+        ([license, count]) =>
+          ["0BSD", "Apache-2.0", "ISC", "MIT"].includes(license) &&
+          Number.isSafeInteger(count) &&
+          count > 0
+      ) &&
+      Object.values(inventory.licenses).reduce(
+        (sum, count) => sum + count,
+        0
+      ) === inventory.packageCount &&
+      notices.status === "PASS" &&
+      notices.noticePath === "THIRD_PARTY_NOTICES.txt" &&
+      notices.packageLockSha256 === installedTree.packageLockSha256 &&
+      HEX_64.test(notices.noticeSha256) &&
+      Number.isSafeInteger(notices.noticeBytes) &&
+      notices.noticeBytes > 0 &&
+      Number.isSafeInteger(notices.licenseTextCount) &&
+      notices.licenseTextCount > 0 &&
+      Number.isSafeInteger(notices.fallbackCount) &&
+      notices.fallbackCount >= 0 &&
+      notices.packageCount > 0 &&
+      notices.packageCount <= installedTree.installedPackageCount &&
+      notices.licenses &&
+      typeof notices.licenses === "object" &&
+      !Array.isArray(notices.licenses) &&
+      Object.entries(notices.licenses).every(
+        ([license, count]) =>
+          ["0BSD", "Apache-2.0", "ISC", "MIT"].includes(license) &&
+          Number.isSafeInteger(count) &&
+          count > 0
+      ) &&
+      Object.values(notices.licenses).reduce(
+        (sum, count) => sum + count,
+        0
+      ) === notices.packageCount &&
+      notices.artifactPackages &&
+      typeof notices.artifactPackages === "object" &&
+      !Array.isArray(notices.artifactPackages) &&
+      Object.keys(notices.artifactPackages).sort().join("\n") ===
+        [...ARTIFACT_NAMES].sort().join("\n") &&
+      Object.values(notices.artifactPackages).every(
+        (packages) =>
+          Array.isArray(packages) &&
+          packages.every(
+            (packageName) =>
+              typeof packageName === "string" &&
+              /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(
+                packageName
+              )
+          ) &&
+          new Set(packages).size === packages.length &&
+          JSON.stringify(packages) === JSON.stringify([...packages].sort())
+      ) &&
+      Object.values(checks).every((value) => value === true),
+    "AWS_READINESS_RELEASE_PROVENANCE"
+  );
+  return receipt;
+}
+
 export function validatePreflightReceipt(
   receipt,
   { sourceCommit, treeDigest }
@@ -750,7 +992,8 @@ function childEnvironment(
       (name.startsWith("AWS_") && !awsAuthenticated) ||
       (!name.startsWith("AWS_") &&
         (SECRET_ENVIRONMENT_NAME.test(name) ||
-          APPLICATION_ENVIRONMENT_NAME.test(name)))
+          APPLICATION_ENVIRONMENT_NAME.test(name) ||
+          TOOL_OVERRIDE_ENVIRONMENT_NAME.test(name)))
     ) {
       continue;
     }
@@ -962,6 +1205,15 @@ export async function runAwsReadiness({
     ],
     "AWS_READINESS_NPM_CI"
   );
+  const releaseProvenance = validateReleaseProvenance(
+    jsonCommand(
+      run,
+      "npm",
+      ["run", "--silent", "release:provenance"],
+      "AWS_READINESS_RELEASE_PROVENANCE"
+    ),
+    checkout
+  );
   checkedCommand(
     run,
     "npm",
@@ -1027,6 +1279,7 @@ export async function runAwsReadiness({
       cleanBeforeAndAfter: true,
       lockedInstall: true,
       dependencyLifecycleScripts: false,
+      releaseProvenance: true,
       testsPassed: true,
       dependencyAudit: audit,
       exactHeadBuild: true,
@@ -1035,6 +1288,7 @@ export async function runAwsReadiness({
       bundledThirdPartyNotices: true,
       awsPreflight: preflight ? "PASS" : "NOT_RUN"
     },
+    releaseProvenance,
     build,
     awsPreflight: preflight,
     claimBoundary: localOnly
@@ -1067,6 +1321,7 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
 
 export const __test = Object.freeze({
   ARTIFACT_NAMES,
+  CLEAN_ROOM_ROOT,
   EXPECTED_BRANCH,
   EXPECTED_REGION,
   OFFICIAL_REMOTE,
