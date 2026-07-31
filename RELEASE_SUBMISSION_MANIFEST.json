@@ -69,7 +69,7 @@
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
       "role": "PUBLIC_CLAIM_INVENTORY",
-      "sha256": "45c6cb9f09a8137c47cfd510ffec64666565780a46695415fb8fb405c666d8e7"
+      "sha256": "c6ce0c9da155ec26571f167562f465b801cf38d83dcab007b982f9cf9668b87f"
     },
     {
       "id": "release-submission-ledger",
@@ -81,7 +81,7 @@
       "id": "rights-ledger",
       "path": "docs/media/RIGHTS.md",
       "role": "MEDIA_RIGHTS_BOUNDARY",
-      "sha256": "1100fe2538b92e34c143b9690d0264f04b67416aad40a35579540f5a2027f005"
+      "sha256": "57cf348467c9df69f29ba0bfb04a5f96a54645ffb49b50578a61e59e56503fb1"
     },
     {
       "id": "submission-packet",

@@ -6,7 +6,7 @@
 - Standard target: `WCAG_2_2_AA`
 - Final release ready: `false`
 - Rights manifest SHA-256:
-  `798d5608c456bd13f5ff7a6851f498d6fb999b8b78e1d01f245a848946cf5061`
+  `f2499611c166beccbb034e9d8ab98d03484eb665c386ab32756b0e80bf472ae7`
 
 ## Exact reviewed files
 
@@ -14,7 +14,7 @@
 | --- | --- |
 | `docs/media/architecture.svg` | `5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c` |
 | `web/app.js` | `f5980c1968417d0c8ebde0256bd56a9f61c6a4c347ccc822839ce8ddb00ecbe2` |
-| `web/index.html` | `88a09d45c3468b0049bee70ef84231554cc88f9e3265b9ed21d7326a9839e25a` |
+| `web/index.html` | `81b621e6073daa3f465fefe73389719da4c399f1b7a88d5b261cc8fe7a1b07a8` |
 | `web/styles.css` | `c33554b39142780f662d9ec5fa8b8c8fd5832eb9c0e4ec5c305ee3a53fd86e9e` |
 
 ## Changes made before the receipt

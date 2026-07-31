@@ -41,7 +41,7 @@
     "gate1:security": "node scripts/gate1-security.js",
     "gate1:temporal": "node scripts/gate1-temporal.js",
     "gate1:vector": "node scripts/gate1-vector.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -53,6 +53,7 @@
     "pg": "8.22.0"
   },
   "devDependencies": {
+    "axe-core": "4.12.1",
     "esbuild": "0.28.1"
   }
 }

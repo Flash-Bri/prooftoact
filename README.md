@@ -169,10 +169,14 @@ and eleven WCAG-formula contrast pairs. Run
 `npm run accessibility:verify` to reproduce its `STATIC_SOURCE_PASS` receipt,
 then `npm run accessibility:browser` to exercise the rendered accessibility
 tree, skip path, presenter state, reduced-motion response, and mobile reflow in
-an isolated local Chromium profile. `LOCAL_BROWSER_PASS` is not a WCAG
-conformance claim or deployed-release scan; an exact-public-release rules
-engine plus keyboard, zoom, reduced-motion, and screen-reader human review are
-still required.
+an isolated local Chromium profile. That browser gate injects the exact locked
+`axe-core` 4.12.1 development dependency and fails on any selected WCAG 2.0,
+2.1, or 2.2 A/AA violation or unresolved result at desktop or mobile size. The
+tool is MPL-2.0, runs only in verification, and is not copied into Tideproof's
+browser, Lambda, or Gate Two ZIP payloads. `LOCAL_BROWSER_PASS` is not a WCAG
+conformance claim or deployed-release scan; the same maintained scan against
+the exact public deployment plus keyboard, zoom, reduced-motion, and
+screen-reader human review are still required.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and

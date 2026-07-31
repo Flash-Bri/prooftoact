@@ -12,7 +12,8 @@ const ALLOWED_LICENSES = Object.freeze([
   "0BSD",
   "Apache-2.0",
   "ISC",
-  "MIT"
+  "MIT",
+  "MPL-2.0"
 ]);
 
 function assert(condition, message) {

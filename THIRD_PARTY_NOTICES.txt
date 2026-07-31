@@ -10,7 +10,7 @@ This is a provenance and distribution control, not legal advice. A final audit
 must still bind the exact release commit, installed tree, deployed ZIP hashes,
 vulnerability report, repository history, and any changed upstream metadata.
 
-Package lock SHA-256: fe1e765145a7bb2e0ee0cadce2e646b7d792c447aee37f010d40453405fd08d9
+Package lock SHA-256: b9903832feed0b4c66eb460a015e4c9df0b3f782369e92ba387b7edd4189a310
 Bundled package union: 42
 Distinct normalized license texts: 17
 Explicit published-package fallbacks: 5

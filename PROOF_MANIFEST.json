@@ -7,31 +7,31 @@
     {
       "id": "accessibility-browser-receipt",
       "path": "evidence/accessibility-browser-review-2026-07-31.md",
-      "sha256": "07d5b47f9a0f3d50326ec37c4b07b8defa73d2a2955e2504996cd52162e01600",
+      "sha256": "ae5a322ed307d4a6c34640d1c685bf3460fd8a3d03e4a5caddabc3207a7c0677",
       "kind": "local-validation"
     },
     {
       "id": "accessibility-browser-tests",
       "path": "test/browser-accessibility.test.js",
-      "sha256": "e8debfa6866f827e38188340bd02f99d87075810131f5e39c95596d821640129",
+      "sha256": "8370d8504735b81fb541984e5458702d72c064866d05212a49ab6fe8a95c7ded",
       "kind": "verification-code"
     },
     {
       "id": "accessibility-browser-verifier",
       "path": "scripts/verify-browser-accessibility.js",
-      "sha256": "a421b519bc514552e3a76290ad69ce965f3e50e6ef8cb865d6b06a8e3ff627d9",
+      "sha256": "1ecb57c1de5a6a67cc376a254fcbe68ca37d7f92920523d6f401c4f5085f7cdc",
       "kind": "verification-code"
     },
     {
       "id": "accessibility-review-ledger",
       "path": "docs/ACCESSIBILITY.md",
-      "sha256": "074bb64a5011d813c3b39ec401e70ee5ab546dc89447a7199557059632991130",
+      "sha256": "f52d42244714a6a8fde85be8639f0f7d5f97c7dd181c69a8102270bffac03207",
       "kind": "boundary-ledger"
     },
     {
       "id": "accessibility-review-receipt",
       "path": "evidence/accessibility-static-review-2026-07-31.md",
-      "sha256": "94ca59776d497776dfcf9e2d2fd251693dd4328af1ef6a30bf88eda9a86005c6",
+      "sha256": "f00edccd11c1cd0d1a7abf0a2b28ae75dbe96ebc1626bfcc5515a72d2f27a28b",
       "kind": "local-validation"
     },
     {
@@ -73,7 +73,7 @@
     {
       "id": "bundle-license-notice",
       "path": "THIRD_PARTY_NOTICES.txt",
-      "sha256": "5c8a48b792687d615793877b9620760b8edeb816030a2cfd6104c91c6e22fbb8",
+      "sha256": "6f90c4cb931877ed8aa8c3991548221cb4a70c349720feff7ab76aa045ba66d2",
       "kind": "boundary-ledger"
     },
     {
@@ -115,25 +115,25 @@
     {
       "id": "dependency-inventory",
       "path": "docs/DEPENDENCY_INVENTORY.md",
-      "sha256": "0598775ac84579a42472210eeaecb05b7694b6d3ba96225990eb3d87d8a37899",
+      "sha256": "82f2741c2046c00aabd508a8b00adea36837ed690291241668e8b3219782c8d8",
       "kind": "boundary-ledger"
     },
     {
       "id": "dependency-inventory-tests",
       "path": "test/dependency-inventory.test.js",
-      "sha256": "dca65473091befe0496bcfadcaf5912a212fbc7d24a3dff0d51ff4c22c23c5c0",
+      "sha256": "282ef4522f9591be610e0cfd1891833b073c85a5b0f8af6b9cdb8be86a22b204",
       "kind": "verification-code"
     },
     {
       "id": "dependency-inventory-verifier",
       "path": "scripts/verify-dependency-inventory.js",
-      "sha256": "792b637caebb64aa58af46fd940bbdbd43fca102075207db22ff1e76c1e227c5",
+      "sha256": "2027daed4eeb1214b92f2c80a1cde708e38b879c77071fc00652f8075c954342",
       "kind": "verification-code"
     },
     {
       "id": "dependency-lock",
       "path": "package-lock.json",
-      "sha256": "fe1e765145a7bb2e0ee0cadce2e646b7d792c447aee37f010d40453405fd08d9",
+      "sha256": "b9903832feed0b4c66eb460a015e4c9df0b3f782369e92ba387b7edd4189a310",
       "kind": "boundary-ledger"
     },
     {
@@ -217,7 +217,7 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "1100fe2538b92e34c143b9690d0264f04b67416aad40a35579540f5a2027f005",
+      "sha256": "57cf348467c9df69f29ba0bfb04a5f96a54645ffb49b50578a61e59e56503fb1",
       "kind": "boundary-ledger"
     },
     {
@@ -253,7 +253,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "45c6cb9f09a8137c47cfd510ffec64666565780a46695415fb8fb405c666d8e7",
+      "sha256": "c6ce0c9da155ec26571f167562f465b801cf38d83dcab007b982f9cf9668b87f",
       "kind": "boundary-ledger"
     },
     {
@@ -307,7 +307,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "0f9db8c63e7b02fdc8fbfb8551ebe9b559339d395a72136ff76025c13d30cc5b",
+      "sha256": "f2499611c166beccbb034e9d8ab98d03484eb665c386ab32756b0e80bf472ae7",
       "kind": "boundary-ledger"
     },
     {
@@ -355,7 +355,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "e67835a40b98320550ec204b705c223096f3e33a44282cc90ed4df29d7dd145c",
+      "sha256": "3e161811c775ad280283a8f956c9970dcbdbc686daed9a904cbfcfd1fa27045c",
       "kind": "boundary-ledger"
     },
     {
@@ -530,9 +530,9 @@
         "media-rights-ledger",
         "release-rights-manifest"
       ],
-      "boundary": "The static verifier binds the current browser document, stylesheet, application script, and architecture SVG to the reviewed rights manifest and returns STATIC_SOURCE_PASS. The dependency-free browser verifier then runs those bytes in an isolated local headless Chromium profile, rejects unexpected browser or network errors, inspects the rendered accessibility tree, exercises skip and presenter keyboard paths, and emulates reduced motion plus a 390-pixel mobile viewport before returning LOCAL_BROWSER_PASS. Both receipts remain finalReleaseReady false. They are not a WCAG conformance claim, maintained rules-engine scan, assistive-technology test, human review, or proof of deployed bytes.",
+      "boundary": "The static verifier binds the current browser document, stylesheet, application script, and architecture SVG to the reviewed rights manifest and returns STATIC_SOURCE_PASS. The browser verifier then runs those bytes in an isolated local headless Chromium profile; rejects unexpected browser or network errors; requires the exact locked axe-core WCAG 2.0, 2.1, and 2.2 A/AA rule set to return no violations or unresolved results at desktop and mobile sizes; inspects the rendered accessibility tree; exercises skip and presenter keyboard paths; and emulates reduced motion plus a 390-pixel mobile viewport before returning LOCAL_BROWSER_PASS. Both receipts remain finalReleaseReady false. They are not a WCAG conformance claim, assistive-technology test, human review, or proof of deployed bytes.",
       "remainingRequirements": [
-        "Bind a maintained rules-engine scan plus keyboard-only, 200% zoom, mobile reflow, reduced-motion, and screen-reader private review to the exact public release and deployed bytes."
+        "Rerun the maintained rules-engine scan plus keyboard-only, 200% zoom, mobile reflow, reduced-motion, and screen-reader private review against the exact public release and deployed bytes."
       ]
     },
     {
@@ -613,7 +613,7 @@
         "dependency-inventory-verifier",
         "dependency-lock"
       ],
-      "boundary": "The exact current package lock, complete 71-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. These controls do not prove the final deployed bundle or independent legal clearance.",
+      "boundary": "The exact current package lock, complete 72-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. The MPL-2.0 axe-core record is development-only and is not part of the bundled package union. These controls do not prove the final deployed bundle or independent legal clearance.",
       "remainingRequirements": [
         "Rerun all dependency, provenance, vulnerability, and artifact controls at the final release commit and reconcile the exact uploaded and deployed bundles."
       ]
