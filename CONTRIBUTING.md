@@ -22,6 +22,7 @@ Use Node.js 22 or newer:
 ```sh
 npm ci
 npm run dependencies:verify
+npm run licenses:verify
 npm test
 npm audit --audit-level=high
 npm run build:gate2

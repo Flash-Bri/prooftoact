@@ -34,6 +34,11 @@ products.
 - Runtime dependencies are pinned: `pg`, role-specific AWS SDK clients, and
   the Smithy Node HTTP handler. `esbuild` is a pinned development dependency
   used only to create deterministic Lambda bundles.
+- `THIRD_PARTY_NOTICES.txt` is generated from the exact package union present
+  in those bundles, records integrity and license-text provenance, and is
+  embedded byte-for-byte in every Gate Two ZIP. Five packages whose published
+  tarballs omit a standalone license file use explicit, version-pinned family
+  or published-README fallbacks; final exact-release review remains required.
 - Two project-only CockroachDB Basic clusters and a cluster-scoped Managed MCP
   identity were created under trial credits with finite monthly caps.
 - Project secrets remain in the macOS Keychain and are excluded from source,

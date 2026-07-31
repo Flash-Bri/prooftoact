@@ -44,8 +44,7 @@ function assertArchiveInput(fileName, content) {
   }
 }
 
-export function singleFileZip(fileName, content) {
-  assertArchiveInput(fileName, content);
+function localRecord(fileName, content) {
   const name = Buffer.from(fileName, "utf8");
   const checksum = crc32(content);
 
@@ -62,7 +61,15 @@ export function singleFileZip(fileName, content) {
   localHeader.writeUInt16LE(name.length, 26);
   localHeader.writeUInt16LE(0, 28);
 
-  const localRecord = Buffer.concat([localHeader, name, content]);
+  return {
+    bytes: Buffer.concat([localHeader, name, content]),
+    checksum,
+    contentBytes: content.length,
+    name
+  };
+}
+
+function centralRecord({ checksum, contentBytes, name }, localOffset) {
   const centralHeader = Buffer.alloc(46);
   centralHeader.writeUInt32LE(CENTRAL_DIRECTORY_SIGNATURE, 0);
   centralHeader.writeUInt16LE(UNIX_ZIP_VERSION, 4);
@@ -72,34 +79,90 @@ export function singleFileZip(fileName, content) {
   centralHeader.writeUInt16LE(FIXED_DOS_TIME, 12);
   centralHeader.writeUInt16LE(FIXED_DOS_DATE, 14);
   centralHeader.writeUInt32LE(checksum, 16);
-  centralHeader.writeUInt32LE(content.length, 20);
-  centralHeader.writeUInt32LE(content.length, 24);
+  centralHeader.writeUInt32LE(contentBytes, 20);
+  centralHeader.writeUInt32LE(contentBytes, 24);
   centralHeader.writeUInt16LE(name.length, 28);
   centralHeader.writeUInt16LE(0, 30);
   centralHeader.writeUInt16LE(0, 32);
   centralHeader.writeUInt16LE(0, 34);
   centralHeader.writeUInt16LE(0, 36);
   centralHeader.writeUInt32LE(REGULAR_FILE_0644, 38);
-  centralHeader.writeUInt32LE(0, 42);
-  const centralRecord = Buffer.concat([centralHeader, name]);
+  centralHeader.writeUInt32LE(localOffset, 42);
+  return Buffer.concat([centralHeader, name]);
+}
+
+export function deterministicZip(entries) {
+  if (
+    !Array.isArray(entries) ||
+    entries.length === 0 ||
+    entries.length > 65_535
+  ) {
+    throw new Error("DETERMINISTIC_ZIP_INPUT_REJECTED");
+  }
+  for (const entry of entries) {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      Array.isArray(entry) ||
+      Object.keys(entry).sort().join("\n") !== "content\nfileName"
+    ) {
+      throw new Error("DETERMINISTIC_ZIP_INPUT_REJECTED");
+    }
+    assertArchiveInput(entry.fileName, entry.content);
+  }
+  const fileNames = entries.map(({ fileName }) => fileName);
+  const sortedFileNames = [...fileNames].sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0
+  );
+  if (
+    new Set(fileNames).size !== fileNames.length ||
+    JSON.stringify(fileNames) !== JSON.stringify(sortedFileNames)
+  ) {
+    throw new Error("DETERMINISTIC_ZIP_INPUT_REJECTED");
+  }
+
+  const localRecords = [];
+  const centralRecords = [];
+  let localOffset = 0;
+  for (const entry of entries) {
+    const local = localRecord(entry.fileName, entry.content);
+    localRecords.push(local.bytes);
+    centralRecords.push(centralRecord(local, localOffset));
+    localOffset += local.bytes.length;
+    if (localOffset > 0xffffffff) {
+      throw new Error("DETERMINISTIC_ZIP_INPUT_REJECTED");
+    }
+  }
+  const centralDirectory = Buffer.concat(centralRecords);
+  if (centralDirectory.length > 0xffffffff) {
+    throw new Error("DETERMINISTIC_ZIP_INPUT_REJECTED");
+  }
 
   const end = Buffer.alloc(22);
   end.writeUInt32LE(END_OF_CENTRAL_DIRECTORY_SIGNATURE, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(1, 8);
-  end.writeUInt16LE(1, 10);
-  end.writeUInt32LE(centralRecord.length, 12);
-  end.writeUInt32LE(localRecord.length, 16);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralDirectory.length, 12);
+  end.writeUInt32LE(localOffset, 16);
   end.writeUInt16LE(0, 20);
 
-  return Buffer.concat([localRecord, centralRecord, end]);
+  return Buffer.concat([...localRecords, centralDirectory, end]);
+}
+
+export function singleFileZip(fileName, content) {
+  return deterministicZip([{ fileName, content }]);
+}
+
+export function writeDeterministicZip(destination, entries) {
+  const archive = deterministicZip(entries);
+  fs.writeFileSync(destination, archive, { mode: 0o644 });
+  return archive;
 }
 
 export function writeSingleFileZip(destination, fileName, content) {
-  const archive = singleFileZip(fileName, content);
-  fs.writeFileSync(destination, archive, { mode: 0o644 });
-  return archive;
+  return writeDeterministicZip(destination, [{ fileName, content }]);
 }
 
 export const __test = {

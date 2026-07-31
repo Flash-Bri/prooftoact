@@ -66,9 +66,10 @@ Every item must have a dated receipt tied to the final release commit:
 - [ ] The architecture diagram, screenshots, README, website, video, and
   submission use one reviewed visual system and the same verified vocabulary.
 - [ ] `CLAIMS.md`, `CLEAN_ROOM.md`, the evidence matrix, dependency inventory,
-  `PROOF_MANIFEST.json`, and pre-existing-work disclosure receive a final
-  exact-commit audit; `npm run proof:verify` and
-  `npm run dependencies:verify` pass.
+  bundled third-party notices, `PROOF_MANIFEST.json`, and pre-existing-work
+  disclosure receive a final exact-commit and deployed-bundle audit;
+  `npm run proof:verify`, `npm run dependencies:verify`, and
+  `npm run licenses:verify` pass.
 - [ ] The Devpost preview contains no secrets, personal data, internal URLs,
   unsupported superlatives, operational-emergency implication, or unresolved
   stop token.
@@ -230,8 +231,8 @@ watermark, and two audit phases before returning sanitized context.
 - A machine-authenticated Managed MCP fixed-query recovery read returned
   signed context only after its pre-read and terminal audits committed.
 - The public MIT repository has deterministic tests, exact dependency
-  versions, claim boundaries, security guidance, and reproducible Gate Two
-  artifacts.
+  versions, bundle-derived third-party notices, claim boundaries, security
+  guidance, and reproducible Gate Two artifacts.
 
 Do not add AWS accomplishments until a live exact-commit receipt exists.
 

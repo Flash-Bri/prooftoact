@@ -1,6 +1,6 @@
 # Locked dependency inventory
 
-**Status: CURRENT LOCK METADATA — final release audit pending**
+**Status: CURRENT LOCK METADATA — bundle notices verified separately; final release audit pending**
 
 This inventory is generated deterministically from `package.json` and
 `package-lock.json`. It records the complete locked npm package set,
@@ -10,9 +10,11 @@ non-registry sources, missing SHA-512 integrity, deprecated packages, and
 licenses outside the explicitly reviewed identifier set.
 
 This is a provenance and review control, not legal advice or an independent
-verification of every upstream copyright statement. A final exact-release
-history, bundle, license-text, vulnerability, and provenance audit remains
-required before submission.
+verification of every upstream copyright statement. The exact package union
+and normalized license texts present in the Gate Two bundles are controlled by
+`THIRD_PARTY_NOTICES.txt` and `npm run licenses:verify`. A final exact-release
+history, installed-tree, deployed-bundle, vulnerability, and provenance audit
+remains required before submission.
 
 ## Bound source
 
@@ -26,7 +28,8 @@ required before submission.
 - Packages declaring an install script: **1**
 - Reviewed package-lock license identifiers: 0BSD: 1; Apache-2.0: 28; ISC: 2; MIT: 40
 - CI install boundary: `npm ci --ignore-scripts`; the deterministic Gate Two
-  build separately proves the exact bundled artifacts.
+  build separately proves the exact bundled artifacts and embeds the verified
+  third-party notice file in every ZIP.
 
 ## Direct declarations
 

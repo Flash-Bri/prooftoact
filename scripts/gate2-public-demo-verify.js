@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -6,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createPublicDemoHandler } from "../src/cloud/public-demo.js";
 import { verifyPublicDemo } from "../src/cloud/public-demo-verifier.js";
 import { runScenario } from "../src/scenario.js";
+import { validateBuildReceipt as validateExactBuildReceipt } from "./gate2-aws-readiness.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -29,13 +29,6 @@ const ASSET_FILES = Object.freeze({
 
 function fail(code) {
   throw new Error(code);
-}
-
-function sha256File(filePath) {
-  return crypto
-    .createHash("sha256")
-    .update(fs.readFileSync(filePath))
-    .digest("hex");
 }
 
 function command(args, code) {
@@ -79,53 +72,21 @@ function parseArguments(args) {
   };
 }
 
-function exactDemoArtifact(receipt) {
-  const artifacts = receipt?.artifacts;
-  const demos = Array.isArray(artifacts)
-    ? artifacts.filter((artifact) => artifact?.name === "demo")
-    : [];
-  if (demos.length !== 1) {
-    fail("PUBLIC_DEMO_VERIFY_BUILD_RECEIPT");
-  }
-  return demos[0];
-}
-
 function validateBuildReceipt(receipt, sourceCommit, treeDigest) {
-  const demo = exactDemoArtifact(receipt);
-  if (
-    receipt?.schemaVersion !== "tideproof.gate2-build.v2" ||
-    receipt?.mode !== "CLEAN_ARTIFACT_BUILD" ||
-    receipt?.workingTreeClean !== true ||
-    receipt?.workingTreeCleanBeforeGeneration !== true ||
-    receipt?.sourceCommit !== sourceCommit ||
-    receipt?.treeDigest !== treeDigest ||
-    !HEX_40.test(receipt.sourceCommit) ||
-    !HEX_40.test(receipt.treeDigest) ||
-    !HEX_64.test(receipt.packageLockDigest) ||
-    demo.sourcePath !== "infra/aws/lambda/demo.js" ||
-    !HEX_64.test(demo.sourceDigest) ||
-    !HEX_64.test(demo.artifactDigest) ||
-    !Number.isInteger(demo.artifactBytes) ||
-    demo.artifactBytes < 1 ||
-    typeof demo.artifactPath !== "string"
-  ) {
+  if (!HEX_40.test(sourceCommit) || !HEX_40.test(treeDigest)) {
     fail("PUBLIC_DEMO_VERIFY_BUILD_RECEIPT");
   }
-
-  const artifactPath = path.resolve(root, demo.artifactPath);
-  if (
-    !artifactPath.startsWith(`${path.join(root, "dist", "aws")}${path.sep}`) ||
-    !fs.existsSync(artifactPath) ||
-    !fs.statSync(artifactPath).isFile() ||
-    sha256File(artifactPath) !== demo.artifactDigest ||
-    fs.statSync(artifactPath).size !== demo.artifactBytes ||
-    sha256File(path.join(root, demo.sourcePath)) !== demo.sourceDigest ||
-    sha256File(path.join(root, "package-lock.json")) !==
-      receipt.packageLockDigest
-  ) {
+  let validated;
+  try {
+    validated = validateExactBuildReceipt(receipt, {
+      projectRoot: root,
+      sourceCommit,
+      treeDigest
+    });
+  } catch {
     fail("PUBLIC_DEMO_VERIFY_BUILD_ARTIFACT");
   }
-  return demo;
+  return validated.artifacts.demo;
 }
 
 function readExpectedAssets() {

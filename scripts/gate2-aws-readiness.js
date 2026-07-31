@@ -20,6 +20,16 @@ const ARTIFACT_NAMES = Object.freeze([
 ]);
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
+const FIXED_ZIP_DATE = ((2026 - 1980) << 9) | (7 << 5) | 30;
+const CRC32_TABLE = Array.from({ length: 256 }, (_, value) => {
+  let crc = value;
+  for (let bit = 0; bit < 8; bit += 1) {
+    crc = (crc & 1) === 1
+      ? 0xedb88320 ^ (crc >>> 1)
+      : crc >>> 1;
+  }
+  return crc >>> 0;
+});
 const SECRET_ENVIRONMENT_NAME =
   /(TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIAL)/i;
 const APPLICATION_ENVIRONMENT_NAME = new RegExp(
@@ -61,6 +71,14 @@ function sha256(value, encoding = "hex") {
   return crypto.createHash("sha256").update(value).digest(encoding);
 }
 
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function sha256File(filePath, encoding = "hex") {
   return sha256(fs.readFileSync(filePath), encoding);
 }
@@ -86,75 +104,158 @@ function resolvedFile(projectRoot, relativePath, code) {
   return { resolved, stat };
 }
 
-function validateStoredSingleFileZip(buffer) {
+function validateStoredTwoFileZip(buffer) {
   requireCondition(
-    Buffer.isBuffer(buffer) && buffer.length >= 52,
+    Buffer.isBuffer(buffer) && buffer.length >= 82,
     "AWS_READINESS_ZIP"
   );
+  const endOffset = buffer.length - 22;
   requireCondition(
-    buffer.readUInt32LE(0) === 0x04034b50,
-    "AWS_READINESS_ZIP_LOCAL_HEADER"
-  );
-  const localFlags = buffer.readUInt16LE(6);
-  const localMethod = buffer.readUInt16LE(8);
-  const compressedBytes = buffer.readUInt32LE(18);
-  const uncompressedBytes = buffer.readUInt32LE(22);
-  const localNameBytes = buffer.readUInt16LE(26);
-  const localExtraBytes = buffer.readUInt16LE(28);
-  const localNameEnd = 30 + localNameBytes;
-  const dataOffset = localNameEnd + localExtraBytes;
-  const centralOffset = dataOffset + compressedBytes;
-  requireCondition(
-    localFlags === 0 &&
-      localMethod === 0 &&
-      compressedBytes > 0 &&
-      compressedBytes === uncompressedBytes &&
-      localNameEnd <= buffer.length &&
-      centralOffset + 46 <= buffer.length &&
-      buffer.subarray(30, localNameEnd).toString("utf8") ===
-        "index.js" &&
-      buffer.readUInt32LE(centralOffset) === 0x02014b50,
-    "AWS_READINESS_ZIP_LOCAL_ENTRY"
-  );
-
-  const centralFlags = buffer.readUInt16LE(centralOffset + 8);
-  const centralMethod = buffer.readUInt16LE(centralOffset + 10);
-  const centralCompressedBytes =
-    buffer.readUInt32LE(centralOffset + 20);
-  const centralUncompressedBytes =
-    buffer.readUInt32LE(centralOffset + 24);
-  const centralNameBytes =
-    buffer.readUInt16LE(centralOffset + 28);
-  const centralExtraBytes =
-    buffer.readUInt16LE(centralOffset + 30);
-  const centralCommentBytes =
-    buffer.readUInt16LE(centralOffset + 32);
-  const localHeaderOffset =
-    buffer.readUInt32LE(centralOffset + 42);
-  const centralNameEnd = centralOffset + 46 + centralNameBytes;
-  const endOffset =
-    centralNameEnd + centralExtraBytes + centralCommentBytes;
-  requireCondition(
-    centralFlags === 0 &&
-      centralMethod === 0 &&
-      centralCompressedBytes === compressedBytes &&
-      centralUncompressedBytes === uncompressedBytes &&
-      localHeaderOffset === 0 &&
-      centralNameEnd <= buffer.length &&
-      buffer
-        .subarray(centralOffset + 46, centralNameEnd)
-        .toString("utf8") === "index.js" &&
-      endOffset + 22 === buffer.length &&
-      buffer.readUInt32LE(endOffset) === 0x06054b50 &&
+    buffer.readUInt32LE(endOffset) === 0x06054b50 &&
       buffer.readUInt16LE(endOffset + 4) === 0 &&
       buffer.readUInt16LE(endOffset + 6) === 0 &&
-      buffer.readUInt16LE(endOffset + 8) === 1 &&
-      buffer.readUInt16LE(endOffset + 10) === 1 &&
-      buffer.readUInt32LE(endOffset + 12) ===
-        endOffset - centralOffset &&
-      buffer.readUInt32LE(endOffset + 16) === centralOffset &&
+      buffer.readUInt16LE(endOffset + 8) === 2 &&
+      buffer.readUInt16LE(endOffset + 10) === 2 &&
       buffer.readUInt16LE(endOffset + 20) === 0,
-    "AWS_READINESS_ZIP_CENTRAL_ENTRY"
+    "AWS_READINESS_ZIP_END"
+  );
+  const centralBytes = buffer.readUInt32LE(endOffset + 12);
+  const centralOffset = buffer.readUInt32LE(endOffset + 16);
+  requireCondition(
+    centralOffset > 0 &&
+      centralBytes > 0 &&
+      centralOffset + centralBytes === endOffset,
+    "AWS_READINESS_ZIP_DIRECTORY"
+  );
+
+  const localEntries = [];
+  let offset = 0;
+  while (offset < centralOffset) {
+    requireCondition(
+      offset + 30 <= centralOffset &&
+        buffer.readUInt32LE(offset) === 0x04034b50,
+      "AWS_READINESS_ZIP_LOCAL_HEADER"
+    );
+    const flags = buffer.readUInt16LE(offset + 6);
+    const method = buffer.readUInt16LE(offset + 8);
+    const time = buffer.readUInt16LE(offset + 10);
+    const date = buffer.readUInt16LE(offset + 12);
+    const checksum = buffer.readUInt32LE(offset + 14);
+    const compressedBytes = buffer.readUInt32LE(offset + 18);
+    const uncompressedBytes = buffer.readUInt32LE(offset + 22);
+    const nameBytes = buffer.readUInt16LE(offset + 26);
+    const extraBytes = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const nameEnd = nameStart + nameBytes;
+    const contentStart = nameEnd + extraBytes;
+    const contentEnd = contentStart + compressedBytes;
+    const content = buffer.subarray(contentStart, contentEnd);
+    requireCondition(
+      buffer.readUInt16LE(offset + 4) === 20 &&
+        flags === 0 &&
+        method === 0 &&
+        time === 0 &&
+        date === FIXED_ZIP_DATE &&
+        compressedBytes > 0 &&
+        compressedBytes === uncompressedBytes &&
+        nameBytes > 0 &&
+        extraBytes === 0 &&
+        contentEnd <= centralOffset &&
+        crc32(content) === checksum,
+      "AWS_READINESS_ZIP_LOCAL_ENTRY"
+    );
+    const name = buffer.subarray(nameStart, nameEnd).toString("utf8");
+    requireCondition(
+      /^[A-Za-z0-9._-]+$/.test(name) &&
+        Buffer.byteLength(name, "utf8") === nameBytes,
+      "AWS_READINESS_ZIP_LOCAL_NAME"
+    );
+    localEntries.push({
+      name,
+      checksum,
+      compressedBytes,
+      localOffset: offset,
+      content
+    });
+    offset = contentEnd;
+  }
+  requireCondition(
+    offset === centralOffset && localEntries.length === 2,
+    "AWS_READINESS_ZIP_LOCAL_SET"
+  );
+
+  const centralEntries = [];
+  offset = centralOffset;
+  while (offset < endOffset) {
+    requireCondition(
+      offset + 46 <= endOffset &&
+        buffer.readUInt32LE(offset) === 0x02014b50,
+      "AWS_READINESS_ZIP_CENTRAL_HEADER"
+    );
+    const flags = buffer.readUInt16LE(offset + 8);
+    const method = buffer.readUInt16LE(offset + 10);
+    const time = buffer.readUInt16LE(offset + 12);
+    const date = buffer.readUInt16LE(offset + 14);
+    const checksum = buffer.readUInt32LE(offset + 16);
+    const compressedBytes = buffer.readUInt32LE(offset + 20);
+    const uncompressedBytes = buffer.readUInt32LE(offset + 24);
+    const nameBytes = buffer.readUInt16LE(offset + 28);
+    const extraBytes = buffer.readUInt16LE(offset + 30);
+    const commentBytes = buffer.readUInt16LE(offset + 32);
+    const disk = buffer.readUInt16LE(offset + 34);
+    const internalAttributes = buffer.readUInt16LE(offset + 36);
+    const externalAttributes = buffer.readUInt32LE(offset + 38);
+    const localOffset = buffer.readUInt32LE(offset + 42);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + nameBytes;
+    const nextOffset = nameEnd + extraBytes + commentBytes;
+    requireCondition(
+      buffer.readUInt16LE(offset + 4) === ((3 << 8) | 20) &&
+        buffer.readUInt16LE(offset + 6) === 20 &&
+        flags === 0 &&
+        method === 0 &&
+        time === 0 &&
+        date === FIXED_ZIP_DATE &&
+        compressedBytes > 0 &&
+        compressedBytes === uncompressedBytes &&
+        extraBytes === 0 &&
+        commentBytes === 0 &&
+        disk === 0 &&
+        internalAttributes === 0 &&
+        externalAttributes === ((0o100644 * 65_536) >>> 0) &&
+        nextOffset <= endOffset,
+      "AWS_READINESS_ZIP_CENTRAL_ENTRY"
+    );
+    centralEntries.push({
+      name: buffer.subarray(nameStart, nameEnd).toString("utf8"),
+      checksum,
+      compressedBytes,
+      localOffset
+    });
+    offset = nextOffset;
+  }
+  requireCondition(
+    offset === endOffset && centralEntries.length === 2,
+    "AWS_READINESS_ZIP_CENTRAL_SET"
+  );
+  for (let index = 0; index < localEntries.length; index += 1) {
+    const local = localEntries[index];
+    const central = centralEntries[index];
+    requireCondition(
+      central.name === local.name &&
+        central.checksum === local.checksum &&
+        central.compressedBytes === local.compressedBytes &&
+        central.localOffset === local.localOffset,
+      "AWS_READINESS_ZIP_ENTRY_MISMATCH"
+    );
+  }
+  const expectedNames = ["THIRD_PARTY_NOTICES.txt", "index.js"];
+  requireCondition(
+    localEntries.map(({ name }) => name).join("\n") === expectedNames.join("\n"),
+    "AWS_READINESS_ZIP_ENTRY_SET"
+  );
+  return Object.fromEntries(
+    localEntries.map(({ name, content }) => [name, content])
   );
 }
 
@@ -186,6 +287,89 @@ function validateTemplateReceipt(
   };
 }
 
+function validateThirdPartyNotices(
+  projectRoot,
+  receipt,
+  packageLockDigest
+) {
+  requireCondition(
+    exactKeys(receipt, [
+      "fallbackCount",
+      "licenseTextCount",
+      "licenses",
+      "noticeBytes",
+      "noticePath",
+      "noticeSha256",
+      "packageCount",
+      "packageLockSha256",
+      "packageNames",
+      "schema",
+      "status"
+    ]) &&
+      receipt.schema === "tideproof.bundled-third-party-notices.v1" &&
+      receipt.status === "PASS" &&
+      receipt.noticePath === "THIRD_PARTY_NOTICES.txt" &&
+      HEX_64.test(receipt.noticeSha256) &&
+      receipt.packageLockSha256 === packageLockDigest &&
+      Array.isArray(receipt.packageNames) &&
+      receipt.packageNames.length === receipt.packageCount &&
+      new Set(receipt.packageNames).size === receipt.packageNames.length &&
+      receipt.packageNames.every(
+        (packageName) =>
+          typeof packageName === "string" &&
+          /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(
+            packageName
+          )
+      ) &&
+      JSON.stringify(receipt.packageNames) ===
+        JSON.stringify([...receipt.packageNames].sort()) &&
+      Number.isSafeInteger(receipt.noticeBytes) &&
+      receipt.noticeBytes > 0 &&
+      Number.isSafeInteger(receipt.packageCount) &&
+      receipt.packageCount > 0 &&
+      Number.isSafeInteger(receipt.licenseTextCount) &&
+      receipt.licenseTextCount > 0 &&
+      Number.isSafeInteger(receipt.fallbackCount) &&
+      receipt.fallbackCount >= 0 &&
+      receipt.fallbackCount <= receipt.packageCount &&
+      receipt.licenses &&
+      typeof receipt.licenses === "object" &&
+      !Array.isArray(receipt.licenses),
+    "AWS_READINESS_THIRD_PARTY_NOTICES"
+  );
+  const licenseEntries = Object.entries(receipt.licenses);
+  requireCondition(
+    licenseEntries.length > 0 &&
+      licenseEntries.every(
+        ([license, count]) =>
+          ["0BSD", "Apache-2.0", "ISC", "MIT"].includes(license) &&
+          Number.isSafeInteger(count) &&
+          count > 0
+      ) &&
+      licenseEntries.reduce((sum, [, count]) => sum + count, 0) ===
+        receipt.packageCount,
+    "AWS_READINESS_THIRD_PARTY_LICENSES"
+  );
+  const notice = resolvedFile(
+    projectRoot,
+    receipt.noticePath,
+    "AWS_READINESS_THIRD_PARTY_NOTICE_FILE"
+  );
+  const bytes = fs.readFileSync(notice.resolved);
+  requireCondition(
+    notice.stat.size === receipt.noticeBytes &&
+      sha256(bytes) === receipt.noticeSha256,
+    "AWS_READINESS_THIRD_PARTY_NOTICE_DIGEST"
+  );
+  return {
+    accepted: {
+      ...receipt,
+      licenses: Object.fromEntries(licenseEntries)
+    },
+    bytes
+  };
+}
+
 export function validateBuildReceipt(
   receipt,
   {
@@ -195,13 +379,13 @@ export function validateBuildReceipt(
   }
 ) {
   requireCondition(
-    receipt?.schemaVersion === "tideproof.gate2-build.v2" &&
+    receipt?.schemaVersion === "tideproof.gate2-build.v3" &&
       receipt.mode === "CLEAN_ARTIFACT_BUILD" &&
       receipt.sourceCommit === sourceCommit &&
       receipt.treeDigest === treeDigest &&
       receipt.workingTreeClean === true &&
       receipt.workingTreeCleanBeforeGeneration === true &&
-      receipt.archiveFormat === "ZIP_STORED_SINGLE_FILE_V1" &&
+      receipt.archiveFormat === "ZIP_STORED_TWO_FILE_V2" &&
       HEX_64.test(receipt.packageLockDigest),
     "AWS_READINESS_BUILD_RECEIPT"
   );
@@ -209,6 +393,11 @@ export function validateBuildReceipt(
     projectRoot,
     "package-lock.json",
     "AWS_READINESS_PACKAGE_LOCK"
+  );
+  const thirdPartyNotices = validateThirdPartyNotices(
+    projectRoot,
+    receipt.thirdPartyNotices,
+    receipt.packageLockDigest
   );
   requireCondition(
     sha256File(packageLock.resolved) ===
@@ -229,6 +418,7 @@ export function validateBuildReceipt(
   );
 
   const acceptedArtifacts = {};
+  const bundledPackageUnion = new Set();
   for (const name of ARTIFACT_NAMES) {
     const artifact = artifacts.find(
       (candidate) => candidate?.name === name
@@ -241,8 +431,23 @@ export function validateBuildReceipt(
         HEX_64.test(artifact.artifactDigest) &&
         typeof artifact.artifactCodeSha256 === "string" &&
         Number.isSafeInteger(artifact.artifactBytes) &&
-        artifact.artifactBytes > 0,
+        artifact.artifactBytes > 0 &&
+        Array.isArray(artifact.bundledPackages) &&
+        new Set(artifact.bundledPackages).size ===
+          artifact.bundledPackages.length &&
+        artifact.bundledPackages.every(
+          (packageName) =>
+            typeof packageName === "string" &&
+            /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(
+              packageName
+            )
+        ) &&
+        JSON.stringify(artifact.bundledPackages) ===
+          JSON.stringify([...artifact.bundledPackages].sort()),
       "AWS_READINESS_ARTIFACT_RECEIPT"
+    );
+    artifact.bundledPackages.forEach((packageName) =>
+      bundledPackageUnion.add(packageName)
     );
     const expectedArtifactFile =
       `${name}-${artifact.artifactDigest}.zip`;
@@ -275,21 +480,34 @@ export function validateBuildReceipt(
           artifact.artifactCodeSha256,
       "AWS_READINESS_ARTIFACT_DIGEST"
     );
-    validateStoredSingleFileZip(archiveBuffer);
+    const archiveEntries = validateStoredTwoFileZip(archiveBuffer);
+    requireCondition(
+      archiveEntries["THIRD_PARTY_NOTICES.txt"].equals(
+        thirdPartyNotices.bytes
+      ) && archiveEntries["index.js"].length > 0,
+      "AWS_READINESS_ARTIFACT_NOTICE"
+    );
     acceptedArtifacts[name] = {
       sourceDigest: artifact.sourceDigest,
       artifactDigest: artifact.artifactDigest,
       artifactCodeSha256: artifact.artifactCodeSha256,
       artifactBytes: artifact.artifactBytes,
       artifactPath: expectedArtifactPath,
+      bundledPackages: artifact.bundledPackages,
       suggestedS3Key: artifact.suggestedS3Key
     };
   }
+  requireCondition(
+    JSON.stringify([...bundledPackageUnion].sort()) ===
+      JSON.stringify(thirdPartyNotices.accepted.packageNames),
+    "AWS_READINESS_BUNDLED_PACKAGE_UNION"
+  );
 
   return {
     schemaVersion: receipt.schemaVersion,
     mode: receipt.mode,
     packageLockDigest: receipt.packageLockDigest,
+    thirdPartyNotices: thirdPartyNotices.accepted,
     bootstrapTemplate: validateTemplateReceipt(
       projectRoot,
       receipt.bootstrapTemplate,
@@ -814,6 +1032,7 @@ export async function runAwsReadiness({
       exactHeadBuild: true,
       artifactSet: ARTIFACT_NAMES,
       artifactIntegrity: true,
+      bundledThirdPartyNotices: true,
       awsPreflight: preflight ? "PASS" : "NOT_RUN"
     },
     build,
@@ -853,5 +1072,5 @@ export const __test = Object.freeze({
   OFFICIAL_REMOTE,
   childEnvironment,
   isOfficialRemote,
-  validateStoredSingleFileZip
+  validateStoredTwoFileZip
 });

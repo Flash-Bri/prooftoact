@@ -5,8 +5,13 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { writeSingleFileZip } from "./lib/deterministic-zip.js";
+import {
+  packageNamesFromMetafile,
+  verifyBundledThirdPartyNotices
+} from "./lib/bundled-third-party-notices.js";
+import { writeDeterministicZip } from "./lib/deterministic-zip.js";
 import { rawTextPlugin } from "./lib/raw-text-plugin.js";
+import { collectBundledPackageNames } from "./verify-bundled-third-party-notices.js";
 import {
   buildAwsBootstrapTemplate,
   buildGate2Template,
@@ -70,7 +75,12 @@ function gitStatus() {
   return result.stdout.trim();
 }
 
-async function buildArtifact(name, sourceCommit) {
+async function buildArtifact(
+  name,
+  sourceCommit,
+  noticeBytes,
+  expectedPackages
+) {
   const sourcePath = path.join(
     lambdaRoot,
     `${name}.${name === "demo" ? "js" : "cjs"}`
@@ -84,8 +94,9 @@ async function buildArtifact(name, sourceCommit) {
     temporaryDirectory,
     `${name}-provisional.zip`
   );
+  let result;
   try {
-    await build({
+    result = await build({
       absWorkingDir: root,
       entryPoints: [sourcePath],
       bundle: true,
@@ -94,6 +105,7 @@ async function buildArtifact(name, sourceCommit) {
       format: "cjs",
       legalComments: "none",
       logLevel: "silent",
+      metafile: true,
       outfile: stagedPath,
       plugins: [rawTextPlugin()]
     });
@@ -101,11 +113,21 @@ async function buildArtifact(name, sourceCommit) {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
     throw new Error(`esbuild failed for ${name}: ${error.message}`);
   }
-  writeSingleFileZip(
-    provisionalPath,
-    "index.js",
-    fs.readFileSync(stagedPath)
-  );
+  const bundledPackages = packageNamesFromMetafile(result.metafile);
+  if (JSON.stringify(bundledPackages) !== JSON.stringify(expectedPackages)) {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    throw new Error(`BUNDLED_PACKAGE_SET_DRIFT:${name}`);
+  }
+  writeDeterministicZip(provisionalPath, [
+    {
+      fileName: "THIRD_PARTY_NOTICES.txt",
+      content: noticeBytes
+    },
+    {
+      fileName: "index.js",
+      content: fs.readFileSync(stagedPath)
+    }
+  ]);
   const artifactDigest = sha256File(provisionalPath);
   const artifactPath = path.join(
     distRoot,
@@ -129,6 +151,7 @@ async function buildArtifact(name, sourceCommit) {
     artifactDigest,
     artifactCodeSha256: sha256FileBase64(artifactPath),
     artifactBytes: fs.statSync(artifactPath).size,
+    bundledPackages,
     suggestedS3Key: `gate2/${sourceCommit}/${name}-${artifactDigest}.zip`
   };
 }
@@ -165,22 +188,39 @@ if (!templatesOnly && !workingTreeClean) {
 }
 
 let artifacts = [];
+let thirdPartyNotices = null;
 if (!templatesOnly) {
+  const bundled = await collectBundledPackageNames({ rootDir: root });
+  thirdPartyNotices = verifyBundledThirdPartyNotices({
+    rootDir: root,
+    packageNames: bundled.packageNames
+  });
+  const noticeBytes = fs.readFileSync(
+    path.join(root, thirdPartyNotices.noticePath)
+  );
   fs.mkdirSync(distRoot, { recursive: true });
   for (const name of artifactNames) {
-    artifacts.push(await buildArtifact(name, sourceCommit));
+    artifacts.push(
+      await buildArtifact(
+        name,
+        sourceCommit,
+        noticeBytes,
+        bundled.artifactPackages[name]
+      )
+    );
   }
 }
 
 const receipt = {
-  schemaVersion: "tideproof.gate2-build.v2",
+  schemaVersion: "tideproof.gate2-build.v3",
   mode: templatesOnly ? "TEMPLATES_ONLY_UNBOUND" : "CLEAN_ARTIFACT_BUILD",
   sourceCommit,
   treeDigest,
   workingTreeClean,
   workingTreeCleanBeforeGeneration,
-  archiveFormat: "ZIP_STORED_SINGLE_FILE_V1",
+  archiveFormat: "ZIP_STORED_TWO_FILE_V2",
   packageLockDigest: sha256File(path.join(root, "package-lock.json")),
+  thirdPartyNotices,
   bootstrapTemplate: {
     path: path.relative(root, bootstrapPath),
     templateDigest: bootstrap.templateDigest,
