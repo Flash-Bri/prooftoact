@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AUTHORITY_PROOF_RESPONSE_SCHEMA,
   AUTHORITY_RACE_RECEIPT_SCHEMA,
   AUTHORITY_REQUEST_SCHEMA,
+  authorityProofEvent,
   authorityRaceEvent,
   parseAuthorityRaceArguments,
   runAuthorityRace,
-  validateAuthorityRaceInvocations
+  validateAuthorityRaceInvocations,
+  validateAuthorityRaceProof
 } from "../src/cloud/aws-authority-race.js";
 
 const EXPECTED = Object.freeze({
@@ -92,6 +95,82 @@ function response(contender, options = {}) {
   };
 }
 
+function proofResponse(options = {}) {
+  const state = {
+    activeRunId: "66666666-6666-4666-8666-666666666666",
+    currentFence: "1",
+    holderOperationId: IDS.alpha,
+    outboxOperationId: IDS.alpha,
+    observedAt: "2026-08-01T12:00:04.000Z",
+    counts: {
+      raceReceiptCount: "2",
+      resourceReceiptCount: "2",
+      reservedCount: "1",
+      heldDenialCount: "1",
+      pendingCount: "0",
+      outboxCount: "1",
+      protectedEffectCount: "0",
+      ...options.counts
+    },
+    outcomes: {
+      alpha: {
+        operationId: IDS.alpha,
+        requestDigest: "1".repeat(64),
+        outcome: "resource_reserved",
+        reason: null,
+        fencingToken: "1",
+        observedHolderOperationId: null,
+        observedFence: null
+      },
+      bravo: {
+        operationId: IDS.bravo,
+        requestDigest: "2".repeat(64),
+        outcome: "resource_held_denied",
+        reason: "active_holder",
+        fencingToken: null,
+        observedHolderOperationId: IDS.alpha,
+        observedFence: "1"
+      },
+      ...options.outcomes
+    },
+    ...options.state
+  };
+  const body = {
+    schemaVersion: AUTHORITY_PROOF_RESPONSE_SCHEMA,
+    status: "OBSERVED",
+    raceId: EXPECTED.raceId,
+    transaction: {
+      isolation: "serializable",
+      databaseObservedAt: "2026-08-01T12:00:04.000Z",
+      databaseSessionDigest: "5".repeat(64),
+      ...options.transaction
+    },
+    state,
+    invocationRequestId:
+      "77777777-7777-4777-8777-777777777777",
+    functionVersion: "7",
+    readOnly: true,
+    authorityTransferred: false,
+    requiresFreshAuthorization: true,
+    modelAccess: false,
+    sourceCommit: EXPECTED.sourceCommit,
+    configDigest: EXPECTED.configDigest,
+    treeDigest: "c".repeat(40),
+    packageLockDigest: "d".repeat(64),
+    authoritySourceDigest: "e".repeat(64),
+    authorityArtifactDigest: "f".repeat(64),
+    ...options.body
+  };
+  return {
+    StatusCode: 200,
+    ExecutedVersion: options.executedVersion ?? "7",
+    Payload: Buffer.from(JSON.stringify(body)),
+    $metadata: {
+      requestId: "aws-invoke-request-proof"
+    }
+  };
+}
+
 test("authority race CLI accepts only an exact aliased proof target", () => {
   assert.deepEqual(
     parseAuthorityRaceArguments([
@@ -136,7 +215,7 @@ test("authority race CLI accepts only an exact aliased proof target", () => {
   }
 });
 
-test("authority race emits exactly two non-authority-bearing events", () => {
+test("authority race emits exact contender and proof events without authority fields", () => {
   assert.deepEqual(authorityRaceEvent(EXPECTED.raceId, "alpha"), {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "reserve",
@@ -147,6 +226,11 @@ test("authority race emits exactly two non-authority-bearing events", () => {
     () => authorityRaceEvent(EXPECTED.raceId, "third"),
     /AUTHORITY_RACE_EVENT_REJECTED/
   );
+  assert.deepEqual(authorityProofEvent(EXPECTED.raceId), {
+    schemaVersion: AUTHORITY_REQUEST_SCHEMA,
+    mode: "proof",
+    raceId: EXPECTED.raceId
+  });
 });
 
 test("authority race requires one overlapping winner and one durable denial", async () => {
@@ -155,11 +239,13 @@ test("authority race requires one overlapping winner and one durable denial", as
     ...EXPECTED,
     invoke: async (functionArn, event) => {
       invoked.push({ functionArn, event });
-      return response(event.contender);
+      return event.mode === "proof"
+        ? proofResponse()
+        : response(event.contender);
     }
   });
 
-  assert.equal(invoked.length, 2);
+  assert.equal(invoked.length, 3);
   assert.equal(
     invoked.every(
       ({ functionArn }) => functionArn === EXPECTED.functionArn
@@ -171,8 +257,20 @@ test("authority race requires one overlapping winner and one durable denial", as
   assert.equal(receipt.contenders, 2);
   assert.equal(receipt.overlappingDatabaseIntervals, true);
   assert.equal(receipt.distinctDatabaseSessions, true);
+  assert.equal(receipt.durableStateVerified, true);
   assert.equal(receipt.winner.contender, "alpha");
   assert.equal(receipt.denial.contender, "bravo");
+  assert.equal(receipt.durableState.receiptCount, 2);
+  assert.equal(receipt.durableState.outboxCount, 1);
+  assert.equal(receipt.durableState.protectedEffectCount, 0);
+  assert.equal(
+    receipt.durableState.denialObservedHolderOperationId,
+    receipt.winner.operationId
+  );
+  assert.equal(
+    receipt.durableState.denialObservedFence,
+    receipt.winner.fencingToken
+  );
   assert.equal(receipt.protectedEffectExecuted, false);
   assert.equal(receipt.authorityTransferredByModel, false);
   assert.equal("functionArn" in receipt, false);
@@ -251,5 +349,73 @@ test("authority race rejects response expansion and model authority", () => {
         EXPECTED
       ),
     /AUTHORITY_RACE_RESPONSE_REJECTED/
+  );
+});
+
+test("authority race rejects durable proof drift, expansion, and stale observation", () => {
+  const observation = validateAuthorityRaceInvocations(
+    {
+      alpha: response("alpha"),
+      bravo: response("bravo")
+    },
+    EXPECTED
+  );
+  for (const proof of [
+    proofResponse({ counts: { protectedEffectCount: "1" } }),
+    proofResponse({ counts: { resourceReceiptCount: "3" } }),
+    proofResponse({ state: { activeRunId: "not-a-run-id" } }),
+    proofResponse({ state: { outboxOperationId: IDS.bravo } }),
+    proofResponse({
+      outcomes: {
+        alpha: {
+          operationId: IDS.alpha,
+          requestDigest: "1".repeat(64),
+          outcome: "resource_reserved",
+          reason: null,
+          fencingToken: "2",
+          observedHolderOperationId: null,
+          observedFence: null
+        }
+      }
+    }),
+    proofResponse({
+      outcomes: {
+        bravo: {
+          operationId: IDS.bravo,
+          requestDigest: "2".repeat(64),
+          outcome: "resource_held_denied",
+          reason: "active_holder",
+          fencingToken: null,
+          observedHolderOperationId: IDS.bravo,
+          observedFence: "1"
+        }
+      }
+    }),
+    proofResponse({
+      state: { observedAt: "2026-08-01T12:00:02.000Z" },
+      transaction: {
+        databaseObservedAt: "2026-08-01T12:00:02.000Z"
+      }
+    }),
+    proofResponse({ body: { leakedSecret: true } })
+  ]) {
+    assert.throws(
+      () =>
+        validateAuthorityRaceProof(
+          proof,
+          observation,
+          EXPECTED
+        ),
+      /AUTHORITY_RACE_PROOF_REJECTED/
+    );
+  }
+  assert.throws(
+    () =>
+      validateAuthorityRaceProof(
+        proofResponse(),
+        { ...observation, unexpected: true },
+        EXPECTED
+      ),
+    /AUTHORITY_RACE_PROOF_REJECTED/
   );
 });

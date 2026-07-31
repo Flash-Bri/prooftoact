@@ -41,6 +41,14 @@ const SPEND_AUTHORITY_SQL = `
   )
 `;
 
+const OBSERVE_AUTHORITY_RACE_SQL = `
+  SELECT *
+  FROM tp_api.g1_observe_authority_race_v1(
+    $1::UUID, $2::UUID, $3,
+    $4::UUID, $5, $6::UUID, $7
+  )
+`;
+
 function spendAuthorityValues(request, authenticatedAgentId) {
   return [
     request.tenantId,
@@ -306,6 +314,13 @@ async function main() {
   };
   const normalizedCapabilityRequest =
     normalizedAuthorityRequestFor(capabilityRequest);
+  const normalizedDeniedRequest = normalizedAuthorityRequestFor({
+    ...capabilityRequest,
+    operationId: randomUUID(),
+    agentId: "synthetic-capability-authorizer-bravo",
+    intentNonce: randomUUID(),
+    effectKey: randomUUID()
+  });
 
   const authorizer = await withClient(
     connectionStringForUser(
@@ -365,6 +380,25 @@ async function main() {
           normalizedCapabilityRequest.agentId
         )
       );
+      const denied = await client.query(
+        SPEND_AUTHORITY_SQL,
+        spendAuthorityValues(
+          normalizedDeniedRequest,
+          normalizedDeniedRequest.agentId
+        )
+      );
+      const durableProof = await client.query(
+        OBSERVE_AUTHORITY_RACE_SQL,
+        [
+          authorityFixture.tenantId,
+          authorityFixture.runId,
+          authorityFixture.resourceId,
+          normalizedCapabilityRequest.operationId,
+          normalizedCapabilityRequest.requestDigest,
+          normalizedDeniedRequest.operationId,
+          normalizedDeniedRequest.requestDigest
+        ]
+      );
       const wrongActorRequest = normalizedAuthorityRequestFor({
         ...capabilityRequest,
         operationId: randomUUID(),
@@ -387,6 +421,8 @@ async function main() {
         spendOutcome: spent.rows[0]?.decision_outcome,
         spendFence: spent.rows[0]?.decision_fencing_token,
         replayKind: replay.rows[0]?.decision_replay_kind,
+        deniedOutcome: denied.rows[0]?.decision_outcome,
+        durableProof: durableProof.rows[0],
         wrongActor
       };
     }
@@ -400,8 +436,21 @@ async function main() {
     authorizer.spendOutcome !== "resource_reserved" ||
     authorizer.spendFence !== "1" ||
     authorizer.replayKind !== "operation_replay" ||
-    capabilitySnapshot.receipts.length !== 1 ||
+    authorizer.deniedOutcome !== "resource_held_denied" ||
+    authorizer.durableProof?.race_receipt_count !== "2" ||
+    authorizer.durableProof?.resource_receipt_count !== "2" ||
+    authorizer.durableProof?.reserved_count !== "1" ||
+    authorizer.durableProof?.held_denial_count !== "1" ||
+    authorizer.durableProof?.pending_count !== "0" ||
+    authorizer.durableProof?.outbox_count !== "1" ||
+    authorizer.durableProof?.protected_effect_count !== "0" ||
+    authorizer.durableProof
+      ?.bravo_observed_holder_operation_id !==
+      normalizedCapabilityRequest.operationId ||
+    authorizer.durableProof?.bravo_observed_fence !== "1" ||
+    capabilitySnapshot.receipts.length !== 2 ||
     capabilitySnapshot.outbox.length !== 1 ||
+    capabilitySnapshot.effects.length !== 0 ||
     capabilitySnapshot.resource.current_fence !== "1"
   ) {
     throw new Error("least-privilege authority spend invariant failed");
@@ -867,6 +916,7 @@ async function main() {
         capabilityAuthority: {
           receiptCount: capabilitySnapshot.receipts.length,
           outboxCount: capabilitySnapshot.outbox.length,
+          protectedEffectCount: capabilitySnapshot.effects.length,
           resourceFence: capabilitySnapshot.resource.current_fence
         },
         claimBoundary:

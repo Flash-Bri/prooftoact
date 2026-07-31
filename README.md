@@ -40,8 +40,10 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
   pinned public-key evidence, exact Lambda code hashes, a dedicated exact-route
   caller, private API access logs, an isolated two-concurrency CockroachDB
   authority candidate that derives capability fields outside the model and
-  calls only the least-privilege `SECURITY DEFINER` surface, and opt-in
-  temporary same-role capability probes;
+  calls only least-privilege `SECURITY DEFINER` surfaces, then requires a
+  separate read-only durable-state observation of both receipts, the winner's
+  outbox and fence, and zero protected effects, plus opt-in temporary
+  same-role capability probes;
 - an exact-head signed-out demo verifier that compares every static and
   dynamic public response with the clean checkout, binds the health receipt to
   the built Demo artifact, checks strict browser headers, and probes route and

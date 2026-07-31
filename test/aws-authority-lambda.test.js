@@ -46,6 +46,14 @@ function validEvent(contender = "alpha") {
   };
 }
 
+function proofEvent() {
+  return {
+    schemaVersion: authority.REQUEST_SCHEMA,
+    mode: "proof",
+    raceId: FIXTURE.raceId
+  };
+}
+
 function spendRow(request, outcome = "resource_reserved") {
   const winner = outcome === "resource_reserved";
   return {
@@ -152,6 +160,75 @@ function resolvedClient(request, outcome = "resource_reserved") {
             }
           ]
         };
+      }
+      return { rowCount: 0, rows: [] };
+    },
+    async end() {
+      this.ended = true;
+    }
+  };
+}
+
+function proofRow(config, changes = {}) {
+  const alpha = authority.authorityRequestFor(
+    validEvent("alpha"),
+    config
+  );
+  const bravo = authority.authorityRequestFor(
+    validEvent("bravo"),
+    config
+  );
+  return {
+    active_run_id: config.runId,
+    current_fence: "1",
+    holder_operation_id: alpha.operationId,
+    race_receipt_count: "2",
+    resource_receipt_count: "2",
+    reserved_count: "1",
+    held_denial_count: "1",
+    pending_count: "0",
+    outbox_count: "1",
+    outbox_operation_id: alpha.operationId,
+    protected_effect_count: "0",
+    alpha_outcome: "resource_reserved",
+    alpha_reason: null,
+    alpha_fencing_token: "1",
+    alpha_observed_holder_operation_id: null,
+    alpha_observed_fence: null,
+    bravo_outcome: "resource_held_denied",
+    bravo_reason: "active_holder",
+    bravo_fencing_token: null,
+    bravo_observed_holder_operation_id: alpha.operationId,
+    bravo_observed_fence: "1",
+    observed_at: "2026-08-01T12:00:04.000Z",
+    ...changes
+  };
+}
+
+function proofClient(row) {
+  const queries = [];
+  return {
+    queries,
+    ended: false,
+    async connect() {
+      queries.push("CONNECT");
+    },
+    async query(sql) {
+      queries.push(sql);
+      if (sql === "SHOW TRANSACTION ISOLATION LEVEL") {
+        return {
+          rowCount: 1,
+          rows: [{ transaction_isolation: "serializable" }]
+        };
+      }
+      if (sql.includes("pg_backend_pid")) {
+        return {
+          rowCount: 1,
+          rows: [{ backend_id: "812346" }]
+        };
+      }
+      if (sql === authority.PROOF_SQL) {
+        return { rowCount: 1, rows: [row] };
       }
       return { rowCount: 0, rows: [] };
     },
@@ -391,6 +468,73 @@ test("authority reconciles an ambiguous COMMIT instead of retrying the spend", a
   );
   assert.equal(result.transaction.reconciled, true);
   assert.equal(clients.every(({ ended }) => ended), true);
+});
+
+test("authority proves the exact durable race state through one read-only capability", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const client = proofClient(proofRow(config));
+  const result = await authority.runAuthority({
+    event: proofEvent(),
+    context: {
+      awsRequestId: "88888888-8888-4888-8888-888888888888"
+    },
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => client
+  });
+
+  assert.equal(
+    result.schemaVersion,
+    authority.PROOF_RESPONSE_SCHEMA
+  );
+  assert.equal(result.status, "OBSERVED");
+  assert.equal(result.readOnly, true);
+  assert.equal(result.authorityTransferred, false);
+  assert.equal(result.requiresFreshAuthorization, true);
+  assert.equal(result.modelAccess, false);
+  assert.equal(result.transaction.isolation, "serializable");
+  assert.equal(result.state.counts.raceReceiptCount, "2");
+  assert.equal(result.state.counts.outboxCount, "1");
+  assert.equal(result.state.counts.protectedEffectCount, "0");
+  assert.equal(
+    result.state.holderOperationId,
+    result.state.outboxOperationId
+  );
+  assert.ok(client.queries.includes(authority.PROOF_SQL));
+  assert.equal(client.ended, true);
+  assert.equal(JSON.stringify(result).includes(CONNECTION_STRING), false);
+});
+
+test("authority durable proof fails closed on extra receipts, effects, or a changed outbox", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const alpha = authority.authorityRequestFor(
+    validEvent("alpha"),
+    config
+  );
+  for (const changes of [
+    { resource_receipt_count: "3" },
+    { protected_effect_count: "1" },
+    { outbox_operation_id: FIXTURE.evidenceId },
+    { holder_operation_id: FIXTURE.evidenceId },
+    { alpha_fencing_token: "2" },
+    { bravo_observed_holder_operation_id: FIXTURE.evidenceId },
+    { bravo_observed_fence: "2" },
+    { observed_at: null },
+    { unexpected_column: true }
+  ]) {
+    const result = await authority.runAuthority({
+      event: proofEvent(),
+      context: {},
+      getConnectionString: async () => CONNECTION_STRING,
+      createClient: () => proofClient(proofRow(config, changes))
+    });
+    assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+    assert.equal(result.code, "AUTHORITY_PROOF_REJECTED");
+    assert.equal(result.authorityTransferred, false);
+    assert.equal(result.requiresFreshAuthorization, true);
+  }
+  assert.notEqual(alpha.operationId, FIXTURE.evidenceId);
 });
 
 test("authority fails closed with bounded public errors", async () => {

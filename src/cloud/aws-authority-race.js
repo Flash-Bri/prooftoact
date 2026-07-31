@@ -1,11 +1,15 @@
 import crypto from "node:crypto";
 
 export const AUTHORITY_REQUEST_SCHEMA =
-  "tideproof.aws-authority-request.v1";
+  "tideproof.aws-authority-request.v2";
 export const AUTHORITY_RESPONSE_SCHEMA =
   "tideproof.aws-authority-boundary.v2";
+export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
+  "tideproof.aws-authority-durable-proof.v1";
 export const AUTHORITY_RACE_RECEIPT_SCHEMA =
-  "tideproof.aws-authority-race-receipt.v1";
+  "tideproof.aws-authority-race-receipt.v2";
+const AUTHORITY_RACE_OBSERVATION_SCHEMA =
+  "tideproof.aws-authority-race-observation.v1";
 
 const CONTENDERS = Object.freeze(["alpha", "bravo"]);
 const UUID_PATTERN =
@@ -91,6 +95,17 @@ export function authorityRaceEvent(raceId, contender) {
     mode: "reserve",
     raceId,
     contender
+  };
+}
+
+export function authorityProofEvent(raceId) {
+  if (!UUID_PATTERN.test(raceId)) {
+    throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
+  }
+  return {
+    schemaVersion: AUTHORITY_REQUEST_SCHEMA,
+    mode: "proof",
+    raceId
   };
 }
 
@@ -293,7 +308,20 @@ export function validateAuthorityRaceInvocations(
       values.map(
         ({ transaction }) => transaction.databaseSessionDigest
       )
-    ).size !== 2
+    ).size !== 2 ||
+    new Set(values.map(({ functionVersion }) => functionVersion))
+      .size !== 1 ||
+    new Set(values.map(({ treeDigest }) => treeDigest)).size !== 1 ||
+    new Set(values.map(({ packageLockDigest }) => packageLockDigest))
+      .size !== 1 ||
+    new Set(
+      values.map(({ authoritySourceDigest }) => authoritySourceDigest)
+    ).size !== 1 ||
+    new Set(
+      values.map(
+        ({ authorityArtifactDigest }) => authorityArtifactDigest
+      )
+    ).size !== 1
   ) {
     throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
   }
@@ -309,10 +337,14 @@ export function validateAuthorityRaceInvocations(
   const winner = winners[0];
   const denial = denials[0];
   return {
-    schemaVersion: AUTHORITY_RACE_RECEIPT_SCHEMA,
-    status: "PASS",
+    schemaVersion: AUTHORITY_RACE_OBSERVATION_SCHEMA,
+    status: "RACE_OBSERVED",
     sourceCommit: expected.sourceCommit,
     configDigest: expected.configDigest,
+    treeDigest: winner.treeDigest,
+    packageLockDigest: winner.packageLockDigest,
+    authoritySourceDigest: winner.authoritySourceDigest,
+    authorityArtifactDigest: winner.authorityArtifactDigest,
     raceId: expected.raceId,
     functionArnDigest: sha256Hex(expected.functionArn),
     functionVersion: winner.functionVersion,
@@ -349,7 +381,223 @@ export function validateAuthorityRaceInvocations(
       ])
     ),
     authorityTransferredByModel: false,
-    protectedEffectExecuted: false
+    durableStateVerified: false
+  };
+}
+
+export function validateAuthorityRaceProof(
+  invocation,
+  observation,
+  expected
+) {
+  if (
+    !exactKeys(expected, [
+      "configDigest",
+      "functionArn",
+      "raceId",
+      "sourceCommit"
+    ]) ||
+    !exactKeys(observation, [
+      "authorityArtifactDigest",
+      "authoritySourceDigest",
+      "authorityTransferredByModel",
+      "awsInvokeRequestDigests",
+      "configDigest",
+      "contenders",
+      "databaseInterval",
+      "denial",
+      "distinctDatabaseSessions",
+      "durableStateVerified",
+      "functionArnDigest",
+      "functionVersion",
+      "invocationRequestDigests",
+      "overlappingDatabaseIntervals",
+      "packageLockDigest",
+      "raceId",
+      "schemaVersion",
+      "serializableTransactions",
+      "sourceCommit",
+      "status",
+      "treeDigest",
+      "winner"
+    ]) ||
+    observation?.schemaVersion !==
+      AUTHORITY_RACE_OBSERVATION_SCHEMA ||
+    observation.status !== "RACE_OBSERVED"
+  ) {
+    throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
+  }
+  const decoded = invocationBody(invocation);
+  const value = decoded.body;
+  if (
+    !exactKeys(value, [
+      "authorityArtifactDigest",
+      "authoritySourceDigest",
+      "authorityTransferred",
+      "configDigest",
+      "functionVersion",
+      "invocationRequestId",
+      "modelAccess",
+      "packageLockDigest",
+      "raceId",
+      "readOnly",
+      "requiresFreshAuthorization",
+      "schemaVersion",
+      "sourceCommit",
+      "state",
+      "status",
+      "transaction",
+      "treeDigest"
+    ]) ||
+    value.schemaVersion !== AUTHORITY_PROOF_RESPONSE_SCHEMA ||
+    value.status !== "OBSERVED" ||
+    value.raceId !== expected.raceId ||
+    value.sourceCommit !== expected.sourceCommit ||
+    value.configDigest !== expected.configDigest ||
+    value.treeDigest !== observation.treeDigest ||
+    value.packageLockDigest !== observation.packageLockDigest ||
+    value.authoritySourceDigest !==
+      observation.authoritySourceDigest ||
+    value.authorityArtifactDigest !==
+      observation.authorityArtifactDigest ||
+    value.functionVersion !== observation.functionVersion ||
+    value.functionVersion !== decoded.executedVersion ||
+    value.readOnly !== true ||
+    value.authorityTransferred !== false ||
+    value.requiresFreshAuthorization !== true ||
+    value.modelAccess !== false ||
+    typeof value.invocationRequestId !== "string" ||
+    value.invocationRequestId.length < 8 ||
+    value.invocationRequestId.length > 160
+  ) {
+    throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
+  }
+  const transaction = value.transaction;
+  const state = value.state;
+  const counts = state?.counts;
+  const outcomes = state?.outcomes;
+  if (
+    !exactKeys(transaction, [
+      "databaseObservedAt",
+      "databaseSessionDigest",
+      "isolation"
+    ]) ||
+    transaction.isolation !== "serializable" ||
+    !SHA256_PATTERN.test(transaction.databaseSessionDigest) ||
+    !exactKeys(state, [
+      "activeRunId",
+      "counts",
+      "currentFence",
+      "holderOperationId",
+      "observedAt",
+      "outboxOperationId",
+      "outcomes"
+    ]) ||
+    !exactKeys(counts, [
+      "heldDenialCount",
+      "outboxCount",
+      "pendingCount",
+      "protectedEffectCount",
+      "raceReceiptCount",
+      "reservedCount",
+      "resourceReceiptCount"
+    ]) ||
+    !exactKeys(outcomes, CONTENDERS) ||
+    !CONTENDERS.every((contender) =>
+      exactKeys(outcomes[contender], [
+        "fencingToken",
+        "observedFence",
+        "observedHolderOperationId",
+        "operationId",
+        "outcome",
+        "reason",
+        "requestDigest"
+      ])
+    ) ||
+    !UUID_PATTERN.test(state.activeRunId) ||
+    !/^[1-9][0-9]*$/.test(state.currentFence) ||
+    counts.raceReceiptCount !== "2" ||
+    counts.resourceReceiptCount !== "2" ||
+    counts.reservedCount !== "1" ||
+    counts.heldDenialCount !== "1" ||
+    counts.pendingCount !== "0" ||
+    counts.outboxCount !== "1" ||
+    counts.protectedEffectCount !== "0" ||
+    state.currentFence !== observation.winner.fencingToken ||
+    state.holderOperationId !== observation.winner.operationId ||
+    state.outboxOperationId !== observation.winner.operationId ||
+    outcomes[observation.winner.contender].operationId !==
+      observation.winner.operationId ||
+    outcomes[observation.winner.contender].requestDigest !==
+      observation.winner.requestDigest ||
+    outcomes[observation.winner.contender].outcome !==
+      "resource_reserved" ||
+    outcomes[observation.winner.contender].reason !== null ||
+    outcomes[observation.winner.contender].fencingToken !==
+      observation.winner.fencingToken ||
+    outcomes[observation.winner.contender]
+      .observedHolderOperationId !== null ||
+    outcomes[observation.winner.contender].observedFence !== null ||
+    outcomes[observation.denial.contender].operationId !==
+      observation.denial.operationId ||
+    outcomes[observation.denial.contender].requestDigest !==
+      observation.denial.requestDigest ||
+    outcomes[observation.denial.contender].outcome !==
+      "resource_held_denied" ||
+    outcomes[observation.denial.contender].reason !== "active_holder" ||
+    outcomes[observation.denial.contender].fencingToken !== null ||
+    outcomes[observation.denial.contender]
+      .observedHolderOperationId !==
+      observation.winner.operationId ||
+    outcomes[observation.denial.contender].observedFence !==
+      observation.winner.fencingToken
+  ) {
+    throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
+  }
+  const stateObservedAt = parseIso(
+    state.observedAt,
+    "AUTHORITY_RACE_PROOF_REJECTED"
+  );
+  const transactionObservedAt = parseIso(
+    transaction.databaseObservedAt,
+    "AUTHORITY_RACE_PROOF_REJECTED"
+  );
+  if (
+    stateObservedAt !== transactionObservedAt ||
+    stateObservedAt < Date.parse(observation.databaseInterval.completedAt)
+  ) {
+    throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
+  }
+  return {
+    ...observation,
+    schemaVersion: AUTHORITY_RACE_RECEIPT_SCHEMA,
+    status: "PASS",
+    durableStateVerified: true,
+    durableState: {
+      observedAt: state.observedAt,
+      currentFence: state.currentFence,
+      holderOperationId: state.holderOperationId,
+      receiptCount: 2,
+      resourceReceiptCount: 2,
+      outboxCount: 1,
+      outboxOperationId: state.outboxOperationId,
+      protectedEffectCount: 0,
+      denialObservedHolderOperationId:
+        outcomes[observation.denial.contender]
+          .observedHolderOperationId,
+      denialObservedFence:
+        outcomes[observation.denial.contender].observedFence,
+      databaseSessionDigest: transaction.databaseSessionDigest
+    },
+    protectedEffectExecuted: false,
+    invocationRequestDigests: {
+      ...observation.invocationRequestDigests,
+      proof: sha256Hex(value.invocationRequestId)
+    },
+    awsInvokeRequestDigests: {
+      ...observation.awsInvokeRequestDigests,
+      proof: decoded.invokeRequestDigest
+    }
   };
 }
 
@@ -378,8 +626,17 @@ export async function runAuthorityRace({
       )
     ])
   );
-  return validateAuthorityRaceInvocations(
+  const observation = validateAuthorityRaceInvocations(
     Object.fromEntries(responses),
+    expected
+  );
+  const proof = await invoke(
+    functionArn,
+    authorityProofEvent(raceId)
+  );
+  return validateAuthorityRaceProof(
+    proof,
+    observation,
     expected
   );
 }

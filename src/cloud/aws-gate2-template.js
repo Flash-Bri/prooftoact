@@ -848,7 +848,7 @@ export function buildGate2Template() {
 
   resources.AuthorityFunction = lambdaFunction({
     description:
-      "Runs one exact synthetic two-contender authority request through the least-privilege CockroachDB SECURITY DEFINER surface.",
+      "Runs one exact synthetic two-contender authority request and later read-only durable proof through least-privilege CockroachDB SECURITY DEFINER surfaces.",
     role: "AuthorityRole",
     code: artifactCode("authority"),
     logGroup: "AuthorityLogGroup",

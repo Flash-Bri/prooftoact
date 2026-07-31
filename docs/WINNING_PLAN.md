@@ -47,6 +47,9 @@ visible in one short story:
 - invoke two isolated Authority Lambda contenders against the least-privilege
   CockroachDB authorizer and require overlapping database intervals with one
   serializable winner;
+- require a later read-only CockroachDB observation of both terminal receipts,
+  the winner-bound outbox and fence, and zero protected effects before the
+  race can pass;
 - keep every decision gate deterministic and server-side;
 - add quotas, alarms, structured receipts, and fail-closed outage behavior.
 

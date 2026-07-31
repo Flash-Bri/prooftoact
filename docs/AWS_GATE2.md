@@ -49,7 +49,10 @@ boundary:
   race, derives operation IDs, intent nonces, effect keys, payloads, and
   digests internally, reads one exact Tideproof-owned Secrets Manager ARN,
   and calls only `tp_api.g1_spend_authority_v1` and
-  `tp_api.g1_resolve_request_v1` as `tp_authorizer_user`.
+  `tp_api.g1_resolve_request_v1` as `tp_authorizer_user`. After both
+  contenders return, the verifier makes one separate read-only proof request
+  through the same immutable alias; that path calls only
+  `tp_api.g1_observe_authority_race_v1`.
 - The authority role is allowed only its exact log group and
   `secretsmanager:GetSecretValue` on that one ARN. It explicitly denies other
   secret reads and enumeration, secret mutation, Bedrock, KMS signing, Lambda
@@ -62,6 +65,13 @@ boundary:
   transport-ambiguous result through the typed read-only resolver instead of
   blindly spending again. Any malformed secret, response, or unresolved
   state returns `UNKNOWN_DO_NOT_ACT` without echoing credentials.
+- A race cannot emit `PASS` from the two contender responses alone. The
+  follow-up CockroachDB observation must be a separate serializable read-only
+  transaction after both contender intervals and must find exactly two
+  terminal receipts, one reservation, one held denial that observed that
+  winner at the same fence, one matching outbox intent, the winner as current
+  holder at that fence, no pending receipt, and zero protected effects. Any
+  extra or mismatched state fails closed.
 - The post-deployment verifier rebuilds the exact clean head, compares every
   public static response byte-for-byte with that checkout, reconciles the
   health and scenario bindings, checks browser headers, and probes unknown,
@@ -89,9 +99,11 @@ path.
   IAM advisory route, or CockroachDB handoff ran.
 - The local authority tests use injected secret and database clients. They
   prove request derivation, transaction control, bounded retry,
-  ambiguous-commit reconciliation, and response validation in software; they
-  do not prove Secrets Manager, Lambda concurrency, CockroachDB reachability,
-  IAM enforcement, or live database state.
+  ambiguous-commit reconciliation, strict durable-proof validation, and
+  response validation in software; they do not prove Secrets Manager, Lambda
+  concurrency, CockroachDB reachability, IAM enforcement, or live database
+  state. The new observation function must be migrated and exercised through
+  the reviewed owner lane before the AWS race can run.
 - The authority connection is intentionally outside a VPC to avoid a NAT
   Gateway. Final review must confirm the exact public CockroachDB endpoint,
   `verify-full` TLS, `tp_authorizer_user`, secret rotation state, and the
@@ -313,10 +325,15 @@ evidence only and must not be used to deploy the repaired candidate.
     configuration digest. Require two distinct Lambda request bindings, two
     distinct CockroachDB session digests, overlapping database-clock
     intervals, `SERIALIZABLE` on both contenders, exactly one
-    `resource_reserved`, exactly one durable `resource_held_denied`, and no
-    protected effect. Preserve the private invocation and database receipts;
-    publish only the reviewed sanitized race receipt. Any sequential,
-    ambiguous, replayed, expanded, or unresolved result is not evidence.
+    `resource_reserved`, and exactly one `resource_held_denied`. Then require
+    the command's third, read-only proof invocation to observe exactly those
+    two durable receipts, the denial's observed holder/fence bound to the
+    winner, one winner-bound outbox intent, the same current holder and fence,
+    no pending receipt, and zero protected effects after both database
+    intervals. Preserve the private invocations and database receipts;
+    publish only the reviewed sanitized
+    `tideproof.aws-authority-race-receipt.v2`. Any sequential, ambiguous,
+    replayed, expanded, stale, extra, or unresolved result is not evidence.
 14. From a signed-out browser, request only the ten enumerated public `GET`
     routes. From the exact clean deployment checkout, run:
 

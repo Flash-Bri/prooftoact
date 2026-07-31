@@ -48,7 +48,10 @@ Every item must have a dated receipt tied to the final release commit:
 - [ ] Live evidence proves the named AWS services actually used, their
   least-privilege boundaries, the one bounded model call, KMS verification,
   exact API traversal, direct-Lambda denial, one genuinely overlapping
-  two-Lambda CockroachDB authority race, cost controls, and teardown path.
+  two-Lambda CockroachDB authority race, a later read-only durable-state
+  reconciliation proving two terminal receipts, the denial observed the
+  winner's fence, one winner-bound outbox, and zero protected effects, cost
+  controls, and teardown path.
 - [ ] The live demo is free, stable, signed-out, resettable, synthetic-only,
   and available without credentials through 2026-09-15 at 5:00 PM ET; the
   exact-head public-demo verifier has a preserved `PASS` receipt.
@@ -193,7 +196,8 @@ exact signed-out read-only demo routes and a logs-only Demo Lambda from
 an IAM-authenticated advisory boundary, proposal-only Bedrock path, KMS signer,
 and separately invoked two-concurrency authority Lambda. The authority
 candidate derives all operation-bearing fields outside the model and calls
-only the least-privilege CockroachDB authorizer surface, but none of that is
+only least-privilege CockroachDB authorizer surfaces; its race verifier also
+requires a later read-only durable-state proof before `PASS`. None of that is
 yet a live-cloud or live-database claim.
 
 ### Challenges
