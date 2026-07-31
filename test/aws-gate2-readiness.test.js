@@ -385,9 +385,47 @@ function releaseSecurityReceipt() {
   };
 }
 
+function releaseSubmissionReceipt() {
+  return {
+    schemaVersion: "tideproof.release-submission-verification.v1",
+    status: "DRAFT_SAFELY_BLOCKED",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "RELEASE_SUBMISSION_MANIFEST.json",
+    manifestSha256: "6".repeat(64),
+    surfaceCount: 7,
+    checklistItemCount: 14,
+    uncheckedChecklistItemCount: 14,
+    stopTokenOccurrenceCount: 13,
+    uniqueStopTokenCount: 12,
+    officialCoordinateCount: 11,
+    finalReleaseRequirements: [
+      "Accepted live receipts.",
+      "Exact-release private review.",
+      "Authorized-entrant confirmation.",
+      "Timestamped final submission receipt."
+    ],
+    checks: {
+      canonicalManifest: true,
+      exactSurfaceHashes: true,
+      canonicalDraftStatus: true,
+      submissionCoordinatesExact: true,
+      officialScheduleInternallyConsistent: true,
+      allHardPublishGatesUnchecked: true,
+      exactStopTokenVocabulary: true,
+      liveAndOwnerFieldsUnresolved: true,
+      contestMatrixRemainsBlocked: true,
+      releasePlanRemainsFailClosed: true,
+      rightsAndClaimsRemainNonfinal: true,
+      releaseClaimsPacketBindingExact: true
+    },
+    claimBoundary: "Fixture fail-closed submission draft only."
+  };
+}
+
 function releaseProvenanceReceipt() {
   return {
-    schemaVersion: "tideproof.release-provenance.v5",
+    schemaVersion: "tideproof.release-provenance.v6",
     status: "PASS",
     source: {
       commit: SOURCE_COMMIT,
@@ -423,6 +461,7 @@ function releaseProvenanceReceipt() {
     rights: releaseRightsReceipt(),
     accessibility: accessibilityReceipt(),
     security: releaseSecurityReceipt(),
+    submission: releaseSubmissionReceipt(),
     dependencies: {
       installedTree: {
         status: "PASS",
@@ -480,6 +519,7 @@ function releaseProvenanceReceipt() {
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,
       currentSourceSecurityVerified: true,
+      submissionDraftFailClosed: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary: "Fixture provenance only."
@@ -803,6 +843,16 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
   assert.throws(
     () =>
       validateReleaseProvenance(insecure, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const submissionReady = releaseProvenanceReceipt();
+  submissionReady.submission.finalReleaseReady = true;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(submissionReady, {
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),
