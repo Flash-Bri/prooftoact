@@ -303,9 +303,49 @@ function privacyReceipt() {
   };
 }
 
+function releaseClaimsReceipt() {
+  return {
+    schemaVersion: "tideproof.release-claims-verification.v1",
+    status: "CURRENT_PUBLIC_CLAIMS_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "RELEASE_CLAIMS_MANIFEST.json",
+    manifestSha256: "7".repeat(64),
+    proofManifestSha256: "8".repeat(64),
+    claimCount: 11,
+    claimStates: { VERIFIED: 7, PARTIAL: 4, PENDING: 0 },
+    surfaceCount: 13,
+    stopTokenCount: 13,
+    uncheckedGateCount: 14,
+    externalUrls: [
+      "http://127.0.0.1:4173",
+      "https://cockroachdb-ai.devpost.com/",
+      "https://cockroachdb-ai.devpost.com/resources",
+      "https://cockroachdb-ai.devpost.com/rules",
+      "https://github.com/Flash-Bri/tideproof",
+      "https://github.com/Flash-Bri/tideproof.git"
+    ],
+    finalReleaseRequirements: [
+      "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
+      "Exact-release private human review of every public claim surface and submitted field."
+    ],
+    checks: {
+      canonicalManifest: true,
+      exactSurfaceHashes: true,
+      claimsLedgerMatchesProofManifest: true,
+      currentDraftStateExplicit: true,
+      localAndHostedAwsBoundariesExplicit: true,
+      syntheticScopeExplicit: true,
+      submissionStopTokensPreserved: true,
+      publicLinksConstrained: true
+    },
+    claimBoundary: "Fixture current public claim surfaces only."
+  };
+}
+
 function releaseProvenanceReceipt() {
   return {
-    schemaVersion: "tideproof.release-provenance.v3",
+    schemaVersion: "tideproof.release-provenance.v4",
     status: "PASS",
     source: {
       commit: SOURCE_COMMIT,
@@ -336,6 +376,7 @@ function releaseProvenanceReceipt() {
       symlinkCount: 0,
       gitlinkCount: 0
     },
+    claims: releaseClaimsReceipt(),
     privacy: privacyReceipt(),
     rights: releaseRightsReceipt(),
     accessibility: accessibilityReceipt(),
@@ -391,6 +432,7 @@ function releaseProvenanceReceipt() {
       installedTreeMatchesLock: true,
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
+      currentClaimSurfacesVerified: true,
       releasePrivacyVerified: true,
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,
@@ -687,6 +729,16 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
   assert.throws(
     () =>
       validateReleaseProvenance(overstated, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const prematureClaims = releaseProvenanceReceipt();
+  prematureClaims.claims.finalReleaseReady = true;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(prematureClaims, {
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),

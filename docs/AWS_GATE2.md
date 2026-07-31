@@ -234,8 +234,9 @@ Local maintainers can exercise every non-AWS part with:
 npm run gate2:aws-readiness:local
 ```
 
-That mode emits `LOCAL_ONLY_PASS`, records `awsPreflight: NOT_RUN`, and is
-never authorization to upload or deploy.
+That mode includes the hash-bound public claim-surface control, emits
+`LOCAL_ONLY_PASS`, records `awsPreflight: NOT_RUN`, and is never authorization
+to upload or deploy.
 
 The underlying account-safety command remains independently runnable from a
 clean checkout:

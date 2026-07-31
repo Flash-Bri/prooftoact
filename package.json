@@ -11,6 +11,7 @@
     "accessibility:browser": "node scripts/verify-browser-accessibility.js",
     "accessibility:verify": "node scripts/verify-accessibility.js",
     "build:gate2": "node scripts/build-gate2-template.js",
+    "claims:verify": "node scripts/verify-release-claims.js",
     "dependencies:verify": "node scripts/verify-dependency-inventory.js",
     "licenses:verify": "node scripts/verify-bundled-third-party-notices.js",
     "generate:gate2": "node scripts/build-gate2-template.js --templates-only",

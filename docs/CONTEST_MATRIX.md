@@ -31,8 +31,9 @@ On official `main`, `npm run release:provenance` rejects shallow or replaced
 history, legacy grafts or alternate object databases, an unexpected clean-room
 root, tracked symlinks or submodules, Git object-integrity failure, lock/install
 identity drift, and stale dependency or bundle-notice inventories. Its receipt
-also requires the rights-bound static accessibility gate. It is a technical
-provenance control, not independent originality, legal-clearance, or WCAG
+also requires the hash-bound public claim surfaces, current rights inventory,
+and rights-bound static accessibility gate. It is a technical provenance
+control, not independent claim-truth, originality, legal-clearance, or WCAG
 conformance evidence, and must be rerun at the final source and deployed-bundle
 freeze.
 

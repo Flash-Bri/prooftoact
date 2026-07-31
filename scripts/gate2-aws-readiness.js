@@ -561,6 +561,9 @@ export function validateReleaseProvenance(
   const source = receipt?.source;
   const history = receipt?.history;
   const trackedTree = receipt?.trackedTree;
+  const claims = receipt?.claims;
+  const claimStates = claims?.claimStates;
+  const claimsChecks = claims?.checks;
   const privacy = receipt?.privacy;
   const privacyChecks = privacy?.checks;
   const rights = receipt?.rights;
@@ -576,6 +579,7 @@ export function validateReleaseProvenance(
   requireCondition(
     exactKeys(receipt, [
       "accessibility",
+      "claims",
       "checks",
       "claimBoundary",
       "dependencies",
@@ -615,6 +619,35 @@ export function validateReleaseProvenance(
         "gitlinkCount",
         "regularFileCount",
         "symlinkCount"
+      ]) &&
+      exactKeys(claims, [
+        "checks",
+        "claimBoundary",
+        "claimCount",
+        "claimStates",
+        "externalUrls",
+        "finalReleaseReady",
+        "finalReleaseRequirements",
+        "manifestPath",
+        "manifestSha256",
+        "proofManifestSha256",
+        "reviewedOn",
+        "schemaVersion",
+        "status",
+        "stopTokenCount",
+        "surfaceCount",
+        "uncheckedGateCount"
+      ]) &&
+      exactKeys(claimStates, ["PARTIAL", "PENDING", "VERIFIED"]) &&
+      exactKeys(claimsChecks, [
+        "canonicalManifest",
+        "claimsLedgerMatchesProofManifest",
+        "currentDraftStateExplicit",
+        "exactSurfaceHashes",
+        "localAndHostedAwsBoundariesExplicit",
+        "publicLinksConstrained",
+        "submissionStopTokensPreserved",
+        "syntheticScopeExplicit"
       ]) &&
       exactKeys(privacy, [
         "allowanceCount",
@@ -760,6 +793,7 @@ export function validateReleaseProvenance(
         "alternateObjectDatabasesAbsent",
         "bundledThirdPartyNoticesMatchInputs",
         "cleanBeforeAndAfter",
+        "currentClaimSurfacesVerified",
         "currentSurfaceRightsVerified",
         "dependencyInventoryMatchesLock",
         "fullSingleRootHistory",
@@ -773,7 +807,7 @@ export function validateReleaseProvenance(
         "submodulesAbsent",
         "trackedSymlinksAbsent"
       ]) &&
-      receipt.schemaVersion === "tideproof.release-provenance.v3" &&
+      receipt.schemaVersion === "tideproof.release-provenance.v4" &&
       receipt.status === "PASS" &&
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
@@ -808,6 +842,33 @@ export function validateReleaseProvenance(
       trackedTree.executableFileCount <= trackedTree.fileCount &&
       trackedTree.symlinkCount === 0 &&
       trackedTree.gitlinkCount === 0 &&
+      claims.schemaVersion ===
+        "tideproof.release-claims-verification.v1" &&
+      claims.status === "CURRENT_PUBLIC_CLAIMS_PASS" &&
+      claims.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(claims.reviewedOn) &&
+      claims.manifestPath === "RELEASE_CLAIMS_MANIFEST.json" &&
+      HEX_64.test(claims.manifestSha256) &&
+      HEX_64.test(claims.proofManifestSha256) &&
+      claims.claimCount === 11 &&
+      claimStates.VERIFIED === 7 &&
+      claimStates.PARTIAL === 4 &&
+      claimStates.PENDING === 0 &&
+      claims.surfaceCount === 13 &&
+      claims.stopTokenCount === 13 &&
+      claims.uncheckedGateCount === 14 &&
+      Array.isArray(claims.externalUrls) &&
+      claims.externalUrls.length === 6 &&
+      claims.externalUrls.every(
+        (url) => typeof url === "string" && /^https?:\/\//.test(url)
+      ) &&
+      JSON.stringify(claims.externalUrls) ===
+        JSON.stringify([...claims.externalUrls].sort()) &&
+      Array.isArray(claims.finalReleaseRequirements) &&
+      claims.finalReleaseRequirements.length === 2 &&
+      Object.values(claimsChecks).every((value) => value === true) &&
+      typeof claims.claimBoundary === "string" &&
+      claims.claimBoundary.length > 0 &&
       privacy.schemaVersion ===
         "tideproof.release-privacy-verification.v1" &&
       privacy.status === "CURRENT_PUBLIC_HISTORY_PASS" &&

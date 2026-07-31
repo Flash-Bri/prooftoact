@@ -20,3 +20,9 @@ synthetic and non-operational.
 
 The repository does not claim invention of provenance-aware memory, temporal
 memory, fencing, replay protection, or exactly-once real-world effects.
+
+The current claim-bearing README, browser, scenario, technical-boundary,
+video-script, contest, and submission surfaces are hash-bound by
+`RELEASE_CLAIMS_MANIFEST.json`. `npm run claims:verify` rejects drift from the
+reviewed pending state but does not prove truth, authorize publication, or
+replace the exact-release private human review.

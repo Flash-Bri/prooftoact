@@ -78,6 +78,7 @@ a secret store and never enter the repository.
 
 ```sh
 npm run proof:verify
+npm run claims:verify
 npm run rights:verify
 npm run accessibility:verify
 npm run accessibility:browser
@@ -111,6 +112,16 @@ The machine-checked [`PROOF_MANIFEST.json`](PROOF_MANIFEST.json) maps every
 current claims-ledger row to exact evidence bytes and leaves incomplete live
 gates explicit. Run `npm run proof:verify` to reject changed evidence, missing
 claim coverage, unsafe paths, or a stale hash.
+
+The fail-closed [`docs/RELEASE_CLAIMS.md`](docs/RELEASE_CLAIMS.md) control
+hash-binds the current README, browser, local and AWS-hosted scenario copy,
+technical boundaries, contest matrix, video script, and Devpost draft. Run
+`npm run claims:verify` to reject surface drift, missing synthetic or
+local-versus-live boundaries, premature submission approvals, removed stop
+tokens, or unreviewed public URLs. Its `CURRENT_PUBLIC_CLAIMS_PASS` result is
+not proof that every statement is true or permission to deploy, publish, or
+submit; accepted live receipts and an exact-release private review remain
+mandatory.
 
 The deterministic
 [`docs/DEPENDENCY_INVENTORY.md`](docs/DEPENDENCY_INVENTORY.md) enumerates all
