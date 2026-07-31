@@ -7,8 +7,9 @@ requires new approval.
 ## Expected contest-period cost
 
 Target architecture: CockroachDB Basic, AWS Lambda, API Gateway, bounded
-Bedrock calls, a bundled signed-out read-only demo, and short-retention
-CloudWatch logs.
+Bedrock calls, one project-owned Secrets Manager credential for the
+least-privilege CockroachDB authorizer, a bundled signed-out read-only demo,
+and short-retention CloudWatch logs.
 
 - Local scaffold and tests: **$0**
 - Low case with applicable free allowances: **$0–$3**
@@ -67,6 +68,9 @@ Stop new cloud work and investigate if:
 ## Controls before first deployment
 
 1. Confirm official price inputs for the selected region and Bedrock model.
+   Recheck and include one Secrets Manager secret plus its bounded read calls
+   in the conservative forecast before creating it; the local template does
+   not create or price that external secret.
 2. Create project-specific least-privilege identities; never reuse OpenClaw
    OAuth or another product credential.
 3. Update the prerequisite bootstrap stack first and verify its account-wide

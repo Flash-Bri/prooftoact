@@ -44,8 +44,24 @@ boundary:
 - Boundary Lambda independently calls `kms:GetPublicKey` on the exact receipt
   key, compares that DER key with the signer envelope, and verifies the P-256
   signature. The key ARN and DER-key SHA-256 are inside the signed receipt.
-- Authority Lambda is an isolated fail-closed placeholder with no model,
-  database, MCP, secret, signing, or IAM-granted operational capability.
+- Authority Lambda is isolated from the advisory Boundary and model. Its
+  local candidate accepts only `alpha` or `bravo` for one configured synthetic
+  race, derives operation IDs, intent nonces, effect keys, payloads, and
+  digests internally, reads one exact Tideproof-owned Secrets Manager ARN,
+  and calls only `tp_api.g1_spend_authority_v1` and
+  `tp_api.g1_resolve_request_v1` as `tp_authorizer_user`.
+- The authority role is allowed only its exact log group and
+  `secretsmanager:GetSecretValue` on that one ARN. It explicitly denies other
+  secret reads and enumeration, secret mutation, Bedrock, KMS signing, Lambda
+  invocation, IAM mutation, and role assumption.
+- A separate short-lived human-assumed race-caller role can invoke only the
+  immutable Authority alias. The function has reserved concurrency two so the
+  two proof contenders can genuinely overlap; no public API route reaches it.
+- Authority transactions explicitly request `SERIALIZABLE`, retry only
+  pre-commit `40001` restarts, and reconcile any COMMIT-dispatched or
+  transport-ambiguous result through the typed read-only resolver instead of
+  blindly spending again. Any malformed secret, response, or unresolved
+  state returns `UNKNOWN_DO_NOT_ACT` without echoing credentials.
 - The post-deployment verifier rebuilds the exact clean head, compares every
   public static response byte-for-byte with that checkout, reconciles the
   health and scenario bindings, checks browser headers, and probes unknown,
@@ -54,10 +70,10 @@ boundary:
   traversal by itself.
 
 The strongest current claim is that this software, the bundled public-demo
-artifact path, and generated CloudFormation passed local review. Do not claim
-live public hosting, Bedrock inference, KMS-backed evidence, IAM denial, API
-authentication, or CockroachDB-to-AWS handoff until their cloud receipts
-exist.
+artifact path, the isolated CockroachDB authority candidate, and generated
+CloudFormation passed local review. Do not claim live public hosting, Bedrock
+inference, KMS-backed evidence, IAM denial, API authentication, an overlapping
+Lambda race, or CockroachDB-to-AWS handoff until their cloud receipts exist.
 
 The Lambda event alone cannot prove that API Gateway created it: a separate
 same-account principal with direct `lambda:InvokeFunction` permission could
@@ -71,6 +87,16 @@ path.
 - A reachable public demo URL would prove only that the read-only AWS host
   responded with the bound artifact. It would not prove that Bedrock, KMS, the
   IAM advisory route, or CockroachDB handoff ran.
+- The local authority tests use injected secret and database clients. They
+  prove request derivation, transaction control, bounded retry,
+  ambiguous-commit reconciliation, and response validation in software; they
+  do not prove Secrets Manager, Lambda concurrency, CockroachDB reachability,
+  IAM enforcement, or live database state.
+- The authority connection is intentionally outside a VPC to avoid a NAT
+  Gateway. Final review must confirm the exact public CockroachDB endpoint,
+  `verify-full` TLS, `tp_authorizer_user`, secret rotation state, and the
+  absence of any broader database grant. The connection secret must never
+  enter source, build output, logs, receipts, or the configuration digest.
 - Public routes create an abuse and cost surface. The stage defaults to a burst
   of eight and a sustained rate of `0.05` requests per second, Demo Lambda
   reserved concurrency is eight, and the account budget remains the operator
@@ -250,29 +276,48 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
    `tideproof.gate2.aws-readiness.v1` `PASS`; independently revalidate current
    Nova Micro pricing. If CloudShell, billing data, the official upstream, or
    any required read is unavailable, stop without uploading.
-6. Upload each artifact once and record its exact S3 version ID and both
+6. Prepare one fresh synthetic Gate Two tenant/run/incident/evidence/resource
+   tuple through the reviewed CockroachDB owner lane. Create one
+   Tideproof-owned Secrets Manager secret whose JSON has exactly the
+   `connectionString` key, whose URL names only `tp_authorizer_user` and the
+   `tideproof` database, and whose TLS mode is `verify-full`. Record secret
+   metadata, database grants, rotation state, and the updated conservative
+   cost forecast privately; never record the credential value.
+7. Upload each artifact once and record its exact S3 version ID and both
    digests.
-7. Hash the full effective nonsecret deployment configuration.
+8. Hash the full effective nonsecret deployment configuration, including the
+   secret ARN and synthetic fixture identifiers but excluding all secret
+   values.
 
 The sanitized historical receipt in
 `evidence/gate2-historical-upload-receipt-0ef4dba-2026-07-30.json` anchors the
 private receipt for the superseded `0ef4dba` upload without publishing AWS
 account, bucket, notification, or object-version identifiers. It is historical
 evidence only and must not be used to deploy the repaired candidate.
-8. Upload the reviewed template to the private versioned bucket and deploy the
+9. Upload the reviewed template to the private versioned bucket and deploy the
    main stack from its exact `TemplateURL` with probes left at their default
    `false`.
-9. Verify every Lambda version's reported `CodeSha256`, alias target, role,
+10. Verify every Lambda version's reported `CodeSha256`, alias target, role,
    reserved concurrency, and access-log destination.
-10. Temporarily update `EnableProbeFunctions` to `true`. Prove the exact allowed
+11. Temporarily update `EnableProbeFunctions` to `true`. Prove the exact allowed
    capability and required denials for every role. Probe concurrency is one;
    the probe canary and functions exist only during this phase. Label all
    probe-phase receipts non-final because the signer-role probe uses the
    evidence key outside the receipt schema.
-11. Update probes back to `false`; verify all probe functions, probe log
+12. Update probes back to `false`; verify all probe functions, probe log
     groups, and the canary secret are removed. Recompute the final
     configuration digest and reverify aliases and roles.
-12. From a signed-out browser, request only the ten enumerated public `GET`
+13. Assume only `AuthorityRaceCallerRole`. From the exact clean deployment
+    checkout, run `npm run gate2:authority-race` with the immutable Authority
+    alias ARN, configured race UUID, exact source commit, and final
+    configuration digest. Require two distinct Lambda request bindings, two
+    distinct CockroachDB session digests, overlapping database-clock
+    intervals, `SERIALIZABLE` on both contenders, exactly one
+    `resource_reserved`, exactly one durable `resource_held_denied`, and no
+    protected effect. Preserve the private invocation and database receipts;
+    publish only the reviewed sanitized race receipt. Any sequential,
+    ambiguous, replayed, expanded, or unresolved result is not evidence.
+14. From a signed-out browser, request only the ten enumerated public `GET`
     routes. From the exact clean deployment checkout, run:
 
     ```sh
@@ -285,14 +330,14 @@ evidence only and must not be used to deploy the repaired candidate.
     Demo version and artifact, independently verify route throttles, and
     complete the three-act path plus reset on desktop and mobile. A failed or
     missing verifier receipt blocks publication.
-13. Assume only the dedicated advisory caller role. Record a denied direct
+15. Assume only the dedicated advisory caller role. Record a denied direct
     invocation attempt for every Lambda, then invoke the exact IAM-signed API
     route.
-14. Preserve and reconcile the signed receipt with the asynchronous API access
+16. Preserve and reconcile the signed receipt with the asynchronous API access
     log by request ID, request time, route, status, and caller. Preserve the
     model, KMS key ARN/public-key fingerprint, signature, source, artifact,
     configuration, token, and latency bindings.
-15. Re-run Gate One state hashes to prove Bedrock changed no authority,
+17. Re-run Gate One state hashes to prove Bedrock changed no authority,
     outbox, fence, or protected synthetic-effect state.
 
 Ambiguous, malformed, unsigned, or unavailable application state returns

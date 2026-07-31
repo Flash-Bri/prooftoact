@@ -1,0 +1,385 @@
+import crypto from "node:crypto";
+
+export const AUTHORITY_REQUEST_SCHEMA =
+  "tideproof.aws-authority-request.v1";
+export const AUTHORITY_RESPONSE_SCHEMA =
+  "tideproof.aws-authority-boundary.v2";
+export const AUTHORITY_RACE_RECEIPT_SCHEMA =
+  "tideproof.aws-authority-race-receipt.v1";
+
+const CONTENDERS = Object.freeze(["alpha", "bravo"]);
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const SHA1_PATTERN = /^[0-9a-f]{40}$/;
+
+function exactKeys(value, allowed) {
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).sort().join("\n") === [...allowed].sort().join("\n")
+  );
+}
+
+function sha256Hex(value) {
+  return crypto
+    .createHash("sha256")
+    .update(String(value))
+    .digest("hex");
+}
+
+function parseIso(value, code) {
+  if (
+    typeof value !== "string" ||
+    value.length > 40 ||
+    !Number.isFinite(Date.parse(value)) ||
+    new Date(value).toISOString() !== value
+  ) {
+    throw new Error(code);
+  }
+  return Date.parse(value);
+}
+
+export function parseAuthorityRaceArguments(argv) {
+  const names = [
+    "--config-digest",
+    "--function-arn",
+    "--race-id",
+    "--source-commit"
+  ];
+  if (
+    !Array.isArray(argv) ||
+    argv.length !== names.length * 2 ||
+    argv.some((value) => typeof value !== "string")
+  ) {
+    throw new Error("AUTHORITY_RACE_ARGUMENTS_REJECTED");
+  }
+  const parsed = {};
+  for (let index = 0; index < argv.length; index += 2) {
+    const name = argv[index];
+    const value = argv[index + 1];
+    if (!names.includes(name) || name in parsed || value.length === 0) {
+      throw new Error("AUTHORITY_RACE_ARGUMENTS_REJECTED");
+    }
+    parsed[name] = value;
+  }
+  if (
+    !SHA256_PATTERN.test(parsed["--config-digest"]) ||
+    !SHA1_PATTERN.test(parsed["--source-commit"]) ||
+    !UUID_PATTERN.test(parsed["--race-id"]) ||
+    !/^arn:aws[a-zA-Z-]*:lambda:us-east-1:\d{12}:function:[A-Za-z0-9-_]{1,64}:proof$/.test(
+      parsed["--function-arn"]
+    )
+  ) {
+    throw new Error("AUTHORITY_RACE_ARGUMENTS_REJECTED");
+  }
+  return {
+    configDigest: parsed["--config-digest"],
+    functionArn: parsed["--function-arn"],
+    raceId: parsed["--race-id"],
+    sourceCommit: parsed["--source-commit"]
+  };
+}
+
+export function authorityRaceEvent(raceId, contender) {
+  if (!UUID_PATTERN.test(raceId) || !CONTENDERS.includes(contender)) {
+    throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
+  }
+  return {
+    schemaVersion: AUTHORITY_REQUEST_SCHEMA,
+    mode: "reserve",
+    raceId,
+    contender
+  };
+}
+
+function invocationBody(value) {
+  if (
+    value?.FunctionError !== undefined ||
+    value?.StatusCode !== 200 ||
+    !value.Payload ||
+    typeof value.ExecutedVersion !== "string" ||
+    !/^[1-9][0-9]*$/.test(value.ExecutedVersion)
+  ) {
+    throw new Error("AUTHORITY_RACE_INVOCATION_REJECTED");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(Buffer.from(value.Payload).toString("utf8"));
+  } catch {
+    throw new Error("AUTHORITY_RACE_INVOCATION_REJECTED");
+  }
+  const requestId = value?.$metadata?.requestId;
+  if (
+    typeof requestId !== "string" ||
+    requestId.length < 8 ||
+    requestId.length > 180
+  ) {
+    throw new Error("AUTHORITY_RACE_INVOCATION_REJECTED");
+  }
+  return {
+    body: parsed,
+    executedVersion: value.ExecutedVersion,
+    invokeRequestDigest: sha256Hex(requestId)
+  };
+}
+
+function validateCommittedResponse(
+  value,
+  contender,
+  expected
+) {
+  const allowedKeys = [
+    "authorityArtifactDigest",
+    "authoritySourceDigest",
+    "authorityTransferred",
+    "configDigest",
+    "contender",
+    "fencingToken",
+    "functionVersion",
+    "invocationRequestId",
+    "leaseExpiresAt",
+    "modelAccess",
+    "operationId",
+    "outcome",
+    "packageLockDigest",
+    "raceId",
+    "reason",
+    "replayKind",
+    "requestDigest",
+    "requiresFreshAuthorization",
+    "schemaVersion",
+    "sourceCommit",
+    "status",
+    "transaction",
+    "treeDigest"
+  ];
+  if (
+    !exactKeys(value, allowedKeys) ||
+    value.schemaVersion !== AUTHORITY_RESPONSE_SCHEMA ||
+    value.status !== "COMMITTED" ||
+    value.raceId !== expected.raceId ||
+    value.contender !== contender ||
+    value.sourceCommit !== expected.sourceCommit ||
+    value.configDigest !== expected.configDigest ||
+    value.authorityTransferred !== false ||
+    value.requiresFreshAuthorization !== false ||
+    value.modelAccess !== false ||
+    !UUID_PATTERN.test(value.operationId) ||
+    !SHA256_PATTERN.test(value.requestDigest) ||
+    !SHA256_PATTERN.test(value.authorityArtifactDigest) ||
+    !SHA256_PATTERN.test(value.authoritySourceDigest) ||
+    !SHA256_PATTERN.test(value.packageLockDigest) ||
+    !SHA1_PATTERN.test(value.treeDigest) ||
+    typeof value.functionVersion !== "string" ||
+    !/^[1-9][0-9]*$/.test(value.functionVersion) ||
+    typeof value.invocationRequestId !== "string" ||
+    value.invocationRequestId.length < 8 ||
+    value.invocationRequestId.length > 160 ||
+    !["resource_reserved", "resource_held_denied"].includes(
+      value.outcome
+    ) ||
+    value.replayKind !== null
+  ) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  if (
+    !exactKeys(value.transaction, [
+      "attempts",
+      "databaseCompletedAt",
+      "databaseSessionDigest",
+      "databaseStartedAt",
+      "isolation",
+      "retryCodes"
+    ]) ||
+    value.transaction.isolation !== "serializable" ||
+    !Number.isSafeInteger(value.transaction.attempts) ||
+    value.transaction.attempts < 1 ||
+    value.transaction.attempts > 7 ||
+    !Array.isArray(value.transaction.retryCodes) ||
+    !value.transaction.retryCodes.every((code) => code === "40001") ||
+    !SHA256_PATTERN.test(value.transaction.databaseSessionDigest)
+  ) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  const startedAt = parseIso(
+    value.transaction.databaseStartedAt,
+    "AUTHORITY_RACE_RESPONSE_REJECTED"
+  );
+  const completedAt = parseIso(
+    value.transaction.databaseCompletedAt,
+    "AUTHORITY_RACE_RESPONSE_REJECTED"
+  );
+  if (completedAt < startedAt) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  if (
+    value.outcome === "resource_reserved" &&
+    (!/^[1-9][0-9]*$/.test(value.fencingToken) ||
+      typeof value.leaseExpiresAt !== "string")
+  ) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  if (
+    value.outcome === "resource_held_denied" &&
+    (value.fencingToken !== null ||
+      value.leaseExpiresAt !== null ||
+      value.reason !== "active_holder")
+  ) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  return {
+    value,
+    startedAt,
+    completedAt
+  };
+}
+
+export function validateAuthorityRaceInvocations(
+  invocations,
+  expected
+) {
+  if (
+    !exactKeys(invocations, CONTENDERS) ||
+    !exactKeys(expected, [
+      "configDigest",
+      "functionArn",
+      "raceId",
+      "sourceCommit"
+    ])
+  ) {
+    throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
+  }
+  const decoded = Object.fromEntries(
+    CONTENDERS.map((contender) => [
+      contender,
+      invocationBody(invocations[contender])
+    ])
+  );
+  const validated = Object.fromEntries(
+    CONTENDERS.map((contender) => [
+      contender,
+      validateCommittedResponse(
+        decoded[contender].body,
+        contender,
+        expected
+      )
+    ])
+  );
+  const values = CONTENDERS.map(
+    (contender) => validated[contender].value
+  );
+  const winners = values.filter(
+    ({ outcome }) => outcome === "resource_reserved"
+  );
+  const denials = values.filter(
+    ({ outcome }) => outcome === "resource_held_denied"
+  );
+  if (
+    winners.length !== 1 ||
+    denials.length !== 1 ||
+    CONTENDERS.some(
+      (contender) =>
+        decoded[contender].executedVersion !==
+        validated[contender].value.functionVersion
+    ) ||
+    new Set(values.map(({ operationId }) => operationId)).size !== 2 ||
+    new Set(values.map(({ requestDigest }) => requestDigest)).size !== 2 ||
+    new Set(
+      values.map(({ invocationRequestId }) => invocationRequestId)
+    ).size !== 2 ||
+    new Set(
+      values.map(
+        ({ transaction }) => transaction.databaseSessionDigest
+      )
+    ).size !== 2
+  ) {
+    throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
+  }
+  const overlapStarts = CONTENDERS.map(
+    (contender) => validated[contender].startedAt
+  );
+  const overlapEnds = CONTENDERS.map(
+    (contender) => validated[contender].completedAt
+  );
+  if (Math.max(...overlapStarts) > Math.min(...overlapEnds)) {
+    throw new Error("AUTHORITY_RACE_NOT_OVERLAPPING");
+  }
+  const winner = winners[0];
+  const denial = denials[0];
+  return {
+    schemaVersion: AUTHORITY_RACE_RECEIPT_SCHEMA,
+    status: "PASS",
+    sourceCommit: expected.sourceCommit,
+    configDigest: expected.configDigest,
+    raceId: expected.raceId,
+    functionArnDigest: sha256Hex(expected.functionArn),
+    functionVersion: winner.functionVersion,
+    contenders: 2,
+    serializableTransactions: true,
+    overlappingDatabaseIntervals: true,
+    distinctDatabaseSessions: true,
+    winner: {
+      contender: winner.contender,
+      operationId: winner.operationId,
+      requestDigest: winner.requestDigest,
+      fencingToken: winner.fencingToken
+    },
+    denial: {
+      contender: denial.contender,
+      operationId: denial.operationId,
+      requestDigest: denial.requestDigest,
+      reason: denial.reason
+    },
+    databaseInterval: {
+      startedAt: new Date(Math.min(...overlapStarts)).toISOString(),
+      completedAt: new Date(Math.max(...overlapEnds)).toISOString()
+    },
+    invocationRequestDigests: Object.fromEntries(
+      CONTENDERS.map((contender) => [
+        contender,
+        sha256Hex(decoded[contender].body.invocationRequestId)
+      ])
+    ),
+    awsInvokeRequestDigests: Object.fromEntries(
+      CONTENDERS.map((contender) => [
+        contender,
+        decoded[contender].invokeRequestDigest
+      ])
+    ),
+    authorityTransferredByModel: false,
+    protectedEffectExecuted: false
+  };
+}
+
+export async function runAuthorityRace({
+  configDigest,
+  functionArn,
+  raceId,
+  sourceCommit,
+  invoke
+}) {
+  if (typeof invoke !== "function") {
+    throw new Error("AUTHORITY_RACE_INVOKER_REQUIRED");
+  }
+  const expected = {
+    configDigest,
+    functionArn,
+    raceId,
+    sourceCommit
+  };
+  const responses = await Promise.all(
+    CONTENDERS.map(async (contender) => [
+      contender,
+      await invoke(
+        functionArn,
+        authorityRaceEvent(raceId, contender)
+      )
+    ])
+  );
+  return validateAuthorityRaceInvocations(
+    Object.fromEntries(responses),
+    expected
+  );
+}

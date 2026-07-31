@@ -10,6 +10,7 @@
   "scripts": {
     "build:gate2": "node scripts/build-gate2-template.js",
     "generate:gate2": "node scripts/build-gate2-template.js --templates-only",
+    "gate2:authority-race": "node scripts/gate2-authority-race.js",
     "gate2:aws-preflight": "node scripts/gate2-aws-preflight.js",
     "gate2:aws-readiness": "node scripts/gate2-aws-readiness.js",
     "gate2:aws-readiness:local": "node scripts/gate2-aws-readiness.js --local-only",

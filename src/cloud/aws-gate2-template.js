@@ -125,6 +125,27 @@ function denySecretMutation() {
   };
 }
 
+function denySecretEnumeration() {
+  return {
+    Sid: "DenySecretEnumeration",
+    Effect: "Deny",
+    Action: [
+      "secretsmanager:BatchGetSecretValue",
+      "secretsmanager:ListSecrets"
+    ],
+    Resource: "*"
+  };
+}
+
+function denyOtherSecretReads() {
+  return {
+    Sid: "DenyOtherSecretReads",
+    Effect: "Deny",
+    Action: ["secretsmanager:GetSecretValue"],
+    NotResource: ref("AuthorityDatabaseSecretArn")
+  };
+}
+
 function denyBedrock() {
   return {
     Sid: "DenyBedrock",
@@ -282,6 +303,15 @@ function hexParameter(description, length = 64) {
     Type: "String",
     Description: description,
     AllowedPattern: `^[0-9a-f]{${length}}$`
+  };
+}
+
+function uuidParameter(description) {
+  return {
+    Type: "String",
+    Description: description,
+    AllowedPattern:
+      "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
   };
 }
 
@@ -510,6 +540,36 @@ export function buildGate2Template() {
       Default: "amazon.nova-micro-v1:0",
       AllowedValues: ["amazon.nova-micro-v1:0"]
     },
+    AuthorityDatabaseSecretArn: {
+      Type: "String",
+      Description:
+        "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_authorizer_user connection string.",
+      AllowedPattern:
+        "^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$"
+    },
+    AuthorityTenantId: uuidParameter(
+      "Synthetic Gate Two tenant UUID prepared in CockroachDB."
+    ),
+    AuthorityRunId: uuidParameter(
+      "Synthetic active-run UUID prepared in CockroachDB."
+    ),
+    AuthorityIncidentId: uuidParameter(
+      "Synthetic incident UUID bound to the prepared evidence and resource."
+    ),
+    AuthorityEvidenceId: uuidParameter(
+      "Verified synthetic evidence UUID admitted by CockroachDB."
+    ),
+    AuthorityRaceId: uuidParameter(
+      "One exact proof-race UUID accepted by both authority contenders."
+    ),
+    AuthorityResourceId: {
+      Type: "String",
+      MinLength: 1,
+      MaxLength: 160,
+      AllowedPattern: "^[A-Za-z0-9._:-]+$",
+      Description:
+        "Prepared synthetic resource identifier; never a real-world capability."
+    },
     EnableProbeFunctions: {
       Type: "String",
       Default: "false",
@@ -691,15 +751,22 @@ export function buildGate2Template() {
   });
   resources.AuthorityRole = roleResource({
     description:
-      "Fail-closed placeholder for the deterministic Cockroach authority path; no Bedrock or operational credential is connected in Gate Two.",
+      "Deterministic Cockroach authority role; reads one exact project secret and has no Bedrock, signing, Lambda invoke, IAM, or base-table AWS capability.",
     statements: [
       exactLogStatement("AuthorityLogGroup"),
       fnIf(
         "ShouldDeployProbes",
         exactLogStatement("AuthorityProbeLogGroup")
       ),
+      {
+        Sid: "ReadOneAuthorityDatabaseSecret",
+        Effect: "Allow",
+        Action: ["secretsmanager:GetSecretValue"],
+        Resource: ref("AuthorityDatabaseSecretArn")
+      },
+      denyOtherSecretReads(),
+      denySecretEnumeration(),
       denyBedrock(),
-      denySecretAccess(),
       denySecretMutation(),
       denyKmsSigning(),
       denyLambdaInvoke(),
@@ -781,13 +848,20 @@ export function buildGate2Template() {
 
   resources.AuthorityFunction = lambdaFunction({
     description:
-      "Deterministic fail-closed authority placeholder with no Bedrock or database permission.",
+      "Runs one exact synthetic two-contender authority request through the least-privilege CockroachDB SECURITY DEFINER surface.",
     role: "AuthorityRole",
     code: artifactCode("authority"),
     logGroup: "AuthorityLogGroup",
-    timeout: 5,
-    concurrency: 1,
+    timeout: 25,
+    concurrency: 2,
     environment: {
+      AUTHORITY_DATABASE_SECRET_ARN: ref("AuthorityDatabaseSecretArn"),
+      AUTHORITY_TENANT_ID: ref("AuthorityTenantId"),
+      AUTHORITY_RUN_ID: ref("AuthorityRunId"),
+      AUTHORITY_INCIDENT_ID: ref("AuthorityIncidentId"),
+      AUTHORITY_EVIDENCE_ID: ref("AuthorityEvidenceId"),
+      AUTHORITY_RACE_ID: ref("AuthorityRaceId"),
+      AUTHORITY_RESOURCE_ID: ref("AuthorityResourceId"),
       SOURCE_COMMIT: ref("SourceCommit"),
       CONFIG_DIGEST: ref("ConfigDigest"),
       AUTHORITY_SOURCE_DIGEST: ref("AuthoritySourceDigest"),
@@ -898,6 +972,31 @@ export function buildGate2Template() {
         )
       },
       denyLambdaInvoke(),
+      denyBedrock(),
+      denySecretAccess(),
+      denySecretMutation(),
+      denyKmsSigning(),
+      denyPrivilegeEscalation()
+    ]
+  });
+
+  resources.AuthorityRaceCallerRole = roleResource({
+    description:
+      "Short-lived human-assumed caller for the exact immutable authority alias; no model, secret, signing, IAM, or other Lambda capability.",
+    assumeRolePolicy: assumeAccountRolePolicy(),
+    statements: [
+      {
+        Sid: "InvokeOnlyAuthorityProof",
+        Effect: "Allow",
+        Action: ["lambda:InvokeFunction"],
+        Resource: getAtt("AuthorityAlias", "AliasArn")
+      },
+      {
+        Sid: "DenyOtherLambdaTargets",
+        Effect: "Deny",
+        Action: ["lambda:InvokeFunction"],
+        NotResource: getAtt("AuthorityAlias", "AliasArn")
+      },
       denyBedrock(),
       denySecretAccess(),
       denySecretMutation(),
@@ -1207,6 +1306,9 @@ export function buildGate2Template() {
       AdvisoryCallerRoleArn: {
         Value: getAtt("AdvisoryCallerRole", "Arn")
       },
+      AuthorityRaceCallerRoleArn: {
+        Value: getAtt("AuthorityRaceCallerRole", "Arn")
+      },
       ApiAccessLogGroupName: {
         Value: ref("ApiAccessLogGroup")
       },
@@ -1302,6 +1404,7 @@ export function deploymentConfigDigest(configuration) {
     "artifactKeys",
     "artifactSourceDigests",
     "artifactVersions",
+    "authority",
     "bedrockModelId",
     "budgetUsd",
     "logRetentionDays",
@@ -1320,7 +1423,22 @@ export function deploymentConfigDigest(configuration) {
   if (
     !configuration ||
     Object.keys(configuration).sort().join("\n") !==
-      required.sort().join("\n")
+      required.sort().join("\n") ||
+    !configuration.authority ||
+    typeof configuration.authority !== "object" ||
+    Array.isArray(configuration.authority) ||
+    Object.keys(configuration.authority).sort().join("\n") !==
+      [
+        "databaseSecretArn",
+        "evidenceId",
+        "incidentId",
+        "raceId",
+        "resourceId",
+        "runId",
+        "tenantId"
+      ]
+        .sort()
+        .join("\n")
   ) {
     throw new Error("DEPLOYMENT_CONFIG_SHAPE_REJECTED");
   }

@@ -34,6 +34,43 @@
         "amazon.nova-micro-v1:0"
       ]
     },
+    "AuthorityDatabaseSecretArn": {
+      "Type": "String",
+      "Description": "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_authorizer_user connection string.",
+      "AllowedPattern": "^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$"
+    },
+    "AuthorityTenantId": {
+      "Type": "String",
+      "Description": "Synthetic Gate Two tenant UUID prepared in CockroachDB.",
+      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "AuthorityRunId": {
+      "Type": "String",
+      "Description": "Synthetic active-run UUID prepared in CockroachDB.",
+      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "AuthorityIncidentId": {
+      "Type": "String",
+      "Description": "Synthetic incident UUID bound to the prepared evidence and resource.",
+      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "AuthorityEvidenceId": {
+      "Type": "String",
+      "Description": "Verified synthetic evidence UUID admitted by CockroachDB.",
+      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "AuthorityRaceId": {
+      "Type": "String",
+      "Description": "One exact proof-race UUID accepted by both authority contenders.",
+      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "AuthorityResourceId": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 160,
+      "AllowedPattern": "^[A-Za-z0-9._:-]+$",
+      "Description": "Prepared synthetic resource identifier; never a real-world capability."
+    },
     "EnableProbeFunctions": {
       "Type": "String",
       "Default": "false",
@@ -823,7 +860,7 @@
     "AuthorityRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "Description": "Fail-closed placeholder for the deterministic Cockroach authority path; no Bedrock or operational credential is connected in Gate Two.",
+        "Description": "Deterministic Cockroach authority role; reads one exact project secret and has no Bedrock, signing, Lambda invoke, IAM, or base-table AWS capability.",
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -874,21 +911,40 @@
                   ]
                 },
                 {
+                  "Sid": "ReadOneAuthorityDatabaseSecret",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:GetSecretValue"
+                  ],
+                  "Resource": {
+                    "Ref": "AuthorityDatabaseSecretArn"
+                  }
+                },
+                {
+                  "Sid": "DenyOtherSecretReads",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:GetSecretValue"
+                  ],
+                  "NotResource": {
+                    "Ref": "AuthorityDatabaseSecretArn"
+                  }
+                },
+                {
+                  "Sid": "DenySecretEnumeration",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
                     "bedrock:InvokeModel",
                     "bedrock:InvokeModelWithResponseStream"
-                  ],
-                  "Resource": "*"
-                },
-                {
-                  "Sid": "DenySecretAccess",
-                  "Effect": "Deny",
-                  "Action": [
-                    "secretsmanager:BatchGetSecretValue",
-                    "secretsmanager:GetSecretValue",
-                    "secretsmanager:ListSecrets"
                   ],
                   "Resource": "*"
                 },
@@ -1297,7 +1353,7 @@
     "AuthorityFunction": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
-        "Description": "Deterministic fail-closed authority placeholder with no Bedrock or database permission.",
+        "Description": "Runs one exact synthetic two-contender authority request through the least-privilege CockroachDB SECURITY DEFINER surface.",
         "Runtime": "nodejs22.x",
         "Architectures": [
           "arm64"
@@ -1310,9 +1366,30 @@
           ]
         },
         "MemorySize": 128,
-        "Timeout": 5,
+        "Timeout": 25,
         "Environment": {
           "Variables": {
+            "AUTHORITY_DATABASE_SECRET_ARN": {
+              "Ref": "AuthorityDatabaseSecretArn"
+            },
+            "AUTHORITY_TENANT_ID": {
+              "Ref": "AuthorityTenantId"
+            },
+            "AUTHORITY_RUN_ID": {
+              "Ref": "AuthorityRunId"
+            },
+            "AUTHORITY_INCIDENT_ID": {
+              "Ref": "AuthorityIncidentId"
+            },
+            "AUTHORITY_EVIDENCE_ID": {
+              "Ref": "AuthorityEvidenceId"
+            },
+            "AUTHORITY_RACE_ID": {
+              "Ref": "AuthorityRaceId"
+            },
+            "AUTHORITY_RESOURCE_ID": {
+              "Ref": "AuthorityResourceId"
+            },
             "SOURCE_COMMIT": {
               "Ref": "SourceCommit"
             },
@@ -1360,7 +1437,7 @@
             "Value": "Two"
           }
         ],
-        "ReservedConcurrentExecutions": 1
+        "ReservedConcurrentExecutions": 2
       }
     },
     "AuthorityVersion": {
@@ -1725,6 +1802,122 @@
                     "lambda:InvokeFunction"
                   ],
                   "Resource": "*"
+                },
+                {
+                  "Sid": "DenyBedrock",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretAccess",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenySecretMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:PutResourcePolicy",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyKmsSigning",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:Sign"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPrivilegeEscalation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ]
+      }
+    },
+    "AuthorityRaceCallerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Short-lived human-assumed caller for the exact immutable authority alias; no model, secret, signing, IAM, or other Lambda capability.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "InvokeOnlyAuthorityProof",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "AuthorityAlias",
+                      "AliasArn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "DenyOtherLambdaTargets",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "NotResource": {
+                    "Fn::GetAtt": [
+                      "AuthorityAlias",
+                      "AliasArn"
+                    ]
+                  }
                 },
                 {
                   "Sid": "DenyBedrock",
@@ -3061,6 +3254,14 @@
       "Value": {
         "Fn::GetAtt": [
           "AdvisoryCallerRole",
+          "Arn"
+        ]
+      }
+    },
+    "AuthorityRaceCallerRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "AuthorityRaceCallerRole",
           "Arn"
         ]
       }

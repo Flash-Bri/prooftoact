@@ -16,7 +16,7 @@ Internal submission target: 2026-08-16 at 5:00 PM ET.
 | New project during submission period | Clean-room repository and provenance receipts | Verified; public source |
 | Agentic memory application | Evidence memory controls retrieval and action authority | Gate One verified, synthetic scope |
 | At least two named CockroachDB tools | Distributed Vector Index + meaningful Managed MCP recovery/audit path | Gate One verified |
-| At least one AWS service | Lambda/API Gateway, KMS, and bounded Bedrock use | Local candidate passed; live deployment pending |
+| At least one AWS service | Lambda/API Gateway, KMS, bounded Bedrock use, and an isolated Lambda-to-CockroachDB authority race | Local candidates passed; live deployment and race pending |
 | Functional AWS-hosted demo | Ten exact signed-out API Gateway `GET` routes to a logs-only Demo Lambda serving the deterministic scenario | Local candidate passed; not deployed |
 | Public open-source repository and license | MIT-licensed repository with reproducible setup | Public source and hosted CI verified |
 | Public video under three minutes | 175-second evidence-led demonstration | Script drafted |
@@ -36,8 +36,10 @@ also the first tie-breaker.
   conflicts, scope, and spent authority instead of storing unqualified facts.
 - **Technological Implementation:** the final proof must show a real
   serializable CockroachDB race, SQL-before-vector filtering, a meaningful
-  second Cockroach tool, AWS runtime evidence, and reproducible tests. Gate
-  One is accepted; live AWS evidence remains pending.
+  second Cockroach tool, a genuinely overlapping AWS Lambda-to-CockroachDB
+  authority race, AWS runtime evidence, and reproducible tests. Gate One and
+  the local Gate Two candidate are accepted; live AWS evidence remains
+  pending.
 - **Real-World Impact:** the synthetic response scenario makes stale or
   contradictory shared memory legible without claiming operational readiness.
 - **Product Readiness:** one-command fixtures, judge-safe reset, cost alarms,
