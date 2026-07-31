@@ -40,6 +40,10 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
   pinned public-key evidence, exact Lambda code hashes, a dedicated exact-route
   caller, private API access logs, and opt-in temporary same-role capability
   probes;
+- an exact-head signed-out demo verifier that compares every static and
+  dynamic public response with the clean checkout, binds the health receipt to
+  the built Demo artifact, checks strict browser headers, and probes route and
+  advisory denials without treating reachability as advisory-path proof;
 - a keyboard-operable three-act local browser demonstration with persistent
   proof-state labels, exact evidence details, receipt links, safe reset, and
   deterministic unit tests.

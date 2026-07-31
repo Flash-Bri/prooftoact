@@ -97,6 +97,14 @@ test("public demo serves only the bounded signed-out proof surface", async () =>
     );
     assert.equal(result.headers["x-frame-options"], "DENY");
     assert.equal(result.headers["referrer-policy"], "no-referrer");
+    assert.equal(
+      result.headers["strict-transport-security"],
+      "max-age=31536000"
+    );
+    assert.equal(
+      result.headers["x-permitted-cross-domain-policies"],
+      "none"
+    );
     assert.doesNotMatch(result.body, /111111111111|arn:aws:iam/);
   }
 
