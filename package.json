@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "accessibility:browser": "node scripts/verify-browser-accessibility.js",
     "accessibility:verify": "node scripts/verify-accessibility.js",
     "build:gate2": "node scripts/build-gate2-template.js",
     "dependencies:verify": "node scripts/verify-dependency-inventory.js",

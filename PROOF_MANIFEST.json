@@ -5,15 +5,33 @@
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
+      "id": "accessibility-browser-receipt",
+      "path": "evidence/accessibility-browser-review-2026-07-31.md",
+      "sha256": "07d5b47f9a0f3d50326ec37c4b07b8defa73d2a2955e2504996cd52162e01600",
+      "kind": "local-validation"
+    },
+    {
+      "id": "accessibility-browser-tests",
+      "path": "test/browser-accessibility.test.js",
+      "sha256": "ce2c33d38046d2d12806b1e2009fe15df7b7961fc193dece53a64b775cf9e7f8",
+      "kind": "verification-code"
+    },
+    {
+      "id": "accessibility-browser-verifier",
+      "path": "scripts/verify-browser-accessibility.js",
+      "sha256": "531f3f61a928ecb0ff247aac16b434e9cacded1abef199d2be1c061151dd41fa",
+      "kind": "verification-code"
+    },
+    {
       "id": "accessibility-review-ledger",
       "path": "docs/ACCESSIBILITY.md",
-      "sha256": "a1471382ccac4ddd1509df0dd5a7ce8c288af43715b8d83d7c52a6f0c80f106a",
+      "sha256": "074bb64a5011d813c3b39ec401e70ee5ab546dc89447a7199557059632991130",
       "kind": "boundary-ledger"
     },
     {
       "id": "accessibility-review-receipt",
       "path": "evidence/accessibility-static-review-2026-07-31.md",
-      "sha256": "81e768b218e5db1b503f8ba5ad39610232e8cd9f2e845c4b9fdc37e9ea7d7581",
+      "sha256": "94ca59776d497776dfcf9e2d2fd251693dd4328af1ef6a30bf88eda9a86005c6",
       "kind": "local-validation"
     },
     {
@@ -205,7 +223,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "652156fe81627ad15b122327b1feffb5df9b005ae5e1d8a51389eacb83e2fa99",
+      "sha256": "e8b867ea8790cfcf9903664e786573c1f7cc6fb51a289d6ede5b561ff2214fcd",
       "kind": "verification-code"
     },
     {
@@ -223,7 +241,7 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "d94247409f0250246512d64f573da9875c48595fe6f2a659251885e35ba9aec3",
+      "sha256": "1a38475dcbc292f6b53585e5de63d7f2e87e306606b768028d0d7741ff9638bb",
       "kind": "verification-code"
     },
     {
@@ -241,7 +259,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "d95aeb38ba937a25e4a4fed1b1e77081e06b6aaf0507ed457262a987c8ac2a0e",
+      "sha256": "798d5608c456bd13f5ff7a6851f498d6fb999b8b78e1d01f245a848946cf5061",
       "kind": "boundary-ledger"
     },
     {
@@ -406,6 +424,9 @@
       "id": "accessibility-review-control",
       "proofState": "PARTIAL",
       "artifacts": [
+        "accessibility-browser-receipt",
+        "accessibility-browser-tests",
+        "accessibility-browser-verifier",
         "accessibility-review-ledger",
         "accessibility-review-receipt",
         "accessibility-review-tests",
@@ -413,9 +434,9 @@
         "media-rights-ledger",
         "release-rights-manifest"
       ],
-      "boundary": "The exact verifier binds the current browser document, stylesheet, application script, and architecture SVG to the reviewed rights manifest; checks targeted semantics, keyboard operation, load failure controls, focus, reduced motion, reflow guards, safe dynamic text, SVG alternatives, and eleven WCAG-formula contrast pairs; and returns STATIC_SOURCE_PASS with finalReleaseReady false. This static technical receipt is not a WCAG conformance claim and does not prove rendered browser or assistive-technology behavior.",
+      "boundary": "The static verifier binds the current browser document, stylesheet, application script, and architecture SVG to the reviewed rights manifest and returns STATIC_SOURCE_PASS. The dependency-free browser verifier then runs those bytes in an isolated local headless Chromium profile, rejects unexpected browser or network errors, inspects the rendered accessibility tree, exercises skip and presenter keyboard paths, and emulates reduced motion plus a 390-pixel mobile viewport before returning LOCAL_BROWSER_PASS. Both receipts remain finalReleaseReady false. They are not a WCAG conformance claim, maintained rules-engine scan, assistive-technology test, human review, or proof of deployed bytes.",
       "remainingRequirements": [
-        "Bind an automated browser scan plus keyboard-only, 200% zoom, mobile reflow, reduced-motion, and screen-reader private review to the exact public release and deployed bytes."
+        "Bind a maintained rules-engine scan plus keyboard-only, 200% zoom, mobile reflow, reduced-motion, and screen-reader private review to the exact public release and deployed bytes."
       ]
     },
     {
