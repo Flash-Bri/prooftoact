@@ -44,7 +44,7 @@
       "id": "browser-document",
       "ledgerRowId": "C04",
       "path": "web/index.html",
-      "sha256": "88a09d45c3468b0049bee70ef84231554cc88f9e3265b9ed21d7326a9839e25a",
+      "sha256": "81b621e6073daa3f465fefe73389719da4c399f1b7a88d5b261cc8fe7a1b07a8",
       "rightsState": "CLEARED_CURRENT",
       "roles": [
         "browser-source"
@@ -80,7 +80,7 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "1100fe2538b92e34c143b9690d0264f04b67416aad40a35579540f5a2027f005"
+      "sha256": "57cf348467c9df69f29ba0bfb04a5f96a54645ffb49b50578a61e59e56503fb1"
     },
     {
       "id": "public-demo-response-verifier",
@@ -90,7 +90,7 @@
     {
       "id": "readme-surface",
       "path": "README.md",
-      "sha256": "d258853e697c4bd642a743cf179ba9c6e4816f73a2ddf477adfcfb45209c1a7c"
+      "sha256": "1e26dc48d7bcbd46aec1ad08c843115ef9c48aed9f094d6be8b321734229d0cf"
     },
     {
       "id": "server-surface",

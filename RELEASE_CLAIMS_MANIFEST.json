@@ -36,7 +36,7 @@
       "id": "browser-document",
       "path": "web/index.html",
       "role": "PUBLIC_BROWSER",
-      "sha256": "88a09d45c3468b0049bee70ef84231554cc88f9e3265b9ed21d7326a9839e25a"
+      "sha256": "81b621e6073daa3f465fefe73389719da4c399f1b7a88d5b261cc8fe7a1b07a8"
     },
     {
       "id": "claims-ledger",
@@ -66,7 +66,7 @@
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "d258853e697c4bd642a743cf179ba9c6e4816f73a2ddf477adfcfb45209c1a7c"
+      "sha256": "1e26dc48d7bcbd46aec1ad08c843115ef9c48aed9f094d6be8b321734229d0cf"
     },
     {
       "id": "release-claims-ledger",

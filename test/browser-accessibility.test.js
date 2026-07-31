@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import axeCore from "axe-core";
+
 import { __test } from "../scripts/verify-browser-accessibility.js";
 
 function axNode(role, name, properties = []) {
@@ -67,6 +69,23 @@ function passingSnapshot() {
     browserErrors: [],
     failedRequests: [],
     faviconStatus: 404,
+    axe: {
+      standardTags: [...__test.AXE_TAGS],
+      desktop: {
+        engine: { name: "axe-core", version: axeCore.version },
+        violationIds: [],
+        incompleteIds: [],
+        passCount: 32,
+        inapplicableCount: 54
+      },
+      mobile: {
+        engine: { name: "axe-core", version: axeCore.version },
+        violationIds: [],
+        incompleteIds: [],
+        passCount: 32,
+        inapplicableCount: 54
+      }
+    },
     expectedOmissions: ["/favicon.ico:404"],
     loadedPaths: [
       "/",
@@ -186,7 +205,30 @@ test("accessibility tree summary exposes names, roles, and disabled state", () =
 });
 
 test("canonical browser snapshot passes the bounded rendered gate", () => {
+  assert.deepEqual(__test.AXE_TAGS, [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22aa"
+  ]);
   assert.equal(__test.validateBrowserSnapshot(passingSnapshot()), true);
+});
+
+test("browser snapshot rejects maintained rules-engine violations", () => {
+  const rulesFailure = passingSnapshot();
+  rulesFailure.axe.mobile.violationIds.push("color-contrast");
+  assert.throws(
+    () => __test.validateBrowserSnapshot(rulesFailure),
+    /BROWSER_ACCESSIBILITY_AXE_RULES_ENGINE/
+  );
+
+  const incomplete = passingSnapshot();
+  incomplete.axe.desktop.incompleteIds.push("aria-prohibited-attr");
+  assert.throws(
+    () => __test.validateBrowserSnapshot(incomplete),
+    /BROWSER_ACCESSIBILITY_AXE_RULES_ENGINE/
+  );
 });
 
 test("browser snapshot rejects unnamed controls and browser failures", () => {

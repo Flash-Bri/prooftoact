@@ -5,11 +5,20 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import axeCore from "axe-core";
+
 import { createTideproofServer } from "../src/server.js";
 import { verifyAccessibility } from "./verify-accessibility.js";
 
 const SCHEMA = "tideproof.accessibility-browser.v1";
 const STANDARD_TARGET = "WCAG_2_2_AA";
+const AXE_TAGS = Object.freeze([
+  "wcag2a",
+  "wcag2aa",
+  "wcag21a",
+  "wcag21aa",
+  "wcag22aa"
+]);
 const EXPECTED_BUTTON_NAMES = Object.freeze([
   "ACT I Admit / Refuse",
   "ACT II Commit One",
@@ -276,6 +285,46 @@ async function waitForExpression(client, expression, timeoutMs = 15_000) {
   throw new Error("BROWSER_ACCESSIBILITY_PAGE_READY_TIMEOUT");
 }
 
+async function runAxe(client) {
+  await evaluate(client, axeCore.source);
+  const result = await evaluate(
+    client,
+    `axe.run(document, {
+      runOnly: { type: "tag", values: ${JSON.stringify(AXE_TAGS)} },
+      resultTypes: ["violations", "incomplete", "passes", "inapplicable"]
+    }).then((report) => ({
+      engine: report.testEngine,
+      testRunner: report.testRunner,
+      testEnvironment: report.testEnvironment,
+      violationIds: report.violations.map(({ id }) => id).sort(),
+      incompleteIds: report.incomplete.map(({ id }) => id).sort(),
+      passCount: report.passes.length,
+      inapplicableCount: report.inapplicable.length
+    }))`
+  );
+  invariant(
+    result?.engine?.name === "axe-core" &&
+      result.engine.version === axeCore.version &&
+      result.testRunner?.name === "axe" &&
+      Array.isArray(result.violationIds) &&
+      Array.isArray(result.incompleteIds) &&
+      Number.isSafeInteger(result.passCount) &&
+      result.passCount > 0 &&
+      Number.isSafeInteger(result.inapplicableCount) &&
+      result.inapplicableCount >= 0,
+    "BROWSER_ACCESSIBILITY_AXE_RECEIPT"
+  );
+  invariant(
+    result.violationIds.length === 0,
+    "BROWSER_ACCESSIBILITY_AXE_VIOLATION"
+  );
+  invariant(
+    result.incompleteIds.length === 0,
+    "BROWSER_ACCESSIBILITY_AXE_INCOMPLETE"
+  );
+  return result;
+}
+
 function axValue(node, property) {
   return node?.[property]?.value;
 }
@@ -414,6 +463,18 @@ function validateBrowserSnapshot(snapshot) {
       JSON.stringify(snapshot.expectedOmissions) ===
         JSON.stringify(["/favicon.ico:404"]),
     "BROWSER_ACCESSIBILITY_BROWSER_ERRORS"
+  );
+  invariant(
+    snapshot.axe?.standardTags.join(",") === AXE_TAGS.join(",") &&
+      snapshot.axe.desktop.violationIds.length === 0 &&
+      snapshot.axe.mobile.violationIds.length === 0 &&
+      Array.isArray(snapshot.axe.desktop.incompleteIds) &&
+      snapshot.axe.desktop.incompleteIds.length === 0 &&
+      Array.isArray(snapshot.axe.mobile.incompleteIds) &&
+      snapshot.axe.mobile.incompleteIds.length === 0 &&
+      snapshot.axe.desktop.engine.version === axeCore.version &&
+      snapshot.axe.mobile.engine.version === axeCore.version,
+    "BROWSER_ACCESSIBILITY_AXE_RULES_ENGINE"
   );
   invariant(
     [
@@ -606,6 +667,7 @@ async function collectBrowserSnapshot(client, origin) {
       document.querySelector("#load-status")?.textContent.includes("loaded") &&
       document.querySelectorAll("#invariants .check-passed").length === 8`
   );
+  const axeDesktop = await runAxe(client);
   const faviconStatus = await evaluate(
     client,
     `fetch("/favicon.ico", { cache: "no-store" }).then((response) => response.status)`
@@ -724,6 +786,7 @@ async function collectBrowserSnapshot(client, origin) {
     mobile: true
   });
   await delay(100);
+  const axeMobile = await runAxe(client);
   const mobile = await evaluate(
     client,
     `(() => {
@@ -755,6 +818,11 @@ async function collectBrowserSnapshot(client, origin) {
     browserErrors,
     failedRequests,
     faviconStatus,
+    axe: {
+      standardTags: [...AXE_TAGS],
+      desktop: axeDesktop,
+      mobile: axeMobile
+    },
     expectedOmissions: [...new Set(expectedOmissions)].sort(),
     loadedPaths: [...loadedPaths].sort()
   };
@@ -826,6 +894,13 @@ export async function verifyBrowserAccessibility({ chromePath } = {}) {
         accessibilityLinks: snapshot.ax.linkCount,
         accessibilityButtons: snapshot.ax.buttons.length,
         localInvariants: snapshot.document.invariantCount,
+        axeVersion: snapshot.axe.desktop.engine.version,
+        axeDesktopPasses: snapshot.axe.desktop.passCount,
+        axeDesktopIncomplete: snapshot.axe.desktop.incompleteIds.length,
+        axeDesktopIncompleteIds: snapshot.axe.desktop.incompleteIds,
+        axeMobilePasses: snapshot.axe.mobile.passCount,
+        axeMobileIncomplete: snapshot.axe.mobile.incompleteIds.length,
+        axeMobileIncompleteIds: snapshot.axe.mobile.incompleteIds,
         desktopViewport: "1440x900",
         mobileViewport: "390x844@2x"
       },
@@ -839,12 +914,13 @@ export async function verifyBrowserAccessibility({ chromePath } = {}) {
         skipNavigationRendered: true,
         keyboardPresenterPathRendered: true,
         presenterStateTransitionsRendered: true,
+        maintainedRulesEngineLocalPass: true,
         reducedMotionRendered: true,
         mobileReflowRendered: true
       },
       remainingRequirements: [...REMAINING_REQUIREMENTS],
       claimBoundary:
-        "This receipt runs the rights-bound current source in an isolated local headless Chromium process, inspects the rendered accessibility tree, exercises the keyboard presenter path and state controls, emulates reduced motion and a 390-pixel mobile viewport, and rejects browser, network, naming, or reflow failures. It is not a WCAG conformance claim, a maintained rules-engine scan, assistive-technology testing, human usability review, or proof of the exact deployed public release."
+        "This receipt runs the rights-bound current source in an isolated local headless Chromium process, executes the locked axe-core WCAG 2.0/2.1 A and AA plus WCAG 2.2 AA rules at desktop and mobile viewports, inspects the rendered accessibility tree, exercises the keyboard presenter path and state controls, emulates reduced motion and a 390-pixel mobile viewport, and rejects browser, network, naming, rules-engine violation, unresolved rule result, or reflow failures. It is not a WCAG conformance claim, assistive-technology testing, human usability review, or proof of the exact deployed public release."
     };
   } finally {
     client?.close();
@@ -855,6 +931,7 @@ export async function verifyBrowserAccessibility({ chromePath } = {}) {
 }
 
 export const __test = Object.freeze({
+  AXE_TAGS,
   EXPECTED_BUTTON_NAMES,
   REMAINING_REQUIREMENTS,
   SCHEMA,
@@ -862,6 +939,7 @@ export const __test = Object.freeze({
   formatUnexpectedFailure,
   parseDevToolsActivePort,
   removeProfileDirectory,
+  runAxe,
   signalChrome,
   summarizeAxTree,
   validateBrowserSnapshot

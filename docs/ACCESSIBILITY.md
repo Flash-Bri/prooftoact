@@ -45,7 +45,7 @@ plain-language `alt` value.
 
 ## Current rendered-browser result
 
-The dependency-free browser verifier starts the clean-room server on an
+The browser verifier starts the clean-room server on an
 ephemeral loopback port and launches an isolated headless Chromium profile. It
 returns `LOCAL_BROWSER_PASS` only after the static rights-bound prerequisite
 passes and the browser confirms all of the following:
@@ -55,6 +55,9 @@ passes and the browser confirms all of the following:
   errors;
 - the deliberate favicon omission remains an expected `/favicon.ico` `404`,
   rather than silently introducing an unreviewed image;
+- the exact locked `axe-core` 4.12.1 engine reports no selected WCAG 2.0,
+  2.1, or 2.2 A/AA violations and no unresolved results at either the desktop
+  or mobile viewport;
 - the rendered accessibility tree exposes one root web area, one main
   landmark, named navigation, nine named headings, six named links, and all
   seven presenter buttons with their exact accessible names;
@@ -67,10 +70,13 @@ passes and the browser confirms all of the following:
   act layout, keeps page-level horizontal overflow absent, and retains the
   bounded scrollable proof ribbon.
 
-The local receipt records browser product/version, the four exact reviewed
-source hashes inherited from the static control, rendered accessibility-tree
-counts, and the explicit non-final boundary. CI repeats this browser gate on
-every pull request and public-main push.
+The local receipt records browser product/version, axe version and result
+counts, the four exact reviewed source hashes inherited from the static
+control, rendered accessibility-tree counts, and the explicit non-final
+boundary. CI repeats this browser gate on every pull request and public-main
+push. `axe-core` is an exact development-only MPL-2.0 dependency; it is loaded
+only into the isolated verification page and is not bundled into the browser,
+Lambda, or Gate Two ZIP payloads.
 
 ## Release boundary
 
@@ -79,8 +85,8 @@ They do not establish WCAG conformance and they are not permission to publish.
 Before final release, bind all of the following to the exact public-release
 commit and deployed bytes:
 
-1. a maintained automated accessibility rules-engine scan against the exact
-   public release and deployed bytes;
+1. rerun the maintained automated accessibility rules-engine scan against the
+   exact public release and deployed bytes;
 2. keyboard-only, `200%` zoom, mobile reflow, and reduced-motion private
    review; and
 3. screen-reader review of navigation, the three-act state changes, status

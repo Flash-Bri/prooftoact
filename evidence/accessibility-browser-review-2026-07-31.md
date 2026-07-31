@@ -8,7 +8,7 @@
 - Final release ready: `false`
 - Static prerequisite: `STATIC_SOURCE_PASS`
 - Rights manifest SHA-256:
-  `798d5608c456bd13f5ff7a6851f498d6fb999b8b78e1d01f245a848946cf5061`
+  `f2499611c166beccbb034e9d8ab98d03484eb665c386ab32756b0e80bf472ae7`
 
 ## Exact reviewed source
 
@@ -16,7 +16,7 @@
 | --- | --- |
 | `docs/media/architecture.svg` | `5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c` |
 | `web/app.js` | `f5980c1968417d0c8ebde0256bd56a9f61c6a4c347ccc822839ce8ddb00ecbe2` |
-| `web/index.html` | `88a09d45c3468b0049bee70ef84231554cc88f9e3265b9ed21d7326a9839e25a` |
+| `web/index.html` | `81b621e6073daa3f465fefe73389719da4c399f1b7a88d5b261cc8fe7a1b07a8` |
 | `web/styles.css` | `c33554b39142780f662d9ec5fa8b8c8fd5832eb9c0e4ec5c305ee3a53fd86e9e` |
 
 ## Rendered result
@@ -24,6 +24,14 @@
 - Five required local routes loaded successfully.
 - The deliberate favicon omission produced the expected `/favicon.ico` `404`
   and no other browser, runtime, console, or network failure occurred.
+- The exact locked `axe-core` 4.12.1 engine ran the selected WCAG 2.0, 2.1,
+  and 2.2 A/AA tags at `1440 × 900` and `390 × 844`; it reported 25 and 26
+  passed rules respectively, with zero violations and zero unresolved results.
+- An earlier same-session scan returned unresolved `aria-prohibited-attr`
+  results for the labelled `.hero-facts` and `.presenter-controls` generic
+  containers. Both now carry the explicit `group` role, and the final desktop
+  and mobile scans report no unresolved results. The verifier now rejects both
+  violations and unresolved rule outcomes.
 - The exposed accessibility tree contained 303 nodes, nine named headings,
   six named links, and seven exactly named presenter buttons.
 - All eight local invariants rendered before playback controls became
@@ -39,8 +47,9 @@
 ## Acceptance boundary
 
 This receipt proves bounded rendered behavior for the rights-bound current
-source in one isolated local headless Chrome run. It is not a WCAG conformance
-claim, a maintained rules-engine scan, assistive-technology testing, human
-usability review, or evidence about the exact deployed public release.
-Exact-release automated scanning, keyboard-only, 200% zoom, mobile,
-reduced-motion, and screen-reader private review remain required.
+source in one isolated local headless Chrome run, including a maintained local
+rules-engine scan. It is not a WCAG conformance claim, assistive-technology
+testing, human usability review, or evidence about the exact deployed public
+release. The same automated scan against exact deployed bytes plus
+keyboard-only, 200% zoom, mobile, reduced-motion, and screen-reader private
+review remain required.

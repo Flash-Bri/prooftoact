@@ -21,15 +21,15 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 
 ## Bound source
 
-- Package lock SHA-256: `fe1e765145a7bb2e0ee0cadce2e646b7d792c447aee37f010d40453405fd08d9`
+- Package lock SHA-256: `b9903832feed0b4c66eb460a015e4c9df0b3f782369e92ba387b7edd4189a310`
 - Direct runtime declarations: **6**
-- Direct development declarations: **1**
-- Complete locked package records: **71**
+- Direct development declarations: **2**
+- Complete locked package records: **72**
 - Runtime package records: **44**
-- Development-only package records: **27**
+- Development-only package records: **28**
 - Optional platform package records: **27**
 - Packages declaring an install script: **1**
-- Reviewed package-lock license identifiers: 0BSD: 1; Apache-2.0: 28; ISC: 2; MIT: 40
+- Reviewed package-lock license identifiers: 0BSD: 1; Apache-2.0: 28; ISC: 2; MIT: 40; MPL-2.0: 1
 - CI install boundary: `npm ci --ignore-scripts`; the deterministic Gate Two
   build separately proves the exact bundled artifacts and embeds the verified
   third-party notice file in every ZIP.
@@ -43,6 +43,7 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 | `@aws-sdk/client-lambda` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-secrets-manager` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@smithy/node-http-handler` | `4.9.13` | `4.9.13` | runtime | `Apache-2.0` |
+| `axe-core` | `4.12.1` | `4.12.1` | development-only | `MPL-2.0` |
 | `esbuild` | `0.28.1` | `0.28.1` | development-only | `MIT` |
 | `pg` | `8.22.0` | `8.22.0` | runtime | `MIT` |
 
@@ -104,6 +105,7 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 | `@smithy/node-http-handler` | `4.9.13` | `node_modules/@smithy/node-http-handler` | runtime | no | no | `Apache-2.0` |
 | `@smithy/signature-v4` | `5.6.12` | `node_modules/@smithy/signature-v4` | runtime | no | no | `Apache-2.0` |
 | `@smithy/types` | `4.16.1` | `node_modules/@smithy/types` | runtime | no | no | `Apache-2.0` |
+| `axe-core` | `4.12.1` | `node_modules/axe-core` | development-only | no | no | `MPL-2.0` |
 | `bowser` | `2.14.1` | `node_modules/bowser` | runtime | no | no | `MIT` |
 | `esbuild` | `0.28.1` | `node_modules/esbuild` | development-only | no | yes | `MIT` |
 | `pg` | `8.22.0` | `node_modules/pg` | runtime | no | no | `MIT` |
