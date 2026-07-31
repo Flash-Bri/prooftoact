@@ -1,0 +1,346 @@
+{
+  "schema": "tideproof.proof-manifest.v1",
+  "status": "INCOMPLETE_LIVE_GATES_PENDING",
+  "reviewedOn": "2026-07-31",
+  "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
+  "artifacts": [
+    {
+      "id": "architecture-png",
+      "path": "docs/media/architecture.png",
+      "sha256": "6228172f7a5a462940a05543ee455e0de21aa53c805e9466076b9e33fed1f168",
+      "kind": "released-asset"
+    },
+    {
+      "id": "architecture-release-receipt",
+      "path": "evidence/architecture-asset-release-2026-07-31.md",
+      "sha256": "44fba1df65a6a5d0ad4b57ab4478f1bc210c119bc19e870d6bce43580b4839ef",
+      "kind": "release-receipt"
+    },
+    {
+      "id": "architecture-svg",
+      "path": "docs/media/architecture.svg",
+      "sha256": "5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c",
+      "kind": "released-asset"
+    },
+    {
+      "id": "aws-gate2-design",
+      "path": "docs/AWS_GATE2.md",
+      "sha256": "7c3db344c57c1f146a53d121ca97a2842022ae28c21ccac08d9f675c161133fd",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "claims-ledger",
+      "path": "CLAIMS.md",
+      "sha256": "2baa5d1796d2f5adab5b2c61ca6a7256673849f5ecf446aad1a0f3838d97ebe1",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "clean-room-ledger",
+      "path": "CLEAN_ROOM.md",
+      "sha256": "8df5ef43eb06432c8d2d8acd5b4377628f49fe76d5d0191f7a66f58d3dc68ca3",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "cost-guard-receipt",
+      "path": "evidence/gate2-cost-guard-2026-07-30.json",
+      "sha256": "b9e0e8487329d86b9c8fd614ce65fc0dd859ab6035701acff3d079a1be693b14",
+      "kind": "release-receipt"
+    },
+    {
+      "id": "gate1-ambiguity-evidence",
+      "path": "evidence/gate1-ambiguity-2026-07-30.md",
+      "sha256": "6ce3446ce19c82ecb52b178c4d00d080fa9281a11bfecefdd5fb8050a3ae0a1b",
+      "kind": "accepted-evidence"
+    },
+    {
+      "id": "gate1-authority-evidence",
+      "path": "evidence/gate1-authority-2026-07-30.md",
+      "sha256": "418a53cf3ef62d4abd19a65f2f2abb2b2355652b90ec7e72438fd69b6aa8f29d",
+      "kind": "accepted-evidence"
+    },
+    {
+      "id": "gate1-recovery-evidence",
+      "path": "evidence/gate1-recovery-broker-2026-07-30.md",
+      "sha256": "b5d273445b5911969bea6b8277b673356712a8f74d707fad7ba3042b05e44924",
+      "kind": "accepted-evidence"
+    },
+    {
+      "id": "gate1-vector-evidence",
+      "path": "evidence/gate1-vector-2026-07-29.md",
+      "sha256": "83271ec1b62a800b533a92d7c3cd2c191b104de2c47cec7c5aecd4404f8ddc45",
+      "kind": "accepted-evidence"
+    },
+    {
+      "id": "gate2-authority-local-validation",
+      "path": "evidence/gate2-authority-local-validation-79476df-2026-07-31.md",
+      "sha256": "2f6fa495ec54e36bb858477c264f8100358bbc772f43c49a93c37daf7e83ad8b",
+      "kind": "local-validation"
+    },
+    {
+      "id": "gate2-console-stop-receipt",
+      "path": "evidence/gate2-console-stop-receipt-2026-07-30.md",
+      "sha256": "7a891b1810d8343e19c3cff40591302b2c483b8fdacf7b68edf68596ad18258d",
+      "kind": "stop-receipt"
+    },
+    {
+      "id": "gate2-local-validation",
+      "path": "evidence/gate2-predeployment-local-validation-9aa7f2e-2026-07-30.md",
+      "sha256": "cfa7d93b458e4aebd254dfddf7e88a0c98f0dc2ecb2f65e6e9da5c1505278ac3",
+      "kind": "local-validation"
+    },
+    {
+      "id": "local-judge-path-evidence",
+      "path": "evidence/local-judge-path-e2b247a-2026-07-30.md",
+      "sha256": "b3ed9414195b224482228e1ea22a4fcf513766551c5d082f976376e69b7f026e",
+      "kind": "local-validation"
+    },
+    {
+      "id": "media-rights-ledger",
+      "path": "docs/media/RIGHTS.md",
+      "sha256": "72d2e8a3df9331754c111aeb68ec28fd46fb796b8a96eef85c64f44c42539469",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "proof-manifest-tests",
+      "path": "test/proof-manifest.test.js",
+      "sha256": "5ec5ad13c4c5aaaaa04cfb9c9bca9c09a6c880384dcb5f403292ebf970e7bbc0",
+      "kind": "verification-code"
+    },
+    {
+      "id": "proof-manifest-verifier",
+      "path": "scripts/verify-proof-manifest.js",
+      "sha256": "bf277ed795a0597d975d3ddd08eb063c14692e9fc92472353feddd35c96ab31c",
+      "kind": "verification-code"
+    },
+    {
+      "id": "public-source-release",
+      "path": "evidence/public-source-release-081b580-2026-07-30.md",
+      "sha256": "2b1d58371034fc394ff5ca203391529a15c039f91f7dab691ec2b7b07c8f238a",
+      "kind": "release-receipt"
+    },
+    {
+      "id": "security-policy",
+      "path": "SECURITY.md",
+      "sha256": "ac9905b7537cf2ff21c236868bc47dcfad33b3608657170b5f72eca7c357d3fd",
+      "kind": "boundary-ledger"
+    }
+  ],
+  "claims": [
+    {
+      "id": "distributed-vector-index",
+      "claim": "CockroachDB Distributed Vector Indexing retrieves eligible memory candidates.",
+      "currentStatus": "Gate One verified",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "gate1-vector-evidence"
+      ],
+      "acceptanceBoundary": "The accepted CockroachDB Cloud plan names the vector index and contains vector search; admissibility and authority are proven separately.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "managed-mcp-recovery",
+      "claim": "CockroachDB Managed MCP can inspect sanitized recovery state without transferring operational authority.",
+      "currentStatus": "Gate One verified, synthetic scope",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "gate1-recovery-evidence"
+      ],
+      "acceptanceBoundary": "The accepted fixed-query broker receipt proves signed, fresh, audited context release without an operation ID, effect key, or fence in the synthetic gate.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "sql-admissibility-before-ranking",
+      "claim": "SQL admissibility precedes semantic ranking and authority.",
+      "currentStatus": "Gate One verified, synthetic scope",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "gate1-authority-evidence",
+        "gate1-vector-evidence"
+      ],
+      "acceptanceBoundary": "The accepted Gate One receipt proves the synthetic SQL provenance, validity, scope, and conflict checks used before authority; vector-plan evidence is separate.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "serializable-authority-race",
+      "claim": "Concurrent contenders produce one authority winner.",
+      "currentStatus": "Gate One verified, 100 × 50 live races",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "gate1-authority-evidence"
+      ],
+      "acceptanceBoundary": "The accepted CockroachDB Gate One run records exactly one winning lease, receipt, fence increment, and outbox intent for each synthetic 50-contender race.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "commit-ambiguity",
+      "claim": "Process death around COMMIT never triggers blind replay in the synthetic authority gate.",
+      "currentStatus": "Gate One verified, 100 runs per boundary",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "gate1-ambiguity-evidence"
+      ],
+      "acceptanceBoundary": "The accepted failpoint receipt covers before-COMMIT, dispatched-COMMIT, and acknowledged-COMMIT boundaries without blind retry or a partial transaction.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "successor-context-recovery",
+      "claim": "A successor recovers context without inheriting authority.",
+      "currentStatus": "Gate One verified, synthetic broker",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "gate1-recovery-evidence"
+      ],
+      "acceptanceBoundary": "The accepted synthetic broker receipt exposes sanitized context only and requires any later authority to be freshly acquired through a separate capability.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "stale-fence-rejection",
+      "claim": "Stale fencing tokens cannot produce a protected synthetic effect.",
+      "currentStatus": "Gate One verified, database sink only",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "gate1-authority-evidence"
+      ],
+      "acceptanceBoundary": "The accepted evidence covers a protected synthetic database sink only and is not an exactly-once real-world effect claim.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "outage-fail-closed",
+      "claim": "Tideproof fails closed when its memory or recovery path is unavailable.",
+      "currentStatus": "Local broker behavior verified; deployed outage proof pending",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "aws-gate2-design",
+        "gate1-recovery-evidence"
+      ],
+      "acceptanceBoundary": "Gate One proves the bounded broker behavior; deployed database and MCP outage behavior is not yet evidenced.",
+      "remainingRequirements": [
+        "Accepted deployed database-outage and Managed-MCP-outage receipts tied to the final release commit."
+      ]
+    },
+    {
+      "id": "signed-out-aws-judge-surface",
+      "claim": "A signed-out AWS judge surface can remain separate from proposal and authority capabilities.",
+      "currentStatus": "Hardened local Gate Two candidate verified; live hosting pending",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "aws-gate2-design",
+        "gate2-local-validation",
+        "local-judge-path-evidence"
+      ],
+      "acceptanceBoundary": "The exact local candidate and judge path are validated, but no public URL, AWS routing, live role enforcement, throttling, or availability is proven.",
+      "remainingRequirements": [
+        "Accepted exact-head public-demo verifier receipt and separate signed-out desktop and mobile review at the final AWS URL."
+      ]
+    },
+    {
+      "id": "bounded-aws-proposal",
+      "claim": "A bounded AWS proposal path can be deployed without giving the model authority.",
+      "currentStatus": "Hardened local Gate Two candidate verified; live AWS proof pending",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "aws-gate2-design",
+        "gate2-local-validation"
+      ],
+      "acceptanceBoundary": "Local artifacts and adversarial tests define a proposal-only boundary; live Bedrock, KMS, IAM, API Gateway, and CloudFormation behavior remains unverified.",
+      "remainingRequirements": [
+        "Accepted live proposal receipt, reconciled private API access log, KMS binding, role audit, and direct-Lambda denial evidence."
+      ]
+    },
+    {
+      "id": "aws-lambda-authority-race",
+      "claim": "Two AWS Lambda contenders can overlap while CockroachDB commits one fresh authority winner.",
+      "currentStatus": "Local handler, IAM, transaction, durable-proof, and verifier candidate tested; no live AWS/DB race claim",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "aws-gate2-design",
+        "gate2-authority-local-validation",
+        "gate2-local-validation"
+      ],
+      "acceptanceBoundary": "Local code and tests do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
+      "remainingRequirements": [
+        "Accepted private invocation and CockroachDB receipts plus a sanitized v2 authority-race receipt proving overlap, two terminal receipts, one winner, winner-aware denial, one outbox, the winning fence, no pending receipt, and zero protected effects."
+      ]
+    }
+  ],
+  "releaseControls": [
+    {
+      "id": "architecture-asset-v09",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "architecture-png",
+        "architecture-release-receipt",
+        "architecture-svg",
+        "media-rights-ledger"
+      ],
+      "boundary": "Only the exact V09 architecture SVG and PNG are rights-cleared for the listed public channels; no other production visual is cleared by this control.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "claim-ledger-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "claims-ledger"
+      ],
+      "boundary": "The current claims ledger is hash-bound and fully represented in this manifest; final live receipts and an exact-release-commit audit are still required.",
+      "remainingRequirements": [
+        "Freeze CLAIMS.md against the final release commit after every live gate is reconciled."
+      ]
+    },
+    {
+      "id": "clean-room-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "clean-room-ledger"
+      ],
+      "boundary": "The current public clean-room policy is hash-bound; this does not replace the final history, dependency, secret, privacy, and pre-existing-work audit.",
+      "remainingRequirements": [
+        "Complete and receipt the final exact-commit clean-room and dependency audit."
+      ]
+    },
+    {
+      "id": "cost-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "cost-guard-receipt",
+        "gate2-console-stop-receipt"
+      ],
+      "boundary": "The receipts document the budget prerequisite and the read-only stop condition only; they do not prove current spend or authorize deployment.",
+      "remainingRequirements": [
+        "Machine-verifiable clean authenticated AWS preflight PASS and current-spend receipt under the effective 13.14 USD remaining project envelope."
+      ]
+    },
+    {
+      "id": "proof-manifest-verifier-control",
+      "proofState": "VERIFIED",
+      "artifacts": [
+        "proof-manifest-tests",
+        "proof-manifest-verifier"
+      ],
+      "boundary": "The exact verifier and focused tests are hash-bound; they validate canonical JSON, complete claims-ledger coverage, exact artifact bytes, safe paths, references, and fail-closed proof states.",
+      "remainingRequirements": []
+    },
+    {
+      "id": "public-source-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "public-source-release"
+      ],
+      "boundary": "The checkpoint proves a public MIT repository and hosted CI at its recorded commit; it is not the final release receipt.",
+      "remainingRequirements": [
+        "Signed-out repository review and hosted CI success at the final release commit."
+      ]
+    },
+    {
+      "id": "security-policy-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "security-policy"
+      ],
+      "boundary": "The public reporting and safety policy is hash-bound; production security and the final live abuse review remain unproven.",
+      "remainingRequirements": [
+        "Complete the exact-release-commit security, privacy, abuse, headers, IAM, and signed-out access review."
+      ]
+    }
+  ]
+}

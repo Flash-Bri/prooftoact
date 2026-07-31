@@ -31,6 +31,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
 
+      - name: Verify proof manifest
+        run: npm run proof:verify
+
       - name: Run deterministic tests
         run: npm test
 

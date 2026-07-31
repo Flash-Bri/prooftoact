@@ -77,6 +77,7 @@ project credentials supplied through the environment; secrets must remain in
 a secret store and never enter the repository.
 
 ```sh
+npm run proof:verify
 npm test
 npm run generate:gate2
 npm run demo
@@ -100,6 +101,11 @@ The implementation uses or is planned to use:
 4. AWS Lambda/API Gateway for a capability-free signed-out judge surface plus
    separated IAM-authenticated proposal roles, KMS, and Amazon Bedrock; the
    local candidate is not a live-cloud claim.
+
+The machine-checked [`PROOF_MANIFEST.json`](PROOF_MANIFEST.json) maps every
+current claims-ledger row to exact evidence bytes and leaves incomplete live
+gates explicit. Run `npm run proof:verify` to reject changed evidence, missing
+claim coverage, unsafe paths, or a stale hash.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and

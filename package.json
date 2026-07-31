@@ -18,6 +18,7 @@
     "gate2:verify-public-demo": "node scripts/gate2-public-demo-verify.js",
     "demo": "node src/demo.js",
     "dev": "node src/server.js",
+    "proof:verify": "node scripts/verify-proof-manifest.js",
     "gate1:ambiguity": "node scripts/gate1-ambiguity.js",
     "gate1:ambiguity:full": "AMBIGUITY_RUNS=100 node scripts/gate1-ambiguity.js",
     "gate1:authority": "node scripts/gate1-authority.js",
