@@ -10,6 +10,12 @@
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
+      "rule": "basic-auth-url",
+      "path": "test/aws-authority-lambda.test.js",
+      "matchSha256": "ec5b7569923e2d470d35870d83f61243c1f7db6488e224615077e71c543a0ba0",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
       "rule": "email-address",
       "path": "THIRD_PARTY_NOTICES.txt",
       "matchSha256": "2dd1e217e885ac11b2ea782579eb499ac771fd1dcef83b15ee147f0e0f4543c3",
