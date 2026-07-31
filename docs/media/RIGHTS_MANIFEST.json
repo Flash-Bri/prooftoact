@@ -34,7 +34,7 @@
       "id": "browser-app",
       "ledgerRowId": "C04",
       "path": "web/app.js",
-      "sha256": "a0d5fdc25c580738cd93cbf1b8b83d4cea9f8571ed9266d7cfa452d48760713f",
+      "sha256": "f5980c1968417d0c8ebde0256bd56a9f61c6a4c347ccc822839ce8ddb00ecbe2",
       "rightsState": "CLEARED_CURRENT",
       "roles": [
         "browser-source"
@@ -44,7 +44,7 @@
       "id": "browser-document",
       "ledgerRowId": "C04",
       "path": "web/index.html",
-      "sha256": "fece908a4208f2e7069760fd1375cb6d08282f56f1123bf1a537ce746587a1e9",
+      "sha256": "88a09d45c3468b0049bee70ef84231554cc88f9e3265b9ed21d7326a9839e25a",
       "rightsState": "CLEARED_CURRENT",
       "roles": [
         "browser-source"
@@ -80,7 +80,7 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "37b6bb4b58a5468491aa748d8e7a5876dfeb2433dfd851e25e94704e2daf80d1"
+      "sha256": "1100fe2538b92e34c143b9690d0264f04b67416aad40a35579540f5a2027f005"
     },
     {
       "id": "public-demo-response-verifier",
@@ -90,7 +90,7 @@
     {
       "id": "readme-surface",
       "path": "README.md",
-      "sha256": "c6f08a3a922a88647ece5366e3c7270302d77bf142b9873673249e699f203f8f"
+      "sha256": "631f7418ef80250c9cb97d681f67f761d30bc2023d00fc665d49f96f1d3f5d82"
     },
     {
       "id": "server-surface",

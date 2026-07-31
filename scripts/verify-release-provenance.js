@@ -6,13 +6,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { verifyDependencyInventory } from "./verify-dependency-inventory.js";
 import { verifyCurrentBundledThirdPartyNotices } from "./verify-bundled-third-party-notices.js";
+import { verifyAccessibility } from "./verify-accessibility.js";
 import { verifyReleaseRights } from "./verify-release-rights.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/tideproof.git";
 const EXPECTED_BRANCH = "main";
 const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
-const SCHEMA = "tideproof.release-provenance.v2";
+const SCHEMA = "tideproof.release-provenance.v3";
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
 
@@ -509,6 +510,7 @@ export function verifyRepositoryHistory({ run, projectRoot = DEFAULT_ROOT }) {
 export async function runReleaseProvenance({
   projectRoot = DEFAULT_ROOT,
   run = defaultRunner(projectRoot),
+  verifyAccessibilityReceipt = verifyAccessibility,
   verifyInventory = verifyDependencyInventory,
   verifyNotices = verifyCurrentBundledThirdPartyNotices,
   verifyRights = verifyReleaseRights
@@ -541,6 +543,41 @@ export async function runReleaseProvenance({
       rights.checks &&
       Object.values(rights.checks).every((value) => value === true),
     "RELEASE_PROVENANCE_RIGHTS"
+  );
+  const accessibility = verifyAccessibilityReceipt({
+    rootDir: projectRoot,
+    verifyRights: () => rights
+  });
+  assert(
+    accessibility?.schemaVersion ===
+      "tideproof.accessibility-static.v1" &&
+      accessibility.status === "STATIC_SOURCE_PASS" &&
+      accessibility.finalReleaseReady === false &&
+      accessibility.standardTarget === "WCAG_2_2_AA" &&
+      accessibility.rightsManifestSha256 === rights.manifestSha256 &&
+      Array.isArray(accessibility.reviewedFiles) &&
+      accessibility.reviewedFiles.length === 4 &&
+      accessibility.reviewedFiles.every(
+        (file) =>
+          typeof file?.id === "string" &&
+          typeof file.path === "string" &&
+          HEX_64.test(file.sha256)
+      ) &&
+      Array.isArray(accessibility.contrast) &&
+      accessibility.contrast.length === 11 &&
+      accessibility.contrast.every(
+        (pair) =>
+          Number.isFinite(pair?.ratio) &&
+          Number.isFinite(pair.minimumRatio) &&
+          pair.ratio >= pair.minimumRatio
+      ) &&
+      Array.isArray(accessibility.remainingRequirements) &&
+      accessibility.remainingRequirements.length === 3 &&
+      accessibility.checks &&
+      Object.values(accessibility.checks).every((value) => value === true) &&
+      typeof accessibility.claimBoundary === "string" &&
+      accessibility.claimBoundary.length > 0,
+    "RELEASE_PROVENANCE_ACCESSIBILITY"
   );
   const lockBytes = fs.readFileSync(path.join(projectRoot, "package-lock.json"));
   const packageLock = readJson(
@@ -593,6 +630,7 @@ export async function runReleaseProvenance({
     history: source.history,
     trackedTree: source.trackedTree,
     rights,
+    accessibility,
     dependencies: {
       installedTree,
       inventory,
@@ -622,10 +660,11 @@ export async function runReleaseProvenance({
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
       currentSurfaceRightsVerified: true,
+      staticAccessibilityVerified: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary:
-      "This receipt binds Git ancestry, tracked file modes, the current-surface rights inventory, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The rights control remains explicitly non-final and grants no rights. This receipt does not independently prove originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live AWS behavior, or final submission approval."
+      "This receipt binds Git ancestry, tracked file modes, the current-surface rights inventory, the bounded static accessibility receipt, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The rights and accessibility controls remain explicitly non-final; neither grants rights nor establishes WCAG conformance. This receipt does not independently prove originality, legal clearance, secrets absence, vulnerability status, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
   };
 }
 

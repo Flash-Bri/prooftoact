@@ -40,6 +40,9 @@ jobs:
       - name: Verify current-surface rights inventory
         run: npm run rights:verify
 
+      - name: Verify bounded static accessibility controls
+        run: npm run accessibility:verify
+
       - name: Verify locked dependency inventory
         run: npm run dependencies:verify
 

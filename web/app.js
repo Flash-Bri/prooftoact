@@ -777,4 +777,12 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && playTimer) {
+    pause();
+    status.textContent =
+      "Automatic presentation paused while this page is hidden.";
+  }
+});
+
 loadScenario();

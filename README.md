@@ -79,6 +79,7 @@ a secret store and never enter the repository.
 ```sh
 npm run proof:verify
 npm run rights:verify
+npm run accessibility:verify
 npm run dependencies:verify
 npm run licenses:verify
 npm test
@@ -125,10 +126,11 @@ version, integrity, license-source, fallback, or notice-byte drift. Every Gate
 Two ZIP embeds that verified notice file byte-for-byte. On official `main`,
 `npm run release:provenance` now binds the full single-root Git ancestry,
 tracked file modes, the non-final current-surface rights control, clean
-installed package identities, dependency inventory, and bundle notice inputs
-to the exact public checkout. The final release must rerun that control with
-the zero-vulnerability and exact-head build gates, then bind the uploaded
-object versions and deployed Lambda `CodeSha256` values.
+static accessibility control, installed package identities, dependency
+inventory, and bundle notice inputs to the exact public checkout. The final
+release must rerun that control with the zero-vulnerability and exact-head
+build gates, then bind the uploaded object versions and deployed Lambda
+`CodeSha256` values.
 
 The machine-readable
 [`docs/media/RIGHTS_MANIFEST.json`](docs/media/RIGHTS_MANIFEST.json) binds the
@@ -139,6 +141,15 @@ planned-asset paths, known reference-only TrustAgentic bytes, or cross-surface
 route drift. Its `CURRENT_SURFACES_PASS` result is explicitly not final-rights
 approval: final production assets or deliberate omissions and an exact-release
 private-review receipt remain required.
+
+The bounded [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) control checks the
+rights-bound browser source and architecture SVG for targeted semantics,
+keyboard operation, focus, reduced motion, reflow guards, safe dynamic text,
+and eleven WCAG-formula contrast pairs. Run
+`npm run accessibility:verify` to reproduce its `STATIC_SOURCE_PASS` receipt.
+That result is not a WCAG conformance claim; exact-release browser scanning,
+keyboard and zoom review, reduced-motion review, and screen-reader review are
+still required.
 
 See `CLAIMS.md`, `evidence/`, `docs/CONTEST_MATRIX.md`,
 `docs/ARCHITECTURE.md`, `docs/AWS_GATE2.md`, `docs/PRIOR_ART.md`, and

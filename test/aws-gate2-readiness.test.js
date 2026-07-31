@@ -195,9 +195,83 @@ function releaseRightsReceipt() {
   };
 }
 
+function accessibilityReceipt() {
+  const pairs = [
+    "amber-on-amber-surface",
+    "blue-on-page",
+    "blue-on-surface",
+    "focus-on-page",
+    "green-on-green-surface",
+    "ink-on-page",
+    "ink-on-surface",
+    "line-strong-on-surface",
+    "muted-on-page",
+    "muted-on-surface",
+    "red-on-red-surface"
+  ];
+  return {
+    schemaVersion: "tideproof.accessibility-static.v1",
+    status: "STATIC_SOURCE_PASS",
+    finalReleaseReady: false,
+    standardTarget: "WCAG_2_2_AA",
+    rightsManifestSha256: "5".repeat(64),
+    reviewedFiles: [
+      ["architecture-svg", "docs/media/architecture.svg"],
+      ["browser-app", "web/app.js"],
+      ["browser-document", "web/index.html"],
+      ["browser-styles", "web/styles.css"]
+    ].map(([id, filePath], index) => ({
+      id,
+      path: filePath,
+      sha256: String(index + 5).repeat(64)
+    })),
+    contrast: pairs.map((id) => ({
+      id,
+      foregroundToken: "fixture-foreground",
+      backgroundToken: "fixture-background",
+      foreground: "#ffffff",
+      background: "#000000",
+      minimumRatio: id === "focus-on-page" ? 3 : 4.5,
+      ratio: 21
+    })),
+    summary: {
+      headingCount: 9,
+      imageCount: 1,
+      buttonCount: 7,
+      landmarkSectionCount: 5
+    },
+    remainingRequirements: [
+      "Automated browser accessibility scan on the exact public release.",
+      "Keyboard-only, 200% zoom, mobile reflow, and reduced-motion private review on the exact public release.",
+      "Screen-reader review on the exact public release."
+    ],
+    checks: {
+      exactRightsBoundSources: true,
+      documentLanguageAndMetadata: true,
+      landmarksAndHeadingOrder: true,
+      skipNavigation: true,
+      uniqueIdsAndAriaReferences: true,
+      namedImagesAndControls: true,
+      controlsFailClosedDuringLoad: true,
+      keyboardPresenterPath: true,
+      liveStatusAnnouncements: true,
+      hiddenPageAutoplayPause: true,
+      focusVisibility: true,
+      reducedMotionSourceSupport: true,
+      responsiveReflowGuards: true,
+      minimumControlHeight: true,
+      contrastPairsPass: true,
+      unsafeDynamicHtmlAbsent: true,
+      textualStatusLabelsPresent: true,
+      architectureAlternativePresent: true
+    },
+    claimBoundary: "Fixture static accessibility only."
+  };
+}
+
 function releaseProvenanceReceipt() {
   return {
-    schemaVersion: "tideproof.release-provenance.v2",
+    schemaVersion: "tideproof.release-provenance.v3",
     status: "PASS",
     source: {
       commit: SOURCE_COMMIT,
@@ -229,6 +303,7 @@ function releaseProvenanceReceipt() {
       gitlinkCount: 0
     },
     rights: releaseRightsReceipt(),
+    accessibility: accessibilityReceipt(),
     dependencies: {
       installedTree: {
         status: "PASS",
@@ -282,6 +357,7 @@ function releaseProvenanceReceipt() {
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
       currentSurfaceRightsVerified: true,
+      staticAccessibilityVerified: true,
       cleanBeforeAndAfter: true
     },
     claimBoundary: "Fixture provenance only."
@@ -580,6 +656,16 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
       }),
     /AWS_READINESS_RELEASE_PROVENANCE/
   );
+  const inaccessible = releaseProvenanceReceipt();
+  inaccessible.accessibility.contrast[0].ratio = 1;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(inaccessible, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
 });
 
 test("AWS readiness full mode performs only reviewed command families", async () => {
@@ -593,6 +679,7 @@ test("AWS readiness full mode performs only reviewed command families", async ()
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.checks.awsPreflight, "PASS");
     assert.equal(receipt.checks.releaseProvenance, true);
+    assert.equal(receipt.checks.staticAccessibility, true);
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.equal(
       calls.some(
@@ -665,6 +752,7 @@ test("AWS readiness local mode is explicit non-AWS evidence", async () => {
     assert.equal(receipt.status, "LOCAL_ONLY_PASS");
     assert.equal(receipt.awsPreflight, null);
     assert.equal(receipt.checks.awsPreflight, "NOT_RUN");
+    assert.equal(receipt.checks.staticAccessibility, true);
     assert.equal(
       calls.some((call) => call.includes("gate2:aws-preflight")),
       false
