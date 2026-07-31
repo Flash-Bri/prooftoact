@@ -106,7 +106,7 @@ demo:
 | Public MIT source and hosted CI | `evidence/public-source-release-081b580-2026-07-30.md` |
 | Claim limitations | `CLAIMS.md` |
 | Live AWS services and behavior | `[[ACCEPTED_LIVE_AWS_RECEIPT_REQUIRED]]` |
-| Visual, trademark, and media permission | `[[COMPLETE_DOCS_MEDIA_RIGHTS_REQUIRED]]` |
+| Visual, trademark, and media permission | `docs/media/RIGHTS.md`; `[[ALL_REQUIRED_ROWS_RELEASE_CLEARED]]` |
 
 ## One-sentence pitch
 
