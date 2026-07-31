@@ -35,6 +35,13 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function formatUnexpectedFailure(error) {
+  const parts = [error?.name, error?.code, error?.message]
+    .filter((value) => typeof value === "string" && value.length > 0)
+    .map((value) => value.replace(/[^A-Za-z0-9 ._:/-]/g, "?"));
+  return (parts.join(":") || "UnknownError").slice(0, 400);
+}
+
 function chromeCandidates(preferred) {
   return [
     preferred,
@@ -786,6 +793,7 @@ export const __test = Object.freeze({
   REMAINING_REQUIREMENTS,
   SCHEMA,
   STANDARD_TARGET,
+  formatUnexpectedFailure,
   parseDevToolsActivePort,
   summarizeAxTree,
   validateBrowserSnapshot
@@ -805,6 +813,11 @@ if (startedDirectly) {
         ? message
         : "BROWSER_ACCESSIBILITY_FAILED";
       process.stderr.write(`${code}\n`);
+      if (code === "BROWSER_ACCESSIBILITY_FAILED") {
+        process.stderr.write(
+          `BROWSER_ACCESSIBILITY_DIAGNOSTIC ${formatUnexpectedFailure(error)}\n`
+        );
+      }
       process.exitCode = 1;
     });
 }

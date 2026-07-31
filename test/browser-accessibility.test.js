@@ -99,6 +99,19 @@ test("DevTools port receipt parser rejects malformed endpoints", () => {
   );
 });
 
+test("unexpected browser diagnostics are bounded and sanitized", () => {
+  const diagnostic = __test.formatUnexpectedFailure({
+    name: "ProtocolError",
+    code: "E_FAIL",
+    message: "bad\nvalue <secret>"
+  });
+  assert.equal(
+    diagnostic,
+    "ProtocolError:E_FAIL:bad?value ?secret?"
+  );
+  assert.equal(__test.formatUnexpectedFailure(undefined), "UnknownError");
+});
+
 test("accessibility tree summary exposes names, roles, and disabled state", () => {
   const disabled = [
     {
