@@ -16,7 +16,7 @@ boundary:
 - API Gateway exposes ten exact signed-out `GET` routes for the read-only
   browser proof and one separate AWS IAM-signed `POST /advisory` route.
 - Demo Lambda serves only bundled HTML, JavaScript, CSS, the deterministic
-  scenario, approved Gate One evidence, claims, favicon, and a nonsecret health
+  scenario, approved Gate One evidence, claims, and a nonsecret health
   binding. Its role can write only its exact log groups and explicitly denies
   Bedrock, Lambda invocation, KMS signing, secrets, and privilege escalation.
 - Demo Lambda validates the API ID, `$default` stage, exact route key, method,

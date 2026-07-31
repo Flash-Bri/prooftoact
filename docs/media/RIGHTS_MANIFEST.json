@@ -44,7 +44,7 @@
       "id": "browser-document",
       "ledgerRowId": "C04",
       "path": "web/index.html",
-      "sha256": "56e93f9f9065b0495813b6080b71cb75590be6abd98bf7fca4d129f757598899",
+      "sha256": "fece908a4208f2e7069760fd1375cb6d08282f56f1123bf1a537ce746587a1e9",
       "rightsState": "CLEARED_CURRENT",
       "roles": [
         "browser-source"
@@ -59,44 +59,33 @@
       "roles": [
         "browser-source"
       ]
-    },
-    {
-      "id": "interim-favicon",
-      "ledgerRowId": "C01",
-      "path": "web/favicon.svg",
-      "sha256": "437fc6278bfb358432cf1b30636dc8f0194351e4fb8f4be77c9c67f79ff02a69",
-      "rightsState": "CLEARED_INTERIM_ONLY",
-      "roles": [
-        "browser-media",
-        "repository-media"
-      ]
     }
   ],
   "controlFiles": [
     {
       "id": "aws-demo-entry",
       "path": "infra/aws/lambda/demo.js",
-      "sha256": "e4ccfe6e3333fd4badbc5fd68e8a2ab03c8be8085db5ec83b81305f8b776745d"
+      "sha256": "eb64e2417358101ca02e95ee847c231ed0c12c30e04ce23407c88362ca8c6536"
     },
     {
       "id": "aws-demo-runtime",
       "path": "src/cloud/public-demo.js",
-      "sha256": "0a1a0239a636535e4f374e6cdc5af1bef1d42ef7f0e0435503fd73d7578f7de7"
+      "sha256": "ad80c8225a543e93af5b59195f730609cb4e79112035b1cbbc78908e0b202273"
     },
     {
       "id": "aws-demo-verifier",
       "path": "scripts/gate2-public-demo-verify.js",
-      "sha256": "aa8f2b5ef90137b967707f0ab99352c698b9dd8a6c409c960319c1b7d4e44546"
+      "sha256": "527ed16a0e003f8bb8947ed43e9d6c4246b9653ee02cd65bd0dd297c7f6fdab4"
     },
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "7afe088e4aadf06f586986969ca916c5e34e5e7ab65d93e73a75cc7f025d28e3"
+      "sha256": "37b6bb4b58a5468491aa748d8e7a5876dfeb2433dfd851e25e94704e2daf80d1"
     },
     {
       "id": "public-demo-response-verifier",
       "path": "src/cloud/public-demo-verifier.js",
-      "sha256": "de0e21301572c821ea4ff5c708929b1f8ced062dc3b0eac06aac243189fb01e7"
+      "sha256": "47e97fe67aea67d155233ae1956c7e43fd22db5fc8c907b229685c68e55f4b9e"
     },
     {
       "id": "readme-surface",
@@ -106,12 +95,12 @@
     {
       "id": "server-surface",
       "path": "src/server.js",
-      "sha256": "36e0ccf156ce0bfda72a7e1306fb0ccbbcf64cb12d6ed8d412702592cb59dce5"
+      "sha256": "9cda2d50db1e5c564ffd45e77cef6b2fa5eab8d7a5a12554791b4ae7ccde0b4a"
     },
     {
       "id": "visual-release-system",
       "path": "docs/VISUAL_RELEASE_SYSTEM.md",
-      "sha256": "7f9ed354a30e816d2bc2127f2f99867744e262022a0cff41bbecff4bf9a48a0b"
+      "sha256": "69f5d9fd5f1e890a27b52c9697a095c05ee21a2a11ab9922baae46ec952b5e9b"
     }
   ],
   "surfaceBindings": {
@@ -122,7 +111,6 @@
     "browserLocalAssetUrls": [
       "/app.js",
       "/architecture.svg",
-      "/favicon.svg",
       "/styles.css"
     ],
     "browserNavigationUrls": [
@@ -174,11 +162,6 @@
         "route": "/evidence/gate1-recovery",
         "path": "evidence/gate1-recovery-broker-2026-07-30.md",
         "contentType": "text/markdown; charset=utf-8"
-      },
-      {
-        "route": "/favicon.svg",
-        "path": "web/favicon.svg",
-        "contentType": "image/svg+xml"
       },
       {
         "route": "/styles.css",

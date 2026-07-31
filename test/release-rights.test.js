@@ -29,7 +29,6 @@ const FIXTURE_FILES = Object.freeze([
   "src/cloud/public-demo.js",
   "src/server.js",
   "web/app.js",
-  "web/favicon.svg",
   "web/index.html",
   "web/styles.css"
 ]);
@@ -116,10 +115,10 @@ test("current rights inventory passes without claiming final release", () => {
 
   assert.equal(receipt.status, "CURRENT_SURFACES_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.distributedFileCount, 6);
+  assert.equal(receipt.distributedFileCount, 5);
   assert.equal(receipt.currentClearedFileCount, 5);
-  assert.equal(receipt.interimOnlyFileCount, 1);
-  assert.equal(receipt.repositoryMediaFileCount, 3);
+  assert.equal(receipt.interimOnlyFileCount, 0);
+  assert.equal(receipt.repositoryMediaFileCount, 2);
   assert.equal(receipt.prohibitedSourceDigestCount, 3);
   assert.equal(receipt.checks.awsDistributionBindingsExact, true);
 });
@@ -127,7 +126,6 @@ test("current rights inventory passes without claiming final release", () => {
 test("rights inventory rejects one-byte drift across browser source and media", () => {
   for (const relativePath of [
     "web/app.js",
-    "web/favicon.svg",
     "web/index.html",
     "web/styles.css"
   ]) {
@@ -403,17 +401,18 @@ test("rights inventory rejects re-enabling data images in the AWS CSP", () => {
   }
 });
 
-test("rights inventory cannot promote the interim favicon or alter protected hashes", () => {
+test("rights inventory rejects a reintroduced favicon or altered protected hashes", () => {
   const fixture = copyFixture();
   try {
-    const manifest = readManifest(fixture.rootDir);
-    manifest.distributedFiles.find(
-      (entry) => entry.id === "interim-favicon"
-    ).rightsState = "CLEARED_CURRENT";
-    writeManifest(fixture.rootDir, manifest);
+    const relativePath = "web/favicon.svg";
+    fs.writeFileSync(
+      path.join(fixture.rootDir, relativePath),
+      '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n'
+    );
+    fixture.trackedFiles.push(relativePath);
     assert.throws(
       () => verifyFixture(fixture),
-      /RELEASE_RIGHTS_DISTRIBUTED_BOUNDARY/
+      /RELEASE_RIGHTS_MEDIA_INVENTORY/
     );
   } finally {
     fixture.cleanup();

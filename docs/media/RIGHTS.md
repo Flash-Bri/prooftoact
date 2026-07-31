@@ -23,7 +23,6 @@ future licensed media.
 | Status | Meaning |
 | --- | --- |
 | `CLEARED_CURRENT` | The exact hashed Tideproof-owned source is cleared for its listed current uses. |
-| `CLEARED_INTERIM_ONLY` | The exact source may remain in the public clean-room repository and current local or signed-out proof, but it is not an approved final production brand asset. |
 | `PLATFORM_ONLY` | No asset file is redistributed; the runtime uses software already licensed on the viewer or capture system. |
 | `TEXT_ONLY_REVIEWED` | A third-party name is used factually in plain text; no logo, trade dress, endorsement, or trademark license is claimed. |
 | `SPEC_ONLY` | The asset does not exist and cannot be published. |
@@ -34,19 +33,17 @@ future licensed media.
 
 | ID | Exact source and SHA-256 | Owner, creator, and provenance | License or grant | Allowed channels, attribution, and modification state | Review |
 | --- | --- | --- | --- | --- | --- |
-| `C01` | `web/favicon.svg` — `437fc6278bfb358432cf1b30636dc8f0194351e4fb8f4be77c9c67f79ff02a69` | Tideproof project; newly authored by Nunan in clean-room commit `aea4a29` on 2026-07-30 | Repository MIT license | Public source repository plus current local and signed-out proof only; no attribution required; unmodified at this review. It is an interim wave glyph and does **not** satisfy final asset `V02` or authorize a final branded launch. | Nunan, 2026-07-30 — `CLEARED_INTERIM_ONLY` |
-| `C03` | UI layout, palette, and component styling in `web/styles.css` — `c33554b39142780f662d9ec5fa8b8c8fd5832eb9c0e4ec5c305ee3a53fd86e9e` | Tideproof project; newly authored in the clean-room repository beginning at commit `e198f41` | Repository MIT license | Public source repository, current local proof, signed-out AWS proof candidate, and captures of that exact proof; no attribution required. No remote image, font, or stylesheet is imported; current local image assets are the `C01` favicon and exact `C08 / V09` SVG. | Nunan, 2026-07-31 — `CLEARED_CURRENT` |
-| `C04` | Plain-text `Tideproof` name, UI copy, and synthetic Highwater Drill labels in `web/index.html` and `web/app.js`; file hashes `56e93f9f9065b0495813b6080b71cb75590be6abd98bf7fca4d129f757598899` and `a0d5fdc25c580738cd93cbf1b8b83d4cea9f8571ed9266d7cfa452d48760713f` | Tideproof project; newly authored under the clean-room boundary documented in `CLEAN_ROOM.md` | Repository MIT license for source and copy | Public source repository plus local and signed-out AWS proof surfaces; no third-party artwork or wordmark implied; modifications require claim and name review. | Nunan, 2026-07-31 — `CLEARED_CURRENT` |
+| `C03` | UI layout, palette, and component styling in `web/styles.css` — `c33554b39142780f662d9ec5fa8b8c8fd5832eb9c0e4ec5c305ee3a53fd86e9e` | Tideproof project; newly authored in the clean-room repository beginning at commit `e198f41` | Repository MIT license | Public source repository, current local proof, signed-out AWS proof candidate, and captures of that exact proof; no attribution required. No remote image, font, or stylesheet is imported; the exact `C08 / V09` SVG is the only browser image asset. | Nunan, 2026-07-31 — `CLEARED_CURRENT` |
+| `C04` | Plain-text `Tideproof` name, UI copy, and synthetic Highwater Drill labels in `web/index.html` and `web/app.js`; file hashes `fece908a4208f2e7069760fd1375cb6d08282f56f1123bf1a537ce746587a1e9` and `a0d5fdc25c580738cd93cbf1b8b83d4cea9f8571ed9266d7cfa452d48760713f` | Tideproof project; newly authored under the clean-room boundary documented in `CLEAN_ROOM.md` | Repository MIT license for source and copy | Public source repository plus local and signed-out AWS proof surfaces; no third-party artwork or wordmark implied; modifications require claim and name review. | Nunan, 2026-07-31 — `CLEARED_CURRENT` |
 | `C05` | CSS platform stacks: `ui-sans-serif`, `system-ui`, `-apple-system`, `BlinkMacSystemFont`, `"Segoe UI"`, `sans-serif`, `ui-monospace`, `SFMono-Regular`, `Menlo`, `Monaco`, `Consolas`, `monospace`; architecture SVG platform stacks also name `Helvetica` and `Arial` | Platform vendors; Tideproof distributes no font binary, webfont, font subset, or font service request. The CSS `font` shorthands resolve only to `inherit` or the recorded monospace families. | Viewer or capture-platform software license; no separate Tideproof font grant claimed | Runtime rendering only. A final screenshot or video receipt must name its capture platform; no font file may be bundled without a separate row and license. | Nunan, 2026-07-31 — `PLATFORM_ONLY` |
 | `C06` | Plain-text references to CockroachDB, CockroachDB Cloud, Distributed Vector Indexing, Managed MCP, AWS, Amazon Bedrock, Lambda, API Gateway, KMS, IAM, GitHub, and Devpost | Marks and names belong to their respective owners; Tideproof uses them only to identify the contest, verified integrations, or source host | Factual nominative text use; no logo, brand artwork, sponsorship, certification, or ownership claimed | Plain text in repository, local and signed-out proof UI, factual submission copy, and evidence only. Preserve official casing, pair every claim with its evidence boundary, and recheck final contest and brand rules. | Nunan, 2026-07-30 — `TEXT_ONLY_REVIEWED` |
-| `C07` | Plain-text `A TrustAgentic.ai project` footer in `web/index.html` — containing-file hash `56e93f9f9065b0495813b6080b71cb75590be6abd98bf7fca4d129f757598899` | Relationship wording approved by Brian and recorded in `docs/VISUAL_RELEASE_SYSTEM.md`; no TrustAgentic asset is embedded or derived | Text-only relationship attribution; no trademark asset license or MIT relicensing claimed | Public source repository plus local and signed-out AWS proof surfaces. Exact text only, no hyperlink, logo, redraw, recolor, halo, chrome, sticker, or implied Northstar release. | Nunan, 2026-07-31 — `TEXT_ONLY_REVIEWED` |
+| `C07` | Plain-text `A TrustAgentic.ai project` footer in `web/index.html` — containing-file hash `fece908a4208f2e7069760fd1375cb6d08282f56f1123bf1a537ce746587a1e9` | Relationship wording approved by Brian and recorded in `docs/VISUAL_RELEASE_SYSTEM.md`; no TrustAgentic asset is embedded or derived | Text-only relationship attribution; no trademark asset license or MIT relicensing claimed | Public source repository plus local and signed-out AWS proof surfaces. Exact text only, no hyperlink, logo, redraw, recolor, halo, chrome, sticker, or implied Northstar release. | Nunan, 2026-07-31 — `TEXT_ONLY_REVIEWED` |
 | `C08 / V09` | `docs/media/architecture.svg` — `5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c`; `docs/media/architecture.png` — `6228172f7a5a462940a05543ee455e0de21aa53c805e9466076b9e33fed1f168` | Tideproof project; Nunan-created standalone derivative of the clean-room `C02` trust-boundary diagram, reviewed against `docs/ARCHITECTURE.md` on 2026-07-31 | Repository MIT license | Public repository, README, website, demo video, social/press packet, and hackathon submission; no attribution required. SVG contains accessible title/description and no external asset, script, link, or embedded font. PNG is the exact `2200 × 720` sRGB-compatible export rendered from that SVG with macOS 26.5.2 `/usr/bin/sips`; platform system fonts only. | Nunan, 2026-07-31 — `CLEARED_CURRENT` |
 
 Current surface audit:
 
-- the browser proof loads only local HTML, JavaScript, CSS, the local favicon,
-  the exact local `C08 / V09` architecture SVG, and local synthetic scenario
-  JSON;
+- the browser proof loads only local HTML, JavaScript, CSS, the exact local
+  `C08 / V09` architecture SVG, and local synthetic scenario JSON;
 - the README and browser proof use the same exact architecture SVG; the
   browser route is `/architecture.svg`, and the PNG remains a non-SVG export;
 - the proof contains one local `<img>` and no `<picture>`, `<video>`,
@@ -59,12 +56,21 @@ Historical provenance: the original `C02` inline trust-boundary SVG remains
 in Git history and is no longer distributed by the browser proof. The exact
 `C08 / V09` asset supersedes it on current README and browser surfaces.
 
+Deliberate current omission: the former `C01` `web/favicon.svg` interim wave
+glyph, SHA-256
+`437fc6278bfb358432cf1b30636dc8f0194351e4fb8f4be77c9c67f79ff02a69`,
+was retired on 2026-07-31. It is absent from the tracked tree, browser markup,
+local-server inventory, AWS bundle, and public route set; `/favicon.svg` must
+return `404`. No replacement favicon, app icon, or social avatar is implied.
+`V02` remains `SPEC_ONLY` and blocked. This records the favicon decision only;
+it is not the final asset freeze or exact-release private review.
+
 ## Planned assets and hard stops
 
 | Production ID | Required source or derivative | Current rights state | Publish rule |
 | --- | --- | --- | --- |
 | `V01` | Tideproof wordmark master and PNG export | `SPEC_ONLY` | `BLOCKED` until the Tideproof-owned design, exact hashes, and lettering review have rows here. |
-| `V02` | Tideproof mark and required icon exports | `SPEC_ONLY` | `BLOCKED`; do not promote interim `C01` or derive the final mark from a generated wave glyph. |
+| `V02` | Tideproof mark and required icon exports | `SPEC_ONLY`; deliberately omitted from the current release surfaces | `BLOCKED`; no favicon, app icon, or social avatar is published, and any future mark must pass a new exact-hash rights review rather than derive from the retired `C01` glyph. |
 | `V03` | Official TrustAgentic wordmark; current custodian candidate hash `1d1aec3649f161d7e706c941baa763f73ff480b7ef09072a290373ebf2544b44` | `RIGHTS_PENDING`; not stored in Tideproof | `BLOCKED` until an approved source is used byte-for-byte and a written grant covers every intended channel while excluding the mark from MIT relicensing. |
 | `V04` | Owned or licensed ocean master at least `4096 × 2304` | `RIGHTS_PENDING`; no source selected | `BLOCKED` until creator, owner, source, acquisition date, unmodified hash, license or grant, attribution, people/property/trademark review, and allowed channels are recorded. |
 | `V05` | Responsive public-site derivatives of `V04` | `SPEC_ONLY` | `BLOCKED` until `V04` is cleared and every derivative has a source-to-output hash chain. |
@@ -98,11 +104,12 @@ for the current repository, README, and browser surfaces. Run
   the exact asset inventory.
 
 A `CURRENT_SURFACES_PASS` receipt is deliberately not a final-rights approval.
-It reports `finalReleaseReady: false` while the interim favicon remains and
-until the exact-release private review is recorded. The JSON manifest grants
-no rights and cannot promote a `SPEC_ONLY`, `RIGHTS_PENDING`, or `BLOCKED`
-item. Changing its verifier, inventory, or protected hashes requires the same
-review as changing this ledger.
+It reports `interimOnlyFileCount: 0` after the deliberate favicon omission but
+keeps `finalReleaseReady: false` until final-production asset decisions and the
+exact-release private review are recorded. The JSON manifest grants no rights
+and cannot promote a `SPEC_ONLY`, `RIGHTS_PENDING`, or `BLOCKED` item. Changing
+its verifier, inventory, or protected hashes requires the same review as
+changing this ledger.
 
 ## Final rights freeze
 

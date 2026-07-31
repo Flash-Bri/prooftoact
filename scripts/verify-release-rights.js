@@ -79,12 +79,6 @@ const EXPECTED_DISTRIBUTED = Object.freeze({
     rightsState: "CLEARED_CURRENT",
     ledgerRowId: "C03",
     roles: ["browser-source"]
-  },
-  "interim-favicon": {
-    path: "web/favicon.svg",
-    rightsState: "CLEARED_INTERIM_ONLY",
-    ledgerRowId: "C01",
-    roles: ["browser-media", "repository-media"]
   }
 });
 const EXPECTED_CONTROLS = Object.freeze({
@@ -113,7 +107,6 @@ const EXPECTED_SURFACE_BINDINGS = Object.freeze({
   browserLocalAssetUrls: [
     "/app.js",
     "/architecture.svg",
-    "/favicon.svg",
     "/styles.css"
   ],
   browserNavigationUrls: [
@@ -163,11 +156,6 @@ const EXPECTED_SURFACE_BINDINGS = Object.freeze({
       route: "/evidence/gate1-recovery",
       path: "evidence/gate1-recovery-broker-2026-07-30.md",
       contentType: "text/markdown; charset=utf-8"
-    },
-    {
-      route: "/favicon.svg",
-      path: "web/favicon.svg",
-      contentType: "image/svg+xml"
     },
     {
       route: "/styles.css",

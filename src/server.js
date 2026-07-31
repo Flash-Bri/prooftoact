@@ -7,7 +7,6 @@ const assets = new Map([
   ["/", ["../web/index.html", "text/html; charset=utf-8"]],
   ["/app.js", ["../web/app.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["../web/styles.css", "text/css; charset=utf-8"]],
-  ["/favicon.svg", ["../web/favicon.svg", "image/svg+xml"]],
   [
     "/architecture.svg",
     ["../docs/media/architecture.svg", "image/svg+xml"]

@@ -89,11 +89,8 @@ test("serves the local health and scenario surfaces", async (context) => {
   const faviconResponse = await fetch(
     `http://127.0.0.1:${port}/favicon.svg`
   );
-  assert.equal(faviconResponse.status, 200);
-  assert.equal(
-    faviconResponse.headers.get("content-type"),
-    "image/svg+xml"
-  );
+  assert.equal(faviconResponse.status, 404);
+  assert.deepEqual(await faviconResponse.json(), { error: "not_found" });
 
   const architectureResponse = await fetch(
     `http://127.0.0.1:${port}/architecture.svg`
