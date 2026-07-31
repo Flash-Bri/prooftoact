@@ -28,8 +28,11 @@ boundary:
   source, demo artifact, package lock, and immutable Lambda version without
   exposing account, role, bucket, or notification identifiers.
 - A dedicated short-lived caller role can invoke only that exact route and is
-  explicitly denied direct Lambda invocation; this applies only to
-  `POST /advisory`, never to the public read-only routes.
+  explicitly denied direct Lambda invocation. Boundary Lambda additionally
+  accepts only the same-account STS `assumed-role` ARN derived from that exact
+  role; another same-account principal with generic `execute-api:Invoke` is
+  rejected before Bedrock or signing. This applies only to `POST /advisory`,
+  never to the public read-only routes.
 - Boundary Lambda binds the API request ID, API request time, and a hash of
   the authenticated principal to the receipt.
 - Private, seven-day API access logs record the corresponding request ID,
@@ -47,9 +50,10 @@ boundary:
 - Authority Lambda is isolated from the advisory Boundary and model. Its
   local candidate accepts only `alpha` or `bravo` for one configured synthetic
   race, derives operation IDs, intent nonces, effect keys, payloads, and
-  digests internally, reads one exact Tideproof-owned Secrets Manager ARN,
-  and calls only `tp_api.g1_spend_authority_v1` and
-  `tp_api.g1_resolve_request_v1` as `tp_authorizer_user`. After both
+  digests internally, reads one exact Tideproof-owned Secrets Manager ARN at
+  one exact `AWSCURRENT` VersionId, verifies the exact CockroachDB Cloud host
+  and port in the URL, and calls only `tp_api.g2_spend_authority_race_v1` and
+  `tp_api.g1_resolve_request_v1` as `tp_gate2_authorizer_user`. After both
   contenders return, the verifier makes one separate read-only proof request
   through the same immutable alias; that path calls only
   `tp_api.g1_observe_authority_race_v1`.
@@ -63,8 +67,10 @@ boundary:
 - Authority transactions explicitly request `SERIALIZABLE`, retry only
   pre-commit `40001` restarts, and reconcile any COMMIT-dispatched or
   transport-ambiguous result through the typed read-only resolver instead of
-  blindly spending again. Any malformed secret, response, or unresolved
-  state returns `UNKNOWN_DO_NOT_ACT` without echoing credentials.
+  blindly spending again. Every spend, proof, and reconciliation client has
+  bounded connection, client-query, server-statement, and idle-transaction
+  timeouts. Any malformed secret, endpoint/version mismatch, response, timeout,
+  or unresolved state returns `UNKNOWN_DO_NOT_ACT` without echoing credentials.
 - A race cannot emit `PASS` from the two contender responses alone. The
   follow-up CockroachDB observation must be a separate serializable read-only
   transaction after both contender intervals and must find exactly two
@@ -106,9 +112,35 @@ path.
   the reviewed owner lane before the AWS race can run.
 - The authority connection is intentionally outside a VPC to avoid a NAT
   Gateway. Final review must confirm the exact public CockroachDB endpoint,
-  `verify-full` TLS, `tp_authorizer_user`, secret rotation state, and the
-  absence of any broader database grant. The connection secret must never
-  enter source, build output, logs, receipts, or the configuration digest.
+  port, `verify-full` TLS, `tp_gate2_authorizer_user`, exact secret VersionId still
+  carrying `AWSCURRENT`, and the absence of any broader database grant. Secret
+  rotation intentionally makes the old deployment fail closed until the new
+  VersionId and configuration digest are reviewed. The connection secret must
+  never enter source, build output, logs, receipts, or the configuration
+  digest.
+- The database bootstrap preserves `tp_authorizer_role` / `tp_authorizer_user`
+  for Gate One and creates a separate `tp_gate2_authorizer_role` /
+  `tp_gate2_authorizer_user` for AWS. Gate One receives direct execute on
+  `g1_spend_authority_v1` but not the Gate Two wrapper. Gate Two receives only
+  `g2_spend_authority_race_v1` plus the exact read-only request resolver and
+  durable race observer, never direct execute on the Gate One spend function.
+  Explicit function and cross-membership revocations make rerunning the
+  bootstrap remove the superseded privilege. The Gate One implementation
+  accepts the Gate Two session identity only when called inside the owner-run
+  `SECURITY DEFINER` wrapper; SQL `EXECUTE` privilege prevents the Gate Two
+  role from calling it directly. The wrapper itself requires
+  `session_user = 'tp_gate2_authorizer_user'` and permits only
+  `aws-authority-alpha` or `aws-authority-bravo`. Each credential remains an
+  authority capability within its granted surface, not per-agent
+  authentication. Credential isolation, grants, and live session identity
+  therefore remain acceptance evidence, not assumptions.
+- CockroachDB v26.2 does not document PostgreSQL function-level
+  `SET search_path`, so this candidate does not add unsupported syntax. Every
+  application relation and nested application function referenced by the
+  primary and recovery `SECURITY DEFINER` bodies is schema-qualified and
+  statically regression-tested. Built-in name resolution and the absence of a
+  server-supported per-function search-path pin remain explicit residual
+  boundaries for live database review.
 - Public routes create an abuse and cost surface. The stage defaults to a burst
   of eight and a sustained rate of `0.05` requests per second, Demo Lambda
   reserved concurrency is eight, and the account budget remains the operator
@@ -303,15 +335,17 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 6. Prepare one fresh synthetic Gate Two tenant/run/incident/evidence/resource
    tuple through the reviewed CockroachDB owner lane. Create one
    Tideproof-owned Secrets Manager secret whose JSON has exactly the
-   `connectionString` key, whose URL names only `tp_authorizer_user` and the
-   `tideproof` database, and whose TLS mode is `verify-full`. Record secret
-   metadata, database grants, rotation state, and the updated conservative
-   cost forecast privately; never record the credential value.
+   `connectionString` key, whose URL names only `tp_gate2_authorizer_user` and the
+   `tideproof` database, whose host and port exactly match the reviewed
+   parameters, and whose TLS mode is `verify-full`. Record the exact
+   `AWSCURRENT` VersionId, secret metadata, database grants, rotation state, and
+   the updated conservative cost forecast privately; never record the
+   credential value.
 7. Upload each artifact once and record its exact S3 version ID and both
    digests.
 8. Hash the full effective nonsecret deployment configuration, including the
-   secret ARN and synthetic fixture identifiers but excluding all secret
-   values.
+   secret ARN, exact VersionId, expected database host and port, and synthetic
+   fixture identifiers but excluding all secret values.
 
 The sanitized historical receipt in
 `evidence/gate2-historical-upload-receipt-0ef4dba-2026-07-30.json` anchors the
@@ -360,8 +394,9 @@ evidence only and must not be used to deploy the repaired candidate.
     complete the three-act path plus reset on desktop and mobile. A failed or
     missing verifier receipt blocks publication.
 15. Assume only the dedicated advisory caller role. Record a denied direct
-    invocation attempt for every Lambda, then invoke the exact IAM-signed API
-    route.
+    invocation attempt for every Lambda, prove a different same-account IAM
+    principal is rejected by the Boundary, then invoke the exact IAM-signed API
+    route through the dedicated STS assumed-role session.
 16. Preserve and reconcile the signed receipt with the asynchronous API access
     log by request ID, request time, route, status, and caller. Preserve the
     model, KMS key ARN/public-key fingerprint, signature, source, artifact,

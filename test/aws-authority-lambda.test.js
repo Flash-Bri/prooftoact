@@ -15,12 +15,16 @@ const FIXTURE = Object.freeze({
 });
 
 const CONNECTION_STRING =
-  "postgresql://tp_authorizer_user:0123456789abcdef@synthetic.cockroachlabs.cloud/tideproof?sslmode=verify-full";
+  "postgresql://tp_gate2_authorizer_user:0123456789abcdef@synthetic.cockroachlabs.cloud:26257/tideproof?sslmode=verify-full";
+const SECRET_VERSION_ID = "a".repeat(32);
 
 function configureEnvironment() {
   Object.assign(process.env, {
     AUTHORITY_DATABASE_SECRET_ARN:
       "arn:aws:secretsmanager:us-east-1:111111111111:secret:tideproof/authorizer-AbCd12",
+    AUTHORITY_DATABASE_SECRET_VERSION_ID: SECRET_VERSION_ID,
+    AUTHORITY_DATABASE_HOST: "synthetic.cockroachlabs.cloud",
+    AUTHORITY_DATABASE_PORT: "26257",
     AUTHORITY_TENANT_ID: FIXTURE.tenantId,
     AUTHORITY_RUN_ID: FIXTURE.runId,
     AUTHORITY_INCIDENT_ID: FIXTURE.incidentId,
@@ -274,21 +278,28 @@ test("authority derives capability fields from one exact two-contender request",
 
 test("authority accepts only one exact current least-privilege secret", () => {
   configureEnvironment();
-  const arn = process.env.AUTHORITY_DATABASE_SECRET_ARN;
+  const config = authority.configuration();
   const valid = {
-    ARN: arn,
+    ARN: config.secretArn,
+    VersionId: config.secretVersionId,
     SecretString: JSON.stringify({
       connectionString: CONNECTION_STRING
     }),
     VersionStages: ["AWSCURRENT"]
   };
   assert.equal(
-    authority.connectionStringFromSecret(valid, arn),
+    authority.connectionStringFromSecret(valid, config),
     CONNECTION_STRING
   );
+  assert.deepEqual(authority.secretRequestFor(config), {
+    SecretId: config.secretArn,
+    VersionId: config.secretVersionId,
+    VersionStage: "AWSCURRENT"
+  });
 
   for (const changed of [
-    { ...valid, ARN: `${arn}-other` },
+    { ...valid, ARN: `${config.secretArn}-other` },
+    { ...valid, VersionId: "b".repeat(32) },
     { ...valid, VersionStages: ["AWSPREVIOUS"] },
     {
       ...valid,
@@ -301,7 +312,7 @@ test("authority accepts only one exact current least-privilege secret", () => {
       ...valid,
       SecretString: JSON.stringify({
         connectionString: CONNECTION_STRING.replace(
-          "tp_authorizer_user",
+          "tp_gate2_authorizer_user",
           "root"
         )
       })
@@ -314,13 +325,76 @@ test("authority accepts only one exact current least-privilege secret", () => {
           "require"
         )
       })
+    },
+    {
+      ...valid,
+      SecretString: JSON.stringify({
+        connectionString: CONNECTION_STRING.replace(
+          "synthetic.cockroachlabs.cloud",
+          "substituted.cockroachlabs.cloud"
+        )
+      })
+    },
+    {
+      ...valid,
+      SecretString: JSON.stringify({
+        connectionString: CONNECTION_STRING.replace("26257", "26258")
+      })
     }
   ]) {
     assert.throws(
-      () => authority.connectionStringFromSecret(changed, arn),
+      () => authority.connectionStringFromSecret(changed, config),
       /AUTHORITY_SECRET_REJECTED/
     );
   }
+});
+
+test("authority requires exact endpoint/version configuration and bounded database clients", () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  assert.equal(config.databaseHost, "synthetic.cockroachlabs.cloud");
+  assert.equal(config.databasePort, "26257");
+  assert.equal(config.secretVersionId, SECRET_VERSION_ID);
+
+  for (const [name, value] of [
+    ["AUTHORITY_DATABASE_HOST", "attacker.example"],
+    ["AUTHORITY_DATABASE_PORT", "70000"],
+    ["AUTHORITY_DATABASE_SECRET_VERSION_ID", "short"]
+  ]) {
+    const original = process.env[name];
+    process.env[name] = value;
+    assert.throws(
+      () => authority.configuration(),
+      /AUTHORITY_CONFIGURATION_REJECTED/
+    );
+    process.env[name] = original;
+  }
+
+  assert.deepEqual(
+    authority.databaseClientConfiguration(
+      CONNECTION_STRING,
+      "tideproof-aws-authority"
+    ),
+    {
+      connectionString: CONNECTION_STRING,
+      application_name: "tideproof-aws-authority",
+      connectionTimeoutMillis: 2_000,
+      query_timeout: 4_500,
+      statement_timeout: 4_000,
+      idle_in_transaction_session_timeout: 3_000
+    }
+  );
+  assert.deepEqual(
+    authority.databaseClientConfiguration(
+      CONNECTION_STRING,
+      "tideproof-aws-authority-proof"
+    ),
+    {
+      connectionString: CONNECTION_STRING,
+      application_name: "tideproof-aws-authority-proof",
+      ...authority.DATABASE_TIMEOUTS
+    }
+  );
 });
 
 test("authority rejects inconsistent database decision shapes", () => {

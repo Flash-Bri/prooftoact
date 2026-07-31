@@ -4,6 +4,7 @@ import { AuthorityStore, connectionStringForDatabase } from "./authority-store.j
 const ROLE_BINDINGS = [
   ["tp_ingest_role", "tp_ingest_user"],
   ["tp_authorizer_role", "tp_authorizer_user"],
+  ["tp_gate2_authorizer_role", "tp_gate2_authorizer_user"],
   ["tp_dispatch_role", "tp_dispatch_user"],
   ["tp_recovery_audit_role", "tp_recovery_audit_user"],
   ["tp_audit_role", "tp_audit_user"]
@@ -29,6 +30,12 @@ async function createRolesAndUsers(client, passwords) {
     ]);
     await client.query(`GRANT ${role} TO ${user}`);
   }
+  await client.query(
+    "REVOKE tp_authorizer_role FROM tp_gate2_authorizer_user"
+  );
+  await client.query(
+    "REVOKE tp_gate2_authorizer_role FROM tp_authorizer_user"
+  );
 }
 
 async function prepareOwnerPrivileges(client) {
@@ -630,6 +637,13 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_spend_authority_v1(
+      UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, STRING,
+      UUID, UUID, JSONB, STRING, STRING, INT8
+    )
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_spend_authority_v1(
       p_tenant_id UUID,
       p_operation_id UUID,
@@ -639,7 +653,6 @@ async function createFunctions(client) {
       p_incident_id UUID,
       p_resource_id STRING,
       p_agent_id STRING,
-      p_authenticated_agent_id STRING,
       p_agency STRING,
       p_evidence_id UUID,
       p_effect_key UUID,
@@ -679,8 +692,11 @@ async function createFunctions(client) {
       v_existing_count INT8;
       v_replay_kind STRING;
     BEGIN
-      IF p_agent_id <> p_authenticated_agent_id THEN
-        RAISE EXCEPTION 'authenticated actor mismatch'
+      IF session_user NOT IN (
+        'tp_authorizer_user',
+        'tp_gate2_authorizer_user'
+      ) THEN
+        RAISE EXCEPTION 'authorizer database session required'
           USING ERRCODE = '42501';
       END IF;
       IF length(p_request_digest) <> 64
@@ -1029,6 +1045,68 @@ async function createFunctions(client) {
         p_operation_id,
         p_request_digest,
         NULL::STRING;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g2_spend_authority_race_v1(
+      p_tenant_id UUID,
+      p_operation_id UUID,
+      p_request_digest STRING,
+      p_request_payload JSONB,
+      p_run_id UUID,
+      p_incident_id UUID,
+      p_resource_id STRING,
+      p_agent_id STRING,
+      p_agency STRING,
+      p_evidence_id UUID,
+      p_effect_key UUID,
+      p_payload JSONB,
+      p_payload_digest STRING,
+      p_policy_version STRING,
+      p_lease_ms INT8
+    )
+    RETURNS TABLE(
+      decision_outcome STRING,
+      decision_reason STRING,
+      decision_fencing_token INT8,
+      decision_lease_expires_at TIMESTAMPTZ,
+      decision_operation_id UUID,
+      decision_request_digest STRING,
+      decision_replay_kind STRING
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    BEGIN
+      IF session_user <> 'tp_gate2_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate Two authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF p_agent_id NOT IN ('aws-authority-alpha', 'aws-authority-bravo') THEN
+        RAISE EXCEPTION 'Gate Two contender is not allowed'
+          USING ERRCODE = '42501';
+      END IF;
+      RETURN QUERY
+      SELECT *
+      FROM tp_api.g1_spend_authority_v1(
+        p_tenant_id,
+        p_operation_id,
+        p_request_digest,
+        p_request_payload,
+        p_run_id,
+        p_incident_id,
+        p_resource_id,
+        p_agent_id,
+        p_agency,
+        p_evidence_id,
+        p_effect_key,
+        p_payload,
+        p_payload_digest,
+        p_policy_version,
+        p_lease_ms
+      );
     END
     $$
   `);
@@ -1678,7 +1756,8 @@ async function transferOwnership(client) {
     "tp_api.g1_append_verified_evidence_v2(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)",
     "tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING)",
     "tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
-    "tp_api.g1_spend_authority_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+    "tp_api.g1_spend_authority_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+    "tp_api.g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
     "tp_api.g1_resolve_request_v1(UUID, UUID, STRING)",
     "tp_api.g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)",
     "tp_api.g1_append_recovery_audit_v1(UUID, UUID, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING)",
@@ -1715,6 +1794,9 @@ async function applyGrants(client) {
       `REVOKE ALL ON ALL TABLES IN SCHEMA tp_private, tp_ledger FROM ${role}`
     );
   }
+  await client.query(
+    "REVOKE USAGE ON SCHEMA tp_private, tp_ledger FROM tp_gate2_authorizer_role"
+  );
 
   await client.query(`
     REVOKE EXECUTE ON FUNCTION
@@ -1735,11 +1817,19 @@ async function applyGrants(client) {
     TO tp_ingest_role
   `);
   await client.query(`
+    REVOKE EXECUTE ON FUNCTION
+      tp_api.g2_spend_authority_race_v1(
+        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
+        UUID, UUID, JSONB, STRING, STRING, INT8
+      )
+    FROM tp_authorizer_role
+  `);
+  await client.query(`
     GRANT EXECUTE ON FUNCTION
       tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING),
       tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING),
       tp_api.g1_spend_authority_v1(
-        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, STRING,
+        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
         UUID, UUID, JSONB, STRING, STRING, INT8
       ),
       tp_api.g1_resolve_request_v1(UUID, UUID, STRING),
@@ -1747,6 +1837,28 @@ async function applyGrants(client) {
         UUID, UUID, STRING, UUID, STRING, UUID, STRING
       )
     TO tp_authorizer_role
+  `);
+  await client.query(`
+    REVOKE EXECUTE ON FUNCTION
+      tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING),
+      tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING),
+      tp_api.g1_spend_authority_v1(
+        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
+        UUID, UUID, JSONB, STRING, STRING, INT8
+      )
+    FROM tp_gate2_authorizer_role
+  `);
+  await client.query(`
+    GRANT EXECUTE ON FUNCTION
+      tp_api.g2_spend_authority_race_v1(
+        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
+        UUID, UUID, JSONB, STRING, STRING, INT8
+      ),
+      tp_api.g1_resolve_request_v1(UUID, UUID, STRING),
+      tp_api.g1_observe_authority_race_v1(
+        UUID, UUID, STRING, UUID, STRING, UUID, STRING
+      )
+    TO tp_gate2_authorizer_role
   `);
   await client.query(`
     GRANT EXECUTE ON FUNCTION
@@ -1841,6 +1953,8 @@ export async function bootstrapPrimarySecurity({
         'tp_ingest_user',
         'tp_authorizer_role',
         'tp_authorizer_user',
+        'tp_gate2_authorizer_role',
+        'tp_gate2_authorizer_user',
         'tp_dispatch_role',
         'tp_dispatch_user',
         'tp_recovery_audit_role',

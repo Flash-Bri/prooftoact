@@ -79,6 +79,8 @@ function configureTestEnvironment() {
       "arn:aws:kms:us-east-1:111111111111:key/11111111-1111-4111-8111-111111111111",
     EXPECTED_ACCOUNT_ID: "111111111111",
     EXPECTED_API_ID: "api123",
+    EXPECTED_ADVISORY_CALLER_ROLE_ARN:
+      "arn:aws:iam::111111111111:role/tideproof-advisory-caller",
     ...DIGESTS
   });
 }
@@ -295,7 +297,7 @@ test("boundary rejects unsigned or shape-expanded public requests", () => {
       authorizer: {
         iam: {
           userArn:
-            "arn:aws:iam::111111111111:user/synthetic-gate-two-caller"
+            "arn:aws:sts::111111111111:assumed-role/tideproof-advisory-caller/review-session"
         }
       }
     }
@@ -340,6 +342,20 @@ test("boundary rejects unsigned or shape-expanded public requests", () => {
     () => boundary.validateHttpCaller(stale),
     /SIGNED_CALLER_REJECTED/
   );
+  for (const callerArn of [
+    "arn:aws:sts::111111111111:assumed-role/other-role/review-session",
+    "arn:aws:iam::111111111111:role/tideproof-advisory-caller",
+    "arn:aws:iam::111111111111:user/tideproof-advisory-caller",
+    "arn:aws:sts::222222222222:assumed-role/tideproof-advisory-caller/review-session",
+    "arn:aws:sts::111111111111:assumed-role/tideproof-advisory-caller/a/b"
+  ]) {
+    const otherCaller = structuredClone(validEvent);
+    otherCaller.requestContext.authorizer.iam.userArn = callerArn;
+    assert.throws(
+      () => boundary.validateHttpCaller(otherCaller),
+      /SIGNED_CALLER_REJECTED/
+    );
+  }
   const injected = {
     ...validEvent,
     body: JSON.stringify({
@@ -694,7 +710,18 @@ function allowedActions(role) {
 
 test("Gate Two template freezes immutable aliases and least-privilege roles", () => {
   const template = buildGate2Template();
-  const { Resources: resources } = template;
+  const { Parameters: parameters, Resources: resources } = template;
+
+  assert.equal(parameters.AuthorityDatabaseSecretVersionId.MinLength, 32);
+  assert.equal(parameters.AuthorityDatabaseSecretVersionId.MaxLength, 64);
+  assert.match(
+    "synthetic.cockroachlabs.cloud",
+    new RegExp(parameters.AuthorityDatabaseHost.AllowedPattern)
+  );
+  assert.doesNotMatch(
+    "attacker.example",
+    new RegExp(parameters.AuthorityDatabaseHost.AllowedPattern)
+  );
 
   assert.equal(
     resources.AdvisoryRoute.Properties.AuthorizationType,
@@ -771,6 +798,11 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       AUTHORITY_DATABASE_SECRET_ARN: {
         Ref: "AuthorityDatabaseSecretArn"
       },
+      AUTHORITY_DATABASE_SECRET_VERSION_ID: {
+        Ref: "AuthorityDatabaseSecretVersionId"
+      },
+      AUTHORITY_DATABASE_HOST: { Ref: "AuthorityDatabaseHost" },
+      AUTHORITY_DATABASE_PORT: { Ref: "AuthorityDatabasePort" },
       AUTHORITY_TENANT_ID: { Ref: "AuthorityTenantId" },
       AUTHORITY_RUN_ID: { Ref: "AuthorityRunId" },
       AUTHORITY_INCIDENT_ID: { Ref: "AuthorityIncidentId" },
@@ -788,6 +820,11 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     }
   );
   assert.equal(resources.AuthorityFunction.Properties.Timeout, 25);
+  assert.deepEqual(
+    resources.BoundaryFunction.Properties.Environment.Variables
+      .EXPECTED_ADVISORY_CALLER_ROLE_ARN,
+    { "Fn::GetAtt": ["AdvisoryCallerRole", "Arn"] }
+  );
 
   for (const name of [
     "AgentFunction",
@@ -1129,10 +1166,41 @@ test("production Lambda sources contain only their intended capability SDK", () 
   );
 });
 
-test("primary security owns and grants only the typed durable race observer", () => {
+test("primary security separates Gate One and Gate Two database authority", () => {
   const source = fs.readFileSync(
     path.join(root, "src/cloud/primary-security.js"),
     "utf8"
+  );
+  const executeGrants = [
+    ...source.matchAll(
+      /GRANT EXECUTE ON FUNCTION([\s\S]*?)TO (tp_[a-z0-9_]+_role)/g
+    )
+  ];
+  const grantFor = (role) =>
+    executeGrants.find(([, , grantedRole]) => grantedRole === role)?.[1] ??
+    "";
+  const executeRevokes = [
+    ...source.matchAll(
+      /REVOKE EXECUTE ON FUNCTION([\s\S]*?)FROM (tp_[a-z0-9_]+_role)/g
+    )
+  ];
+  const revokesFor = (role) =>
+    executeRevokes
+      .filter(([, , revokedRole]) => revokedRole === role)
+      .map(([, body]) => body)
+      .join("\n");
+
+  assert.match(
+    source,
+    /\["tp_gate2_authorizer_role", "tp_gate2_authorizer_user"\]/
+  );
+  assert.match(
+    source,
+    /REVOKE tp_authorizer_role FROM tp_gate2_authorizer_user/
+  );
+  assert.match(
+    source,
+    /REVOKE tp_gate2_authorizer_role FROM tp_authorizer_user/
   );
   assert.match(
     source,
@@ -1144,16 +1212,75 @@ test("primary security owns and grants only the typed durable race observer", ()
   );
   assert.match(
     source,
-    /GRANT EXECUTE ON FUNCTION[\s\S]*tp_api\.g1_observe_authority_race_v1\([\s\S]*\)[\s\S]*TO tp_authorizer_role/
-  );
-  assert.match(
-    source,
     /resource\.active_run_id = p_run_id[\s\S]*AND EXISTS \([\s\S]*receipt\.operation_id = p_alpha_operation_id[\s\S]*AND EXISTS \([\s\S]*receipt\.operation_id = p_bravo_operation_id/
   );
   assert.doesNotMatch(
     source,
     /GRANT SELECT ON tp_(?:private|ledger)\.[^\n]+ TO tp_authorizer_role/
   );
+  assert.doesNotMatch(
+    source,
+    /GRANT SELECT ON tp_(?:private|ledger)\.[^\n]+ TO tp_gate2_authorizer_role/
+  );
+  assert.match(
+    source,
+    /CREATE OR REPLACE FUNCTION tp_api\.g2_spend_authority_race_v1/
+  );
+  assert.match(
+    source,
+    /session_user NOT IN \([\s\S]*'tp_authorizer_user',[\s\S]*'tp_gate2_authorizer_user'[\s\S]*\)/
+  );
+  assert.match(
+    source,
+    /session_user <> 'tp_gate2_authorizer_user'/
+  );
+  assert.match(
+    source,
+    /p_agent_id NOT IN \('aws-authority-alpha', 'aws-authority-bravo'\)/
+  );
+  const gateOneGrant = grantFor("tp_authorizer_role");
+  assert.match(gateOneGrant, /tp_api\.g1_spend_authority_v1/);
+  assert.match(gateOneGrant, /tp_api\.g1_resolve_request_v1/);
+  assert.match(gateOneGrant, /tp_api\.g1_observe_authority_race_v1/);
+  assert.doesNotMatch(gateOneGrant, /tp_api\.g2_spend_authority_race_v1/);
+  const gateTwoGrant = grantFor("tp_gate2_authorizer_role");
+  assert.match(gateTwoGrant, /tp_api\.g2_spend_authority_race_v1/);
+  assert.match(gateTwoGrant, /tp_api\.g1_resolve_request_v1/);
+  assert.match(gateTwoGrant, /tp_api\.g1_observe_authority_race_v1/);
+  assert.doesNotMatch(gateTwoGrant, /tp_api\.g1_spend_authority_v1/);
+  assert.doesNotMatch(gateTwoGrant, /tp_api\.g1_observe_admissibility/);
+  assert.match(
+    revokesFor("tp_authorizer_role"),
+    /tp_api\.g2_spend_authority_race_v1/
+  );
+  assert.match(
+    revokesFor("tp_gate2_authorizer_role"),
+    /tp_api\.g1_spend_authority_v1/
+  );
+  assert.doesNotMatch(source, /p_authenticated_agent_id/);
+});
+
+test("SECURITY DEFINER bodies resolve every application relation by schema", () => {
+  for (const file of [
+    "src/cloud/primary-security.js",
+    "src/cloud/recovery-security.js"
+  ]) {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.doesNotMatch(source, /\bSET\s+search_path\b/i, file);
+    const definitions = source.matchAll(
+      /CREATE OR REPLACE FUNCTION[\s\S]*?SECURITY DEFINER[\s\S]*?AS \$\$([\s\S]*?)\$\$/g
+    );
+    let count = 0;
+    for (const [, body] of definitions) {
+      count += 1;
+      for (const match of body.matchAll(
+        /^\s*(?:FROM|(?:LEFT\s+|RIGHT\s+|FULL\s+|INNER\s+|CROSS\s+)?JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([A-Za-z_][A-Za-z0-9_.]*)/gim
+      )) {
+        assert.match(match[1], /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/i, `${file}: ${match[0]}`);
+      }
+    }
+    assert.ok(count > 0, file);
+  }
 });
 
 test("generated templates exactly match the reviewed builders", () => {
@@ -1217,8 +1344,11 @@ test("effective config digest changes with every deployment control", () => {
       signer: "v6"
     },
     authority: {
+      databaseHost: "synthetic.cockroachlabs.cloud",
+      databasePort: "26257",
       databaseSecretArn:
         "arn:aws:secretsmanager:us-east-1:111111111111:secret:tideproof/authorizer-AbCd12",
+      databaseSecretVersionId: "a".repeat(32),
       tenantId: "11111111-1111-4111-8111-111111111111",
       runId: "22222222-2222-4222-8222-222222222222",
       incidentId: "33333333-3333-4333-8333-333333333333",
@@ -1257,13 +1387,15 @@ test("effective config digest changes with every deployment control", () => {
   const changed = structuredClone(configuration);
   changed.throttle.publicDemo.rate = 0.06;
   const changedAuthority = structuredClone(configuration);
-  changedAuthority.authority.raceId =
-    "66666666-6666-4666-8666-666666666666";
+  changedAuthority.authority.databaseSecretVersionId = "b".repeat(32);
+  const changedEndpoint = structuredClone(configuration);
+  changedEndpoint.authority.databasePort = "26258";
   const incompleteAuthority = structuredClone(configuration);
   delete incompleteAuthority.authority.databaseSecretArn;
   assert.match(first, /^[0-9a-f]{64}$/);
   assert.notEqual(first, deploymentConfigDigest(changed));
   assert.notEqual(first, deploymentConfigDigest(changedAuthority));
+  assert.notEqual(first, deploymentConfigDigest(changedEndpoint));
   assert.throws(
     () => deploymentConfigDigest(incompleteAuthority),
     /DEPLOYMENT_CONFIG_SHAPE_REJECTED/

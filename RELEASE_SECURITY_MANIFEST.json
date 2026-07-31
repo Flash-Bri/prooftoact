@@ -12,13 +12,13 @@
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
-      "sha256": "3a9bc56fb6a083a4d6ce1f1e29955a4f5028be2cfeec90a64744261ba20aa5c7"
+      "sha256": "5ee0deb6418b41792c2909eee026c5bf261873161ed7f0e8bfba337d59736ea3"
     },
     {
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "37a36965b7a50121bd31367c20f7b5e00b2e47f85d3015669c01560cb7c8e694"
+      "sha256": "25061fd425b0d5b67d269ee822dbc010231f234192b329daf3b746d469774f3a"
     },
     {
       "id": "aws-preflight",
@@ -36,19 +36,19 @@
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "85dbefe09712aa3d76437544543c7ff7d11c2e5f3abe9e69e2e061f1b8300782"
+      "sha256": "7828eff99cbfe0c26f07218a7b9e6ab2721a776f51378d8813609f2f4a96bb3d"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "8bf6095103567116f639614f5fabebc148a688fb43053c433de2f421e74b45ba"
+      "sha256": "ed4c9bfdbc29b1cc4a99604d50d2a2a1e2d19f301d91f2f8d20f77f10f7d6105"
     },
     {
       "id": "boundary-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "AWS_COORDINATOR_RUNTIME",
-      "sha256": "1461d3b0ab14c24b56552e633032f1ee07e8159329c5a1121c594b5d2285b2a3"
+      "sha256": "4889430a6c370a26e63d941f950585657cc4c7027b9125fb0d9b1a0b6c082a49"
     },
     {
       "id": "demo-entry",
@@ -72,7 +72,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "463432dd085dd34dc3ad47d8bb10ef752e557c4ee50ac74c693b4601c6126414"
+      "sha256": "c38c5308ab0714c799a2517a4d2066b502d4bad2684a96a04d3ec4e28491b107"
     },
     {
       "id": "proposal-runtime",
@@ -102,7 +102,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "fadb47c628c17a1a7c0511138f1e90331d4781a09c7a5e326980b352094a3e56"
+      "sha256": "584712bd074316c8efbb65e3d189457108a165d3278abf64d5232fbe535b5184"
     },
     {
       "id": "security-policy",

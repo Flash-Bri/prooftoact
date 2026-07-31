@@ -36,8 +36,29 @@
     },
     "AuthorityDatabaseSecretArn": {
       "Type": "String",
-      "Description": "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_authorizer_user connection string.",
+      "Description": "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_gate2_authorizer_user connection string.",
       "AllowedPattern": "^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$"
+    },
+    "AuthorityDatabaseSecretVersionId": {
+      "Type": "String",
+      "MinLength": 32,
+      "MaxLength": 64,
+      "AllowedPattern": "^[A-Za-z0-9-]{32,64}$",
+      "Description": "Exact AWSCURRENT Secrets Manager VersionId; rotation requires a reviewed configuration update."
+    },
+    "AuthorityDatabaseHost": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 253,
+      "AllowedPattern": "^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+cockroachlabs\\.cloud$",
+      "Description": "Exact lowercase CockroachDB Cloud hostname expected in the authority secret."
+    },
+    "AuthorityDatabasePort": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 5,
+      "AllowedPattern": "^[1-9][0-9]{0,4}$",
+      "Description": "Exact CockroachDB Cloud TCP port expected in the authority secret."
     },
     "AuthorityTenantId": {
       "Type": "String",
@@ -1372,6 +1393,15 @@
             "AUTHORITY_DATABASE_SECRET_ARN": {
               "Ref": "AuthorityDatabaseSecretArn"
             },
+            "AUTHORITY_DATABASE_SECRET_VERSION_ID": {
+              "Ref": "AuthorityDatabaseSecretVersionId"
+            },
+            "AUTHORITY_DATABASE_HOST": {
+              "Ref": "AuthorityDatabaseHost"
+            },
+            "AUTHORITY_DATABASE_PORT": {
+              "Ref": "AuthorityDatabasePort"
+            },
             "AUTHORITY_TENANT_ID": {
               "Ref": "AuthorityTenantId"
             },
@@ -2038,6 +2068,12 @@
             },
             "EXPECTED_ACCOUNT_ID": {
               "Ref": "AWS::AccountId"
+            },
+            "EXPECTED_ADVISORY_CALLER_ROLE_ARN": {
+              "Fn::GetAtt": [
+                "AdvisoryCallerRole",
+                "Arn"
+              ]
             },
             "SOURCE_COMMIT": {
               "Ref": "SourceCommit"

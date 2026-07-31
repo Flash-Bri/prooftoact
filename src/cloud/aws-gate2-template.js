@@ -543,9 +543,34 @@ export function buildGate2Template() {
     AuthorityDatabaseSecretArn: {
       Type: "String",
       Description:
-        "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_authorizer_user connection string.",
+        "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_gate2_authorizer_user connection string.",
       AllowedPattern:
         "^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$"
+    },
+    AuthorityDatabaseSecretVersionId: {
+      Type: "String",
+      MinLength: 32,
+      MaxLength: 64,
+      AllowedPattern: "^[A-Za-z0-9-]{32,64}$",
+      Description:
+        "Exact AWSCURRENT Secrets Manager VersionId; rotation requires a reviewed configuration update."
+    },
+    AuthorityDatabaseHost: {
+      Type: "String",
+      MinLength: 1,
+      MaxLength: 253,
+      AllowedPattern:
+        "^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+cockroachlabs\\.cloud$",
+      Description:
+        "Exact lowercase CockroachDB Cloud hostname expected in the authority secret."
+    },
+    AuthorityDatabasePort: {
+      Type: "String",
+      MinLength: 1,
+      MaxLength: 5,
+      AllowedPattern: "^[1-9][0-9]{0,4}$",
+      Description:
+        "Exact CockroachDB Cloud TCP port expected in the authority secret."
     },
     AuthorityTenantId: uuidParameter(
       "Synthetic Gate Two tenant UUID prepared in CockroachDB."
@@ -856,6 +881,11 @@ export function buildGate2Template() {
     concurrency: 2,
     environment: {
       AUTHORITY_DATABASE_SECRET_ARN: ref("AuthorityDatabaseSecretArn"),
+      AUTHORITY_DATABASE_SECRET_VERSION_ID: ref(
+        "AuthorityDatabaseSecretVersionId"
+      ),
+      AUTHORITY_DATABASE_HOST: ref("AuthorityDatabaseHost"),
+      AUTHORITY_DATABASE_PORT: ref("AuthorityDatabasePort"),
       AUTHORITY_TENANT_ID: ref("AuthorityTenantId"),
       AUTHORITY_RUN_ID: ref("AuthorityRunId"),
       AUTHORITY_INCIDENT_ID: ref("AuthorityIncidentId"),
@@ -1024,6 +1054,10 @@ export function buildGate2Template() {
       SIGNING_KEY_ARN: getAtt("ReceiptSigningKey", "Arn"),
       EXPECTED_API_ID: ref("HttpApi"),
       EXPECTED_ACCOUNT_ID: ref("AWS::AccountId"),
+      EXPECTED_ADVISORY_CALLER_ROLE_ARN: getAtt(
+        "AdvisoryCallerRole",
+        "Arn"
+      ),
       SOURCE_COMMIT: ref("SourceCommit"),
       CONFIG_DIGEST: ref("ConfigDigest"),
       BEDROCK_MODEL_ID: ref("BedrockModelId"),
@@ -1429,7 +1463,10 @@ export function deploymentConfigDigest(configuration) {
     Array.isArray(configuration.authority) ||
     Object.keys(configuration.authority).sort().join("\n") !==
       [
+        "databaseHost",
+        "databasePort",
         "databaseSecretArn",
+        "databaseSecretVersionId",
         "evidenceId",
         "incidentId",
         "raceId",
