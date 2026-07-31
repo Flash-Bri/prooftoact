@@ -159,6 +159,46 @@ function privacyReceipt() {
   };
 }
 
+function claimsReceipt() {
+  return {
+    schemaVersion: "tideproof.release-claims-verification.v1",
+    status: "CURRENT_PUBLIC_CLAIMS_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "RELEASE_CLAIMS_MANIFEST.json",
+    manifestSha256: "7".repeat(64),
+    proofManifestSha256: "8".repeat(64),
+    claimCount: 11,
+    claimStates: { VERIFIED: 7, PARTIAL: 4, PENDING: 0 },
+    surfaceCount: 13,
+    stopTokenCount: 13,
+    uncheckedGateCount: 14,
+    externalUrls: [
+      "http://127.0.0.1:4173",
+      "https://cockroachdb-ai.devpost.com/",
+      "https://cockroachdb-ai.devpost.com/resources",
+      "https://cockroachdb-ai.devpost.com/rules",
+      "https://github.com/Flash-Bri/tideproof",
+      "https://github.com/Flash-Bri/tideproof.git"
+    ],
+    finalReleaseRequirements: [
+      "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
+      "Exact-release private human review of every public claim surface and submitted field."
+    ],
+    checks: {
+      canonicalManifest: true,
+      exactSurfaceHashes: true,
+      claimsLedgerMatchesProofManifest: true,
+      currentDraftStateExplicit: true,
+      localAndHostedAwsBoundariesExplicit: true,
+      syntheticScopeExplicit: true,
+      submissionStopTokensPreserved: true,
+      publicLinksConstrained: true
+    },
+    claimBoundary: "Fixture current public claim surfaces only."
+  };
+}
+
 function accessibilityReceipt() {
   return {
     schemaVersion: "tideproof.accessibility-static.v1",
@@ -425,10 +465,11 @@ test("complete provenance receipt binds source, install, inventory, and notices"
         artifactPackages: { demo: ["required"] }
       }),
       verifyAccessibilityReceipt: () => accessibilityReceipt(),
+      verifyClaims: () => claimsReceipt(),
       verifyPrivacy: () => privacyReceipt(),
       verifyRights: () => rightsReceipt()
     });
-    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v3");
+    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v4");
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.match(
@@ -436,12 +477,14 @@ test("complete provenance receipt binds source, install, inventory, and notices"
       PACKAGE_LOCK_SHA
     );
     assert.equal(receipt.checks.installedTreeMatchesLock, true);
+    assert.equal(receipt.checks.currentClaimSurfacesVerified, true);
     assert.equal(receipt.checks.releasePrivacyVerified, true);
     assert.equal(receipt.checks.currentSurfaceRightsVerified, true);
     assert.equal(receipt.checks.staticAccessibilityVerified, true);
     assert.equal(receipt.rights.finalReleaseReady, false);
     assert.equal(receipt.privacy.finalReleaseReady, false);
     assert.equal(receipt.accessibility.finalReleaseReady, false);
+    assert.equal(receipt.claims.finalReleaseReady, false);
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);
   } finally {
     fixture.cleanup();

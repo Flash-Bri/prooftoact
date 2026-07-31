@@ -67,7 +67,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "3e673ff85a88e587b7ff9439c3d3d91adcb7d654f54e7ebf74cf1706cda6022c",
+      "sha256": "37a36965b7a50121bd31367c20f7b5e00b2e47f85d3015669c01560cb7c8e694",
       "kind": "boundary-ledger"
     },
     {
@@ -97,7 +97,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "2baa5d1796d2f5adab5b2c61ca6a7256673849f5ecf446aad1a0f3838d97ebe1",
+      "sha256": "4a3fd2b7e0e7d1cc4f86081bbe8a36ad28760e116eccaad7bbef7b7dcb1f1a5e",
       "kind": "boundary-ledger"
     },
     {
@@ -199,13 +199,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "16b8406da70d7f0ec8b17d5ef2a0ed83d3a1a8ea37f0cac9382368598e7296f0",
+      "sha256": "7f6af4c323c7a4c5819bb9424421023ccdab3365de71487cf175514d8e32c393",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "051358ab94a4da8643d717cac8c8e6888d2a67cff5f7d7423e2af9a92c304a20",
+      "sha256": "59bf9c3379ca304ec09d74c102e59c05a5b99bbcb7e0b30cdf08c2fa5431e54b",
       "kind": "verification-code"
     },
     {
@@ -223,7 +223,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "8f17d7a767f7c13400cb91557998a95bec5272a57546e8a4f210b6f33c56cfc9",
+      "sha256": "d4d5a4aa658bc13a2b481bac7fae3186dddc3e39f91ff6c74f74fac4ed0193d8",
       "kind": "verification-code"
     },
     {
@@ -241,7 +241,31 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "2cc117acf9f4b379c07d23f27192ed6d0466c7668cedfbf35c820259ccf211e2",
+      "sha256": "f59bd7ec69c615932a93928c1cf989bc81390ef037f910f4dd4cd392ef13a563",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-claims-ledger",
+      "path": "docs/RELEASE_CLAIMS.md",
+      "sha256": "869953a1fc823c259d8c97d0ea550af08f5486345bf5e3dd737d81c5eebb0625",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-claims-manifest",
+      "path": "RELEASE_CLAIMS_MANIFEST.json",
+      "sha256": "db987bab6d7b4ed1e31b47dfadccc05d0982d95e37beb572070f99bc9c8ce5b6",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-claims-tests",
+      "path": "test/release-claims.test.js",
+      "sha256": "e669457686bc0f4121d6c4fbc05a875a46f60f55d49bd7dccb93ac486a40bae5",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-claims-verifier",
+      "path": "scripts/verify-release-claims.js",
+      "sha256": "10baf165269c956ad1aecaf5cc767a9a3a7522441f9ec8aa8a35b80fef0fe1ae",
       "kind": "verification-code"
     },
     {
@@ -271,19 +295,19 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "389a569ef8ed7f600202f0b10c6f9e03a3313df606b6eea8d27b3d320334f4f1",
+      "sha256": "d62e5308f729c8edf5065a55141398e17147678a3a1e749b2187e97ecffc5b20",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "7ba1a748a77d94e5a134c687d9f000a1b8740d1c4a18e599fc9910c94d9f4d5a",
+      "sha256": "2194920d633977531af9841a9fc06889d6ad327b452724279415829c9e1a7208",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "0237acdb7cf0a4c73f25cb8f4c0513603341cb5439b076b715cb49593728473a",
+      "sha256": "0f9db8c63e7b02fdc8fbfb8551ebe9b559339d395a72136ff76025c13d30cc5b",
       "kind": "boundary-ledger"
     },
     {
@@ -498,11 +522,15 @@
       "id": "claim-ledger-control",
       "proofState": "PARTIAL",
       "artifacts": [
-        "claims-ledger"
+        "claims-ledger",
+        "release-claims-ledger",
+        "release-claims-manifest",
+        "release-claims-tests",
+        "release-claims-verifier"
       ],
-      "boundary": "The current claims ledger is hash-bound and fully represented in this manifest; final live receipts and an exact-release-commit audit are still required.",
+      "boundary": "The current claims ledger is fully represented in this manifest, and the exact verifier hash-binds 13 reviewed README, browser, local/AWS scenario, architecture, AWS, contest, video, and Devpost surfaces; requires the synthetic and local-versus-live boundaries; preserves all 13 unresolved submission stop-token occurrences and 14 unchecked hard gates; and constrains absolute URLs to six reviewed local or public values. CURRENT_PUBLIC_CLAIMS_PASS does not prove claim truth, authorize deployment or publication, or replace the final private human review.",
       "remainingRequirements": [
-        "Freeze CLAIMS.md against the final release commit after every live gate is reconciled."
+        "After every live gate is reconciled, freeze all claim surfaces against accepted receipts and the exact final release, then complete the private human review of every submitted field."
       ]
     },
     {
@@ -582,6 +610,10 @@
       "proofState": "PARTIAL",
       "artifacts": [
         "release-ci-workflow",
+        "release-claims-ledger",
+        "release-claims-manifest",
+        "release-claims-tests",
+        "release-claims-verifier",
         "release-privacy-ledger",
         "release-privacy-manifest",
         "release-privacy-tests",
@@ -589,7 +621,7 @@
         "release-provenance-tests",
         "release-provenance-verifier"
       ],
-      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final bounded privacy, current-surface rights, and static accessibility receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, or submission approval.",
+      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, bounded privacy, current-surface rights, and static accessibility receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, or submission approval.",
       "remainingRequirements": [
         "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
       ]

@@ -1,0 +1,91 @@
+{
+  "schema": "tideproof.release-claims-manifest.v1",
+  "status": "CURRENT_PUBLIC_CLAIMS_REVIEWED_FINAL_LIVE_GATES_PENDING",
+  "reviewedOn": "2026-07-31",
+  "claimBoundary": "This inventory binds only the current public claim surfaces to reviewed pending-state copy. It does not prove claim truth, authorize deployment or publication, or replace the exact-release private human review.",
+  "finalReleaseRequirements": [
+    "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
+    "Exact-release private human review of every public claim surface and submitted field."
+  ],
+  "surfaces": [
+    {
+      "id": "architecture-boundary",
+      "path": "docs/ARCHITECTURE.md",
+      "role": "TECHNICAL_BOUNDARY",
+      "sha256": "707cef909af7f2a9f36cf79a8eb13246404e79e0aa2d652d4324021acd7ce4e9"
+    },
+    {
+      "id": "aws-boundary",
+      "path": "docs/AWS_GATE2.md",
+      "role": "TECHNICAL_BOUNDARY",
+      "sha256": "37a36965b7a50121bd31367c20f7b5e00b2e47f85d3015669c01560cb7c8e694"
+    },
+    {
+      "id": "aws-demo-entry",
+      "path": "infra/aws/lambda/demo.js",
+      "role": "DISTRIBUTION_ENTRY",
+      "sha256": "eb64e2417358101ca02e95ee847c231ed0c12c30e04ce23407c88362ca8c6536"
+    },
+    {
+      "id": "browser-app",
+      "path": "web/app.js",
+      "role": "PUBLIC_BROWSER_CONTROLLER",
+      "sha256": "f5980c1968417d0c8ebde0256bd56a9f61c6a4c347ccc822839ce8ddb00ecbe2"
+    },
+    {
+      "id": "browser-document",
+      "path": "web/index.html",
+      "role": "PUBLIC_BROWSER",
+      "sha256": "88a09d45c3468b0049bee70ef84231554cc88f9e3265b9ed21d7326a9839e25a"
+    },
+    {
+      "id": "claims-ledger",
+      "path": "CLAIMS.md",
+      "role": "CLAIMS_LEDGER",
+      "sha256": "4a3fd2b7e0e7d1cc4f86081bbe8a36ad28760e116eccaad7bbef7b7dcb1f1a5e"
+    },
+    {
+      "id": "contest-matrix",
+      "path": "docs/CONTEST_MATRIX.md",
+      "role": "CONTEST_DRAFT",
+      "sha256": "10f1dd08448aecb2174be1afb02ccce3cf83ff93b9825995409b7c290b879e1d"
+    },
+    {
+      "id": "demo-script",
+      "path": "docs/DEMO_SCRIPT.md",
+      "role": "VIDEO_DRAFT",
+      "sha256": "c005238dd0ffd9d814af0318b72b59d65bb6f93615cce73ea3fba69b7226997b"
+    },
+    {
+      "id": "public-demo-runtime",
+      "path": "src/cloud/public-demo.js",
+      "role": "AWS_PUBLIC_RUNTIME",
+      "sha256": "ad80c8225a543e93af5b59195f730609cb4e79112035b1cbbc78908e0b202273"
+    },
+    {
+      "id": "readme-surface",
+      "path": "README.md",
+      "role": "PUBLIC_SOURCE",
+      "sha256": "d258853e697c4bd642a743cf179ba9c6e4816f73a2ddf477adfcfb45209c1a7c"
+    },
+    {
+      "id": "release-claims-ledger",
+      "path": "docs/RELEASE_CLAIMS.md",
+      "role": "CONTROL_LEDGER",
+      "sha256": "869953a1fc823c259d8c97d0ea550af08f5486345bf5e3dd737d81c5eebb0625"
+    },
+    {
+      "id": "scenario-source",
+      "path": "src/scenario.js",
+      "role": "SCENARIO_SOURCE",
+      "sha256": "49fffe83d44a4e66239667e1111c98fffa7b0622294338d48b95f41e5daa2eaa"
+    },
+    {
+      "id": "submission-packet",
+      "path": "docs/SUBMISSION_PACKET.md",
+      "role": "SUBMISSION_DRAFT",
+      "sha256": "16d2a857626ac8036f75bf0cca07abc09e5a56f3aa686b0be906e562a08a9f7a"
+    }
+  ],
+  "finalReleaseReady": false
+}
