@@ -9,6 +9,10 @@ const assets = new Map([
   ["/styles.css", ["../web/styles.css", "text/css; charset=utf-8"]],
   ["/favicon.svg", ["../web/favicon.svg", "image/svg+xml"]],
   [
+    "/architecture.svg",
+    ["../docs/media/architecture.svg", "image/svg+xml"]
+  ],
+  [
     "/evidence/gate1-authority",
     [
       "../evidence/gate1-authority-2026-07-30.md",

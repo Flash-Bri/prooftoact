@@ -40,6 +40,10 @@ function assets() {
       path.join(root, "web/favicon.svg"),
       "utf8"
     ),
+    "/architecture.svg": fs.readFileSync(
+      path.join(root, "docs/media/architecture.svg"),
+      "utf8"
+    ),
     "/evidence/gate1-authority": fs.readFileSync(
       path.join(root, "evidence/gate1-authority-2026-07-30.md"),
       "utf8"
@@ -115,6 +119,13 @@ test("public demo serves only the bounded signed-out proof surface", async () =>
     page.body,
     /https:\/\/github\.com\/Flash-Bri\/tideproof/
   );
+  const architecture = await handler(event("/architecture.svg"));
+  assert.equal(architecture.statusCode, 200);
+  assert.equal(
+    architecture.headers["content-type"],
+    "image/svg+xml"
+  );
+  assert.equal(architecture.body, assets()["/architecture.svg"]);
 
   const scenarioResponse = await handler(event("/api/scenario"));
   const scenario = JSON.parse(scenarioResponse.body);
@@ -269,6 +280,9 @@ test("production demo entry bundles its exact local assets", async () => {
     );
     const page = await bundled.handler(event("/"));
     assert.match(page.body, /Memory should preserve evidence/);
+    const architecture = await bundled.handler(event("/architecture.svg"));
+    assert.equal(architecture.statusCode, 200);
+    assert.equal(architecture.body, assets()["/architecture.svg"]);
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {

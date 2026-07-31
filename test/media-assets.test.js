@@ -7,6 +7,7 @@ const SVG_PATH = new URL("../docs/media/architecture.svg", import.meta.url);
 const PNG_PATH = new URL("../docs/media/architecture.png", import.meta.url);
 const README_PATH = new URL("../README.md", import.meta.url);
 const RIGHTS_PATH = new URL("../docs/media/RIGHTS.md", import.meta.url);
+const WEB_PATH = new URL("../web/index.html", import.meta.url);
 
 const SVG_SHA256 =
   "5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c";
@@ -53,9 +54,10 @@ test("architecture PNG is the exact reviewed 2200 by 720 export", () => {
   assert.equal(image.readUInt32BE(20), 720);
 });
 
-test("README and rights ledger bind the reviewed architecture assets", () => {
+test("public surfaces and rights ledger bind the reviewed architecture assets", () => {
   const readme = readFileSync(README_PATH, "utf8");
   const rights = readFileSync(RIGHTS_PATH, "utf8");
+  const web = readFileSync(WEB_PATH, "utf8");
 
   assert.match(
     readme,
@@ -65,6 +67,9 @@ test("README and rights ledger bind the reviewed architecture assets", () => {
     readme,
     /\[`docs\/ARCHITECTURE\.md`\]\(docs\/ARCHITECTURE\.md\)/
   );
+  assert.match(web, /<img\s+[\s\S]*?src="\/architecture\.svg"/);
+  assert.match(web, /width="2200"[\s\S]*?height="720"/);
+  assert.doesNotMatch(web, /<svg\b/);
   assert.match(rights, /`C08 \/ V09`/);
   assert.match(rights, new RegExp(SVG_SHA256));
   assert.match(rights, new RegExp(PNG_SHA256));

@@ -283,96 +283,11 @@ h2 {
   scrollbar-color: var(--line-strong) var(--surface);
 }
 
-.architecture-shell svg {
+.architecture-shell img {
   display: block;
   width: 100%;
   height: auto;
   min-width: 48rem;
-}
-
-.diagram-zone {
-  fill: #0c1711;
-  stroke: var(--line);
-  stroke-width: 2;
-  stroke-dasharray: 7 6;
-}
-
-.authority-zone {
-  fill: #111a16;
-  stroke: #779381;
-}
-
-.zone-label {
-  fill: var(--muted);
-  font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 1.2px;
-}
-
-.diagram-edge {
-  fill: none;
-  stroke: #9eb0a5;
-  stroke-width: 2.5;
-  marker-end: url("#arrow");
-}
-
-.proposal-edge {
-  stroke: var(--amber);
-  stroke-dasharray: 7 5;
-}
-
-.context-edge {
-  stroke: var(--blue);
-  stroke-dasharray: 5 5;
-}
-
-.arrowhead {
-  fill: #9eb0a5;
-}
-
-.diagram-node rect {
-  stroke-width: 2;
-}
-
-.diagram-node text {
-  fill: var(--ink);
-  font: 750 15px/1.2 ui-sans-serif, system-ui, sans-serif;
-}
-
-.diagram-node .node-small {
-  fill: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.input-node rect {
-  fill: #241d15;
-  stroke: var(--amber);
-}
-
-.process-node rect {
-  fill: #173127;
-  stroke: var(--green);
-}
-
-.storage-node rect {
-  fill: #152b39;
-  stroke: var(--blue);
-}
-
-.agent-node rect {
-  fill: #302718;
-  stroke: var(--amber);
-}
-
-.authority-node rect,
-.receipt-node rect {
-  fill: #173127;
-  stroke: var(--green);
-}
-
-.edge-label {
-  fill: var(--muted);
-  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .diagram-caption {

@@ -97,7 +97,7 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "72d2e8a3df9331754c111aeb68ec28fd46fb796b8a96eef85c64f44c42539469",
+      "sha256": "ae4779f31f0a6ba4743d6edafb97180f512f87de4ffd77011201919b46badb06",
       "kind": "boundary-ledger"
     },
     {
