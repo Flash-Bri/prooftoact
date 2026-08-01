@@ -564,6 +564,8 @@ export function validateReleaseProvenance(
   const claims = receipt?.claims;
   const claimStates = claims?.claimStates;
   const claimsChecks = claims?.checks;
+  const cost = receipt?.cost;
+  const costChecks = cost?.checks;
   const privacy = receipt?.privacy;
   const privacyChecks = privacy?.checks;
   const rights = receipt?.rights;
@@ -586,6 +588,7 @@ export function validateReleaseProvenance(
       "claims",
       "checks",
       "claimBoundary",
+      "cost",
       "dependencies",
       "history",
       "privacy",
@@ -654,6 +657,35 @@ export function validateReleaseProvenance(
         "publicLinksConstrained",
         "submissionStopTokensPreserved",
         "syntheticScopeExplicit"
+      ]) &&
+      exactKeys(cost, [
+        "boundedFunctionCount",
+        "budgetAlertCount",
+        "checks",
+        "claimBoundary",
+        "finalReleaseReady",
+        "finalReleaseRequirements",
+        "forbiddenResourceTypeCount",
+        "logGroupCount",
+        "manifestPath",
+        "manifestSha256",
+        "reviewedOn",
+        "schemaVersion",
+        "status",
+        "surfaceCount",
+        "unapprovedPurchaseClassCount"
+      ]) &&
+      exactKeys(costChecks, [
+        "budgetAndAlertsBounded",
+        "canonicalManifest",
+        "deploymentStopPreserved",
+        "exactSurfaceHashes",
+        "fixedChargeResourcesAbsent",
+        "liveSpendClaimAbsent",
+        "preflightCostCeilingsFailClosed",
+        "recordedSpendArithmeticExact",
+        "runtimeAndLogBoundsExact",
+        "unapprovedPurchasesRemainBlocked"
       ]) &&
       exactKeys(privacy, [
         "allowanceCount",
@@ -868,6 +900,7 @@ export function validateReleaseProvenance(
         "bundledThirdPartyNoticesMatchInputs",
         "cleanBeforeAndAfter",
         "currentClaimSurfacesVerified",
+        "currentCostGuardsVerified",
         "currentSourceSecurityVerified",
         "currentSurfaceRightsVerified",
         "dependencyInventoryMatchesLock",
@@ -883,7 +916,7 @@ export function validateReleaseProvenance(
         "submissionDraftFailClosed",
         "trackedSymlinksAbsent"
       ]) &&
-      receipt.schemaVersion === "tideproof.release-provenance.v6" &&
+      receipt.schemaVersion === "tideproof.release-provenance.v7" &&
       receipt.status === "PASS" &&
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
@@ -945,6 +978,23 @@ export function validateReleaseProvenance(
       Object.values(claimsChecks).every((value) => value === true) &&
       typeof claims.claimBoundary === "string" &&
       claims.claimBoundary.length > 0 &&
+      cost.schemaVersion === "tideproof.release-cost-verification.v1" &&
+      cost.status === "CURRENT_COST_GUARDS_PASS" &&
+      cost.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(cost.reviewedOn) &&
+      cost.manifestPath === "RELEASE_COST_MANIFEST.json" &&
+      HEX_64.test(cost.manifestSha256) &&
+      cost.surfaceCount === 10 &&
+      cost.budgetAlertCount === 4 &&
+      cost.forbiddenResourceTypeCount === 5 &&
+      cost.unapprovedPurchaseClassCount === 5 &&
+      cost.boundedFunctionCount === 10 &&
+      cost.logGroupCount === 11 &&
+      Array.isArray(cost.finalReleaseRequirements) &&
+      cost.finalReleaseRequirements.length === 4 &&
+      Object.values(costChecks).every((value) => value === true) &&
+      typeof cost.claimBoundary === "string" &&
+      cost.claimBoundary.length > 0 &&
       privacy.schemaVersion ===
         "tideproof.release-privacy-verification.v1" &&
       privacy.status === "CURRENT_PUBLIC_HISTORY_PASS" &&

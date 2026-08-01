@@ -199,13 +199,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "521a868a1380343a5359eacc68e785035193bb8121d6cd620349aeae2e7ce93a",
+      "sha256": "daf307ab086389cac40ecd2a29702243f56dfa58a25f9402cbdbce1fa5a68701",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "583bc204e2878f78ca1b36d27f9495edaad9b9d79975fac08e2124d138f4359d",
+      "sha256": "3d8e59218dcc37cc2e0842cf9809ce58fc749c36c2195a11531506a2bada0ea8",
       "kind": "verification-code"
     },
     {
@@ -223,7 +223,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "f14e0dabc97e8ecc5be91e551ca465bea93118e10eee2a8d1497948611f47bf1",
+      "sha256": "eae7483ebe23de177323c1434a60ffef5766057a91fac99cadb39eb74a3b4bd2",
       "kind": "verification-code"
     },
     {
@@ -241,7 +241,7 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "11086df6573d6cc9de304c0ec5501dd355f35eabdf7890ae76a0dd7ea2bc6fee",
+      "sha256": "20f6b8fcbc5d674ae3e4cef0b64adbadad8c2996936191d104fe823c5d554f21",
       "kind": "verification-code"
     },
     {
@@ -266,6 +266,30 @@
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
       "sha256": "10baf165269c956ad1aecaf5cc767a9a3a7522441f9ec8aa8a35b80fef0fe1ae",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-cost-ledger",
+      "path": "docs/RELEASE_COST.md",
+      "sha256": "86236a88d0100b0503802c9485c07c73c5bb18bb3b6e98e40519ac6fd3342069",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-cost-manifest",
+      "path": "RELEASE_COST_MANIFEST.json",
+      "sha256": "5f144eda35fb5b4fc38be8f1ecc00947ec72208d4653c0c1d6b28ef1ed880f4b",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-cost-tests",
+      "path": "test/release-cost.test.js",
+      "sha256": "3420aa1608450e23c6b2dc21d98acb57d737c9d053147156b4ae68810568e886",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-cost-verifier",
+      "path": "scripts/verify-release-cost.js",
+      "sha256": "24d4a87c56713a51a5372fc52de061c83ec8825ab328a6428d0c71c23515d43c",
       "kind": "verification-code"
     },
     {
@@ -295,13 +319,13 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "044036518722e801a0d7b1024d4fd3fa4e6f7fd79851b5a5716e9d908d471cfc",
+      "sha256": "056fefe25c7bb5e9a5f3c948166ad6b60d5018a09c46f9695cbba78037613494",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "220e070e946b4f40b172b3a1b2f33e0f5e69c39b590070d6e7ef95c52d34312e",
+      "sha256": "dc628a1db34537a38eace33adc91b8169a644e92a87fbcf8d2ab7fb1830799af",
       "kind": "verification-code"
     },
     {
@@ -331,7 +355,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "786c0db1d3a6e9aa2b773e70ed623b2b0d9fecbaba53645cfafab9984dbfcc1f",
+      "sha256": "de2562b7e6622694066bcaf4746f0e780bf6b96188b7b0f6b07643c75af8de41",
       "kind": "boundary-ledger"
     },
     {
@@ -597,11 +621,15 @@
       "proofState": "PARTIAL",
       "artifacts": [
         "cost-guard-receipt",
-        "gate2-console-stop-receipt"
+        "gate2-console-stop-receipt",
+        "release-cost-ledger",
+        "release-cost-manifest",
+        "release-cost-tests",
+        "release-cost-verifier"
       ],
-      "boundary": "The receipts document the budget prerequisite and the read-only stop condition only; they do not prove current spend or authorize deployment.",
+      "boundary": "The exact current-source verifier hash-binds ten cost surfaces; validates the 25 USD total envelope, 11.86 USD recorded non-AWS spend, 13.14 USD effective AWS ceiling, 15 USD account-wide monthly budget, four required alerts, conservative preflight comparisons, absent main stack, forbidden fixed-charge resource types, bounded Lambda and log settings, explicit owner-input limitations, and the read-only stop receipt; and returns CURRENT_COST_GUARDS_PASS with finalReleaseReady false. It does not assert current AWS spend, independently verify registrar evidence, authorize cloud or DNS mutation, prove final cost, or approve publication or submission.",
       "remainingRequirements": [
-        "Machine-verifiable clean authenticated AWS preflight PASS and current-spend receipt under the effective 13.14 USD remaining project envelope."
+        "Bind a machine-verifiable exact-checkout AWS preflight PASS and current-spend receipt under 13.14 USD, the exact-release price and forecast review, protected registrar and auto-renew evidence review, and the final spend plus teardown or approved keep-alive receipt."
       ]
     },
     {
@@ -662,6 +690,10 @@
         "release-claims-manifest",
         "release-claims-tests",
         "release-claims-verifier",
+        "release-cost-ledger",
+        "release-cost-manifest",
+        "release-cost-tests",
+        "release-cost-verifier",
         "release-privacy-ledger",
         "release-privacy-manifest",
         "release-privacy-tests",
@@ -677,7 +709,7 @@
         "release-submission-tests",
         "release-submission-verifier"
       ],
-      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, bounded privacy, current-surface rights, static accessibility, current-source security, and fail-closed submission-draft receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, entrant eligibility or authority, or submission approval.",
+      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, current-source cost, bounded privacy, current-surface rights, static accessibility, current-source security, and fail-closed submission-draft receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, current or final spend, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, entrant eligibility or authority, deployment approval, or submission approval.",
       "remainingRequirements": [
         "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
       ]

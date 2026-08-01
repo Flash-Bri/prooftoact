@@ -40,6 +40,9 @@ jobs:
       - name: Verify current claim surfaces
         run: npm run claims:verify
 
+      - name: Verify current-source cost guards
+        run: npm run cost:verify
+
       - name: Verify current-surface rights inventory
         run: npm run rights:verify
 

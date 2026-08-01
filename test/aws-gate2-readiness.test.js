@@ -343,6 +343,42 @@ function releaseClaimsReceipt() {
   };
 }
 
+function releaseCostReceipt() {
+  return {
+    schemaVersion: "tideproof.release-cost-verification.v1",
+    status: "CURRENT_COST_GUARDS_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-07-31",
+    manifestPath: "RELEASE_COST_MANIFEST.json",
+    manifestSha256: "8".repeat(64),
+    surfaceCount: 10,
+    budgetAlertCount: 4,
+    forbiddenResourceTypeCount: 5,
+    unapprovedPurchaseClassCount: 5,
+    boundedFunctionCount: 10,
+    logGroupCount: 11,
+    finalReleaseRequirements: [
+      "Machine-verifiable preflight PASS.",
+      "Exact-release price and forecast review.",
+      "Private registrar evidence review.",
+      "Final spend and teardown receipt."
+    ],
+    checks: {
+      canonicalManifest: true,
+      exactSurfaceHashes: true,
+      budgetAndAlertsBounded: true,
+      recordedSpendArithmeticExact: true,
+      liveSpendClaimAbsent: true,
+      deploymentStopPreserved: true,
+      preflightCostCeilingsFailClosed: true,
+      fixedChargeResourcesAbsent: true,
+      runtimeAndLogBoundsExact: true,
+      unapprovedPurchasesRemainBlocked: true
+    },
+    claimBoundary: "Fixture current-source cost guards only."
+  };
+}
+
 function releaseSecurityReceipt() {
   return {
     schemaVersion: "tideproof.release-security-verification.v1",
@@ -425,7 +461,7 @@ function releaseSubmissionReceipt() {
 
 function releaseProvenanceReceipt() {
   return {
-    schemaVersion: "tideproof.release-provenance.v6",
+    schemaVersion: "tideproof.release-provenance.v7",
     status: "PASS",
     source: {
       commit: SOURCE_COMMIT,
@@ -457,6 +493,7 @@ function releaseProvenanceReceipt() {
       gitlinkCount: 0
     },
     claims: releaseClaimsReceipt(),
+    cost: releaseCostReceipt(),
     privacy: privacyReceipt(),
     rights: releaseRightsReceipt(),
     accessibility: accessibilityReceipt(),
@@ -515,6 +552,7 @@ function releaseProvenanceReceipt() {
       dependencyInventoryMatchesLock: true,
       bundledThirdPartyNoticesMatchInputs: true,
       currentClaimSurfacesVerified: true,
+      currentCostGuardsVerified: true,
       releasePrivacyVerified: true,
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,
@@ -823,6 +861,16 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
   assert.throws(
     () =>
       validateReleaseProvenance(prematureClaims, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const prematureCost = releaseProvenanceReceipt();
+  prematureCost.cost.finalReleaseReady = true;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(prematureCost, {
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),
