@@ -169,8 +169,8 @@ export function recoveryBrokerConfigDigest({
       tool: FIXED_TOOL,
       trustedPublisherKeysDigest:
         trustedPublisherKeysDigest(trustedPublisherKeys),
-      validator: "tideproof-recovery-row-v2-p256",
-      version: "tideproof-deterministic-recovery-broker-v2"
+      validator: "tideproof-recovery-row-v2-p256-source-bound",
+      version: "tideproof-deterministic-recovery-broker-v3"
     })
   );
 }
@@ -395,6 +395,10 @@ export class DeterministicRecoveryBroker {
         binding.recoverySessionId,
         "binding.recoverySessionId"
       );
+      const sourceDigest = requireSha256(
+        binding.sourceDigest,
+        "binding.sourceDigest"
+      );
       if (
         requireSha256(
           binding.subjectBindingHash,
@@ -407,7 +411,8 @@ export class DeterministicRecoveryBroker {
         canonicalJson({
           tenantId,
           recoverySessionId,
-          subjectBindingHash: callerSubjectHash
+          subjectBindingHash: callerSubjectHash,
+          sourceDigest
         })
       );
       const brokerConfigDigest = recoveryBrokerConfigDigest({
@@ -419,7 +424,8 @@ export class DeterministicRecoveryBroker {
       const query = renderRecoveryQuery({
         tenantId,
         recoverySessionId,
-        subjectBindingHash: callerSubjectHash
+        subjectBindingHash: callerSubjectHash,
+        sourceDigest
       });
       const interactionId = randomUUID();
       const preReadEventId = randomUUID();
@@ -480,6 +486,7 @@ export class DeterministicRecoveryBroker {
           tenantId,
           recoverySessionId,
           subjectBindingHash: callerSubjectHash,
+          sourceDigest,
           expectedSourceClusterId: this.#expectedSourceClusterId,
           trustedPublisherKeys: this.#trustedPublisherKeys
         },

@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-07-31",
+  "reviewedOn": "2026-08-01",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -151,7 +151,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "6ff97d41ed905871569439d541906cc3f359bdf5aab0e46afda26ed90bef7a51",
+      "sha256": "de64c5878dc46859ce682b7bd81169ca9ea4d18530fc140620faf19575c06037",
       "kind": "boundary-ledger"
     },
     {
@@ -385,13 +385,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "45b7f035297c009295beda1ff314cb99a544215c2559becba6291bb95fe44def",
+      "sha256": "f5ddf6bb779332d099313d2d3ea4df019ac6fbe5b4f28f136b8869814b94cc73",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "c3d10c08d4cb5169a2a540f9833fac173f3df89df75cf8c1b1a150c212a71517",
+      "sha256": "c6730274d3f410e482c97398c2ba53f334106133b3e1fb92d98cc580ab95818a",
       "kind": "boundary-ledger"
     },
     {
@@ -509,7 +509,7 @@
       ],
       "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
       "remainingRequirements": [
-        "Implement the bounded live batch harness and exact cross-act recovery lookup, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-winner Managed MCP recovery, replay checks, cleanup, and zero invariant violations."
+        "Implement the bounded live batch harness, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-source-bound winner recovery through Managed MCP, replay checks, cleanup, and zero invariant violations."
       ]
     },
     {

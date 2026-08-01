@@ -8,6 +8,7 @@ import {
   recoverySignaturePayloadFor,
   recoveryQueryBindingsFor,
   recoveryQueryTemplateDigest,
+  recoverySourceBindingDigestFor,
   renderRecoveryQuery,
   validateRecoveryRow
 } from "../src/cloud/recovery-store.js";
@@ -17,6 +18,17 @@ const TENANT_ID = "22222222-2222-4222-8222-222222222222";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const SOURCE_CLUSTER_ID = "33333333-3333-4333-8333-333333333333";
 const SUBJECT_BINDING_HASH = "b".repeat(64);
+const SOURCE_BINDING = Object.freeze({
+  tenantId: TENANT_ID,
+  runId: "44444444-4444-4444-8444-444444444444",
+  incidentId: "55555555-5555-4555-8555-555555555555",
+  evidenceDigest: "c".repeat(64),
+  resourceId: "synthetic-rescue-unit",
+  operationId: "66666666-6666-4666-8666-666666666666",
+  requestDigest: "d".repeat(64),
+  outcome: "resource_reserved"
+});
+const SOURCE_DIGEST = recoverySourceBindingDigestFor(SOURCE_BINDING);
 const SIGNER = createSyntheticRecoverySigner();
 const UNSIGNED_BUNDLE = {
   tenantId: TENANT_ID,
@@ -26,7 +38,7 @@ const UNSIGNED_BUNDLE = {
   snapshotVersion: 7,
   sourceClusterId: SOURCE_CLUSTER_ID,
   sourceCommitTs: "2026-07-29T20:00:00.000Z",
-  sourceDigest: "a".repeat(64),
+  sourceDigest: SOURCE_DIGEST,
   policyVersion: "gate1-policy-v2",
   checkpointSummary: {
     checkpointVersion: 1,
@@ -83,6 +95,7 @@ function validationBinding(overrides = {}) {
     recoverySessionId: SESSION_ID,
     tenantId: TENANT_ID,
     subjectBindingHash: SUBJECT_BINDING_HASH,
+    sourceDigest: SOURCE_DIGEST,
     expectedSourceClusterId: SOURCE_CLUSTER_ID,
     trustedPublisherKeys: {
       [SIGNER.publisherKeyId]: SIGNER.publicKeySpkiBase64
@@ -151,17 +164,49 @@ test("recovery summaries use exact typed allowlists", () => {
   );
 });
 
-test("fixed recovery query binds tenant, principal, and strict UUID", () => {
+test("cross-act source binding digest changes with every authority identity field", () => {
+  assert.match(SOURCE_DIGEST, /^[a-f0-9]{64}$/u);
+  for (const [key, value] of Object.entries(SOURCE_BINDING)) {
+    const changed = {
+      ...SOURCE_BINDING,
+      [key]:
+        key === "outcome"
+          ? "authorization_denied"
+          : key.endsWith("Id") && key !== "resourceId"
+            ? "77777777-7777-4777-8777-777777777777"
+            : key.endsWith("Digest")
+              ? "e".repeat(64)
+              : `${value}-changed`
+    };
+    assert.notEqual(
+      recoverySourceBindingDigestFor(changed),
+      SOURCE_DIGEST,
+      key
+    );
+  }
+  assert.throws(
+    () =>
+      recoverySourceBindingDigestFor({
+        ...SOURCE_BINDING,
+        unreviewedField: true
+      }),
+    /unexpected shape/
+  );
+});
+
+test("fixed recovery query binds tenant, principal, and exact source", () => {
   const bindings = {
     recoverySessionId: SESSION_ID,
     tenantId: TENANT_ID,
-    subjectBindingHash: SUBJECT_BINDING_HASH
+    subjectBindingHash: SUBJECT_BINDING_HASH,
+    sourceDigest: SOURCE_DIGEST
   };
   const query = renderRecoveryQuery(bindings);
   assert.deepEqual(recoveryQueryBindingsFor(query), bindings);
   assert.equal(query.includes("__RECOVERY_SESSION_ID__"), false);
   assert.equal(query.includes("__TENANT_ID__"), false);
   assert.equal(query.includes("__SUBJECT_BINDING_HASH__"), false);
+  assert.equal(query.includes("__SOURCE_BINDING_DIGEST__"), false);
   assert.throws(
     () =>
       renderRecoveryQuery({
@@ -175,7 +220,9 @@ test("fixed recovery query binds tenant, principal, and strict UUID", () => {
     /TEMPLATE_MISMATCH/
   );
   assert.match(recoveryQueryTemplateDigest(), /^[a-f0-9]{64}$/u);
-  assert.equal(RECOVERY_QUERY_TEMPLATE.includes("LIMIT 1"), true);
+  assert.equal(RECOVERY_QUERY_TEMPLATE.includes("source_digest ="), true);
+  assert.equal(RECOVERY_QUERY_TEMPLATE.includes("ORDER BY"), false);
+  assert.equal(RECOVERY_QUERY_TEMPLATE.includes("LIMIT"), false);
 });
 
 test("recovery row validation enforces signature and context-only state", () => {
@@ -217,6 +264,17 @@ test("recovery row validation enforces signature and context-only state", () => 
         new Date("2026-07-29T20:30:00.000Z")
       ),
     /RECOVERY_SUBJECT_BINDING_MISMATCH/
+  );
+  assert.throws(
+    () =>
+      validateRecoveryRow(
+        row,
+        validationBinding({
+          sourceDigest: "e".repeat(64)
+        }),
+        new Date("2026-07-29T20:30:00.000Z")
+      ),
+    /RECOVERY_SOURCE_BINDING_MISMATCH/
   );
 });
 

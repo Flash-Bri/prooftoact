@@ -13,6 +13,7 @@ import {
 } from "../src/cloud/recovery-security.js";
 import {
   createRecoveryDatabase,
+  recoverySourceBindingDigestFor,
   recoveryQueryTemplateDigest,
   RecoveryStore,
   renderRecoveryQuery
@@ -204,6 +205,16 @@ async function main() {
     process.env.SNAPSHOT_VERSION ?? String(Math.max(1, sourceCommitMs))
   );
   const subjectBindingHash = principalBindingHash(SYNTHETIC_PRINCIPAL);
+  const sourceDigest = recoverySourceBindingDigestFor({
+    tenantId: receipt.tenant_id,
+    runId: receipt.run_id,
+    incidentId: receipt.incident_id,
+    evidenceDigest: receipt.evidence_digest,
+    resourceId: receipt.resource_id,
+    operationId: receipt.operation_id,
+    requestDigest: receipt.request_digest,
+    outcome: receipt.outcome
+  });
   const signer = createSyntheticRecoverySigner();
 
   await createRecoveryDatabase(recoveryUrl);
@@ -229,7 +240,7 @@ async function main() {
       snapshotVersion,
       sourceClusterId: primaryClusterId,
       sourceCommitTs: new Date(sourceCommitMs).toISOString(),
-      sourceDigest: receipt.request_digest,
+      sourceDigest,
       policyVersion: receipt.policy_version,
       checkpointSummary: {
         checkpointVersion: 1,
@@ -262,10 +273,11 @@ async function main() {
 
     const appended = await publisher.appendSignedBundle(bundle);
     const replay = await publisher.appendSignedBundle(bundle);
-    const recovered = await store.readLatest({
+    const recovered = await store.readExact({
       tenantId: receipt.tenant_id,
       recoverySessionId,
       subjectBindingHash,
+      sourceDigest,
       expectedSourceClusterId: primaryClusterId,
       trustedPublisherKeys: {
         [signer.publisherKeyId]: signer.publicKeySpkiBase64
@@ -291,6 +303,10 @@ async function main() {
     assert(
       recovered.requiresFreshAuthorization === true,
       "recovery omitted fresh-authorization requirement"
+    );
+    assert(
+      recovered.sourceDigest === sourceDigest,
+      "recovery selected context outside the exact cross-act source binding"
     );
 
     console.log(
@@ -318,7 +334,8 @@ async function main() {
           fixedQuery: renderRecoveryQuery({
             tenantId: receipt.tenant_id,
             recoverySessionId,
-            subjectBindingHash
+            subjectBindingHash,
+            sourceDigest
           }),
           recoveryStatus: recovered.status,
           sourceDigest: recovered.sourceDigest,
@@ -332,7 +349,7 @@ async function main() {
           authorityTransferred: recovered.authorityTransferred,
           requiresFreshAuthorization: recovered.requiresFreshAuthorization,
           claimBoundary:
-            "This proves signed, principal-bound, isolated recovery publication and direct validation through a least-privilege publisher. Noninteractive Managed MCP broker execution and primary audit are separate evidence gates."
+            "This proves signed, principal-bound, exact-source recovery publication and direct validation through a least-privilege publisher. Noninteractive Managed MCP broker execution, the 100-drill batch, and primary audit are separate evidence gates."
         },
         null,
         2
