@@ -626,22 +626,27 @@ export function validateReleaseProvenance(
       exactKeys(history, [
         "alternateObjectDatabaseCount",
         "commitCount",
+        "filesystemMonitorDisabled",
         "headAuthorTime",
         "headCommitterTime",
         "legacyGraftFilePresent",
         "mergeCommitCount",
         "objectIntegrity",
         "replaceRefCount",
+        "replacementObjectsDisabled",
         "rootAuthorTime",
         "rootCommit",
         "rootCommitterTime",
         "shallow"
       ]) &&
       exactKeys(trackedTree, [
+        "assumeUnchangedEntryCount",
         "executableFileCount",
         "fileCount",
         "gitlinkCount",
+        "indexEntryCount",
         "regularFileCount",
+        "skipWorktreeEntryCount",
         "symlinkCount"
       ]) &&
       exactKeys(claims, [
@@ -981,6 +986,8 @@ export function validateReleaseProvenance(
       history.mergeCommitCount < history.commitCount &&
       history.shallow === false &&
       history.replaceRefCount === 0 &&
+      history.replacementObjectsDisabled === true &&
+      history.filesystemMonitorDisabled === true &&
       history.legacyGraftFilePresent === false &&
       history.alternateObjectDatabaseCount === 0 &&
       history.objectIntegrity === true &&
@@ -998,6 +1005,9 @@ export function validateReleaseProvenance(
       trackedTree.executableFileCount <= trackedTree.fileCount &&
       trackedTree.symlinkCount === 0 &&
       trackedTree.gitlinkCount === 0 &&
+      trackedTree.indexEntryCount === trackedTree.fileCount &&
+      trackedTree.skipWorktreeEntryCount === 0 &&
+      trackedTree.assumeUnchangedEntryCount === 0 &&
       claims.schemaVersion ===
         "tideproof.release-claims-verification.v1" &&
       claims.status === "CURRENT_PUBLIC_CLAIMS_PASS" &&
