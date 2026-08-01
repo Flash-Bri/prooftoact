@@ -13,7 +13,10 @@ import {
 } from "../src/cloud/recovery-broker.js";
 import { CockroachManagedMcpRecoveryClient } from "../src/cloud/managed-mcp-client.js";
 import { RecoveryPublisher } from "../src/cloud/recovery-security.js";
-import { recoveryQueryTemplateDigest } from "../src/cloud/recovery-store.js";
+import {
+  recoveryQueryTemplateDigest,
+  recoverySourceBindingDigestFor
+} from "../src/cloud/recovery-store.js";
 import { createSyntheticRecoverySigner } from "./lib/synthetic-recovery-signer.js";
 
 const SYNTHETIC_PRINCIPAL = "principal://tideproof-demo-successor";
@@ -238,6 +241,16 @@ async function main() {
   );
   const recoverySessionId = randomUUID();
   const subjectBindingHash = principalBindingHash(SYNTHETIC_PRINCIPAL);
+  const sourceDigest = recoverySourceBindingDigestFor({
+    tenantId: receipt.tenant_id,
+    runId: receipt.run_id,
+    incidentId: receipt.incident_id,
+    evidenceDigest: receipt.evidence_digest,
+    resourceId: receipt.resource_id,
+    operationId: receipt.operation_id,
+    requestDigest: receipt.request_digest,
+    outcome: receipt.outcome
+  });
   const signer = createSyntheticRecoverySigner();
   const sourceCommitMs = new Date(receipt.recorded_at).getTime();
   assert(
@@ -252,7 +265,7 @@ async function main() {
     snapshotVersion: Math.max(1, Date.now()),
     sourceClusterId: primaryClusterId,
     sourceCommitTs: new Date(sourceCommitMs).toISOString(),
-    sourceDigest: receipt.request_digest,
+    sourceDigest,
     policyVersion: receipt.policy_version,
     checkpointSummary: {
       checkpointVersion: 1,
@@ -323,7 +336,8 @@ async function main() {
         return {
           tenantId: receipt.tenant_id,
           recoverySessionId,
-          subjectBindingHash
+          subjectBindingHash,
+          sourceDigest
         };
       }
     },
@@ -353,6 +367,10 @@ async function main() {
     recovered.authorityTransferred === false &&
       recovered.requiresFreshAuthorization === true,
     "broker violated the successor authority boundary"
+  );
+  assert(
+    recovered.sourceDigest === sourceDigest,
+    "broker released context outside the exact cross-act source binding"
   );
   assert(
     unauthorized.status === "UNKNOWN_DO_NOT_ACT",
@@ -388,7 +406,8 @@ async function main() {
     canonicalJson({
       tenantId: receipt.tenant_id,
       recoverySessionId,
-      subjectBindingHash
+      subjectBindingHash,
+      sourceDigest
     })
   );
   const mcpRows = JSON.parse(capturedMcpResult.content[0].text).rows;
@@ -495,7 +514,7 @@ async function main() {
         requiresFreshAuthorization: recovered.requiresFreshAuthorization,
         operationalCapabilitiesReturned: false,
         claimBoundary:
-          "This proves a noninteractive, cluster-scoped Managed MCP read through a deterministic fixed-query broker, signed context validation, principal binding, context-only recovery, and a separate primary-cluster audit receipt. It does not transfer authority or prove a real-world external effect."
+          "This proves a noninteractive, cluster-scoped Managed MCP read through a deterministic fixed query bound to the exact tenant, run, incident, evidence, resource, operation, request digest, outcome, and successor principal; signed context validation; context-only recovery; and a separate primary-cluster audit receipt. It does not transfer authority, satisfy the 100-drill batch, or prove a real-world external effect."
       },
       null,
       2

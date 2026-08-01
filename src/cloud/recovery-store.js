@@ -11,6 +11,7 @@ const DEFAULT_DATABASE = "tideproof_recovery";
 const QUERY_SESSION_TOKEN = "__RECOVERY_SESSION_ID__";
 const QUERY_TENANT_TOKEN = "__TENANT_ID__";
 const QUERY_SUBJECT_TOKEN = "__SUBJECT_BINDING_HASH__";
+const QUERY_SOURCE_TOKEN = "__SOURCE_BINDING_DIGEST__";
 const SAFE_BUNDLE_BYTES = 24_576;
 export const RECOVERY_MAX_TTL_MS = 24 * 60 * 60 * 1_000;
 export const RECOVERY_MAX_SOURCE_AGE_MS = 60 * 60 * 1_000;
@@ -71,9 +72,8 @@ FROM mcp_public.recovery_bundle_v2
 WHERE recovery_session_id = '${QUERY_SESSION_TOKEN}'::UUID
   AND tenant_id = '${QUERY_TENANT_TOKEN}'::UUID
   AND subject_binding_hash = '${QUERY_SUBJECT_TOKEN}'
+  AND source_digest = '${QUERY_SOURCE_TOKEN}'
   AND expires_at > transaction_timestamp()
-ORDER BY snapshot_version DESC
-LIMIT 1
 `.trim();
 
 function canonicalJson(value) {
@@ -186,6 +186,51 @@ function requireExactKeys(value, name, expectedKeys) {
   if (canonicalJson(actual) !== canonicalJson(expected)) {
     throw new TypeError(`${name} has an unexpected shape`);
   }
+}
+
+export function recoverySourceBindingDigestFor(input) {
+  requireExactKeys(input, "recoverySourceBinding", [
+    "evidenceDigest",
+    "incidentId",
+    "operationId",
+    "outcome",
+    "requestDigest",
+    "resourceId",
+    "runId",
+    "tenantId"
+  ]);
+  return sha256(
+    canonicalJson({
+      schema: "tideproof.highwater-recovery-binding.v1",
+      tenantId: requireUuid(input.tenantId, "recoverySourceBinding.tenantId"),
+      runId: requireUuid(input.runId, "recoverySourceBinding.runId"),
+      incidentId: requireUuid(
+        input.incidentId,
+        "recoverySourceBinding.incidentId"
+      ),
+      evidenceDigest: requireSha256(
+        input.evidenceDigest,
+        "recoverySourceBinding.evidenceDigest"
+      ),
+      resourceId: requireBoundedText(
+        input.resourceId,
+        "recoverySourceBinding.resourceId"
+      ),
+      operationId: requireUuid(
+        input.operationId,
+        "recoverySourceBinding.operationId"
+      ),
+      requestDigest: requireSha256(
+        input.requestDigest,
+        "recoverySourceBinding.requestDigest"
+      ),
+      outcome: requireEnum(input.outcome, "recoverySourceBinding.outcome", [
+        "resource_reserved",
+        "resource_held_denied",
+        "authorization_denied"
+      ])
+    })
+  );
 }
 
 function requireCheckpointSummary(value) {
@@ -462,7 +507,8 @@ export function recoveryQueryTemplateDigest() {
 export function renderRecoveryQuery({
   recoverySessionId,
   tenantId,
-  subjectBindingHash
+  subjectBindingHash,
+  sourceDigest
 }) {
   const sessionId = requireUuid(recoverySessionId, "recoverySessionId");
   const boundTenantId = requireUuid(tenantId, "tenantId");
@@ -470,15 +516,17 @@ export function renderRecoveryQuery({
     subjectBindingHash,
     "subjectBindingHash"
   );
+  const boundSourceDigest = requireSha256(sourceDigest, "sourceDigest");
   return RECOVERY_QUERY_TEMPLATE.replace(QUERY_SESSION_TOKEN, sessionId)
     .replace(QUERY_TENANT_TOKEN, boundTenantId)
-    .replace(QUERY_SUBJECT_TOKEN, boundSubjectHash);
+    .replace(QUERY_SUBJECT_TOKEN, boundSubjectHash)
+    .replace(QUERY_SOURCE_TOKEN, boundSourceDigest);
 }
 
 export function recoveryQueryBindingsFor(query) {
   const text = requireText(query, "query");
   const match = text.match(
-    /WHERE recovery_session_id = '([0-9a-f-]+)'::UUID\n  AND tenant_id = '([0-9a-f-]+)'::UUID\n  AND subject_binding_hash = '([a-f0-9]{64})'/u
+    /WHERE recovery_session_id = '([0-9a-f-]+)'::UUID\n  AND tenant_id = '([0-9a-f-]+)'::UUID\n  AND subject_binding_hash = '([a-f0-9]{64})'\n  AND source_digest = '([a-f0-9]{64})'/u
   );
   if (!match) {
     throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
@@ -486,7 +534,8 @@ export function recoveryQueryBindingsFor(query) {
   const bindings = {
     recoverySessionId: requireUuid(match[1], "recoverySessionId"),
     tenantId: requireUuid(match[2], "tenantId"),
-    subjectBindingHash: requireSha256(match[3], "subjectBindingHash")
+    subjectBindingHash: requireSha256(match[3], "subjectBindingHash"),
+    sourceDigest: requireSha256(match[4], "sourceDigest")
   };
   if (renderRecoveryQuery(bindings) !== text) {
     throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
@@ -500,6 +549,7 @@ export function validateRecoveryRow(
     recoverySessionId,
     tenantId,
     subjectBindingHash,
+    sourceDigest,
     expectedSourceClusterId,
     trustedPublisherKeys
   },
@@ -519,6 +569,7 @@ export function validateRecoveryRow(
     subjectBindingHash,
     "subjectBindingHash"
   );
+  const expectedSourceDigest = requireSha256(sourceDigest, "sourceDigest");
   const expectedSourceCluster = requireUuid(
     expectedSourceClusterId,
     "expectedSourceClusterId"
@@ -531,6 +582,9 @@ export function validateRecoveryRow(
   }
   if (row.subject_binding_hash !== expectedSubject) {
     throw new Error("RECOVERY_SUBJECT_BINDING_MISMATCH");
+  }
+  if (row.source_digest !== expectedSourceDigest) {
+    throw new Error("RECOVERY_SOURCE_BINDING_MISMATCH");
   }
   if (row.source_cluster_id !== expectedSourceCluster) {
     throw new Error("RECOVERY_SOURCE_CLUSTER_MISMATCH");
@@ -916,10 +970,11 @@ export class RecoveryStore {
     }
   }
 
-  async readLatest({
+  async readExact({
     recoverySessionId,
     tenantId,
     subjectBindingHash,
+    sourceDigest,
     expectedSourceClusterId,
     trustedPublisherKeys
   }) {
@@ -929,6 +984,7 @@ export class RecoveryStore {
       subjectBindingHash,
       "subjectBindingHash"
     );
+    const boundSourceDigest = requireSha256(sourceDigest, "sourceDigest");
     const result = await this.#pool.query(
       `
         SELECT
@@ -958,11 +1014,10 @@ export class RecoveryStore {
         WHERE recovery_session_id = $1::UUID
           AND tenant_id = $2::UUID
           AND subject_binding_hash = $3
+          AND source_digest = $4
           AND expires_at > transaction_timestamp()
-        ORDER BY snapshot_version DESC
-        LIMIT 1
       `,
-      [sessionId, boundTenantId, boundSubjectHash]
+      [sessionId, boundTenantId, boundSubjectHash, boundSourceDigest]
     );
     if (result.rowCount !== 1) {
       return {
@@ -977,6 +1032,7 @@ export class RecoveryStore {
         recoverySessionId: sessionId,
         tenantId: boundTenantId,
         subjectBindingHash: boundSubjectHash,
+        sourceDigest: boundSourceDigest,
         expectedSourceClusterId,
         trustedPublisherKeys
       }

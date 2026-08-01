@@ -11,13 +11,15 @@ const CLUSTER_ID = "44444444-4444-4444-8444-444444444444";
 const TENANT_ID = "22222222-2222-4222-8222-222222222222";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const SUBJECT_HASH = "a".repeat(64);
+const SOURCE_DIGEST = "b".repeat(64);
 const API_KEY = "synthetic-api-key-that-is-long-enough";
 
 function fixedQuery() {
   return renderRecoveryQuery({
     recoverySessionId: SESSION_ID,
     tenantId: TENANT_ID,
-    subjectBindingHash: SUBJECT_HASH
+    subjectBindingHash: SUBJECT_HASH,
+    sourceDigest: SOURCE_DIGEST
   });
 }
 

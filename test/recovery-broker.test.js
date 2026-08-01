@@ -84,7 +84,8 @@ function brokerFor({
   auditError = null,
   auditFailureAt = null,
   trace = [],
-  bindingHash = principalBindingHash(PRINCIPAL)
+  bindingHash = principalBindingHash(PRINCIPAL),
+  sourceDigest = row.source_digest
 }) {
   const mcpCalls = [];
   const auditEvents = [];
@@ -100,7 +101,8 @@ function brokerFor({
         return {
           tenantId: TENANT_ID,
           recoverySessionId: SESSION_ID,
-          subjectBindingHash: bindingHash
+          subjectBindingHash: bindingHash,
+          sourceDigest
         };
       }
     },
@@ -180,6 +182,22 @@ test("broker derives session from principal and rejects cross-principal access",
   assert.equal(result.reason, "RECOVERY_PRINCIPAL_BINDING_MISMATCH");
   assert.equal(mcpCalls.length, 0);
   assert.equal(auditEvents.length, 0);
+});
+
+test("broker rejects a row outside the exact cross-act source binding", async () => {
+  const { row, signer } = fixture();
+  const { broker, mcpCalls, auditEvents } = brokerFor({
+    row,
+    signer,
+    sourceDigest: "e".repeat(64)
+  });
+  const result = await broker.recover({ authenticatedPrincipal: PRINCIPAL });
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.reason, "RECOVERY_SOURCE_BINDING_MISMATCH");
+  assert.equal(mcpCalls.length, 1);
+  assert.equal(auditEvents.length, 2);
+  assert.equal(auditEvents[1].outcome, "unknown_do_not_act");
+  assert.equal("context" in result, false);
 });
 
 test("broker fails closed on MCP outage", async () => {
@@ -282,7 +300,8 @@ test("broker fails closed instead of throwing on malformed resolver bindings", a
         return {
           tenantId: "not-a-uuid",
           recoverySessionId: SESSION_ID,
-          subjectBindingHash: principalBindingHash(PRINCIPAL)
+          subjectBindingHash: principalBindingHash(PRINCIPAL),
+          sourceDigest: row.source_digest
         };
       }
     },

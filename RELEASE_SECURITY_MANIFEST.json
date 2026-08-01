@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-07-31",
+  "reviewedOn": "2026-08-01",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -150,31 +150,31 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "d21a941d1b15356a594070e622a2c4922692482e49d8abc12b000e6fedadedc7"
+      "sha256": "c3a53eb43d5f285fe0ae0c62cc03a9112a2a32402ff3dcaf7ef643aa28e8bc9a"
     },
     {
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "641be534d84379ff0345ebbdb9e27a4c39a2dfc9719baca08a96e537d4232c84"
+      "sha256": "e67a02cc188113d9b8a1585aab23ae4eead07974ac72c5f57e601a2070aeb914"
     },
     {
       "id": "recovery-evidence-runner",
       "path": "scripts/gate1-recovery.js",
       "role": "RECOVERY_EVIDENCE_RUNNER",
-      "sha256": "a998a1c92d4b41675d5c2d55b6323316afaa582492ffac6c184d5286065169fa"
+      "sha256": "76e2482ec24aac4de1e87490413c100f46f3091ec8dd7601cc89e4abaebed186"
     },
     {
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "48ec74fb7a5a9608f5f2d54dc294bad24a93669de411f8e5c60501bbf7a72c0c"
+      "sha256": "4fab034a365e052a436e5776267599fc427f9d15323583ffdbeb55f97670ba68"
     },
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "45b7f035297c009295beda1ff314cb99a544215c2559becba6291bb95fe44def"
+      "sha256": "f5ddf6bb779332d099313d2d3ea4df019ac6fbe5b4f28f136b8869814b94cc73"
     },
     {
       "id": "security-policy",

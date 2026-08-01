@@ -74,9 +74,31 @@ may be referenced by digest, but they are not counted as full drills.
 
 The source tree now contains stronger replay, recovery, DVI-snapshot, AWS
 evidence, timeout, and resource-bound controls. The provider-backed batch
-harness, bounded multi-race deployment shape, exact cross-act recovery lookup,
-and live receipt do not yet exist. Public claims and final release readiness
-must therefore remain partial and blocked.
+harness, bounded multi-race deployment shape, and live receipt do not yet
+exist. The exact cross-act recovery lookup now has a locally tested source
+control, but no provider-backed receipt. Public claims and final release
+readiness must therefore remain partial and blocked.
+
+## Exact cross-act recovery lookup
+
+The recovery broker no longer selects a bundle by principal, session, and
+recency. `recoverySourceBindingDigestFor` creates one canonical SHA-256 binding
+over the exact tenant, run, incident, admitted evidence digest, resource,
+winning operation, authority request digest, and outcome. The signed bundle,
+session resolver, pre-read audit digest, fixed Managed MCP query, returned row,
+and terminal audit must all carry that same digest.
+
+The fixed query includes `source_digest` as an equality predicate and contains
+no `ORDER BY` or `LIMIT`. Zero rows and duplicate rows both fail closed at the
+broker's exact-one cardinality check. This prevents a newer bundle, another
+operation in the same recovery session, or a resolver/query mismatch from
+being treated as the requested winner. The digest does not disclose the bound
+identifiers in the public receipt.
+
+This is a source-level prerequisite only. It does not prove a Managed MCP
+call, a live database row, the exact 100-run batch, AWS behavior, or final
+release readiness until a fresh provider-backed receipt binds it to the exact
+official release.
 
 ## Integrated DVI acceptance harness
 
