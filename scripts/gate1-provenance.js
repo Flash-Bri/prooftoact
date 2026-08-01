@@ -3,6 +3,7 @@ import {
   AuthorityStore,
   EvidenceVerificationMismatchError
 } from "../src/cloud/authority-store.js";
+import { authorizeSyntheticProposal } from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 function requiredDatabaseUrl() {
@@ -226,13 +227,23 @@ async function main() {
       runId,
       resourceId
     });
+    const rawRevokedRequest = requestFor(
+      laterRevokedEvidence,
+      resourceId,
+      runId
+    );
+    const revokedAuthorization = await authorizeSyntheticProposal(
+      store,
+      rawRevokedRequest
+    );
     await store.revokeVerificationKey({
       tenantId: laterRevokedEvidence.tenantId,
       verificationKeyId: signer.verificationKeyId
     });
-    const revokedDecision = await store.spendAuthority(
-      requestFor(laterRevokedEvidence, resourceId, runId)
-    );
+    const revokedDecision = await store.spendAuthority({
+      ...rawRevokedRequest,
+      dviAuthorization: revokedAuthorization.dviAuthorization
+    });
     const revokedSnapshot = await store.snapshot({
       tenantId: laterRevokedEvidence.tenantId,
       resourceId

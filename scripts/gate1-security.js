@@ -8,7 +8,11 @@ import {
   bootstrapPrimarySecurity,
   connectionStringForUser
 } from "../src/cloud/primary-security.js";
+import {
+  authorizeDviProposalWithClient
+} from "../src/cloud/dvi-proposal-authorization.js";
 import { SignedEvidenceIngest } from "../src/cloud/signed-ingest.js";
+import { authorizeSyntheticProposal } from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 const USERS = [
@@ -27,17 +31,20 @@ const SPEND_AUTHORITY_SQL = `
     $2::UUID,
     $3,
     $4::JSONB,
-    $5::UUID,
-    $6::UUID,
+    $5,
+    $6,
     $7,
-    $8,
-    $9,
-    $10::UUID,
-    $11::UUID,
-    $12::JSONB,
-    $13,
-    $14,
-    $15::INT8
+    $8::UUID,
+    $9::UUID,
+    $10,
+    $11,
+    $12,
+    $13::UUID,
+    $14::UUID,
+    $15::JSONB,
+    $16,
+    $17,
+    $18::INT8
   )
 `;
 
@@ -60,6 +67,9 @@ function spendAuthorityValues(request) {
     request.operationId,
     request.requestDigest,
     JSON.stringify(request.requestPayload),
+    request.proposalDigest,
+    request.logicalActionDigest,
+    request.selectedEvidenceDigest,
     request.runId,
     request.incidentId,
     request.resourceId,
@@ -208,6 +218,14 @@ async function main() {
     databaseName: "tideproof",
     maxConnections: 4
   });
+  const proposalAuthorizer = (input) => withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_authorizer_user",
+      passwords.tp_authorizer_user
+    ),
+    (client) => authorizeDviProposalWithClient(client, input)
+  );
   const signer = createSyntheticEvidenceSigner();
   const signedIngestFixture = {
     tenantId: randomUUID(),
@@ -320,15 +338,177 @@ async function main() {
       destination: "synthetic-zone-capability"
     }
   };
-  const normalizedCapabilityRequest =
-    normalizedAuthorityRequestFor(capabilityRequest);
-  const normalizedDeniedRequest = normalizedAuthorityRequestFor({
+  const mismatchRetrievalId = randomUUID();
+  const beforeSelectionMismatch =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  const selectionMismatch = await authorizeSyntheticProposal(
+    authorityStore,
+    capabilityRequest,
+    {
+      allowDenied: true,
+      proposalAuthorizer,
+      retrievalId: mismatchRetrievalId,
+      requestedSelectedEvidenceId: randomUUID(),
+      requestedSelectedEvidenceDigest: "f".repeat(64)
+    }
+  );
+  const afterSelectionMismatch =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  if (
+    selectionMismatch.authorization.outcome !==
+      "proposal_authorization_denied" ||
+    selectionMismatch.authorization.reason !==
+      "dvi_selection_request_mismatch" ||
+    Number(afterSelectionMismatch.selection_receipt_count) !==
+      Number(beforeSelectionMismatch.selection_receipt_count) + 1 ||
+    Number(afterSelectionMismatch.proposal_receipt_count) !==
+      Number(beforeSelectionMismatch.proposal_receipt_count) ||
+    Number(afterSelectionMismatch.epoch_count) !==
+      Number(beforeSelectionMismatch.epoch_count) ||
+    Number(afterSelectionMismatch.authority_receipt_count) !==
+      Number(beforeSelectionMismatch.authority_receipt_count) ||
+    Number(afterSelectionMismatch.outbox_count) !==
+      Number(beforeSelectionMismatch.outbox_count) ||
+    Number(afterSelectionMismatch.protected_effect_count) !==
+      Number(beforeSelectionMismatch.protected_effect_count) ||
+    Number(afterSelectionMismatch.current_fence) !==
+      Number(beforeSelectionMismatch.current_fence)
+  ) {
+    throw new Error("DVI selection mismatch mutated authority state");
+  }
+  const capabilityAuthorization = await authorizeSyntheticProposal(
+    authorityStore,
+    capabilityRequest,
+    {
+      proposalAuthorizer,
+      retrievalId: mismatchRetrievalId
+    }
+  );
+  const authorizedCapabilityRequest = {
+    ...capabilityRequest,
+    dviAuthorization: capabilityAuthorization.dviAuthorization
+  };
+  const deniedRequest = {
     ...capabilityRequest,
     operationId: randomUUID(),
     agentId: "synthetic-capability-authorizer-bravo",
     intentNonce: randomUUID(),
-    effectKey: randomUUID()
+    effectKey: randomUUID(),
+    payload: {
+      ...capabilityRequest.payload,
+      destination: "synthetic-zone-capability-denied"
+    }
+  };
+  const deniedAuthorization = await authorizeSyntheticProposal(
+    authorityStore,
+    deniedRequest,
+    { proposalAuthorizer }
+  );
+  const normalizedCapabilityRequest = normalizedAuthorityRequestFor(
+    authorizedCapabilityRequest
+  );
+  const normalizedDeniedRequest = normalizedAuthorityRequestFor({
+    ...deniedRequest,
+    dviAuthorization: deniedAuthorization.dviAuthorization
   });
+
+  const beforeSqlBindingNegatives =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  const sqlBindingNegatives = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_authorizer_user",
+      passwords.tp_authorizer_user
+    ),
+    async (client) => {
+      const payloadSubstitution = spendAuthorityValues(
+        normalizedCapabilityRequest
+      );
+      const substitutedPayload = {
+        ...normalizedCapabilityRequest.payload,
+        destination: "synthetic-zone-attacker-substitution"
+      };
+      payloadSubstitution[1] = randomUUID();
+      payloadSubstitution[2] = "a".repeat(64);
+      payloadSubstitution[3] = JSON.stringify({
+        ...normalizedCapabilityRequest.requestPayload,
+        payloadDigest: "b".repeat(64)
+      });
+      payloadSubstitution[13] = randomUUID();
+      payloadSubstitution[14] = JSON.stringify(substitutedPayload);
+      payloadSubstitution[15] = "b".repeat(64);
+      const substituted = await client.query(
+        SPEND_AUTHORITY_SQL,
+        payloadSubstitution
+      );
+
+      const proposalAlias = spendAuthorityValues(
+        normalizedCapabilityRequest
+      );
+      proposalAlias[1] = randomUUID();
+      proposalAlias[2] = "c".repeat(64);
+      proposalAlias[3] = JSON.stringify({
+        ...normalizedCapabilityRequest.requestPayload,
+        proposalDigest: normalizedDeniedRequest.proposalDigest
+      });
+      proposalAlias[4] = normalizedDeniedRequest.proposalDigest;
+      proposalAlias[13] = randomUUID();
+      const aliased = await client.query(
+        SPEND_AUTHORITY_SQL,
+        proposalAlias
+      );
+
+      const forgedRequestDigest = spendAuthorityValues(
+        normalizedCapabilityRequest
+      );
+      forgedRequestDigest[1] = randomUUID();
+      forgedRequestDigest[2] = "d".repeat(64);
+      forgedRequestDigest[13] = randomUUID();
+      const requestDigestRejected = await expectSqlState(
+        client,
+        SPEND_AUTHORITY_SQL,
+        forgedRequestDigest,
+        "22023"
+      );
+
+      const nullIntentNonce = spendAuthorityValues(
+        normalizedCapabilityRequest
+      );
+      nullIntentNonce[1] = randomUUID();
+      nullIntentNonce[2] = "e".repeat(64);
+      nullIntentNonce[3] = JSON.stringify({
+        ...normalizedCapabilityRequest.requestPayload,
+        intentNonce: null
+      });
+      nullIntentNonce[13] = randomUUID();
+      const nullIntentNonceRejected = await expectSqlState(
+        client,
+        SPEND_AUTHORITY_SQL,
+        nullIntentNonce,
+        "22023"
+      );
+      return {
+        payloadSubstitutionOutcome:
+          substituted.rows[0]?.decision_outcome,
+        proposalAliasOutcome: aliased.rows[0]?.decision_outcome,
+        requestDigestRejected,
+        nullIntentNonceRejected
+      };
+    }
+  );
+  const afterSqlBindingNegatives =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  if (
+    sqlBindingNegatives.payloadSubstitutionOutcome !==
+        "authorization_denied" ||
+    sqlBindingNegatives.proposalAliasOutcome !== "authorization_denied" ||
+    sqlBindingNegatives.requestDigestRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.nullIntentNonceRejected?.sqlstate !== "22023" ||
+    JSON.stringify(afterSqlBindingNegatives) !==
+      JSON.stringify(beforeSqlBindingNegatives)
+  ) {
+    throw new Error("least-privilege SQL identity binding invariant failed");
+  }
 
   const authorizer = await withClient(
     connectionStringForUser(
@@ -418,7 +598,7 @@ async function main() {
     }
   );
   const gateTwoProbeRequest = normalizedAuthorityRequestFor({
-    ...capabilityRequest,
+    ...authorizedCapabilityRequest,
     operationId: randomUUID(),
     agentId: "aws-authority-alpha",
     intentNonce: randomUUID(),
@@ -467,6 +647,11 @@ async function main() {
     authorizer.durableProof?.pending_count !== "0" ||
     authorizer.durableProof?.outbox_count !== "1" ||
     authorizer.durableProof?.protected_effect_count !== "0" ||
+    sqlBindingNegatives.payloadSubstitutionOutcome !==
+      "authorization_denied" ||
+    sqlBindingNegatives.proposalAliasOutcome !== "authorization_denied" ||
+    sqlBindingNegatives.requestDigestRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.nullIntentNonceRejected?.sqlstate !== "22023" ||
     authorizer.durableProof
       ?.bravo_observed_holder_operation_id !==
       normalizedCapabilityRequest.operationId ||
@@ -933,6 +1118,7 @@ async function main() {
         roles: bootstrap.roles,
         ingest,
         authorizer,
+        sqlBindingNegatives,
         gateTwoAuthorizer,
         dispatch,
         recoveryAudit,

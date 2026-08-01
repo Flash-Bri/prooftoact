@@ -26,6 +26,11 @@ const SOURCE_BINDING = Object.freeze({
   resourceId: "synthetic-rescue-unit",
   operationId: "66666666-6666-4666-8666-666666666666",
   requestDigest: "d".repeat(64),
+  proposalDigest: "e".repeat(64),
+  logicalActionDigest: "f".repeat(64),
+  authorizationEpoch: 1,
+  logicalAuthorityKeySha256: "1".repeat(64),
+  authorizationBindingSha256: "2".repeat(64),
   outcome: "resource_reserved"
 });
 const SOURCE_DIGEST = recoverySourceBindingDigestFor(SOURCE_BINDING);
@@ -172,10 +177,14 @@ test("cross-act source binding digest changes with every authority identity fiel
       [key]:
         key === "outcome"
           ? "authorization_denied"
+          : key === "authorizationEpoch"
+            ? 2
           : key.endsWith("Id") && key !== "resourceId"
             ? "77777777-7777-4777-8777-777777777777"
-            : key.endsWith("Digest")
-              ? "e".repeat(64)
+            : key.endsWith("Digest") || key.endsWith("Sha256")
+              ? value === "e".repeat(64)
+                ? "a".repeat(64)
+                : "e".repeat(64)
               : `${value}-changed`
     };
     assert.notEqual(

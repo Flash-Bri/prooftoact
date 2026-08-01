@@ -4,6 +4,7 @@ import {
   AuthorityStore,
   normalizedAuthorityRequestFor
 } from "../src/cloud/authority-store.js";
+import { authorizeSyntheticContenders } from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 const CONTENDERS = 50;
@@ -11,8 +12,8 @@ const SPEND_SQL = `
   SELECT *
   FROM tp_api.g1_spend_authority_v1(
     $1::UUID, $2::UUID, $3, $4::JSONB,
-    $5::UUID, $6::UUID, $7, $8, $9,
-    $10::UUID, $11::UUID, $12::JSONB, $13, $14, $15::INT8
+    $5, $6, $7, $8::UUID, $9::UUID, $10, $11, $12,
+    $13::UUID, $14::UUID, $15::JSONB, $16, $17, $18::INT8
   )
 `;
 
@@ -65,6 +66,9 @@ function valuesFor(request) {
     request.operationId,
     request.requestDigest,
     JSON.stringify(request.requestPayload),
+    request.proposalDigest,
+    request.logicalActionDigest,
+    request.selectedEvidenceDigest,
     request.runId,
     request.incidentId,
     request.resourceId,
@@ -158,8 +162,7 @@ async function main() {
     assert(evidence.outcome === "evidence_verified", "evidence did not verify");
     await store.prepareResource(fixture);
 
-    const requests = Array.from({ length: CONTENDERS }, (_, index) =>
-      normalizedAuthorityRequestFor({
+    const rawRequests = Array.from({ length: CONTENDERS }, (_, index) => ({
         ...fixture,
         operationId: randomUUID(),
         agentId: `capability-agent-${String(index + 1).padStart(2, "0")}`,
@@ -172,8 +175,10 @@ async function main() {
           action: "dispatch_rescue_unit",
           destination: "synthetic-zone-capability-race"
         }
-      })
-    );
+      }));
+    const requests = (
+      await authorizeSyntheticContenders(store, rawRequests)
+    ).map((request) => normalizedAuthorityRequestFor(request));
     const barrier = new Barrier(CONTENDERS);
     const settled = await Promise.allSettled(
       requests.map((request) =>

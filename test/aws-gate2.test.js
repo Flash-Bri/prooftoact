@@ -807,6 +807,13 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       AUTHORITY_RUN_ID: { Ref: "AuthorityRunId" },
       AUTHORITY_INCIDENT_ID: { Ref: "AuthorityIncidentId" },
       AUTHORITY_EVIDENCE_ID: { Ref: "AuthorityEvidenceId" },
+      AUTHORITY_PROPOSAL_DIGEST: { Ref: "AuthorityProposalDigest" },
+      AUTHORITY_LOGICAL_ACTION_DIGEST: {
+        Ref: "AuthorityLogicalActionDigest"
+      },
+      AUTHORITY_SELECTED_EVIDENCE_DIGEST: {
+        Ref: "AuthoritySelectedEvidenceDigest"
+      },
       AUTHORITY_RACE_ID: { Ref: "AuthorityRaceId" },
       AUTHORITY_RESOURCE_ID: { Ref: "AuthorityResourceId" },
       SOURCE_COMMIT: { Ref: "SourceCommit" },
@@ -1247,6 +1254,7 @@ test("primary security separates Gate One and Gate Two database authority", () =
     /p_agent_id NOT IN \('aws-authority-alpha', 'aws-authority-bravo'\)/
   );
   const gateOneGrant = grantFor("tp_authorizer_role");
+  assert.match(gateOneGrant, /tp_api\.g1_commit_dvi_selection_v1/);
   assert.match(gateOneGrant, /tp_api\.g1_spend_authority_v1/);
   assert.match(gateOneGrant, /tp_api\.g1_resolve_request_v1/);
   assert.match(gateOneGrant, /tp_api\.g1_observe_authority_race_v1/);
@@ -1257,6 +1265,7 @@ test("primary security separates Gate One and Gate Two database authority", () =
   assert.match(gateTwoGrant, /tp_api\.g1_observe_authority_race_v1/);
   assert.doesNotMatch(gateTwoGrant, /tp_api\.g1_spend_authority_v1/);
   assert.doesNotMatch(gateTwoGrant, /tp_api\.g1_observe_admissibility/);
+  assert.doesNotMatch(gateTwoGrant, /tp_api\.g1_commit_dvi_selection_v1/);
   assert.match(
     revokesFor("tp_authorizer_role"),
     /tp_api\.g2_spend_authority_race_v1/
@@ -1266,6 +1275,16 @@ test("primary security separates Gate One and Gate Two database authority", () =
     /tp_api\.g1_spend_authority_v1/
   );
   assert.doesNotMatch(source, /p_authenticated_agent_id/);
+  assert.match(
+    source,
+    /proposal\.resource_id = p_resource_id[\s\S]*proposal\.payload = p_payload[\s\S]*proposal\.payload_digest = p_payload_digest/
+  );
+  assert.match(
+    source,
+    /v_expected_payload_digest := encode[\s\S]*v_expected_logical_action_digest := encode[\s\S]*v_expected_request_digest := encode/
+  );
+  assert.match(source, /v_existing_request_payload <> p_request_payload/);
+  assert.match(source, /v_existing_proposal_digest/);
 });
 
 test("SECURITY DEFINER bodies resolve every application relation by schema", () => {
@@ -1281,9 +1300,17 @@ test("SECURITY DEFINER bodies resolve every application relation by schema", () 
     let count = 0;
     for (const [, body] of definitions) {
       count += 1;
+      const cteNames = new Set(
+        [...body.matchAll(/\b(?:WITH|,)\s+([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(/gi)].map(
+          (match) => match[1].toLowerCase()
+        )
+      );
       for (const match of body.matchAll(
         /^\s*(?:FROM|(?:LEFT\s+|RIGHT\s+|FULL\s+|INNER\s+|CROSS\s+)?JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([A-Za-z_][A-Za-z0-9_.]*)/gim
       )) {
+        if (cteNames.has(match[1].toLowerCase())) {
+          continue;
+        }
         assert.match(match[1], /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/i, `${file}: ${match[0]}`);
       }
     }
@@ -1362,7 +1389,10 @@ test("effective config digest changes with every deployment control", () => {
       incidentId: "33333333-3333-4333-8333-333333333333",
       evidenceId: "44444444-4444-4444-8444-444444444444",
       raceId: "55555555-5555-4555-8555-555555555555",
-      resourceId: "synthetic-rescue-unit-aws-proof"
+      resourceId: "synthetic-rescue-unit-aws-proof",
+      proposalDigest: "1".repeat(64),
+      logicalActionDigest: "2".repeat(64),
+      selectedEvidenceDigest: "3".repeat(64),
     },
     bedrockModelId: "amazon.nova-micro-v1:0",
     budgetUsd: 15,

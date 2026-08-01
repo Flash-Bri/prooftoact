@@ -80,6 +80,21 @@
       "Description": "Verified synthetic evidence UUID admitted by CockroachDB.",
       "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
+    "AuthorityProposalDigest": {
+      "Type": "String",
+      "Description": "Database-authorized DVI proposal identity consumed by Gate Two.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "AuthorityLogicalActionDigest": {
+      "Type": "String",
+      "Description": "Stable logical-action identity consumed by Gate Two.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
+    "AuthoritySelectedEvidenceDigest": {
+      "Type": "String",
+      "Description": "Exact selected evidence digest bound by the authorized DVI proposal.",
+      "AllowedPattern": "^[0-9a-f]{64}$"
+    },
     "AuthorityRaceId": {
       "Type": "String",
       "Description": "One exact proof-race UUID accepted by both authority contenders.",
@@ -1413,6 +1428,15 @@
             },
             "AUTHORITY_EVIDENCE_ID": {
               "Ref": "AuthorityEvidenceId"
+            },
+            "AUTHORITY_PROPOSAL_DIGEST": {
+              "Ref": "AuthorityProposalDigest"
+            },
+            "AUTHORITY_LOGICAL_ACTION_DIGEST": {
+              "Ref": "AuthorityLogicalActionDigest"
+            },
+            "AUTHORITY_SELECTED_EVIDENCE_DIGEST": {
+              "Ref": "AuthoritySelectedEvidenceDigest"
             },
             "AUTHORITY_RACE_ID": {
               "Ref": "AuthorityRaceId"
@@ -3395,6 +3419,21 @@
     "AuthorityArtifactDigest": {
       "Value": {
         "Ref": "AuthorityArtifactDigest"
+      }
+    },
+    "AuthorityProposalDigest": {
+      "Value": {
+        "Ref": "AuthorityProposalDigest"
+      }
+    },
+    "AuthorityLogicalActionDigest": {
+      "Value": {
+        "Ref": "AuthorityLogicalActionDigest"
+      }
+    },
+    "AuthoritySelectedEvidenceDigest": {
+      "Value": {
+        "Ref": "AuthoritySelectedEvidenceDigest"
       }
     },
     "ProbeSourceDigest": {

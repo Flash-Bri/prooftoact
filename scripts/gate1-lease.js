@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { AuthorityStore } from "../src/cloud/authority-store.js";
+import {
+  authorizeSyntheticContenders,
+  authorizeSyntheticProposal
+} from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 class Barrier {
@@ -137,9 +141,17 @@ async function main() {
 
     const missing = await prepareFixture(store, signer);
     const missingResourceId = `missing-${randomUUID()}`;
-    const missingDecision = await store.spendAuthority({
+    const rawMissingRequest = {
       ...requestFor(missing, "missing"),
       resourceId: missingResourceId
+    };
+    const missingAuthorization = await authorizeSyntheticProposal(
+      store,
+      rawMissingRequest
+    );
+    const missingDecision = await store.spendAuthority({
+      ...rawMissingRequest,
+      dviAuthorization: missingAuthorization.dviAuthorization
     });
     const missingSnapshot = await store.snapshot({
       tenantId: missing.tenantId,
@@ -158,14 +170,31 @@ async function main() {
     );
 
     const fixture = await prepareFixture(store, signer);
-    const originalRequest = requestFor(fixture, "original");
+    const rawOriginalRequest = requestFor(fixture, "original");
+    const originalAuthorization = await authorizeSyntheticProposal(
+      store,
+      rawOriginalRequest
+    );
+    const originalRequest = {
+      ...rawOriginalRequest,
+      dviAuthorization: originalAuthorization.dviAuthorization
+    };
     const original = await store.spendAuthority(originalRequest);
     assert(original.receipt.fencing_token === "1", "first fence was not 1");
     const boundary = await store.expireLeaseAtDatabaseNowForTest(fixture);
     assert(boundary.exact_boundary === true, "expiry was not set at DB now");
 
-    const contenders = Array.from({ length: 50 }, (_, index) =>
-      requestFor(fixture, index + 1)
+    const contenders = await authorizeSyntheticContenders(
+      store,
+      Array.from({ length: 50 }, (_, index) =>
+        requestFor(fixture, index + 1, {
+          payload: {
+            scenario: "synthetic-highwater",
+            action: "dispatch_rescue_unit",
+            destination: "synthetic-zone-expiry-race"
+          }
+        })
+      )
     );
     const expiryBarrier = new Barrier(50);
     const settled = await Promise.allSettled(
@@ -206,9 +235,21 @@ async function main() {
         deniedReplay.receipt.outcome === "resource_held_denied",
       "denied request changed outcome after expiry"
     );
-    const fresh = await store.spendAuthority(
-      requestFor(fixture, "fresh-after-expiry")
+    const rawFresh = requestFor(fixture, "fresh-after-expiry", {
+      payload: {
+        scenario: "synthetic-highwater",
+        action: "dispatch_rescue_unit",
+        destination: "synthetic-zone-fresh-after-expiry"
+      }
+    });
+    const freshAuthorization = await authorizeSyntheticProposal(
+      store,
+      rawFresh
     );
+    const fresh = await store.spendAuthority({
+      ...rawFresh,
+      dviAuthorization: freshAuthorization.dviAuthorization
+    });
     assert(
       fresh.outcome === "resource_reserved" &&
         fresh.receipt.fencing_token === "3",

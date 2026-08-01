@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AuthorityStore } from "../src/cloud/authority-store.js";
+import { authorizeSyntheticProposal } from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 function requiredDatabaseUrl() {
@@ -150,13 +151,18 @@ async function main() {
       runId,
       resourceId
     });
-    const request = requestFor({
+    const rawRequest = requestFor({
       tenantId: forward.tenantId,
       runId,
       incidentId: forward.incidentId,
       resourceId,
       evidenceId: forward.evidenceA
     });
+    const authorization = await authorizeSyntheticProposal(store, rawRequest);
+    const request = {
+      ...rawRequest,
+      dviAuthorization: authorization.dviAuthorization
+    };
     let historicalAuthorizationRejected = false;
     try {
       await store.spendAuthority({ ...request, at: forward.times.t1 });

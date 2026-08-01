@@ -55,16 +55,17 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
       "g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
       "g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
       "g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
+      "g1_commit_dvi_selection_v1(UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, INT8, STRING)",
       "g1_delete_vector_set_v1(UUID, UUID)",
       "g1_purge_expired_vector_sets_v1(UUID, INT8)",
-      "g1_spend_authority_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+      "g1_spend_authority_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
       "g1_resolve_request_v1(UUID, UUID, STRING)",
       "g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)"
     ])
   }),
   tp_gate2_authorizer_role: Object.freeze({
     functions: Object.freeze([
-      "g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+      "g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
       "g1_resolve_request_v1(UUID, UUID, STRING)",
       "g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)"
     ])
@@ -359,6 +360,11 @@ async function createAuditObjects(client) {
       tenant_id,
       operation_id,
       request_digest,
+      proposal_digest,
+      logical_action_digest,
+      authorization_epoch,
+      logical_authority_key_sha256,
+      authorization_binding_sha256,
       run_id,
       incident_id,
       resource_id,
@@ -1050,7 +1056,9 @@ async function createFunctions(client) {
       FROM tp_private.g1_vector_candidates AS candidate
       WHERE candidate.tenant_id = p_tenant_id
         AND candidate.retrieval_id = p_retrieval_id
-      ORDER BY candidate.embedding <=> p_query_embedding::VECTOR(3)
+      ORDER BY
+        candidate.embedding <=> p_query_embedding::VECTOR(3),
+        candidate.evidence_id
       LIMIT p_limit;
     END
     $$
@@ -1149,6 +1157,814 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_commit_dvi_selection_v1(
+      UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING,
+      STRING, INT8, UUID, STRING, STRING
+    )
+  `);
+
+  await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_commit_dvi_selection_v1(
+      UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING,
+      STRING, INT8, STRING
+    )
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_commit_dvi_selection_v1(
+      p_tenant_id UUID,
+      p_retrieval_id UUID,
+      p_run_id UUID,
+      p_incident_id UUID,
+      p_agency STRING,
+      p_policy_version STRING,
+      p_source_commit STRING,
+      p_tree_digest STRING,
+      p_spec_sha256 STRING,
+      p_query_embedding STRING,
+      p_limit INT8,
+      p_claimed_authority_evidence_binding_sha256 STRING
+    )
+    RETURNS TABLE(
+      authority_evidence_binding_sha256 STRING,
+      admitted_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      ranked_sequence_sha256 STRING,
+      query_embedding_sha256 STRING,
+      result_limit INT8,
+      selected_rank INT8,
+      selected_evidence_id UUID,
+      selected_evidence_digest STRING
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_admitted_at TIMESTAMPTZ;
+      v_expires_at TIMESTAMPTZ;
+      v_observed_count INT8;
+      v_ranked_sequence_sha256 STRING;
+      v_query_embedding_sha256 STRING;
+      v_selected_evidence_id UUID;
+      v_selected_evidence_digest STRING;
+      v_authority_evidence_binding_sha256 STRING;
+      v_admitted_at_text STRING;
+      v_expires_at_text STRING;
+    BEGIN
+      IF session_user <> 'tp_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate One authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF p_policy_version IS DISTINCT FROM 'g1-admissibility-v2'
+        OR p_source_commit IS NULL
+        OR p_source_commit !~ '^[0-9a-f]{40}$'
+        OR p_tree_digest IS NULL
+        OR p_tree_digest !~ '^[0-9a-f]{40}$'
+        OR p_spec_sha256 IS NULL
+        OR p_spec_sha256 !~ '^[0-9a-f]{64}$'
+        OR p_query_embedding IS NULL
+        OR p_claimed_authority_evidence_binding_sha256 IS NULL
+        OR p_claimed_authority_evidence_binding_sha256 !~
+          '^[0-9a-f]{64}$'
+        OR p_limit IS NULL
+        OR p_limit < 1
+        OR p_limit > 100 THEN
+        RAISE EXCEPTION 'DVI selection receipt identity outside policy'
+          USING ERRCODE = '22023';
+      END IF;
+
+      SELECT retrieval.admitted_at, retrieval.expires_at
+      INTO v_admitted_at, v_expires_at
+      FROM tp_private.g1_vector_retrieval_sets AS retrieval
+      WHERE retrieval.tenant_id = p_tenant_id
+        AND retrieval.retrieval_id = p_retrieval_id
+        AND retrieval.incident_id = p_incident_id
+        AND retrieval.agency = p_agency
+        AND retrieval.policy_version = p_policy_version
+        AND retrieval.cleaned_at IS NULL
+        AND retrieval.expires_at > transaction_timestamp();
+      IF v_admitted_at IS NULL THEN
+        RAISE EXCEPTION 'live DVI retrieval set required'
+          USING ERRCODE = '22023';
+      END IF;
+      WITH ranked AS (
+        SELECT
+          candidate.evidence_id,
+          candidate.evidence_digest,
+          row_number() OVER (
+            ORDER BY
+              candidate.embedding <=> p_query_embedding::VECTOR(3),
+              candidate.evidence_id
+          ) AS rank
+        FROM tp_private.g1_vector_candidates AS candidate
+        WHERE candidate.tenant_id = p_tenant_id
+          AND candidate.retrieval_id = p_retrieval_id
+        ORDER BY
+          candidate.embedding <=> p_query_embedding::VECTOR(3),
+          candidate.evidence_id
+        LIMIT p_limit
+      )
+      SELECT
+        count(*)::INT8,
+        encode(
+          sha256((
+            string_agg(
+              ranked.evidence_id::STRING || ':' || ranked.evidence_digest,
+              e'\n' ORDER BY ranked.rank
+            ) || e'\n'
+          )::BYTES),
+          'hex'
+        )
+      INTO v_observed_count, v_ranked_sequence_sha256
+      FROM ranked;
+      IF v_observed_count <> p_limit THEN
+        RAISE EXCEPTION 'ranked DVI result count outside policy'
+          USING ERRCODE = '22023';
+      END IF;
+      SELECT candidate.evidence_id, candidate.evidence_digest
+      INTO v_selected_evidence_id, v_selected_evidence_digest
+      FROM tp_private.g1_vector_candidates AS candidate
+      WHERE candidate.tenant_id = p_tenant_id
+        AND candidate.retrieval_id = p_retrieval_id
+      ORDER BY
+        candidate.embedding <=> p_query_embedding::VECTOR(3),
+        candidate.evidence_id
+      LIMIT 1;
+      IF v_selected_evidence_id IS NULL THEN
+        RAISE EXCEPTION 'rank-1 DVI evidence missing'
+          USING ERRCODE = '22023';
+      END IF;
+
+      v_query_embedding_sha256 := encode(
+        sha256(p_query_embedding::BYTES),
+        'hex'
+      );
+      v_admitted_at_text := to_char(
+        v_admitted_at AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+      );
+      v_expires_at_text := to_char(
+        v_expires_at AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+      );
+      v_authority_evidence_binding_sha256 := encode(
+        sha256((
+          '{"agency":' || to_json(p_agency)::STRING ||
+          ',"incidentId":"' || p_incident_id::STRING ||
+          '","policyVersion":' || to_json(p_policy_version)::STRING ||
+          ',"queryEmbeddingSha256":"' || v_query_embedding_sha256 ||
+          '","rankedSequenceSha256":"' || v_ranked_sequence_sha256 ||
+          '","resultLimit":' || p_limit::STRING ||
+          ',"retrievalId":"' || p_retrieval_id::STRING ||
+          '","runId":"' || p_run_id::STRING ||
+          '","schemaVersion":"tideproof.authority.dvi-selection-receipt.v2"' ||
+          ',"selected":{"evidenceDigest":"' ||
+          v_selected_evidence_digest || '","evidenceId":"' ||
+          v_selected_evidence_id::STRING || '","rank":1}' ||
+          ',"snapshot":{"admittedAt":"' || v_admitted_at_text ||
+          '","expiresAt":"' || v_expires_at_text || '"}' ||
+          ',"sourceCommit":"' || p_source_commit ||
+          '","specSha256":"' || p_spec_sha256 ||
+          '","tenantId":"' || p_tenant_id::STRING ||
+          '","treeDigest":"' || p_tree_digest || '"}'
+        )::BYTES),
+        'hex'
+      );
+      IF v_authority_evidence_binding_sha256 IS DISTINCT FROM
+        p_claimed_authority_evidence_binding_sha256 THEN
+        RAISE EXCEPTION 'DVI selection binding mismatch'
+          USING ERRCODE = '22023';
+      END IF;
+
+      INSERT INTO tp_ledger.g1_dvi_selection_receipts (
+        tenant_id,
+        retrieval_id,
+        authority_evidence_binding_sha256,
+        run_id,
+        incident_id,
+        agency,
+        policy_version,
+        source_commit,
+        tree_digest,
+        spec_sha256,
+        admitted_at,
+        expires_at,
+        ranked_sequence_sha256,
+        query_embedding_sha256,
+        result_limit,
+        selected_rank,
+        selected_evidence_id,
+        selected_evidence_digest
+      ) VALUES (
+        p_tenant_id,
+        p_retrieval_id,
+        v_authority_evidence_binding_sha256,
+        p_run_id,
+        p_incident_id,
+        p_agency,
+        p_policy_version,
+        p_source_commit,
+        p_tree_digest,
+        p_spec_sha256,
+        v_admitted_at,
+        v_expires_at,
+        v_ranked_sequence_sha256,
+        v_query_embedding_sha256,
+        p_limit,
+        1,
+        v_selected_evidence_id,
+        v_selected_evidence_digest
+      )
+      ON CONFLICT DO NOTHING;
+
+      SELECT count(*)::INT8
+      INTO v_observed_count
+      FROM tp_ledger.g1_dvi_selection_receipts AS receipt
+      WHERE receipt.tenant_id = p_tenant_id
+        AND receipt.retrieval_id = p_retrieval_id
+        AND receipt.authority_evidence_binding_sha256 =
+          v_authority_evidence_binding_sha256
+        AND receipt.run_id = p_run_id
+        AND receipt.incident_id = p_incident_id
+        AND receipt.agency = p_agency
+        AND receipt.policy_version = p_policy_version
+        AND receipt.source_commit = p_source_commit
+        AND receipt.tree_digest = p_tree_digest
+        AND receipt.spec_sha256 = p_spec_sha256
+        AND receipt.admitted_at = v_admitted_at
+        AND receipt.expires_at = v_expires_at
+        AND receipt.ranked_sequence_sha256 = v_ranked_sequence_sha256
+        AND receipt.query_embedding_sha256 = v_query_embedding_sha256
+        AND receipt.result_limit = p_limit
+        AND receipt.selected_rank = 1
+        AND receipt.selected_evidence_id = v_selected_evidence_id
+        AND receipt.selected_evidence_digest = v_selected_evidence_digest;
+      IF v_observed_count <> 1 THEN
+        RAISE EXCEPTION 'DVI selection receipt conflict'
+          USING ERRCODE = '22000';
+      END IF;
+
+      RETURN QUERY SELECT
+        v_authority_evidence_binding_sha256,
+        v_admitted_at,
+        v_expires_at,
+        v_ranked_sequence_sha256,
+        v_query_embedding_sha256,
+        p_limit,
+        1::INT8,
+        v_selected_evidence_id,
+      v_selected_evidence_digest;
+    END
+    $$
+  `);
+
+  await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_authorize_dvi_proposal_v1(
+      UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB
+    )
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_authorize_dvi_proposal_v1(
+      p_tenant_id UUID,
+      p_retrieval_id UUID,
+      p_expected_run_id UUID,
+      p_expected_incident_id UUID,
+      p_requested_selected_evidence_id UUID,
+      p_requested_selected_evidence_digest STRING,
+      p_resource_id STRING,
+      p_agency STRING,
+      p_action_kind STRING,
+      p_payload JSONB
+    )
+    RETURNS TABLE(
+      decision_outcome STRING,
+      decision_reason STRING,
+      decision_proposal_digest STRING,
+      decision_logical_action_digest STRING,
+      decision_authorization_epoch INT8,
+      decision_logical_authority_key_sha256 STRING,
+      decision_authorization_binding_sha256 STRING,
+      decision_authority_evidence_binding_sha256 STRING,
+      decision_run_id UUID,
+      decision_incident_id UUID,
+      decision_policy_version STRING,
+      decision_selected_rank INT8,
+      decision_selected_evidence_id UUID,
+      decision_selected_evidence_digest STRING,
+      decision_admitted_at TIMESTAMPTZ,
+      decision_expires_at TIMESTAMPTZ,
+      decision_payload_digest STRING,
+      decision_authorized_at TIMESTAMPTZ,
+      decision_authority_current BOOL,
+      decision_database_now TIMESTAMPTZ
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_database_now TIMESTAMPTZ := transaction_timestamp();
+      v_selection RECORD;
+      v_evidence RECORD;
+      v_existing RECORD;
+      v_epoch RECORD;
+      v_authorized_at TIMESTAMPTZ;
+      v_payload_canonical STRING;
+      v_payload_digest STRING;
+      v_logical_action_digest STRING;
+      v_proposal_digest STRING;
+      v_logical_authority_key_sha256 STRING;
+      v_authorization_binding_sha256 STRING;
+      v_authorization_epoch INT8;
+      v_admitted_at_text STRING;
+      v_expires_at_text STRING;
+      v_prior_spend_count INT8;
+      v_authority_current BOOL;
+    BEGIN
+      IF session_user <> 'tp_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate One authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF p_tenant_id IS NULL
+        OR p_retrieval_id IS NULL
+        OR p_expected_run_id IS NULL
+        OR p_expected_incident_id IS NULL
+        OR p_requested_selected_evidence_id IS NULL
+        OR p_requested_selected_evidence_digest IS NULL
+        OR p_requested_selected_evidence_digest !~ '^[0-9a-f]{64}$'
+        OR p_resource_id IS NULL
+        OR length(p_resource_id) < 1
+        OR length(p_resource_id) > 256
+        OR btrim(p_resource_id) IS DISTINCT FROM p_resource_id
+        OR p_agency IS NULL
+        OR length(p_agency) < 1
+        OR length(p_agency) > 128
+        OR btrim(p_agency) IS DISTINCT FROM p_agency
+        OR p_action_kind IS DISTINCT FROM 'dispatch_rescue_unit'
+        OR p_payload IS NULL
+        OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'DVI proposal authorization input outside policy'
+          USING ERRCODE = '22023';
+      END IF;
+
+      SELECT selection.*
+      INTO v_selection
+      FROM tp_ledger.g1_dvi_selection_receipts AS selection
+      WHERE selection.tenant_id = p_tenant_id
+        AND selection.retrieval_id = p_retrieval_id;
+      IF NOT FOUND THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_denied'::STRING,
+          'dvi_selection_receipt_missing'::STRING,
+          NULL::STRING, NULL::STRING, NULL::INT8,
+          NULL::STRING, NULL::STRING, NULL::STRING,
+          NULL::UUID, NULL::UUID, NULL::STRING, NULL::INT8,
+          NULL::UUID, NULL::STRING, NULL::TIMESTAMPTZ,
+          NULL::TIMESTAMPTZ, NULL::STRING, NULL::TIMESTAMPTZ,
+          false, v_database_now;
+        RETURN;
+      END IF;
+      IF v_selection.run_id IS DISTINCT FROM p_expected_run_id
+        OR v_selection.incident_id IS DISTINCT FROM p_expected_incident_id
+        OR v_selection.agency IS DISTINCT FROM p_agency
+        OR v_selection.selected_rank IS DISTINCT FROM 1
+        OR v_selection.selected_evidence_id IS DISTINCT FROM
+          p_requested_selected_evidence_id
+        OR v_selection.selected_evidence_digest IS DISTINCT FROM
+          p_requested_selected_evidence_digest THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_denied'::STRING,
+          'dvi_selection_request_mismatch'::STRING,
+          NULL::STRING, NULL::STRING, NULL::INT8,
+          NULL::STRING, NULL::STRING,
+          v_selection.authority_evidence_binding_sha256,
+          v_selection.run_id, v_selection.incident_id,
+          v_selection.policy_version, v_selection.selected_rank,
+          v_selection.selected_evidence_id,
+          v_selection.selected_evidence_digest,
+          v_selection.admitted_at, v_selection.expires_at,
+          NULL::STRING, NULL::TIMESTAMPTZ, false, v_database_now;
+        RETURN;
+      END IF;
+      IF v_selection.admitted_at > v_database_now
+        OR v_selection.expires_at <= v_database_now THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_denied'::STRING,
+          'dvi_selection_receipt_expired'::STRING,
+          NULL::STRING, NULL::STRING, NULL::INT8,
+          NULL::STRING, NULL::STRING,
+          v_selection.authority_evidence_binding_sha256,
+          v_selection.run_id, v_selection.incident_id,
+          v_selection.policy_version, v_selection.selected_rank,
+          v_selection.selected_evidence_id,
+          v_selection.selected_evidence_digest,
+          v_selection.admitted_at, v_selection.expires_at,
+          NULL::STRING, NULL::TIMESTAMPTZ, false, v_database_now;
+        RETURN;
+      END IF;
+
+      SELECT listed.*
+      INTO v_evidence
+      FROM tp_private.g1_list_admissibility_internal_v1(
+        p_tenant_id,
+        v_selection.incident_id,
+        p_agency
+      ) AS listed
+      WHERE listed.evidence_id = v_selection.selected_evidence_id;
+      IF NOT FOUND
+        OR v_evidence.admissibility IS DISTINCT FROM 'admissible'
+        OR v_evidence.evidence_digest IS DISTINCT FROM
+          v_selection.selected_evidence_digest THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_denied'::STRING,
+          CASE
+            WHEN NOT FOUND THEN 'selected_evidence_missing'
+            WHEN v_evidence.admissibility IS DISTINCT FROM 'admissible'
+              THEN 'selected_evidence_not_admissible'
+            ELSE 'selected_evidence_digest_mismatch'
+          END::STRING,
+          NULL::STRING, NULL::STRING, NULL::INT8,
+          NULL::STRING, NULL::STRING,
+          v_selection.authority_evidence_binding_sha256,
+          v_selection.run_id, v_selection.incident_id,
+          v_selection.policy_version, v_selection.selected_rank,
+          v_selection.selected_evidence_id,
+          v_selection.selected_evidence_digest,
+          v_selection.admitted_at, v_selection.expires_at,
+          NULL::STRING, NULL::TIMESTAMPTZ, false, v_database_now;
+        RETURN;
+      END IF;
+
+      v_payload_canonical := p_payload::STRING;
+      v_payload_digest := encode(
+        sha256(v_payload_canonical::BYTES),
+        'hex'
+      );
+      v_logical_action_digest := encode(
+        sha256((
+          '{"actionKind":' || to_json(p_action_kind)::STRING ||
+          ',"agency":' || to_json(p_agency)::STRING ||
+          ',"incidentId":"' || v_selection.incident_id::STRING ||
+          '","payloadDigest":"' || v_payload_digest ||
+          '","resourceId":' || to_json(p_resource_id)::STRING ||
+          ',"schemaVersion":"tideproof.authority.logical-action.v1"' ||
+          ',"tenantId":"' || p_tenant_id::STRING || '"}'
+        )::BYTES),
+        'hex'
+      );
+      v_admitted_at_text := to_char(
+        v_selection.admitted_at AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+      );
+      v_expires_at_text := to_char(
+        v_selection.expires_at AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+      );
+      v_proposal_digest := encode(
+        sha256((
+          '{"admittedAt":"' || v_admitted_at_text ||
+          '","authorityEvidenceBindingSha256":"' ||
+          v_selection.authority_evidence_binding_sha256 ||
+          '","expiresAt":"' || v_expires_at_text ||
+          '","incidentId":"' || v_selection.incident_id::STRING ||
+          '","logicalActionDigest":"' || v_logical_action_digest ||
+          '","policyVersion":' ||
+          to_json(v_selection.policy_version)::STRING ||
+          ',"retrievalId":"' || v_selection.retrieval_id::STRING ||
+          '","runId":"' || v_selection.run_id::STRING ||
+          '","schemaVersion":"tideproof.authority.dvi-proposal-identity.v1"' ||
+          ',"selectedEvidenceDigest":"' ||
+          v_selection.selected_evidence_digest ||
+          '","selectedEvidenceId":"' ||
+          v_selection.selected_evidence_id::STRING ||
+          '","selectedRank":1' ||
+          ',"tenantId":"' || p_tenant_id::STRING || '"}'
+        )::BYTES),
+        'hex'
+      );
+
+      SELECT proposal.*
+      INTO v_existing
+      FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
+      WHERE proposal.tenant_id = p_tenant_id
+        AND proposal.proposal_digest = v_proposal_digest;
+      IF FOUND THEN
+        IF v_existing.logical_action_digest IS DISTINCT FROM
+            v_logical_action_digest
+          OR v_existing.resource_id IS DISTINCT FROM p_resource_id
+          OR v_existing.agency IS DISTINCT FROM p_agency
+          OR v_existing.action_kind IS DISTINCT FROM p_action_kind
+          OR v_existing.payload_canonical IS DISTINCT FROM
+            v_payload_canonical
+          OR v_existing.payload_digest IS DISTINCT FROM v_payload_digest
+          OR v_existing.retrieval_id IS DISTINCT FROM
+            v_selection.retrieval_id
+          OR v_existing.run_id IS DISTINCT FROM v_selection.run_id
+          OR v_existing.incident_id IS DISTINCT FROM
+            v_selection.incident_id
+          OR v_existing.authority_evidence_binding_sha256 IS DISTINCT FROM
+            v_selection.authority_evidence_binding_sha256
+          OR v_existing.selected_evidence_id IS DISTINCT FROM
+            v_selection.selected_evidence_id
+          OR v_existing.selected_evidence_digest IS DISTINCT FROM
+            v_selection.selected_evidence_digest THEN
+          RAISE EXCEPTION 'proposal digest matched different durable state'
+            USING ERRCODE = '22000';
+        END IF;
+        v_authority_current :=
+          v_existing.expires_at > v_database_now
+          AND NOT EXISTS (
+            SELECT 1
+            FROM tp_ledger.g1_authority_receipts AS receipt
+            WHERE receipt.tenant_id = p_tenant_id
+              AND receipt.logical_action_digest =
+                v_existing.logical_action_digest
+              AND receipt.outcome = 'resource_reserved'
+          );
+        RETURN QUERY SELECT
+          'proposal_authorization_replay'::STRING,
+          NULL::STRING,
+          v_existing.proposal_digest,
+          v_existing.logical_action_digest,
+          v_existing.authorization_epoch,
+          v_existing.logical_authority_key_sha256,
+          v_existing.authorization_binding_sha256,
+          v_existing.authority_evidence_binding_sha256,
+          v_existing.run_id,
+          v_existing.incident_id,
+          v_existing.policy_version,
+          v_existing.selected_rank,
+          v_existing.selected_evidence_id,
+          v_existing.selected_evidence_digest,
+          v_existing.admitted_at,
+          v_existing.expires_at,
+          v_existing.payload_digest,
+          v_existing.authorized_at,
+          v_authority_current,
+          v_database_now;
+        RETURN;
+      END IF;
+
+      INSERT INTO tp_ledger.g1_logical_authority_epochs (
+        tenant_id,
+        logical_action_digest,
+        current_epoch
+      ) VALUES (
+        p_tenant_id,
+        v_logical_action_digest,
+        0
+      )
+      ON CONFLICT DO NOTHING;
+      SELECT epoch.*
+      INTO v_epoch
+      FROM tp_ledger.g1_logical_authority_epochs AS epoch
+      WHERE epoch.tenant_id = p_tenant_id
+        AND epoch.logical_action_digest = v_logical_action_digest
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'logical authority epoch lock missing'
+          USING ERRCODE = '22000';
+      END IF;
+
+      SELECT proposal.*
+      INTO v_existing
+      FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
+      WHERE proposal.tenant_id = p_tenant_id
+        AND proposal.proposal_digest = v_proposal_digest;
+      IF FOUND THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_replay'::STRING,
+          NULL::STRING,
+          v_existing.proposal_digest,
+          v_existing.logical_action_digest,
+          v_existing.authorization_epoch,
+          v_existing.logical_authority_key_sha256,
+          v_existing.authorization_binding_sha256,
+          v_existing.authority_evidence_binding_sha256,
+          v_existing.run_id,
+          v_existing.incident_id,
+          v_existing.policy_version,
+          v_existing.selected_rank,
+          v_existing.selected_evidence_id,
+          v_existing.selected_evidence_digest,
+          v_existing.admitted_at,
+          v_existing.expires_at,
+          v_existing.payload_digest,
+          v_existing.authorized_at,
+          v_existing.expires_at > v_database_now,
+          v_database_now;
+        RETURN;
+      END IF;
+
+      SELECT count(*)::INT8
+      INTO v_prior_spend_count
+      FROM tp_ledger.g1_authority_receipts AS receipt
+      WHERE receipt.tenant_id = p_tenant_id
+        AND receipt.logical_action_digest = v_logical_action_digest
+        AND receipt.outcome = 'resource_reserved';
+      IF v_prior_spend_count > 0 THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_denied'::STRING,
+          'logical_authority_already_spent'::STRING,
+          v_proposal_digest, v_logical_action_digest, NULL::INT8,
+          NULL::STRING, NULL::STRING,
+          v_selection.authority_evidence_binding_sha256,
+          v_selection.run_id, v_selection.incident_id,
+          v_selection.policy_version, v_selection.selected_rank,
+          v_selection.selected_evidence_id,
+          v_selection.selected_evidence_digest,
+          v_selection.admitted_at, v_selection.expires_at,
+          v_payload_digest, NULL::TIMESTAMPTZ, false, v_database_now;
+        RETURN;
+      END IF;
+
+      IF v_epoch.current_epoch = 1 THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_denied'::STRING,
+          'explicit_new_authorization_required'::STRING,
+          v_proposal_digest, v_logical_action_digest, NULL::INT8,
+          NULL::STRING, NULL::STRING,
+          v_selection.authority_evidence_binding_sha256,
+          v_selection.run_id, v_selection.incident_id,
+          v_selection.policy_version, v_selection.selected_rank,
+          v_selection.selected_evidence_id,
+          v_selection.selected_evidence_digest,
+          v_selection.admitted_at, v_selection.expires_at,
+          v_payload_digest, NULL::TIMESTAMPTZ, false, v_database_now;
+        RETURN;
+      END IF;
+      IF v_epoch.current_epoch <> 0 THEN
+        RAISE EXCEPTION
+          'authorization epoch advancement requires an explicit new-authorization receipt'
+          USING ERRCODE = 'XX000';
+      END IF;
+      v_authorization_epoch := 1;
+      UPDATE tp_ledger.g1_logical_authority_epochs AS epoch
+      SET current_epoch = v_authorization_epoch,
+          updated_at = v_database_now
+      WHERE epoch.tenant_id = p_tenant_id
+        AND epoch.logical_action_digest = v_logical_action_digest
+        AND epoch.current_epoch = v_epoch.current_epoch;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'logical authority epoch initialization failed'
+          USING ERRCODE = '40001';
+      END IF;
+
+      v_logical_authority_key_sha256 := encode(
+        sha256((
+          '{"authorizationEpoch":' || v_authorization_epoch::STRING ||
+          ',"logicalActionDigest":"' || v_logical_action_digest ||
+          '","schemaVersion":"tideproof.authority.logical-authority-key.v1"}'
+        )::BYTES),
+        'hex'
+      );
+      v_authorization_binding_sha256 := encode(
+        sha256((
+          '{"authorizationEpoch":' || v_authorization_epoch::STRING ||
+          ',"logicalActionDigest":"' || v_logical_action_digest ||
+          '","logicalAuthorityKeySha256":"' ||
+          v_logical_authority_key_sha256 ||
+          '","proposalDigest":"' || v_proposal_digest ||
+          '","schemaVersion":"tideproof.authority.authorization-binding.v1"}'
+        )::BYTES),
+        'hex'
+      );
+      INSERT INTO tp_ledger.g1_dvi_proposal_receipts (
+        tenant_id,
+        proposal_digest,
+        logical_action_digest,
+        resource_id,
+        agency,
+        action_kind,
+        payload,
+        payload_canonical,
+        payload_digest,
+        retrieval_id,
+        run_id,
+        incident_id,
+        authority_evidence_binding_sha256,
+        policy_version,
+        selected_rank,
+        selected_evidence_id,
+        selected_evidence_digest,
+        admitted_at,
+        expires_at,
+        authorization_epoch,
+        logical_authority_key_sha256,
+        authorization_binding_sha256
+      ) VALUES (
+        p_tenant_id,
+        v_proposal_digest,
+        v_logical_action_digest,
+        p_resource_id,
+        p_agency,
+        p_action_kind,
+        p_payload,
+        v_payload_canonical,
+        v_payload_digest,
+        v_selection.retrieval_id,
+        v_selection.run_id,
+        v_selection.incident_id,
+        v_selection.authority_evidence_binding_sha256,
+        v_selection.policy_version,
+        v_selection.selected_rank,
+        v_selection.selected_evidence_id,
+        v_selection.selected_evidence_digest,
+        v_selection.admitted_at,
+        v_selection.expires_at,
+        v_authorization_epoch,
+        v_logical_authority_key_sha256,
+        v_authorization_binding_sha256
+      )
+      RETURNING authorized_at INTO v_authorized_at;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'proposal authorization receipt insert failed'
+          USING ERRCODE = '22000';
+      END IF;
+
+      RETURN QUERY SELECT
+        'proposal_authorized'::STRING,
+        NULL::STRING,
+        v_proposal_digest,
+        v_logical_action_digest,
+        v_authorization_epoch,
+        v_logical_authority_key_sha256,
+        v_authorization_binding_sha256,
+        v_selection.authority_evidence_binding_sha256,
+        v_selection.run_id,
+        v_selection.incident_id,
+        v_selection.policy_version,
+        v_selection.selected_rank,
+        v_selection.selected_evidence_id,
+        v_selection.selected_evidence_digest,
+        v_selection.admitted_at,
+        v_selection.expires_at,
+        v_payload_digest,
+        v_authorized_at,
+        true,
+        v_database_now;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_private.g1_authority_receipt_current_v1(
+      p_tenant_id UUID,
+      p_operation_id UUID
+    )
+    RETURNS BOOL
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    BEGIN
+      IF session_user NOT IN (
+        'tp_authorizer_user',
+        'tp_gate2_authorizer_user'
+      ) THEN
+        RAISE EXCEPTION 'authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      RETURN COALESCE((
+        SELECT
+          receipt.outcome = 'resource_reserved'
+          AND receipt.fencing_token = resource.current_fence
+          AND receipt.run_id = resource.active_run_id
+          AND receipt.operation_id = resource.holder_operation_id
+          AND receipt.proposal_digest = resource.holder_proposal_digest
+          AND receipt.logical_authority_key_sha256 =
+            resource.holder_logical_authority_key_sha256
+          AND receipt.lease_expires_at > transaction_timestamp()
+          AND resource.lease_expires_at > transaction_timestamp()
+          AND proposal.expires_at > transaction_timestamp()
+        FROM tp_ledger.g1_authority_receipts AS receipt
+        JOIN tp_private.g1_resources AS resource
+          ON resource.tenant_id = receipt.tenant_id
+         AND resource.resource_id = receipt.resource_id
+        JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+          ON proposal.tenant_id = receipt.tenant_id
+         AND proposal.proposal_digest = receipt.proposal_digest
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.operation_id = p_operation_id
+      ), false);
+    END
+    $$
+  `);
+
+  await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_spend_authority_v1(
+      UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
+      UUID, UUID, JSONB, STRING, STRING, INT8
+    )
+  `);
+
+  await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_spend_authority_v1(
+      UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
+      STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
+    )
+  `);
+
+  await client.query(`
     DROP FUNCTION IF EXISTS tp_api.g1_spend_authority_v1(
       UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, STRING,
       UUID, UUID, JSONB, STRING, STRING, INT8
@@ -1161,6 +1977,9 @@ async function createFunctions(client) {
       p_operation_id UUID,
       p_request_digest STRING,
       p_request_payload JSONB,
+      p_proposal_digest STRING,
+      p_logical_action_digest STRING,
+      p_selected_evidence_digest STRING,
       p_run_id UUID,
       p_incident_id UUID,
       p_resource_id STRING,
@@ -1180,7 +1999,14 @@ async function createFunctions(client) {
       decision_lease_expires_at TIMESTAMPTZ,
       decision_operation_id UUID,
       decision_request_digest STRING,
-      decision_replay_kind STRING
+      decision_replay_kind STRING,
+      decision_proposal_digest STRING,
+      decision_logical_action_digest STRING,
+      decision_authorization_epoch INT8,
+      decision_logical_authority_key_sha256 STRING,
+      decision_authorization_binding_sha256 STRING,
+      decision_authority_current BOOL,
+      decision_database_now TIMESTAMPTZ
     )
     LANGUAGE PLpgSQL
     SECURITY DEFINER
@@ -1203,6 +2029,22 @@ async function createFunctions(client) {
       v_inserted_operation UUID;
       v_existing_count INT8;
       v_replay_kind STRING;
+      v_request_field_count INT8;
+      v_authorization_epoch INT8;
+      v_current_authorization_epoch INT8;
+      v_logical_authority_key_sha256 STRING;
+      v_authorization_binding_sha256 STRING;
+      v_payload_canonical STRING;
+      v_expected_payload_digest STRING;
+      v_expected_logical_action_digest STRING;
+      v_expected_request_digest STRING;
+      v_existing_request_payload JSONB;
+      v_existing_proposal_digest STRING;
+      v_existing_logical_action_digest STRING;
+      v_existing_authorization_epoch INT8;
+      v_existing_logical_authority_key_sha256 STRING;
+      v_existing_authorization_binding_sha256 STRING;
+      v_proposal_expires_at TIMESTAMPTZ;
     BEGIN
       IF session_user NOT IN (
         'tp_authorizer_user',
@@ -1211,14 +2053,167 @@ async function createFunctions(client) {
         RAISE EXCEPTION 'authorizer database session required'
           USING ERRCODE = '42501';
       END IF;
-      IF length(p_request_digest) <> 64
-        OR length(p_payload_digest) <> 64 THEN
+      IF p_request_digest IS NULL
+        OR p_request_digest !~ '^[0-9a-f]{64}$'
+        OR p_payload_digest IS NULL
+        OR p_payload_digest !~ '^[0-9a-f]{64}$'
+        OR p_proposal_digest IS NULL
+        OR p_proposal_digest !~ '^[0-9a-f]{64}$'
+        OR p_logical_action_digest IS NULL
+        OR p_logical_action_digest !~ '^[0-9a-f]{64}$'
+        OR p_selected_evidence_digest IS NULL
+        OR p_selected_evidence_digest !~ '^[0-9a-f]{64}$' THEN
         RAISE EXCEPTION 'digest must be SHA-256 hex'
           USING ERRCODE = '22023';
       END IF;
-      IF p_lease_ms < 1000 OR p_lease_ms > 600000 THEN
+      IF p_lease_ms IS NULL OR p_lease_ms < 1000 OR p_lease_ms > 600000 THEN
         RAISE EXCEPTION 'lease duration outside policy'
           USING ERRCODE = '22023';
+      END IF;
+      IF p_request_payload IS NULL
+        OR jsonb_typeof(p_request_payload) IS DISTINCT FROM 'object'
+        OR p_payload IS NULL
+        OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'authority request payload must be an object'
+          USING ERRCODE = '22023';
+      END IF;
+      v_request_field_count := jsonb_object_length(p_request_payload)::INT8;
+      IF v_request_field_count IS DISTINCT FROM 18
+        OR p_request_payload->>'digestVersion' IS DISTINCT FROM '2'
+        OR p_request_payload->>'tenantId' IS DISTINCT FROM p_tenant_id::STRING
+        OR p_request_payload->>'runId' IS DISTINCT FROM p_run_id::STRING
+        OR p_request_payload->>'incidentId' IS DISTINCT FROM p_incident_id::STRING
+        OR p_request_payload->>'resourceId' IS DISTINCT FROM p_resource_id
+        OR p_request_payload->>'agentId' IS DISTINCT FROM p_agent_id
+        OR p_request_payload->>'agency' IS DISTINCT FROM p_agency
+        OR p_request_payload->>'evidenceId' IS DISTINCT FROM p_evidence_id::STRING
+        OR p_request_payload->>'effectKey' IS DISTINCT FROM p_effect_key::STRING
+        OR p_request_payload->>'leaseMs' IS DISTINCT FROM p_lease_ms::STRING
+        OR p_request_payload->>'policyVersion' IS DISTINCT FROM p_policy_version
+        OR p_request_payload->>'actionKind' IS DISTINCT FROM 'dispatch_rescue_unit'
+        OR p_request_payload->>'payloadDigest' IS DISTINCT FROM p_payload_digest
+        OR p_request_payload->>'logicalActionDigest' IS DISTINCT FROM
+          p_logical_action_digest
+        OR p_request_payload->>'proposalDigest' IS DISTINCT FROM p_proposal_digest
+        OR p_request_payload->>'selectedEvidenceId' IS DISTINCT FROM
+          p_evidence_id::STRING
+        OR p_request_payload->>'selectedEvidenceDigest' IS DISTINCT FROM
+          p_selected_evidence_digest
+        OR p_request_payload->>'intentNonce' IS NULL
+        OR p_request_payload->>'intentNonce' !~
+          '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        OR p_payload->>'action' IS DISTINCT FROM 'dispatch_rescue_unit'
+        OR p_policy_version IS DISTINCT FROM 'gate1-policy-v2' THEN
+        RAISE EXCEPTION 'authority request identity binding mismatch'
+          USING ERRCODE = '22023';
+      END IF;
+
+      v_authorization_epoch := NULL;
+      SELECT
+        proposal.authorization_epoch,
+        proposal.logical_authority_key_sha256,
+        proposal.authorization_binding_sha256,
+        proposal.payload_canonical,
+        proposal.expires_at
+      INTO
+        v_authorization_epoch,
+        v_logical_authority_key_sha256,
+        v_authorization_binding_sha256,
+        v_payload_canonical,
+        v_proposal_expires_at
+      FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
+      WHERE proposal.tenant_id = p_tenant_id
+        AND proposal.proposal_digest = p_proposal_digest
+        AND proposal.logical_action_digest = p_logical_action_digest
+        AND proposal.run_id = p_run_id
+        AND proposal.incident_id = p_incident_id
+        AND proposal.resource_id = p_resource_id
+        AND proposal.agency = p_agency
+        AND proposal.action_kind = 'dispatch_rescue_unit'
+        AND proposal.payload = p_payload
+        AND proposal.payload_digest = p_payload_digest
+        AND proposal.selected_evidence_id = p_evidence_id
+        AND proposal.selected_evidence_digest = p_selected_evidence_digest
+        AND proposal.selected_rank = 1;
+      IF v_authorization_epoch IS NULL THEN
+        RETURN QUERY SELECT
+          'authorization_denied'::STRING,
+          'proposal_authorization_missing_or_stale'::STRING,
+          NULL::INT8,
+          NULL::TIMESTAMPTZ,
+          p_operation_id,
+          p_request_digest,
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          NULL::INT8,
+          NULL::STRING,
+          NULL::STRING,
+          false,
+          transaction_timestamp();
+        RETURN;
+      END IF;
+
+      v_expected_payload_digest := encode(
+        sha256(v_payload_canonical::BYTES),
+        'hex'
+      );
+      v_expected_logical_action_digest := encode(
+        sha256((
+          '{"actionKind":"dispatch_rescue_unit","agency":' ||
+          to_json(p_agency)::STRING ||
+          ',"incidentId":"' || p_incident_id::STRING ||
+          '","payloadDigest":"' || v_expected_payload_digest ||
+          '","resourceId":' || to_json(p_resource_id)::STRING ||
+          ',"schemaVersion":"tideproof.authority.logical-action.v1"' ||
+          ',"tenantId":"' || p_tenant_id::STRING || '"}'
+        )::BYTES),
+        'hex'
+      );
+      v_expected_request_digest := encode(
+        sha256((
+          '{"actionKind":"dispatch_rescue_unit","agency":' ||
+          to_json(p_agency)::STRING ||
+          ',"agentId":' || to_json(p_agent_id)::STRING ||
+          ',"digestVersion":2' ||
+          ',"effectKey":"' || p_effect_key::STRING ||
+          '","evidenceId":"' || p_evidence_id::STRING ||
+          '","incidentId":"' || p_incident_id::STRING ||
+          '","intentNonce":' ||
+          to_json(p_request_payload->>'intentNonce')::STRING ||
+          ',"leaseMs":' || p_lease_ms::STRING ||
+          ',"logicalActionDigest":"' ||
+          v_expected_logical_action_digest ||
+          '","payloadDigest":"' || v_expected_payload_digest ||
+          '","policyVersion":' || to_json(p_policy_version)::STRING ||
+          ',"proposalDigest":"' || p_proposal_digest ||
+          '","resourceId":' || to_json(p_resource_id)::STRING ||
+          ',"runId":"' || p_run_id::STRING ||
+          '","selectedEvidenceDigest":"' ||
+          p_selected_evidence_digest ||
+          '","selectedEvidenceId":"' || p_evidence_id::STRING ||
+          '","tenantId":"' || p_tenant_id::STRING || '"}'
+        )::BYTES),
+        'hex'
+      );
+      IF v_expected_payload_digest IS DISTINCT FROM p_payload_digest
+        OR v_expected_logical_action_digest IS DISTINCT FROM
+          p_logical_action_digest
+        OR v_expected_request_digest IS DISTINCT FROM p_request_digest THEN
+        RAISE EXCEPTION 'database-derived authority identity mismatch'
+          USING ERRCODE = '22023';
+      END IF;
+
+      v_current_authorization_epoch := NULL;
+      SELECT epoch.current_epoch
+      INTO v_current_authorization_epoch
+      FROM tp_ledger.g1_logical_authority_epochs AS epoch
+      WHERE epoch.tenant_id = p_tenant_id
+        AND epoch.logical_action_digest = p_logical_action_digest
+      FOR UPDATE;
+      IF v_current_authorization_epoch IS NULL THEN
+        RAISE EXCEPTION 'logical authority epoch lock missing'
+          USING ERRCODE = 'XX000';
       END IF;
 
       SELECT count(*)::INT8
@@ -1233,18 +2228,31 @@ async function createFunctions(client) {
         receipt.reason,
         receipt.fencing_token,
         receipt.lease_expires_at,
-        receipt.operation_id
+        receipt.operation_id,
+        receipt.request_payload,
+        receipt.proposal_digest,
+        receipt.logical_action_digest,
+        receipt.authorization_epoch,
+        receipt.logical_authority_key_sha256,
+        receipt.authorization_binding_sha256
       INTO
         v_existing_digest,
         v_existing_outcome,
         v_existing_reason,
         v_existing_fence,
         v_existing_expiry,
-        v_existing_operation
+        v_existing_operation,
+        v_existing_request_payload,
+        v_existing_proposal_digest,
+        v_existing_logical_action_digest,
+        v_existing_authorization_epoch,
+        v_existing_logical_authority_key_sha256,
+        v_existing_authorization_binding_sha256
         FROM tp_ledger.g1_authority_receipts AS receipt
         WHERE receipt.tenant_id = p_tenant_id
           AND receipt.operation_id = p_operation_id;
-        IF v_existing_digest <> p_request_digest THEN
+        IF v_existing_digest <> p_request_digest
+          OR v_existing_request_payload <> p_request_payload THEN
           RAISE EXCEPTION 'operation digest mismatch'
             USING ERRCODE = '22000';
         END IF;
@@ -1259,7 +2267,81 @@ async function createFunctions(client) {
           v_existing_expiry,
           v_existing_operation,
           v_existing_digest,
-          'operation_replay'::STRING;
+          'operation_replay'::STRING,
+          v_existing_proposal_digest,
+          v_existing_logical_action_digest,
+          v_existing_authorization_epoch,
+          v_existing_logical_authority_key_sha256,
+          v_existing_authorization_binding_sha256,
+          tp_private.g1_authority_receipt_current_v1(
+            p_tenant_id,
+            v_existing_operation
+          ),
+          transaction_timestamp();
+        RETURN;
+      END IF;
+
+      SELECT count(*)::INT8
+      INTO v_existing_count
+      FROM tp_ledger.g1_authority_receipts AS receipt
+      WHERE receipt.tenant_id = p_tenant_id
+        AND receipt.logical_action_digest = p_logical_action_digest
+        AND receipt.outcome = 'resource_reserved';
+      IF v_existing_count > 0 THEN
+        IF v_existing_count <> 1 THEN
+          RAISE EXCEPTION 'logical authority spend was not singular'
+            USING ERRCODE = 'XX000';
+        END IF;
+        SELECT
+          receipt.request_digest,
+          receipt.outcome,
+          receipt.reason,
+          receipt.fencing_token,
+          receipt.lease_expires_at,
+          receipt.operation_id,
+          receipt.proposal_digest,
+          receipt.logical_action_digest,
+          receipt.authorization_epoch,
+          receipt.logical_authority_key_sha256,
+          receipt.authorization_binding_sha256
+        INTO
+          v_existing_digest,
+          v_existing_outcome,
+          v_existing_reason,
+          v_existing_fence,
+          v_existing_expiry,
+          v_existing_operation,
+          v_existing_proposal_digest,
+          v_existing_logical_action_digest,
+          v_existing_authorization_epoch,
+          v_existing_logical_authority_key_sha256,
+          v_existing_authorization_binding_sha256
+        FROM tp_ledger.g1_authority_receipts AS receipt
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.logical_action_digest = p_logical_action_digest
+          AND receipt.outcome = 'resource_reserved';
+        IF v_existing_logical_action_digest <> p_logical_action_digest THEN
+          RAISE EXCEPTION 'logical authority replay identity mismatch'
+            USING ERRCODE = 'XX000';
+        END IF;
+        RETURN QUERY SELECT
+          v_existing_outcome,
+          v_existing_reason,
+          v_existing_fence,
+          v_existing_expiry,
+          v_existing_operation,
+          v_existing_digest,
+          'logical_authority_replay'::STRING,
+          v_existing_proposal_digest,
+          v_existing_logical_action_digest,
+          v_existing_authorization_epoch,
+          v_existing_logical_authority_key_sha256,
+          v_existing_authorization_binding_sha256,
+          tp_private.g1_authority_receipt_current_v1(
+            p_tenant_id,
+            v_existing_operation
+          ),
+          transaction_timestamp();
         RETURN;
       END IF;
 
@@ -1275,17 +2357,33 @@ async function createFunctions(client) {
         receipt.reason,
         receipt.fencing_token,
         receipt.lease_expires_at,
-        receipt.operation_id
+        receipt.operation_id,
+        receipt.request_payload,
+        receipt.proposal_digest,
+        receipt.logical_action_digest,
+        receipt.authorization_epoch,
+        receipt.logical_authority_key_sha256,
+        receipt.authorization_binding_sha256
       INTO
         v_existing_digest,
         v_existing_outcome,
         v_existing_reason,
         v_existing_fence,
         v_existing_expiry,
-        v_existing_operation
+        v_existing_operation,
+        v_existing_request_payload,
+        v_existing_proposal_digest,
+        v_existing_logical_action_digest,
+        v_existing_authorization_epoch,
+        v_existing_logical_authority_key_sha256,
+        v_existing_authorization_binding_sha256
         FROM tp_ledger.g1_authority_receipts AS receipt
         WHERE receipt.tenant_id = p_tenant_id
           AND receipt.request_digest = p_request_digest;
+        IF v_existing_request_payload <> p_request_payload THEN
+          RAISE EXCEPTION 'semantic request payload mismatch'
+            USING ERRCODE = '22000';
+        END IF;
         IF v_existing_outcome = 'pending' THEN
           RAISE EXCEPTION 'committed pending receipt invariant'
             USING ERRCODE = 'XX000';
@@ -1297,7 +2395,56 @@ async function createFunctions(client) {
           v_existing_expiry,
           v_existing_operation,
           v_existing_digest,
-          'semantic_replay'::STRING;
+          'semantic_replay'::STRING,
+          v_existing_proposal_digest,
+          v_existing_logical_action_digest,
+          v_existing_authorization_epoch,
+          v_existing_logical_authority_key_sha256,
+          v_existing_authorization_binding_sha256,
+          tp_private.g1_authority_receipt_current_v1(
+            p_tenant_id,
+            v_existing_operation
+          ),
+          transaction_timestamp();
+        RETURN;
+      END IF;
+
+      IF v_current_authorization_epoch IS DISTINCT FROM
+          v_authorization_epoch THEN
+        RETURN QUERY SELECT
+          'authorization_denied'::STRING,
+          'proposal_authorization_superseded'::STRING,
+          NULL::INT8,
+          NULL::TIMESTAMPTZ,
+          p_operation_id,
+          p_request_digest,
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          transaction_timestamp();
+        RETURN;
+      END IF;
+
+      IF v_proposal_expires_at <= transaction_timestamp() THEN
+        RETURN QUERY SELECT
+          'authorization_denied'::STRING,
+          'proposal_authorization_expired'::STRING,
+          NULL::INT8,
+          NULL::TIMESTAMPTZ,
+          p_operation_id,
+          p_request_digest,
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          transaction_timestamp();
         RETURN;
       END IF;
 
@@ -1306,6 +2453,11 @@ async function createFunctions(client) {
         operation_id,
         request_digest,
         request_payload,
+        proposal_digest,
+        logical_action_digest,
+        authorization_epoch,
+        logical_authority_key_sha256,
+        authorization_binding_sha256,
         run_id,
         incident_id,
         resource_id,
@@ -1322,6 +2474,11 @@ async function createFunctions(client) {
         p_operation_id,
         p_request_digest,
         p_request_payload,
+        p_proposal_digest,
+        p_logical_action_digest,
+        v_authorization_epoch,
+        v_logical_authority_key_sha256,
+        v_authorization_binding_sha256,
         p_run_id,
         p_incident_id,
         p_resource_id,
@@ -1343,6 +2500,10 @@ async function createFunctions(client) {
           AND (
             receipt.operation_id = p_operation_id
             OR receipt.request_digest = p_request_digest
+            OR (
+              receipt.logical_action_digest = p_logical_action_digest
+              AND receipt.outcome = 'resource_reserved'
+            )
           );
         IF v_existing_count <> 1 THEN
           RAISE EXCEPTION 'receipt conflict was not singular'
@@ -1354,19 +2515,35 @@ async function createFunctions(client) {
           receipt.fencing_token,
           receipt.lease_expires_at,
           receipt.operation_id,
-          receipt.request_digest
+          receipt.request_digest,
+          receipt.request_payload,
+          receipt.proposal_digest,
+          receipt.logical_action_digest,
+          receipt.authorization_epoch,
+          receipt.logical_authority_key_sha256,
+          receipt.authorization_binding_sha256
         INTO
           v_existing_outcome,
           v_existing_reason,
           v_existing_fence,
           v_existing_expiry,
           v_existing_operation,
-          v_existing_digest
+          v_existing_digest,
+          v_existing_request_payload,
+          v_existing_proposal_digest,
+          v_existing_logical_action_digest,
+          v_existing_authorization_epoch,
+          v_existing_logical_authority_key_sha256,
+          v_existing_authorization_binding_sha256
         FROM tp_ledger.g1_authority_receipts AS receipt
         WHERE receipt.tenant_id = p_tenant_id
           AND (
             receipt.operation_id = p_operation_id
             OR receipt.request_digest = p_request_digest
+            OR (
+              receipt.logical_action_digest = p_logical_action_digest
+              AND receipt.outcome = 'resource_reserved'
+            )
           )
         LIMIT 2;
         IF v_existing_outcome = 'pending' THEN
@@ -1375,8 +2552,27 @@ async function createFunctions(client) {
         END IF;
         IF v_existing_operation = p_operation_id THEN
           v_replay_kind := 'operation_replay';
-        ELSE
+        ELSIF v_existing_digest = p_request_digest THEN
           v_replay_kind := 'semantic_replay';
+        ELSE
+          v_replay_kind := 'logical_authority_replay';
+        END IF;
+        IF v_replay_kind IN ('operation_replay', 'semantic_replay')
+          AND v_existing_request_payload <> p_request_payload THEN
+          RAISE EXCEPTION 'receipt replay payload mismatch'
+            USING ERRCODE = '22000';
+        END IF;
+        IF v_existing_logical_action_digest <> p_logical_action_digest
+          OR (
+            v_replay_kind <> 'logical_authority_replay'
+            AND (
+              v_existing_authorization_epoch <> v_authorization_epoch
+              OR v_existing_logical_authority_key_sha256 <>
+                v_logical_authority_key_sha256
+            )
+          ) THEN
+          RAISE EXCEPTION 'receipt replay logical identity mismatch'
+            USING ERRCODE = 'XX000';
         END IF;
         RETURN QUERY SELECT
           v_existing_outcome,
@@ -1385,7 +2581,17 @@ async function createFunctions(client) {
           v_existing_expiry,
           v_existing_operation,
           v_existing_digest,
-          v_replay_kind;
+          v_replay_kind,
+          v_existing_proposal_digest,
+          v_existing_logical_action_digest,
+          v_existing_authorization_epoch,
+          v_existing_logical_authority_key_sha256,
+          v_existing_authorization_binding_sha256,
+          tp_private.g1_authority_receipt_current_v1(
+            p_tenant_id,
+            v_existing_operation
+          ),
+          transaction_timestamp();
         RETURN;
       END IF;
 
@@ -1415,7 +2621,38 @@ async function createFunctions(client) {
           NULL::TIMESTAMPTZ,
           p_operation_id,
           p_request_digest,
-          NULL::STRING;
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          transaction_timestamp();
+        RETURN;
+      END IF;
+      IF v_evidence_digest <> p_selected_evidence_digest THEN
+        UPDATE tp_ledger.g1_authority_receipts AS receipt
+        SET outcome = 'authorization_denied',
+            reason = 'selected_evidence_digest_mismatch',
+            evidence_digest = v_evidence_digest
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.operation_id = p_operation_id;
+        RETURN QUERY SELECT
+          'authorization_denied'::STRING,
+          'selected_evidence_digest_mismatch'::STRING,
+          NULL::INT8,
+          NULL::TIMESTAMPTZ,
+          p_operation_id,
+          p_request_digest,
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          transaction_timestamp();
         RETURN;
       END IF;
 
@@ -1448,7 +2685,14 @@ async function createFunctions(client) {
           NULL::TIMESTAMPTZ,
           p_operation_id,
           p_request_digest,
-          NULL::STRING;
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          transaction_timestamp();
         RETURN;
       END IF;
       IF v_active_run <> p_run_id THEN
@@ -1465,7 +2709,14 @@ async function createFunctions(client) {
           NULL::TIMESTAMPTZ,
           p_operation_id,
           p_request_digest,
-          NULL::STRING;
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          transaction_timestamp();
         RETURN;
       END IF;
       IF v_holder_operation IS NOT NULL
@@ -1485,7 +2736,14 @@ async function createFunctions(client) {
           NULL::TIMESTAMPTZ,
           p_operation_id,
           p_request_digest,
-          NULL::STRING;
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          transaction_timestamp();
         RETURN;
       END IF;
 
@@ -1495,6 +2753,9 @@ async function createFunctions(client) {
           holder_incident_id = p_incident_id,
           holder_operation_id = p_operation_id,
           holder_agent_id = p_agent_id,
+          holder_proposal_digest = p_proposal_digest,
+          holder_logical_authority_key_sha256 =
+            v_logical_authority_key_sha256,
           lease_expires_at =
             transaction_timestamp() +
             (p_lease_ms * INTERVAL '1 millisecond'),
@@ -1526,6 +2787,11 @@ async function createFunctions(client) {
         tenant_id,
         operation_id,
         request_digest,
+        proposal_digest,
+        logical_action_digest,
+        authorization_epoch,
+        logical_authority_key_sha256,
+        authorization_binding_sha256,
         run_id,
         incident_id,
         resource_id,
@@ -1539,6 +2805,11 @@ async function createFunctions(client) {
         p_tenant_id,
         p_operation_id,
         p_request_digest,
+        p_proposal_digest,
+        p_logical_action_digest,
+        v_authorization_epoch,
+        v_logical_authority_key_sha256,
+        v_authorization_binding_sha256,
         p_run_id,
         p_incident_id,
         p_resource_id,
@@ -1556,9 +2827,30 @@ async function createFunctions(client) {
         v_new_expiry,
         p_operation_id,
         p_request_digest,
-        NULL::STRING;
+        NULL::STRING,
+        p_proposal_digest,
+        p_logical_action_digest,
+        v_authorization_epoch,
+        v_logical_authority_key_sha256,
+        v_authorization_binding_sha256,
+        true,
+        transaction_timestamp();
     END
     $$
+  `);
+
+  await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g2_spend_authority_race_v1(
+      UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
+      UUID, UUID, JSONB, STRING, STRING, INT8
+    )
+  `);
+
+  await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g2_spend_authority_race_v1(
+      UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
+      STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
+    )
   `);
 
   await client.query(`
@@ -1567,6 +2859,9 @@ async function createFunctions(client) {
       p_operation_id UUID,
       p_request_digest STRING,
       p_request_payload JSONB,
+      p_proposal_digest STRING,
+      p_logical_action_digest STRING,
+      p_selected_evidence_digest STRING,
       p_run_id UUID,
       p_incident_id UUID,
       p_resource_id STRING,
@@ -1586,7 +2881,14 @@ async function createFunctions(client) {
       decision_lease_expires_at TIMESTAMPTZ,
       decision_operation_id UUID,
       decision_request_digest STRING,
-      decision_replay_kind STRING
+      decision_replay_kind STRING,
+      decision_proposal_digest STRING,
+      decision_logical_action_digest STRING,
+      decision_authorization_epoch INT8,
+      decision_logical_authority_key_sha256 STRING,
+      decision_authorization_binding_sha256 STRING,
+      decision_authority_current BOOL,
+      decision_database_now TIMESTAMPTZ
     )
     LANGUAGE PLpgSQL
     SECURITY DEFINER
@@ -1607,6 +2909,9 @@ async function createFunctions(client) {
         p_operation_id,
         p_request_digest,
         p_request_payload,
+        p_proposal_digest,
+        p_logical_action_digest,
+        p_selected_evidence_digest,
         p_run_id,
         p_incident_id,
         p_resource_id,
@@ -1624,6 +2929,12 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_resolve_request_v1(
+      UUID, UUID, STRING
+    )
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_resolve_request_v1(
       p_tenant_id UUID,
       p_operation_id UUID,
@@ -1632,6 +2943,11 @@ async function createFunctions(client) {
     RETURNS TABLE(
       operation_id UUID,
       request_digest STRING,
+      proposal_digest STRING,
+      logical_action_digest STRING,
+      authorization_epoch INT8,
+      logical_authority_key_sha256 STRING,
+      authorization_binding_sha256 STRING,
       outcome STRING,
       reason STRING,
       fencing_token INT8,
@@ -1639,7 +2955,11 @@ async function createFunctions(client) {
       outbox_intent_id UUID,
       current_fence INT8,
       active_run_id UUID,
-      holder_operation_id UUID
+      holder_operation_id UUID,
+      holder_proposal_digest STRING,
+      holder_logical_authority_key_sha256 STRING,
+      authority_current BOOL,
+      database_now TIMESTAMPTZ
     )
     LANGUAGE SQL
     SECURITY DEFINER
@@ -1647,6 +2967,11 @@ async function createFunctions(client) {
       SELECT
         receipt.operation_id,
         receipt.request_digest,
+        receipt.proposal_digest,
+        receipt.logical_action_digest,
+        receipt.authorization_epoch,
+        receipt.logical_authority_key_sha256,
+        receipt.authorization_binding_sha256,
         receipt.outcome,
         receipt.reason,
         receipt.fencing_token,
@@ -1654,7 +2979,14 @@ async function createFunctions(client) {
         outbox.intent_id,
         resource.current_fence,
         resource.active_run_id,
-        resource.holder_operation_id
+        resource.holder_operation_id,
+        resource.holder_proposal_digest,
+        resource.holder_logical_authority_key_sha256,
+        tp_private.g1_authority_receipt_current_v1(
+          receipt.tenant_id,
+          receipt.operation_id
+        ),
+        transaction_timestamp()
       FROM tp_ledger.g1_authority_receipts AS receipt
       LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
         ON outbox.tenant_id = receipt.tenant_id
@@ -2203,6 +3535,11 @@ async function createFunctions(client) {
         effect_key,
         operation_id,
         request_digest,
+        proposal_digest,
+        logical_action_digest,
+        authorization_epoch,
+        logical_authority_key_sha256,
+        authorization_binding_sha256,
         run_id,
         incident_id,
         resource_id,
@@ -2215,6 +3552,11 @@ async function createFunctions(client) {
         p_effect_key,
         p_operation_id,
         p_request_digest,
+        outbox.proposal_digest,
+        outbox.logical_action_digest,
+        outbox.authorization_epoch,
+        outbox.logical_authority_key_sha256,
+        outbox.authorization_binding_sha256,
         p_run_id,
         p_incident_id,
         p_resource_id,
@@ -2233,10 +3575,30 @@ async function createFunctions(client) {
        AND outbox.effect_key = p_effect_key
        AND outbox.payload_digest = p_payload_digest
       JOIN tp_ledger.g1_authority_receipts AS receipt
-        ON receipt.tenant_id = outbox.tenant_id
+       ON receipt.tenant_id = outbox.tenant_id
        AND receipt.operation_id = outbox.operation_id
+       AND receipt.proposal_digest = outbox.proposal_digest
+       AND receipt.logical_action_digest = outbox.logical_action_digest
+       AND receipt.authorization_epoch = outbox.authorization_epoch
+       AND receipt.logical_authority_key_sha256 =
+         outbox.logical_authority_key_sha256
+       AND receipt.authorization_binding_sha256 =
+         outbox.authorization_binding_sha256
        AND receipt.agent_id = p_agent_id
        AND receipt.outcome = 'resource_reserved'
+      JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+       ON proposal.tenant_id = outbox.tenant_id
+       AND proposal.proposal_digest = outbox.proposal_digest
+       AND proposal.logical_action_digest = outbox.logical_action_digest
+       AND proposal.authorization_epoch = outbox.authorization_epoch
+       AND proposal.logical_authority_key_sha256 =
+         outbox.logical_authority_key_sha256
+       AND proposal.authorization_binding_sha256 =
+         outbox.authorization_binding_sha256
+       AND proposal.run_id = outbox.run_id
+       AND proposal.incident_id = outbox.incident_id
+       AND proposal.resource_id = outbox.resource_id
+       AND proposal.payload_digest = outbox.payload_digest
       WHERE resource.tenant_id = p_tenant_id
         AND resource.resource_id = p_resource_id
         AND resource.active_run_id = p_run_id
@@ -2244,8 +3606,12 @@ async function createFunctions(client) {
         AND resource.holder_incident_id = p_incident_id
         AND resource.holder_operation_id = p_operation_id
         AND resource.holder_agent_id = p_agent_id
+        AND resource.holder_proposal_digest = outbox.proposal_digest
+        AND resource.holder_logical_authority_key_sha256 =
+          outbox.logical_authority_key_sha256
         AND resource.current_fence = p_fencing_token
         AND resource.lease_expires_at > transaction_timestamp()
+        AND proposal.expires_at > transaction_timestamp()
       ON CONFLICT DO NOTHING
       RETURNING effect_key, operation_id
     $$
@@ -2261,6 +3627,9 @@ async function transferOwnership(client) {
     "tp_private.g1_resources",
     "tp_private.g1_retry_probes",
     "tp_ledger.g1_evidence_verification_receipts",
+    "tp_ledger.g1_logical_authority_epochs",
+    "tp_ledger.g1_dvi_selection_receipts",
+    "tp_ledger.g1_dvi_proposal_receipts",
     "tp_ledger.g1_authority_receipts",
     "tp_ledger.g1_outbox_intents",
     "tp_ledger.g1_protected_effects",
@@ -2286,10 +3655,13 @@ async function transferOwnership(client) {
     "tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
     "tp_api.g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
     "tp_api.g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
+    "tp_api.g1_commit_dvi_selection_v1(UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, INT8, STRING)",
+    "tp_api.g1_authorize_dvi_proposal_v1(UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB)",
+    "tp_private.g1_authority_receipt_current_v1(UUID, UUID)",
     "tp_api.g1_delete_vector_set_v1(UUID, UUID)",
     "tp_api.g1_purge_expired_vector_sets_v1(UUID, INT8)",
-    "tp_api.g1_spend_authority_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
-    "tp_api.g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+    "tp_api.g1_spend_authority_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+    "tp_api.g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
     "tp_api.g1_resolve_request_v1(UUID, UUID, STRING)",
     "tp_api.g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)",
     "tp_api.g1_append_recovery_audit_v1(UUID, UUID, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING)",
@@ -2349,8 +3721,8 @@ async function applyGrants(client, bootstrapOwner) {
   await client.query(`
     REVOKE EXECUTE ON FUNCTION
       tp_api.g2_spend_authority_race_v1(
-        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
-        UUID, UUID, JSONB, STRING, STRING, INT8
+        UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
+        STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
       )
     FROM tp_authorizer_role
   `);
@@ -2364,11 +3736,18 @@ async function applyGrants(client, bootstrapOwner) {
       tp_api.g1_rank_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, STRING, INT8
       ),
+      tp_api.g1_commit_dvi_selection_v1(
+        UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING,
+        STRING, INT8, STRING
+      ),
+      tp_api.g1_authorize_dvi_proposal_v1(
+        UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB
+      ),
       tp_api.g1_delete_vector_set_v1(UUID, UUID),
       tp_api.g1_purge_expired_vector_sets_v1(UUID, INT8),
       tp_api.g1_spend_authority_v1(
-        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
-        UUID, UUID, JSONB, STRING, STRING, INT8
+        UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
+        STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
       ),
       tp_api.g1_resolve_request_v1(UUID, UUID, STRING),
       tp_api.g1_observe_authority_race_v1(
@@ -2386,19 +3765,26 @@ async function applyGrants(client, bootstrapOwner) {
       tp_api.g1_rank_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, STRING, INT8
       ),
+      tp_api.g1_commit_dvi_selection_v1(
+        UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING,
+        STRING, INT8, STRING
+      ),
+      tp_api.g1_authorize_dvi_proposal_v1(
+        UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB
+      ),
       tp_api.g1_delete_vector_set_v1(UUID, UUID),
       tp_api.g1_purge_expired_vector_sets_v1(UUID, INT8),
       tp_api.g1_spend_authority_v1(
-        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
-        UUID, UUID, JSONB, STRING, STRING, INT8
+        UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
+        STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
       )
     FROM tp_gate2_authorizer_role
   `);
   await client.query(`
     GRANT EXECUTE ON FUNCTION
       tp_api.g2_spend_authority_race_v1(
-        UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
-        UUID, UUID, JSONB, STRING, STRING, INT8
+        UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
+        STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
       ),
       tp_api.g1_resolve_request_v1(UUID, UUID, STRING),
       tp_api.g1_observe_authority_race_v1(

@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import { Pool } from "pg";
 import { connectionStringForDatabase } from "./authority-store.js";
+import { canonicalJson } from "./canonical-json.js";
 import { runtimeDatabaseConfig } from "./database-runtime.js";
+import {
+  dviRankedSequenceSha256For,
+  dviSelectionBindingSha256For
+} from "./dvi-selection.js";
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -10,8 +15,6 @@ const GIT_OBJECT_ID = /^[0-9a-f]{40}$/;
 const POLICY_VERSION = "g1-admissibility-v2";
 const VECTOR_INDEX_NAME = "g1_vector_candidates_embedding_idx";
 const PROOF_SCHEMA = "tideproof.gate1.admissible-vector-proof.v2";
-const AUTHORITY_EVIDENCE_BINDING_SCHEMA =
-  "tideproof.gate1.admissible-vector-authority-binding.v1";
 const PROOF_CANDIDATE_COUNT = 10_000;
 const PROOF_LIMIT = 10;
 const PROOF_TTL_MS = 60_000;
@@ -44,22 +47,6 @@ function exactKeys(value, expected, code) {
 
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function canonicalJson(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(
-        ([key, nested]) =>
-          `${JSON.stringify(key)}:${canonicalJson(nested)}`
-      )
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
 }
 
 function identifierSetDigest(values, code) {
@@ -197,31 +184,32 @@ function validateProofSpec(value) {
 function authorityEvidenceBindingDigest({
   accepted,
   preparedTiming,
+  queryEmbeddingSha256,
   rankedSequenceSha256,
   selected,
   sourceCommit,
   specSha256,
   treeDigest
 }) {
-  return sha256(
-    canonicalJson({
-      schemaVersion: AUTHORITY_EVIDENCE_BINDING_SCHEMA,
-      sourceCommit,
-      treeDigest,
-      specSha256,
-      runId: accepted.runId,
-      tenantId: accepted.tenantId,
-      incidentId: accepted.incidentId,
-      retrievalId: accepted.retrievalId,
-      snapshot: preparedTiming,
-      rankedSequenceSha256,
-      selected: {
-        rank: 1,
-        evidenceId: selected.evidenceId,
-        evidenceDigest: selected.evidenceDigest
-      }
-    })
-  );
+  return dviSelectionBindingSha256For({
+    sourceCommit,
+    treeDigest,
+    specSha256,
+    runId: accepted.runId,
+    tenantId: accepted.tenantId,
+    incidentId: accepted.incidentId,
+    retrievalId: accepted.retrievalId,
+    agency: accepted.agency,
+    policyVersion: POLICY_VERSION,
+    admittedAt: preparedTiming.admittedAt,
+    expiresAt: preparedTiming.expiresAt,
+    rankedSequenceSha256,
+    queryEmbeddingSha256,
+    resultLimit: accepted.limit,
+    selectedRank: 1,
+    selectedEvidenceId: selected.evidenceId,
+    selectedEvidenceDigest: selected.evidenceDigest
+  });
 }
 
 function integerFromRow(value, name, maximum = Number.MAX_SAFE_INTEGER) {
@@ -589,7 +577,7 @@ export async function proveAdmissibleVectorSnapshot({
         FROM tp_private.g1_vector_candidates
         WHERE tenant_id = $1::UUID
           AND retrieval_id = $2::UUID
-        ORDER BY embedding <=> $3::VECTOR(3)
+        ORDER BY embedding <=> $3::VECTOR(3), evidence_id
         LIMIT $4::INT8
       `,
       [
@@ -639,7 +627,7 @@ export async function proveAdmissibleVectorSnapshot({
         FROM tp_private.g1_vector_candidates
         WHERE tenant_id = $1::UUID
           AND retrieval_id = $2::UUID
-        ORDER BY embedding <=> $3::VECTOR(3)
+        ORDER BY embedding <=> $3::VECTOR(3), evidence_id
         LIMIT $4::INT8
       `,
       [
@@ -699,25 +687,70 @@ export async function proveAdmissibleVectorSnapshot({
       ranked.map(({ evidenceId }) => evidenceId),
       "rankedEvidenceId"
     );
-    const rankedSequenceSha256 = sha256(
-      canonicalJson(
-        ranked.map(({ evidenceId, evidenceDigest, distance }) => ({
-          evidenceId,
-          evidenceDigest,
-          distance
-        }))
-      )
+    const rankedSequenceSha256 = dviRankedSequenceSha256For(
+      ranked.map(({ evidenceId, evidenceDigest }) => ({
+        evidenceId,
+        evidenceDigest
+      }))
     );
+    const queryEmbeddingSha256 = sha256(accepted.vector);
     const authorityEvidenceBindingSha256 =
       authorityEvidenceBindingDigest({
         accepted,
         preparedTiming,
+        queryEmbeddingSha256,
         rankedSequenceSha256,
         selected: ranked[0],
         sourceCommit,
         specSha256,
         treeDigest
       });
+    const committedSelection = await authorizer.query(
+      `
+        SELECT *
+        FROM tp_api.g1_commit_dvi_selection_v1(
+          $1::UUID, $2::UUID, $3::UUID, $4::UUID, $5, $6, $7, $8,
+          $9, $10, $11::INT8, $12
+        )
+      `,
+      [
+        accepted.tenantId,
+        accepted.retrievalId,
+        accepted.runId,
+        accepted.incidentId,
+        accepted.agency,
+        POLICY_VERSION,
+        sourceCommit,
+        treeDigest,
+        specSha256,
+        accepted.vector,
+        accepted.limit,
+        authorityEvidenceBindingSha256
+      ]
+    );
+    assert(
+      committedSelection.rowCount === 1 &&
+        committedSelection.rows[0]?.authority_evidence_binding_sha256 ===
+          authorityEvidenceBindingSha256 &&
+        committedSelection.rows[0]?.ranked_sequence_sha256 ===
+          rankedSequenceSha256 &&
+        committedSelection.rows[0]?.query_embedding_sha256 ===
+          queryEmbeddingSha256 &&
+        integerFromRow(
+          committedSelection.rows[0]?.result_limit,
+          "result_limit",
+          100
+        ) === accepted.limit &&
+        committedSelection.rows[0]?.selected_evidence_id ===
+          ranked[0].evidenceId &&
+        committedSelection.rows[0]?.selected_evidence_digest ===
+          ranked[0].evidenceDigest &&
+        new Date(committedSelection.rows[0]?.admitted_at).toISOString() ===
+          preparedTiming.admittedAt &&
+        new Date(committedSelection.rows[0]?.expires_at).toISOString() ===
+          preparedTiming.expiresAt,
+      "ADMISSIBLE_VECTOR_SELECTION_COMMIT_INVALID"
+    );
 
     receipt = {
       schemaVersion: PROOF_SCHEMA,
@@ -727,7 +760,10 @@ export async function proveAdmissibleVectorSnapshot({
       drill: {
         runId: accepted.runId,
         selectedRank: 1,
-        authorityEvidenceBindingSha256
+        queryEmbeddingSha256,
+        resultLimit: accepted.limit,
+        authorityEvidenceBindingSha256,
+        durableSelectionCommitted: true
       },
       database: {
         name: authorizerIdentity.databaseName,
@@ -1053,7 +1089,6 @@ export class AdmissibleVectorRetriever {
 }
 
 export const __test = Object.freeze({
-  AUTHORITY_EVIDENCE_BINDING_SCHEMA,
   POLICY_VERSION,
   PROOF_CANDIDATE_COUNT,
   PROOF_LIMIT,
