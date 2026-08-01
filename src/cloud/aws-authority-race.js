@@ -7,9 +7,9 @@ export const AUTHORITY_RESPONSE_SCHEMA =
 export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
 export const AUTHORITY_RACE_RECEIPT_SCHEMA =
-  "tideproof.aws-authority-race-receipt.v3";
+  "tideproof.aws-authority-race-receipt.v4";
 const AUTHORITY_RACE_OBSERVATION_SCHEMA =
-  "tideproof.aws-authority-race-observation.v1";
+  "tideproof.aws-authority-race-observation.v2";
 
 const CONTENDERS = Object.freeze(["alpha", "bravo"]);
 const INITIAL_FENCING_TOKEN = "1";
@@ -74,6 +74,7 @@ export function parseAuthorityRaceArguments(argv) {
     "--config-digest",
     "--function-arn",
     "--race-id",
+    "--run-id",
     "--source-commit"
   ];
   if (
@@ -96,6 +97,7 @@ export function parseAuthorityRaceArguments(argv) {
     !SHA256_PATTERN.test(parsed["--config-digest"]) ||
     !SHA1_PATTERN.test(parsed["--source-commit"]) ||
     !UUID_PATTERN.test(parsed["--race-id"]) ||
+    !UUID_PATTERN.test(parsed["--run-id"]) ||
     !/^arn:aws[a-zA-Z-]*:lambda:us-east-1:\d{12}:function:[A-Za-z0-9-_]{1,64}:proof$/.test(
       parsed["--function-arn"]
     )
@@ -106,6 +108,7 @@ export function parseAuthorityRaceArguments(argv) {
     configDigest: parsed["--config-digest"],
     functionArn: parsed["--function-arn"],
     raceId: parsed["--race-id"],
+    runId: parsed["--run-id"],
     sourceCommit: parsed["--source-commit"]
   };
 }
@@ -292,6 +295,7 @@ export function validateAuthorityRaceInvocations(
       "configDigest",
       "functionArn",
       "raceId",
+      "runId",
       "sourceCommit"
     ])
   ) {
@@ -377,6 +381,7 @@ export function validateAuthorityRaceInvocations(
     authoritySourceDigest: winner.authoritySourceDigest,
     authorityArtifactDigest: winner.authorityArtifactDigest,
     raceId: expected.raceId,
+    runId: expected.runId,
     functionArnDigest: sha256Hex(expected.functionArn),
     functionVersion: winner.functionVersion,
     contenders: 2,
@@ -436,6 +441,7 @@ export function validateAuthorityRaceProof(
       "configDigest",
       "functionArn",
       "raceId",
+      "runId",
       "sourceCommit"
     ]) ||
     !exactKeys(observation, [
@@ -455,6 +461,7 @@ export function validateAuthorityRaceProof(
       "overlappingDatabaseIntervals",
       "packageLockDigest",
       "raceId",
+      "runId",
       "schemaVersion",
       "serializableTransactions",
       "sourceCommit",
@@ -464,7 +471,12 @@ export function validateAuthorityRaceProof(
     ]) ||
     observation?.schemaVersion !==
       AUTHORITY_RACE_OBSERVATION_SCHEMA ||
-    observation.status !== "RACE_OBSERVED"
+    observation.status !== "RACE_OBSERVED" ||
+    observation.sourceCommit !== expected.sourceCommit ||
+    observation.configDigest !== expected.configDigest ||
+    observation.raceId !== expected.raceId ||
+    observation.runId !== expected.runId ||
+    observation.functionArnDigest !== sha256Hex(expected.functionArn)
   ) {
     throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
   }
@@ -556,6 +568,7 @@ export function validateAuthorityRaceProof(
       ])
     ) ||
     !UUID_PATTERN.test(state.activeRunId) ||
+    state.activeRunId !== expected.runId ||
     !/^[1-9][0-9]*$/.test(state.currentFence) ||
     counts.raceReceiptCount !== "2" ||
     counts.resourceReceiptCount !== "2" ||
@@ -648,6 +661,7 @@ export async function runAuthorityRace({
   configDigest,
   functionArn,
   raceId,
+  runId,
   sourceCommit,
   callerBinding,
   invoke
@@ -659,6 +673,7 @@ export async function runAuthorityRace({
     configDigest,
     functionArn,
     raceId,
+    runId,
     sourceCommit
   };
   const acceptedCallerBinding = validatedCallerBinding(callerBinding);

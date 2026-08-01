@@ -257,6 +257,7 @@ export async function main(argv = process.argv.slice(2)) {
         sourceCommit: options.sourceCommit,
         configDigest: options.configDigest,
         raceId: options.raceId,
+        runId: options.runId,
         functionArn: options.functionArn,
         packageLockDigest:
           provenance.dependencies.installedTree.packageLockSha256,
