@@ -41,6 +41,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate2-authority-race.js",
     role: "AWS_AUTHORITY_EVIDENCE_RUNNER"
   }),
+  "aws-authority-race-validator": Object.freeze({
+    path: "src/cloud/aws-authority-race.js",
+    role: "AWS_AUTHORITY_EVIDENCE_VALIDATOR"
+  }),
   "aws-boundary-ledger": Object.freeze({
     path: "docs/AWS_GATE2.md",
     role: "AWS_SECURITY_BOUNDARY"
@@ -343,6 +347,15 @@ const SOURCE_MARKERS = Object.freeze({
     "DescribeStackResourceCommand",
     "receipt.treeDigest !== checkout.treeDigest",
     "ignoreConfiguredEndpointUrls: true"
+  ]),
+  "aws-authority-race-validator": Object.freeze([
+    "const INITIAL_FENCING_TOKEN = \"1\"",
+    "const validatedObservationBindings = new WeakMap()",
+    "completedAt <= startedAt",
+    "value.fencingToken !== INITIAL_FENCING_TOKEN",
+    "leaseExpiresAt <= completedAt",
+    "Math.max(...overlapStarts) >= Math.min(...overlapEnds)",
+    "stateObservedAt >= observationBinding.leaseExpiresAt"
   ]),
   "aws-boundary-ledger": Object.freeze([
     "The command is read-only and fail closed.",

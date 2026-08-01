@@ -297,7 +297,7 @@ function securityReceipt() {
     reviewedOn: "2026-07-31",
     manifestPath: "RELEASE_SECURITY_MANIFEST.json",
     manifestSha256: "9".repeat(64),
-    surfaceCount: 31,
+    surfaceCount: 32,
     publicPathCount: 10,
     securityHeaderCount: 9,
     negativeProbeCount: 6,

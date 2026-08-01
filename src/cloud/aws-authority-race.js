@@ -12,10 +12,12 @@ const AUTHORITY_RACE_OBSERVATION_SCHEMA =
   "tideproof.aws-authority-race-observation.v1";
 
 const CONTENDERS = Object.freeze(["alpha", "bravo"]);
+const INITIAL_FENCING_TOKEN = "1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SHA1_PATTERN = /^[0-9a-f]{40}$/;
+const validatedObservationBindings = new WeakMap();
 
 function exactKeys(value, allowed) {
   return (
@@ -248,15 +250,21 @@ function validateCommittedResponse(
     value.transaction.databaseCompletedAt,
     "AUTHORITY_RACE_RESPONSE_REJECTED"
   );
-  if (completedAt < startedAt) {
+  if (completedAt <= startedAt) {
     throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
   }
-  if (
-    value.outcome === "resource_reserved" &&
-    (!/^[1-9][0-9]*$/.test(value.fencingToken) ||
-      typeof value.leaseExpiresAt !== "string")
-  ) {
-    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  let leaseExpiresAt = null;
+  if (value.outcome === "resource_reserved") {
+    if (value.fencingToken !== INITIAL_FENCING_TOKEN) {
+      throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+    }
+    leaseExpiresAt = parseIso(
+      value.leaseExpiresAt,
+      "AUTHORITY_RACE_RESPONSE_REJECTED"
+    );
+    if (leaseExpiresAt <= completedAt) {
+      throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+    }
   }
   if (
     value.outcome === "resource_held_denied" &&
@@ -269,7 +277,8 @@ function validateCommittedResponse(
   return {
     value,
     startedAt,
-    completedAt
+    completedAt,
+    leaseExpiresAt
   };
 }
 
@@ -353,12 +362,12 @@ export function validateAuthorityRaceInvocations(
   const overlapEnds = CONTENDERS.map(
     (contender) => validated[contender].completedAt
   );
-  if (Math.max(...overlapStarts) > Math.min(...overlapEnds)) {
+  if (Math.max(...overlapStarts) >= Math.min(...overlapEnds)) {
     throw new Error("AUTHORITY_RACE_NOT_OVERLAPPING");
   }
   const winner = winners[0];
   const denial = denials[0];
-  return {
+  const observation = {
     schemaVersion: AUTHORITY_RACE_OBSERVATION_SCHEMA,
     status: "RACE_OBSERVED",
     sourceCommit: expected.sourceCommit,
@@ -405,6 +414,11 @@ export function validateAuthorityRaceInvocations(
     authorityTransferredByModel: false,
     durableStateVerified: false
   };
+  validatedObservationBindings.set(observation, {
+    digest: sha256Hex(JSON.stringify(observation)),
+    leaseExpiresAt: validated[winner.contender].leaseExpiresAt
+  });
+  return observation;
 }
 
 export function validateAuthorityRaceProof(
@@ -414,7 +428,10 @@ export function validateAuthorityRaceProof(
   callerBinding
 ) {
   const acceptedCallerBinding = validatedCallerBinding(callerBinding);
+  const observationBinding = validatedObservationBindings.get(observation);
   if (
+    !observationBinding ||
+    observationBinding.digest !== sha256Hex(JSON.stringify(observation)) ||
     !exactKeys(expected, [
       "configDigest",
       "functionArn",
@@ -588,7 +605,8 @@ export function validateAuthorityRaceProof(
   );
   if (
     stateObservedAt !== transactionObservedAt ||
-    stateObservedAt < Date.parse(observation.databaseInterval.completedAt)
+    stateObservedAt < Date.parse(observation.databaseInterval.completedAt) ||
+    stateObservedAt >= observationBinding.leaseExpiresAt
   ) {
     throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
   }
