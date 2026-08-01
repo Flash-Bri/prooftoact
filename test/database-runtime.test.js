@@ -88,13 +88,29 @@ test("database URLs require one verify-full TLS parameter and a safe application
 });
 
 test("ambient libpq controls fail closed without exposing credentials", () => {
-  assert.throws(
-    () => runtimeDatabaseConfig({
-      connectionString: CONNECTION,
-      environment: { PGOPTIONS: "-c statement_timeout=0" }
-    }),
-    ({ message }) => message === "DATABASE_AMBIENT_CONFIGURATION_REJECTED"
-  );
+  for (const name of [
+    "NODE_DEBUG",
+    "NODE_EXTRA_CA_CERTS",
+    "NODE_OPTIONS",
+    "NODE_TLS_REJECT_UNAUTHORIZED",
+    "OPENSSL_CONF",
+    "PGCHANNELBINDING",
+    "PGOPTIONS",
+    "PGPASSFILE",
+    "PG_UNREVIEWED_FUTURE_OVERRIDE",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+    "SSLKEYLOGFILE"
+  ]) {
+    assert.throws(
+      () => runtimeDatabaseConfig({
+        connectionString: CONNECTION,
+        environment: { [name]: "unsafe-ambient-value" }
+      }),
+      ({ message }) =>
+        message === "DATABASE_AMBIENT_CONFIGURATION_REJECTED"
+    );
+  }
   assert.throws(
     () => runtimeDatabaseConfig({
       connectionString: "postgresql://user:super-secret@example.invalid/db?statement_timeout=0",

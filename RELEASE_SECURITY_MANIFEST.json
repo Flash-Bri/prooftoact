@@ -84,7 +84,7 @@
       "id": "database-runtime",
       "path": "src/cloud/database-runtime.js",
       "role": "DATABASE_RUNTIME_BOUNDARY",
-      "sha256": "67bee2e952625bea67e5bcf18a640775165132909dfac17501e551960a586acb"
+      "sha256": "3bcc28c28aa071863def188f0128442fb803724a199028c2ee78df20cde6c339"
     },
     {
       "id": "database-security-posture",

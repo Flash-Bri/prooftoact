@@ -23,12 +23,20 @@ const REQUIRED_CONNECTION_PARAMETERS = Object.freeze({
 const APPLICATION_NAME = /^[a-z][a-z0-9-]{0,62}$/u;
 
 const FORBIDDEN_ENVIRONMENT_NAMES = new Set([
+  "NODE_DEBUG",
+  "NODE_EXTRA_CA_CERTS",
+  "NODE_OPTIONS",
+  "NODE_TLS_REJECT_UNAUTHORIZED",
+  "OPENSSL_CONF",
   "PGAPPNAME",
+  "PGCHANNELBINDING",
+  "PGCLIENTENCODING",
   "PGCONNECT_TIMEOUT",
   "PGDATABASE",
   "PGHOST",
   "PGHOSTADDR",
   "PGOPTIONS",
+  "PGPASSFILE",
   "PGPASSWORD",
   "PGPORT",
   "PGSERVICE",
@@ -39,7 +47,10 @@ const FORBIDDEN_ENVIRONMENT_NAMES = new Set([
   "PGSSLROOTCERT",
   "PGSSLMODE",
   "PGTARGETSESSIONATTRS",
-  "PGUSER"
+  "PGUSER",
+  "SSL_CERT_DIR",
+  "SSL_CERT_FILE",
+  "SSLKEYLOGFILE"
 ]);
 
 function requireConnectionString(value) {
@@ -87,7 +98,11 @@ function assertNoAmbientPgOverrides(environment) {
     throw new TypeError("DATABASE_ENVIRONMENT_INVALID");
   }
   for (const name of Object.keys(environment)) {
-    if (FORBIDDEN_ENVIRONMENT_NAMES.has(name.toUpperCase())) {
+    const normalizedName = name.toUpperCase();
+    if (
+      normalizedName.startsWith("PG") ||
+      FORBIDDEN_ENVIRONMENT_NAMES.has(normalizedName)
+    ) {
       throw new Error("DATABASE_AMBIENT_CONFIGURATION_REJECTED");
     }
   }
