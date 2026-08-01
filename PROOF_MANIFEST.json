@@ -217,13 +217,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "78f46f377c885d269e1fe2a7e9b6bc0eae827b22456720836ffbfdd40854437c",
+      "sha256": "3c782b6d5eae2fa81b63acb6f6f587c8439222a61ab755133e6daabb9295f4ea",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "db39f1678214941c53f0bcdd7736a24ae4b39064a11712b66fe2cc003874ec41",
+      "sha256": "a476ceaa704a43fea26af3e3b021e988d58e25f4c8cccd58f11134a9962915a7",
       "kind": "verification-code"
     },
     {
@@ -295,7 +295,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "724ac1ccb64503abd3e7b00e1a928ac236b772c8cacf0bac816e57c80a09da1b",
+      "sha256": "ba6b0dffe31a01a4b2548f6a886e03d38bfab66601a3727b4c352fbf3d5c537a",
       "kind": "boundary-ledger"
     },
     {
@@ -403,7 +403,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "6d945d0369d9ceb44258198baad90cbb3a29676e1051928e3746e6bb877f8c81",
+      "sha256": "347e7f9ffef91c1858f783546ba29aefbedf26c29e7759558bd236eb4d77be1d",
       "kind": "boundary-ledger"
     },
     {
