@@ -34,6 +34,7 @@
     "gate1:ambiguity": "node scripts/gate1-ambiguity.js",
     "gate1:ambiguity:full": "AMBIGUITY_RUNS=100 node scripts/gate1-ambiguity.js",
     "gate1:admissible-vector": "node scripts/gate1-admissible-vector.js",
+    "gate1:admissible-vector:proof": "node scripts/gate1-admissible-vector.js --proof",
     "gate1:authority": "node scripts/gate1-authority.js",
     "gate1:authority:full": "RACE_RUNS=100 CONTENDERS=50 node scripts/gate1-authority.js",
     "gate1:capability-race": "node scripts/gate1-capability-race.js",

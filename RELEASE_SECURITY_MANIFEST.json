@@ -12,13 +12,13 @@
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
       "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
-      "sha256": "76cce81116962d36f5b607da63f9194a15b7610993a445acc691aa59379fe8e8"
+      "sha256": "4792a40d9f32a34356bfd1b7c4eb368cb1e86ed5e92077785a997e2c44fa9615"
     },
     {
       "id": "admissible-vector-runner",
       "path": "scripts/gate1-admissible-vector.js",
       "role": "ADMISSIBLE_VECTOR_EVIDENCE_RUNNER",
-      "sha256": "bdc085e2b938a07db04dc669c5f0965375ecc05da056ce5a8fa40f1dd0594637"
+      "sha256": "5bc27a62f30dfe8ca9173192fee34f3475d4d3fa55ccdfa934c15320c30ebfa4"
     },
     {
       "id": "authority-runtime",

@@ -77,3 +77,57 @@ evidence, timeout, and resource-bound controls. The provider-backed batch
 harness, bounded multi-race deployment shape, exact cross-act recovery lookup,
 and live receipt do not yet exist. Public claims and final release readiness
 must therefore remain partial and blocked.
+
+## Integrated DVI acceptance harness
+
+`npm run gate1:admissible-vector:proof` is the owner-run acceptance lane for
+the first per-drill requirement. It is deliberately excluded from CI and must
+not be run without the reviewed synthetic fixture and separate credential
+bindings.
+
+The lane requires a clean official `main` checkout that matches a freshly
+fetched public `origin/main`, a `tp_authorizer_user` connection through
+`DATABASE_URL`, a distinct owner/auditor connection through
+`TIDEPROOF_AUDITOR_DATABASE_URL`, and one canonical
+`TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC` JSON object.
+
+The source guard disables replacement objects and filesystem-monitor shortcuts
+and rejects replacement refs plus any skip-worktree or assume-unchanged index
+entry before and after the public-main fetch.
+
+The spec binds:
+
+- exactly 10,000 admissible candidate evidence IDs by sorted-set SHA-256;
+- one exact tenant, incident, retrieval, agency, three-dimensional query,
+  ten-result limit, and 60-second snapshot TTL;
+- exactly one expected case for each of `verification_binding_mismatch`,
+  `verification_key_revoked`, `future_observation`, `not_yet_valid`,
+  `expired`, `out_of_scope`, and `unresolved_conflict`; and
+- which excluded row must be closer to the query than every returned ranked
+  row.
+
+The authorizer session creates the snapshot only through
+`tp_api.g1_prepare_vector_set_v1`, observes every exclusion through
+`tp_api.g1_observe_admissibility_v2`, ranks only through
+`tp_api.g1_rank_vector_set_v1`, and retires only through
+`tp_api.g1_delete_vector_set_v1`. The auditor session reads the private
+candidate IDs, validates the expected set digest, captures
+`EXPLAIN (VERBOSE)`, and requires `vector search`,
+`g1_vector_candidates_embedding_idx`, and the exact tenant/retrieval prefix
+spans. The auditor then executes that exact ranked query and requires its
+ordered results to match the authorizer function byte-for-byte. It also proves
+the designated inadmissible row is semantically closer than the first returned
+candidate and verifies zero candidate rows remain after retirement.
+
+The emitted receipt contains source, tree, fixture, plan, ranked-set, database
+cluster, version, and session digests; snapshot and cleanup timestamps; counts;
+reason labels; and an order-sensitive ranked-result digest. It does not emit
+credentials, usernames, endpoints, raw plans, fixture IDs, or query vectors.
+Both database sessions must report the same CockroachDB cluster, any prepare
+attempt still attempts retirement, and a cleanup failure is preserved
+alongside the primary failure. Pool shutdown must also succeed before the
+`PASS` receipt is emitted. A `PASS` remains subject to independent acceptance
+review and does not satisfy the 100-drill, AWS, authorization,
+production-safety, or final-release gates by itself.
+
+No provider-backed receipt from this lane exists yet.

@@ -292,11 +292,27 @@ const SOURCE_MARKERS = Object.freeze({
     "FROM tp_api.g1_prepare_vector_set_v1(",
     "FROM tp_api.g1_rank_vector_set_v1(",
     "FROM tp_api.g1_delete_vector_set_v1(",
+    "g1_vector_candidates_embedding_idx",
+    "crdb_internal.cluster_id()::STRING",
+    "nearestExcludedCloserThanRanked: true",
+    "rankedSequenceSha256",
+    "auditorRankMatchesAuthorizer: true",
+    "prepareAttempted = true",
     "authorizationRecheckRequired: true",
+    "ADMISSIBLE_VECTOR_PLAN_INDEX_MISSING",
     "ADMISSIBLE_VECTOR_RESULT_ORDER_INVALID"
   ]),
   "admissible-vector-runner": Object.freeze([
     "ADMISSIBLE_VECTOR_WORKTREE_DIRTY",
+    "ADMISSIBLE_VECTOR_GIT_REPLACEMENT_REJECTED",
+    "ADMISSIBLE_VECTOR_GIT_INDEX_FLAGS_REJECTED",
+    "GIT_NO_REPLACE_OBJECTS",
+    "core.fsmonitor=false",
+    "refs/heads/main:refs/remotes/origin/main",
+    "TIDEPROOF_AUDITOR_DATABASE_URL",
+    "TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC",
+    "ADMISSIBLE_VECTOR_POOL_CLOSE_FAILED",
+    "--proof",
     "not an accepted DVI plan/exclusion receipt"
   ]),
   "authority-runtime": Object.freeze([

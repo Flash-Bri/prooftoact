@@ -59,6 +59,7 @@ function childEnvironment(source) {
   environment.AWS_SHARED_CREDENTIALS_FILE = "/dev/null";
   environment.GIT_CONFIG_GLOBAL = "/dev/null";
   environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_TERMINAL_PROMPT = "0";
   environment.npm_config_always_auth = "false";
   environment.npm_config_registry = "https://registry.npmjs.org/";
@@ -314,6 +315,37 @@ export function validateTrackedTree(output) {
   };
 }
 
+export function validateIndexFlags(output, expectedFileCount) {
+  assert(
+    typeof output === "string" &&
+      output.endsWith("\0") &&
+      Number.isSafeInteger(expectedFileCount) &&
+      expectedFileCount > 0,
+    "RELEASE_PROVENANCE_INDEX_FLAGS"
+  );
+  const records = output.slice(0, -1).split("\0");
+  const paths = new Set();
+  assert(
+    records.length === expectedFileCount,
+    "RELEASE_PROVENANCE_INDEX_FLAGS"
+  );
+  for (const record of records) {
+    const filePath = record.slice(2);
+    assert(
+      record.startsWith("H ") &&
+        filePath.length > 0 &&
+        !paths.has(filePath),
+      "RELEASE_PROVENANCE_INDEX_FLAGS"
+    );
+    paths.add(filePath);
+  }
+  return {
+    indexEntryCount: records.length,
+    skipWorktreeEntryCount: 0,
+    assumeUnchangedEntryCount: 0
+  };
+}
+
 function checkoutSnapshot(run) {
   return {
     branch: textCommand(
@@ -325,7 +357,13 @@ function checkoutSnapshot(run) {
     status: textCommand(
       run,
       "git",
-      ["status", "--porcelain=v1", "--untracked-files=all"],
+      [
+        "-c",
+        "core.fsmonitor=false",
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all"
+      ],
       "RELEASE_PROVENANCE_GIT_STATUS"
     ),
     commit: textCommand(
@@ -490,6 +528,15 @@ export function verifyRepositoryHistory({ run, projectRoot = DEFAULT_ROOT }) {
       "RELEASE_PROVENANCE_GIT_LS_TREE"
     )
   );
+  const indexFlags = validateIndexFlags(
+    checkedCommand(
+      run,
+      "git",
+      ["ls-files", "-v", "-z", "--cached"],
+      "RELEASE_PROVENANCE_GIT_LS_FILES"
+    ),
+    trackedTree.fileCount
+  );
   checkedCommand(
     run,
     "git",
@@ -508,11 +555,13 @@ export function verifyRepositoryHistory({ run, projectRoot = DEFAULT_ROOT }) {
       headCommitterTime,
       shallow: false,
       replaceRefCount: 0,
+      replacementObjectsDisabled: true,
+      filesystemMonitorDisabled: true,
       legacyGraftFilePresent: false,
       alternateObjectDatabaseCount: 0,
       objectIntegrity: true
     },
-    trackedTree
+    trackedTree: { ...trackedTree, ...indexFlags }
   };
 }
 
