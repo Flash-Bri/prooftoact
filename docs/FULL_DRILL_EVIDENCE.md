@@ -30,8 +30,9 @@ acts:
 1. CockroachDB produces a short-lived snapshot from the full provenance,
    validity, revocation, scope, and conflict predicate. DVI ranks only that
    snapshot. The semantically closest inadmissible row is excluded, ranked IDs
-   are a subset of the snapshot, and current admissibility is rechecked before
-   authority is spent.
+   are a subset of the snapshot, the selected top-ranked evidence is bound to
+   the exact drill run without disclosing its identifier, and current
+   admissibility is rechecked before authority is spent.
 2. Two genuinely overlapping AWS Lambda invocations use that evidence and one
    bounded race binding. CockroachDB commits exactly one winner, one durable
    denial, two terminal receipts, one outbox intent, fence one, and zero
@@ -73,11 +74,13 @@ may be referenced by digest, but they are not counted as full drills.
 ## Present release boundary
 
 The source tree now contains stronger replay, recovery, DVI-snapshot, AWS
-evidence, timeout, and resource-bound controls. The provider-backed batch
-harness, bounded multi-race deployment shape, and live receipt do not yet
-exist. The exact cross-act recovery lookup now has a locally tested source
-control, but no provider-backed receipt. Public claims and final release
-readiness must therefore remain partial and blocked.
+evidence, timeout, and resource-bound controls. The DVI proof candidate now
+binds its selected top-ranked evidence to one exact synthetic drill run, but
+the AWS authority request does not yet consume that binding. The
+provider-backed batch harness, bounded multi-race deployment shape, and live
+receipt do not yet exist. The exact cross-act recovery lookup now has a locally
+tested source control, but no provider-backed receipt. Public claims and final
+release readiness must therefore remain partial and blocked.
 
 The sanitized `tideproof.aws-authority-race-receipt.v4` now carries the exact
 configured active-run UUID, and its durable proof rejects a database
@@ -126,6 +129,7 @@ entry before and after the public-main fetch.
 
 The spec binds:
 
+- one exact synthetic drill-run UUID;
 - exactly 10,000 admissible candidate evidence IDs by sorted-set SHA-256;
 - one exact tenant, incident, retrieval, agency, three-dimensional query,
   ten-result limit, and 60-second snapshot TTL;
@@ -148,15 +152,20 @@ ordered results to match the authorizer function byte-for-byte. It also proves
 the designated inadmissible row is semantically closer than the first returned
 candidate and verifies zero candidate rows remain after retirement.
 
-The emitted receipt contains source, tree, fixture, plan, ranked-set, database
-cluster, version, and session digests; snapshot and cleanup timestamps; counts;
-reason labels; and an order-sensitive ranked-result digest. It does not emit
-credentials, usernames, endpoints, raw plans, fixture IDs, or query vectors.
+The emitted `tideproof.gate1.admissible-vector-proof.v2` receipt contains the
+synthetic drill-run UUID plus a non-reversible authority-evidence binding over
+the exact source, tree, canonical proof spec, snapshot interval, ranked
+sequence, and selected rank-one evidence ID and digest. It also contains
+fixture, plan, ranked-set, database cluster, version, and session digests;
+snapshot and cleanup timestamps; counts; reason labels; and an order-sensitive
+ranked-result digest. It does not emit credentials, usernames, endpoints, raw
+plans, tenant, incident, retrieval, or evidence IDs, or query vectors.
+
 Both database sessions must report the same CockroachDB cluster, any prepare
 attempt still attempts retirement, and a cleanup failure is preserved
 alongside the primary failure. Pool shutdown must also succeed before the
 `PASS` receipt is emitted. A `PASS` remains subject to independent acceptance
-review and does not satisfy the 100-drill, AWS, authorization,
-production-safety, or final-release gates by itself.
+review and does not prove that AWS consumed the binding or satisfy the
+100-drill, authorization, production-safety, or final-release gates by itself.
 
 No provider-backed receipt from this lane exists yet.

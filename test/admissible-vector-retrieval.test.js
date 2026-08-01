@@ -233,6 +233,7 @@ const PROOF_EXCLUSIONS = Object.freeze(
 function proofSpec(overrides = {}) {
   return {
     tenantId: "11111111-1111-4111-8111-111111111111",
+    runId: "99999999-9999-4999-8999-999999999999",
     retrievalId: "22222222-2222-4222-8222-222222222222",
     incidentId: "33333333-3333-4333-8333-333333333333",
     agency: "rescue",
@@ -439,6 +440,12 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
   const receipt = await runProof(pools);
   assert.equal(receipt.schemaVersion, __test.PROOF_SCHEMA);
   assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.drill.runId, proofSpec().runId);
+  assert.equal(receipt.drill.selectedRank, 1);
+  assert.match(
+    receipt.drill.authorityEvidenceBindingSha256,
+    /^[0-9a-f]{64}$/u
+  );
   assert.equal(receipt.fixture.candidateCount, 10_000);
   assert.equal(receipt.fixture.exclusionCaseCount, 7);
   assert.equal(receipt.fixture.nearestExcludedCloserThanRanked, true);
@@ -458,8 +465,54 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
   assert.equal(receipt.cleanup.deletedCandidateCount, 10_000);
   assert.equal(receipt.cleanup.snapshotRetired, true);
   assert.equal(receipt.cleanup.cleanedAt, "2026-08-01T12:00:02.000Z");
+  const publicReceipt = JSON.stringify(receipt);
+  assert.equal(publicReceipt.includes(proofSpec().tenantId), false);
+  assert.equal(publicReceipt.includes(proofSpec().incidentId), false);
+  assert.equal(publicReceipt.includes(proofSpec().retrievalId), false);
+  assert.equal(publicReceipt.includes(PROOF_CANDIDATE_IDS[0]), false);
   assert.equal(pools.authorizerReleasedWith, undefined);
   assert.equal(pools.auditorReleasedWith, undefined);
+});
+
+test("integrated DVI proof binding changes with the run and selected evidence", () => {
+  const accepted = __test.validateProofSpec(proofSpec());
+  const base = {
+    accepted,
+    preparedTiming: {
+      admittedAt: "2026-08-01T12:00:00.000Z",
+      expiresAt: "2026-08-01T12:01:00.000Z"
+    },
+    rankedSequenceSha256: "c".repeat(64),
+    selected: {
+      evidenceId: PROOF_CANDIDATE_IDS[0],
+      evidenceDigest: "d".repeat(64)
+    },
+    sourceCommit: "a".repeat(40),
+    specSha256: "e".repeat(64),
+    treeDigest: "b".repeat(40)
+  };
+  const digest = __test.authorityEvidenceBindingDigest(base);
+  assert.match(digest, /^[0-9a-f]{64}$/u);
+  assert.notEqual(
+    digest,
+    __test.authorityEvidenceBindingDigest({
+      ...base,
+      accepted: {
+        ...accepted,
+        runId: "88888888-8888-4888-8888-888888888888"
+      }
+    })
+  );
+  assert.notEqual(
+    digest,
+    __test.authorityEvidenceBindingDigest({
+      ...base,
+      selected: {
+        evidenceId: PROOF_CANDIDATE_IDS[1],
+        evidenceDigest: "f".repeat(64)
+      }
+    })
+  );
 });
 
 test("integrated DVI proof rejects a non-vector plan and still retires the snapshot", async () => {
@@ -561,5 +614,14 @@ test("integrated DVI proof spec requires all seven exact exclusion classes", () 
   assert.throws(
     () => __test.validateProofSpec(missing),
     /ADMISSIBLE_VECTOR_PROOF_EXCLUSIONS/
+  );
+  const { runId: _runId, ...missingRun } = proofSpec();
+  assert.throws(
+    () => __test.validateProofSpec(missingRun),
+    /ADMISSIBLE_VECTOR_PROOF_SPEC_SHAPE/
+  );
+  assert.throws(
+    () => __test.validateProofSpec(proofSpec({ runId: "not-a-uuid" })),
+    /runId must be a UUID/
   );
 });

@@ -9,7 +9,9 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const GIT_OBJECT_ID = /^[0-9a-f]{40}$/;
 const POLICY_VERSION = "g1-admissibility-v2";
 const VECTOR_INDEX_NAME = "g1_vector_candidates_embedding_idx";
-const PROOF_SCHEMA = "tideproof.gate1.admissible-vector-proof.v1";
+const PROOF_SCHEMA = "tideproof.gate1.admissible-vector-proof.v2";
+const AUTHORITY_EVIDENCE_BINDING_SCHEMA =
+  "tideproof.gate1.admissible-vector-authority-binding.v1";
 const PROOF_CANDIDATE_COUNT = 10_000;
 const PROOF_LIMIT = 10;
 const PROOF_TTL_MS = 60_000;
@@ -120,12 +122,14 @@ function validateProofSpec(value) {
       "nearestExcludedEvidenceId",
       "queryEmbedding",
       "retrievalId",
+      "runId",
       "tenantId",
       "ttlMs"
     ],
     "ADMISSIBLE_VECTOR_PROOF_SPEC_SHAPE"
   );
   const tenantId = requireUuid(value.tenantId, "tenantId");
+  const runId = requireUuid(value.runId, "runId");
   const retrievalId = requireUuid(value.retrievalId, "retrievalId");
   const incidentId = requireUuid(value.incidentId, "incidentId");
   const agency = requireText(value.agency, "agency");
@@ -173,6 +177,7 @@ function validateProofSpec(value) {
   );
   return {
     tenantId,
+    runId,
     retrievalId,
     incidentId,
     agency,
@@ -187,6 +192,36 @@ function validateProofSpec(value) {
     limit: PROOF_LIMIT,
     ttlMs: PROOF_TTL_MS
   };
+}
+
+function authorityEvidenceBindingDigest({
+  accepted,
+  preparedTiming,
+  rankedSequenceSha256,
+  selected,
+  sourceCommit,
+  specSha256,
+  treeDigest
+}) {
+  return sha256(
+    canonicalJson({
+      schemaVersion: AUTHORITY_EVIDENCE_BINDING_SCHEMA,
+      sourceCommit,
+      treeDigest,
+      specSha256,
+      runId: accepted.runId,
+      tenantId: accepted.tenantId,
+      incidentId: accepted.incidentId,
+      retrievalId: accepted.retrievalId,
+      snapshot: preparedTiming,
+      rankedSequenceSha256,
+      selected: {
+        rank: 1,
+        evidenceId: selected.evidenceId,
+        evidenceDigest: selected.evidenceDigest
+      }
+    })
+  );
 }
 
 function integerFromRow(value, name, maximum = Number.MAX_SAFE_INTEGER) {
@@ -660,11 +695,40 @@ export async function proveAdmissibleVectorSnapshot({
       "ADMISSIBLE_VECTOR_PROOF_NEAREST_EXCLUSION_NOT_CLOSER"
     );
 
+    const rankedSetSha256 = identifierSetDigest(
+      ranked.map(({ evidenceId }) => evidenceId),
+      "rankedEvidenceId"
+    );
+    const rankedSequenceSha256 = sha256(
+      canonicalJson(
+        ranked.map(({ evidenceId, evidenceDigest, distance }) => ({
+          evidenceId,
+          evidenceDigest,
+          distance
+        }))
+      )
+    );
+    const authorityEvidenceBindingSha256 =
+      authorityEvidenceBindingDigest({
+        accepted,
+        preparedTiming,
+        rankedSequenceSha256,
+        selected: ranked[0],
+        sourceCommit,
+        specSha256,
+        treeDigest
+      });
+
     receipt = {
       schemaVersion: PROOF_SCHEMA,
       status: "PASS",
       sourceCommit,
       treeDigest,
+      drill: {
+        runId: accepted.runId,
+        selectedRank: 1,
+        authorityEvidenceBindingSha256
+      },
       database: {
         name: authorizerIdentity.databaseName,
         clusterIdSha256: sha256(authorizerIdentity.clusterId),
@@ -687,26 +751,15 @@ export async function proveAdmissibleVectorSnapshot({
       ranking: {
         ...plan,
         rankedCount: ranked.length,
-        rankedSetSha256: identifierSetDigest(
-          ranked.map(({ evidenceId }) => evidenceId),
-          "rankedEvidenceId"
-        ),
-        rankedSequenceSha256: sha256(
-          canonicalJson(
-            ranked.map(({ evidenceId, evidenceDigest, distance }) => ({
-              evidenceId,
-              evidenceDigest,
-              distance
-            }))
-          )
-        ),
+        rankedSetSha256,
+        rankedSequenceSha256,
         auditorRankMatchesAuthorizer: true,
         approximateNearestNeighbor: true,
         authorizationRecheckRequired: true
       },
       cleanup: null,
       claimBoundary:
-        "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, the required adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove authorization, the 100-drill batch, AWS behavior, production suitability, or final release readiness."
+        "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, its synthetic drill identity, a non-reversible binding from the top-ranked admissible evidence to the exact source, spec, snapshot, and ranked sequence, the required adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove that AWS consumed the binding, authorization, the 100-drill batch, production suitability, or final release readiness."
     };
   } catch (error) {
     primaryError = error;
@@ -1000,6 +1053,7 @@ export class AdmissibleVectorRetriever {
 }
 
 export const __test = Object.freeze({
+  AUTHORITY_EVIDENCE_BINDING_SCHEMA,
   POLICY_VERSION,
   PROOF_CANDIDATE_COUNT,
   PROOF_LIMIT,
@@ -1007,6 +1061,7 @@ export const __test = Object.freeze({
   PROOF_TTL_MS,
   REQUIRED_EXCLUSION_REASONS,
   VECTOR_INDEX_NAME,
+  authorityEvidenceBindingDigest,
   identifierSetDigest,
   preparedSnapshot,
   validateProofSpec,
