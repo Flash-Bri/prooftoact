@@ -89,9 +89,17 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/database-runtime.js",
     role: "DATABASE_RUNTIME_BOUNDARY"
   }),
+  "database-security-bootstrap-tests": Object.freeze({
+    path: "test/database-security-bootstrap.test.js",
+    role: "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION"
+  }),
   "database-security-posture": Object.freeze({
     path: "src/cloud/database-security-posture.js",
     role: "DATABASE_POSTURE_BOUNDARY"
+  }),
+  "database-security-posture-tests": Object.freeze({
+    path: "test/database-security-posture.test.js",
+    role: "DATABASE_POSTURE_VERIFICATION"
   }),
   "demo-entry": Object.freeze({
     path: "infra/aws/lambda/demo.js",
@@ -162,6 +170,48 @@ const EXPECTED_SURFACES = Object.freeze({
     role: "AWS_SIGNING_RUNTIME"
   })
 });
+
+export const RELEASE_SECURITY_SURFACE_COUNT =
+  Object.keys(EXPECTED_SURFACES).length;
+
+const RELEASE_SECURITY_RECEIPT_KEYS = Object.freeze([
+  "boundedFunctionCount",
+  "checks",
+  "claimBoundary",
+  "finalReleaseReady",
+  "finalReleaseRequirements",
+  "iamRoleCount",
+  "lambdaPermissionCount",
+  "logGroupCount",
+  "manifestPath",
+  "manifestSha256",
+  "negativeProbeCount",
+  "publicPathCount",
+  "publicRouteCount",
+  "reviewedOn",
+  "schemaVersion",
+  "securityHeaderCount",
+  "status",
+  "surfaceCount"
+]);
+
+const RELEASE_SECURITY_CHECK_KEYS = Object.freeze([
+  "advisoryRouteIamAuthenticated",
+  "apiGatewayInvokePermissionsBounded",
+  "asymmetricSigningKeyBounded",
+  "canonicalManifest",
+  "criticalRoleDenialsPresent",
+  "exactPublicRouteSet",
+  "exactSurfaceHashes",
+  "generatedTemplateMatchesSource",
+  "immutableVersionedLambdaTargets",
+  "leastPrivilegeRoleActionsBounded",
+  "logsBoundedAndPrivacyMinimized",
+  "publicCorsAndLambdaUrlsAbsent",
+  "publicHeadersAndNegativeProbesBounded",
+  "sourceSecurityMarkersPresent",
+  "throttlesAndConcurrencyBounded"
+]);
 
 const EXPECTED_PUBLIC_PATHS = Object.freeze([
   "/",
@@ -452,14 +502,56 @@ const SOURCE_MARKERS = Object.freeze({
     "idleTransactionTimeoutMillis: RUNTIME_IDLE_TRANSACTION_TIMEOUT_MS",
     "code === \"40003\""
   ]),
+  "database-security-bootstrap-tests": Object.freeze([
+    "audits posture before credentials, ownership, or grants",
+    "every database SECURITY DEFINER body binds the exact session user",
+    "lockInitialPublicCapability(client, bootstrapOwner)",
+    "lockInitialRecoveryPublicCapability(client, bootstrapOwner)",
+    "expectedPrimaryGuards",
+    "sharedAuthorizerGuard",
+    "schemaDefaultLock"
+  ]),
   "database-security-posture": Object.freeze([
+    "DATABASE_POSTURE_BOOTSTRAP_SESSION_UNSAFE",
+    "DATABASE_POSTURE_BOOTSTRAP_ADMIN_REQUIRED",
     "DATABASE_POSTURE_PRINCIPAL_OPTIONS_UNSAFE",
+    "DATABASE_POSTURE_EXTERNAL_PRINCIPAL_CAPABILITY",
+    "DATABASE_POSTURE_STALE_PRINCIPAL",
     "DATABASE_POSTURE_EXTERNAL_MEMBERSHIP",
     "DATABASE_POSTURE_SYSTEM_GRANT_UNSAFE",
+    "DATABASE_POSTURE_EXTERNAL_OBJECT_GRANT",
+    "DATABASE_POSTURE_DEFAULT_GRANT_UNSAFE",
+    "DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED",
     "DATABASE_POSTURE_OUT_OF_SCOPE_GRANT",
     "DATABASE_POSTURE_DIRECT_USER_GRANT",
+    "DATABASE_POSTURE_CROSS_BOUNDARY_GRANT",
+    "DATABASE_POSTURE_DATABASE_SET_CHANGED",
+    "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY",
+    "version() AS database_version",
+    "current_database() AS database_name",
+    "object_name,",
+    "object_type,",
     "FROM [SHOW GRANTS ON ROLE]",
-    "FROM [SHOW SYSTEM GRANTS]"
+    "FROM [SHOW SYSTEM GRANTS]",
+    "WHERE database_name = current_database()",
+    "FROM crdb_internal.default_privileges",
+    "FROM [SHOW DATABASES]",
+    "collectClusterManagedGrantPosture",
+    "canonicalRoutineIdentity",
+    "synthesizedAllRoleRoutineBaseline",
+    "isGrantable: boolean(row?.is_grantable ?? false)"
+  ]),
+  "database-security-posture-tests": Object.freeze([
+    "clean exhaustive database posture validates and binds the census",
+    "bootstrap defaults are rejected once a managed principal or surface exists",
+    "sibling database principals are recognized but remain capability-free",
+    "collector uses one read-only transaction with cache-versioned role introspection",
+    "collector rolls back a failed census snapshot",
+    "cluster census enforces database isolation with matching barriers",
+    "cluster census rejects database-set drift",
+    "DATABASE_POSTURE_EXTERNAL_PRINCIPAL_CAPABILITY",
+    "DATABASE_POSTURE_EXTERNAL_OBJECT_GRANT",
+    "DATABASE_POSTURE_DEFAULT_GRANT_UNSAFE"
   ]),
   "demo-entry": Object.freeze([
     "createPublicDemoHandler({",
@@ -487,6 +579,15 @@ const SOURCE_MARKERS = Object.freeze({
     "REVOKE CREATE ON SCHEMA public FROM public",
     "ALTER DEFAULT PRIVILEGES FOR ROLE",
     "SECURITY DEFINER",
+    "PRIMARY_ROLE_GRANT_POLICIES",
+    "lockInitialPublicCapability(client, bootstrapOwner)",
+    "clusterPreflightPostureDigest: clusterPreflight.postureDigest",
+    "lockPublicRoutineDefaults(client, principals, schemas = [])",
+    "ALTER DEFAULT PRIVILEGES ${scope} REVOKE EXECUTE ON FUNCTIONS FROM public",
+    "allowMissingExpectedCapabilities: false",
+    "session_user = 'tp_ingest_user'",
+    "session_user = 'tp_dispatch_user'",
+    "session_user <> 'tp_recovery_audit_user'",
     "session_user <> 'tp_gate2_authorizer_user'",
     "collectValidatedPosture(",
     "ALTER ROLE ${role} WITH NOLOGIN",
@@ -531,6 +632,11 @@ const SOURCE_MARKERS = Object.freeze({
     "REVOKE CREATE ON SCHEMA public FROM public",
     "ALTER DEFAULT PRIVILEGES FOR ROLE",
     "SECURITY DEFINER",
+    "session_user <> '${RECOVERY_PUBLISHER_USER}'",
+    "lockInitialRecoveryPublicCapability(client, bootstrapOwner)",
+    "clusterPreflightPostureDigest: clusterPreflight.postureDigest",
+    "lockRecoveryPublicRoutineDefaults(",
+    "allowMissingExpectedCapabilities: false",
     "collectValidatedRecoveryPosture(",
     "GRANT USAGE ON SCHEMA mcp_api TO ${RECOVERY_PUBLISHER_ROLE}",
     "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED"
@@ -609,6 +715,45 @@ function exactKeys(value, keys, code) {
       sameJson(sorted(Object.keys(value)), sorted(keys)),
     code
   );
+}
+
+export function validateReleaseSecurityReceipt(receipt) {
+  exactKeys(
+    receipt,
+    RELEASE_SECURITY_RECEIPT_KEYS,
+    "RELEASE_SECURITY_RECEIPT_CONTRACT"
+  );
+  exactKeys(
+    receipt.checks,
+    RELEASE_SECURITY_CHECK_KEYS,
+    "RELEASE_SECURITY_RECEIPT_CONTRACT"
+  );
+  assert(
+    receipt.schemaVersion === RECEIPT_SCHEMA &&
+      receipt.status === "CURRENT_SOURCE_SECURITY_PASS" &&
+      receipt.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(receipt.reviewedOn) &&
+      receipt.manifestPath === MANIFEST_PATH &&
+      HEX_64.test(receipt.manifestSha256) &&
+      receipt.surfaceCount === RELEASE_SECURITY_SURFACE_COUNT &&
+      receipt.publicPathCount === 10 &&
+      receipt.securityHeaderCount === 9 &&
+      receipt.negativeProbeCount === 6 &&
+      receipt.publicRouteCount === 10 &&
+      receipt.iamRoleCount === 7 &&
+      receipt.lambdaPermissionCount === 3 &&
+      receipt.boundedFunctionCount === 5 &&
+      receipt.logGroupCount === 11 &&
+      sameJson(
+        receipt.finalReleaseRequirements,
+        EXPECTED_FINAL_RELEASE_REQUIREMENTS
+      ) &&
+      Object.values(receipt.checks).every((value) => value === true) &&
+      typeof receipt.claimBoundary === "string" &&
+      receipt.claimBoundary.length > 0,
+    "RELEASE_SECURITY_RECEIPT_CONTRACT"
+  );
+  return receipt;
 }
 
 function safeRelativePath(value, code) {
@@ -1070,7 +1215,7 @@ export function verifyReleaseSecurity({ rootDir = DEFAULT_ROOT } = {}) {
   const template = assertTemplateContract(generatedTemplate);
   const runtime = assertRuntimeContract();
 
-  return {
+  const receipt = {
     schemaVersion: RECEIPT_SCHEMA,
     status: "CURRENT_SOURCE_SECURITY_PASS",
     finalReleaseReady: false,
@@ -1101,6 +1246,7 @@ export function verifyReleaseSecurity({ rootDir = DEFAULT_ROOT } = {}) {
     claimBoundary:
       "This receipt proves only that the current hash-bound security surfaces match the reviewed source state and that the generated Gate Two template preserves the enumerated route, authentication, browser-header, negative-probe, throttle, concurrency, immutable-version, IAM-action, Lambda-permission, KMS, log-retention, database-bootstrap, and Managed MCP source contracts checked here. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit."
   };
+  return validateReleaseSecurityReceipt(receipt);
 }
 
 async function main() {
@@ -1129,6 +1275,8 @@ export const __test = Object.freeze({
   EXPECTED_ROLE_ALLOW_ACTIONS,
   EXPECTED_SECURITY_HEADERS,
   EXPECTED_SURFACES,
+  RELEASE_SECURITY_CHECK_KEYS,
+  RELEASE_SECURITY_RECEIPT_KEYS,
   MANIFEST_PATH,
   MANIFEST_SCHEMA,
   MANIFEST_STATUS,

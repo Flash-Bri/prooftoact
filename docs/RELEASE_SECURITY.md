@@ -25,7 +25,7 @@ live IAM enforcement, or permission to deploy or publish.
 | Advisory proposal | One `AWS_IAM` `POST /advisory` route, one immutable coordinator alias, exact dedicated-role STS principal validation, schema-bound input, one bounded Bedrock model, and an explicitly untrusted proposal | Live dedicated-role allow plus alternate-principal denial receipts, model invocation receipt, and private payload/log review |
 | Receipt signing | One P-256 `SIGN_VERIFY` KMS key, digest-only ECDSA signing, one immutable signer alias, and no model, secret, or arbitrary Lambda capability | Live key-policy, public-key, sign/verify, direct-invoke-denial, and teardown receipts |
 | Authority spend | One exact project secret ARN and `AWSCURRENT` VersionId, exact Cockroach host/port, `sslmode=verify-full`, bounded database timeouts, derived operation fields, a two-contender typed `SECURITY DEFINER` wrapper, serializable one-winner logic, and no model/signing/arbitrary-Lambda capability. The evidence runner rejects endpoint/profile/proxy/CA and Git-object indirection, resolves the expected caller role from CloudFormation, and binds the observed STS caller triple before invocation. Its validator now requires positive-duration transactions with a positive overlap interval, an initial fence of one, a canonical lease later than the winning commit and still active at the durable observation, and the exact unmodified in-process race observation. | Live secret/version/endpoint/IAM audit, overlapping two-Lambda race, ambiguous-commit behavior, private raw STS receipt, and later read-only durable-state reconciliation |
-| CockroachDB memory and recovery | Pre-mutation reused-cluster posture checks reject unsafe role options, external/admin memberships, system grants, and out-of-scope grants; managed privileges are scrubbed and rebuilt through NOLOGIN capability roles. Runtime URLs cannot override the reviewed query/statement/idle timeouts. Managed MCP uses one fixed query bound to the exact tenant, run, incident, evidence, resource, operation, request digest, outcome, and successor principal; it has no recency fallback, rejects redirects, caps streamed responses at 256 KiB, decodes UTF-8 fatally, requires exact-one cardinality, and releases context only after both audits. | Disposable-cluster validation against the exact CockroachDB Cloud version, final grants/options/membership inventory, MCP audit, credential isolation, and private human review |
+| CockroachDB memory and recovery | Before mutation, one read-only SERIALIZABLE v26.2 transaction binds descriptor-backed object and schema/global default privileges in the current dedicated database while recording cache-versioned principal, membership, and default-role introspection. Matching post-convergence and database-set barriers reject drift; the release boundary still requires no concurrent administrator changes. It rejects stale Tideproof principals and untrusted paths into the managed capability boundary. Exact provider-canonical routine signatures, role grant allowlists, NOLOGIN capability roles, an un-switched bootstrap session, and exact `session_user` guards on every `SECURITY DEFINER` body are attested again after convergence. Runtime URLs cannot override the reviewed query/statement/idle timeouts. Managed MCP uses one fixed query bound to the exact tenant, run, incident, evidence, resource, operation, request digest, outcome, and successor principal; it has no recency fallback, rejects redirects, caps streamed responses at 256 KiB, decodes UTF-8 fatally, requires exact-one cardinality, and releases context only after both audits. | Disposable-cluster validation against the exact CockroachDB Cloud version, final grants/options/membership/default-privilege inventory, MCP audit, credential isolation, and private human review |
 | Repository and evidence | Exact dependency lock, bundle notices, full-history provenance, bounded privacy scan, claim ledger, and proof manifest | Final official-main rerun plus private review of repository, receipts, screenshots, video, URLs, and submission fields |
 
 ## Threat and abuse cases
@@ -64,21 +64,51 @@ enforcement:
   contender wrapper plus the exact read-only resolver/observer, while explicit
   cross-grant and cross-membership revocations deny direct Gate One spend; the
   Gate One role cannot execute the Gate Two wrapper. Both spend contracts use
-  `session_user`, not a caller-supplied authenticated-agent duplicate. All
-  application relations and nested application functions in primary/recovery
-  `SECURITY DEFINER` bodies are schema-qualified. CockroachDB v26.2 has no
+  `session_user`, not a caller-supplied authenticated-agent duplicate. Every
+  primary/recovery `SECURITY DEFINER` body now has an exact `session_user`
+  predicate or exception guard, including nested and read-only functions. All
+  application relations and nested application functions in those bodies are
+  schema-qualified. CockroachDB v26.2 has no
   documented function-level `SET search_path`, so each database credential
   remains an authority capability within its grant surface and live
   grant/session review remains required.
-- **Dirty or reused database state:** both security bootstraps inventory the
-  managed users, roles, memberships, system grants, and object grants before
-  changing credentials, ownership, or grants. Unknown options, external or
-  admin memberships, system privileges, and out-of-scope grants fail closed.
-  Managed-scope grants are broadly revoked from runtime roles and users,
-  capability roles are forced to `NOLOGIN`, only exact memberships are
-  rebuilt, and a post-attestation digest is returned. Catalog formatting,
-  membership propagation, and convergence still require a live disposable-
-  cluster test on the exact provider version.
+- **Dirty or reused database state:** both security bootstraps use one
+  read-only SERIALIZABLE v26.2 transaction for descriptor-backed system,
+  current-database non-system object, and schema/global default-privilege
+  reads while recording cache-versioned user/role, membership, and
+  default-role introspection before changing
+  credentials, ownership, or grants. The connection must remain in the exact
+  database with
+  `current_user = session_user`; that injected bootstrap principal is the only
+  dynamically trusted administrator. Unknown managed options or prefixes,
+  login-capable or privileged external principals, untrusted administrator
+  membership edges, external membership edges into Tideproof,
+  non-administrator system grants, direct user grants, grant options,
+  unexpected runtime-role privileges, unsafe public defaults, and future
+  default capabilities fail closed. A separately connected, admin-proven
+  census enumerates every visible non-system database twice and inspects all
+  of its object grants between matching start/end database-set barriers; any
+  Tideproof principal grant outside that principal's one assigned database is
+  rejected. This is not a cluster-atomic snapshot, so provider evidence still
+  requires an administrative maintenance boundary.
+  Only a database with no local managed principal or managed-schema surface
+  may contain the documented CockroachDB public `CONNECT`, `TEMPORARY`, and
+  public-schema `CREATE` bootstrap defaults. They and public default routine
+  execution for all roles, the bootstrap actor, and every present Tideproof
+  principal are revoked immediately after the census and before any
+  application routine is created; every later attestation permits neither.
+  CockroachDB synthesizes one database-level `FOR ALL ROLES` public-routine
+  row even when no stored all-role descriptor exists, so that exact baseline
+  is not treated as proof of a grant; the bootstrap still issues the explicit
+  all-role revocation, rejects schema-scoped variants, and keeps live
+  creator-by-creator routine materialization as a provider gate.
+  Managed-scope grants are
+  then rebuilt, capability roles are forced to `NOLOGIN`, and digests bind the
+  normalized local and cross-database censuses while returned public bootstrap
+  data is filtered back to managed principals. Catalog formatting, membership
+  propagation, default-privilege behavior, and convergence still require a
+  live disposable-cluster
+  test on the exact provider version.
 - **Replay, ambiguous commit, and inherited authority:** these are enforced by
   the accepted Gate One transaction/recovery controls and the local Gate Two
   candidate. The static security gate binds those sources but does not upgrade

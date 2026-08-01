@@ -217,13 +217,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "3c782b6d5eae2fa81b63acb6f6f587c8439222a61ab755133e6daabb9295f4ea",
+      "sha256": "e70b7b6448d39b6050bb5b26e908982bf63b7de46a21f8876fdfbf4b74d861ad",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "a476ceaa704a43fea26af3e3b021e988d58e25f4c8cccd58f11134a9962915a7",
+      "sha256": "b344724e1c7b550b82d1518c20452ed65ab62de2b6cd1a15e21aa756ed41b9a3",
       "kind": "verification-code"
     },
     {
@@ -241,13 +241,13 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "a528ca1f20e2d8609d571b545576206b683a796c29c866918e0fff4d68a17cd1",
+      "sha256": "c81ac3a010324084317cda71fb056d7998043cb4a1c66b17314aa7b69c304f92",
       "kind": "verification-code"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
-      "sha256": "bf277ed795a0597d975d3ddd08eb063c14692e9fc92472353feddd35c96ab31c",
+      "sha256": "f7ff9466384f05f0fd1847d08d893477bdc790cde3fcde8038205d20566774d1",
       "kind": "verification-code"
     },
     {
@@ -295,7 +295,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "ba6b0dffe31a01a4b2548f6a886e03d38bfab66601a3727b4c352fbf3d5c537a",
+      "sha256": "64e017d13a73e6c6f5e6fdc89e604915b64b4d838d8f847795c35bf860de6df4",
       "kind": "boundary-ledger"
     },
     {
@@ -367,13 +367,13 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "424d06612632ce55a2df0f9ddb1d0d2aa2d4127b0a470f2ce606baa0a54a20e0",
+      "sha256": "09347d3c4cdef3d11f93bc60d8ae5ead0297781450505049e91829bf2d801493",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "fdd1829a86c3678b48c5d187aa0488af6369387113ba56f8539ad82c0506ad2c",
+      "sha256": "9797171f62a670366aee3d98939308edbc4c12cb294de81712c0709067d0b328",
       "kind": "verification-code"
     },
     {
@@ -397,25 +397,25 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "06e53a50fec9a2b836d3f67bb65ef769dc7bacf26fb8a977896bfce50c6e9cf1",
+      "sha256": "c13b0017de2f23baeee83b15c34eef8445d01b5bc0eacdada0b9b19e6f6762ff",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "347e7f9ffef91c1858f783546ba29aefbedf26c29e7759558bd236eb4d77be1d",
+      "sha256": "11cc79aad2db0645d5be5dd9961c230b83b555cdc20b3201bc9fae840928836d",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "79976b2af833fd2099ad7feb7e32e329ae3df134c147acd301fc6308885bb306",
+      "sha256": "be528e1363ea840917a81756bb0aa9d850a8651bdaa6ba1e0b7c8521d2ec7925",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "3f839a0eb83320a185666fe16babc3b0d00212ee5ad8fbe7bc93ef6b23274eec",
+      "sha256": "f8b370d4689b0f7eb6c56269b56f71c135ab6515768aeb8757c06e54ec22c544",
       "kind": "verification-code"
     },
     {
@@ -827,7 +827,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds 32 reviewed security surfaces and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, immutable Lambda aliases, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, database bootstrap markers, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, immutable Lambda aliases, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database Tideproof-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind exact-release live security receipts and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

@@ -89,6 +89,18 @@ test("current proof manifest binds every claim and exact artifact", () => {
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
 
+test("current proof manifest recursively requires release-security PASS", () => {
+  assert.throws(
+    () => verifyProofManifest({
+      rootDir: ROOT,
+      verifySecurity: () => {
+        throw new Error("simulated nested security failure");
+      }
+    }),
+    /proof manifest nested release-security verification failed/
+  );
+});
+
 test("proof manifest rejects changed evidence bytes", () => {
   const fixture = makeFixture();
   try {

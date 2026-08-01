@@ -8,6 +8,7 @@ import {
   runtimeDatabaseConfig
 } from "./database-runtime.js";
 import {
+  collectClusterManagedGrantPosture,
   collectDatabaseSecurityPosture,
   quoteIdentifier,
   validateDatabaseSecurityPosture
@@ -27,12 +28,57 @@ const RECOVERY_ROLE_BINDINGS = [
 ];
 const RECOVERY_ROLES = ["tp_recovery_owner", RECOVERY_PUBLISHER_ROLE];
 const RECOVERY_USERS = [RECOVERY_PUBLISHER_USER];
+const PRIMARY_SIBLING_ROLES = [
+  "tp_owner",
+  "tp_ingest_role",
+  "tp_authorizer_role",
+  "tp_gate2_authorizer_role",
+  "tp_dispatch_role",
+  "tp_recovery_audit_role",
+  "tp_audit_role"
+];
+const PRIMARY_SIBLING_USERS = [
+  "tp_ingest_user",
+  "tp_authorizer_user",
+  "tp_gate2_authorizer_user",
+  "tp_dispatch_user",
+  "tp_recovery_audit_user",
+  "tp_audit_user"
+];
+const PRIMARY_SIBLING_BINDINGS = PRIMARY_SIBLING_ROLES
+  .slice(1)
+  .map((role, index) => [role, PRIMARY_SIBLING_USERS[index]]);
+const CLUSTER_PRINCIPAL_DATABASES = Object.freeze(Object.fromEntries([
+  ...PRIMARY_SIBLING_ROLES.map((principal) => [principal, "tideproof"]),
+  ...PRIMARY_SIBLING_USERS.map((principal) => [principal, "tideproof"]),
+  ...RECOVERY_ROLES.map((principal) => [
+    principal,
+    "tideproof_recovery"
+  ]),
+  ...RECOVERY_USERS.map((principal) => [
+    principal,
+    "tideproof_recovery"
+  ])
+]));
 const RECOVERY_POSTURE_SPEC = Object.freeze({
   databaseName: "tideproof_recovery",
   managedSchemas: ["mcp_private", "mcp_public", "mcp_api"],
+  managedPrefixes: ["tp_"],
+  apiSchema: "mcp_api",
+  ownerRoles: ["tp_recovery_owner"],
+  roleGrantPolicies: Object.freeze({
+    [RECOVERY_PUBLISHER_ROLE]: Object.freeze({
+      functions: Object.freeze([
+        "append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)"
+      ])
+    })
+  }),
   roles: RECOVERY_ROLES,
   users: RECOVERY_USERS,
-  bindings: RECOVERY_ROLE_BINDINGS
+  bindings: RECOVERY_ROLE_BINDINGS,
+  optionalRoles: PRIMARY_SIBLING_ROLES,
+  optionalUsers: PRIMARY_SIBLING_USERS,
+  optionalBindings: PRIMARY_SIBLING_BINDINGS
 });
 
 const APPEND_SIGNATURE =
@@ -80,10 +126,7 @@ async function collectValidatedRecoveryPosture(
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const posture = await collectDatabaseSecurityPosture(
-        client,
-        RECOVERY_POSTURE_SPEC
-      );
+      const posture = await collectDatabaseSecurityPosture(client);
       const summary = validateDatabaseSecurityPosture(
         posture,
         RECOVERY_POSTURE_SPEC,
@@ -114,6 +157,39 @@ async function scrubRecoveryPrivileges(client) {
     await client.query(
       `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mcp_private, mcp_public, mcp_api FROM ${principal}`
     );
+  }
+}
+
+async function lockInitialRecoveryPublicCapability(client, bootstrapOwner) {
+  await client.query(
+    "REVOKE ALL ON DATABASE tideproof_recovery FROM public"
+  );
+  await client.query("REVOKE CREATE ON SCHEMA public FROM public");
+  await lockRecoveryPublicRoutineDefaults(client, [bootstrapOwner]);
+}
+
+async function lockRecoveryPublicRoutineDefaults(
+  client,
+  principals,
+  schemas = []
+) {
+  const scopes = [
+    "FOR ALL ROLES",
+    ...principals.map((principal) =>
+      `FOR ROLE ${quoteIdentifier(principal)}`
+    )
+  ];
+  for (const scope of scopes) {
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES ${scope} REVOKE EXECUTE ON FUNCTIONS FROM public`
+    );
+    for (const schema of schemas) {
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES ${scope} IN SCHEMA ${quoteIdentifier(
+          schema
+        )} REVOKE EXECUTE ON FUNCTIONS FROM public`
+      );
+    }
   }
 }
 
@@ -172,16 +248,42 @@ export async function bootstrapRecoverySecurity({
     await client.connect();
     const preflight = await collectValidatedRecoveryPosture(
       client,
-      { allowMissing: true, allowManagedDrift: true }
+      {
+        allowMissingPrincipals: true,
+        allowMissingExpectedCapabilities: true,
+        allowBootstrapDefaults: true
+      }
     );
+    const clusterPreflight = await collectClusterManagedGrantPosture({
+      adminConnectionString,
+      principalDatabases: CLUSTER_PRINCIPAL_DATABASES
+    });
+    const bootstrapOwner =
+      preflight.posture.session[0].session_user_name;
+    await lockInitialRecoveryPublicCapability(client, bootstrapOwner);
     await client.query("CREATE ROLE IF NOT EXISTS tp_recovery_owner");
     await client.query(
       `CREATE ROLE IF NOT EXISTS ${RECOVERY_PUBLISHER_ROLE}`
     );
     await client.query(`CREATE USER IF NOT EXISTS ${RECOVERY_PUBLISHER_USER}`);
+    const existingOptionalPrincipals = preflight.posture.principals
+      .map((row) => row.username)
+      .filter((name) => [
+        ...PRIMARY_SIBLING_ROLES,
+        ...PRIMARY_SIBLING_USERS
+      ].includes(name));
+    await lockRecoveryPublicRoutineDefaults(client, [
+      ...RECOVERY_ROLES,
+      ...RECOVERY_USERS,
+      ...existingOptionalPrincipals
+    ]);
     await collectValidatedRecoveryPosture(
       client,
-      { allowMissing: false, allowManagedDrift: true }
+      {
+        allowMissingPrincipals: false,
+        allowMissingExpectedCapabilities: true,
+        allowBootstrapDefaults: false
+      }
     );
     const migrationStore = new RecoveryStore({
       connectionString: adminConnectionString,
@@ -193,6 +295,11 @@ export async function bootstrapRecoverySecurity({
     } finally {
       await migrationStore.close().catch(() => {});
     }
+    await lockRecoveryPublicRoutineDefaults(
+      client,
+      [bootstrapOwner, ...RECOVERY_ROLES, ...RECOVERY_USERS],
+      ["mcp_private", "mcp_public", "mcp_api"]
+    );
     await client.query(
       `REVOKE ${RECOVERY_PUBLISHER_ROLE} FROM ${RECOVERY_PUBLISHER_USER}`
     );
@@ -246,6 +353,10 @@ export async function bootstrapRecoverySecurity({
         v_existing_count INT8;
         v_existing_digest STRING;
       BEGIN
+        IF session_user <> '${RECOVERY_PUBLISHER_USER}' THEN
+          RAISE EXCEPTION 'recovery publisher database session required'
+            USING ERRCODE = '42501';
+        END IF;
         IF p_schema_version <> 2
           OR p_publisher_version <> '${RECOVERY_PUBLISHER_VERSION}'
           OR p_signature_algorithm <> '${RECOVERY_SIGNATURE_ALGORITHM}'
@@ -360,6 +471,11 @@ export async function bootstrapRecoverySecurity({
     await client.query(
       "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mcp_private, mcp_public, mcp_api FROM public"
     );
+    await lockRecoveryPublicRoutineDefaults(
+      client,
+      [bootstrapOwner, ...RECOVERY_ROLES, ...RECOVERY_USERS],
+      ["mcp_private", "mcp_public", "mcp_api"]
+    );
     await scrubRecoveryPrivileges(client);
     await client.query(
       `GRANT CONNECT ON DATABASE tideproof_recovery TO ${RECOVERY_PUBLISHER_ROLE}`
@@ -373,17 +489,8 @@ export async function bootstrapRecoverySecurity({
     await client.query(
       `REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public FROM ${RECOVERY_PUBLISHER_ROLE}`
     );
-    const bootstrapOwnerResult = await client.query(
-      "SELECT current_user AS bootstrap_owner"
-    );
-    if (
-      bootstrapOwnerResult.rowCount !== 1 ||
-      typeof bootstrapOwnerResult.rows[0]?.bootstrap_owner !== "string"
-    ) {
-      throw new Error("DATABASE_POSTURE_BOOTSTRAP_OWNER_INVALID");
-    }
     for (const owner of [
-      quoteIdentifier(bootstrapOwnerResult.rows[0].bootstrap_owner),
+      quoteIdentifier(bootstrapOwner),
       "tp_recovery_owner"
     ]) {
       for (const schema of ["mcp_private", "mcp_public", "mcp_api"]) {
@@ -400,13 +507,25 @@ export async function bootstrapRecoverySecurity({
     );
     const attested = await collectValidatedRecoveryPosture(
       client,
-      { allowMissing: false, allowManagedDrift: false },
+      {
+        allowMissingPrincipals: false,
+        allowMissingExpectedCapabilities: false,
+        allowBootstrapDefaults: false
+      },
       { attempts: 30, delayMs: 2_000 }
     );
+    const clusterAttested = await collectClusterManagedGrantPosture({
+      adminConnectionString,
+      principalDatabases: CLUSTER_PRINCIPAL_DATABASES
+    });
     return {
-      roles: attested.posture.principals,
+      roles: attested.posture.principals.filter((row) =>
+        [...RECOVERY_ROLES, ...RECOVERY_USERS].includes(row.username)
+      ),
       preflightPostureDigest: preflight.summary.postureDigest,
-      finalPostureDigest: attested.summary.postureDigest
+      finalPostureDigest: attested.summary.postureDigest,
+      clusterPreflightPostureDigest: clusterPreflight.postureDigest,
+      clusterFinalPostureDigest: clusterAttested.postureDigest
     };
   } finally {
     await client.end().catch(() => {});

@@ -84,7 +84,7 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "a476ceaa704a43fea26af3e3b021e988d58e25f4c8cccd58f11134a9962915a7"
+      "sha256": "b344724e1c7b550b82d1518c20452ed65ab62de2b6cd1a15e21aa756ed41b9a3"
     },
     {
       "id": "aws-template-generated",
@@ -111,10 +111,22 @@
       "sha256": "3bcc28c28aa071863def188f0128442fb803724a199028c2ee78df20cde6c339"
     },
     {
+      "id": "database-security-bootstrap-tests",
+      "path": "test/database-security-bootstrap.test.js",
+      "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
+      "sha256": "28866c23249e3bdaffb8a62862f742059c226207a4c103f3762088188e7c910f"
+    },
+    {
       "id": "database-security-posture",
       "path": "src/cloud/database-security-posture.js",
       "role": "DATABASE_POSTURE_BOUNDARY",
-      "sha256": "b13899d70804587ea105180d6f5acd09ce5d627d09b194dbc7f7f672e543cc17"
+      "sha256": "8113a58753c5189234bdd7b1d75aa780f5382fb7e4243d60875151fad4037033"
+    },
+    {
+      "id": "database-security-posture-tests",
+      "path": "test/database-security-posture.test.js",
+      "role": "DATABASE_POSTURE_VERIFICATION",
+      "sha256": "de16f3e51f1adf9c01ba557d0073376be9715cef781ed3cbd839435e3993ef36"
     },
     {
       "id": "demo-entry",
@@ -138,7 +150,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "f514a6797885f5caf2c0eb75979de109a98433654eed1647029464a1b2a6f1f4"
+      "sha256": "d3bbc473e824287c9c941c2c8618b63e82b276cb79e2f7c818744a4ba709496d"
     },
     {
       "id": "protocol-runtime",
@@ -168,7 +180,7 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "61ba7936763c7ebfeae94a00603fa42f4eaedc85f7a646da6763686ae2618e62"
+      "sha256": "3de2ca1af2d7fe853d2f6781a73411d641f7e5e56cb3a92742ee65ca0976822f"
     },
     {
       "id": "recovery-broker",
@@ -198,7 +210,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "06e53a50fec9a2b836d3f67bb65ef769dc7bacf26fb8a977896bfce50c6e9cf1"
+      "sha256": "c13b0017de2f23baeee83b15c34eef8445d01b5bc0eacdada0b9b19e6f6762ff"
     },
     {
       "id": "security-policy",

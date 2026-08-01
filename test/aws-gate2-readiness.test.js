@@ -14,6 +14,10 @@ import {
   validatePreflightReceipt,
   validateReleaseProvenance
 } from "../scripts/gate2-aws-readiness.js";
+import {
+  RELEASE_SECURITY_SURFACE_COUNT,
+  __test as securityVerifierContract
+} from "../scripts/verify-release-security.js";
 
 const SOURCE_COMMIT = "a".repeat(40);
 const TREE_DIGEST = "b".repeat(40);
@@ -424,7 +428,7 @@ function releaseSecurityReceipt() {
     reviewedOn: "2026-07-31",
     manifestPath: "RELEASE_SECURITY_MANIFEST.json",
     manifestSha256: "9".repeat(64),
-    surfaceCount: 35,
+    surfaceCount: RELEASE_SECURITY_SURFACE_COUNT,
     publicPathCount: 10,
     securityHeaderCount: 9,
     negativeProbeCount: 6,
@@ -434,8 +438,7 @@ function releaseSecurityReceipt() {
     boundedFunctionCount: 5,
     logGroupCount: 11,
     finalReleaseRequirements: [
-      "Exact-release live security receipts.",
-      "Separate private human security review."
+      ...securityVerifierContract.EXPECTED_FINAL_RELEASE_REQUIREMENTS
     ],
     checks: {
       canonicalManifest: true,
@@ -948,6 +951,19 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
       }),
     /AWS_READINESS_RELEASE_PROVENANCE/
   );
+  for (const offset of [-1, 1]) {
+    const staleSecurityContract = releaseProvenanceReceipt();
+    staleSecurityContract.security.surfaceCount =
+      RELEASE_SECURITY_SURFACE_COUNT + offset;
+    assert.throws(
+      () =>
+        validateReleaseProvenance(staleSecurityContract, {
+          sourceCommit: SOURCE_COMMIT,
+          treeDigest: TREE_DIGEST
+        }),
+      /AWS_READINESS_RELEASE_PROVENANCE/
+    );
+  }
   const hiddenIndexEntry = releaseProvenanceReceipt();
   hiddenIndexEntry.trackedTree.skipWorktreeEntryCount = 1;
   assert.throws(

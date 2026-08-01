@@ -3,6 +3,7 @@ import { setTimeout as sleepTimer } from "node:timers/promises";
 import { AuthorityStore, connectionStringForDatabase } from "./authority-store.js";
 import { bootstrapDatabaseConfig } from "./database-runtime.js";
 import {
+  collectClusterManagedGrantPosture,
   collectDatabaseSecurityPosture,
   quoteIdentifier,
   validateDatabaseSecurityPosture
@@ -21,12 +22,80 @@ const RUNTIME_ROLES = ROLE_BINDINGS.map(([role]) => role);
 const RUNTIME_USERS = ROLE_BINDINGS.map(([, user]) => user);
 const CAPABILITY_ROLES = ["tp_owner", ...RUNTIME_ROLES];
 const MANAGED_PRINCIPALS = [...CAPABILITY_ROLES, ...RUNTIME_USERS];
+const RECOVERY_SIBLING_ROLES = [
+  "tp_recovery_owner",
+  "tp_recovery_publisher_role"
+];
+const RECOVERY_SIBLING_USERS = ["tp_recovery_publisher_user"];
+const RECOVERY_SIBLING_BINDINGS = [[
+  "tp_recovery_publisher_role",
+  "tp_recovery_publisher_user"
+]];
+const CLUSTER_PRINCIPAL_DATABASES = Object.freeze(Object.fromEntries([
+  ...MANAGED_PRINCIPALS.map((principal) => [principal, "tideproof"]),
+  ...RECOVERY_SIBLING_ROLES.map((principal) => [
+    principal,
+    "tideproof_recovery"
+  ]),
+  ...RECOVERY_SIBLING_USERS.map((principal) => [
+    principal,
+    "tideproof_recovery"
+  ])
+]));
+const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
+  tp_ingest_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_get_verification_key_v1(UUID, STRING)",
+      "g1_append_verified_evidence_v2(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)"
+    ])
+  }),
+  tp_authorizer_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_observe_admissibility_v1(UUID, UUID, UUID, STRING)",
+      "g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
+      "g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
+      "g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
+      "g1_delete_vector_set_v1(UUID, UUID)",
+      "g1_purge_expired_vector_sets_v1(UUID, INT8)",
+      "g1_spend_authority_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+      "g1_resolve_request_v1(UUID, UUID, STRING)",
+      "g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)"
+    ])
+  }),
+  tp_gate2_authorizer_role: Object.freeze({
+    functions: Object.freeze([
+      "g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
+      "g1_resolve_request_v1(UUID, UUID, STRING)",
+      "g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)"
+    ])
+  }),
+  tp_dispatch_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
+    ])
+  }),
+  tp_recovery_audit_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)"
+    ])
+  }),
+  tp_audit_role: Object.freeze({
+    relations: Object.freeze(["g1_receipt_audit_v1"])
+  })
+});
 const PRIMARY_POSTURE_SPEC = Object.freeze({
   databaseName: "tideproof",
   managedSchemas: ["tp_private", "tp_ledger", "tp_api"],
+  managedPrefixes: ["tp_"],
+  apiSchema: "tp_api",
+  ownerRoles: ["tp_owner"],
+  roleGrantPolicies: PRIMARY_ROLE_GRANT_POLICIES,
   roles: CAPABILITY_ROLES,
   users: RUNTIME_USERS,
-  bindings: ROLE_BINDINGS
+  bindings: ROLE_BINDINGS,
+  optionalRoles: RECOVERY_SIBLING_ROLES,
+  optionalUsers: RECOVERY_SIBLING_USERS,
+  optionalBindings: RECOVERY_SIBLING_BINDINGS
 });
 
 function requirePassword(passwords, user) {
@@ -48,6 +117,33 @@ async function createPrincipalShells(client) {
   for (const [role, user] of ROLE_BINDINGS) {
     await client.query(`CREATE ROLE IF NOT EXISTS ${role}`);
     await client.query(`CREATE USER IF NOT EXISTS ${user}`);
+  }
+}
+
+async function lockInitialPublicCapability(client, bootstrapOwner) {
+  await client.query("REVOKE ALL ON DATABASE tideproof FROM public");
+  await client.query("REVOKE CREATE ON SCHEMA public FROM public");
+  await lockPublicRoutineDefaults(client, [bootstrapOwner]);
+}
+
+async function lockPublicRoutineDefaults(client, principals, schemas = []) {
+  const scopes = [
+    "FOR ALL ROLES",
+    ...principals.map((principal) =>
+      `FOR ROLE ${quoteIdentifier(principal)}`
+    )
+  ];
+  for (const scope of scopes) {
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES ${scope} REVOKE EXECUTE ON FUNCTIONS FROM public`
+    );
+    for (const schema of schemas) {
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES ${scope} IN SCHEMA ${quoteIdentifier(
+          schema
+        )} REVOKE EXECUTE ON FUNCTIONS FROM public`
+      );
+    }
   }
 }
 
@@ -100,10 +196,7 @@ async function collectValidatedPosture(
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const posture = await collectDatabaseSecurityPosture(
-        client,
-        PRIMARY_POSTURE_SPEC
-      );
+      const posture = await collectDatabaseSecurityPosture(client);
       const summary = validateDatabaseSecurityPosture(
         posture,
         PRIMARY_POSTURE_SPEC,
@@ -324,7 +417,7 @@ async function createFunctions(client) {
         assertion,
         embedding
       )
-      VALUES (
+      SELECT
         p_tenant_id,
         p_evidence_id,
         p_incident_id,
@@ -341,7 +434,7 @@ async function createFunctions(client) {
         p_conflict_status,
         p_assertion,
         p_embedding::VECTOR(3)
-      )
+      WHERE session_user = 'tp_ingest_user'
       RETURNING evidence_id
     $$
   `);
@@ -376,6 +469,7 @@ async function createFunctions(client) {
       FROM tp_private.g1_verification_keys AS key
       WHERE key.tenant_id = p_tenant_id
         AND key.verification_key_id = p_verification_key_id
+        AND session_user = 'tp_ingest_user'
     $$
   `);
 
@@ -413,6 +507,10 @@ async function createFunctions(client) {
       v_existing_outcome STRING;
       v_evidence_count INT8;
     BEGIN
+      IF session_user <> 'tp_ingest_user' THEN
+        RAISE EXCEPTION 'ingest database session required'
+          USING ERRCODE = '42501';
+      END IF;
       IF p_verifier_version <> 'gate1-ed25519-verifier-v1' THEN
         RAISE EXCEPTION 'unsupported verifier version'
           USING ERRCODE = '22023';
@@ -594,6 +692,7 @@ async function createFunctions(client) {
       WHERE evidence.tenant_id = p_tenant_id
         AND evidence.evidence_id = p_evidence_id
         AND evidence.incident_id = p_incident_id
+        AND session_user = 'tp_authorizer_user'
     $$
   `);
 
@@ -719,6 +818,10 @@ async function createFunctions(client) {
          evidence.verification_key_id
       WHERE evidence.tenant_id = p_tenant_id
         AND evidence.incident_id = p_incident_id
+        AND session_user IN (
+          'tp_authorizer_user',
+          'tp_gate2_authorizer_user'
+        )
     $$
   `);
 
@@ -747,6 +850,10 @@ async function createFunctions(client) {
         p_agency
       ) AS listed
       WHERE listed.evidence_id = p_evidence_id
+        AND session_user IN (
+          'tp_authorizer_user',
+          'tp_gate2_authorizer_user'
+        )
     $$
   `);
 
@@ -1556,6 +1663,10 @@ async function createFunctions(client) {
         ON resource.tenant_id = receipt.tenant_id
        AND resource.resource_id = receipt.resource_id
       WHERE receipt.tenant_id = p_tenant_id
+        AND session_user IN (
+          'tp_authorizer_user',
+          'tp_gate2_authorizer_user'
+        )
         AND (
           receipt.operation_id = p_operation_id
           OR receipt.request_digest = p_request_digest
@@ -1782,6 +1893,10 @@ async function createFunctions(client) {
       WHERE resource.tenant_id = p_tenant_id
         AND resource.resource_id = p_resource_id
         AND resource.active_run_id = p_run_id
+        AND session_user IN (
+          'tp_authorizer_user',
+          'tp_gate2_authorizer_user'
+        )
         AND EXISTS (
           SELECT 1
           FROM tp_ledger.g1_authority_receipts AS receipt
@@ -1831,7 +1946,7 @@ async function createFunctions(client) {
         source_watermark,
         outcome
       )
-      VALUES (
+      SELECT
         p_audit_id,
         p_recovery_session_id,
         p_caller_subject_hash,
@@ -1841,7 +1956,7 @@ async function createFunctions(client) {
         p_result_digest,
         p_source_watermark,
         p_outcome
-      )
+      WHERE session_user = 'tp_recovery_audit_user'
       ON CONFLICT (
         recovery_session_id,
         query_template_digest,
@@ -1893,7 +2008,7 @@ async function createFunctions(client) {
         outcome,
         error_code
       )
-      VALUES (
+      SELECT
         p_audit_id,
         p_tenant_id,
         p_recovery_session_id,
@@ -1909,7 +2024,7 @@ async function createFunctions(client) {
         p_completed_at,
         p_outcome,
         p_error_code
-      )
+      WHERE session_user = 'tp_recovery_audit_user'
       ON CONFLICT (tenant_id, audit_id)
       DO UPDATE SET audit_id =
         tp_ledger.g1_recovery_audit_receipts_v2.audit_id
@@ -1949,6 +2064,10 @@ async function createFunctions(client) {
       v_existing_event_id STRING;
       v_inserted_event_id UUID;
     BEGIN
+      IF session_user <> 'tp_recovery_audit_user' THEN
+        RAISE EXCEPTION 'recovery audit database session required'
+          USING ERRCODE = '42501';
+      END IF;
       SELECT
         count(*),
         min(event_id::STRING)
@@ -2121,6 +2240,7 @@ async function createFunctions(client) {
       WHERE resource.tenant_id = p_tenant_id
         AND resource.resource_id = p_resource_id
         AND resource.active_run_id = p_run_id
+        AND session_user = 'tp_dispatch_user'
         AND resource.holder_incident_id = p_incident_id
         AND resource.holder_operation_id = p_operation_id
         AND resource.holder_agent_id = p_agent_id
@@ -2317,6 +2437,11 @@ async function applyGrants(client, bootstrapOwner) {
     "GRANT SELECT ON tp_api.g1_receipt_audit_v1 TO tp_audit_role"
   );
 
+  await lockPublicRoutineDefaults(
+    client,
+    [bootstrapOwner, ...MANAGED_PRINCIPALS],
+    ["tp_private", "tp_ledger", "tp_api"]
+  );
   for (const owner of [quoteIdentifier(bootstrapOwner), "tp_owner"]) {
     for (const schema of ["tp_private", "tp_ledger", "tp_api"]) {
       await client.query(
@@ -2361,12 +2486,37 @@ export async function bootstrapPrimarySecurity({
     await client.connect();
     const preflight = await collectValidatedPosture(
       client,
-      { allowMissing: true, allowManagedDrift: true }
+      {
+        allowMissingPrincipals: true,
+        allowMissingExpectedCapabilities: true,
+        allowBootstrapDefaults: true
+      }
     );
+    const clusterPreflight = await collectClusterManagedGrantPosture({
+      adminConnectionString,
+      principalDatabases: CLUSTER_PRINCIPAL_DATABASES
+    });
+    const bootstrapOwner =
+      preflight.posture.session[0].session_user_name;
+    await lockInitialPublicCapability(client, bootstrapOwner);
     await createPrincipalShells(client);
+    const existingOptionalPrincipals = preflight.posture.principals
+      .map((row) => row.username)
+      .filter((name) => [
+        ...RECOVERY_SIBLING_ROLES,
+        ...RECOVERY_SIBLING_USERS
+      ].includes(name));
+    await lockPublicRoutineDefaults(client, [
+      ...MANAGED_PRINCIPALS,
+      ...existingOptionalPrincipals
+    ]);
     await collectValidatedPosture(
       client,
-      { allowMissing: false, allowManagedDrift: true }
+      {
+        allowMissingPrincipals: false,
+        allowMissingExpectedCapabilities: true,
+        allowBootstrapDefaults: false
+      }
     );
 
     store = new AuthorityStore({
@@ -2377,6 +2527,11 @@ export async function bootstrapPrimarySecurity({
     await store.migrate();
     await store.close();
     store = undefined;
+    await lockPublicRoutineDefaults(
+      client,
+      [bootstrapOwner, ...MANAGED_PRINCIPALS],
+      ["tp_private", "tp_ledger", "tp_api"]
+    );
 
     await scrubManagedPrivileges(client);
     await scrubManagedMemberships(client);
@@ -2385,30 +2540,30 @@ export async function bootstrapPrimarySecurity({
     await createAuditObjects(client);
     await createFunctions(client);
     await transferOwnership(client);
-    const bootstrapOwnerResult = await client.query(
-      "SELECT current_user AS bootstrap_owner"
-    );
-    if (
-      bootstrapOwnerResult.rowCount !== 1 ||
-      typeof bootstrapOwnerResult.rows[0]?.bootstrap_owner !== "string"
-    ) {
-      throw new Error("DATABASE_POSTURE_BOOTSTRAP_OWNER_INVALID");
-    }
-    await applyGrants(
-      client,
-      bootstrapOwnerResult.rows[0].bootstrap_owner
-    );
+    await applyGrants(client, bootstrapOwner);
     await grantExactMemberships(client);
 
     const attested = await collectValidatedPosture(
       client,
-      { allowMissing: false, allowManagedDrift: false },
+      {
+        allowMissingPrincipals: false,
+        allowMissingExpectedCapabilities: false,
+        allowBootstrapDefaults: false
+      },
       { attempts: 30, delayMs: 2_000 }
     );
+    const clusterAttested = await collectClusterManagedGrantPosture({
+      adminConnectionString,
+      principalDatabases: CLUSTER_PRINCIPAL_DATABASES
+    });
     return {
-      roles: attested.posture.principals,
+      roles: attested.posture.principals.filter((row) =>
+        MANAGED_PRINCIPALS.includes(row.username)
+      ),
       preflightPostureDigest: preflight.summary.postureDigest,
-      finalPostureDigest: attested.summary.postureDigest
+      finalPostureDigest: attested.summary.postureDigest,
+      clusterPreflightPostureDigest: clusterPreflight.postureDigest,
+      clusterFinalPostureDigest: clusterAttested.postureDigest
     };
   } finally {
     if (store) {
