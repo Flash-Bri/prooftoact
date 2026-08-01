@@ -13,6 +13,10 @@ const security = fs.readFileSync(
   path.join(root, "src/cloud/primary-security.js"),
   "utf8"
 );
+const retrieval = fs.readFileSync(
+  path.join(root, "src/cloud/admissible-vector-retrieval.js"),
+  "utf8"
+);
 
 function definition(name) {
   const start = security.indexOf(`CREATE OR REPLACE FUNCTION ${name}`);
@@ -83,7 +87,7 @@ test("DVI ranking is restricted to exact snapshot prefix columns", () => {
   );
   assert.match(
     rank,
-    /FROM tp_private\.g1_vector_candidates AS candidate[\s\S]*WHERE candidate\.tenant_id = p_tenant_id[\s\S]*AND candidate\.retrieval_id = p_retrieval_id[\s\S]*ORDER BY candidate\.embedding <=> p_query_embedding::VECTOR\(3\)/
+    /FROM tp_private\.g1_vector_candidates AS candidate[\s\S]*WHERE candidate\.tenant_id = p_tenant_id[\s\S]*AND candidate\.retrieval_id = p_retrieval_id[\s\S]*ORDER BY[\s\S]*candidate\.embedding <=> p_query_embedding::VECTOR\(3\),[\s\S]*candidate\.evidence_id/
   );
   assert.match(
     rank,
@@ -132,5 +136,90 @@ test("snapshot retrieval stays private and cannot authorize by itself", () => {
   assert.match(
     security,
     /FROM tp_api\.g1_observe_admissibility_v2\([\s\S]*IF v_admissibility <> 'admissible'/
+  );
+});
+
+test("DVI selection becomes a durable source-bound authorization input", () => {
+  assert.match(
+    store,
+    /CREATE TABLE IF NOT EXISTS tp_ledger\.g1_dvi_selection_receipts/
+  );
+  const commit = definition("tp_api.g1_commit_dvi_selection_v1");
+  assert.match(commit, /session_user <> 'tp_authorizer_user'/);
+  assert.match(
+    commit,
+    /retrieval\.cleaned_at IS NULL[\s\S]*retrieval\.expires_at > transaction_timestamp\(\)/
+  );
+  assert.doesNotMatch(commit, /p_selected_evidence_(?:id|digest)/);
+  assert.match(
+    commit,
+    /row_number\(\) OVER \([\s\S]*candidate\.embedding <=> p_query_embedding::VECTOR\(3\),[\s\S]*candidate\.evidence_id[\s\S]*LIMIT p_limit/
+  );
+  assert.match(
+    commit,
+    /SELECT candidate\.evidence_id, candidate\.evidence_digest[\s\S]*ORDER BY[\s\S]*candidate\.embedding <=> p_query_embedding::VECTOR\(3\),[\s\S]*candidate\.evidence_id[\s\S]*LIMIT 1/
+  );
+  assert.match(commit, /v_query_embedding_sha256 := encode/);
+  assert.match(commit, /DVI selection binding mismatch/);
+  assert.match(commit, /query_embedding_sha256,[\s\S]*result_limit/);
+  assert.match(commit, /INSERT INTO tp_ledger\.g1_dvi_selection_receipts/);
+  assert.match(retrieval, /FROM tp_api\.g1_commit_dvi_selection_v1/);
+  assert.match(retrieval, /durableSelectionCommitted: true/);
+  assert.match(
+    security,
+    /GRANT EXECUTE ON FUNCTION[\s\S]*tp_api\.g1_commit_dvi_selection_v1[\s\S]*TO tp_authorizer_role/
+  );
+  assert.match(
+    security,
+    /REVOKE EXECUTE ON FUNCTION[\s\S]*tp_api\.g1_commit_dvi_selection_v1[\s\S]*FROM tp_gate2_authorizer_role/
+  );
+
+  const authorize = definition("tp_api.g1_authorize_dvi_proposal_v1");
+  assert.match(authorize, /SECURITY DEFINER/);
+  assert.match(authorize, /session_user <> 'tp_authorizer_user'/);
+  assert.match(
+    authorize,
+    /FROM tp_ledger\.g1_dvi_selection_receipts AS selection[\s\S]*selection\.retrieval_id = p_retrieval_id/
+  );
+  assert.match(
+    authorize,
+    /selected_evidence_id IS DISTINCT FROM[\s\S]*p_requested_selected_evidence_id[\s\S]*dvi_selection_request_mismatch/
+  );
+  assert.ok(
+    authorize.indexOf("dvi_selection_request_mismatch") <
+      authorize.indexOf("INSERT INTO tp_ledger.g1_logical_authority_epochs"),
+    "selection mismatch must precede every authority-state mutation"
+  );
+  assert.match(
+    authorize,
+    /FROM tp_private\.g1_list_admissibility_internal_v1\([\s\S]*v_evidence\.admissibility IS DISTINCT FROM 'admissible'/
+  );
+  assert.match(
+    authorize,
+    /tideproof\.authority\.logical-action\.v1[\s\S]*tideproof\.authority\.dvi-proposal-identity\.v1/
+  );
+  assert.match(
+    authorize,
+    /FROM tp_ledger\.g1_logical_authority_epochs AS epoch[\s\S]*FOR UPDATE/
+  );
+  assert.match(
+    authorize,
+    /logical_authority_already_spent[\s\S]*v_epoch\.current_epoch = 1[\s\S]*explicit_new_authorization_required[\s\S]*v_authorization_epoch := 1/
+  );
+  assert.doesNotMatch(
+    authorize,
+    /v_authorization_epoch := v_epoch\.current_epoch \+ 1/
+  );
+  assert.match(
+    authorize,
+    /INSERT INTO tp_ledger\.g1_dvi_proposal_receipts/
+  );
+  assert.match(
+    security,
+    /GRANT EXECUTE ON FUNCTION[\s\S]*tp_api\.g1_authorize_dvi_proposal_v1[\s\S]*TO tp_authorizer_role/
+  );
+  assert.match(
+    security,
+    /REVOKE EXECUTE ON FUNCTION[\s\S]*tp_api\.g1_authorize_dvi_proposal_v1[\s\S]*FROM tp_gate2_authorizer_role/
   );
 });

@@ -3,6 +3,10 @@ import {
   AuthorityStore,
   OperationDigestMismatchError
 } from "../src/cloud/authority-store.js";
+import {
+  authorizeSyntheticContenders,
+  authorizeSyntheticProposal
+} from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 const SYNTHETIC_SIGNER = createSyntheticEvidenceSigner();
@@ -123,6 +127,31 @@ async function prepareAdmissibleFixture(store, {
   await store.prepareResource({ tenantId, runId, resourceId });
 }
 
+async function recordContextMismatch(store, input, authenticatedAgentId) {
+  try {
+    const result = await store.recordProtectedEffect(input, {
+      authenticatedAgentId
+    });
+    if (
+      result.outcome === "stale_or_unauthorized_fence_denied" &&
+      /^proposal_authorization_/u.test(result.reason ?? "")
+    ) {
+      return { outcome: "identity_binding_rejected" };
+    }
+  } catch (error) {
+    if (
+      error instanceof TypeError &&
+      /AUTHORITY_(?:PROPOSAL_REQUEST|SELECTED_EVIDENCE)_MISMATCH/u.test(
+        error.message
+      )
+    ) {
+      return { outcome: "identity_binding_rejected" };
+    }
+    throw error;
+  }
+  throw new Error("changed authority context reached database mutation");
+}
+
 async function runRace(store, { proofLabel, runNumber, contenderCount }) {
   const tenantId = randomUUID();
   const runId = randomUUID();
@@ -137,15 +166,18 @@ async function runRace(store, { proofLabel, runNumber, contenderCount }) {
     evidenceId
   });
 
-  const requests = Array.from({ length: contenderCount }, (_, index) =>
-    baseRequest({
-      tenantId,
-      runId,
-      incidentId,
-      resourceId,
-      evidenceId,
-      index: index + 1
-    })
+  const requests = await authorizeSyntheticContenders(
+    store,
+    Array.from({ length: contenderCount }, (_, index) =>
+      baseRequest({
+        tenantId,
+        runId,
+        incidentId,
+        resourceId,
+        evidenceId,
+        index: index + 1
+      })
+    )
   );
   const barrier = new Barrier(contenderCount);
   const settled = await Promise.allSettled(
@@ -237,8 +269,9 @@ async function runRace(store, { proofLabel, runNumber, contenderCount }) {
   };
   const semanticReplay = await store.spendAuthority(semanticReplayRequest);
   assert(
-    semanticReplay.outcome === "semantic_replay",
-    "same semantic request with a new operation ID was not deduplicated"
+    semanticReplay.outcome === "logical_authority_replay" &&
+      semanticReplay.receipt.outcome === "resource_reserved",
+    "replacement transport did not reconcile to the positive logical act"
   );
 
   let digestMismatch = false;
@@ -292,7 +325,7 @@ async function runConcurrentReplayProof(store, proofLabel, contenderCount) {
       resourceId,
       evidenceId
     });
-    const base = baseRequest({
+    const rawBase = baseRequest({
       tenantId,
       runId,
       incidentId,
@@ -300,6 +333,11 @@ async function runConcurrentReplayProof(store, proofLabel, contenderCount) {
       evidenceId,
       index: label === "operation" ? 401 : 402
     });
+    const authorized = await authorizeSyntheticProposal(store, rawBase);
+    const base = {
+      ...rawBase,
+      dviAuthorization: authorized.dviAuthorization
+    };
     const requests = Array.from(
       { length: contenderCount },
       () =>
@@ -319,7 +357,7 @@ async function runConcurrentReplayProof(store, proofLabel, contenderCount) {
       ({ outcome }) => outcome === "resource_reserved"
     );
     const replayKind = varyOperationId
-      ? "semantic_replay"
+      ? "logical_authority_replay"
       : "operation_replay";
     const replayCount = results.filter(
       ({ outcome }) => outcome === replayKind
@@ -396,7 +434,10 @@ async function runConcurrentReplayProof(store, proofLabel, contenderCount) {
   for (const changed of changedFields) {
     let denied = false;
     try {
-      await store.spendAuthority(changed.input);
+      const result = await store.spendAuthority(changed.input);
+      denied =
+        result.outcome === "authorization_denied" &&
+        /^proposal_authorization_/u.test(result.reason ?? "");
     } catch (error) {
       denied = error instanceof OperationDigestMismatchError;
     }
@@ -410,6 +451,358 @@ async function runConcurrentReplayProof(store, proofLabel, contenderCount) {
     semantic: publicResult(semantic),
     exactWinnerReplayOutcome: exactWinnerReplay.outcome,
     changedRequestDenials
+  };
+}
+
+async function runRuntimeIdentityNegativeProof(store, proofLabel) {
+  const mismatchTenantId = randomUUID();
+  const mismatchRunId = randomUUID();
+  const mismatchIncidentId = randomUUID();
+  const mismatchEvidenceId = randomUUID();
+  const mismatchResourceId = `${proofLabel}-identity-mismatch`;
+  await prepareAdmissibleFixture(store, {
+    tenantId: mismatchTenantId,
+    runId: mismatchRunId,
+    incidentId: mismatchIncidentId,
+    resourceId: mismatchResourceId,
+    evidenceId: mismatchEvidenceId
+  });
+  const rawMismatchRequest = baseRequest({
+    tenantId: mismatchTenantId,
+    runId: mismatchRunId,
+    incidentId: mismatchIncidentId,
+    resourceId: mismatchResourceId,
+    evidenceId: mismatchEvidenceId,
+    index: 151
+  });
+  const mismatchAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawMismatchRequest
+  );
+  const forgedEvidenceId = randomUUID();
+  await SYNTHETIC_SIGNER.append(store, {
+    tenantId: mismatchTenantId,
+    evidenceId: forgedEvidenceId,
+    incidentId: mismatchIncidentId,
+    agencyScope: "rescue",
+    claimKey: "rescue_unit_status",
+    claimValue: "available",
+    observedAt: isoFromNow(-60_000),
+    validFrom: isoFromNow(-120_000),
+    validUntil: isoFromNow(30 * 60_000),
+    conflictStatus: "none",
+    assertion: "Synthetic forged-selection evidence B.",
+    embedding: [0.81, 0.12, 0.07]
+  });
+  const forgedEvidence = await store.verificationSnapshot({
+    tenantId: mismatchTenantId,
+    evidenceId: forgedEvidenceId
+  });
+  const beforeForgedSelection = await store.authorityIdentityStateForTest({
+    tenantId: mismatchTenantId,
+    resourceId: mismatchResourceId
+  });
+  const forgedSelection = await store.authorizeDviProposal({
+    dviProposal: {
+      ...mismatchAuthorization.dviAuthorization.dviProposal,
+      selectedEvidenceId: forgedEvidenceId,
+      selectedEvidenceDigest: forgedEvidence.evidence.evidence_digest
+    },
+    selectedEvidenceId: forgedEvidenceId,
+    selectedEvidenceDigest: forgedEvidence.evidence.evidence_digest,
+    logicalAction: {
+      tenantId: mismatchTenantId,
+      incidentId: mismatchIncidentId,
+      resourceId: mismatchResourceId,
+      agency: rawMismatchRequest.agency,
+      actionKind: "dispatch_rescue_unit",
+      payload: rawMismatchRequest.payload
+    }
+  });
+  const afterForgedSelection = await store.authorityIdentityStateForTest({
+    tenantId: mismatchTenantId,
+    resourceId: mismatchResourceId
+  });
+  assert(
+    forgedSelection.outcome === "proposal_authorization_denied" &&
+      forgedSelection.reason === "dvi_selection_receipt_mismatch",
+    "DVI binding A authorized selected evidence B"
+  );
+  assert(
+    JSON.stringify(afterForgedSelection) ===
+      JSON.stringify(beforeForgedSelection),
+    "forged DVI selection changed durable authority identity state"
+  );
+  const beforeMismatch = await store.snapshot({
+    tenantId: mismatchTenantId,
+    resourceId: mismatchResourceId
+  });
+  let mismatchRejected = false;
+  try {
+    await store.spendAuthority({
+      ...rawMismatchRequest,
+      evidenceId: randomUUID(),
+      dviAuthorization: mismatchAuthorization.dviAuthorization
+    });
+  } catch (error) {
+    mismatchRejected =
+      error instanceof TypeError &&
+      error.message === "AUTHORITY_SELECTED_EVIDENCE_MISMATCH";
+  }
+  const afterMismatch = await store.snapshot({
+    tenantId: mismatchTenantId,
+    resourceId: mismatchResourceId
+  });
+  assert(mismatchRejected, "DVI selection A authorized request B");
+  assert(
+    beforeMismatch.resource.current_fence ===
+        afterMismatch.resource.current_fence &&
+      beforeMismatch.receipts.length === afterMismatch.receipts.length &&
+      beforeMismatch.outbox.length === afterMismatch.outbox.length &&
+      beforeMismatch.effects.length === afterMismatch.effects.length,
+    "DVI selection mismatch changed durable authority state"
+  );
+
+  const replacementTenantId = randomUUID();
+  const replacementRunId = randomUUID();
+  const replacementIncidentId = randomUUID();
+  const replacementEvidenceId = randomUUID();
+  const replacementResourceId = `${proofLabel}-identity-replacement`;
+  await prepareAdmissibleFixture(store, {
+    tenantId: replacementTenantId,
+    runId: replacementRunId,
+    incidentId: replacementIncidentId,
+    resourceId: replacementResourceId,
+    evidenceId: replacementEvidenceId
+  });
+  const rawOriginal = baseRequest({
+    tenantId: replacementTenantId,
+    runId: replacementRunId,
+    incidentId: replacementIncidentId,
+    resourceId: replacementResourceId,
+    evidenceId: replacementEvidenceId,
+    index: 152
+  });
+  const originalAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawOriginal
+  );
+  const originalRequest = {
+    ...rawOriginal,
+    dviAuthorization: originalAuthorization.dviAuthorization
+  };
+  const originalDecision = await store.spendAuthority(originalRequest);
+  assert(
+    originalDecision.outcome === "resource_reserved",
+    "original logical authority was not reserved"
+  );
+  const originalEffect = await store.recordProtectedEffect(
+    {
+      ...originalRequest,
+      fencingToken: originalDecision.receipt.fencing_token
+    },
+    { authenticatedAgentId: originalRequest.agentId }
+  );
+  assert(
+    originalEffect.outcome === "protected_effect_recorded",
+    "original logical effect was not recorded"
+  );
+  await store.expireLeaseForTest({
+    tenantId: replacementTenantId,
+    resourceId: replacementResourceId
+  });
+
+  const replacementRequest = {
+    ...baseRequest({
+      tenantId: replacementTenantId,
+      runId: replacementRunId,
+      incidentId: replacementIncidentId,
+      resourceId: replacementResourceId,
+      evidenceId: replacementEvidenceId,
+      index: 153
+    }),
+    leaseMs: 60_000,
+    dviAuthorization: originalAuthorization.dviAuthorization
+  };
+  assert(
+    replacementRequest.operationId !== originalRequest.operationId &&
+      replacementRequest.agentId !== originalRequest.agentId &&
+      replacementRequest.intentNonce !== originalRequest.intentNonce &&
+      replacementRequest.effectKey !== originalRequest.effectKey &&
+      replacementRequest.leaseMs !== originalRequest.leaseMs,
+    "replacement did not change every transport identity field"
+  );
+  const replacementDecision = await store.spendAuthority(
+    replacementRequest
+  );
+  assert(
+    replacementDecision.outcome === "logical_authority_replay" &&
+      replacementDecision.receipt.operation_id ===
+        originalDecision.receipt.operation_id,
+    "expired-lease replacement reminted logical authority"
+  );
+  const replacementEffect = await store.recordProtectedEffect(
+    {
+      ...replacementRequest,
+      fencingToken: originalDecision.receipt.fencing_token
+    },
+    { authenticatedAgentId: replacementRequest.agentId }
+  );
+  const replacementSnapshot = await store.snapshot({
+    tenantId: replacementTenantId,
+    resourceId: replacementResourceId
+  });
+  assert(
+    replacementEffect.outcome === "effect_already_recorded" &&
+      replacementEffect.replayKind === "logical_authority_replay",
+    "expired-lease replacement reminted the protected effect"
+  );
+  assert(
+    replacementSnapshot.receipts.length === 1 &&
+      replacementSnapshot.outbox.length === 1 &&
+      replacementSnapshot.effects.length === 1 &&
+      replacementSnapshot.resource.current_fence === "1",
+    "expired-lease replacement changed durable logical effect state"
+  );
+  const beforeNewRetrieval = await store.authorityIdentityStateForTest({
+    tenantId: replacementTenantId,
+    resourceId: replacementResourceId
+  });
+  const newRetrieval = await authorizeSyntheticProposal(store, rawOriginal, {
+    retrievalId: randomUUID(),
+    allowDenied: true
+  });
+  const afterNewRetrieval = await store.authorityIdentityStateForTest({
+    tenantId: replacementTenantId,
+    resourceId: replacementResourceId
+  });
+  assert(
+    newRetrieval.authorization.outcome ===
+        "proposal_authorization_denied" &&
+      newRetrieval.authorization.reason ===
+        "logical_authority_already_spent",
+    "new retrieval reminted an already-spent logical authority"
+  );
+  for (const field of [
+    "proposal_receipt_count",
+    "epoch_count",
+    "maximum_epoch",
+    "authority_receipt_count",
+    "outbox_count",
+    "protected_effect_count",
+    "current_fence"
+  ]) {
+    assert(
+      afterNewRetrieval[field] === beforeNewRetrieval[field],
+      `new retrieval changed ${field}`
+    );
+  }
+
+  return {
+    selectedEvidenceMismatch: {
+      forgedBindingRejected: true,
+      rejectedBeforeSpend: mismatchRejected,
+      receiptCount: afterMismatch.receipts.length,
+      outboxCount: afterMismatch.outbox.length,
+      protectedEffectCount: afterMismatch.effects.length,
+      fenceAfter: afterMismatch.resource.current_fence
+    },
+    expiredLeaseReplacement: {
+      decisionOutcome: replacementDecision.outcome,
+      effectOutcome: replacementEffect.outcome,
+      replayKind: replacementEffect.replayKind,
+      durableReceiptCount: replacementSnapshot.receipts.length,
+      outboxCount: replacementSnapshot.outbox.length,
+      protectedEffectCount: replacementSnapshot.effects.length,
+      fenceAfter: replacementSnapshot.resource.current_fence,
+      newRetrievalOutcome: newRetrieval.authorization.outcome,
+      newRetrievalReason: newRetrieval.authorization.reason,
+      authorizationEpoch: afterNewRetrieval.maximum_epoch
+    }
+  };
+}
+
+async function runExpiredUnspentReplacementProof(store, proofLabel) {
+  const tenantId = randomUUID();
+  const runId = randomUUID();
+  const incidentId = randomUUID();
+  const evidenceId = randomUUID();
+  const resourceId = `${proofLabel}-expired-unspent-replacement`;
+  await prepareAdmissibleFixture(store, {
+    tenantId,
+    runId,
+    incidentId,
+    resourceId,
+    evidenceId
+  });
+  const request = baseRequest({
+    tenantId,
+    runId,
+    incidentId,
+    resourceId,
+    evidenceId,
+    index: 154
+  });
+  const original = await authorizeSyntheticProposal(store, request);
+  const proposalBoundary = await store.expireProposalAtDatabaseNowForTest({
+    tenantId,
+    proposalDigest: original.proposal.proposal_digest
+  });
+  assert(
+    proposalBoundary.exact_boundary === true,
+    "unspent proposal did not reach the exact database-time expiry boundary"
+  );
+  const beforeReplacement = await store.authorityIdentityStateForTest({
+    tenantId,
+    resourceId
+  });
+  const replacement = await authorizeSyntheticProposal(store, request, {
+    retrievalId: randomUUID(),
+    allowDenied: true
+  });
+  const afterReplacement = await store.authorityIdentityStateForTest({
+    tenantId,
+    resourceId
+  });
+  assert(
+    replacement.authorization.outcome ===
+        "proposal_authorization_denied" &&
+      replacement.authorization.reason ===
+        "explicit_new_authorization_required",
+    "expired unspent proposal implicitly minted a replacement epoch"
+  );
+  for (const field of [
+    "proposal_receipt_count",
+    "epoch_count",
+    "maximum_epoch",
+    "authority_receipt_count",
+    "outbox_count",
+    "protected_effect_count",
+    "current_fence"
+  ]) {
+    assert(
+      afterReplacement[field] === beforeReplacement[field],
+      `expired unspent replacement changed ${field}`
+    );
+  }
+  assert(
+    afterReplacement.proposal_receipt_count === "1" &&
+      afterReplacement.maximum_epoch === "1" &&
+      afterReplacement.authority_receipt_count === "0" &&
+      afterReplacement.outbox_count === "0" &&
+      afterReplacement.protected_effect_count === "0" &&
+      afterReplacement.current_fence === "0",
+    "expired unspent replacement changed durable authority state"
+  );
+  return {
+    outcome: replacement.authorization.outcome,
+    reason: replacement.authorization.reason,
+    proposalReceiptCount: afterReplacement.proposal_receipt_count,
+    maximumEpoch: afterReplacement.maximum_epoch,
+    authorityReceiptCount: afterReplacement.authority_receipt_count,
+    outboxCount: afterReplacement.outbox_count,
+    protectedEffectCount: afterReplacement.protected_effect_count,
+    fenceAfter: afterReplacement.current_fence
   };
 }
 
@@ -427,7 +820,7 @@ async function runFencingProof(store, proofLabel) {
     evidenceId
   });
 
-  const firstRequest = baseRequest({
+  const rawFirstRequest = baseRequest({
     tenantId,
     runId,
     incidentId,
@@ -435,10 +828,18 @@ async function runFencingProof(store, proofLabel) {
     evidenceId,
     index: 201
   });
+  const firstAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawFirstRequest
+  );
+  const firstRequest = {
+    ...rawFirstRequest,
+    dviAuthorization: firstAuthorization.dviAuthorization
+  };
   const first = await store.spendAuthority(firstRequest);
   await store.expireLeaseForTest({ tenantId, resourceId });
 
-  const secondRequest = baseRequest({
+  const rawSecondBase = baseRequest({
     tenantId,
     runId,
     incidentId,
@@ -446,6 +847,21 @@ async function runFencingProof(store, proofLabel) {
     evidenceId,
     index: 202
   });
+  const rawSecondRequest = {
+    ...rawSecondBase,
+    payload: {
+      ...rawSecondBase.payload,
+      destination: "synthetic-zone-fencing-successor"
+    }
+  };
+  const secondAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawSecondRequest
+  );
+  const secondRequest = {
+    ...rawSecondRequest,
+    dviAuthorization: secondAuthorization.dviAuthorization
+  };
   const second = await store.spendAuthority(secondRequest);
   assert(first.receipt.fencing_token === "1", "first fence was not 1");
   assert(second.receipt.fencing_token === "2", "second fence was not 2");
@@ -471,37 +887,41 @@ async function runFencingProof(store, proofLabel) {
     },
     { authenticatedAgentId: "synthetic-agent-impostor" }
   );
-  const wrongTenant = await store.recordProtectedEffect(
+  const wrongTenant = await recordContextMismatch(
+    store,
     {
       ...secondRequest,
       tenantId: randomUUID(),
       fencingToken: second.receipt.fencing_token
     },
-    { authenticatedAgentId: secondRequest.agentId }
+    secondRequest.agentId
   );
-  const wrongIncident = await store.recordProtectedEffect(
+  const wrongIncident = await recordContextMismatch(
+    store,
     {
       ...secondRequest,
       incidentId: randomUUID(),
       fencingToken: second.receipt.fencing_token
     },
-    { authenticatedAgentId: secondRequest.agentId }
+    secondRequest.agentId
   );
-  const wrongResource = await store.recordProtectedEffect(
+  const wrongResource = await recordContextMismatch(
+    store,
     {
       ...secondRequest,
       resourceId: `${resourceId}-other`,
       fencingToken: second.receipt.fencing_token
     },
-    { authenticatedAgentId: secondRequest.agentId }
+    secondRequest.agentId
   );
-  const wrongRun = await store.recordProtectedEffect(
+  const wrongRun = await recordContextMismatch(
+    store,
     {
       ...secondRequest,
       runId: randomUUID(),
       fencingToken: second.receipt.fencing_token
     },
-    { authenticatedAgentId: secondRequest.agentId }
+    secondRequest.agentId
   );
   const current = await store.recordProtectedEffect(
     {
@@ -538,7 +958,7 @@ async function runFencingProof(store, proofLabel) {
     ["run", wrongRun]
   ]) {
     assert(
-      result.outcome === "stale_or_unauthorized_fence_denied",
+      result.outcome === "identity_binding_rejected",
       `wrong ${label} was accepted`
     );
   }
@@ -564,7 +984,7 @@ async function runFencingProof(store, proofLabel) {
     resourceId: expiredResourceId,
     evidenceId: expiredEvidenceId
   });
-  const expiredRequest = baseRequest({
+  const rawExpiredRequest = baseRequest({
     tenantId: expiredTenantId,
     runId: expiredRunId,
     incidentId: expiredIncidentId,
@@ -572,6 +992,14 @@ async function runFencingProof(store, proofLabel) {
     evidenceId: expiredEvidenceId,
     index: 203
   });
+  const expiredAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawExpiredRequest
+  );
+  const expiredRequest = {
+    ...rawExpiredRequest,
+    dviAuthorization: expiredAuthorization.dviAuthorization
+  };
   const expiredAuthority = await store.spendAuthority(expiredRequest);
   await store.expireLeaseAtDatabaseNowForTest({
     tenantId: expiredTenantId,
@@ -589,6 +1017,63 @@ async function runFencingProof(store, proofLabel) {
     "expired current fence was accepted"
   );
 
+  const proposalExpiredTenantId = randomUUID();
+  const proposalExpiredRunId = randomUUID();
+  const proposalExpiredIncidentId = randomUUID();
+  const proposalExpiredEvidenceId = randomUUID();
+  const proposalExpiredResourceId = `${proofLabel}-proposal-expired`;
+  await prepareAdmissibleFixture(store, {
+    tenantId: proposalExpiredTenantId,
+    runId: proposalExpiredRunId,
+    incidentId: proposalExpiredIncidentId,
+    resourceId: proposalExpiredResourceId,
+    evidenceId: proposalExpiredEvidenceId
+  });
+  const rawProposalExpiredRequest = baseRequest({
+    tenantId: proposalExpiredTenantId,
+    runId: proposalExpiredRunId,
+    incidentId: proposalExpiredIncidentId,
+    resourceId: proposalExpiredResourceId,
+    evidenceId: proposalExpiredEvidenceId,
+    index: 204
+  });
+  const proposalExpiredAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawProposalExpiredRequest
+  );
+  const proposalExpiredRequest = {
+    ...rawProposalExpiredRequest,
+    dviAuthorization: proposalExpiredAuthorization.dviAuthorization
+  };
+  const proposalExpiredAuthority = await store.spendAuthority(
+    proposalExpiredRequest
+  );
+  const proposalBoundary = await store.expireProposalAtDatabaseNowForTest({
+    tenantId: proposalExpiredTenantId,
+    proposalDigest: proposalExpiredAuthorization.proposal.proposal_digest
+  });
+  assert(
+    proposalBoundary.exact_boundary === true,
+    "proposal did not reach the exact database-time expiry boundary"
+  );
+  const proposalExpiredEffect = await store.recordProtectedEffect(
+    {
+      ...proposalExpiredRequest,
+      fencingToken: proposalExpiredAuthority.receipt.fencing_token
+    },
+    { authenticatedAgentId: proposalExpiredRequest.agentId }
+  );
+  const proposalExpiredSnapshot = await store.snapshot({
+    tenantId: proposalExpiredTenantId,
+    resourceId: proposalExpiredResourceId
+  });
+  assert(
+    proposalExpiredEffect.outcome ===
+        "stale_or_unauthorized_fence_denied" &&
+      proposalExpiredSnapshot.effects.length === 0,
+    "exact-boundary proposal expiry allowed a protected effect"
+  );
+
   const concurrentTenantId = randomUUID();
   const concurrentRunId = randomUUID();
   const concurrentIncidentId = randomUUID();
@@ -601,14 +1086,22 @@ async function runFencingProof(store, proofLabel) {
     resourceId: concurrentResourceId,
     evidenceId: concurrentEvidenceId
   });
-  const concurrentRequest = baseRequest({
+  const rawConcurrentRequest = baseRequest({
     tenantId: concurrentTenantId,
     runId: concurrentRunId,
     incidentId: concurrentIncidentId,
     resourceId: concurrentResourceId,
     evidenceId: concurrentEvidenceId,
-    index: 204
+    index: 205
   });
+  const concurrentAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawConcurrentRequest
+  );
+  const concurrentRequest = {
+    ...rawConcurrentRequest,
+    dviAuthorization: concurrentAuthorization.dviAuthorization
+  };
   const concurrentAuthority = await store.spendAuthority(concurrentRequest);
   const effectSettled = await Promise.allSettled(
     Array.from({ length: 50 }, () =>
@@ -656,6 +1149,8 @@ async function runFencingProof(store, proofLabel) {
     wrongResourceOutcome: wrongResource.outcome,
     wrongRunOutcome: wrongRun.outcome,
     expiredCurrentOutcome: expired.outcome,
+    proposalExpiredOutcome: proposalExpiredEffect.outcome,
+    proposalExpiredEffectCount: proposalExpiredSnapshot.effects.length,
     currentOutcome: current.outcome,
     replayOutcome: replay.outcome,
     protectedEffectCount: snapshot.effects.length,
@@ -744,7 +1239,7 @@ async function runAdmissibilityProof(store, proofLabel) {
       );
     }
     await store.prepareResource({ tenantId, runId, resourceId });
-    const request = baseRequest({
+    const rawRequest = baseRequest({
       tenantId,
       runId,
       incidentId,
@@ -752,6 +1247,11 @@ async function runAdmissibilityProof(store, proofLabel) {
       evidenceId,
       index: 301
     });
+    const authorization = await authorizeSyntheticProposal(store, rawRequest);
+    const request = {
+      ...rawRequest,
+      dviAuthorization: authorization.dviAuthorization
+    };
     const decision = await store.spendAuthority(request);
     const snapshot = await store.snapshot({ tenantId, resourceId });
 
@@ -800,6 +1300,99 @@ async function runRetryProof(store) {
   return result;
 }
 
+async function runCrossEpochRaceProof(store, proofLabel) {
+  const tenantId = randomUUID();
+  const runId = randomUUID();
+  const incidentId = randomUUID();
+  const evidenceId = randomUUID();
+  const resourceId = `${proofLabel}-cross-epoch-race`;
+  await prepareAdmissibleFixture(store, {
+    tenantId,
+    runId,
+    incidentId,
+    resourceId,
+    evidenceId
+  });
+  const rawRequest = baseRequest({
+    tenantId,
+    runId,
+    incidentId,
+    resourceId,
+    evidenceId,
+    index: 401
+  });
+  const expiresAt = new Date(Date.now() + 750).toISOString();
+  const firstAuthorization = await authorizeSyntheticProposal(
+    store,
+    rawRequest,
+    { expiresAt }
+  );
+  const firstRequest = {
+    ...rawRequest,
+    dviAuthorization: firstAuthorization.dviAuthorization
+  };
+  let releaseEpochLock;
+  let observeEpochLock;
+  const epochLocked = new Promise((resolve) => {
+    observeEpochLock = resolve;
+  });
+  const epochRelease = new Promise((resolve) => {
+    releaseEpochLock = resolve;
+  });
+  const firstSpend = store.spendAuthority(firstRequest, {
+    afterEpochLockObserver: async () => {
+      observeEpochLock();
+      await epochRelease;
+    }
+  });
+  await epochLocked;
+  const remainingMs = Date.parse(expiresAt) - Date.now();
+  if (remainingMs >= 0) {
+    await new Promise((resolve) => setTimeout(resolve, remainingMs + 25));
+  }
+  const freshAuthorization = authorizeSyntheticProposal(store, rawRequest, {
+    retrievalId: randomUUID(),
+    allowDenied: true
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  releaseEpochLock();
+  const [firstDecision, freshResult] = await Promise.all([
+    firstSpend,
+    freshAuthorization
+  ]);
+  const snapshot = await store.snapshot({ tenantId, resourceId });
+  const identityState = await store.authorityIdentityStateForTest({
+    tenantId,
+    resourceId
+  });
+  assert(
+    firstDecision.outcome === "resource_reserved",
+    "pre-expiry spend did not retain its serialized authority"
+  );
+  assert(
+    freshResult.authorization.outcome ===
+        "proposal_authorization_denied" &&
+      freshResult.authorization.reason === "logical_authority_already_spent",
+    "post-expiry authorization raced into a second spendable epoch"
+  );
+  assert(
+    snapshot.receipts.length === 1 &&
+      snapshot.outbox.length === 1 &&
+      snapshot.effects.length === 0 &&
+      identityState.maximum_epoch === "1",
+    "cross-epoch race changed the singular logical-authority state"
+  );
+  return {
+    firstOutcome: firstDecision.outcome,
+    freshOutcome: freshResult.authorization.outcome,
+    freshReason: freshResult.authorization.reason,
+    authorityReceiptCount: snapshot.receipts.length,
+    outboxCount: snapshot.outbox.length,
+    protectedEffectCount: snapshot.effects.length,
+    maximumEpoch: identityState.maximum_epoch
+  };
+}
+
 async function main() {
   const raceRuns = positiveInteger(process.env.RACE_RUNS, 3, "RACE_RUNS");
   const contenderCount = positiveInteger(
@@ -831,7 +1424,12 @@ async function main() {
       proofLabel,
       contenderCount
     );
+    const runtimeIdentityNegatives =
+      await runRuntimeIdentityNegativeProof(store, proofLabel);
+    const expiredUnspentReplacement =
+      await runExpiredUnspentReplacementProof(store, proofLabel);
     const fencing = await runFencingProof(store, proofLabel);
+    const crossEpochRace = await runCrossEpochRaceProof(store, proofLabel);
     const admissibility = await runAdmissibilityProof(store, proofLabel);
     const retryProof = await runRetryProof(store);
 
@@ -848,7 +1446,10 @@ async function main() {
           raceInvariantViolations: 0,
           races,
           replay,
+          runtimeIdentityNegatives,
+          expiredUnspentReplacement,
           fencing,
+          crossEpochRace,
           admissibility,
           retryProof,
           ambiguityBoundary:

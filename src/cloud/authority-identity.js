@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "./canonical-json.js";
 
 export const LOGICAL_ACTION_SCHEMA =
   "tideproof.authority.logical-action.v1";
@@ -31,6 +32,8 @@ const PROPOSAL_FIELDS = Object.freeze([
   "retrievalId",
   "logicalActionDigest",
   "authorityEvidenceBindingSha256",
+  "selectedEvidenceId",
+  "selectedEvidenceDigest",
   "policyVersion",
   "selectedRank",
   "admittedAt",
@@ -54,6 +57,8 @@ export const AUTHORITY_IDENTITY_CONTRACT = Object.freeze({
     "runId",
     "retrievalId",
     "authorityEvidenceBindingSha256",
+    "selectedEvidenceId",
+    "selectedEvidenceDigest",
     "policyVersion",
     "selectedRank",
     "admittedAt",
@@ -140,22 +145,6 @@ function requireAuthorizationEpoch(value) {
   return value;
 }
 
-function canonicalJson(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(
-        ([key, nested]) =>
-          `${JSON.stringify(key)}:${canonicalJson(nested)}`
-      )
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -205,6 +194,14 @@ export function dviProposalIdentityFor(input) {
     authorityEvidenceBindingSha256: requireSha256(
       input.authorityEvidenceBindingSha256,
       "authorityEvidenceBindingSha256"
+    ),
+    selectedEvidenceId: requireUuid(
+      input.selectedEvidenceId,
+      "selectedEvidenceId"
+    ),
+    selectedEvidenceDigest: requireSha256(
+      input.selectedEvidenceDigest,
+      "selectedEvidenceDigest"
     ),
     policyVersion: requireText(input.policyVersion, "policyVersion", 128),
     selectedRank: 1,

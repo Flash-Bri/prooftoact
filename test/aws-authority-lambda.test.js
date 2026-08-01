@@ -29,6 +29,9 @@ function configureEnvironment() {
     AUTHORITY_RUN_ID: FIXTURE.runId,
     AUTHORITY_INCIDENT_ID: FIXTURE.incidentId,
     AUTHORITY_EVIDENCE_ID: FIXTURE.evidenceId,
+    AUTHORITY_PROPOSAL_DIGEST: "1".repeat(64),
+    AUTHORITY_LOGICAL_ACTION_DIGEST: "2".repeat(64),
+    AUTHORITY_SELECTED_EVIDENCE_DIGEST: "3".repeat(64),
     AUTHORITY_RACE_ID: FIXTURE.raceId,
     AUTHORITY_RESOURCE_ID: FIXTURE.resourceId,
     SOURCE_COMMIT: "a".repeat(40),
@@ -60,6 +63,7 @@ function proofEvent() {
 
 function spendRow(request, outcome = "resource_reserved") {
   const winner = outcome === "resource_reserved";
+  const identity = authority.authorityIdentityFor(request, 1);
   return {
     decision_outcome: outcome,
     decision_reason: winner ? null : "active_holder",
@@ -69,7 +73,16 @@ function spendRow(request, outcome = "resource_reserved") {
       : null,
     decision_operation_id: request.operationId,
     decision_request_digest: request.requestDigest,
-    decision_replay_kind: null
+    decision_replay_kind: null,
+    decision_proposal_digest: request.proposalDigest,
+    decision_logical_action_digest: request.logicalActionDigest,
+    decision_authorization_epoch: String(identity.authorizationEpoch),
+    decision_logical_authority_key_sha256:
+      identity.logicalAuthorityKeySha256,
+    decision_authorization_binding_sha256:
+      identity.authorizationBindingSha256,
+    decision_authority_current: winner,
+    decision_database_now: "2026-08-01T12:00:01.000Z"
   };
 }
 
@@ -112,11 +125,11 @@ function successfulClient(request, options = {}) {
         if (options.spendError) {
           throw options.spendError;
         }
+        const row = spendRow(request, options.outcome ?? "resource_reserved");
+        Object.assign(row, options.decisionChanges ?? {});
         return {
           rowCount: 1,
-          rows: [
-            spendRow(request, options.outcome ?? "resource_reserved")
-          ]
+          rows: [row]
         };
       }
       if (sql === "COMMIT" && options.commitError) {
@@ -130,7 +143,8 @@ function successfulClient(request, options = {}) {
   };
 }
 
-function resolvedClient(request, outcome = "resource_reserved") {
+function resolvedClient(request, outcome = "resource_reserved", options = {}) {
+  const identity = authority.authorityIdentityFor(request, 1);
   return {
     ended: false,
     async connect() {},
@@ -142,6 +156,13 @@ function resolvedClient(request, outcome = "resource_reserved") {
             {
               operation_id: request.operationId,
               request_digest: request.requestDigest,
+              proposal_digest: request.proposalDigest,
+              logical_action_digest: request.logicalActionDigest,
+              authorization_epoch: String(identity.authorizationEpoch),
+              logical_authority_key_sha256:
+                identity.logicalAuthorityKeySha256,
+              authorization_binding_sha256:
+                identity.authorizationBindingSha256,
               outcome,
               reason: null,
               fencing_token:
@@ -160,7 +181,18 @@ function resolvedClient(request, outcome = "resource_reserved") {
               holder_operation_id:
                 outcome === "resource_reserved"
                   ? request.operationId
-                  : null
+                  : null,
+              holder_proposal_digest:
+                outcome === "resource_reserved"
+                  ? request.proposalDigest
+                  : null,
+              holder_logical_authority_key_sha256:
+                outcome === "resource_reserved"
+                  ? identity.logicalAuthorityKeySha256
+                  : null,
+              authority_current: outcome === "resource_reserved",
+              database_now: "2026-08-01T12:00:01.000Z",
+              ...(options.rowChanges ?? {})
             }
           ]
         };
@@ -441,6 +473,86 @@ test("authority rejects inconsistent database decision shapes", () => {
   );
 });
 
+test("logical-authority replay verifies and preserves the stored receipt identity", () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const storedProposalDigest = "4".repeat(64);
+  const storedIdentity = authority.authorityIdentityFor(
+    { ...request, proposalDigest: storedProposalDigest },
+    1
+  );
+  const row = {
+    ...spendRow(request),
+    decision_operation_id: "77777777-7777-4777-8777-777777777777",
+    decision_request_digest: "5".repeat(64),
+    decision_replay_kind: "logical_authority_replay",
+    decision_proposal_digest: storedProposalDigest,
+    decision_authorization_binding_sha256:
+      storedIdentity.authorizationBindingSha256
+  };
+  const normalized = authority.normalizeSpendRow(row, request);
+  assert.equal(normalized.replayKind, "logical_authority_replay");
+  assert.equal(
+    normalized.authorizationBindingSha256,
+    storedIdentity.authorizationBindingSha256
+  );
+  assert.throws(
+    () => authority.normalizeSpendRow({
+      ...row,
+      decision_authorization_binding_sha256: "6".repeat(64)
+    }, request),
+    /AUTHORITY_DATABASE_RESPONSE_REJECTED/u
+  );
+});
+
+test("historical positive receipts never claim current authority", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const historicalLease = "2000-01-01T00:00:00.000Z";
+  const direct = authority.normalizeSpendRow(
+    {
+      ...spendRow(request),
+      decision_lease_expires_at: historicalLease,
+      decision_authority_current: false
+    },
+    request
+  );
+  assert.equal(direct.outcome, "resource_reserved");
+  assert.equal(direct.authorityCurrent, false);
+
+  const resolvedRow = (
+    await resolvedClient(request, "resource_reserved", {
+      rowChanges: {
+        lease_expires_at: historicalLease,
+        authority_current: false
+      }
+    }).query(authority.RESOLVE_SQL)
+  ).rows[0];
+  const reconciled = authority.normalizeResolvedRow(resolvedRow, request);
+  assert.equal(reconciled.outcome, "resource_reserved");
+  assert.equal(reconciled.authorityCurrent, false);
+
+  const client = successfulClient(request, {
+    decisionChanges: {
+      decision_lease_expires_at: historicalLease,
+      decision_authority_current: false
+    }
+  });
+  const response = await authority.runAuthority({
+    event: validEvent(),
+    context: { awsRequestId: "77777777-7777-4777-8777-777777777777" },
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => client,
+    now: () => 1_000
+  });
+  assert.equal(response.status, "COMMITTED");
+  assert.equal(response.outcome, "resource_reserved");
+  assert.equal(response.authorityCurrent, false);
+  assert.equal(response.requiresFreshAuthorization, true);
+});
+
 test("authority commits one strict SERIALIZABLE decision without returning the secret", async () => {
   configureEnvironment();
   const config = authority.configuration();
@@ -470,6 +582,7 @@ test("authority commits one strict SERIALIZABLE decision without returning the s
     "2026-08-01T12:00:01.000Z"
   );
   assert.equal(result.authorityTransferred, false);
+  assert.equal(result.authorityCurrent, true);
   assert.equal(result.requiresFreshAuthorization, false);
   assert.equal(result.modelAccess, false);
   assert.equal(result.operationId, request.operationId);

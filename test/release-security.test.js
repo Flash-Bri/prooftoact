@@ -140,6 +140,20 @@ test("security source contract rejects a removed fail-closed marker", () => {
     () => __test.assertSourceMarkers(sources),
     /RELEASE_SECURITY_MARKER_MANAGED_MCP_CLIENT/
   );
+  sources.set(
+    "managed-mcp-client",
+    __test.SOURCE_MARKERS["managed-mcp-client"].join("\n")
+  );
+  sources.set(
+    "primary-security-bootstrap",
+    `${sources.get("primary-security-bootstrap")}\n${
+      __test.FORBIDDEN_SOURCE_MARKERS["primary-security-bootstrap"][0]
+    }`
+  );
+  assert.throws(
+    () => __test.assertSourceMarkers(sources),
+    /RELEASE_SECURITY_FORBIDDEN_MARKER_PRIMARY_SECURITY_BOOTSTRAP/
+  );
 });
 
 test("public verifier contract remains exact", () => {

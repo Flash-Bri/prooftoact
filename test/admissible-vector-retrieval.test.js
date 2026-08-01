@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -9,6 +10,11 @@ import {
   __test
 } from "../src/cloud/admissible-vector-retrieval.js";
 import { safeAdmissibleVectorFailureCode } from "../scripts/gate1-admissible-vector.js";
+import { dviRankedSequenceSha256For } from "../src/cloud/dvi-selection.js";
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 const CONNECTION_STRING =
   "postgresql://u:p@example.invalid/defaultdb?sslmode=verify-full";
@@ -54,6 +60,30 @@ function fakePool({
             evidence_digest: "a".repeat(64),
             assertion: "Synthetic admissible evidence.",
             distance: "0.125"
+          }]
+        };
+      }
+      if (text.includes("g1_commit_dvi_selection_v1")) {
+        const selectedRows = rankedRows ?? [{
+          evidence_id: "44444444-4444-4444-8444-444444444444",
+          evidence_digest: "a".repeat(64)
+        }];
+        return {
+          rowCount: 1,
+          rows: [{
+            authority_evidence_binding_sha256: values[11],
+            admitted_at: "2026-08-01T12:00:00.000Z",
+            expires_at: "2026-08-01T12:01:00.000Z",
+            ranked_sequence_sha256: dviRankedSequenceSha256For(
+              selectedRows.map(({ evidence_id, evidence_digest }) => ({
+                evidenceId: evidence_id,
+                evidenceDigest: evidence_digest
+              }))
+            ),
+            query_embedding_sha256: sha256(values[9]),
+            result_limit: String(values[10]),
+            selected_evidence_id: selectedRows[0].evidence_id,
+            selected_evidence_digest: selectedRows[0].evidence_digest
           }]
         };
       }
@@ -321,6 +351,33 @@ function proofPools({
           )
         };
       }
+      if (text.includes("g1_commit_dvi_selection_v1")) {
+        const selectedRows = PROOF_CANDIDATE_IDS.slice(
+          0,
+          __test.PROOF_LIMIT
+        ).map((evidenceId, index) => ({
+          evidence_id: evidenceId,
+          evidence_digest: (index + 1).toString(16).repeat(64)
+        }));
+        return {
+          rowCount: 1,
+          rows: [{
+            authority_evidence_binding_sha256: values[11],
+            admitted_at: "2026-08-01T12:00:00.000Z",
+            expires_at: "2026-08-01T12:01:00.000Z",
+            ranked_sequence_sha256: dviRankedSequenceSha256For(
+              selectedRows.map(({ evidence_id, evidence_digest }) => ({
+                evidenceId: evidence_id,
+                evidenceDigest: evidence_digest
+              }))
+            ),
+            query_embedding_sha256: sha256(values[9]),
+            result_limit: String(values[10]),
+            selected_evidence_id: selectedRows[0].evidence_id,
+            selected_evidence_digest: selectedRows[0].evidence_digest
+          }]
+        };
+      }
       if (text.includes("g1_delete_vector_set_v1")) {
         if (cleanupError) throw cleanupError;
         return {
@@ -442,6 +499,7 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
   assert.equal(receipt.status, "PASS");
   assert.equal(receipt.drill.runId, proofSpec().runId);
   assert.equal(receipt.drill.selectedRank, 1);
+  assert.equal(receipt.drill.durableSelectionCommitted, true);
   assert.match(
     receipt.drill.authorityEvidenceBindingSha256,
     /^[0-9a-f]{64}$/u
@@ -483,6 +541,7 @@ test("integrated DVI proof binding changes with the run and selected evidence", 
       expiresAt: "2026-08-01T12:01:00.000Z"
     },
     rankedSequenceSha256: "c".repeat(64),
+    queryEmbeddingSha256: "f".repeat(64),
     selected: {
       evidenceId: PROOF_CANDIDATE_IDS[0],
       evidenceDigest: "d".repeat(64)

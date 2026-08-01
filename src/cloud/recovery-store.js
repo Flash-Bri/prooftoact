@@ -190,10 +190,15 @@ function requireExactKeys(value, name, expectedKeys) {
 
 export function recoverySourceBindingDigestFor(input) {
   requireExactKeys(input, "recoverySourceBinding", [
+    "authorizationBindingSha256",
+    "authorizationEpoch",
     "evidenceDigest",
     "incidentId",
+    "logicalActionDigest",
+    "logicalAuthorityKeySha256",
     "operationId",
     "outcome",
+    "proposalDigest",
     "requestDigest",
     "resourceId",
     "runId",
@@ -201,7 +206,7 @@ export function recoverySourceBindingDigestFor(input) {
   ]);
   return sha256(
     canonicalJson({
-      schema: "tideproof.highwater-recovery-binding.v1",
+      schema: "tideproof.highwater-recovery-binding.v2",
       tenantId: requireUuid(input.tenantId, "recoverySourceBinding.tenantId"),
       runId: requireUuid(input.runId, "recoverySourceBinding.runId"),
       incidentId: requireUuid(
@@ -223,6 +228,26 @@ export function recoverySourceBindingDigestFor(input) {
       requestDigest: requireSha256(
         input.requestDigest,
         "recoverySourceBinding.requestDigest"
+      ),
+      proposalDigest: requireSha256(
+        input.proposalDigest,
+        "recoverySourceBinding.proposalDigest"
+      ),
+      logicalActionDigest: requireSha256(
+        input.logicalActionDigest,
+        "recoverySourceBinding.logicalActionDigest"
+      ),
+      authorizationEpoch: requirePositiveInteger(
+        input.authorizationEpoch,
+        "recoverySourceBinding.authorizationEpoch"
+      ),
+      logicalAuthorityKeySha256: requireSha256(
+        input.logicalAuthorityKeySha256,
+        "recoverySourceBinding.logicalAuthorityKeySha256"
+      ),
+      authorizationBindingSha256: requireSha256(
+        input.authorizationBindingSha256,
+        "recoverySourceBinding.authorizationBindingSha256"
       ),
       outcome: requireEnum(input.outcome, "recoverySourceBinding.outcome", [
         "resource_reserved",

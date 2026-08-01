@@ -174,24 +174,33 @@ function validateCommittedResponse(
 ) {
   const allowedKeys = [
     "authorityArtifactDigest",
+    "authorityCurrent",
     "authoritySourceDigest",
     "authorityTransferred",
+    "authorizationBindingSha256",
+    "authorizationEpoch",
+    "committedOperationId",
+    "committedRequestDigest",
     "configDigest",
     "contender",
     "fencingToken",
     "functionVersion",
     "invocationRequestId",
     "leaseExpiresAt",
+    "logicalActionDigest",
+    "logicalAuthorityKeySha256",
     "modelAccess",
     "operationId",
     "outcome",
     "packageLockDigest",
+    "proposalDigest",
     "raceId",
     "reason",
     "replayKind",
     "requestDigest",
     "requiresFreshAuthorization",
     "schemaVersion",
+    "selectedEvidenceDigest",
     "sourceCommit",
     "status",
     "transaction",
@@ -206,10 +215,20 @@ function validateCommittedResponse(
     value.sourceCommit !== expected.sourceCommit ||
     value.configDigest !== expected.configDigest ||
     value.authorityTransferred !== false ||
-    value.requiresFreshAuthorization !== false ||
+    typeof value.authorityCurrent !== "boolean" ||
+    value.requiresFreshAuthorization === value.authorityCurrent ||
     value.modelAccess !== false ||
     !UUID_PATTERN.test(value.operationId) ||
+    value.committedOperationId !== value.operationId ||
     !SHA256_PATTERN.test(value.requestDigest) ||
+    value.committedRequestDigest !== value.requestDigest ||
+    !Number.isSafeInteger(value.authorizationEpoch) ||
+    value.authorizationEpoch < 1 ||
+    !SHA256_PATTERN.test(value.logicalAuthorityKeySha256) ||
+    !SHA256_PATTERN.test(value.authorizationBindingSha256) ||
+    !SHA256_PATTERN.test(value.proposalDigest) ||
+    !SHA256_PATTERN.test(value.logicalActionDigest) ||
+    !SHA256_PATTERN.test(value.selectedEvidenceDigest) ||
     !SHA256_PATTERN.test(value.authorityArtifactDigest) ||
     !SHA256_PATTERN.test(value.authoritySourceDigest) ||
     !SHA256_PATTERN.test(value.packageLockDigest) ||
@@ -258,7 +277,10 @@ function validateCommittedResponse(
   }
   let leaseExpiresAt = null;
   if (value.outcome === "resource_reserved") {
-    if (value.fencingToken !== INITIAL_FENCING_TOKEN) {
+    if (
+      value.fencingToken !== INITIAL_FENCING_TOKEN ||
+      value.authorityCurrent !== true
+    ) {
       throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
     }
     leaseExpiresAt = parseIso(
@@ -273,7 +295,8 @@ function validateCommittedResponse(
     value.outcome === "resource_held_denied" &&
     (value.fencingToken !== null ||
       value.leaseExpiresAt !== null ||
-      value.reason !== "active_holder")
+      value.reason !== "active_holder" ||
+      value.authorityCurrent !== false)
   ) {
     throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
   }
@@ -355,6 +378,21 @@ export function validateAuthorityRaceInvocations(
     new Set(
       values.map(
         ({ authorityArtifactDigest }) => authorityArtifactDigest
+      )
+    ).size !== 1 ||
+    new Set(values.map(({ proposalDigest }) => proposalDigest)).size !== 1 ||
+    new Set(values.map(({ logicalActionDigest }) => logicalActionDigest))
+      .size !== 1 ||
+    new Set(values.map(({ authorizationEpoch }) => authorizationEpoch))
+      .size !== 1 ||
+    new Set(
+      values.map(
+        ({ logicalAuthorityKeySha256 }) => logicalAuthorityKeySha256
+      )
+    ).size !== 1 ||
+    new Set(
+      values.map(
+        ({ authorizationBindingSha256 }) => authorizationBindingSha256
       )
     ).size !== 1
   ) {

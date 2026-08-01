@@ -7,6 +7,31 @@ import {
   signedEvidenceDigestFor
 } from "../src/cloud/authority-store.js";
 
+function dviAuthorization({
+  tenantId,
+  runId,
+  incidentId,
+  evidenceId
+}) {
+  return {
+    dviProposal: {
+      tenantId,
+      runId,
+      incidentId,
+      retrievalId: "12121212-1212-4212-8212-121212121212",
+      authorityEvidenceBindingSha256: "1".repeat(64),
+      selectedEvidenceId: evidenceId,
+      selectedEvidenceDigest: "2".repeat(64),
+      policyVersion: "g1-admissibility-v2",
+      selectedRank: 1,
+      admittedAt: "2026-08-01T18:00:00.000Z",
+      expiresAt: "2026-08-01T18:05:00.000Z"
+    },
+    selectedEvidenceId: evidenceId,
+    selectedEvidenceDigest: "2".repeat(64)
+  };
+}
+
 const REQUEST = {
   tenantId: "33333333-3333-4333-8333-333333333333",
   runId: "99999999-9999-4999-8999-999999999999",
@@ -22,7 +47,13 @@ const REQUEST = {
   payload: {
     scenario: "synthetic-highwater",
     action: "dispatch_rescue_unit"
-  }
+  },
+  dviAuthorization: dviAuthorization({
+    tenantId: "33333333-3333-4333-8333-333333333333",
+    runId: "99999999-9999-4999-8999-999999999999",
+    incidentId: "44444444-4444-4444-8444-444444444444",
+    evidenceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+  })
 };
 
 test("request digests are deterministic and bind every authority input", () => {
@@ -39,20 +70,57 @@ test("request digests are deterministic and bind every authority input", () => {
     resourceId: REQUEST.resourceId,
     incidentId: REQUEST.incidentId,
     runId: REQUEST.runId,
-    tenantId: REQUEST.tenantId
+    tenantId: REQUEST.tenantId,
+    dviAuthorization: REQUEST.dviAuthorization
   });
 
   assert.equal(first, reordered);
   assert.match(first, /^[a-f0-9]{64}$/);
 
   const changedRequests = [
-    { ...REQUEST, tenantId: "66666666-6666-4666-8666-666666666666" },
-    { ...REQUEST, runId: "77777777-7777-4777-8777-777777777777" },
-    { ...REQUEST, incidentId: "88888888-8888-4888-8888-888888888888" },
+    {
+      ...REQUEST,
+      tenantId: "66666666-6666-4666-8666-666666666666",
+      dviAuthorization: dviAuthorization({
+        tenantId: "66666666-6666-4666-8666-666666666666",
+        runId: REQUEST.runId,
+        incidentId: REQUEST.incidentId,
+        evidenceId: REQUEST.evidenceId
+      })
+    },
+    {
+      ...REQUEST,
+      runId: "77777777-7777-4777-8777-777777777777",
+      dviAuthorization: dviAuthorization({
+        tenantId: REQUEST.tenantId,
+        runId: "77777777-7777-4777-8777-777777777777",
+        incidentId: REQUEST.incidentId,
+        evidenceId: REQUEST.evidenceId
+      })
+    },
+    {
+      ...REQUEST,
+      incidentId: "88888888-8888-4888-8888-888888888888",
+      dviAuthorization: dviAuthorization({
+        tenantId: REQUEST.tenantId,
+        runId: REQUEST.runId,
+        incidentId: "88888888-8888-4888-8888-888888888888",
+        evidenceId: REQUEST.evidenceId
+      })
+    },
     { ...REQUEST, resourceId: `${REQUEST.resourceId}-changed` },
     { ...REQUEST, agentId: `${REQUEST.agentId}-changed` },
     { ...REQUEST, agency: "medical" },
-    { ...REQUEST, evidenceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" },
+    {
+      ...REQUEST,
+      evidenceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      dviAuthorization: dviAuthorization({
+        tenantId: REQUEST.tenantId,
+        runId: REQUEST.runId,
+        incidentId: REQUEST.incidentId,
+        evidenceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+      })
+    },
     { ...REQUEST, intentNonce: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" },
     { ...REQUEST, effectKey: "ffffffff-ffff-4fff-8fff-ffffffffffff" },
     { ...REQUEST, leaseMs: 299_999 },

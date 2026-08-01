@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { AuthorityStore } from "../src/cloud/authority-store.js";
+import { authorizeSyntheticProposal } from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 const CHILD_PATH = fileURLToPath(
@@ -101,14 +102,19 @@ async function prepareFixture(store, label) {
   });
   assert(appended.outcome === "evidence_verified", "evidence was not verified");
   await store.prepareResource({ tenantId, runId, resourceId });
+  const rawRequest = requestFor({
+    tenantId,
+    runId,
+    incidentId,
+    resourceId,
+    evidenceId
+  });
+  const authorization = await authorizeSyntheticProposal(store, rawRequest);
   return {
-    request: requestFor({
-      tenantId,
-      runId,
-      incidentId,
-      resourceId,
-      evidenceId
-    }),
+    request: {
+      ...rawRequest,
+      dviAuthorization: authorization.dviAuthorization
+    },
     tenantId,
     resourceId
   };

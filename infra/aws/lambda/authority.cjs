@@ -33,8 +33,8 @@ const SPEND_SQL = `
   SELECT *
   FROM tp_api.g2_spend_authority_race_v1(
     $1::UUID, $2::UUID, $3, $4::JSONB,
-    $5::UUID, $6::UUID, $7, $8, $9,
-    $10::UUID, $11::UUID, $12::JSONB, $13, $14, $15::INT8
+    $5, $6, $7, $8::UUID, $9::UUID, $10, $11, $12,
+    $13::UUID, $14::UUID, $15::JSONB, $16, $17, $18::INT8
   )
 `;
 
@@ -80,6 +80,34 @@ function sha256Hex(value) {
     .createHash("sha256")
     .update(typeof value === "string" ? value : canonicalJson(value))
     .digest("hex");
+}
+
+function authorityIdentityFor(request, epochValue) {
+  const authorizationEpoch = Number(epochValue);
+  if (
+    !Number.isSafeInteger(authorizationEpoch) ||
+    authorizationEpoch < 1 ||
+    String(authorizationEpoch) !== String(epochValue)
+  ) {
+    throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
+  }
+  const logicalAuthorityKeySha256 = sha256Hex({
+    schemaVersion: "tideproof.authority.logical-authority-key.v1",
+    logicalActionDigest: request.logicalActionDigest,
+    authorizationEpoch
+  });
+  const authorizationBindingSha256 = sha256Hex({
+    schemaVersion: "tideproof.authority.authorization-binding.v1",
+    logicalActionDigest: request.logicalActionDigest,
+    proposalDigest: request.proposalDigest,
+    authorizationEpoch,
+    logicalAuthorityKeySha256
+  });
+  return {
+    authorizationEpoch,
+    logicalAuthorityKeySha256,
+    authorizationBindingSha256
+  };
 }
 
 function uuidBytes(value) {
@@ -171,6 +199,15 @@ function configuration() {
     evidenceId: requiredUuidEnvironment("AUTHORITY_EVIDENCE_ID"),
     raceId: requiredUuidEnvironment("AUTHORITY_RACE_ID"),
     resourceId: requiredEnvironment("AUTHORITY_RESOURCE_ID", 160),
+    proposalDigest: requiredEnvironment("AUTHORITY_PROPOSAL_DIGEST", 64),
+    logicalActionDigest: requiredEnvironment(
+      "AUTHORITY_LOGICAL_ACTION_DIGEST",
+      64
+    ),
+    selectedEvidenceDigest: requiredEnvironment(
+      "AUTHORITY_SELECTED_EVIDENCE_DIGEST",
+      64
+    ),
     sourceCommit: requiredEnvironment("SOURCE_COMMIT", 64),
     configDigest: requiredEnvironment("CONFIG_DIGEST", 64),
     treeDigest: requiredEnvironment("TREE_DIGEST", 64),
@@ -195,7 +232,10 @@ function configuration() {
       config.configDigest,
       config.packageLockDigest,
       config.authoritySourceDigest,
-      config.authorityArtifactDigest
+      config.authorityArtifactDigest,
+      config.proposalDigest,
+      config.logicalActionDigest,
+      config.selectedEvidenceDigest
     ].every((value) => /^[0-9a-f]{64}$/.test(value))
   ) {
     throw new Error("AUTHORITY_CONFIGURATION_REJECTED");
@@ -243,7 +283,7 @@ function authorityRequestFor(event, config) {
     destination: "synthetic-zone-aws-race"
   };
   const request = {
-    digestVersion: 1,
+    digestVersion: 2,
     tenantId: config.tenantId,
     runId: config.runId,
     incidentId: config.incidentId,
@@ -267,7 +307,10 @@ function authorityRequestFor(event, config) {
     policyVersion: POLICY_VERSION,
     actionKind: "dispatch_rescue_unit",
     payload,
-    payloadDigest: sha256Hex(payload)
+    payloadDigest: sha256Hex(payload),
+    proposalDigest: config.proposalDigest,
+    logicalActionDigest: config.logicalActionDigest,
+    selectedEvidenceDigest: config.selectedEvidenceDigest
   };
   request.requestPayload = {
     digestVersion: request.digestVersion,
@@ -283,7 +326,11 @@ function authorityRequestFor(event, config) {
     leaseMs: request.leaseMs,
     policyVersion: request.policyVersion,
     actionKind: request.actionKind,
-    payloadDigest: request.payloadDigest
+    payloadDigest: request.payloadDigest,
+    logicalActionDigest: request.logicalActionDigest,
+    proposalDigest: request.proposalDigest,
+    selectedEvidenceId: request.evidenceId,
+    selectedEvidenceDigest: request.selectedEvidenceDigest
   };
   request.requestDigest = sha256Hex(request.requestPayload);
   return request;
@@ -375,6 +422,9 @@ function spendValues(request) {
     request.operationId,
     request.requestDigest,
     JSON.stringify(request.requestPayload),
+    request.proposalDigest,
+    request.logicalActionDigest,
+    request.selectedEvidenceDigest,
     request.runId,
     request.incidentId,
     request.resourceId,
@@ -424,16 +474,47 @@ function normalizeSpendRow(row, request) {
     "resource_held_denied",
     "resource_reserved"
   ]);
+  const replayKind = row?.decision_replay_kind ?? null;
   if (
     !row ||
     !allowedOutcomes.has(row.decision_outcome) ||
-    row.decision_operation_id !== request.operationId ||
-    row.decision_request_digest !== request.requestDigest ||
-    ![null, "operation_replay"].includes(row.decision_replay_kind ?? null)
+    ![
+      null,
+      "operation_replay",
+      "semantic_replay",
+      "logical_authority_replay"
+    ].includes(replayKind) ||
+    row.decision_logical_action_digest !== request.logicalActionDigest ||
+    (replayKind !== "logical_authority_replay" &&
+      row.decision_proposal_digest !== request.proposalDigest) ||
+    !/^[0-9a-f]{64}$/.test(row.decision_proposal_digest ?? "")
+  ) {
+    throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
+  }
+  const identity = authorityIdentityFor(
+    {
+      ...request,
+      proposalDigest: row.decision_proposal_digest
+    },
+    row.decision_authorization_epoch
+  );
+  if (
+    row.decision_logical_authority_key_sha256 !==
+      identity.logicalAuthorityKeySha256 ||
+    row.decision_authorization_binding_sha256 !==
+      identity.authorizationBindingSha256 ||
+    ((replayKind === null || replayKind === "operation_replay") &&
+      (row.decision_operation_id !== request.operationId ||
+        row.decision_request_digest !== request.requestDigest)) ||
+    (replayKind === "semantic_replay" &&
+      row.decision_request_digest !== request.requestDigest) ||
+    (replayKind === "logical_authority_replay" &&
+      row.decision_outcome !== "resource_reserved")
   ) {
     throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
   }
   const winning = row.decision_outcome === "resource_reserved";
+  const authorityCurrent = row.decision_authority_current;
   const reason = row.decision_reason ?? null;
   const fencingToken =
     row.decision_fencing_token === null ||
@@ -443,6 +524,7 @@ function normalizeSpendRow(row, request) {
   const leaseExpiresAt = normalizeTimestamp(
     row.decision_lease_expires_at
   );
+  const databaseNow = normalizeTimestamp(row.decision_database_now);
   if (
     (winning &&
       (reason !== null ||
@@ -455,7 +537,12 @@ function normalizeSpendRow(row, request) {
         fencingToken !== null ||
         leaseExpiresAt !== null)) ||
     (row.decision_outcome === "resource_held_denied" &&
-      reason !== "active_holder")
+      reason !== "active_holder") ||
+    typeof authorityCurrent !== "boolean" ||
+    (!winning && authorityCurrent) ||
+    databaseNow === null ||
+    (authorityCurrent &&
+      new Date(leaseExpiresAt).getTime() <= new Date(databaseNow).getTime())
   ) {
     throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
   }
@@ -464,7 +551,12 @@ function normalizeSpendRow(row, request) {
     reason,
     fencingToken,
     leaseExpiresAt,
-    replayKind: row.decision_replay_kind ?? null
+    authorityCurrent,
+    databaseNow,
+    replayKind,
+    committedOperationId: row.decision_operation_id,
+    committedRequestDigest: row.decision_request_digest,
+    ...identity
   };
 }
 
@@ -478,11 +570,29 @@ function normalizeResolvedRow(row, request) {
     !row ||
     row.operation_id !== request.operationId ||
     row.request_digest !== request.requestDigest ||
+    row.proposal_digest !== request.proposalDigest ||
+    row.logical_action_digest !== request.logicalActionDigest ||
     !allowedOutcomes.has(row.outcome)
   ) {
     throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
   }
+  let identity;
+  try {
+    identity = authorityIdentityFor(request, row.authorization_epoch);
+  } catch {
+    throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
+  }
+  if (
+    row.logical_authority_key_sha256 !==
+      identity.logicalAuthorityKeySha256 ||
+    row.authorization_binding_sha256 !==
+      identity.authorizationBindingSha256
+  ) {
+    throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
+  }
   const winning = row.outcome === "resource_reserved";
+  const authorityCurrent = row.authority_current;
+  const databaseNow = normalizeTimestamp(row.database_now);
   const reason = row.reason ?? null;
   const fencingToken =
     row.fencing_token === null || row.fencing_token === undefined
@@ -496,9 +606,13 @@ function normalizeResolvedRow(row, request) {
         fencingToken === null ||
         !/^[1-9][0-9]*$/.test(fencingToken) ||
         leaseExpiresAt === null ||
-        fencingToken !== String(row.current_fence) ||
-        row.active_run_id !== request.runId ||
-        row.holder_operation_id !== request.operationId)) ||
+        (authorityCurrent &&
+          (fencingToken !== String(row.current_fence) ||
+            row.active_run_id !== request.runId ||
+            row.holder_operation_id !== request.operationId ||
+            row.holder_proposal_digest !== request.proposalDigest ||
+            row.holder_logical_authority_key_sha256 !==
+              identity.logicalAuthorityKeySha256)))) ||
     (!winning &&
       (row.outbox_intent_id ||
         typeof reason !== "string" ||
@@ -506,7 +620,12 @@ function normalizeResolvedRow(row, request) {
         fencingToken !== null ||
         leaseExpiresAt !== null)) ||
     (row.outcome === "resource_held_denied" &&
-      reason !== "active_holder")
+      reason !== "active_holder") ||
+    typeof authorityCurrent !== "boolean" ||
+    (!winning && authorityCurrent) ||
+    databaseNow === null ||
+    (authorityCurrent &&
+      new Date(leaseExpiresAt).getTime() <= new Date(databaseNow).getTime())
   ) {
     throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
   }
@@ -515,7 +634,12 @@ function normalizeResolvedRow(row, request) {
     reason,
     fencingToken,
     leaseExpiresAt,
-    replayKind: "reconciled_after_ambiguous_commit"
+    authorityCurrent,
+    databaseNow,
+    replayKind: "reconciled_after_ambiguous_commit",
+    committedOperationId: row.operation_id,
+    committedRequestDigest: row.request_digest,
+    ...identity
   };
 }
 
@@ -864,7 +988,10 @@ function buildBindings(config) {
     treeDigest: config.treeDigest,
     packageLockDigest: config.packageLockDigest,
     authoritySourceDigest: config.authoritySourceDigest,
-    authorityArtifactDigest: config.authorityArtifactDigest
+    authorityArtifactDigest: config.authorityArtifactDigest,
+    proposalDigest: config.proposalDigest,
+    logicalActionDigest: config.logicalActionDigest,
+    selectedEvidenceDigest: config.selectedEvidenceDigest
   };
 }
 
@@ -982,11 +1109,19 @@ async function runAuthority({
       contender: parsed.contender,
       operationId: request.operationId,
       requestDigest: request.requestDigest,
+      committedOperationId: result.decision.committedOperationId,
+      committedRequestDigest: result.decision.committedRequestDigest,
       outcome: result.decision.outcome,
       reason: result.decision.reason,
       fencingToken: result.decision.fencingToken,
       leaseExpiresAt: result.decision.leaseExpiresAt,
       replayKind: result.decision.replayKind,
+      authorizationEpoch: result.decision.authorizationEpoch,
+      logicalAuthorityKeySha256:
+        result.decision.logicalAuthorityKeySha256,
+      authorizationBindingSha256:
+        result.decision.authorizationBindingSha256,
+      authorityCurrent: result.decision.authorityCurrent,
       transaction: result.transaction,
       invocationRequestId:
         typeof context?.awsRequestId === "string"
@@ -994,7 +1129,7 @@ async function runAuthority({
           : null,
       functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
       authorityTransferred: false,
-      requiresFreshAuthorization: false,
+      requiresFreshAuthorization: !result.decision.authorityCurrent,
       modelAccess: false,
       ...buildBindings(config)
     };
@@ -1017,6 +1152,7 @@ exports.__test = {
   RESPONSE_SCHEMA,
   SPEND_SQL,
   RESOLVE_SQL,
+  authorityIdentityFor,
   authorityRequestFor,
   canonicalJson,
   configuration,
@@ -1033,6 +1169,7 @@ exports.__test = {
   safeCode,
   secretRequestFor,
   sha256Hex,
+  spendValues,
   spendAuthority,
   uuidV5,
   validateConnectionString

@@ -3,11 +3,19 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const primaryUrl = new URL("../src/cloud/primary-security.js", import.meta.url);
+const authorityStoreUrl = new URL(
+  "../src/cloud/authority-store.js",
+  import.meta.url
+);
 const recoveryUrl = new URL("../src/cloud/recovery-security.js", import.meta.url);
 const recoveryScriptUrls = [
   new URL("../scripts/gate1-recovery.js", import.meta.url),
   new URL("../scripts/gate1-recovery-broker.js", import.meta.url)
 ];
+const gate1AuthorityUrl = new URL(
+  "../scripts/gate1-authority.js",
+  import.meta.url
+);
 
 test("primary bootstrap audits posture before credentials, ownership, or grants", async () => {
   const source = await readFile(primaryUrl, "utf8");
@@ -128,6 +136,9 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_rank_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_delete_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_purge_expired_vector_sets_v1", /session_user <> 'tp_authorizer_user'/u],
+    ["g1_commit_dvi_selection_v1", /session_user <> 'tp_authorizer_user'/u],
+    ["g1_authorize_dvi_proposal_v1", /session_user <> 'tp_authorizer_user'/u],
+    ["g1_authority_receipt_current_v1", sharedAuthorizerGuard],
     ["g1_spend_authority_v1", sharedAuthorizerGuard],
     ["g2_spend_authority_race_v1", /session_user <> 'tp_gate2_authorizer_user'/u],
     ["g1_resolve_request_v1", sharedAuthorizerGuard],
@@ -174,4 +185,94 @@ test("recovery evidence selects one exact upstream authority receipt", async () 
     assert.doesNotMatch(source, /ORDER BY receipt\.recorded_at DESC/u);
     assert.doesNotMatch(source, /latestSyntheticReceipt/u);
   }
+});
+
+test("logical-action spend is serialized and unique across authorization epochs", async () => {
+  const [primarySource, authorityStoreSource, gate1AuthoritySource] = await Promise.all([
+    readFile(primaryUrl, "utf8"),
+    readFile(authorityStoreUrl, "utf8"),
+    readFile(gate1AuthorityUrl, "utf8")
+  ]);
+  assert.match(
+    authorityStoreSource,
+    /CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_logical_action_spend[\s\S]*tenant_id,[\s\S]*logical_action_digest[\s\S]*WHERE outcome = 'resource_reserved'/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_logical_action_outbox[\s\S]*tenant_id,[\s\S]*logical_action_digest/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_logical_action_effect[\s\S]*tenant_id,[\s\S]*logical_action_digest/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /SELECT current_epoch[\s\S]*FROM tp_ledger\.g1_logical_authority_epochs[\s\S]*logical_action_digest = \$2[\s\S]*FOR UPDATE/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /reason: "proposal_authorization_superseded"/u
+  );
+  const spendBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_spend_authority_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(spendBody);
+  assert.match(
+    spendBody,
+    /FROM tp_ledger\.g1_logical_authority_epochs AS epoch[\s\S]*logical_action_digest = p_logical_action_digest[\s\S]*FOR UPDATE/u
+  );
+  assert.match(
+    spendBody,
+    /v_current_authorization_epoch IS DISTINCT FROM[\s\S]*v_authorization_epoch[\s\S]*'proposal_authorization_superseded'/u
+  );
+  assert.match(
+    spendBody,
+    /receipt\.logical_action_digest = p_logical_action_digest[\s\S]*receipt\.outcome = 'resource_reserved'/u
+  );
+  assert.match(
+    gate1AuthoritySource,
+    /runCrossEpochRaceProof[\s\S]*afterEpochLockObserver[\s\S]*logical_authority_already_spent[\s\S]*maximum_epoch/u
+  );
+});
+
+test("expired unspent proposals cannot implicitly mint a replacement epoch", async () => {
+  const [primarySource, authorityStoreSource, gate1AuthoritySource] = await Promise.all([
+    readFile(primaryUrl, "utf8"),
+    readFile(authorityStoreUrl, "utf8"),
+    readFile(gate1AuthorityUrl, "utf8")
+  ]);
+  assert.match(
+    authorityStoreSource,
+    /authorizationEpoch === 1[\s\S]*outcome: "proposal_authorization_denied"[\s\S]*reason: "explicit_new_authorization_required"/u
+  );
+  const authorizeBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_authorize_dvi_proposal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(authorizeBody);
+  assert.match(
+    authorizeBody,
+    /v_epoch\.current_epoch = 1[\s\S]*'explicit_new_authorization_required'/u
+  );
+  assert.doesNotMatch(
+    authorizeBody,
+    /v_authorization_epoch := v_epoch\.current_epoch \+ 1/u
+  );
+  assert.match(
+    gate1AuthoritySource,
+    /runExpiredUnspentReplacementProof[\s\S]*expireProposalAtDatabaseNowForTest[\s\S]*explicit_new_authorization_required[\s\S]*proposal_receipt_count/u
+  );
+});
+
+test("protected-effect SQL denies the exact proposal-expiry boundary", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const body = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_record_protected_effect_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(body);
+  assert.match(
+    body,
+    /JOIN tp_ledger\.g1_dvi_proposal_receipts AS proposal[\s\S]*proposal\.proposal_digest = outbox\.proposal_digest[\s\S]*proposal\.authorization_epoch = outbox\.authorization_epoch/u
+  );
+  assert.match(body, /proposal\.expires_at > transaction_timestamp\(\)/u);
+  assert.doesNotMatch(body, /proposal\.expires_at >= transaction_timestamp\(\)/u);
 });

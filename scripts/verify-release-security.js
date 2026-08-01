@@ -41,9 +41,17 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/authority-identity.test.js",
     role: "AUTHORITY_IDENTITY_VERIFICATION"
   }),
+  "authority-evidence-runner": Object.freeze({
+    path: "scripts/gate1-authority.js",
+    role: "AUTHORITY_IDENTITY_EVIDENCE_RUNNER"
+  }),
   "authority-runtime": Object.freeze({
     path: "infra/aws/lambda/authority.cjs",
     role: "AWS_AUTHORITY_RUNTIME"
+  }),
+  "authority-runtime-identity-tests": Object.freeze({
+    path: "test/authority-runtime-identity.test.js",
+    role: "AUTHORITY_RUNTIME_IDENTITY_VERIFICATION"
   }),
   "authority-store": Object.freeze({
     path: "src/cloud/authority-store.js",
@@ -85,6 +93,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "infra/aws/lambda/boundary.cjs",
     role: "AWS_COORDINATOR_RUNTIME"
   }),
+  "canonical-json-contract": Object.freeze({
+    path: "src/cloud/canonical-json.js",
+    role: "CANONICAL_IDENTITY_SERIALIZATION"
+  }),
   "database-runtime": Object.freeze({
     path: "src/cloud/database-runtime.js",
     role: "DATABASE_RUNTIME_BOUNDARY"
@@ -105,6 +117,18 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "infra/aws/lambda/demo.js",
     role: "AWS_PUBLIC_ENTRY"
   }),
+  "dvi-proposal-authorization": Object.freeze({
+    path: "src/cloud/dvi-proposal-authorization.js",
+    role: "DATABASE_OWNED_PROPOSAL_AUTHORIZATION"
+  }),
+  "dvi-proposal-authorization-tests": Object.freeze({
+    path: "test/dvi-proposal-authorization.test.js",
+    role: "PROPOSAL_AUTHORIZATION_VERIFICATION"
+  }),
+  "dvi-selection-contract": Object.freeze({
+    path: "src/cloud/dvi-selection.js",
+    role: "DURABLE_DVI_SELECTION_IDENTITY"
+  }),
   "local-server": Object.freeze({
     path: "src/server.js",
     role: "LOOPBACK_DEVELOPMENT_SERVER"
@@ -116,6 +140,14 @@ const EXPECTED_SURFACES = Object.freeze({
   "primary-security-bootstrap": Object.freeze({
     path: "src/cloud/primary-security.js",
     role: "PRIMARY_DATABASE_SECURITY"
+  }),
+  "primary-security-runner": Object.freeze({
+    path: "scripts/gate1-security.js",
+    role: "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER"
+  }),
+  "probe-runtime": Object.freeze({
+    path: "infra/aws/lambda/probe.cjs",
+    role: "AWS_CAPABILITY_PROBE_RUNTIME"
   }),
   "protocol-runtime": Object.freeze({
     path: "src/protocol.js",
@@ -168,6 +200,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "signer-runtime": Object.freeze({
     path: "infra/aws/lambda/signer.cjs",
     role: "AWS_SIGNING_RUNTIME"
+  }),
+  "synthetic-authority-proposal": Object.freeze({
+    path: "scripts/lib/synthetic-authority-proposal.js",
+    role: "SYNTHETIC_AUTHORITY_PROPOSAL_FIXTURE"
   })
 });
 
@@ -362,13 +398,14 @@ const SOURCE_MARKERS = Object.freeze({
     "crdb_internal.cluster_id()::STRING",
     "nearestExcludedCloserThanRanked: true",
     "tideproof.gate1.admissible-vector-proof.v2",
-    "tideproof.gate1.admissible-vector-authority-binding.v1",
+    "FROM tp_api.g1_commit_dvi_selection_v1(",
     "runId: accepted.runId",
     "authorityEvidenceBindingSha256",
     "rankedSequenceSha256",
     "auditorRankMatchesAuthorizer: true",
     "prepareAttempted = true",
     "authorizationRecheckRequired: true",
+    "durableSelectionCommitted: true",
     "ADMISSIBLE_VECTOR_PLAN_INDEX_MISSING",
     "ADMISSIBLE_VECTOR_RESULT_ORDER_INVALID"
   ]),
@@ -389,6 +426,8 @@ const SOURCE_MARKERS = Object.freeze({
     "tideproof.authority.identity-contract.v1",
     "tideproof.authority.logical-action.v1",
     "tideproof.authority.dvi-proposal-identity.v1",
+    "selectedEvidenceId",
+    "selectedEvidenceDigest",
     "proposalContextOnlyFields",
     "attemptOnlyFields",
     "databaseOwnedFields",
@@ -397,16 +436,24 @@ const SOURCE_MARKERS = Object.freeze({
     "authorizationBindingSha256"
   ]),
   "authority-identity-ledger": Object.freeze([
-    "FROZEN_CONTRACT_RUNTIME_MIGRATION_PENDING",
+    "SOURCE_RUNTIME_BOUND_PROVIDER_VALIDATION_PENDING",
+    "tideproof.authority.dvi-selection-receipt.v1",
+    "UTF-16 code-unit ordering without Unicode normalization",
     "Only an explicit durable database transition may create a later epoch.",
     "Client input cannot select, increment, or reset the epoch.",
-    "must not be treated as satisfying this contract"
+    "CockroachDB v26.2 execution remains pending"
   ]),
   "authority-identity-tests": Object.freeze([
     "attempt and proposal context cannot enter logical action identity",
     "only an explicit authorization epoch remints a logical authority key",
     "a new proposal changes authorization binding but not the authority key",
     "identity inputs reject noncanonical text, digests, and timestamps"
+  ]),
+  "authority-evidence-runner": Object.freeze([
+    "dvi_selection_receipt_mismatch",
+    "logical_authority_already_spent",
+    "new retrieval reminted an already-spent logical authority",
+    "new retrieval changed ${field}"
   ]),
   "authority-runtime": Object.freeze([
     "parsed.username !== \"tp_gate2_authorizer_user\"",
@@ -421,11 +468,24 @@ const SOURCE_MARKERS = Object.freeze({
     "idle_in_transaction_session_timeout: 3_000",
     "AUTHORITY_SECRET_REJECTED",
     "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY",
-    "authorityTransferred: false"
+    "authorityTransferred: false",
+    "row.decision_proposal_digest",
+    "authorizationBindingSha256"
+  ]),
+  "authority-runtime-identity-tests": Object.freeze([
+    "derives all identity digests without a client epoch",
+    "transport replacement cannot remint logical action or proposal identity",
+    "Unicode-key insertion order",
+    "AUTHORITY_DVI_SELECTION_MISMATCH"
   ]),
   "authority-store": Object.freeze([
     "runtimeDatabaseConfig({",
     "bootstrapDatabaseConfig({",
+    "tp_ledger.g1_dvi_selection_receipts",
+    "dvi_selection_receipt_mismatch",
+    "logical_authority_already_spent",
+    "authorization epoch advancement requires an explicit new-authorization receipt",
+    "payload_canonical STRING NOT NULL",
     "tp_private.g1_vector_retrieval_sets",
     "g1_vector_candidates_embedding_idx",
     "CHECK (octet_length(assertion) BETWEEN 1 AND 4096)"
@@ -459,6 +519,11 @@ const SOURCE_MARKERS = Object.freeze({
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN",
     "assumed-role/${escapedRoleName}",
     "SIGNED_CALLER_REJECTED"
+  ]),
+  "canonical-json-contract": Object.freeze([
+    "compareCanonicalKeys(left, right)",
+    ".sort(([left], [right]) => compareCanonicalKeys(left, right))",
+    "return JSON.stringify(value);"
   ]),
   "aws-evidence-identity": Object.freeze([
     "AWS_EVIDENCE_ENDPOINT_OVERRIDE",
@@ -560,6 +625,26 @@ const SOURCE_MARKERS = Object.freeze({
     "functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION",
     "runScenario"
   ]),
+  "dvi-selection-contract": Object.freeze([
+    "tideproof.authority.dvi-selection-receipt.v2",
+    "dviSelectionReceiptFor(input)",
+    "dviSelectionBindingSha256For(input)",
+    "dviRankedSequenceSha256For(rows)",
+    "DVI_SELECTION_RECEIPT_RANK"
+  ]),
+  "dvi-proposal-authorization": Object.freeze([
+    "FROM tp_api.g1_authorize_dvi_proposal_v1(",
+    "normalizedDviAuthorizationFor({",
+    "logicalAuthorityKeyFor({",
+    "authorizationBindingFor({",
+    "DVI_PROPOSAL_DATABASE_IDENTITY_MISMATCH",
+    "DVI_PROPOSAL_DATABASE_BINDING_MISMATCH"
+  ]),
+  "dvi-proposal-authorization-tests": Object.freeze([
+    "least-privilege runtime accepts only a database-derived proposal identity",
+    "selection mismatch returns no runtime authorization",
+    "runtime rejects a database row with a forged logical binding"
+  ]),
   "local-server": Object.freeze([
     "if (request.method !== \"GET\")",
     "frame-ancestors 'none'",
@@ -597,7 +682,33 @@ const SOURCE_MARKERS = Object.freeze({
     "FROM tp_gate2_authorizer_role",
     "TO tp_gate2_authorizer_role",
     "p_agent_id NOT IN ('aws-authority-alpha', 'aws-authority-bravo')",
+    "tp_api.g1_commit_dvi_selection_v1",
+    "tp_api.g1_authorize_dvi_proposal_v1",
+    "dvi_selection_request_mismatch",
+    "IF v_epoch.current_epoch = 1 THEN",
+    "'explicit_new_authorization_required'::STRING",
+    "v_authorization_epoch := 1",
+    "v_expected_payload_digest",
+    "v_expected_logical_action_digest",
+    "v_expected_request_digest",
+    "database-derived authority identity mismatch",
     "tp_api.g2_spend_authority_race_v1"
+  ]),
+  "primary-security-runner": Object.freeze([
+    "sqlBindingNegatives",
+    "payloadSubstitutionOutcome",
+    "proposalAliasOutcome",
+    "DVI selection mismatch mutated authority state",
+    "requestDigestRejected?.sqlstate",
+    "nullIntentNonceRejected?.sqlstate",
+    "tp_authorizer_user"
+  ]),
+  "probe-runtime": Object.freeze([
+    "PROBE_REQUEST_REJECTED",
+    "tideproof.capability-probe.v1",
+    "MessageType: \"RAW\"",
+    "functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION",
+    "probeSourceDigest: process.env.PROBE_SOURCE_DIGEST"
   ]),
   "protocol-runtime": Object.freeze([
     "receiptOperationId",
@@ -686,6 +797,18 @@ const SOURCE_MARKERS = Object.freeze({
     "SigningAlgorithm: \"ECDSA_SHA_256\"",
     "new VerifyCommand({",
     "KMS_SIGNATURE_VERIFICATION_FAILED"
+  ]),
+  "synthetic-authority-proposal": Object.freeze([
+    "dviSelectionBindingSha256For(selection)",
+    "recordDviSelectionReceiptForTest(selection)",
+    "SYNTHETIC_PROPOSAL_AUTHORIZATION_FAILED",
+    "authorizeSyntheticContenders"
+  ])
+});
+
+const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
+  "primary-security-bootstrap": Object.freeze([
+    "v_authorization_epoch := v_epoch.current_epoch + 1"
   ])
 });
 
@@ -1110,6 +1233,17 @@ function assertSourceMarkers(sources) {
       );
     }
   }
+  for (const [id, markers] of Object.entries(FORBIDDEN_SOURCE_MARKERS)) {
+    const source = sources.get(id);
+    assert(typeof source === "string", "RELEASE_SECURITY_MARKER_SOURCE");
+    const normalizedSource = source.replace(/\s+/g, " ").trim();
+    for (const marker of markers) {
+      assert(
+        !normalizedSource.includes(marker.replace(/\s+/g, " ").trim()),
+        `RELEASE_SECURITY_FORBIDDEN_MARKER_${id.replaceAll("-", "_").toUpperCase()}`
+      );
+    }
+  }
   return true;
 }
 
@@ -1280,6 +1414,7 @@ export const __test = Object.freeze({
   MANIFEST_PATH,
   MANIFEST_SCHEMA,
   MANIFEST_STATUS,
+  FORBIDDEN_SOURCE_MARKERS,
   REQUIRED_DENY_ACTIONS,
   SOURCE_MARKERS,
   assertRuntimeContract,

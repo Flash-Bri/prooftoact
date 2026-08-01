@@ -67,7 +67,7 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "5a9031007ffe335b757fa84cd1fcde10ef47dcbb938c5730c56d881450c2fc3b"
+      "sha256": "80342ab3c6f30514a803f24c07ae43c1884a816ccfd8590b8e07377863013c57"
     },
     {
       "id": "aws-preflight-library",

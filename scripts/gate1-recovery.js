@@ -68,6 +68,11 @@ async function exactSyntheticReceipt(connectionString, binding) {
         receipt.operation_id,
         receipt.recorded_at,
         receipt.request_digest,
+        receipt.proposal_digest,
+        receipt.logical_action_digest,
+        receipt.authorization_epoch,
+        receipt.logical_authority_key_sha256,
+        receipt.authorization_binding_sha256,
         receipt.policy_version,
         receipt.agent_id,
         receipt.agency,
@@ -213,6 +218,11 @@ async function main() {
     resourceId: receipt.resource_id,
     operationId: receipt.operation_id,
     requestDigest: receipt.request_digest,
+    proposalDigest: receipt.proposal_digest,
+    logicalActionDigest: receipt.logical_action_digest,
+    authorizationEpoch: Number(receipt.authorization_epoch),
+    logicalAuthorityKeySha256: receipt.logical_authority_key_sha256,
+    authorizationBindingSha256: receipt.authorization_binding_sha256,
     outcome: receipt.outcome
   });
   const signer = createSyntheticRecoverySigner();

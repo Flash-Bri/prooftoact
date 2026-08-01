@@ -9,6 +9,18 @@ import {
   connectionStringForExactDatabase,
   runtimeDatabaseConfig
 } from "./database-runtime.js";
+import {
+  authorizationBindingFor,
+  dviProposalIdentityDigestFor,
+  dviProposalIdentityFor,
+  logicalActionDigestFor,
+  logicalAuthorityKeyFor
+} from "./authority-identity.js";
+import { canonicalJson } from "./canonical-json.js";
+import {
+  dviSelectionBindingSha256For,
+  dviSelectionReceiptFor
+} from "./dvi-selection.js";
 
 const RETRYABLE_TRANSACTION_CODE = "40001";
 const AMBIGUOUS_TRANSACTION_CODE = "40003";
@@ -18,6 +30,51 @@ const MIN_LEASE_MS = 1_000;
 const MAX_LEASE_MS = 10 * 60_000;
 const POLICY_VERSION = "gate1-policy-v2";
 const ACTION_KIND = "dispatch_rescue_unit";
+const DVI_PROPOSAL_INPUT_FIELDS = Object.freeze([
+  "tenantId",
+  "runId",
+  "incidentId",
+  "retrievalId",
+  "authorityEvidenceBindingSha256",
+  "selectedEvidenceId",
+  "selectedEvidenceDigest",
+  "policyVersion",
+  "selectedRank",
+  "admittedAt",
+  "expiresAt"
+]);
+const DVI_AUTHORIZATION_FIELDS = Object.freeze([
+  "dviProposal",
+  "selectedEvidenceId",
+  "selectedEvidenceDigest",
+  "logicalAction"
+]);
+const REQUEST_DVI_AUTHORIZATION_FIELDS = Object.freeze([
+  "dviProposal",
+  "selectedEvidenceId",
+  "selectedEvidenceDigest"
+]);
+const LOGICAL_ACTION_INPUT_FIELDS = Object.freeze([
+  "tenantId",
+  "incidentId",
+  "resourceId",
+  "agency",
+  "actionKind",
+  "payload"
+]);
+
+function requireExactObject(value, fields, code) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    JSON.stringify(Object.keys(value).sort()) !==
+      JSON.stringify([...fields].sort())
+  ) {
+    throw new TypeError(code);
+  }
+  return value;
+}
 
 function requireText(value, name) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -124,28 +181,233 @@ function requireJsonObject(value, name) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function canonicalJson(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(
-        ([key, nested]) =>
-          `${JSON.stringify(key)}:${canonicalJson(nested)}`
-      );
-    return `{${entries.join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
 export function connectionStringForDatabase(connectionString, databaseName) {
   return connectionStringForExactDatabase(connectionString, databaseName);
+}
+
+function normalizeLogicalActionInput(input) {
+  requireExactObject(
+    input,
+    LOGICAL_ACTION_INPUT_FIELDS,
+    "AUTHORITY_LOGICAL_ACTION_INPUT_SHAPE"
+  );
+  const payload = requireJsonObject(input.payload, "logicalAction.payload");
+  const actionKind = requireText(input.actionKind, "logicalAction.actionKind");
+  if (actionKind !== ACTION_KIND) {
+    throw new TypeError("AUTHORITY_ACTION_KIND_UNSUPPORTED");
+  }
+  const logicalAction = {
+    tenantId: requireUuid(input.tenantId, "logicalAction.tenantId"),
+    incidentId: requireUuid(input.incidentId, "logicalAction.incidentId"),
+    resourceId: requireText(input.resourceId, "logicalAction.resourceId"),
+    agency: requireText(input.agency, "logicalAction.agency"),
+    actionKind,
+    payload,
+    payloadDigest: sha256(canonicalJson(payload))
+  };
+  return {
+    ...logicalAction,
+    logicalActionDigest: logicalActionDigestFor({
+      tenantId: logicalAction.tenantId,
+      incidentId: logicalAction.incidentId,
+      resourceId: logicalAction.resourceId,
+      agency: logicalAction.agency,
+      actionKind: logicalAction.actionKind,
+      payloadDigest: logicalAction.payloadDigest
+    })
+  };
+}
+
+function normalizeProposalInput(input, logicalAction) {
+  requireExactObject(
+    input,
+    DVI_PROPOSAL_INPUT_FIELDS,
+    "AUTHORITY_DVI_PROPOSAL_INPUT_SHAPE"
+  );
+  const proposalInput = {
+    tenantId: requireUuid(input.tenantId, "dviProposal.tenantId"),
+    runId: requireUuid(input.runId, "dviProposal.runId"),
+    incidentId: requireUuid(input.incidentId, "dviProposal.incidentId"),
+    retrievalId: requireUuid(input.retrievalId, "dviProposal.retrievalId"),
+    logicalActionDigest: logicalAction.logicalActionDigest,
+    authorityEvidenceBindingSha256: requireSha256(
+      input.authorityEvidenceBindingSha256,
+      "dviProposal.authorityEvidenceBindingSha256"
+    ),
+    selectedEvidenceId: requireUuid(
+      input.selectedEvidenceId,
+      "dviProposal.selectedEvidenceId"
+    ),
+    selectedEvidenceDigest: requireSha256(
+      input.selectedEvidenceDigest,
+      "dviProposal.selectedEvidenceDigest"
+    ),
+    policyVersion: requireText(
+      input.policyVersion,
+      "dviProposal.policyVersion"
+    ),
+    selectedRank: input.selectedRank,
+    admittedAt: requireTimestamp(input.admittedAt, "dviProposal.admittedAt"),
+    expiresAt: requireTimestamp(input.expiresAt, "dviProposal.expiresAt")
+  };
+  if (
+    proposalInput.tenantId !== logicalAction.tenantId ||
+    proposalInput.incidentId !== logicalAction.incidentId
+  ) {
+    throw new TypeError("AUTHORITY_PROPOSAL_REQUEST_MISMATCH");
+  }
+  return {
+    dviProposal: dviProposalIdentityFor(proposalInput),
+    proposalDigest: dviProposalIdentityDigestFor(proposalInput)
+  };
+}
+
+export function normalizedDviAuthorizationFor(input) {
+  requireExactObject(
+    input,
+    DVI_AUTHORIZATION_FIELDS,
+    "AUTHORITY_DVI_AUTHORIZATION_SHAPE"
+  );
+  if (
+    input.authorizationEpoch !== undefined ||
+    input.logicalAuthorityKeySha256 !== undefined
+  ) {
+    throw new TypeError("AUTHORITY_DATABASE_OWNED_IDENTITY");
+  }
+  const logicalAction = normalizeLogicalActionInput(input.logicalAction);
+  const proposal = normalizeProposalInput(input.dviProposal, logicalAction);
+  const selectedEvidenceId = requireUuid(
+    input.selectedEvidenceId,
+    "selectedEvidenceId"
+  );
+  const selectedEvidenceDigest = requireSha256(
+    input.selectedEvidenceDigest,
+    "selectedEvidenceDigest"
+  );
+  if (
+    proposal.dviProposal.selectedEvidenceId !== selectedEvidenceId ||
+    proposal.dviProposal.selectedEvidenceDigest !== selectedEvidenceDigest
+  ) {
+    throw new TypeError("AUTHORITY_DVI_SELECTION_MISMATCH");
+  }
+  return Object.freeze({
+    logicalAction,
+    logicalActionDigest: logicalAction.logicalActionDigest,
+    dviProposal: proposal.dviProposal,
+    proposalDigest: proposal.proposalDigest,
+    selectedEvidenceId,
+    selectedEvidenceDigest
+  });
+}
+
+function authorizationEpochFromRow(value) {
+  const epoch = Number(value);
+  if (
+    !Number.isSafeInteger(epoch) ||
+    epoch < 1 ||
+    String(epoch) !== String(value)
+  ) {
+    throw new InvariantViolationError(
+      "database authorization epoch is outside the runtime identity contract"
+    );
+  }
+  return epoch;
+}
+
+function proposalReceiptMatches(row, authorization) {
+  if (!row) {
+    return false;
+  }
+  const epoch = authorizationEpochFromRow(row.authorization_epoch);
+  const logicalAuthority = logicalAuthorityKeyFor({
+    logicalActionDigest: authorization.logicalActionDigest,
+    authorizationEpoch: epoch
+  });
+  const binding = authorizationBindingFor({
+    logicalActionDigest: authorization.logicalActionDigest,
+    proposalDigest: authorization.proposalDigest,
+    authorizationEpoch: epoch
+  });
+  return (
+    row.tenant_id === authorization.logicalAction.tenantId &&
+    row.proposal_digest === authorization.proposalDigest &&
+    row.logical_action_digest === authorization.logicalActionDigest &&
+    row.resource_id === authorization.logicalAction.resourceId &&
+    row.agency === authorization.logicalAction.agency &&
+    row.action_kind === authorization.logicalAction.actionKind &&
+    row.payload_digest === authorization.logicalAction.payloadDigest &&
+    row.payload_canonical === canonicalJson(authorization.logicalAction.payload) &&
+    canonicalJson(row.payload) ===
+      canonicalJson(authorization.logicalAction.payload) &&
+    row.retrieval_id === authorization.dviProposal.retrievalId &&
+    row.run_id === authorization.dviProposal.runId &&
+    row.incident_id === authorization.dviProposal.incidentId &&
+    row.authority_evidence_binding_sha256 ===
+      authorization.dviProposal.authorityEvidenceBindingSha256 &&
+    row.policy_version === authorization.dviProposal.policyVersion &&
+    Number(row.selected_rank) === authorization.dviProposal.selectedRank &&
+    row.selected_evidence_id === authorization.selectedEvidenceId &&
+    row.selected_evidence_digest === authorization.selectedEvidenceDigest &&
+    new Date(row.admitted_at).toISOString() ===
+      authorization.dviProposal.admittedAt &&
+    new Date(row.expires_at).toISOString() ===
+      authorization.dviProposal.expiresAt &&
+    row.logical_authority_key_sha256 ===
+      logicalAuthority.logicalAuthorityKeySha256 &&
+    row.authorization_binding_sha256 ===
+      binding.authorizationBindingSha256
+  );
+}
+
+function dviSelectionReceiptInputFromRow(row) {
+  return {
+    sourceCommit: row.source_commit,
+    treeDigest: row.tree_digest,
+    specSha256: row.spec_sha256,
+    runId: row.run_id,
+    tenantId: row.tenant_id,
+    incidentId: row.incident_id,
+    retrievalId: row.retrieval_id,
+    agency: row.agency,
+    policyVersion: row.policy_version,
+    admittedAt: new Date(row.admitted_at).toISOString(),
+    expiresAt: new Date(row.expires_at).toISOString(),
+    rankedSequenceSha256: row.ranked_sequence_sha256,
+    queryEmbeddingSha256: row.query_embedding_sha256,
+    resultLimit: Number(row.result_limit),
+    selectedRank: Number(row.selected_rank),
+    selectedEvidenceId: row.selected_evidence_id,
+    selectedEvidenceDigest: row.selected_evidence_digest
+  };
+}
+
+function dviSelectionReceiptMatches(row, authorization) {
+  if (!row) {
+    return false;
+  }
+  const receiptInput = dviSelectionReceiptInputFromRow(row);
+  return (
+    row.authority_evidence_binding_sha256 ===
+      authorization.dviProposal.authorityEvidenceBindingSha256 &&
+    dviSelectionBindingSha256For(receiptInput) ===
+      authorization.dviProposal.authorityEvidenceBindingSha256 &&
+    receiptInput.tenantId === authorization.logicalAction.tenantId &&
+    receiptInput.runId === authorization.dviProposal.runId &&
+    receiptInput.incidentId === authorization.logicalAction.incidentId &&
+    receiptInput.retrievalId === authorization.dviProposal.retrievalId &&
+    receiptInput.agency === authorization.logicalAction.agency &&
+    receiptInput.policyVersion === authorization.dviProposal.policyVersion &&
+    receiptInput.admittedAt === authorization.dviProposal.admittedAt &&
+    receiptInput.expiresAt === authorization.dviProposal.expiresAt &&
+    receiptInput.selectedRank === authorization.dviProposal.selectedRank &&
+    receiptInput.selectedEvidenceId === authorization.selectedEvidenceId &&
+    receiptInput.selectedEvidenceDigest ===
+      authorization.selectedEvidenceDigest
+  );
 }
 
 function normalizeRequest(input) {
@@ -167,8 +429,13 @@ function normalizeRequest(input) {
     },
     "payload"
   );
+  const dviAuthorization = requireExactObject(
+    input.dviAuthorization,
+    REQUEST_DVI_AUTHORIZATION_FIELDS,
+    "AUTHORITY_DVI_AUTHORIZATION_SHAPE"
+  );
   const normalized = {
-    digestVersion: 1,
+    digestVersion: 2,
     tenantId: requireUuid(input.tenantId, "tenantId"),
     runId: requireUuid(input.runId, "runId"),
     incidentId: requireUuid(input.incidentId, "incidentId"),
@@ -185,6 +452,42 @@ function normalizeRequest(input) {
     payload,
     payloadDigest: sha256(canonicalJson(payload))
   };
+  const logicalAction = normalizeLogicalActionInput({
+    tenantId: normalized.tenantId,
+    incidentId: normalized.incidentId,
+    resourceId: normalized.resourceId,
+    agency: normalized.agency,
+    actionKind: normalized.actionKind,
+    payload: normalized.payload
+  });
+  const proposal = normalizeProposalInput(
+    dviAuthorization.dviProposal,
+    logicalAction
+  );
+  if (
+    proposal.dviProposal.runId !== normalized.runId ||
+    proposal.dviProposal.tenantId !== normalized.tenantId ||
+    proposal.dviProposal.incidentId !== normalized.incidentId
+  ) {
+    throw new TypeError("AUTHORITY_PROPOSAL_REQUEST_MISMATCH");
+  }
+  const selectedEvidenceId = requireUuid(
+    dviAuthorization.selectedEvidenceId,
+    "dviAuthorization.selectedEvidenceId"
+  );
+  if (selectedEvidenceId !== normalized.evidenceId) {
+    throw new TypeError("AUTHORITY_SELECTED_EVIDENCE_MISMATCH");
+  }
+  const selectedEvidenceDigest = requireSha256(
+    dviAuthorization.selectedEvidenceDigest,
+    "dviAuthorization.selectedEvidenceDigest"
+  );
+  if (
+    proposal.dviProposal.selectedEvidenceId !== selectedEvidenceId ||
+    proposal.dviProposal.selectedEvidenceDigest !== selectedEvidenceDigest
+  ) {
+    throw new TypeError("AUTHORITY_DVI_SELECTION_MISMATCH");
+  }
   const semanticPayload = {
     digestVersion: normalized.digestVersion,
     tenantId: normalized.tenantId,
@@ -199,12 +502,41 @@ function normalizeRequest(input) {
     leaseMs: normalized.leaseMs,
     policyVersion: normalized.policyVersion,
     actionKind: normalized.actionKind,
-    payloadDigest: normalized.payloadDigest
+    payloadDigest: normalized.payloadDigest,
+    logicalActionDigest: logicalAction.logicalActionDigest,
+    proposalDigest: proposal.proposalDigest,
+    selectedEvidenceId,
+    selectedEvidenceDigest
   };
   return {
     ...normalized,
+    logicalActionDigest: logicalAction.logicalActionDigest,
+    dviProposal: proposal.dviProposal,
+    proposalDigest: proposal.proposalDigest,
+    selectedEvidenceId,
+    selectedEvidenceDigest,
     requestPayload: semanticPayload,
     requestDigest: sha256(canonicalJson(semanticPayload))
+  };
+}
+
+function dviAuthorizationFromRequest(request) {
+  return {
+    logicalAction: {
+      tenantId: request.tenantId,
+      incidentId: request.incidentId,
+      resourceId: request.resourceId,
+      agency: request.agency,
+      actionKind: request.actionKind,
+      payload: request.payload,
+      payloadDigest: request.payloadDigest,
+      logicalActionDigest: request.logicalActionDigest
+    },
+    logicalActionDigest: request.logicalActionDigest,
+    dviProposal: request.dviProposal,
+    proposalDigest: request.proposalDigest,
+    selectedEvidenceId: request.selectedEvidenceId,
+    selectedEvidenceDigest: request.selectedEvidenceDigest
   };
 }
 
@@ -669,6 +1001,8 @@ export class AuthorityStore {
         holder_incident_id UUID NULL,
         holder_operation_id UUID NULL,
         holder_agent_id STRING NULL,
+        holder_proposal_digest STRING(64) NULL,
+        holder_logical_authority_key_sha256 STRING(64) NULL,
         lease_expires_at TIMESTAMPTZ NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
         PRIMARY KEY (tenant_id, resource_id),
@@ -678,6 +1012,8 @@ export class AuthorityStore {
             holder_incident_id IS NULL
             AND holder_operation_id IS NULL
             AND holder_agent_id IS NULL
+            AND holder_proposal_digest IS NULL
+            AND holder_logical_authority_key_sha256 IS NULL
             AND lease_expires_at IS NULL
           )
           OR
@@ -685,11 +1021,20 @@ export class AuthorityStore {
             holder_incident_id IS NOT NULL
             AND holder_operation_id IS NOT NULL
             AND holder_agent_id IS NOT NULL
+            AND holder_proposal_digest IS NOT NULL
+            AND holder_logical_authority_key_sha256 IS NOT NULL
             AND lease_expires_at IS NOT NULL
           )
         )
       )
     `);
+
+    await bootstrapPool.query(
+      "ALTER TABLE tp_private.g1_resources ADD COLUMN IF NOT EXISTS holder_proposal_digest STRING(64) NULL"
+    );
+    await bootstrapPool.query(
+      "ALTER TABLE tp_private.g1_resources ADD COLUMN IF NOT EXISTS holder_logical_authority_key_sha256 STRING(64) NULL"
+    );
 
     await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_private.g1_retry_probes (
@@ -702,11 +1047,152 @@ export class AuthorityStore {
     `);
 
     await bootstrapPool.query(`
+      CREATE TABLE IF NOT EXISTS tp_ledger.g1_logical_authority_epochs (
+        tenant_id UUID NOT NULL,
+        logical_action_digest STRING(64) NOT NULL,
+        current_epoch INT8 NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
+        PRIMARY KEY (tenant_id, logical_action_digest),
+        CHECK (length(logical_action_digest) = 64),
+        CHECK (current_epoch >= 0 AND current_epoch < 9223372036854775807)
+      )
+    `);
+
+    await bootstrapPool.query(`
+      CREATE TABLE IF NOT EXISTS tp_ledger.g1_dvi_selection_receipts (
+        tenant_id UUID NOT NULL,
+        retrieval_id UUID NOT NULL,
+        authority_evidence_binding_sha256 STRING(64) NOT NULL,
+        run_id UUID NOT NULL,
+        incident_id UUID NOT NULL,
+        agency STRING NOT NULL,
+        policy_version STRING NOT NULL,
+        source_commit STRING(40) NOT NULL,
+        tree_digest STRING(40) NOT NULL,
+        spec_sha256 STRING(64) NOT NULL,
+        admitted_at TIMESTAMPTZ NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        ranked_sequence_sha256 STRING(64) NOT NULL,
+        query_embedding_sha256 STRING(64) NOT NULL,
+        result_limit INT8 NOT NULL,
+        selected_rank INT8 NOT NULL,
+        selected_evidence_id UUID NOT NULL,
+        selected_evidence_digest STRING(64) NOT NULL,
+        committed_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
+        PRIMARY KEY (tenant_id, retrieval_id),
+        UNIQUE (tenant_id, authority_evidence_binding_sha256),
+        CHECK (policy_version = 'g1-admissibility-v2'),
+        CHECK (length(source_commit) = 40),
+        CHECK (length(tree_digest) = 40),
+        CHECK (length(spec_sha256) = 64),
+        CHECK (length(authority_evidence_binding_sha256) = 64),
+        CHECK (length(ranked_sequence_sha256) = 64),
+        CHECK (length(query_embedding_sha256) = 64),
+        CHECK (result_limit >= 1 AND result_limit <= 100),
+        CHECK (length(selected_evidence_digest) = 64),
+        CHECK (selected_rank = 1),
+        CHECK (expires_at > admitted_at)
+      )
+    `);
+    await bootstrapPool.query(
+      "ALTER TABLE tp_ledger.g1_dvi_selection_receipts ADD COLUMN IF NOT EXISTS query_embedding_sha256 STRING(64) NULL"
+    );
+    await bootstrapPool.query(
+      "ALTER TABLE tp_ledger.g1_dvi_selection_receipts ADD COLUMN IF NOT EXISTS result_limit INT8 NULL"
+    );
+
+    await bootstrapPool.query(`
+      CREATE TABLE IF NOT EXISTS tp_ledger.g1_dvi_proposal_receipts (
+        tenant_id UUID NOT NULL,
+        proposal_digest STRING(64) NOT NULL,
+        logical_action_digest STRING(64) NOT NULL,
+        resource_id STRING NOT NULL,
+        agency STRING NOT NULL,
+        action_kind STRING NOT NULL,
+        payload JSONB NOT NULL,
+        payload_canonical STRING NOT NULL,
+        payload_digest STRING(64) NOT NULL,
+        retrieval_id UUID NOT NULL,
+        run_id UUID NOT NULL,
+        incident_id UUID NOT NULL,
+        authority_evidence_binding_sha256 STRING(64) NOT NULL,
+        policy_version STRING NOT NULL,
+        selected_rank INT8 NOT NULL,
+        selected_evidence_id UUID NOT NULL,
+        selected_evidence_digest STRING(64) NOT NULL,
+        admitted_at TIMESTAMPTZ NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        authorization_epoch INT8 NOT NULL,
+        logical_authority_key_sha256 STRING(64) NOT NULL,
+        authorization_binding_sha256 STRING(64) NOT NULL,
+        authorized_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
+        PRIMARY KEY (tenant_id, proposal_digest),
+        CHECK (length(proposal_digest) = 64),
+        CHECK (length(logical_action_digest) = 64),
+        CHECK (action_kind = 'dispatch_rescue_unit'),
+        CHECK (jsonb_typeof(payload) = 'object'),
+        CHECK (length(payload_canonical) > 1),
+        CHECK (length(payload_digest) = 64),
+        CHECK (length(authority_evidence_binding_sha256) = 64),
+        CHECK (length(selected_evidence_digest) = 64),
+        CHECK (length(logical_authority_key_sha256) = 64),
+        CHECK (length(authorization_binding_sha256) = 64),
+        CHECK (selected_rank = 1),
+        CHECK (expires_at > admitted_at),
+        CHECK (authorization_epoch > 0)
+      )
+    `);
+    await bootstrapPool.query(`
+      ALTER TABLE tp_ledger.g1_dvi_proposal_receipts
+      DROP CONSTRAINT IF EXISTS
+        g1_dvi_proposal_receipts_tenant_id_logical_action_digest_authorization_epoch_key
+    `);
+    await bootstrapPool.query(`
+      ALTER TABLE tp_ledger.g1_dvi_proposal_receipts
+      DROP CONSTRAINT IF EXISTS
+        g1_dvi_proposal_receipts_tenant_id_logical_authority_key_sha256_key
+    `);
+    await bootstrapPool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS
+        g1_dvi_proposal_receipts_logical_epoch_idx
+      ON tp_ledger.g1_dvi_proposal_receipts (
+        tenant_id,
+        logical_action_digest,
+        authorization_epoch
+      )
+    `);
+    await bootstrapPool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS
+        g1_dvi_proposal_receipts_logical_authority_key_idx
+      ON tp_ledger.g1_dvi_proposal_receipts (
+        tenant_id,
+        logical_authority_key_sha256
+      )
+    `);
+    for (const [column, definition] of [
+      ["resource_id", "STRING NULL"],
+      ["agency", "STRING NULL"],
+      ["action_kind", "STRING NULL"],
+      ["payload", "JSONB NULL"],
+      ["payload_canonical", "STRING NULL"],
+      ["payload_digest", "STRING(64) NULL"]
+    ]) {
+      await bootstrapPool.query(
+        `ALTER TABLE tp_ledger.g1_dvi_proposal_receipts ADD COLUMN IF NOT EXISTS ${column} ${definition}`
+      );
+    }
+
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_ledger.g1_authority_receipts (
         tenant_id UUID NOT NULL,
         operation_id UUID NOT NULL,
         request_digest STRING(64) NOT NULL,
         request_payload JSONB NOT NULL,
+        proposal_digest STRING(64) NOT NULL,
+        logical_action_digest STRING(64) NOT NULL,
+        authorization_epoch INT8 NOT NULL,
+        logical_authority_key_sha256 STRING(64) NOT NULL,
+        authorization_binding_sha256 STRING(64) NOT NULL,
         run_id UUID NOT NULL,
         incident_id UUID NOT NULL,
         resource_id STRING NOT NULL,
@@ -726,6 +1212,11 @@ export class AuthorityStore {
         recorded_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
         PRIMARY KEY (tenant_id, operation_id),
         UNIQUE (tenant_id, request_digest),
+        CHECK (length(proposal_digest) = 64),
+        CHECK (length(logical_action_digest) = 64),
+        CHECK (authorization_epoch > 0),
+        CHECK (length(logical_authority_key_sha256) = 64),
+        CHECK (length(authorization_binding_sha256) = 64),
         CHECK (outcome IN (
           'pending',
           'resource_reserved',
@@ -744,6 +1235,35 @@ export class AuthorityStore {
         )
       )
     `);
+    for (const [column, definition] of [
+      ["proposal_digest", "STRING(64) NULL"],
+      ["logical_action_digest", "STRING(64) NULL"],
+      ["authorization_epoch", "INT8 NULL"],
+      ["logical_authority_key_sha256", "STRING(64) NULL"],
+      ["authorization_binding_sha256", "STRING(64) NULL"]
+    ]) {
+      await bootstrapPool.query(
+        `ALTER TABLE tp_ledger.g1_authority_receipts ADD COLUMN IF NOT EXISTS ${column} ${definition}`
+      );
+    }
+
+    await bootstrapPool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_logical_authority_spend
+      ON tp_ledger.g1_authority_receipts (
+        tenant_id,
+        logical_authority_key_sha256
+      )
+      WHERE outcome = 'resource_reserved'
+    `);
+
+    await bootstrapPool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_logical_action_spend
+      ON tp_ledger.g1_authority_receipts (
+        tenant_id,
+        logical_action_digest
+      )
+      WHERE outcome = 'resource_reserved'
+    `);
 
     await bootstrapPool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_winning_fence
@@ -761,6 +1281,11 @@ export class AuthorityStore {
         intent_id UUID NOT NULL DEFAULT gen_random_uuid(),
         operation_id UUID NOT NULL,
         request_digest STRING(64) NOT NULL,
+        proposal_digest STRING(64) NOT NULL,
+        logical_action_digest STRING(64) NOT NULL,
+        authorization_epoch INT8 NOT NULL,
+        logical_authority_key_sha256 STRING(64) NOT NULL,
+        authorization_binding_sha256 STRING(64) NOT NULL,
         run_id UUID NOT NULL,
         incident_id UUID NOT NULL,
         resource_id STRING NOT NULL,
@@ -774,9 +1299,33 @@ export class AuthorityStore {
         PRIMARY KEY (tenant_id, intent_id),
         UNIQUE (tenant_id, operation_id),
         UNIQUE (tenant_id, effect_key),
+        UNIQUE (tenant_id, logical_authority_key_sha256),
+        CHECK (length(proposal_digest) = 64),
+        CHECK (length(logical_action_digest) = 64),
+        CHECK (authorization_epoch > 0),
+        CHECK (length(logical_authority_key_sha256) = 64),
+        CHECK (length(authorization_binding_sha256) = 64),
         CHECK (fencing_token > 0),
         CHECK (intent_kind = 'dispatch_rescue_unit'),
         CHECK (state IN ('pending', 'delivering', 'delivered', 'failed'))
+      )
+    `);
+    for (const [column, definition] of [
+      ["proposal_digest", "STRING(64) NULL"],
+      ["logical_action_digest", "STRING(64) NULL"],
+      ["authorization_epoch", "INT8 NULL"],
+      ["logical_authority_key_sha256", "STRING(64) NULL"],
+      ["authorization_binding_sha256", "STRING(64) NULL"]
+    ]) {
+      await bootstrapPool.query(
+        `ALTER TABLE tp_ledger.g1_outbox_intents ADD COLUMN IF NOT EXISTS ${column} ${definition}`
+      );
+    }
+    await bootstrapPool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_logical_action_outbox
+      ON tp_ledger.g1_outbox_intents (
+        tenant_id,
+        logical_action_digest
       )
     `);
 
@@ -786,6 +1335,11 @@ export class AuthorityStore {
         effect_key UUID NOT NULL,
         operation_id UUID NOT NULL,
         request_digest STRING(64) NOT NULL,
+        proposal_digest STRING(64) NOT NULL,
+        logical_action_digest STRING(64) NOT NULL,
+        authorization_epoch INT8 NOT NULL,
+        logical_authority_key_sha256 STRING(64) NOT NULL,
+        authorization_binding_sha256 STRING(64) NOT NULL,
         run_id UUID NOT NULL,
         incident_id UUID NOT NULL,
         resource_id STRING NOT NULL,
@@ -795,12 +1349,87 @@ export class AuthorityStore {
         recorded_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
         PRIMARY KEY (tenant_id, effect_key),
         UNIQUE (tenant_id, operation_id),
+        UNIQUE (tenant_id, logical_authority_key_sha256),
+        CHECK (length(proposal_digest) = 64),
+        CHECK (length(logical_action_digest) = 64),
+        CHECK (authorization_epoch > 0),
+        CHECK (length(logical_authority_key_sha256) = 64),
+        CHECK (length(authorization_binding_sha256) = 64),
         CHECK (fencing_token > 0)
       )
     `);
+    for (const [column, definition] of [
+      ["proposal_digest", "STRING(64) NULL"],
+      ["logical_action_digest", "STRING(64) NULL"],
+      ["authorization_epoch", "INT8 NULL"],
+      ["logical_authority_key_sha256", "STRING(64) NULL"],
+      ["authorization_binding_sha256", "STRING(64) NULL"]
+    ]) {
+      await bootstrapPool.query(
+        `ALTER TABLE tp_ledger.g1_protected_effects ADD COLUMN IF NOT EXISTS ${column} ${definition}`
+      );
+    }
+    await bootstrapPool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_logical_action_effect
+      ON tp_ledger.g1_protected_effects (
+        tenant_id,
+        logical_action_digest
+      )
+    `);
+
+    const legacyIdentityRows = await bootstrapPool.query(`
+      SELECT
+        (
+          SELECT count(*)
+          FROM tp_ledger.g1_authority_receipts
+          WHERE proposal_digest IS NULL
+            OR logical_action_digest IS NULL
+            OR authorization_epoch IS NULL
+            OR logical_authority_key_sha256 IS NULL
+            OR authorization_binding_sha256 IS NULL
+        ) + (
+          SELECT count(*)
+          FROM tp_ledger.g1_outbox_intents
+          WHERE proposal_digest IS NULL
+            OR logical_action_digest IS NULL
+            OR authorization_epoch IS NULL
+            OR logical_authority_key_sha256 IS NULL
+            OR authorization_binding_sha256 IS NULL
+        ) + (
+          SELECT count(*)
+          FROM tp_ledger.g1_protected_effects
+          WHERE proposal_digest IS NULL
+            OR logical_action_digest IS NULL
+            OR authorization_epoch IS NULL
+            OR logical_authority_key_sha256 IS NULL
+            OR authorization_binding_sha256 IS NULL
+        ) + (
+          SELECT count(*)
+          FROM tp_ledger.g1_dvi_proposal_receipts
+          WHERE resource_id IS NULL
+            OR agency IS NULL
+            OR action_kind IS NULL
+            OR payload IS NULL
+            OR payload_canonical IS NULL
+            OR payload_digest IS NULL
+        ) + (
+          SELECT count(*)
+          FROM tp_private.g1_resources
+          WHERE holder_operation_id IS NOT NULL
+            AND (
+              holder_proposal_digest IS NULL
+              OR holder_logical_authority_key_sha256 IS NULL
+            )
+        ) AS legacy_rows
+    `);
+    if (Number(legacyIdentityRows.rows[0]?.legacy_rows ?? -1) !== 0) {
+      throw new Error(
+        "AUTHORITY_IDENTITY_LEGACY_ROWS_REQUIRE_DISPOSABLE_REBUILD"
+      );
+    }
 
     await bootstrapPool.query(`
-      CREATE VIEW IF NOT EXISTS tp_api.g1_recovery_bundle_v1 AS
+      CREATE OR REPLACE VIEW tp_api.g1_recovery_bundle_v1 AS
       SELECT
         receipt.operation_id AS recovery_session_id,
         1::INT8 AS schema_version,
@@ -823,7 +1452,12 @@ export class AuthorityStore {
         outbox.intent_id,
         outbox.intent_kind,
         false AS authority_transferred,
-        true AS requires_fresh_authorization
+        true AS requires_fresh_authorization,
+        receipt.proposal_digest,
+        receipt.logical_action_digest,
+        receipt.authorization_epoch,
+        receipt.logical_authority_key_sha256,
+        receipt.authorization_binding_sha256
       FROM tp_ledger.g1_authority_receipts AS receipt
       LEFT JOIN tp_private.g1_resources AS resource
         ON resource.tenant_id = receipt.tenant_id
@@ -1493,6 +2127,483 @@ export class AuthorityStore {
     return result.rows[0];
   }
 
+  async recordDviSelectionReceiptForTest(input) {
+    const receipt = dviSelectionReceiptFor(input);
+    const binding = dviSelectionBindingSha256For(input);
+    const result = await this.#pool.query(
+      `
+        INSERT INTO tp_ledger.g1_dvi_selection_receipts (
+          tenant_id,
+          retrieval_id,
+          authority_evidence_binding_sha256,
+          run_id,
+          incident_id,
+          agency,
+          policy_version,
+          source_commit,
+          tree_digest,
+          spec_sha256,
+          admitted_at,
+          expires_at,
+          ranked_sequence_sha256,
+          query_embedding_sha256,
+          result_limit,
+          selected_rank,
+          selected_evidence_id,
+          selected_evidence_digest
+        )
+        VALUES (
+          $1::UUID, $2::UUID, $3, $4::UUID, $5::UUID, $6, $7, $8, $9,
+          $10, $11::TIMESTAMPTZ, $12::TIMESTAMPTZ, $13, $14, $15::INT8,
+          $16::INT8, $17::UUID, $18
+        )
+        ON CONFLICT DO NOTHING
+        RETURNING *
+      `,
+      [
+        receipt.tenantId,
+        receipt.retrievalId,
+        binding,
+        receipt.runId,
+        receipt.incidentId,
+        receipt.agency,
+        receipt.policyVersion,
+        receipt.sourceCommit,
+        receipt.treeDigest,
+        receipt.specSha256,
+        receipt.snapshot.admittedAt,
+        receipt.snapshot.expiresAt,
+        receipt.rankedSequenceSha256,
+        receipt.queryEmbeddingSha256,
+        receipt.resultLimit,
+        receipt.selected.rank,
+        receipt.selected.evidenceId,
+        receipt.selected.evidenceDigest
+      ]
+    );
+    const observed = result.rowCount === 1
+      ? result
+      : await this.#pool.query(
+          `
+            SELECT *
+            FROM tp_ledger.g1_dvi_selection_receipts
+            WHERE tenant_id = $1::UUID
+              AND retrieval_id = $2::UUID
+          `,
+          [receipt.tenantId, receipt.retrievalId]
+        );
+    if (
+      observed.rowCount !== 1 ||
+      dviSelectionBindingSha256For(
+        dviSelectionReceiptInputFromRow(observed.rows[0])
+      ) !== binding ||
+      observed.rows[0].authority_evidence_binding_sha256 !== binding
+    ) {
+      throw new InvariantViolationError(
+        "synthetic DVI selection receipt conflicted with durable state"
+      );
+    }
+    return observed.rows[0];
+  }
+
+  async authorizeDviProposal(input) {
+    const authorization = normalizedDviAuthorizationFor(input);
+    return this.#runSerializable(async (client) => {
+      const findExisting = async () => client.query(
+        `
+          SELECT *
+          FROM tp_ledger.g1_dvi_proposal_receipts
+          WHERE tenant_id = $1::UUID
+            AND proposal_digest = $2
+        `,
+        [authorization.logicalAction.tenantId, authorization.proposalDigest]
+      );
+      const existing = await findExisting();
+      if (existing.rowCount === 1) {
+        if (!proposalReceiptMatches(existing.rows[0], authorization)) {
+          throw new InvariantViolationError(
+            "proposal digest matched a different durable authorization"
+          );
+        }
+        return {
+          outcome: "proposal_authorization_replay",
+          proposal: existing.rows[0]
+        };
+      }
+      if (existing.rowCount !== 0) {
+        throw new InvariantViolationError(
+          "proposal digest matched multiple durable authorizations"
+        );
+      }
+
+      const selectionReceipt = await client.query(
+        `
+          SELECT *
+          FROM tp_ledger.g1_dvi_selection_receipts
+          WHERE tenant_id = $1::UUID
+            AND authority_evidence_binding_sha256 = $2
+        `,
+        [
+          authorization.logicalAction.tenantId,
+          authorization.dviProposal.authorityEvidenceBindingSha256
+        ]
+      );
+      if (selectionReceipt.rowCount !== 1) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "dvi_selection_receipt_missing"
+        };
+      }
+      if (!dviSelectionReceiptMatches(selectionReceipt.rows[0], authorization)) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "dvi_selection_receipt_mismatch"
+        };
+      }
+
+      const evidence = await client.query(
+        `
+          SELECT evidence.*, transaction_timestamp() AS database_now
+          FROM tp_private.g1_evidence AS evidence
+          WHERE evidence.tenant_id = $1::UUID
+            AND evidence.evidence_id = $2::UUID
+            AND evidence.incident_id = $3::UUID
+        `,
+        [
+          authorization.logicalAction.tenantId,
+          authorization.selectedEvidenceId,
+          authorization.logicalAction.incidentId
+        ]
+      );
+      if (evidence.rowCount !== 1) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "selected_evidence_missing"
+        };
+      }
+      const evidenceRow = evidence.rows[0];
+      if (
+        evidenceRow.evidence_digest !== authorization.selectedEvidenceDigest ||
+        evidenceDigestFor(evidenceRow) !== authorization.selectedEvidenceDigest
+      ) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "selected_evidence_digest_mismatch"
+        };
+      }
+      if (
+        Date.parse(authorization.dviProposal.expiresAt) <=
+        new Date(evidenceRow.database_now).getTime()
+      ) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "proposal_expired"
+        };
+      }
+      if (
+        Date.parse(authorization.dviProposal.admittedAt) >
+        new Date(evidenceRow.database_now).getTime()
+      ) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "proposal_not_yet_admitted"
+        };
+      }
+
+      await client.query(
+        `
+          INSERT INTO tp_ledger.g1_logical_authority_epochs (
+            tenant_id,
+            logical_action_digest,
+            current_epoch
+          )
+          VALUES ($1::UUID, $2, 0)
+          ON CONFLICT DO NOTHING
+        `,
+        [authorization.logicalAction.tenantId, authorization.logicalActionDigest]
+      );
+      const lockedEpoch = await client.query(
+        `
+          SELECT current_epoch
+          FROM tp_ledger.g1_logical_authority_epochs
+          WHERE tenant_id = $1::UUID
+            AND logical_action_digest = $2
+          FOR UPDATE
+        `,
+        [authorization.logicalAction.tenantId, authorization.logicalActionDigest]
+      );
+      if (lockedEpoch.rowCount !== 1) {
+        throw new InvariantViolationError(
+          "database authorization epoch row was not locked exactly once"
+        );
+      }
+
+      const racedExisting = await findExisting();
+      if (racedExisting.rowCount === 1) {
+        if (!proposalReceiptMatches(racedExisting.rows[0], authorization)) {
+          throw new InvariantViolationError(
+            "proposal digest raced with a different durable authorization"
+          );
+        }
+        return {
+          outcome: "proposal_authorization_replay",
+          proposal: racedExisting.rows[0]
+        };
+      }
+      if (racedExisting.rowCount !== 0) {
+        throw new InvariantViolationError(
+          "proposal digest race was not singular"
+        );
+      }
+
+      const priorSpend = await client.query(
+        `
+          SELECT count(*)::INT8 AS count
+          FROM tp_ledger.g1_authority_receipts AS receipt
+          WHERE receipt.tenant_id = $1::UUID
+            AND receipt.logical_action_digest = $2
+            AND receipt.outcome = 'resource_reserved'
+        `,
+        [authorization.logicalAction.tenantId, authorization.logicalActionDigest]
+      );
+      if (Number(priorSpend.rows[0]?.count ?? -1) > 0) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "logical_authority_already_spent"
+        };
+      }
+      if (Number(priorSpend.rows[0]?.count ?? -1) !== 0) {
+        throw new InvariantViolationError(
+          "logical authority spend census was not singular"
+        );
+      }
+
+      let authorizationEpoch = Number(lockedEpoch.rows[0].current_epoch);
+      if (authorizationEpoch === 1) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "explicit_new_authorization_required"
+        };
+      }
+      if (authorizationEpoch !== 0) {
+        throw new InvariantViolationError(
+          "authorization epoch advancement requires an explicit new-authorization receipt"
+        );
+      }
+      const initializedEpoch = await client.query(
+        `
+          UPDATE tp_ledger.g1_logical_authority_epochs
+          SET current_epoch = 1,
+              updated_at = transaction_timestamp()
+          WHERE tenant_id = $1::UUID
+            AND logical_action_digest = $2
+            AND current_epoch = 0
+          RETURNING current_epoch
+        `,
+        [
+          authorization.logicalAction.tenantId,
+          authorization.logicalActionDigest
+        ]
+      );
+      if (initializedEpoch.rowCount !== 1) {
+        throw new InvariantViolationError(
+          "database authorization epoch could not initialize exactly once"
+        );
+      }
+      authorizationEpoch = Number(initializedEpoch.rows[0].current_epoch);
+      if (authorizationEpoch !== 1) {
+        throw new InvariantViolationError(
+          "database authorization epoch initialized outside the frozen contract"
+        );
+      }
+      authorizationEpoch = authorizationEpochFromRow(authorizationEpoch);
+      const expectedLogicalAuthority = logicalAuthorityKeyFor({
+        logicalActionDigest: authorization.logicalActionDigest,
+        authorizationEpoch
+      });
+      const expectedBinding = authorizationBindingFor({
+        logicalActionDigest: authorization.logicalActionDigest,
+        proposalDigest: authorization.proposalDigest,
+        authorizationEpoch
+      });
+      const databaseIdentity = await client.query(
+        `
+          WITH authority_key AS (
+            SELECT encode(
+              sha256((
+                '{"authorizationEpoch":' || $3::STRING ||
+                ',"logicalActionDigest":"' || $1 ||
+                '","schemaVersion":"tideproof.authority.logical-authority-key.v1"}'
+              )::BYTES),
+              'hex'
+            ) AS logical_authority_key_sha256
+          )
+          SELECT
+            authority_key.logical_authority_key_sha256,
+            encode(
+              sha256((
+                '{"authorizationEpoch":' || $3::STRING ||
+                ',"logicalActionDigest":"' || $1 ||
+                '","logicalAuthorityKeySha256":"' ||
+                authority_key.logical_authority_key_sha256 ||
+                '","proposalDigest":"' || $2 ||
+                '","schemaVersion":"tideproof.authority.authorization-binding.v1"}'
+              )::BYTES),
+              'hex'
+            ) AS authorization_binding_sha256
+          FROM authority_key
+        `,
+        [
+          authorization.logicalActionDigest,
+          authorization.proposalDigest,
+          authorizationEpoch
+        ]
+      );
+      if (
+        databaseIdentity.rowCount !== 1 ||
+        databaseIdentity.rows[0].logical_authority_key_sha256 !==
+          expectedLogicalAuthority.logicalAuthorityKeySha256 ||
+        databaseIdentity.rows[0].authorization_binding_sha256 !==
+          expectedBinding.authorizationBindingSha256
+      ) {
+        throw new InvariantViolationError(
+          "database-derived authorization identity diverged from the frozen contract"
+        );
+      }
+      const logicalAuthorityKeySha256 =
+        databaseIdentity.rows[0].logical_authority_key_sha256;
+      const authorizationBindingSha256 =
+        databaseIdentity.rows[0].authorization_binding_sha256;
+      const inserted = await client.query(
+        `
+          INSERT INTO tp_ledger.g1_dvi_proposal_receipts (
+            tenant_id,
+            proposal_digest,
+            logical_action_digest,
+            resource_id,
+            agency,
+            action_kind,
+            payload,
+            payload_canonical,
+            payload_digest,
+            retrieval_id,
+            run_id,
+            incident_id,
+            authority_evidence_binding_sha256,
+            policy_version,
+            selected_rank,
+            selected_evidence_id,
+            selected_evidence_digest,
+            admitted_at,
+            expires_at,
+            authorization_epoch,
+            logical_authority_key_sha256,
+            authorization_binding_sha256
+          )
+          VALUES (
+            $1::UUID, $2, $3, $4, $5, $6, $7::JSONB, $8, $9,
+            $10::UUID, $11::UUID, $12::UUID, $13, $14,
+            $15::INT8, $16::UUID, $17, $18::TIMESTAMPTZ, $19::TIMESTAMPTZ,
+            $20::INT8, $21, $22
+          )
+          RETURNING *
+        `,
+        [
+          authorization.logicalAction.tenantId,
+          authorization.proposalDigest,
+          authorization.logicalActionDigest,
+          authorization.logicalAction.resourceId,
+          authorization.logicalAction.agency,
+          authorization.logicalAction.actionKind,
+          JSON.stringify(authorization.logicalAction.payload),
+          canonicalJson(authorization.logicalAction.payload),
+          authorization.logicalAction.payloadDigest,
+          authorization.dviProposal.retrievalId,
+          authorization.dviProposal.runId,
+          authorization.dviProposal.incidentId,
+          authorization.dviProposal.authorityEvidenceBindingSha256,
+          authorization.dviProposal.policyVersion,
+          authorization.dviProposal.selectedRank,
+          authorization.selectedEvidenceId,
+          authorization.selectedEvidenceDigest,
+          authorization.dviProposal.admittedAt,
+          authorization.dviProposal.expiresAt,
+          authorizationEpoch,
+          logicalAuthorityKeySha256,
+          authorizationBindingSha256
+        ]
+      );
+      if (
+        inserted.rowCount !== 1 ||
+        !proposalReceiptMatches(inserted.rows[0], authorization)
+      ) {
+        throw new InvariantViolationError(
+          "durable proposal authorization binding was not observable"
+        );
+      }
+      return {
+        outcome: "proposal_authorized",
+        proposal: inserted.rows[0]
+      };
+    });
+  }
+
+  async authorityIdentityStateForTest({ tenantId, resourceId }) {
+    const tenant = requireUuid(tenantId, "tenantId");
+    const resource = requireText(resourceId, "resourceId");
+    const result = await this.#pool.query(
+      `
+        SELECT
+          resource.current_fence,
+          (
+            SELECT count(*)::INT8
+            FROM tp_ledger.g1_dvi_selection_receipts
+            WHERE tenant_id = $1::UUID
+          ) AS selection_receipt_count,
+          (
+            SELECT count(*)::INT8
+            FROM tp_ledger.g1_dvi_proposal_receipts
+            WHERE tenant_id = $1::UUID
+          ) AS proposal_receipt_count,
+          (
+            SELECT count(*)::INT8
+            FROM tp_ledger.g1_logical_authority_epochs
+            WHERE tenant_id = $1::UUID
+          ) AS epoch_count,
+          (
+            SELECT coalesce(max(current_epoch), 0)::INT8
+            FROM tp_ledger.g1_logical_authority_epochs
+            WHERE tenant_id = $1::UUID
+          ) AS maximum_epoch,
+          (
+            SELECT count(*)::INT8
+            FROM tp_ledger.g1_authority_receipts
+            WHERE tenant_id = $1::UUID
+          ) AS authority_receipt_count,
+          (
+            SELECT count(*)::INT8
+            FROM tp_ledger.g1_outbox_intents
+            WHERE tenant_id = $1::UUID
+          ) AS outbox_count,
+          (
+            SELECT count(*)::INT8
+            FROM tp_ledger.g1_protected_effects
+            WHERE tenant_id = $1::UUID
+          ) AS protected_effect_count
+        FROM tp_private.g1_resources AS resource
+        WHERE resource.tenant_id = $1::UUID
+          AND resource.resource_id = $2
+      `,
+      [tenant, resource]
+    );
+    if (result.rowCount !== 1) {
+      throw new InvariantViolationError(
+        "authority identity test state was not singular"
+      );
+    }
+    return result.rows[0];
+  }
+
   async expireLeaseForTest({ tenantId, resourceId }) {
     const result = await this.#pool.query(
       `
@@ -1535,6 +2646,32 @@ export class AuthorityStore {
     );
     if (result.rowCount !== 1) {
       throw new InvariantViolationError("resource missing during lease expiry");
+    }
+    return result.rows[0];
+  }
+
+  async expireProposalAtDatabaseNowForTest({ tenantId, proposalDigest }) {
+    const result = await this.#pool.query(
+      `
+        UPDATE tp_ledger.g1_dvi_proposal_receipts
+        SET expires_at = transaction_timestamp()
+        WHERE tenant_id = $1::UUID
+          AND proposal_digest = $2
+        RETURNING
+          proposal_digest,
+          expires_at,
+          transaction_timestamp() AS database_now,
+          expires_at = transaction_timestamp() AS exact_boundary
+      `,
+      [
+        requireUuid(tenantId, "tenantId"),
+        requireSha256(proposalDigest, "proposalDigest")
+      ]
+    );
+    if (result.rowCount !== 1) {
+      throw new InvariantViolationError(
+        "proposal missing during exact-boundary expiry"
+      );
     }
     return result.rows[0];
   }
@@ -1637,6 +2774,95 @@ export class AuthorityStore {
     throw new Error("serializable retry loop exhausted");
   }
 
+  async #boundProposal(client, request, { requireCurrent = true } = {}) {
+    const result = await client.query(
+      `
+        SELECT proposal.*, transaction_timestamp() AS database_now
+        FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
+        WHERE proposal.tenant_id = $1::UUID
+          AND proposal.proposal_digest = $2
+      `,
+      [request.tenantId, request.proposalDigest]
+    );
+    if (result.rowCount !== 1) {
+      return {
+        ok: false,
+        reason:
+          result.rowCount === 0
+            ? "proposal_authorization_missing"
+            : "proposal_authorization_ambiguous"
+      };
+    }
+    const row = result.rows[0];
+    if (!proposalReceiptMatches(row, dviAuthorizationFromRequest(request))) {
+      return { ok: false, reason: "proposal_authorization_binding_mismatch" };
+    }
+    if (
+      row.selected_evidence_id !== request.evidenceId ||
+      row.selected_evidence_digest !== request.selectedEvidenceDigest
+    ) {
+      return { ok: false, reason: "selected_evidence_binding_mismatch" };
+    }
+    if (
+      requireCurrent &&
+      new Date(row.expires_at).getTime() <= new Date(row.database_now).getTime()
+    ) {
+      return { ok: false, reason: "proposal_authorization_expired" };
+    }
+    return {
+      ok: true,
+      current:
+        new Date(row.expires_at).getTime() >
+        new Date(row.database_now).getTime(),
+      proposal: row,
+      authorizationEpoch: authorizationEpochFromRow(row.authorization_epoch),
+      logicalAuthorityKeySha256: row.logical_authority_key_sha256,
+      authorizationBindingSha256: row.authorization_binding_sha256
+    };
+  }
+
+  async #receiptAuthorityCurrent(client, receipt) {
+    if (receipt.outcome !== "resource_reserved") {
+      return false;
+    }
+    const result = await client.query(
+      `
+        SELECT
+          resource.current_fence,
+          resource.active_run_id,
+          resource.holder_operation_id,
+          resource.holder_proposal_digest,
+          resource.holder_logical_authority_key_sha256,
+          resource.lease_expires_at AS resource_lease_expires_at,
+          proposal.expires_at AS proposal_expires_at,
+          transaction_timestamp() AS database_now
+        FROM tp_private.g1_resources AS resource
+        JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+          ON proposal.tenant_id = resource.tenant_id
+         AND proposal.proposal_digest = $3
+        WHERE resource.tenant_id = $1::UUID
+          AND resource.resource_id = $2
+      `,
+      [receipt.tenant_id, receipt.resource_id, receipt.proposal_digest]
+    );
+    if (result.rowCount !== 1) {
+      return false;
+    }
+    const state = result.rows[0];
+    const databaseNow = new Date(state.database_now).getTime();
+    return (
+      receipt.fencing_token === state.current_fence &&
+      receipt.run_id === state.active_run_id &&
+      receipt.operation_id === state.holder_operation_id &&
+      receipt.proposal_digest === state.holder_proposal_digest &&
+      receipt.logical_authority_key_sha256 ===
+        state.holder_logical_authority_key_sha256 &&
+      new Date(receipt.lease_expires_at).getTime() > databaseNow &&
+      new Date(state.resource_lease_expires_at).getTime() > databaseNow &&
+      new Date(state.proposal_expires_at).getTime() > databaseNow
+    );
+  }
+
   async #existingReceipt(client, request) {
     const byOperation = await client.query(
       `
@@ -1647,6 +2873,50 @@ export class AuthorityStore {
       `,
       [request.tenantId, request.operationId]
     );
+    if (byOperation.rowCount > 1) {
+      throw new InvariantViolationError(
+        "operation ID matched multiple authority receipts"
+      );
+    }
+    if (byOperation.rowCount === 1) {
+      const receipt = byOperation.rows[0];
+      if (receipt.request_digest !== request.requestDigest) {
+        throw new OperationDigestMismatchError(request.operationId);
+      }
+      if (receipt.outcome === "pending") {
+        throw new InvariantViolationError("committed pending receipt found");
+      }
+      return {
+        outcome: "operation_replay",
+        receipt,
+        authorityCurrent: await this.#receiptAuthorityCurrent(client, receipt)
+      };
+    }
+
+    const byLogicalAuthority = await client.query(
+      `
+        SELECT *
+        FROM tp_ledger.g1_authority_receipts
+        WHERE tenant_id = $1::UUID
+          AND logical_action_digest = $2
+          AND outcome = 'resource_reserved'
+      `,
+      [request.tenantId, request.logicalActionDigest]
+    );
+    if (byLogicalAuthority.rowCount > 1) {
+      throw new InvariantViolationError(
+        "logical action matched multiple positive receipts"
+      );
+    }
+    if (byLogicalAuthority.rowCount === 1) {
+      const receipt = byLogicalAuthority.rows[0];
+      return {
+        outcome: "logical_authority_replay",
+        receipt,
+        authorityCurrent: await this.#receiptAuthorityCurrent(client, receipt)
+      };
+    }
+
     const byDigest = await client.query(
       `
         SELECT *
@@ -1656,64 +2926,110 @@ export class AuthorityStore {
       `,
       [request.tenantId, request.requestDigest]
     );
-    const rows = [...byOperation.rows];
-    if (
-      byDigest.rowCount === 1 &&
-      !rows.some(
-        ({ operation_id }) => operation_id === byDigest.rows[0].operation_id
-      )
-    ) {
-      rows.push(byDigest.rows[0]);
-    }
-    if (rows.length === 0) {
+    if (byDigest.rowCount === 0) {
       return null;
     }
-    if (
-      byOperation.rowCount > 1 ||
-      byDigest.rowCount > 1 ||
-      rows.length !== 1
-    ) {
+    if (byDigest.rowCount !== 1) {
       throw new InvariantViolationError(
-        "operation ID and semantic digest matched different receipts"
+        "semantic digest matched multiple authority receipts"
       );
     }
-    const receipt = rows[0];
-    if (
-      receipt.operation_id === request.operationId &&
-      receipt.request_digest !== request.requestDigest
-    ) {
-      throw new OperationDigestMismatchError(request.operationId);
-    }
+    const receipt = byDigest.rows[0];
     if (receipt.outcome === "pending") {
       throw new InvariantViolationError("committed pending receipt found");
     }
     return {
-      outcome:
-        receipt.operation_id === request.operationId
-          ? "operation_replay"
-          : "semantic_replay",
-      receipt
+      outcome: "semantic_replay",
+      receipt,
+      authorityCurrent: await this.#receiptAuthorityCurrent(client, receipt)
     };
   }
 
   async spendAuthority(
     input,
     {
+      afterEpochLockObserver,
       barrier,
       beforeCommitObserver,
       commitDispatchObserver,
       afterCommitObserver
     } = {}
   ) {
-    const request = normalizeRequest(input);
+    const unboundRequest = normalizeRequest(input);
 
     return this.#runSerializable(
       async (client, transactionContext) => {
+        const boundProposal = await this.#boundProposal(client, unboundRequest, {
+          requireCurrent: false
+        });
+        if (!boundProposal.ok) {
+          return {
+            outcome: "authorization_denied",
+            reason: boundProposal.reason,
+            requestDigest: unboundRequest.requestDigest,
+            proposalDigest: unboundRequest.proposalDigest,
+            authorityCurrent: false,
+            durableMutation: false
+          };
+        }
+        const request = {
+          ...unboundRequest,
+          authorizationEpoch: boundProposal.authorizationEpoch,
+          logicalAuthorityKeySha256:
+            boundProposal.logicalAuthorityKeySha256,
+          authorizationBindingSha256:
+            boundProposal.authorizationBindingSha256
+        };
+        const epochLock = await client.query(
+          `
+            SELECT current_epoch
+            FROM tp_ledger.g1_logical_authority_epochs
+            WHERE tenant_id = $1::UUID
+              AND logical_action_digest = $2
+            FOR UPDATE
+          `,
+          [request.tenantId, request.logicalActionDigest]
+        );
+        if (epochLock.rowCount !== 1) {
+          throw new InvariantViolationError(
+            "logical authority epoch lock was not singular"
+          );
+        }
+        await afterEpochLockObserver?.();
         const existing = await this.#existingReceipt(client, request);
         if (existing) {
           return {
             ...existing,
             requestDigest: request.requestDigest
+          };
+        }
+        if (
+          String(epochLock.rows[0].current_epoch) !==
+          String(request.authorizationEpoch)
+        ) {
+          return {
+            outcome: "authorization_denied",
+            reason: "proposal_authorization_superseded",
+            requestDigest: request.requestDigest,
+            proposalDigest: request.proposalDigest,
+            authorizationEpoch: request.authorizationEpoch,
+            logicalAuthorityKeySha256: request.logicalAuthorityKeySha256,
+            authorizationBindingSha256: request.authorizationBindingSha256,
+            authorityCurrent: false,
+            durableMutation: false
+          };
+        }
+        if (!boundProposal.current) {
+          return {
+            outcome: "authorization_denied",
+            reason: "proposal_authorization_expired",
+            requestDigest: request.requestDigest,
+            proposalDigest: request.proposalDigest,
+            authorizationEpoch: request.authorizationEpoch,
+            logicalAuthorityKeySha256: request.logicalAuthorityKeySha256,
+            authorizationBindingSha256: request.authorizationBindingSha256,
+            authorityCurrent: false,
+            durableMutation: false
           };
         }
 
@@ -1724,6 +3040,11 @@ export class AuthorityStore {
               operation_id,
               request_digest,
               request_payload,
+              proposal_digest,
+              logical_action_digest,
+              authorization_epoch,
+              logical_authority_key_sha256,
+              authorization_binding_sha256,
               run_id,
               incident_id,
               resource_id,
@@ -1740,15 +3061,20 @@ export class AuthorityStore {
               $2::UUID,
               $3,
               $4::JSONB,
-              $5::UUID,
-              $6::UUID,
-              $7,
+              $5,
+              $6,
+              $7::INT8,
               $8,
               $9,
               $10::UUID,
               $11::UUID,
               $12,
               $13,
+              $14,
+              $15::UUID,
+              $16::UUID,
+              $17,
+              $18,
               'pending'
             )
             ON CONFLICT DO NOTHING
@@ -1759,6 +3085,11 @@ export class AuthorityStore {
             request.operationId,
             request.requestDigest,
             JSON.stringify(request.requestPayload),
+            request.proposalDigest,
+            request.logicalActionDigest,
+            request.authorizationEpoch,
+            request.logicalAuthorityKeySha256,
+            request.authorizationBindingSha256,
             request.runId,
             request.incidentId,
             request.resourceId,
@@ -1931,17 +3262,21 @@ export class AuthorityStore {
             outcome: "authorization_denied",
             reason,
             requestDigest: request.requestDigest,
+            authorityCurrent: false,
             receipt: denied.rows[0]
           };
         }
 
         const evidenceDigest = evidenceDigestFor(evidence.rows[0]);
-        if (evidence.rows[0].evidence_digest !== evidenceDigest) {
+        if (
+          evidence.rows[0].evidence_digest !== evidenceDigest ||
+          evidenceDigest !== request.selectedEvidenceDigest
+        ) {
           const denied = await client.query(
             `
               UPDATE tp_ledger.g1_authority_receipts
               SET outcome = 'authorization_denied',
-                  reason = 'evidence_digest_mismatch'
+                  reason = 'selected_evidence_digest_mismatch'
               WHERE tenant_id = $1::UUID
                 AND operation_id = $2::UUID
               RETURNING *
@@ -1950,8 +3285,9 @@ export class AuthorityStore {
           );
           return {
             outcome: "authorization_denied",
-            reason: "evidence_digest_mismatch",
+            reason: "selected_evidence_digest_mismatch",
             requestDigest: request.requestDigest,
+            authorityCurrent: false,
             receipt: denied.rows[0]
           };
         }
@@ -1986,6 +3322,7 @@ export class AuthorityStore {
             outcome: "authorization_denied",
             reason: "resource_missing",
             requestDigest: request.requestDigest,
+            authorityCurrent: false,
             receipt: denied.rows[0]
           };
         }
@@ -2007,6 +3344,7 @@ export class AuthorityStore {
             outcome: "authorization_denied",
             reason: "inactive_run",
             requestDigest: request.requestDigest,
+            authorityCurrent: false,
             receipt: denied.rows[0]
           };
         }
@@ -2039,6 +3377,7 @@ export class AuthorityStore {
           return {
             outcome: "resource_held_denied",
             requestDigest: request.requestDigest,
+            authorityCurrent: false,
             receipt: denied.rows[0]
           };
         }
@@ -2050,6 +3389,8 @@ export class AuthorityStore {
                 holder_incident_id = $3::UUID,
                 holder_operation_id = $4::UUID,
                 holder_agent_id = $5,
+                holder_proposal_digest = $8,
+                holder_logical_authority_key_sha256 = $9,
                 lease_expires_at =
                   transaction_timestamp() +
                   ($6::INT8 * INTERVAL '1 millisecond'),
@@ -2071,7 +3412,9 @@ export class AuthorityStore {
             request.operationId,
             request.agentId,
             request.leaseMs,
-            request.runId
+            request.runId,
+            request.proposalDigest,
+            request.logicalAuthorityKeySha256
           ]
         );
         if (acquired.rowCount !== 1) {
@@ -2107,6 +3450,11 @@ export class AuthorityStore {
               tenant_id,
               operation_id,
               request_digest,
+              proposal_digest,
+              logical_action_digest,
+              authorization_epoch,
+              logical_authority_key_sha256,
+              authorization_binding_sha256,
               run_id,
               incident_id,
               resource_id,
@@ -2120,14 +3468,19 @@ export class AuthorityStore {
               $1::UUID,
               $2::UUID,
               $3,
-              $4::UUID,
-              $5::UUID,
-              $6,
-              $7::INT8,
-              $8::UUID,
+              $4,
+              $5,
+              $6::INT8,
+              $7,
+              $8,
+              $9::UUID,
+              $10::UUID,
+              $11,
+              $12::INT8,
+              $13::UUID,
               'dispatch_rescue_unit',
-              $9::JSONB,
-              $10
+              $14::JSONB,
+              $15
             )
             RETURNING *
           `,
@@ -2135,6 +3488,11 @@ export class AuthorityStore {
             request.tenantId,
             request.operationId,
             request.requestDigest,
+            request.proposalDigest,
+            request.logicalActionDigest,
+            request.authorizationEpoch,
+            request.logicalAuthorityKeySha256,
+            request.authorizationBindingSha256,
             request.runId,
             request.incidentId,
             request.resourceId,
@@ -2149,6 +3507,7 @@ export class AuthorityStore {
         return {
           outcome: "resource_reserved",
           requestDigest: request.requestDigest,
+          authorityCurrent: true,
           receipt: receipt.rows[0],
           outbox: outbox.rows[0]
         };
@@ -2228,7 +3587,7 @@ export class AuthorityStore {
   }
 
   async reconcileRequest(input) {
-    const request = normalizeRequest(input);
+    const unboundRequest = normalizeRequest(input);
     const client = new Client(runtimeDatabaseConfig({
       connectionString: this.#connectionString,
       max: 1,
@@ -2239,6 +3598,27 @@ export class AuthorityStore {
       await client.query(
         "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY"
       );
+      const boundProposal = await this.#boundProposal(
+        client,
+        unboundRequest,
+        { requireCurrent: false }
+      );
+      if (!boundProposal.ok) {
+        await client.query("COMMIT");
+        return {
+          status: "UNKNOWN_DO_NOT_ACT",
+          requestDigest: unboundRequest.requestDigest,
+          reason: boundProposal.reason
+        };
+      }
+      const request = {
+        ...unboundRequest,
+        authorizationEpoch: boundProposal.authorizationEpoch,
+        logicalAuthorityKeySha256:
+          boundProposal.logicalAuthorityKeySha256,
+        authorizationBindingSha256:
+          boundProposal.authorizationBindingSha256
+      };
       const result = await client.query(
         `
           SELECT
@@ -2247,7 +3627,11 @@ export class AuthorityStore {
             outbox.fencing_token AS outbox_fencing_token,
             resource.current_fence,
             resource.active_run_id,
-            resource.holder_operation_id
+            resource.holder_operation_id,
+            resource.holder_proposal_digest,
+            resource.holder_logical_authority_key_sha256,
+            resource.lease_expires_at AS resource_lease_expires_at,
+            transaction_timestamp() AS database_now
           FROM tp_ledger.g1_authority_receipts AS receipt
           LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
             ON outbox.tenant_id = receipt.tenant_id
@@ -2259,10 +3643,19 @@ export class AuthorityStore {
             AND (
               receipt.operation_id = $2::UUID
               OR receipt.request_digest = $3
+              OR (
+                receipt.logical_authority_key_sha256 = $4
+                AND receipt.outcome = 'resource_reserved'
+              )
             )
           LIMIT 2
         `,
-        [request.tenantId, request.operationId, request.requestDigest]
+        [
+          request.tenantId,
+          request.operationId,
+          request.requestDigest,
+          request.logicalAuthorityKeySha256
+        ]
       );
       await client.query("COMMIT");
 
@@ -2284,11 +3677,31 @@ export class AuthorityStore {
           reason: "committed_pending_receipt_invariant"
         };
       }
-      if (row.request_digest !== request.requestDigest) {
+      if (
+        row.request_digest !== request.requestDigest &&
+        row.logical_authority_key_sha256 !==
+          request.logicalAuthorityKeySha256
+      ) {
         return {
           status: "UNKNOWN_DO_NOT_ACT",
           requestDigest: request.requestDigest,
           reason: "digest_mismatch"
+        };
+      }
+      if (
+        row.proposal_digest !== request.proposalDigest ||
+        row.logical_action_digest !== request.logicalActionDigest ||
+        authorizationEpochFromRow(row.authorization_epoch) !==
+          request.authorizationEpoch ||
+        row.logical_authority_key_sha256 !==
+          request.logicalAuthorityKeySha256 ||
+        row.authorization_binding_sha256 !==
+          request.authorizationBindingSha256
+      ) {
+        return {
+          status: "UNKNOWN_DO_NOT_ACT",
+          requestDigest: request.requestDigest,
+          reason: "authority_identity_mismatch"
         };
       }
       if (
@@ -2306,7 +3719,12 @@ export class AuthorityStore {
         row.outcome !== "resource_reserved" ||
         (row.fencing_token === row.current_fence &&
           row.operation_id === row.holder_operation_id &&
-          row.run_id === row.active_run_id);
+          row.run_id === row.active_run_id &&
+          row.proposal_digest === row.holder_proposal_digest &&
+          row.logical_authority_key_sha256 ===
+            row.holder_logical_authority_key_sha256 &&
+          new Date(row.resource_lease_expires_at).getTime() >
+            new Date(row.database_now).getTime());
       return {
         status: authorityStillCurrent
           ? "COMMITTED"
@@ -2318,7 +3736,7 @@ export class AuthorityStore {
       await rollbackQuietly(client);
       return {
         status: "UNKNOWN_DO_NOT_ACT",
-        requestDigest: request.requestDigest,
+        requestDigest: unboundRequest.requestDigest,
         reason: "reconciliation_unavailable",
         errorCode: error.code ?? error.name
       };
@@ -2328,12 +3746,12 @@ export class AuthorityStore {
   }
 
   async recordProtectedEffect(input, { authenticatedAgentId } = {}) {
-    const request = normalizeRequest(input);
+    const unboundRequest = normalizeRequest(input);
     const authenticatedActor = requireText(
       authenticatedAgentId,
       "authenticatedAgentId"
     );
-    if (authenticatedActor !== request.agentId) {
+    if (authenticatedActor !== unboundRequest.agentId) {
       return { outcome: "stale_or_unauthorized_fence_denied" };
     }
     const fencingToken = requireText(
@@ -2345,6 +3763,24 @@ export class AuthorityStore {
     }
 
     return this.#runSerializable(async (client) => {
+      const boundProposal = await this.#boundProposal(
+        client,
+        unboundRequest
+      );
+      if (!boundProposal.ok) {
+        return {
+          outcome: "stale_or_unauthorized_fence_denied",
+          reason: boundProposal.reason
+        };
+      }
+      const request = {
+        ...unboundRequest,
+        authorizationEpoch: boundProposal.authorizationEpoch,
+        logicalAuthorityKeySha256:
+          boundProposal.logicalAuthorityKeySha256,
+        authorizationBindingSha256:
+          boundProposal.authorizationBindingSha256
+      };
       const existing = await client.query(
         `
           SELECT *
@@ -2353,10 +3789,16 @@ export class AuthorityStore {
             AND (
               effect_key = $2::UUID
               OR operation_id = $3::UUID
+              OR logical_action_digest = $4
             )
           LIMIT 2
         `,
-        [request.tenantId, request.effectKey, request.operationId]
+        [
+          request.tenantId,
+          request.effectKey,
+          request.operationId,
+          request.logicalActionDigest
+        ]
       );
       if (existing.rowCount > 1) {
         throw new InvariantViolationError(
@@ -2365,6 +3807,19 @@ export class AuthorityStore {
       }
       if (existing.rowCount === 1) {
         const effect = existing.rows[0];
+        if (
+          effect.logical_action_digest === request.logicalActionDigest &&
+          effect.payload_digest === request.payloadDigest
+        ) {
+          return {
+            outcome: "effect_already_recorded",
+            replayKind:
+              effect.operation_id === request.operationId
+                ? "operation_replay"
+                : "logical_authority_replay",
+            effect
+          };
+        }
         if (
           effect.effect_key !== request.effectKey ||
           effect.operation_id !== request.operationId ||
@@ -2384,6 +3839,11 @@ export class AuthorityStore {
             effect_key,
             operation_id,
             request_digest,
+            proposal_digest,
+            logical_action_digest,
+            authorization_epoch,
+            logical_authority_key_sha256,
+            authorization_binding_sha256,
             run_id,
             incident_id,
             resource_id,
@@ -2396,36 +3856,67 @@ export class AuthorityStore {
             $2::UUID,
             $3::UUID,
             $4,
-            $5::UUID,
-            $6::UUID,
-            $7,
+            $5,
+            $6,
+            $7::INT8,
             $8,
-            $9::INT8,
-            $10
+            $9,
+            $10::UUID,
+            $11::UUID,
+            $12,
+            $13,
+            $14::INT8,
+            $15
           FROM tp_private.g1_resources AS resource
           JOIN tp_ledger.g1_outbox_intents AS outbox
             ON outbox.tenant_id = resource.tenant_id
            AND outbox.operation_id = $3::UUID
            AND outbox.request_digest = $4
-           AND outbox.run_id = $5::UUID
-           AND outbox.incident_id = $6::UUID
-           AND outbox.resource_id = $7
-           AND outbox.fencing_token = $9::INT8
+           AND outbox.proposal_digest = $5
+           AND outbox.logical_action_digest = $6
+           AND outbox.authorization_epoch = $7::INT8
+           AND outbox.logical_authority_key_sha256 = $8
+           AND outbox.authorization_binding_sha256 = $9
+           AND outbox.run_id = $10::UUID
+           AND outbox.incident_id = $11::UUID
+           AND outbox.resource_id = $12
+           AND outbox.fencing_token = $14::INT8
            AND outbox.effect_key = $2::UUID
-           AND outbox.payload_digest = $10
+           AND outbox.payload_digest = $15
           JOIN tp_ledger.g1_authority_receipts AS receipt
-            ON receipt.tenant_id = outbox.tenant_id
+           ON receipt.tenant_id = outbox.tenant_id
            AND receipt.operation_id = outbox.operation_id
-           AND receipt.agent_id = $8
+           AND receipt.proposal_digest = $5
+           AND receipt.logical_action_digest = $6
+           AND receipt.authorization_epoch = $7::INT8
+           AND receipt.logical_authority_key_sha256 = $8
+           AND receipt.authorization_binding_sha256 = $9
+           AND receipt.agent_id = $13
            AND receipt.outcome = 'resource_reserved'
+          JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+           ON proposal.tenant_id = outbox.tenant_id
+           AND proposal.proposal_digest = outbox.proposal_digest
+           AND proposal.logical_action_digest = outbox.logical_action_digest
+           AND proposal.authorization_epoch = outbox.authorization_epoch
+           AND proposal.logical_authority_key_sha256 =
+             outbox.logical_authority_key_sha256
+           AND proposal.authorization_binding_sha256 =
+             outbox.authorization_binding_sha256
+           AND proposal.run_id = outbox.run_id
+           AND proposal.incident_id = outbox.incident_id
+           AND proposal.resource_id = outbox.resource_id
+           AND proposal.payload_digest = outbox.payload_digest
           WHERE resource.tenant_id = $1::UUID
-            AND resource.resource_id = $7
-            AND resource.active_run_id = $5::UUID
-            AND resource.holder_incident_id = $6::UUID
+            AND resource.resource_id = $12
+            AND resource.active_run_id = $10::UUID
+            AND resource.holder_incident_id = $11::UUID
             AND resource.holder_operation_id = $3::UUID
-            AND resource.holder_agent_id = $8
-            AND resource.current_fence = $9::INT8
+            AND resource.holder_agent_id = $13
+            AND resource.holder_proposal_digest = $5
+            AND resource.holder_logical_authority_key_sha256 = $8
+            AND resource.current_fence = $14::INT8
             AND resource.lease_expires_at > transaction_timestamp()
+            AND proposal.expires_at > transaction_timestamp()
           ON CONFLICT DO NOTHING
           RETURNING *
         `,
@@ -2434,6 +3925,11 @@ export class AuthorityStore {
           request.effectKey,
           request.operationId,
           request.requestDigest,
+          request.proposalDigest,
+          request.logicalActionDigest,
+          request.authorizationEpoch,
+          request.logicalAuthorityKeySha256,
+          request.authorizationBindingSha256,
           request.runId,
           request.incidentId,
           request.resourceId,
@@ -2451,10 +3947,16 @@ export class AuthorityStore {
               AND (
                 effect_key = $2::UUID
                 OR operation_id = $3::UUID
+                OR logical_action_digest = $4
               )
             LIMIT 2
           `,
-          [request.tenantId, request.effectKey, request.operationId]
+          [
+            request.tenantId,
+            request.effectKey,
+            request.operationId,
+            request.logicalActionDigest
+          ]
         );
         if (raced.rowCount > 1) {
           throw new InvariantViolationError(
@@ -2463,6 +3965,16 @@ export class AuthorityStore {
         }
         if (raced.rowCount === 1) {
           const effect = raced.rows[0];
+          if (
+            effect.logical_action_digest === request.logicalActionDigest &&
+            effect.payload_digest === request.payloadDigest
+          ) {
+            return {
+              outcome: "effect_already_recorded",
+              replayKind: "logical_authority_replay",
+              effect
+            };
+          }
           if (
             effect.effect_key !== request.effectKey ||
             effect.operation_id !== request.operationId ||
@@ -2512,6 +4024,25 @@ export class AuthorityStore {
         `,
         values
       );
+      const proposals = await client.query(
+        `
+          SELECT DISTINCT proposal.*
+          FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
+          JOIN tp_ledger.g1_authority_receipts AS receipt
+            ON receipt.tenant_id = proposal.tenant_id
+           AND receipt.proposal_digest = proposal.proposal_digest
+           AND receipt.logical_action_digest = proposal.logical_action_digest
+           AND receipt.authorization_epoch = proposal.authorization_epoch
+           AND receipt.logical_authority_key_sha256 =
+             proposal.logical_authority_key_sha256
+           AND receipt.authorization_binding_sha256 =
+             proposal.authorization_binding_sha256
+          WHERE receipt.tenant_id = $1::UUID
+            AND receipt.resource_id = $2
+          ORDER BY proposal.authorization_epoch, proposal.proposal_digest
+        `,
+        values
+      );
       const outbox = await client.query(
         `
           SELECT *
@@ -2535,6 +4066,7 @@ export class AuthorityStore {
       await client.query("COMMIT");
       return {
         resource: resource.rows[0] ?? null,
+        proposals: proposals.rows,
         receipts: receipts.rows,
         outbox: outbox.rows,
         effects: effects.rows

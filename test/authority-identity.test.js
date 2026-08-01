@@ -27,6 +27,8 @@ function proposal(overrides = {}) {
     retrievalId: "44444444-4444-4444-8444-444444444444",
     logicalActionDigest: logicalActionDigestFor(ACTION),
     authorityEvidenceBindingSha256: "b".repeat(64),
+    selectedEvidenceId: "55555555-5555-4555-8555-555555555555",
+    selectedEvidenceDigest: "c".repeat(64),
     policyVersion: "g1-admissibility-v2",
     selectedRank: 1,
     admittedAt: "2026-08-01T12:00:00.000Z",
@@ -103,6 +105,8 @@ test("proposal identity binds every exact DVI selection field", () => {
     { retrievalId: "66666666-6666-4666-8666-666666666666" },
     { logicalActionDigest: "c".repeat(64) },
     { authorityEvidenceBindingSha256: "d".repeat(64) },
+    { selectedEvidenceId: "66666666-6666-4666-8666-666666666666" },
+    { selectedEvidenceDigest: "e".repeat(64) },
     { policyVersion: "g1-admissibility-v3" },
     { admittedAt: "2026-08-01T12:00:01.000Z" },
     { expiresAt: "2026-08-01T12:01:01.000Z" }

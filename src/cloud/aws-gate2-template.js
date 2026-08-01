@@ -584,6 +584,15 @@ export function buildGate2Template() {
     AuthorityEvidenceId: uuidParameter(
       "Verified synthetic evidence UUID admitted by CockroachDB."
     ),
+    AuthorityProposalDigest: hexParameter(
+      "Database-authorized DVI proposal identity consumed by Gate Two."
+    ),
+    AuthorityLogicalActionDigest: hexParameter(
+      "Stable logical-action identity consumed by Gate Two."
+    ),
+    AuthoritySelectedEvidenceDigest: hexParameter(
+      "Exact selected evidence digest bound by the authorized DVI proposal."
+    ),
     AuthorityRaceId: uuidParameter(
       "One exact proof-race UUID accepted by both authority contenders."
     ),
@@ -890,6 +899,13 @@ export function buildGate2Template() {
       AUTHORITY_RUN_ID: ref("AuthorityRunId"),
       AUTHORITY_INCIDENT_ID: ref("AuthorityIncidentId"),
       AUTHORITY_EVIDENCE_ID: ref("AuthorityEvidenceId"),
+      AUTHORITY_PROPOSAL_DIGEST: ref("AuthorityProposalDigest"),
+      AUTHORITY_LOGICAL_ACTION_DIGEST: ref(
+        "AuthorityLogicalActionDigest"
+      ),
+      AUTHORITY_SELECTED_EVIDENCE_DIGEST: ref(
+        "AuthoritySelectedEvidenceDigest"
+      ),
       AUTHORITY_RACE_ID: ref("AuthorityRaceId"),
       AUTHORITY_RESOURCE_ID: ref("AuthorityResourceId"),
       SOURCE_COMMIT: ref("SourceCommit"),
@@ -1389,6 +1405,15 @@ export function buildGate2Template() {
       AuthorityArtifactDigest: {
         Value: ref("AuthorityArtifactDigest")
       },
+      AuthorityProposalDigest: {
+        Value: ref("AuthorityProposalDigest")
+      },
+      AuthorityLogicalActionDigest: {
+        Value: ref("AuthorityLogicalActionDigest")
+      },
+      AuthoritySelectedEvidenceDigest: {
+        Value: ref("AuthoritySelectedEvidenceDigest")
+      },
       ProbeSourceDigest: {
         Value: ref("ProbeSourceDigest")
       },
@@ -1477,9 +1502,12 @@ export function deploymentConfigDigest(configuration) {
         "databaseSecretVersionId",
         "evidenceId",
         "incidentId",
+        "logicalActionDigest",
+        "proposalDigest",
         "raceId",
         "resourceId",
         "runId",
+        "selectedEvidenceDigest",
         "tenantId"
       ]
         .sort()
