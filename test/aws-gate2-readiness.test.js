@@ -518,6 +518,8 @@ function releaseProvenanceReceipt() {
       headCommitterTime: "2026-07-31T10:00:00-04:00",
       shallow: false,
       replaceRefCount: 0,
+      replacementObjectsDisabled: true,
+      filesystemMonitorDisabled: true,
       legacyGraftFilePresent: false,
       alternateObjectDatabaseCount: 0,
       objectIntegrity: true
@@ -527,7 +529,10 @@ function releaseProvenanceReceipt() {
       regularFileCount: 100,
       executableFileCount: 0,
       symlinkCount: 0,
-      gitlinkCount: 0
+      gitlinkCount: 0,
+      indexEntryCount: 100,
+      skipWorktreeEntryCount: 0,
+      assumeUnchangedEntryCount: 0
     },
     claims: releaseClaimsReceipt(),
     cost: releaseCostReceipt(),
@@ -938,6 +943,26 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
   assert.throws(
     () =>
       validateReleaseProvenance(insecure, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const hiddenIndexEntry = releaseProvenanceReceipt();
+  hiddenIndexEntry.trackedTree.skipWorktreeEntryCount = 1;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(hiddenIndexEntry, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const replacementObjectsEnabled = releaseProvenanceReceipt();
+  replacementObjectsEnabled.history.replacementObjectsDisabled = false;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(replacementObjectsEnabled, {
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),
