@@ -79,6 +79,13 @@ exist. The exact cross-act recovery lookup now has a locally tested source
 control, but no provider-backed receipt. Public claims and final release
 readiness must therefore remain partial and blocked.
 
+The sanitized `tideproof.aws-authority-race-receipt.v4` now carries the exact
+configured active-run UUID, and its durable proof rejects a database
+observation for any other run. This closes one source-level prerequisite for
+joining the authority race to a per-drill identity. It does not yet bind the
+ranked evidence selection to that authority request, create the 100-run
+provider harness, or produce live evidence.
+
 ## Exact cross-act recovery lookup
 
 The recovery broker no longer selects a bundle by principal, session, and

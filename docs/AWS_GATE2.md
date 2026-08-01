@@ -367,14 +367,16 @@ evidence only and must not be used to deploy the repaired candidate.
     configuration digest and reverify aliases and roles.
 13. Assume only `AuthorityRaceCallerRole`. From the exact clean deployment
     checkout, run `npm run gate2:authority-race` with the immutable Authority
-    alias ARN, configured race UUID, exact source commit, and final
+    alias ARN, configured active-run UUID, configured race UUID, exact source
+    commit, and final
     configuration digest. The evidence runner rejects endpoint, profile,
     proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and
     tree-digest contamination; it resolves the expected role from the exact
     CloudFormation stack resource and validates the exact account plus the
     precommitted observed STS caller ARN/UserId triple before invoking Lambda.
     This binds the observed caller but does not prove a globally unique
-    AssumeRole issuance when a session name can be reused. Require two
+    AssumeRole issuance when a session name can be reused. Require the later
+    durable proof to report the exact configured active-run UUID. Require two
     distinct Lambda request bindings, two
     distinct CockroachDB session digests, overlapping database-clock
     intervals with positive duration and a positive intersection,
@@ -389,8 +391,9 @@ evidence only and must not be used to deploy the repaired candidate.
     observation; a reconstructed observation is rejected. Preserve the
     private invocations and database receipts;
     publish only the reviewed sanitized
-    `tideproof.aws-authority-race-receipt.v3`. Any sequential, ambiguous,
-    replayed, expanded, stale, extra, or unresolved result is not evidence.
+    `tideproof.aws-authority-race-receipt.v4`. Any wrong-run, sequential,
+    ambiguous, replayed, expanded, stale, extra, or unresolved result is not
+    evidence.
 14. From a signed-out browser, request only the ten enumerated public `GET`
     routes. From the exact clean deployment checkout, run:
 

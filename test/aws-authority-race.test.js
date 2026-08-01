@@ -24,6 +24,7 @@ const EXPECTED = Object.freeze({
   functionArn:
     "arn:aws:lambda:us-east-1:111111111111:function:tideproof-authority:proof",
   raceId: "55555555-5555-4555-8555-555555555555",
+  runId: "66666666-6666-4666-8666-666666666666",
   sourceCommit: "a".repeat(40)
 });
 
@@ -113,7 +114,7 @@ function response(contender, options = {}) {
 
 function proofResponse(options = {}) {
   const state = {
-    activeRunId: "66666666-6666-4666-8666-666666666666",
+    activeRunId: EXPECTED.runId,
     currentFence: "1",
     holderOperationId: IDS.alpha,
     outboxOperationId: IDS.alpha,
@@ -194,6 +195,8 @@ test("authority race CLI accepts only an exact aliased proof target", () => {
       EXPECTED.functionArn,
       "--race-id",
       EXPECTED.raceId,
+      "--run-id",
+      EXPECTED.runId,
       "--source-commit",
       EXPECTED.sourceCommit,
       "--config-digest",
@@ -208,6 +211,20 @@ test("authority race CLI accepts only an exact aliased proof target", () => {
       EXPECTED.functionArn.replace(":proof", ""),
       "--race-id",
       EXPECTED.raceId,
+      "--run-id",
+      EXPECTED.runId,
+      "--source-commit",
+      EXPECTED.sourceCommit,
+      "--config-digest",
+      EXPECTED.configDigest
+    ],
+    [
+      "--function-arn",
+      EXPECTED.functionArn,
+      "--race-id",
+      EXPECTED.raceId,
+      "--run-id",
+      "not-a-run-id",
       "--source-commit",
       EXPECTED.sourceCommit,
       "--config-digest",
@@ -375,6 +392,7 @@ test("authority race requires one overlapping winner and one durable denial", as
   );
   assert.equal(receipt.schemaVersion, AUTHORITY_RACE_RECEIPT_SCHEMA);
   assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.runId, EXPECTED.runId);
   assert.equal(receipt.contenders, 2);
   assert.equal(receipt.overlappingDatabaseIntervals, true);
   assert.equal(receipt.distinctDatabaseSessions, true);
@@ -531,6 +549,11 @@ test("authority race rejects durable proof drift, expansion, and stale observati
     proofResponse({ counts: { protectedEffectCount: "1" } }),
     proofResponse({ counts: { resourceReceiptCount: "3" } }),
     proofResponse({ state: { activeRunId: "not-a-run-id" } }),
+    proofResponse({
+      state: {
+        activeRunId: "77777777-7777-4777-8777-777777777777"
+      }
+    }),
     proofResponse({ state: { outboxOperationId: IDS.bravo } }),
     proofResponse({
       outcomes: {
@@ -577,6 +600,17 @@ test("authority race rejects durable proof drift, expansion, and stale observati
       /AUTHORITY_RACE_PROOF_REJECTED/
     );
   }
+  const otherRunId = "77777777-7777-4777-8777-777777777777";
+  assert.throws(
+    () =>
+      validateAuthorityRaceProof(
+        proofResponse({ state: { activeRunId: otherRunId } }),
+        observation,
+        { ...EXPECTED, runId: otherRunId },
+        CALLER_BINDING
+      ),
+    /AUTHORITY_RACE_PROOF_REJECTED/
+  );
   assert.throws(
     () =>
       validateAuthorityRaceProof(

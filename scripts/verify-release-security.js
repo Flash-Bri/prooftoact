@@ -346,6 +346,7 @@ const SOURCE_MARKERS = Object.freeze({
     "objects/info/alternates",
     "DescribeStackResourceCommand",
     "receipt.treeDigest !== checkout.treeDigest",
+    "runId: options.runId",
     "ignoreConfiguredEndpointUrls: true"
   ]),
   "aws-authority-race-validator": Object.freeze([
@@ -355,13 +356,15 @@ const SOURCE_MARKERS = Object.freeze({
     "value.fencingToken !== INITIAL_FENCING_TOKEN",
     "leaseExpiresAt <= completedAt",
     "Math.max(...overlapStarts) >= Math.min(...overlapEnds)",
+    "observation.runId !== expected.runId",
+    "state.activeRunId !== expected.runId",
     "stateObservedAt >= observationBinding.leaseExpiresAt"
   ]),
   "aws-boundary-ledger": Object.freeze([
     "The command is read-only and fail closed.",
     "The evidence runner rejects endpoint, profile, proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and tree-digest contamination",
-    "`tideproof.aws-authority-race-receipt.v3`",
-    "Any sequential, ambiguous, replayed, expanded, stale, extra, or unresolved result is not evidence."
+    "`tideproof.aws-authority-race-receipt.v4`",
+    "Any wrong-run, sequential, ambiguous, replayed, expanded, stale, extra, or unresolved result is not evidence."
   ]),
   "boundary-runtime": Object.freeze([
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN",

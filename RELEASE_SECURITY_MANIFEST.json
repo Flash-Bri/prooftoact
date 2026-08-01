@@ -36,19 +36,19 @@
       "id": "aws-authority-race",
       "path": "scripts/gate2-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
-      "sha256": "6e5d61847ac78fb95698ff0af0e97ae55e3c733bcb7e30f665fc3855dc0ad37e"
+      "sha256": "756a5068d48755bdaf20f17c966676ba2da2b62d2cd0a2f9fc76911f9617ff6d"
     },
     {
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "a89053d198125c7eda1625977de4a435454c87c9094d4db1685ab7bb581c341d"
+      "sha256": "11e680b1149b525f7e354fbd5d555eb0a66a38a15984b69a615830a07d18e017"
     },
     {
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "3c7dd01baf3ded4981b3347b5fe403e5481e163df5ea8cced61d74029b04c841"
+      "sha256": "3ef96b2942997098b5b366d50811770b9f4c19de5c77908dd97f42a4dd3adf8a"
     },
     {
       "id": "aws-evidence-identity",

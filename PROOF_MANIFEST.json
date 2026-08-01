@@ -67,7 +67,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "3c7dd01baf3ded4981b3347b5fe403e5481e163df5ea8cced61d74029b04c841",
+      "sha256": "3ef96b2942997098b5b366d50811770b9f4c19de5c77908dd97f42a4dd3adf8a",
       "kind": "boundary-ledger"
     },
     {
@@ -97,7 +97,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "06643266ccfd66076d7f942e4de82fa5021d8f5b581dcb9f19f7c0e3c234c7d8",
+      "sha256": "64bff84dacfe277b61170b475cc3a8cef9a67164251bc8b2a32ac5e6fa8117e5",
       "kind": "boundary-ledger"
     },
     {
@@ -151,7 +151,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "de64c5878dc46859ce682b7bd81169ca9ea4d18530fc140620faf19575c06037",
+      "sha256": "cd5cc06ec3224b412109a382932a18394d9364437351e957199b57a6a59fe0e6",
       "kind": "boundary-ledger"
     },
     {
@@ -193,13 +193,13 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "4edc9bd93b1be2f0a9dc53bcffdf72d9fc28f4e924721808cbf90e1dbbae6fe4",
+      "sha256": "bdb8fe9adf9e7d99068ef524936d0b78c51f763c1731d225eb9837cf5facd077",
       "kind": "verification-code"
     },
     {
       "id": "gate2-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
-      "sha256": "a89053d198125c7eda1625977de4a435454c87c9094d4db1685ab7bb581c341d",
+      "sha256": "11e680b1149b525f7e354fbd5d555eb0a66a38a15984b69a615830a07d18e017",
       "kind": "verification-code"
     },
     {
@@ -271,7 +271,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "a63a45e65e72dee61016a2ef2e1634a8a96f3dc73b545539d258b712f081e681",
+      "sha256": "75d61a3a84b5f7a08f238aae91980526f714b2cade21549f81a0b7726c0beb90",
       "kind": "boundary-ledger"
     },
     {
@@ -403,7 +403,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "21503986a9aac40f7bed7fc1460f7f794047ab6813213050935475638153acf6",
+      "sha256": "2902451c5e0b5d48baf06eef2d228b90e1b5e2654e339b554f8c76075463e159",
       "kind": "boundary-ledger"
     },
     {
@@ -415,7 +415,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "9c529477d77f8c09a3a65dcb1e56f2ea5bab27f0b63dde0ca889e9598394315d",
+      "sha256": "02f28070b72fbbbafada9f9a4c1ac56c917a3c0f4c2d61833e1c3a4f0033bdf5",
       "kind": "verification-code"
     },
     {
@@ -427,7 +427,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "8bcbbcf71dad892729c352643ec7eb7b306c846d6d89018702543d1f699cebf3",
+      "sha256": "6425c642231fef4009910aae5d6ccc309815fbc4279f1be93ab7783c4b2edec4",
       "kind": "boundary-ledger"
     },
     {
@@ -827,7 +827,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds 31 reviewed security surfaces and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, immutable Lambda aliases, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, database bootstrap markers, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds 32 reviewed security surfaces and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, immutable Lambda aliases, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, database bootstrap markers, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind exact-release live security receipts and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]
