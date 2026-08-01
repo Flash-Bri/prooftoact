@@ -407,6 +407,21 @@ test("authority race rejects non-overlap, alias drift, and outcome drift", () =>
             completedAt: "2026-08-01T12:00:01.000Z"
           }),
           bravo: response("bravo", {
+            startedAt: "2026-08-01T12:00:01.000Z"
+          })
+        },
+        EXPECTED
+      ),
+    /AUTHORITY_RACE_NOT_OVERLAPPING/
+  );
+  assert.throws(
+    () =>
+      validateAuthorityRaceInvocations(
+        {
+          alpha: response("alpha", {
+            completedAt: "2026-08-01T12:00:01.000Z"
+          }),
+          bravo: response("bravo", {
             startedAt: "2026-08-01T12:00:02.000Z"
           })
         },
@@ -434,7 +449,7 @@ test("authority race rejects non-overlap, alias drift, and outcome drift", () =>
             outcome: "resource_reserved",
             body: {
               reason: null,
-              fencingToken: "2",
+              fencingToken: "1",
               leaseExpiresAt: "2026-08-01T12:05:00.000Z"
             }
           })
@@ -443,6 +458,36 @@ test("authority race rejects non-overlap, alias drift, and outcome drift", () =>
       ),
     /AUTHORITY_RACE_RESULT_REJECTED/
   );
+});
+
+test("authority race requires positive transaction duration, a fresh first fence, and a later canonical lease", () => {
+  for (const changedAlpha of [
+    response("alpha", {
+      startedAt: "2026-08-01T12:00:02.000Z",
+      completedAt: "2026-08-01T12:00:02.000Z"
+    }),
+    response("alpha", {
+      body: { fencingToken: "2" }
+    }),
+    response("alpha", {
+      body: { leaseExpiresAt: "not-a-timestamp" }
+    }),
+    response("alpha", {
+      body: { leaseExpiresAt: "2026-08-01T12:00:02.000Z" }
+    })
+  ]) {
+    assert.throws(
+      () =>
+        validateAuthorityRaceInvocations(
+          {
+            alpha: changedAlpha,
+            bravo: response("bravo")
+          },
+          EXPECTED
+        ),
+      /AUTHORITY_RACE_RESPONSE_REJECTED/
+    );
+  }
 });
 
 test("authority race rejects response expansion and model authority", () => {
@@ -537,6 +582,35 @@ test("authority race rejects durable proof drift, expansion, and stale observati
       validateAuthorityRaceProof(
         proofResponse(),
         { ...observation, unexpected: true },
+        EXPECTED,
+        CALLER_BINDING
+      ),
+    /AUTHORITY_RACE_PROOF_REJECTED/
+  );
+  assert.throws(
+    () =>
+      validateAuthorityRaceProof(
+        proofResponse(),
+        { ...observation },
+        EXPECTED,
+        CALLER_BINDING
+      ),
+    /AUTHORITY_RACE_PROOF_REJECTED/
+  );
+  const expiringObservation = validateAuthorityRaceInvocations(
+    {
+      alpha: response("alpha", {
+        body: { leaseExpiresAt: "2026-08-01T12:00:04.000Z" }
+      }),
+      bravo: response("bravo")
+    },
+    EXPECTED
+  );
+  assert.throws(
+    () =>
+      validateAuthorityRaceProof(
+        proofResponse(),
+        expiringObservation,
         EXPECTED,
         CALLER_BINDING
       ),

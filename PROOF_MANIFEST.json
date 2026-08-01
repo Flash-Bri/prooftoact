@@ -67,7 +67,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "81bda9315b2efae993bd478221c6078ac2a215c3a39683ad6e19778fdad27f0d",
+      "sha256": "3c7dd01baf3ded4981b3347b5fe403e5481e163df5ea8cced61d74029b04c841",
       "kind": "boundary-ledger"
     },
     {
@@ -191,6 +191,18 @@
       "kind": "local-validation"
     },
     {
+      "id": "gate2-authority-race-tests",
+      "path": "test/aws-authority-race.test.js",
+      "sha256": "4edc9bd93b1be2f0a9dc53bcffdf72d9fc28f4e924721808cbf90e1dbbae6fe4",
+      "kind": "verification-code"
+    },
+    {
+      "id": "gate2-authority-race-validator",
+      "path": "src/cloud/aws-authority-race.js",
+      "sha256": "a89053d198125c7eda1625977de4a435454c87c9094d4db1685ab7bb581c341d",
+      "kind": "verification-code"
+    },
+    {
       "id": "gate2-console-stop-receipt",
       "path": "evidence/gate2-console-stop-receipt-2026-07-30.md",
       "sha256": "7a891b1810d8343e19c3cff40591302b2c483b8fdacf7b68edf68596ad18258d",
@@ -205,13 +217,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "2a10f43e8f2ce69f0ca825ab2c4fc7717add120679e7cfa6b98efd16185d008b",
+      "sha256": "78f46f377c885d269e1fe2a7e9b6bc0eae827b22456720836ffbfdd40854437c",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "e349cd37dae7fcacc89e173626a1b7d709abf76f63bc741447e0b79bea30b68f",
+      "sha256": "db39f1678214941c53f0bcdd7736a24ae4b39064a11712b66fe2cc003874ec41",
       "kind": "verification-code"
     },
     {
@@ -229,7 +241,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "1e3d2bf275b3c53f9d3a24b2a5d2a111f6a574df92d9a10a58de0a67d87c669a",
+      "sha256": "a528ca1f20e2d8609d571b545576206b683a796c29c866918e0fff4d68a17cd1",
       "kind": "verification-code"
     },
     {
@@ -259,7 +271,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "1482bba117d510975648eed982326448b3013a0fc4a13c19512582573bbfea41",
+      "sha256": "a63a45e65e72dee61016a2ef2e1634a8a96f3dc73b545539d258b712f081e681",
       "kind": "boundary-ledger"
     },
     {
@@ -283,7 +295,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "31cdf550dae8a01bc89bbd508d1e2998adfba7ae99abe13fcb9917805f1b353b",
+      "sha256": "724ac1ccb64503abd3e7b00e1a928ac236b772c8cacf0bac816e57c80a09da1b",
       "kind": "boundary-ledger"
     },
     {
@@ -355,13 +367,13 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "628245ad8c02f65d109d66dc5dc57134289824b62fb38919a1a8a243a2c5e07f",
+      "sha256": "8264424bd6065bb7681b78c1cba2541a6fea4844020b42cf15b111a57578cd38",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "b7ccbdcba38f812deb5c0dcc352e77a814f5d73a490a2e60de1efc931789ec24",
+      "sha256": "79e5aceaec9edd0f34cced73f1890da32d967f477b4b00c2b107f1b11946a118",
       "kind": "verification-code"
     },
     {
@@ -385,25 +397,25 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "f5ddf6bb779332d099313d2d3ea4df019ac6fbe5b4f28f136b8869814b94cc73",
+      "sha256": "06e53a50fec9a2b836d3f67bb65ef769dc7bacf26fb8a977896bfce50c6e9cf1",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "c6730274d3f410e482c97398c2ba53f334106133b3e1fb92d98cc580ab95818a",
+      "sha256": "21503986a9aac40f7bed7fc1460f7f794047ab6813213050935475638153acf6",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "6c5f28af7d950bccf4a59d015edffefc4ec6f1e34a27415cafd8863accef9a16",
+      "sha256": "3d8afebc72c272934ea8f28fe4f08c338717f443983c300d5f57fe8a0eec2027",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "ce6a536087437758889459079264f2a75961f7559b42b404c50af611fd2f2228",
+      "sha256": "9c529477d77f8c09a3a65dcb1e56f2ea5bab27f0b63dde0ca889e9598394315d",
       "kind": "verification-code"
     },
     {
@@ -415,7 +427,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "80b9f12cb6c5db0aa474752d968da10adad3906b1392217e73f0a4ef3a28a2c8",
+      "sha256": "8bcbbcf71dad892729c352643ec7eb7b306c846d6d89018702543d1f699cebf3",
       "kind": "boundary-ledger"
     },
     {
@@ -585,11 +597,13 @@
       "artifacts": [
         "aws-gate2-design",
         "gate2-authority-local-validation",
+        "gate2-authority-race-tests",
+        "gate2-authority-race-validator",
         "gate2-local-validation"
       ],
-      "acceptanceBoundary": "Local code and tests do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
+      "acceptanceBoundary": "Local code and adversarial tests require positive-duration serializable transactions with a positive overlap interval, an initial fence of one, a canonical lease that remains active through the exact bound durable observation, and the expected terminal-state shape. They do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
       "remainingRequirements": [
-        "Accepted private invocation and CockroachDB receipts plus a sanitized v2 authority-race receipt proving overlap, two terminal receipts, one winner, winner-aware denial, one outbox, the winning fence, no pending receipt, and zero protected effects."
+        "Accepted private invocation and CockroachDB receipts plus a sanitized v3 authority-race receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
       ]
     }
   ],

@@ -39,10 +39,16 @@
       "sha256": "6e5d61847ac78fb95698ff0af0e97ae55e3c733bcb7e30f665fc3855dc0ad37e"
     },
     {
+      "id": "aws-authority-race-validator",
+      "path": "src/cloud/aws-authority-race.js",
+      "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
+      "sha256": "a89053d198125c7eda1625977de4a435454c87c9094d4db1685ab7bb581c341d"
+    },
+    {
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "81bda9315b2efae993bd478221c6078ac2a215c3a39683ad6e19778fdad27f0d"
+      "sha256": "3c7dd01baf3ded4981b3347b5fe403e5481e163df5ea8cced61d74029b04c841"
     },
     {
       "id": "aws-evidence-identity",
@@ -60,7 +66,7 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "e349cd37dae7fcacc89e173626a1b7d709abf76f63bc741447e0b79bea30b68f"
+      "sha256": "db39f1678214941c53f0bcdd7736a24ae4b39064a11712b66fe2cc003874ec41"
     },
     {
       "id": "aws-template-generated",
@@ -174,7 +180,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "f5ddf6bb779332d099313d2d3ea4df019ac6fbe5b4f28f136b8869814b94cc73"
+      "sha256": "06e53a50fec9a2b836d3f67bb65ef769dc7bacf26fb8a977896bfce50c6e9cf1"
     },
     {
       "id": "security-policy",

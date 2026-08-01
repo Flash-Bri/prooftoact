@@ -377,13 +377,17 @@ evidence only and must not be used to deploy the repaired candidate.
     AssumeRole issuance when a session name can be reused. Require two
     distinct Lambda request bindings, two
     distinct CockroachDB session digests, overlapping database-clock
-    intervals, `SERIALIZABLE` on both contenders, exactly one
+    intervals with positive duration and a positive intersection,
+    `SERIALIZABLE` on both contenders, exactly one
     `resource_reserved`, and exactly one `resource_held_denied`. Then require
     the command's third, read-only proof invocation to observe exactly those
     two durable receipts, the denial's observed holder/fence bound to the
-    winner, one winner-bound outbox intent, the same current holder and fence,
-    no pending receipt, and zero protected effects after both database
-    intervals. Preserve the private invocations and database receipts;
+    winner, an initial fence of one, one winner-bound outbox intent, the same
+    current holder and fence, no pending receipt, and zero protected effects
+    after both database intervals but before the winner's canonical lease
+    expires. The proof must consume the exact unmodified in-process race
+    observation; a reconstructed observation is rejected. Preserve the
+    private invocations and database receipts;
     publish only the reviewed sanitized
     `tideproof.aws-authority-race-receipt.v3`. Any sequential, ambiguous,
     replayed, expanded, stale, extra, or unresolved result is not evidence.

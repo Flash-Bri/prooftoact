@@ -1197,7 +1197,7 @@ export function validateReleaseProvenance(
       /^\d{4}-\d{2}-\d{2}$/.test(security.reviewedOn) &&
       security.manifestPath === "RELEASE_SECURITY_MANIFEST.json" &&
       HEX_64.test(security.manifestSha256) &&
-      security.surfaceCount === 31 &&
+      security.surfaceCount === 32 &&
       security.publicPathCount === 10 &&
       security.securityHeaderCount === 9 &&
       security.negativeProbeCount === 6 &&
