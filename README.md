@@ -79,6 +79,7 @@ a secret store and never enter the repository.
 ```sh
 npm run proof:verify
 npm run claims:verify
+npm run governance:verify
 npm run rights:verify
 npm run accessibility:verify
 npm run accessibility:browser
@@ -118,10 +119,21 @@ hash-binds the current README, browser, local and AWS-hosted scenario copy,
 technical boundaries, contest matrix, video script, and Devpost draft. Run
 `npm run claims:verify` to reject surface drift, missing synthetic or
 local-versus-live boundaries, premature submission approvals, removed stop
-tokens, or unreviewed public URLs. Its `CURRENT_PUBLIC_CLAIMS_PASS` result is
+tokens, or unreviewed public URLs.
+Its `CURRENT_PUBLIC_CLAIMS_PASS` result is
 not proof that every statement is true or permission to deploy, publish, or
 submit; accepted live receipts and an exact-release private review remain
 mandatory.
+
+The sanitized [`docs/RELEASE_GOVERNANCE.md`](docs/RELEASE_GOVERNANCE.md)
+control binds a read-only GitHub settings observation to the reviewed public
+repository, security policy, and required CI workflow. Run
+`npm run governance:verify` to reject snapshot, branch-protection, security
+setting, workflow-identity, or surface-hash drift. Its
+`CURRENT_REPOSITORY_GOVERNANCE_PASS` result verifies a historical checkpoint,
+not current GitHub state or final release approval; the exact final commit
+still requires a fresh API observation, successful hosted CI, and signed-out
+repository review.
 
 The deterministic
 [`docs/DEPENDENCY_INVENTORY.md`](docs/DEPENDENCY_INVENTORY.md) enumerates all

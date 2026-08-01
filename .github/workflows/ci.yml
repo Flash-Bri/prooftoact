@@ -43,6 +43,9 @@ jobs:
       - name: Verify current-source cost guards
         run: npm run cost:verify
 
+      - name: Verify repository release governance snapshot
+        run: npm run governance:verify
+
       - name: Verify current-surface rights inventory
         run: npm run rights:verify
 

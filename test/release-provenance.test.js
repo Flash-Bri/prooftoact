@@ -224,6 +224,32 @@ function costReceipt() {
   };
 }
 
+function governanceReceipt() {
+  return {
+    schemaVersion: "tideproof.release-governance-verification.v1",
+    status: "CURRENT_REPOSITORY_GOVERNANCE_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-08-01",
+    manifestPath: "RELEASE_GOVERNANCE_MANIFEST.json",
+    manifestSha256: "5".repeat(64),
+    snapshotPath: "evidence/github-release-governance-2026-08-01.json",
+    snapshotSha256: "6".repeat(64),
+    observedAt: "2026-08-01T01:45:38Z",
+    sourceCommit: "7".repeat(40),
+    sourceTree: "8".repeat(40),
+    surfaceCount: 5,
+    requiredCheckCount: 1,
+    requiredApprovingReviewCount: 0,
+    finalReleaseRequirements: [
+      "Requery final settings.",
+      "Verify final hosted CI.",
+      "Complete signed-out review."
+    ],
+    checks: { fixtureGovernancePass: true },
+    claimBoundary: "Fixture historical repository governance only."
+  };
+}
+
 function accessibilityReceipt() {
   return {
     schemaVersion: "tideproof.accessibility-static.v1",
@@ -543,12 +569,13 @@ test("complete provenance receipt binds source, install, inventory, and notices"
       verifyAccessibilityReceipt: () => accessibilityReceipt(),
       verifyClaims: () => claimsReceipt(),
       verifyCost: () => costReceipt(),
+      verifyGovernance: () => governanceReceipt(),
       verifyPrivacy: () => privacyReceipt(),
       verifyRights: () => rightsReceipt(),
       verifySecurity: () => securityReceipt(),
       verifySubmission: () => submissionReceipt()
     });
-    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v7");
+    assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v8");
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.match(
@@ -558,6 +585,7 @@ test("complete provenance receipt binds source, install, inventory, and notices"
     assert.equal(receipt.checks.installedTreeMatchesLock, true);
     assert.equal(receipt.checks.currentClaimSurfacesVerified, true);
     assert.equal(receipt.checks.currentCostGuardsVerified, true);
+    assert.equal(receipt.checks.repositoryGovernanceSnapshotVerified, true);
     assert.equal(receipt.checks.releasePrivacyVerified, true);
     assert.equal(receipt.checks.currentSurfaceRightsVerified, true);
     assert.equal(receipt.checks.staticAccessibilityVerified, true);
@@ -568,6 +596,7 @@ test("complete provenance receipt binds source, install, inventory, and notices"
     assert.equal(receipt.accessibility.finalReleaseReady, false);
     assert.equal(receipt.claims.finalReleaseReady, false);
     assert.equal(receipt.cost.finalReleaseReady, false);
+    assert.equal(receipt.governance.finalReleaseReady, false);
     assert.equal(receipt.security.finalReleaseReady, false);
     assert.equal(receipt.submission.finalReleaseReady, false);
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);

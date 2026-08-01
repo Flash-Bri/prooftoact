@@ -199,13 +199,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "daf307ab086389cac40ecd2a29702243f56dfa58a25f9402cbdbce1fa5a68701",
+      "sha256": "72984ca1e5acea2b392fd87d055e4fca077183d7a34718ee2e673fb28712a918",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "3d8e59218dcc37cc2e0842cf9809ce58fc749c36c2195a11531506a2bada0ea8",
+      "sha256": "8940a41ba7fd33cf041a542427c0ff340208b484761f9f98721cfee52adc8bf4",
       "kind": "verification-code"
     },
     {
@@ -223,7 +223,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "eae7483ebe23de177323c1434a60ffef5766057a91fac99cadb39eb74a3b4bd2",
+      "sha256": "ad2047a080862d90f798e6add84d5b7a75302e5acd84157bbd57c0cf614a6493",
       "kind": "verification-code"
     },
     {
@@ -241,7 +241,7 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "20f6b8fcbc5d674ae3e4cef0b64adbadad8c2996936191d104fe823c5d554f21",
+      "sha256": "12ca90ad4e144d0d7b4c747d6a6560aa9dcdd94bca724e3c671d13092f6e787d",
       "kind": "verification-code"
     },
     {
@@ -253,7 +253,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "415000902918348fcfe4f9b47d86fcda7128c78e6be043ecf5a78207ed3c3734",
+      "sha256": "7736730c0951b9b782c9e9ddad5d0284efa677f52fc978a83ca822e4fae4c189",
       "kind": "boundary-ledger"
     },
     {
@@ -277,7 +277,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "5f144eda35fb5b4fc38be8f1ecc00947ec72208d4653c0c1d6b28ef1ed880f4b",
+      "sha256": "40f485cb54ab568239e574ee3e93d48366efddd503ae93d91db6827899b03f2a",
       "kind": "boundary-ledger"
     },
     {
@@ -290,6 +290,36 @@
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
       "sha256": "24d4a87c56713a51a5372fc52de061c83ec8825ab328a6428d0c71c23515d43c",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-governance-ledger",
+      "path": "docs/RELEASE_GOVERNANCE.md",
+      "sha256": "2f89ade0f4e5498a4a3d510dcecf73a93cdb5abbc6145d3db890974db22dbdeb",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-governance-manifest",
+      "path": "RELEASE_GOVERNANCE_MANIFEST.json",
+      "sha256": "ce25b77121fb9a1a86cf686f621feae9783d465781aca2d2b440c1e5771c41b2",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-governance-snapshot",
+      "path": "evidence/github-release-governance-2026-08-01.json",
+      "sha256": "527eeea8909f1006fa4337e7517ded81907e46548fa395eacad9ec38284a65a8",
+      "kind": "release-receipt"
+    },
+    {
+      "id": "release-governance-tests",
+      "path": "test/release-governance.test.js",
+      "sha256": "6280c2564cfa71ef9b00fd1cbe85cee0bc9bd4e7347d4a5bdaae1bb89dc22e3d",
+      "kind": "verification-code"
+    },
+    {
+      "id": "release-governance-verifier",
+      "path": "scripts/verify-release-governance.js",
+      "sha256": "54cd36d83f7727bd287e103c3ef1cb272c7ac0b42a057210dfd140c1550ecace",
       "kind": "verification-code"
     },
     {
@@ -319,19 +349,19 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "056fefe25c7bb5e9a5f3c948166ad6b60d5018a09c46f9695cbba78037613494",
+      "sha256": "500647beb7fd52a6a96d89a677e7d72c522809d4122f1efd6ffaa9edd770685c",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "dc628a1db34537a38eace33adc91b8169a644e92a87fbcf8d2ab7fb1830799af",
+      "sha256": "9af94a24cf4362f904a56a2cbe7ded27c4db746dc378ff060b9a828ef0117a86",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "f2499611c166beccbb034e9d8ab98d03484eb665c386ab32756b0e80bf472ae7",
+      "sha256": "397b835377fdd29a0b7a2983f4955f5770cdd3de59d222b66163d21d2855e920",
       "kind": "boundary-ledger"
     },
     {
@@ -355,7 +385,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "de2562b7e6622694066bcaf4746f0e780bf6b96188b7b0f6b07643c75af8de41",
+      "sha256": "81dedec9cc0cb789c7a5d3a482b24e27eccc3fc359da03fa5e9cdce7ef46d051",
       "kind": "boundary-ledger"
     },
     {
@@ -379,7 +409,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "da4f3af6fa18cec85be73d83bf401029f2068260aa76a2e71278211a36d4f34b",
+      "sha256": "698e2b6cc24c3313b362e51a206a54d2ebe5c0335af2d885b454c73ec514adf1",
       "kind": "boundary-ledger"
     },
     {
@@ -397,7 +427,7 @@
     {
       "id": "security-policy",
       "path": "SECURITY.md",
-      "sha256": "4141eadb0a9a106724bbeb27167c9340944a65424feced81a3203313118b7828",
+      "sha256": "e024a73c8000001ef4fba9318814a423e7cf8f59e8fd74ebfe03e296d10db13b",
       "kind": "boundary-ledger"
     }
   ],
@@ -668,6 +698,23 @@
       ]
     },
     {
+      "id": "release-governance-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "release-ci-workflow",
+        "release-governance-ledger",
+        "release-governance-manifest",
+        "release-governance-snapshot",
+        "release-governance-tests",
+        "release-governance-verifier",
+        "security-policy"
+      ],
+      "boundary": "The exact current-source verifier hash-binds five governance surfaces and validates a sanitized read-only GitHub API observation of the public repository, required pull-request path, strict verify check, administrator enforcement, conversation resolution, force-push and deletion blocks, vulnerability alerts, secret scanning, push protection, deliberate single-writer Dependabot boundary, and the successful hosted CI run at the observed commit. It returns CURRENT_REPOSITORY_GOVERNANCE_PASS with finalReleaseReady false. It does not query GitHub, claim a human approval requirement, prove settings remain unchanged, establish vulnerability absence, or authorize deployment, publication, or submission.",
+      "remainingRequirements": [
+        "Requery complete repository governance at the exact final release commit, bind the successful required CI run, and complete signed-out repository, metadata, and public-link review."
+      ]
+    },
+    {
       "id": "release-privacy-control",
       "proofState": "PARTIAL",
       "artifacts": [
@@ -694,6 +741,11 @@
         "release-cost-manifest",
         "release-cost-tests",
         "release-cost-verifier",
+        "release-governance-ledger",
+        "release-governance-manifest",
+        "release-governance-snapshot",
+        "release-governance-tests",
+        "release-governance-verifier",
         "release-privacy-ledger",
         "release-privacy-manifest",
         "release-privacy-tests",
@@ -709,7 +761,7 @@
         "release-submission-tests",
         "release-submission-verifier"
       ],
-      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, current-source cost, bounded privacy, current-surface rights, static accessibility, current-source security, and fail-closed submission-draft receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, current or final spend, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, entrant eligibility or authority, deployment approval, or submission approval.",
+      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, current-source cost, historical repository-governance, bounded privacy, current-surface rights, static accessibility, current-source security, and fail-closed submission-draft receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, current or final spend, current GitHub settings, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, entrant eligibility or authority, deployment approval, or submission approval.",
       "remainingRequirements": [
         "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
       ]

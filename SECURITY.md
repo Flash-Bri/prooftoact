@@ -51,6 +51,20 @@ vulnerability-free claim, penetration test, live IAM receipt, or publication
 authorization. The exact scope and remaining live/private review requirements
 are documented in `docs/RELEASE_SECURITY.md`.
 
+## Repository governance gate
+
+`npm run governance:verify` validates a sanitized historical observation of
+repository visibility, branch protection, required CI, vulnerability alerts,
+secret scanning, and push protection against exact reviewed source hashes.
+The observation records that automated Dependabot security-update pull
+requests were deliberately disabled at that checkpoint to preserve the
+single-writer release lane; vulnerability alerts and explicit dependency
+review remain required.
+
+`CURRENT_REPOSITORY_GOVERNANCE_PASS` does not query GitHub or establish that
+settings remain unchanged. Requery and review the complete GitHub settings at
+the exact final release commit before publication or submission.
+
 ## Safe research boundary
 
 Testing must stay within locally owned fixtures or explicitly authorized

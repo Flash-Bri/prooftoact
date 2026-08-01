@@ -379,6 +379,43 @@ function releaseCostReceipt() {
   };
 }
 
+function releaseGovernanceReceipt() {
+  return {
+    schemaVersion: "tideproof.release-governance-verification.v1",
+    status: "CURRENT_REPOSITORY_GOVERNANCE_PASS",
+    finalReleaseReady: false,
+    reviewedOn: "2026-08-01",
+    manifestPath: "RELEASE_GOVERNANCE_MANIFEST.json",
+    manifestSha256: "5".repeat(64),
+    snapshotPath: "evidence/github-release-governance-2026-08-01.json",
+    snapshotSha256: "6".repeat(64),
+    observedAt: "2026-08-01T01:45:38Z",
+    sourceCommit: "7".repeat(40),
+    sourceTree: "8".repeat(40),
+    surfaceCount: 5,
+    requiredCheckCount: 1,
+    requiredApprovingReviewCount: 0,
+    finalReleaseRequirements: [
+      "Requery final settings.",
+      "Verify final hosted CI.",
+      "Complete signed-out review."
+    ],
+    checks: {
+      canonicalManifest: true,
+      canonicalSnapshot: true,
+      exactSurfaceHashes: true,
+      publicRepositoryCoordinatesExact: true,
+      branchProtectionSnapshotExact: true,
+      securitySnapshotExact: true,
+      requiredCiSnapshotExact: true,
+      localWorkflowIdentityExact: true,
+      publicBoundariesExplicit: true,
+      nonfinalBoundaryPreserved: true
+    },
+    claimBoundary: "Fixture historical repository governance only."
+  };
+}
+
 function releaseSecurityReceipt() {
   return {
     schemaVersion: "tideproof.release-security-verification.v1",
@@ -461,7 +498,7 @@ function releaseSubmissionReceipt() {
 
 function releaseProvenanceReceipt() {
   return {
-    schemaVersion: "tideproof.release-provenance.v7",
+    schemaVersion: "tideproof.release-provenance.v8",
     status: "PASS",
     source: {
       commit: SOURCE_COMMIT,
@@ -494,6 +531,7 @@ function releaseProvenanceReceipt() {
     },
     claims: releaseClaimsReceipt(),
     cost: releaseCostReceipt(),
+    governance: releaseGovernanceReceipt(),
     privacy: privacyReceipt(),
     rights: releaseRightsReceipt(),
     accessibility: accessibilityReceipt(),
@@ -553,6 +591,7 @@ function releaseProvenanceReceipt() {
       bundledThirdPartyNoticesMatchInputs: true,
       currentClaimSurfacesVerified: true,
       currentCostGuardsVerified: true,
+      repositoryGovernanceSnapshotVerified: true,
       releasePrivacyVerified: true,
       currentSurfaceRightsVerified: true,
       staticAccessibilityVerified: true,

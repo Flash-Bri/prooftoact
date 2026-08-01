@@ -85,7 +85,7 @@
       "id": "aws-readiness-runner",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
-      "sha256": "3d8e59218dcc37cc2e0842cf9809ce58fc749c36c2195a11531506a2bada0ea8"
+      "sha256": "8940a41ba7fd33cf041a542427c0ff340208b484761f9f98721cfee52adc8bf4"
     },
     {
       "id": "cost-boundary-ledger",

@@ -1,0 +1,52 @@
+{
+  "schema": "tideproof.release-governance-manifest.v1",
+  "status": "CURRENT_REPOSITORY_GOVERNANCE_REVIEWED_FINAL_RECHECK_PENDING",
+  "reviewedOn": "2026-08-01",
+  "claimBoundary": "This manifest binds a sanitized historical GitHub governance observation and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.",
+  "repository": {
+    "fullName": "Flash-Bri/tideproof",
+    "htmlUrl": "https://github.com/Flash-Bri/tideproof",
+    "visibility": "public",
+    "defaultBranch": "main",
+    "requiredWorkflow": "CI",
+    "requiredCheck": "verify"
+  },
+  "surfaces": [
+    {
+      "id": "ci-workflow",
+      "path": ".github/workflows/ci.yml",
+      "role": "REQUIRED_CHECK_SOURCE",
+      "sha256": "12ca90ad4e144d0d7b4c747d6a6560aa9dcdd94bca724e3c671d13092f6e787d"
+    },
+    {
+      "id": "governance-ledger",
+      "path": "docs/RELEASE_GOVERNANCE.md",
+      "role": "NONFINAL_CONTROL_BOUNDARY",
+      "sha256": "2f89ade0f4e5498a4a3d510dcecf73a93cdb5abbc6145d3db890974db22dbdeb"
+    },
+    {
+      "id": "governance-snapshot",
+      "path": "evidence/github-release-governance-2026-08-01.json",
+      "role": "SANITIZED_READ_ONLY_OBSERVATION",
+      "sha256": "527eeea8909f1006fa4337e7517ded81907e46548fa395eacad9ec38284a65a8"
+    },
+    {
+      "id": "public-readme",
+      "path": "README.md",
+      "role": "PUBLIC_PROJECT_SURFACE",
+      "sha256": "0e935a3cff53d13476c383baf23d576efb1e510efe3d5e1307749cdb1a03be09"
+    },
+    {
+      "id": "security-policy",
+      "path": "SECURITY.md",
+      "role": "PUBLIC_SECURITY_BOUNDARY",
+      "sha256": "e024a73c8000001ef4fba9318814a423e7cf8f59e8fd74ebfe03e296d10db13b"
+    }
+  ],
+  "finalReleaseRequirements": [
+    "Requery repository visibility, security settings, and complete branch protection at the exact final release commit.",
+    "Verify the required CI run succeeds at the exact final release commit and that the protected check identity still matches the intended GitHub Actions workflow.",
+    "Complete signed-out repository, release metadata, and public-link review before publication and submission."
+  ],
+  "finalReleaseReady": false
+}
