@@ -69,10 +69,10 @@ test("current release claim surfaces match the reviewed pending state", () => {
   const receipt = verifyReleaseClaims({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_PUBLIC_CLAIMS_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.claimCount, 11);
+  assert.equal(receipt.claimCount, 12);
   assert.deepEqual(receipt.claimStates, {
-    VERIFIED: 7,
-    PARTIAL: 4,
+    VERIFIED: 5,
+    PARTIAL: 7,
     PENDING: 0
   });
   assert.equal(receipt.surfaceCount, 13);

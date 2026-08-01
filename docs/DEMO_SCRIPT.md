@@ -36,11 +36,14 @@ the event.
 - **96–116:** Show exactly one committed lease and its fencing token and
   receipt in CockroachDB.
 - **116–134:** Terminate the winning agent after its checkpoint.
-- **134–155:** A successor reconstructs evidence, receipt, and lease state
-  through the bounded recovery path, but receives no inherited authority.
-- **155–166:** Replay the original operation ID. CockroachDB returns the
-  original durable receipt and creates no second authority or outbox intent.
-  State plainly that the protected effect is a synthetic database sink.
+- **134–155:** A successor reconstructs evidence and a digest-bound bounded
+  receipt summary through the recovery path, but receives no operation ID,
+  effect key, fence, lease state, or inherited authority.
+- **155–166:** Show two distinct cases. An exact duplicate of the original
+  request returns its durable receipt and creates no second authority or
+  outbox intent. Reusing the operation ID after changing the agent or any
+  authority input fails with an operation-digest mismatch. State plainly
+  that the protected effect is a synthetic database sink.
 - **166–175:** Show named CockroachDB/AWS integrations, public repository,
   tests, cost controls, synthetic-data disclosure, and live link.
 

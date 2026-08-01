@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Client } from "pg";
+import { connectionStringForDatabase } from "./authority-store.js";
+import { runtimeDatabaseConfig } from "./database-runtime.js";
 import {
   recoveryQueryTemplateDigest,
   renderRecoveryQuery,
@@ -267,12 +269,19 @@ export class RecoveryAuditSink {
     if (!connectionString) {
       throw new Error("connectionString is required");
     }
-    this.#connectionString = connectionString;
+    this.#connectionString = connectionStringForDatabase(
+      connectionString,
+      "tideproof"
+    );
   }
 
   async append(event) {
     const eventDigest = recoveryAuditEventDigest(event);
-    const client = new Client({ connectionString: this.#connectionString });
+    const client = new Client(runtimeDatabaseConfig({
+      connectionString: this.#connectionString,
+      max: 1,
+      applicationName: "tideproof-recovery-audit"
+    }));
     try {
       await client.connect();
       const result = await client.query(

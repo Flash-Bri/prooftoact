@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   AUTHORITY_PROOF_RESPONSE_SCHEMA,
@@ -11,6 +12,12 @@ import {
   validateAuthorityRaceInvocations,
   validateAuthorityRaceProof
 } from "../src/cloud/aws-authority-race.js";
+import {
+  authorityPrincipalFromStackResource,
+  awsEvidenceClientOptions,
+  safeAuthorityRaceFailureCode,
+  validateAuthorityRaceExpectedPrincipal
+} from "../scripts/gate2-authority-race.js";
 
 const EXPECTED = Object.freeze({
   configDigest: "b".repeat(64),
@@ -23,6 +30,15 @@ const EXPECTED = Object.freeze({
 const IDS = Object.freeze({
   alpha: "11111111-1111-5111-8111-111111111111",
   bravo: "22222222-2222-5222-8222-222222222222"
+});
+
+const CALLER_BINDING = Object.freeze({
+  bindingDigest: "5".repeat(64),
+  callerIdentityDigest: "6".repeat(64),
+  contextDigest: "8".repeat(64),
+  expectedIdentityDigest: "6".repeat(64),
+  expectedPrincipalDigest: "7".repeat(64),
+  principalType: "assumed-role"
 });
 
 function response(contender, options = {}) {
@@ -215,6 +231,110 @@ test("authority race CLI accepts only an exact aliased proof target", () => {
   }
 });
 
+test("authority race checkout rejects Git object indirection and binds the tree", async () => {
+  const source = await readFile(
+    new URL("../scripts/gate2-authority-race.js", import.meta.url),
+    "utf8"
+  );
+  for (const required of [
+    'GIT_NO_REPLACE_OBJECTS: "1"',
+    '"core.fsmonitor=false"',
+    '["replace", "-l"]',
+    '"info/grafts"',
+    '"objects/info/alternates"',
+    '"--is-shallow-repository"',
+    'receipt.treeDigest !== checkout.treeDigest'
+  ]) {
+    assert.equal(source.includes(required), true, required);
+  }
+});
+
+test("authority race accepts only the generated dedicated caller-role shape", () => {
+  const accountId = "111111111111";
+  const dedicated =
+    `arn:aws:iam::${accountId}:role/` +
+    "tideproof-gate2-AuthorityRaceCallerRole-A1B2C3D4";
+  assert.equal(
+    validateAuthorityRaceExpectedPrincipal(accountId, dedicated),
+    dedicated
+  );
+  for (const untrusted of [
+    `arn:aws:iam::${accountId}:role/Admin`,
+    `arn:aws:iam::${accountId}:role/AuthorityRaceCallerRole`,
+    `arn:aws:iam::222222222222:role/` +
+      "tideproof-gate2-AuthorityRaceCallerRole-A1B2C3D4"
+  ]) {
+    assert.throws(
+      () => validateAuthorityRaceExpectedPrincipal(accountId, untrusted),
+      /AUTHORITY_RACE_EXPECTED_ROLE_REJECTED/
+    );
+  }
+});
+
+test("authority race derives its expected role from the exact stack resource", () => {
+  const accountId = "111111111111";
+  const physicalRoleName =
+    "tideproof-gate2-AuthorityRaceCallerRole-A1B2C3D4";
+  const response = {
+    StackResourceDetail: {
+      StackName: "tideproof-gate2",
+      StackId:
+        `arn:aws:cloudformation:us-east-1:${accountId}:stack/` +
+        "tideproof-gate2/11111111-1111-4111-8111-111111111111",
+      LogicalResourceId: "AuthorityRaceCallerRole",
+      PhysicalResourceId: physicalRoleName,
+      ResourceType: "AWS::IAM::Role",
+      ResourceStatus: "CREATE_COMPLETE"
+    }
+  };
+  assert.equal(
+    authorityPrincipalFromStackResource(accountId, response),
+    `arn:aws:iam::${accountId}:role/${physicalRoleName}`
+  );
+  for (const changed of [
+    { ...response, StackResourceDetail: { ...response.StackResourceDetail, StackName: "other" } },
+    { ...response, StackResourceDetail: { ...response.StackResourceDetail, LogicalResourceId: "Admin" } },
+    { ...response, StackResourceDetail: { ...response.StackResourceDetail, PhysicalResourceId: "Admin" } }
+  ]) {
+    assert.throws(
+      () => authorityPrincipalFromStackResource(accountId, changed),
+      /AUTHORITY_RACE_STACK_ROLE_REJECTED/
+    );
+  }
+});
+
+test("STS and Lambda evidence clients share one explicit fail-fast option set", () => {
+  const credentials = Object.freeze({
+    accessKeyId: "ASIAEXAMPLE12345678",
+    secretAccessKey: "secret-example-value",
+    sessionToken: "session-example-value"
+  });
+  const requestHandler = Object.freeze({ kind: "bounded-handler" });
+  const options = awsEvidenceClientOptions(credentials, requestHandler);
+  assert.equal(options.credentials, credentials);
+  assert.equal(options.requestHandler, requestHandler);
+  assert.equal(options.region, "us-east-1");
+  assert.equal(options.maxAttempts, 1);
+  assert.equal(options.ignoreConfiguredEndpointUrls, true);
+});
+
+test("authority race errors never publish AWS identity or resource details", () => {
+  assert.equal(
+    safeAuthorityRaceFailureCode(
+      new Error("AWS_EVIDENCE_CALLER_ACCOUNT")
+    ),
+    "AWS_EVIDENCE_CALLER_ACCOUNT"
+  );
+  assert.equal(
+    safeAuthorityRaceFailureCode(
+      new Error(
+        "AccessDenied for arn:aws:sts::111111111111:assumed-role/Admin/session"
+      )
+    ),
+    "AUTHORITY_RACE_UNKNOWN"
+  );
+});
+
 test("authority race emits exact contender and proof events without authority fields", () => {
   assert.deepEqual(authorityRaceEvent(EXPECTED.raceId, "alpha"), {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
@@ -237,6 +357,7 @@ test("authority race requires one overlapping winner and one durable denial", as
   const invoked = [];
   const receipt = await runAuthorityRace({
     ...EXPECTED,
+    callerBinding: CALLER_BINDING,
     invoke: async (functionArn, event) => {
       invoked.push({ functionArn, event });
       return event.mode === "proof"
@@ -273,6 +394,7 @@ test("authority race requires one overlapping winner and one durable denial", as
   );
   assert.equal(receipt.protectedEffectExecuted, false);
   assert.equal(receipt.authorityTransferredByModel, false);
+  assert.deepEqual(receipt.callerBinding, CALLER_BINDING);
   assert.equal("functionArn" in receipt, false);
 });
 
@@ -404,7 +526,8 @@ test("authority race rejects durable proof drift, expansion, and stale observati
         validateAuthorityRaceProof(
           proof,
           observation,
-          EXPECTED
+          EXPECTED,
+          CALLER_BINDING
         ),
       /AUTHORITY_RACE_PROOF_REJECTED/
     );
@@ -414,7 +537,8 @@ test("authority race rejects durable proof drift, expansion, and stale observati
       validateAuthorityRaceProof(
         proofResponse(),
         { ...observation, unexpected: true },
-        EXPECTED
+        EXPECTED,
+        CALLER_BINDING
       ),
     /AUTHORITY_RACE_PROOF_REJECTED/
   );

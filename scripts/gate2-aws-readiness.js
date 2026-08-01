@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { assertNoAwsEndpointOverrides } from "../src/cloud/aws-evidence-identity.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -52,7 +53,18 @@ const APPLICATION_ENVIRONMENT_NAME = new RegExp(
   "i"
 );
 const TOOL_OVERRIDE_ENVIRONMENT_NAME =
-  /^(?:BASH_ENV|CDPATH|DYLD_.+|ENV|GIT_.+|LD_PRELOAD|NODE_OPTIONS|NODE_PATH|NPM_CONFIG_.+)$/i;
+  /^(?:BASH_ENV|CDPATH|DYLD_.+|ENV|GIT_.+|LD_PRELOAD|NODE_DEBUG|NODE_EXTRA_CA_CERTS|NODE_OPTIONS|NODE_PATH|NODE_TLS_REJECT_UNAUTHORIZED|NODE_V8_COVERAGE|NPM_CONFIG_.+)$/i;
+const AUTHENTICATED_AWS_ENVIRONMENT_NAMES = new Set([
+  "AWS_ACCESS_KEY_ID",
+  "AWS_DEFAULT_REGION",
+  "AWS_EVIDENCE_EXPECTED_ACCOUNT_ID",
+  "AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN",
+  "AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID",
+  "AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN",
+  "AWS_REGION",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN"
+]);
 
 function requireCondition(condition, code) {
   if (!condition) {
@@ -994,9 +1006,9 @@ export function validateReleaseProvenance(
       claims.manifestPath === "RELEASE_CLAIMS_MANIFEST.json" &&
       HEX_64.test(claims.manifestSha256) &&
       HEX_64.test(claims.proofManifestSha256) &&
-      claims.claimCount === 11 &&
-      claimStates.VERIFIED === 7 &&
-      claimStates.PARTIAL === 4 &&
+      claims.claimCount === 12 &&
+      claimStates.VERIFIED === 5 &&
+      claimStates.PARTIAL === 7 &&
       claimStates.PENDING === 0 &&
       claims.surfaceCount === 13 &&
       claims.stopTokenCount === 13 &&
@@ -1175,7 +1187,7 @@ export function validateReleaseProvenance(
       /^\d{4}-\d{2}-\d{2}$/.test(security.reviewedOn) &&
       security.manifestPath === "RELEASE_SECURITY_MANIFEST.json" &&
       HEX_64.test(security.manifestSha256) &&
-      security.surfaceCount === 18 &&
+      security.surfaceCount === 31 &&
       security.publicPathCount === 10 &&
       security.securityHeaderCount === 9 &&
       security.negativeProbeCount === 6 &&
@@ -1343,11 +1355,20 @@ export function validatePreflightReceipt(
         "bedrock",
         "bootstrapStack",
         "budget",
+        "callerBinding",
         "currentCost",
         "mainGateTwoStack",
         "projectExposure"
       ]) &&
       exactKeys(controls?.bootstrapStack, ["name", "status"]) &&
+      exactKeys(controls?.callerBinding, [
+        "bindingDigest",
+        "callerIdentityDigest",
+        "contextDigest",
+        "expectedIdentityDigest",
+        "expectedPrincipalDigest",
+        "principalType"
+      ]) &&
       exactKeys(budget, [
         "budgetReportedActualUsd",
         "conservativeObservedActualUsd",
@@ -1398,7 +1419,7 @@ export function validatePreflightReceipt(
         "textOutput"
       ]) &&
       receipt?.schemaVersion ===
-      "tideproof.gate2.aws-preflight.v3" &&
+      "tideproof.gate2.aws-preflight.v4" &&
       receipt.status === "PASS" &&
       receipt.sourceCommit === sourceCommit &&
       receipt.treeDigest === treeDigest &&
@@ -1409,6 +1430,23 @@ export function validatePreflightReceipt(
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
       controls?.authenticatedAwsCaller === true &&
+      /^[0-9a-f]{64}$/.test(
+        controls?.callerBinding?.bindingDigest
+      ) &&
+      /^[0-9a-f]{64}$/.test(
+        controls?.callerBinding?.callerIdentityDigest
+      ) &&
+      /^[0-9a-f]{64}$/.test(
+        controls?.callerBinding?.contextDigest
+      ) &&
+      controls?.callerBinding?.expectedIdentityDigest ===
+        controls?.callerBinding?.callerIdentityDigest &&
+      /^[0-9a-f]{64}$/.test(
+        controls?.callerBinding?.expectedPrincipalDigest
+      ) &&
+      ["assumed-role", "iam-user"].includes(
+        controls?.callerBinding?.principalType
+      ) &&
       controls.bootstrapStack.name ===
         "tideproof-gate2-artifacts" &&
       ["CREATE_COMPLETE", "UPDATE_COMPLETE"].includes(
@@ -1499,11 +1537,19 @@ function childEnvironment(
   sourceEnvironment,
   { awsAuthenticated = false } = {}
 ) {
+  if (awsAuthenticated) {
+    assertNoAwsEndpointOverrides(sourceEnvironment);
+  }
   const environment = {};
   for (const [name, value] of Object.entries(sourceEnvironment)) {
+    const normalizedName = name.toUpperCase();
+    const awsNamed = normalizedName.startsWith("AWS_");
     if (
-      (name.startsWith("AWS_") && !awsAuthenticated) ||
-      (!name.startsWith("AWS_") &&
+      (awsNamed &&
+        (!awsAuthenticated ||
+          name !== normalizedName ||
+          !AUTHENTICATED_AWS_ENVIRONMENT_NAMES.has(normalizedName))) ||
+      (!awsNamed &&
         (SECRET_ENVIRONMENT_NAME.test(name) ||
           APPLICATION_ENVIRONMENT_NAME.test(name) ||
           TOOL_OVERRIDE_ENVIRONMENT_NAME.test(name)))
@@ -1513,7 +1559,10 @@ function childEnvironment(
     environment[name] = value;
   }
   environment.AWS_EC2_METADATA_DISABLED = "true";
+  environment.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS = "true";
   environment.AWS_PAGER = "";
+  environment.AWS_CONFIG_FILE = "/dev/null";
+  environment.AWS_SHARED_CREDENTIALS_FILE = "/dev/null";
   environment.GIT_CONFIG_GLOBAL = "/dev/null";
   environment.GIT_CONFIG_NOSYSTEM = "1";
   environment.GIT_TERMINAL_PROMPT = "0";
@@ -1521,10 +1570,6 @@ function childEnvironment(
   environment.npm_config_registry = "https://registry.npmjs.org/";
   environment.npm_config_update_notifier = "false";
   environment.npm_config_userconfig = "/dev/null";
-  if (!awsAuthenticated) {
-    environment.AWS_CONFIG_FILE = "/dev/null";
-    environment.AWS_SHARED_CREDENTIALS_FILE = "/dev/null";
-  }
   return environment;
 }
 

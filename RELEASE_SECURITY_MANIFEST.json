@@ -9,46 +9,88 @@
   ],
   "surfaces": [
     {
+      "id": "admissible-vector-retrieval",
+      "path": "src/cloud/admissible-vector-retrieval.js",
+      "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
+      "sha256": "76cce81116962d36f5b607da63f9194a15b7610993a445acc691aa59379fe8e8"
+    },
+    {
+      "id": "admissible-vector-runner",
+      "path": "scripts/gate1-admissible-vector.js",
+      "role": "ADMISSIBLE_VECTOR_EVIDENCE_RUNNER",
+      "sha256": "bdc085e2b938a07db04dc669c5f0965375ecc05da056ce5a8fa40f1dd0594637"
+    },
+    {
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
       "sha256": "5ee0deb6418b41792c2909eee026c5bf261873161ed7f0e8bfba337d59736ea3"
     },
     {
+      "id": "authority-store",
+      "path": "src/cloud/authority-store.js",
+      "role": "PRIMARY_AUTHORITY_STORE",
+      "sha256": "6f346b69439aac4c00b5ed99a36093eb82fb6c18af22babfaf29acb64926446f"
+    },
+    {
+      "id": "aws-authority-race",
+      "path": "scripts/gate2-authority-race.js",
+      "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
+      "sha256": "6e5d61847ac78fb95698ff0af0e97ae55e3c733bcb7e30f665fc3855dc0ad37e"
+    },
+    {
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "25061fd425b0d5b67d269ee822dbc010231f234192b329daf3b746d469774f3a"
+      "sha256": "81bda9315b2efae993bd478221c6078ac2a215c3a39683ad6e19778fdad27f0d"
+    },
+    {
+      "id": "aws-evidence-identity",
+      "path": "src/cloud/aws-evidence-identity.js",
+      "role": "AWS_EVIDENCE_IDENTITY_BOUNDARY",
+      "sha256": "1271ae0a0892c7d05d5ff8c1a7676b918f31044239a1ac806c8d12ad3425c570"
     },
     {
       "id": "aws-preflight",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "4eb00f49c18fd4c786a6a5066093c563a8f063c2f77f5a448d4ca7009ec051ed"
+      "sha256": "49f992eb850aae506a6f2f99b9250d35f8c05d73ac84978cacea0d2753038ff6"
     },
     {
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "8940a41ba7fd33cf041a542427c0ff340208b484761f9f98721cfee52adc8bf4"
+      "sha256": "25884babc1536420937bf1c4155144234d7f436b555430cb44403f821ea99b16"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "7828eff99cbfe0c26f07218a7b9e6ab2721a776f51378d8813609f2f4a96bb3d"
+      "sha256": "5a9031007ffe335b757fa84cd1fcde10ef47dcbb938c5730c56d881450c2fc3b"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "ed4c9bfdbc29b1cc4a99604d50d2a2a1e2d19f301d91f2f8d20f77f10f7d6105"
+      "sha256": "869fbc839a8345437796068ba88e427c40a291fb4338ef0b1842a3a75eebe56d"
     },
     {
       "id": "boundary-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "AWS_COORDINATOR_RUNTIME",
       "sha256": "4889430a6c370a26e63d941f950585657cc4c7027b9125fb0d9b1a0b6c082a49"
+    },
+    {
+      "id": "database-runtime",
+      "path": "src/cloud/database-runtime.js",
+      "role": "DATABASE_RUNTIME_BOUNDARY",
+      "sha256": "67bee2e952625bea67e5bcf18a640775165132909dfac17501e551960a586acb"
+    },
+    {
+      "id": "database-security-posture",
+      "path": "src/cloud/database-security-posture.js",
+      "role": "DATABASE_POSTURE_BOUNDARY",
+      "sha256": "b13899d70804587ea105180d6f5acd09ce5d627d09b194dbc7f7f672e543cc17"
     },
     {
       "id": "demo-entry",
@@ -66,13 +108,19 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "39eaf691a5ebab32d7d48e3aed5cf9ad6752f423356cf9324be9b08c214091e6"
+      "sha256": "1eeb6970b345ae2206fac51021396512ab3276647d563d58014afc19d4c30f95"
     },
     {
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "c38c5308ab0714c799a2517a4d2066b502d4bad2684a96a04d3ec4e28491b107"
+      "sha256": "f514a6797885f5caf2c0eb75979de109a98433654eed1647029464a1b2a6f1f4"
+    },
+    {
+      "id": "protocol-runtime",
+      "path": "src/protocol.js",
+      "role": "LOCAL_PROTOCOL_SPECIFICATION",
+      "sha256": "8f4a68405b3dc8817152a951b3cbfad0f274cfaa362e390d710a286a23807c2f"
     },
     {
       "id": "proposal-runtime",
@@ -96,19 +144,49 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "d92bb585424085ab3562c8c910ac25f8e06dba6ea2d5a0fc084d45a968ebe166"
+      "sha256": "61ba7936763c7ebfeae94a00603fa42f4eaedc85f7a646da6763686ae2618e62"
+    },
+    {
+      "id": "recovery-broker",
+      "path": "src/cloud/recovery-broker.js",
+      "role": "RECOVERY_BROKER_RUNTIME",
+      "sha256": "d21a941d1b15356a594070e622a2c4922692482e49d8abc12b000e6fedadedc7"
+    },
+    {
+      "id": "recovery-broker-runner",
+      "path": "scripts/gate1-recovery-broker.js",
+      "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
+      "sha256": "641be534d84379ff0345ebbdb9e27a4c39a2dfc9719baca08a96e537d4232c84"
+    },
+    {
+      "id": "recovery-evidence-runner",
+      "path": "scripts/gate1-recovery.js",
+      "role": "RECOVERY_EVIDENCE_RUNNER",
+      "sha256": "a998a1c92d4b41675d5c2d55b6323316afaa582492ffac6c184d5286065169fa"
+    },
+    {
+      "id": "recovery-store",
+      "path": "src/cloud/recovery-store.js",
+      "role": "RECOVERY_STORE_RUNTIME",
+      "sha256": "48ec74fb7a5a9608f5f2d54dc294bad24a93669de411f8e5c60501bbf7a72c0c"
     },
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "584712bd074316c8efbb65e3d189457108a165d3278abf64d5232fbe535b5184"
+      "sha256": "45b7f035297c009295beda1ff314cb99a544215c2559becba6291bb95fe44def"
     },
     {
       "id": "security-policy",
       "path": "SECURITY.md",
       "role": "VULNERABILITY_POLICY",
       "sha256": "e024a73c8000001ef4fba9318814a423e7cf8f59e8fd74ebfe03e296d10db13b"
+    },
+    {
+      "id": "signed-ingest",
+      "path": "src/cloud/signed-ingest.js",
+      "role": "SIGNED_EVIDENCE_INGEST",
+      "sha256": "34a917550367cdfa7624c7e9057255e9b26e7d475485f274df592af74661fcd4"
     },
     {
       "id": "signer-runtime",

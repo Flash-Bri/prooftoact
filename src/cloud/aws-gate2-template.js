@@ -1022,6 +1022,14 @@ export function buildGate2Template() {
         Resource: getAtt("AuthorityAlias", "AliasArn")
       },
       {
+        Sid: "ReadOwnStackRoleBinding",
+        Effect: "Allow",
+        Action: ["cloudformation:DescribeStackResource"],
+        Resource: sub(
+          "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+        )
+      },
+      {
         Sid: "DenyOtherLambdaTargets",
         Effect: "Deny",
         Action: ["lambda:InvokeFunction"],

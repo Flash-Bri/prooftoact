@@ -6,11 +6,26 @@ import {
   awsCostExplorerPeriod,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
+import { assertAwsPreflightParentEnvironment } from "../scripts/gate2-aws-preflight.js";
 
 const ACCOUNT_ID = "111111111111";
 const BUCKET_NAME = "private-tideproof-artifacts-111111111111";
 const BOOTSTRAP_STACK = "tideproof-gate2-artifacts";
 const BUDGET_NAME = `${BOOTSTRAP_STACK}-account-safety`;
+
+test("direct AWS preflight rejects Node and endpoint injection before spawning", () => {
+  for (const environment of [
+    { NODE_DEBUG: "child_process" },
+    { NODE_OPTIONS: "--require=/tmp/inject.js" },
+    { NODE_TLS_REJECT_UNAUTHORIZED: "0" },
+    { AWS_ENDPOINT_URL_STS: "http://127.0.0.1:9000" }
+  ]) {
+    assert.throws(
+      () => assertAwsPreflightParentEnvironment(environment),
+      /AWS_EVIDENCE_(?:SDK_ENVIRONMENT|ENDPOINT_OVERRIDE)/
+    );
+  }
+});
 
 function notification(
   notificationType,
@@ -40,6 +55,12 @@ function validSnapshot() {
     treeDigest: "b".repeat(40),
     workingTreeClean: true,
     region: "us-east-1",
+    expectedAccountId: ACCOUNT_ID,
+    expectedPrincipalArn:
+      `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
+    expectedCallerArn:
+      `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
+    expectedCallerUserId: "AIDATIDEPROOF",
     callerIdentity: {
       Account: ACCOUNT_ID,
       Arn: `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
@@ -181,13 +202,22 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   assert.equal(receipt.status, "PASS");
   assert.equal(
     receipt.schemaVersion,
-    "tideproof.gate2.aws-preflight.v3"
+    "tideproof.gate2.aws-preflight.v4"
   );
   assert.equal(
     receipt.controls.budget.conservativeObservedActualUsd,
     "0.250000"
   );
   assert.equal(receipt.controls.mainGateTwoStack.state, "ABSENT");
+  assert.match(
+    receipt.controls.callerBinding.callerIdentityDigest,
+    /^[0-9a-f]{64}$/
+  );
+  assert.equal(
+    receipt.controls.callerBinding.callerIdentityDigest,
+    receipt.controls.callerBinding.expectedIdentityDigest
+  );
+  assert.equal(receipt.controls.callerBinding.principalType, "iam-user");
   assert.equal(receipt.controls.bedrock.catalogStatus, "ACTIVE");
   assert.equal(receipt.controls.artifactBucket.tlsOnlyPolicy, true);
   assert.equal(receipt.controls.budget.scope, "ACCOUNT_WIDE");

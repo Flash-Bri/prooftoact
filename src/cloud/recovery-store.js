@@ -1,6 +1,11 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { Pool } from "pg";
 import { connectionStringForDatabase } from "./authority-store.js";
+import {
+  bootstrapDatabaseConfig,
+  databaseClientMustBeDiscarded,
+  runtimeDatabaseConfig
+} from "./database-runtime.js";
 
 const DEFAULT_DATABASE = "tideproof_recovery";
 const QUERY_SESSION_TOKEN = "__RECOVERY_SESSION_ID__";
@@ -600,7 +605,11 @@ export async function createRecoveryDatabase(
   connectionString,
   databaseName = DEFAULT_DATABASE
 ) {
-  const pool = new Pool({ connectionString, max: 1 });
+  const pool = new Pool(bootstrapDatabaseConfig({
+    connectionString,
+    max: 1,
+    applicationName: "tideproof-recovery-create"
+  }));
   try {
     const safeName = requireText(databaseName, "databaseName");
     if (!/^[a-z][a-z0-9_]*$/.test(safeName)) {
@@ -613,6 +622,7 @@ export async function createRecoveryDatabase(
 }
 
 export class RecoveryStore {
+  #connectionString;
   #pool;
 
   constructor({
@@ -623,15 +633,16 @@ export class RecoveryStore {
     if (!connectionString) {
       throw new Error("connectionString is required");
     }
-    this.#pool = new Pool({
-      connectionString: connectionStringForDatabase(
-        connectionString,
-        databaseName
-      ),
+    this.#connectionString = connectionStringForDatabase(
+      connectionString,
+      databaseName
+    );
+    this.#pool = new Pool(runtimeDatabaseConfig({
+      connectionString: this.#connectionString,
       max: maxConnections,
       idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 20_000
-    });
+      applicationName: "tideproof-recovery-runtime"
+    }));
   }
 
   async close() {
@@ -639,10 +650,16 @@ export class RecoveryStore {
   }
 
   async migrate() {
-    await this.#pool.query("CREATE SCHEMA IF NOT EXISTS mcp_private");
-    await this.#pool.query("CREATE SCHEMA IF NOT EXISTS mcp_public");
-    await this.#pool.query("CREATE SCHEMA IF NOT EXISTS mcp_api");
-    await this.#pool.query(`
+    const bootstrapPool = new Pool(bootstrapDatabaseConfig({
+      connectionString: this.#connectionString,
+      max: 1,
+      applicationName: "tideproof-recovery-migrate"
+    }));
+    try {
+    await bootstrapPool.query("CREATE SCHEMA IF NOT EXISTS mcp_private");
+    await bootstrapPool.query("CREATE SCHEMA IF NOT EXISTS mcp_public");
+    await bootstrapPool.query("CREATE SCHEMA IF NOT EXISTS mcp_api");
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS mcp_private.recovery_bundles_v1 (
         recovery_session_id UUID NOT NULL,
         schema_version INT8 NOT NULL,
@@ -669,7 +686,7 @@ export class RecoveryStore {
         CHECK (expires_at > source_commit_ts)
       )
     `);
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE OR REPLACE VIEW mcp_public.recovery_bundle_v1 AS
       SELECT
         recovery_session_id,
@@ -688,7 +705,7 @@ export class RecoveryStore {
         expires_at
       FROM mcp_private.recovery_bundles_v1
     `);
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS mcp_private.recovery_bundles_v2 (
         tenant_id UUID NOT NULL,
         recovery_session_id UUID NOT NULL,
@@ -731,7 +748,7 @@ export class RecoveryStore {
         )
       )
     `);
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE OR REPLACE VIEW mcp_public.recovery_bundle_v2 AS
       SELECT
         tenant_id,
@@ -758,12 +775,17 @@ export class RecoveryStore {
         expires_at
       FROM mcp_private.recovery_bundles_v2
     `);
+    } finally {
+      await bootstrapPool.end().catch(() => {});
+    }
   }
 
   async appendBundle(input) {
     const bundle = normalizeBundle(input);
     validateBundleFreshness(bundle);
     const client = await this.#pool.connect();
+    let releaseError;
+    let discardClient = false;
     try {
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
       const existing = await client.query(
@@ -874,10 +896,23 @@ export class RecoveryStore {
       await client.query("COMMIT");
       return { outcome: "bundle_appended", row: inserted.rows[0] };
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
+      releaseError = error;
+      discardClient = databaseClientMustBeDiscarded(error);
+      if (!discardClient) {
+        try {
+          await client.query("ROLLBACK");
+        } catch (rollbackError) {
+          releaseError = rollbackError;
+          discardClient = true;
+          throw new AggregateError(
+            [error, rollbackError],
+            "RECOVERY_STORE_ROLLBACK_FAILED"
+          );
+        }
+      }
       throw error;
     } finally {
-      client.release();
+      client.release(discardClient ? releaseError : undefined);
     }
   }
 

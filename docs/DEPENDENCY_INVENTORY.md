@@ -21,15 +21,15 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 
 ## Bound source
 
-- Package lock SHA-256: `b9903832feed0b4c66eb460a015e4c9df0b3f782369e92ba387b7edd4189a310`
-- Direct runtime declarations: **6**
+- Package lock SHA-256: `af5fe003b6df5da1d2d142684c39e64fcb90d60c97dcf34cb73c86b0dd6fb218`
+- Direct runtime declarations: **8**
 - Direct development declarations: **2**
-- Complete locked package records: **72**
-- Runtime package records: **44**
+- Complete locked package records: **74**
+- Runtime package records: **46**
 - Development-only package records: **28**
 - Optional platform package records: **27**
 - Packages declaring an install script: **1**
-- Reviewed package-lock license identifiers: 0BSD: 1; Apache-2.0: 28; ISC: 2; MIT: 40; MPL-2.0: 1
+- Reviewed package-lock license identifiers: 0BSD: 1; Apache-2.0: 30; ISC: 2; MIT: 40; MPL-2.0: 1
 - CI install boundary: `npm ci --ignore-scripts`; the deterministic Gate Two
   build separately proves the exact bundled artifacts and embeds the verified
   third-party notice file in every ZIP.
@@ -39,9 +39,11 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 | Package | Declared | Locked | Use | License |
 | --- | --- | --- | --- | --- |
 | `@aws-sdk/client-bedrock-runtime` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
+| `@aws-sdk/client-cloudformation` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-kms` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-lambda` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-secrets-manager` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
+| `@aws-sdk/client-sts` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@smithy/node-http-handler` | `4.9.13` | `4.9.13` | runtime | `Apache-2.0` |
 | `axe-core` | `4.12.1` | `4.12.1` | development-only | `MPL-2.0` |
 | `esbuild` | `0.28.1` | `0.28.1` | development-only | `MIT` |
@@ -52,9 +54,11 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 | Package | Version | Lock path | Use | Optional | Install script | License |
 | --- | --- | --- | --- | --- | --- | --- |
 | `@aws-sdk/client-bedrock-runtime` | `3.1098.0` | `node_modules/@aws-sdk/client-bedrock-runtime` | runtime | no | no | `Apache-2.0` |
+| `@aws-sdk/client-cloudformation` | `3.1098.0` | `node_modules/@aws-sdk/client-cloudformation` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-kms` | `3.1098.0` | `node_modules/@aws-sdk/client-kms` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-lambda` | `3.1098.0` | `node_modules/@aws-sdk/client-lambda` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-secrets-manager` | `3.1098.0` | `node_modules/@aws-sdk/client-secrets-manager` | runtime | no | no | `Apache-2.0` |
+| `@aws-sdk/client-sts` | `3.1098.0` | `node_modules/@aws-sdk/client-sts` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/core` | `3.977.3` | `node_modules/@aws-sdk/core` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/credential-provider-env` | `3.972.64` | `node_modules/@aws-sdk/credential-provider-env` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/credential-provider-http` | `3.972.66` | `node_modules/@aws-sdk/credential-provider-http` | runtime | no | no | `Apache-2.0` |

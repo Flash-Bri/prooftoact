@@ -57,19 +57,19 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_BOUNDARY",
-      "sha256": "4a3fd2b7e0e7d1cc4f86081bbe8a36ad28760e116eccaad7bbef7b7dcb1f1a5e"
+      "sha256": "06643266ccfd66076d7f942e4de82fa5021d8f5b581dcb9f19f7c0e3c234c7d8"
     },
     {
       "id": "contest-matrix",
       "path": "docs/CONTEST_MATRIX.md",
       "role": "CONTEST_REQUIREMENT_MATRIX",
-      "sha256": "37c56302ef48c4b0cb14f1cb8e3420e38e73b078d00adef687d131c79e533fd3"
+      "sha256": "3aaf84ea8544489d31677c57c1690ee83d0d6db1882a1f17084883e51ffeb3e9"
     },
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
       "role": "PUBLIC_CLAIM_INVENTORY",
-      "sha256": "7736730c0951b9b782c9e9ddad5d0284efa677f52fc978a83ca822e4fae4c189"
+      "sha256": "1482bba117d510975648eed982326448b3013a0fc4a13c19512582573bbfea41"
     },
     {
       "id": "release-submission-ledger",
@@ -81,13 +81,13 @@
       "id": "rights-ledger",
       "path": "docs/media/RIGHTS.md",
       "role": "MEDIA_RIGHTS_BOUNDARY",
-      "sha256": "57cf348467c9df69f29ba0bfb04a5f96a54645ffb49b50578a61e59e56503fb1"
+      "sha256": "720bab8ec891819c1b3f43772cb885e836ad7bfa999efd5cbf63ab7886e0e9be"
     },
     {
       "id": "submission-packet",
       "path": "docs/SUBMISSION_PACKET.md",
       "role": "DEVPOST_DRAFT",
-      "sha256": "7ee9e2fc068effaae298f289a24d6a12dd9388756194f66903f978f790208f0f"
+      "sha256": "74c5678718fcb788025d0636020b0d50bc21effdd373c134236d5ffd17236eac"
     },
     {
       "id": "winning-plan",

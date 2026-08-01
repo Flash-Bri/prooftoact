@@ -6,7 +6,8 @@ Tideproof is an admissibility-memory demonstration for high-stakes agents.
 Its “Highwater Drill” is a synthetic multi-agency response exercise: shared
 memory preserves attributable evidence, filters what is no longer admissible,
 exposes conflicts, gives exactly one local contender a scarce resource, lets a
-successor reconstruct prior state, and refuses to replay an operation.
+successor reconstruct prior context, returns the original decision for an
+exact duplicate, and rejects reuse with changed authority inputs.
 
 The thesis is deliberately narrower than “AI remembers better”:
 
@@ -26,15 +27,18 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
 
 - provenance, validity-window, and scope checks before vector ranking;
 - unresolved-conflict detection and fail-closed authorization;
-- CockroachDB-backed signed evidence, validity, revocation, scope, and conflict
-  checks before vector ranking and inside authorization;
+- a CockroachDB-backed candidate that derives a short-lived vector snapshot
+  from the same signed-evidence, validity, revocation, scope, and conflict
+  policy used inside authorization; a fresh live integrated plan/exclusion
+  receipt remains pending;
 - serializable one-winner resource reservation with durable denial receipts,
   semantic replay protection, monotonic fencing tokens, and a transactional
   outbox;
 - a protected synthetic effect boundary that rejects stale, future, expired,
   cross-scope, and changed-payload requests;
-- CockroachDB Distributed Vector Indexing with named-index plan evidence and
-  fail-closed dimension validation;
+- CockroachDB Distributed Vector Indexing with historical named-index plan
+  evidence and fail-closed dimension validation; that plan proves DVI
+  mechanics separately from the new admissible-snapshot integration;
 - an isolated CockroachDB recovery cluster and deterministic Managed MCP
   fixed-query broker with signed context-only bundles;
 - separate pre-read and terminal recovery-audit events on the primary cluster;

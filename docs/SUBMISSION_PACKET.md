@@ -32,6 +32,11 @@ end of judging on 2026-09-15 at 5:00 PM ET.
 | Public video | `[[PUBLIC_YOUTUBE_OR_VIMEO_URL_REQUIRED]]` |
 | Entrant / authorized representative | `[[OWNER_CONFIRMATION_REQUIRED]]` |
 
+The project name is provisional. A pre-existing, closely adjacent public
+`TideProof` repository is recorded in `docs/PRIOR_ART.md`; final branding,
+video recording, and submission remain blocked until the entrant records a
+rename/clearance decision and the coordinates above are updated if required.
+
 Do not substitute a localhost URL, private preview, repository page, AWS
 console URL, or credentialed environment for the functional demo.
 
@@ -62,7 +67,8 @@ Every item must have a dated receipt tied to the final release commit:
   application and claim state.
 - [ ] Every visual, font, trademark, music track, voice, and other media item
   has a complete row in `docs/media/RIGHTS.md`; no third-party material is used
-  without the required permission.
+  without the required permission; and the pre-existing adjacent `TideProof`
+  name finding has a recorded entrant rename/clearance decision.
 - [ ] The architecture diagram, screenshots, README, website, video, and
   submission use one reviewed visual system and the same verified vocabulary.
 - [ ] `CLAIMS.md`, `CLEAN_ROOM.md`, the evidence matrix, dependency inventory,
@@ -91,7 +97,7 @@ demo, repository, claims, rights, and release receipts are all green.
 | --- | --- | --- |
 | New project built during the submission period | Clean-room repository, dated provenance, pre-existing-work disclosure, and exact-checkout history control | Verified; final freeze rerun pending |
 | Agentic application with CockroachDB as persistent memory, deployed on AWS | CockroachDB stores evidence, vector memory, authority state, receipts, and recovery state; AWS hosts the bounded agent path | CockroachDB verified; live AWS pending |
-| At least two meaningfully integrated CockroachDB tools | Distributed Vector Indexing and Managed MCP Server | Gate One verified |
+| At least two meaningfully integrated CockroachDB tools | Distributed Vector Indexing and Managed MCP Server | Managed MCP verified; DVI mechanics and admissibility verified separately; integrated snapshot DVI live receipt pending |
 | At least one meaningfully integrated AWS service | Final entry will name only services proven by live receipts | `[[LIVE_AWS_EVIDENCE_REQUIRED]]` |
 | Public open-source repository with license and runnable source | Public MIT repository with Node.js setup and lockfile | Verified at public-source checkpoint; final commit pending |
 | Functional demo URL | Free signed-out synthetic drill | `[[PUBLIC_DEMO_REQUIRED]]` |
@@ -111,7 +117,7 @@ demo:
 
 | Submission claim | Controlling source |
 | --- | --- |
-| Distributed vector plan and admissibility order | `evidence/gate1-vector-2026-07-29.md` and `evidence/gate1-authority-2026-07-30.md` |
+| Distributed vector plan and admissibility order | Historical separate receipts: `evidence/gate1-vector-2026-07-29.md` and `evidence/gate1-authority-2026-07-30.md`; integrated snapshot plan/exclusion receipt still required |
 | 100 × 50 one-winner races and protected synthetic effect | `evidence/gate1-authority-2026-07-30.md` |
 | 100 runs at each ambiguous-commit boundary | `evidence/gate1-ambiguity-2026-07-30.md` |
 | Fixed-query context-only Managed MCP recovery | `evidence/gate1-recovery-broker-2026-07-30.md` |
@@ -167,8 +173,10 @@ identity have changed?
 The synthetic Highwater Drill has three acts:
 
 1. A responder receives fresh, stale, invalid-provenance, out-of-scope, and
-   contradictory reports. SQL admissibility checks run before vector ranking,
-   and unresolved trusted conflict fails closed.
+   contradictory reports. The implementation materializes a short-lived set
+   from SQL admissibility checks before vector ranking, and unresolved trusted
+   conflict fails closed. Fresh live integrated plan evidence is still
+   required.
 2. Fifty contenders race for one synthetic resource. One serializable
    CockroachDB transaction commits one lease, one monotonic fence, one durable
    winning receipt, and one outbox intent; denials are durable too.
@@ -186,8 +194,11 @@ CockroachDB stores verified evidence, revocation and conflict state, vector
 embeddings, resource leases, fencing tokens, operation receipts, checkpoints,
 recovery bundles, and audit events.
 
-Distributed Vector Indexing ranks only candidates that pass provenance,
-valid-time, incident-scope, and conflict gates. Serializable transactions,
+The integrated candidate materializes only rows that pass provenance,
+valid-time, incident-scope, and conflict gates, then ranks that exact
+short-lived set through Distributed Vector Indexing. Historical cloud evidence
+proves the DVI mechanics and admissibility separately; a fresh live integrated
+plan and exclusion receipt remains required. Serializable transactions,
 unique operation semantics, monotonic fencing, and a transactional outbox
 make authority spending explicit and replay-safe inside the synthetic
 database boundary.
@@ -225,8 +236,10 @@ watermark, and two audit phases before returning sanitized context.
 
 ### Accomplishments
 
-- A named CockroachDB vector index appears in a real `vector search` plan only
-  after admissibility predicates.
+- A named CockroachDB vector index appears in a historical real `vector search`
+  plan, and Gate One separately proves deterministic admissibility. The
+  integrated admissible-snapshot implementation is source-tested locally but
+  remains blocked on a fresh live plan and exclusion receipt.
 - One hundred live 50-contender races produced one authority winner each, with
   no invariant violation.
 - One hundred live runs at each ambiguous-commit boundary produced no partial
@@ -267,10 +280,16 @@ actually proved.
 
 Tideproof stores embeddings beside structured evidence in CockroachDB. The
 agent does not run nearest-neighbor search over everything it remembers.
-Provenance, revocation, valid time, incident scope, and unresolved conflict are
-checked first; the surviving candidates are then ranked through a named
-CockroachDB distributed vector index. The Gate One receipt includes a real
-plan containing `vector search` and the named index.
+The candidate uses one database policy function to evaluate provenance,
+revocation, valid time, incident scope, and unresolved conflict, commits only
+the admissible rows to a short-lived retrieval snapshot, and ranks that exact
+tenant/retrieval prefix through a named CockroachDB distributed vector index.
+Authorization still rechecks current admissibility because a retrieval
+snapshot can become stale. Historical Gate One receipts separately prove the
+real DVI mechanics and deterministic gates; this integrated description may
+not be submitted as verified until a fresh live plan and adversarial-exclusion
+receipt is accepted. DVI is approximate nearest-neighbor search, not an exact
+neighbor guarantee.
 
 ### CockroachDB Cloud Managed MCP Server
 
@@ -312,7 +331,8 @@ Generate this section from the accepted live receipt and include:
    conflicting memory cannot authorize.
 5. In Act Two, inspect the single winning lease, fence, receipt, and denial
    evidence.
-6. In Act Three, inspect context-only successor recovery and replay denial.
+6. In Act Three, inspect context-only successor recovery, exact-replay
+   readback, and changed-input replay denial.
 7. Open the linked evidence details and confirm whether each item is a local
    replay or recorded provider proof.
 8. Use **Restart** and verify the drill returns to its initial state without

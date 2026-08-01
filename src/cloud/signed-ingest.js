@@ -4,6 +4,10 @@ import {
   connectionStringForDatabase,
   signedEvidenceEnvelopeFor
 } from "./authority-store.js";
+import {
+  databaseClientMustBeDiscarded,
+  runtimeDatabaseConfig
+} from "./database-runtime.js";
 
 const APPEND_SQL = `
   SELECT tp_api.g1_append_verified_evidence_v2(
@@ -20,15 +24,15 @@ export class SignedEvidenceIngest {
     if (!connectionString) {
       throw new Error("connectionString is required");
     }
-    this.#pool = new Pool({
+    this.#pool = new Pool(runtimeDatabaseConfig({
       connectionString: connectionStringForDatabase(
         connectionString,
         databaseName
       ),
       max: 4,
       idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 20_000
-    });
+      applicationName: "tideproof-signed-ingest"
+    }));
   }
 
   async close() {
@@ -38,6 +42,8 @@ export class SignedEvidenceIngest {
   async appendVerified(input) {
     const evidence = signedEvidenceEnvelopeFor(input);
     const client = await this.#pool.connect();
+    let releaseError;
+    let discardClient = false;
     try {
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
       const keyResult = await client.query(
@@ -108,10 +114,23 @@ export class SignedEvidenceIngest {
         evidenceDigest: evidence.evidenceDigest
       };
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
+      releaseError = error;
+      discardClient = databaseClientMustBeDiscarded(error);
+      if (!discardClient) {
+        try {
+          await client.query("ROLLBACK");
+        } catch (rollbackError) {
+          releaseError = rollbackError;
+          discardClient = true;
+          throw new AggregateError(
+            [error, rollbackError],
+            "SIGNED_INGEST_ROLLBACK_FAILED"
+          );
+        }
+      }
       throw error;
     } finally {
-      client.release();
+      client.release(discardClient ? releaseError : undefined);
     }
   }
 }

@@ -13,13 +13,13 @@
     {
       "id": "accessibility-browser-tests",
       "path": "test/browser-accessibility.test.js",
-      "sha256": "8370d8504735b81fb541984e5458702d72c064866d05212a49ab6fe8a95c7ded",
+      "sha256": "229e9c2328952a18b4f828f127da7356ad493e8e557ca27b50225b6e62200bbd",
       "kind": "verification-code"
     },
     {
       "id": "accessibility-browser-verifier",
       "path": "scripts/verify-browser-accessibility.js",
-      "sha256": "1ecb57c1de5a6a67cc376a254fcbe68ca37d7f92920523d6f401c4f5085f7cdc",
+      "sha256": "9061fee407d57bf2aa6a178fb1ef3120aa0e21eacba9461fb0b8c4f424445e7c",
       "kind": "verification-code"
     },
     {
@@ -67,13 +67,13 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "25061fd425b0d5b67d269ee822dbc010231f234192b329daf3b746d469774f3a",
+      "sha256": "81bda9315b2efae993bd478221c6078ac2a215c3a39683ad6e19778fdad27f0d",
       "kind": "boundary-ledger"
     },
     {
       "id": "bundle-license-notice",
       "path": "THIRD_PARTY_NOTICES.txt",
-      "sha256": "6f90c4cb931877ed8aa8c3991548221cb4a70c349720feff7ab76aa045ba66d2",
+      "sha256": "baeb4f37948e4e657334fcdfe2bb0ac4a66f95603e90d5b519957108bbfe4e12",
       "kind": "boundary-ledger"
     },
     {
@@ -97,7 +97,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "4a3fd2b7e0e7d1cc4f86081bbe8a36ad28760e116eccaad7bbef7b7dcb1f1a5e",
+      "sha256": "06643266ccfd66076d7f942e4de82fa5021d8f5b581dcb9f19f7c0e3c234c7d8",
       "kind": "boundary-ledger"
     },
     {
@@ -115,13 +115,13 @@
     {
       "id": "dependency-inventory",
       "path": "docs/DEPENDENCY_INVENTORY.md",
-      "sha256": "82f2741c2046c00aabd508a8b00adea36837ed690291241668e8b3219782c8d8",
+      "sha256": "95eeea70f6c6074be96d3f30998331ce5cfd928df91554dceb0a909651f43d91",
       "kind": "boundary-ledger"
     },
     {
       "id": "dependency-inventory-tests",
       "path": "test/dependency-inventory.test.js",
-      "sha256": "282ef4522f9591be610e0cfd1891833b073c85a5b0f8af6b9cdb8be86a22b204",
+      "sha256": "bc335ddcd511bc64f198f9be1a6433c8d62f6708657e8ccae8d669d42621bfac",
       "kind": "verification-code"
     },
     {
@@ -133,7 +133,7 @@
     {
       "id": "dependency-lock",
       "path": "package-lock.json",
-      "sha256": "b9903832feed0b4c66eb460a015e4c9df0b3f782369e92ba387b7edd4189a310",
+      "sha256": "af5fe003b6df5da1d2d142684c39e64fcb90d60c97dcf34cb73c86b0dd6fb218",
       "kind": "boundary-ledger"
     },
     {
@@ -147,6 +147,12 @@
       "path": "test/deterministic-zip.test.js",
       "sha256": "05f963e9f0cfc3edb7162c8abedc8b98a7383e14eeb7ca7e60815ea8a4b7a2ee",
       "kind": "verification-code"
+    },
+    {
+      "id": "full-drill-evidence",
+      "path": "docs/FULL_DRILL_EVIDENCE.md",
+      "sha256": "7093831fa4704b6f3d0f106b719d757f5eb3e8c21571bc0bd21d761b75d4511f",
+      "kind": "boundary-ledger"
     },
     {
       "id": "gate1-ambiguity-evidence",
@@ -199,13 +205,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "72984ca1e5acea2b392fd87d055e4fca077183d7a34718ee2e673fb28712a918",
+      "sha256": "417caee5737ec176684b05df747d7b80a07d966022cf33227ac4e549179964fa",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "8940a41ba7fd33cf041a542427c0ff340208b484761f9f98721cfee52adc8bf4",
+      "sha256": "25884babc1536420937bf1c4155144234d7f436b555430cb44403f821ea99b16",
       "kind": "verification-code"
     },
     {
@@ -217,13 +223,13 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "57cf348467c9df69f29ba0bfb04a5f96a54645ffb49b50578a61e59e56503fb1",
+      "sha256": "720bab8ec891819c1b3f43772cb885e836ad7bfa999efd5cbf63ab7886e0e9be",
       "kind": "boundary-ledger"
     },
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "ad2047a080862d90f798e6add84d5b7a75302e5acd84157bbd57c0cf614a6493",
+      "sha256": "1e3d2bf275b3c53f9d3a24b2a5d2a111f6a574df92d9a10a58de0a67d87c669a",
       "kind": "verification-code"
     },
     {
@@ -253,19 +259,19 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "7736730c0951b9b782c9e9ddad5d0284efa677f52fc978a83ca822e4fae4c189",
+      "sha256": "1482bba117d510975648eed982326448b3013a0fc4a13c19512582573bbfea41",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-claims-tests",
       "path": "test/release-claims.test.js",
-      "sha256": "e669457686bc0f4121d6c4fbc05a875a46f60f55d49bd7dccb93ac486a40bae5",
+      "sha256": "e52cbf553089b4e7ff67c145382d14d724c3dba7db1740d0898517552ac02390",
       "kind": "verification-code"
     },
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "10baf165269c956ad1aecaf5cc767a9a3a7522441f9ec8aa8a35b80fef0fe1ae",
+      "sha256": "965d7749c156d1ca4e5dd144126d580a9a559ed986eb93286cfbec4e2614ec83",
       "kind": "verification-code"
     },
     {
@@ -277,7 +283,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "40f485cb54ab568239e574ee3e93d48366efddd503ae93d91db6827899b03f2a",
+      "sha256": "9c71c2d9a8447b5f36b6a407bc6736ca3522053c11d08a3a7303d0d1aabaf221",
       "kind": "boundary-ledger"
     },
     {
@@ -301,7 +307,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "ce25b77121fb9a1a86cf686f621feae9783d465781aca2d2b440c1e5771c41b2",
+      "sha256": "81d2ea12e741ee4458c0022aedf0a10929aa2f93473e79d876085389cd637762",
       "kind": "boundary-ledger"
     },
     {
@@ -337,31 +343,31 @@
     {
       "id": "release-privacy-tests",
       "path": "test/release-privacy.test.js",
-      "sha256": "4fde31278f989b909aa7f698075a138d0b03d89f2a9ec110c633dee771c68cd3",
+      "sha256": "c7458dbf74a20df1338f750e2a4da3369970932cc2878733a8855c7a1be3f0fc",
       "kind": "verification-code"
     },
     {
       "id": "release-privacy-verifier",
       "path": "scripts/verify-release-privacy.js",
-      "sha256": "1d19f703445c38855eb37237f891f3f5f715abc52107fde6cc1196eda6437bf9",
+      "sha256": "6469564812fba14b54cdc8ee4cd162d076f018ebde1ac9e5b9a1a575797aaa1c",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "500647beb7fd52a6a96d89a677e7d72c522809d4122f1efd6ffaa9edd770685c",
+      "sha256": "341bcac9121d511ced4dcefa5bd765372ad361effebaa9ebb60defde7ee93326",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "9af94a24cf4362f904a56a2cbe7ded27c4db746dc378ff060b9a828ef0117a86",
+      "sha256": "dae30186eed0e2f056ae85b1d35baafcedc3bbc816306eeea270ef30e0de4768",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "397b835377fdd29a0b7a2983f4955f5770cdd3de59d222b66163d21d2855e920",
+      "sha256": "13bae3537286619dd5267389a21291d7fcd2c370ef5d6781fb2edeccb32200e2",
       "kind": "boundary-ledger"
     },
     {
@@ -379,25 +385,25 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "584712bd074316c8efbb65e3d189457108a165d3278abf64d5232fbe535b5184",
+      "sha256": "45b7f035297c009295beda1ff314cb99a544215c2559becba6291bb95fe44def",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "81dedec9cc0cb789c7a5d3a482b24e27eccc3fc359da03fa5e9cdce7ef46d051",
+      "sha256": "8f3adada0816f952748d41bc2a4544b24ed17d510a1e85ad5cdc37cd78d45af5",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "4225385389ce4b278a17cab8883fec22e965a8fc7b31cce05523b6ddefbf8136",
+      "sha256": "6c5f28af7d950bccf4a59d015edffefc4ec6f1e34a27415cafd8863accef9a16",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "4aec849cb35017a8c087edb6e148d3e81a871481075ec5ced3f48ecc89ccb5cc",
+      "sha256": "49e46961ca3365dd84349071045311c88d2248dc3a1263af9db910474c808712",
       "kind": "verification-code"
     },
     {
@@ -409,7 +415,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "698e2b6cc24c3313b362e51a206a54d2ebe5c0335af2d885b454c73ec514adf1",
+      "sha256": "80b9f12cb6c5db0aa474752d968da10adad3906b1392217e73f0a4ef3a28a2c8",
       "kind": "boundary-ledger"
     },
     {
@@ -434,14 +440,17 @@
   "claims": [
     {
       "id": "distributed-vector-index",
-      "claim": "CockroachDB Distributed Vector Indexing retrieves eligible memory candidates.",
-      "currentStatus": "Gate One verified",
-      "proofState": "VERIFIED",
+      "claim": "CockroachDB Distributed Vector Indexing ranks a database-produced snapshot of admissible memory candidates.",
+      "currentStatus": "DVI mechanics and admissibility verified separately; integrated snapshot path source-tested locally; fresh live plan and exclusion receipt pending",
+      "proofState": "PARTIAL",
       "artifacts": [
+        "gate1-authority-evidence",
         "gate1-vector-evidence"
       ],
-      "acceptanceBoundary": "The accepted CockroachDB Cloud plan names the vector index and contains vector search; admissibility and authority are proven separately.",
-      "remainingRequirements": []
+      "acceptanceBoundary": "The historical CockroachDB Cloud plan proves real DVI mechanics and the authority receipt proves deterministic admissibility, but neither proves that the named index ranks the full gate output. The local candidate materializes a short-lived database-produced admissibility snapshot and rechecks current admissibility before authorization.",
+      "remainingRequirements": [
+        "A fresh exact-implementation CockroachDB Cloud receipt with mixed admissible and inadmissible fixtures, adversarial exclusions, and EXPLAIN (VERBOSE) naming the snapshot vector index with exact tenant/retrieval prefix spans."
+      ]
     },
     {
       "id": "managed-mcp-recovery",
@@ -457,14 +466,16 @@
     {
       "id": "sql-admissibility-before-ranking",
       "claim": "SQL admissibility precedes semantic ranking and authority.",
-      "currentStatus": "Gate One verified, synthetic scope",
-      "proofState": "VERIFIED",
+      "currentStatus": "Authority ordering verified; integrated admissible-snapshot ranking source-tested locally; fresh live integrated receipt pending",
+      "proofState": "PARTIAL",
       "artifacts": [
         "gate1-authority-evidence",
         "gate1-vector-evidence"
       ],
-      "acceptanceBoundary": "The accepted Gate One receipt proves the synthetic SQL provenance, validity, scope, and conflict checks used before authority; vector-plan evidence is separate.",
-      "remainingRequirements": []
+      "acceptanceBoundary": "The accepted Gate One receipt proves the synthetic SQL provenance, validity, revocation, scope, and conflict checks used before authority; historical vector-plan evidence is separate. The local candidate now derives both observation and vector snapshots from one policy function, but that integration is not a live-provider claim.",
+      "remainingRequirements": [
+        "A fresh exact-implementation live receipt proving the shared policy output is the snapshot ranked through DVI and that current authorization rejects a candidate revoked after snapshot creation."
+      ]
     },
     {
       "id": "serializable-authority-race",
@@ -487,6 +498,19 @@
       ],
       "acceptanceBoundary": "The accepted failpoint receipt covers before-COMMIT, dispatched-COMMIT, and acknowledged-COMMIT boundaries without blind retry or a partial transaction.",
       "remainingRequirements": []
+    },
+    {
+      "id": "full-highwater-drills",
+      "claim": "One hundred full high-water drills bind admissibility-ranked memory, one authority winner, exact recovery, and replay behavior end to end.",
+      "currentStatus": "Partial; independent component receipts exist, but no accepted provider-backed 100-run batch exists",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "full-drill-evidence"
+      ],
+      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
+      "remainingRequirements": [
+        "Implement the bounded live batch harness and exact cross-act recovery lookup, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-winner Managed MCP recovery, replay checks, cleanup, and zero invariant violations."
+      ]
     },
     {
       "id": "successor-context-recovery",
@@ -556,7 +580,7 @@
     {
       "id": "aws-lambda-authority-race",
       "claim": "Two AWS Lambda contenders can overlap while CockroachDB commits one fresh authority winner.",
-      "currentStatus": "Local handler, IAM, transaction, durable-proof, and verifier candidate tested; no live AWS/DB race claim",
+      "currentStatus": "Local handler, IAM, transaction, exact-caller evidence binding, durable-proof, and verifier candidate tested; no live AWS/DB race claim",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
@@ -671,7 +695,7 @@
         "dependency-inventory-verifier",
         "dependency-lock"
       ],
-      "boundary": "The exact current package lock, complete 72-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. The MPL-2.0 axe-core record is development-only and is not part of the bundled package union. These controls do not prove the final deployed bundle or independent legal clearance.",
+      "boundary": "The exact current package lock, complete 74-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. The MPL-2.0 axe-core record is development-only and is not part of the bundled package union. These controls do not prove the final deployed bundle or independent legal clearance.",
       "remainingRequirements": [
         "Rerun all dependency, provenance, vulnerability, and artifact controls at the final release commit and reconcile the exact uploaded and deployed bundles."
       ]
@@ -789,7 +813,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds 18 reviewed security surfaces and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, immutable Lambda aliases, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, database bootstrap markers, and Managed MCP client markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds 31 reviewed security surfaces and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, immutable Lambda aliases, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, database bootstrap markers, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind exact-release live security receipts and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

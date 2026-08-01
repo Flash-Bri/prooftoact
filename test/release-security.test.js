@@ -38,7 +38,7 @@ test("current source security and abuse boundaries match reviewed state", () => 
   const receipt = verifyReleaseSecurity({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_SOURCE_SECURITY_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 18);
+  assert.equal(receipt.surfaceCount, 31);
   assert.equal(receipt.publicPathCount, 10);
   assert.equal(receipt.securityHeaderCount, 9);
   assert.equal(receipt.negativeProbeCount, 6);
@@ -109,6 +109,7 @@ test("security template contract rejects new public-demo capability", () => {
 });
 
 test("security source contract rejects a removed fail-closed marker", () => {
+  assert.equal(Object.keys(__test.SOURCE_MARKERS).length, 31);
   const sources = new Map(
     Object.entries(__test.SOURCE_MARKERS).map(([id, markers]) => [
       id,

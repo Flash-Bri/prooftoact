@@ -195,7 +195,10 @@ test("public demo verifier binds every route and denial", async () => {
       PUBLIC_DEMO_PATHS
     );
     assert.equal(receipt.binding.functionVersion, "7");
-    assert.equal(receipt.invariantCount, 8);
+    assert.equal(
+      receipt.invariantCount,
+      Object.keys(runScenario().invariants).length
+    );
     assert.equal(receipt.authorityCapability, false);
     assert.deepEqual(receipt.pacing, {
       initialBurstRequests: 8,

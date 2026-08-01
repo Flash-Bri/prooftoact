@@ -21,13 +21,33 @@ const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
 ]);
 
 const EXPECTED_SURFACES = Object.freeze({
+  "admissible-vector-retrieval": Object.freeze({
+    path: "src/cloud/admissible-vector-retrieval.js",
+    role: "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME"
+  }),
+  "admissible-vector-runner": Object.freeze({
+    path: "scripts/gate1-admissible-vector.js",
+    role: "ADMISSIBLE_VECTOR_EVIDENCE_RUNNER"
+  }),
   "authority-runtime": Object.freeze({
     path: "infra/aws/lambda/authority.cjs",
     role: "AWS_AUTHORITY_RUNTIME"
   }),
+  "authority-store": Object.freeze({
+    path: "src/cloud/authority-store.js",
+    role: "PRIMARY_AUTHORITY_STORE"
+  }),
+  "aws-authority-race": Object.freeze({
+    path: "scripts/gate2-authority-race.js",
+    role: "AWS_AUTHORITY_EVIDENCE_RUNNER"
+  }),
   "aws-boundary-ledger": Object.freeze({
     path: "docs/AWS_GATE2.md",
     role: "AWS_SECURITY_BOUNDARY"
+  }),
+  "aws-evidence-identity": Object.freeze({
+    path: "src/cloud/aws-evidence-identity.js",
+    role: "AWS_EVIDENCE_IDENTITY_BOUNDARY"
   }),
   "aws-preflight": Object.freeze({
     path: "scripts/gate2-aws-preflight.js",
@@ -49,6 +69,14 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "infra/aws/lambda/boundary.cjs",
     role: "AWS_COORDINATOR_RUNTIME"
   }),
+  "database-runtime": Object.freeze({
+    path: "src/cloud/database-runtime.js",
+    role: "DATABASE_RUNTIME_BOUNDARY"
+  }),
+  "database-security-posture": Object.freeze({
+    path: "src/cloud/database-security-posture.js",
+    role: "DATABASE_POSTURE_BOUNDARY"
+  }),
   "demo-entry": Object.freeze({
     path: "infra/aws/lambda/demo.js",
     role: "AWS_PUBLIC_ENTRY"
@@ -64,6 +92,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "primary-security-bootstrap": Object.freeze({
     path: "src/cloud/primary-security.js",
     role: "PRIMARY_DATABASE_SECURITY"
+  }),
+  "protocol-runtime": Object.freeze({
+    path: "src/protocol.js",
+    role: "LOCAL_PROTOCOL_SPECIFICATION"
   }),
   "proposal-runtime": Object.freeze({
     path: "infra/aws/lambda/agent.cjs",
@@ -81,6 +113,22 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/recovery-security.js",
     role: "RECOVERY_DATABASE_SECURITY"
   }),
+  "recovery-broker": Object.freeze({
+    path: "src/cloud/recovery-broker.js",
+    role: "RECOVERY_BROKER_RUNTIME"
+  }),
+  "recovery-broker-runner": Object.freeze({
+    path: "scripts/gate1-recovery-broker.js",
+    role: "RECOVERY_BROKER_EVIDENCE_RUNNER"
+  }),
+  "recovery-evidence-runner": Object.freeze({
+    path: "scripts/gate1-recovery.js",
+    role: "RECOVERY_EVIDENCE_RUNNER"
+  }),
+  "recovery-store": Object.freeze({
+    path: "src/cloud/recovery-store.js",
+    role: "RECOVERY_STORE_RUNTIME"
+  }),
   "release-security-ledger": Object.freeze({
     path: "docs/RELEASE_SECURITY.md",
     role: "SECURITY_CONTROL_LEDGER"
@@ -88,6 +136,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "security-policy": Object.freeze({
     path: "SECURITY.md",
     role: "VULNERABILITY_POLICY"
+  }),
+  "signed-ingest": Object.freeze({
+    path: "src/cloud/signed-ingest.js",
+    role: "SIGNED_EVIDENCE_INGEST"
   }),
   "signer-runtime": Object.freeze({
     path: "infra/aws/lambda/signer.cjs",
@@ -149,7 +201,10 @@ const EXPECTED_ROLE_ALLOW_ACTIONS = Object.freeze({
     "logs:CreateLogStream",
     "logs:PutLogEvents"
   ]),
-  AuthorityRaceCallerRole: Object.freeze(["lambda:InvokeFunction"]),
+  AuthorityRaceCallerRole: Object.freeze([
+    "cloudformation:DescribeStackResource",
+    "lambda:InvokeFunction"
+  ]),
   AuthorityRole: Object.freeze([
     "logs:CreateLogStream",
     "logs:PutLogEvents",
@@ -231,6 +286,19 @@ const REQUIRED_DENY_ACTIONS = Object.freeze({
 });
 
 const SOURCE_MARKERS = Object.freeze({
+  "admissible-vector-retrieval": Object.freeze([
+    "connectionStringForDatabase(",
+    "\"tideproof\"",
+    "FROM tp_api.g1_prepare_vector_set_v1(",
+    "FROM tp_api.g1_rank_vector_set_v1(",
+    "FROM tp_api.g1_delete_vector_set_v1(",
+    "authorizationRecheckRequired: true",
+    "ADMISSIBLE_VECTOR_RESULT_ORDER_INVALID"
+  ]),
+  "admissible-vector-runner": Object.freeze([
+    "ADMISSIBLE_VECTOR_WORKTREE_DIRTY",
+    "not an accepted DVI plan/exclusion receipt"
+  ]),
   "authority-runtime": Object.freeze([
     "parsed.username !== \"tp_gate2_authorizer_user\"",
     "parsed.hostname !== expectedHost",
@@ -246,10 +314,36 @@ const SOURCE_MARKERS = Object.freeze({
     "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY",
     "authorityTransferred: false"
   ]),
+  "authority-store": Object.freeze([
+    "runtimeDatabaseConfig({",
+    "bootstrapDatabaseConfig({",
+    "tp_private.g1_vector_retrieval_sets",
+    "g1_vector_candidates_embedding_idx",
+    "CHECK (octet_length(assertion) BETWEEN 1 AND 4096)"
+  ]),
+  "aws-authority-race": Object.freeze([
+    "GIT_NO_REPLACE_OBJECTS: \"1\"",
+    "objects/info/alternates",
+    "DescribeStackResourceCommand",
+    "receipt.treeDigest !== checkout.treeDigest",
+    "ignoreConfiguredEndpointUrls: true"
+  ]),
+  "aws-boundary-ledger": Object.freeze([
+    "The command is read-only and fail closed.",
+    "The evidence runner rejects endpoint, profile, proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and tree-digest contamination",
+    "`tideproof.aws-authority-race-receipt.v3`",
+    "Any sequential, ambiguous, replayed, expanded, stale, extra, or unresolved result is not evidence."
+  ]),
   "boundary-runtime": Object.freeze([
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN",
     "assumed-role/${escapedRoleName}",
     "SIGNED_CALLER_REJECTED"
+  ]),
+  "aws-evidence-identity": Object.freeze([
+    "AWS_EVIDENCE_ENDPOINT_OVERRIDE",
+    "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: \"true\"",
+    "expectedCallerUserId",
+    "bindingDigest"
   ]),
   "aws-preflight": Object.freeze([
     "sts",
@@ -264,6 +358,45 @@ const SOURCE_MARKERS = Object.freeze({
     "AWS was not queried or mutated",
     "upload and deployment remain separate reviewed actions"
   ]),
+  "aws-template-generated": Object.freeze([
+    "\"Type\": \"AWS::KMS::Key\"",
+    "\"ReservedConcurrentExecutions\": 2",
+    "\"DisableExecuteApiEndpoint\": false",
+    "\"EXPECTED_ADVISORY_CALLER_ROLE_ARN\": {",
+    "\"AuthorizationType\": \"AWS_IAM\"",
+    "\"Type\": \"AWS::Lambda::Permission\""
+  ]),
+  "aws-template-source": Object.freeze([
+    "properties.ReservedConcurrentExecutions = concurrency;",
+    "Type: \"AWS::KMS::Key\"",
+    "DisableExecuteApiEndpoint: false",
+    "EXPECTED_ADVISORY_CALLER_ROLE_ARN: getAtt(",
+    "AuthorizationType: \"AWS_IAM\"",
+    "ThrottlingBurstLimit: 1",
+    "Type: \"AWS::Lambda::Permission\""
+  ]),
+  "database-runtime": Object.freeze([
+    "DATABASE_CONNECTION_RUNTIME_OVERRIDE_REJECTED",
+    "statementTimeoutMillis: RUNTIME_STATEMENT_TIMEOUT_MS",
+    "idleTransactionTimeoutMillis: RUNTIME_IDLE_TRANSACTION_TIMEOUT_MS",
+    "code === \"40003\""
+  ]),
+  "database-security-posture": Object.freeze([
+    "DATABASE_POSTURE_PRINCIPAL_OPTIONS_UNSAFE",
+    "DATABASE_POSTURE_EXTERNAL_MEMBERSHIP",
+    "DATABASE_POSTURE_SYSTEM_GRANT_UNSAFE",
+    "DATABASE_POSTURE_OUT_OF_SCOPE_GRANT",
+    "DATABASE_POSTURE_DIRECT_USER_GRANT",
+    "FROM [SHOW GRANTS ON ROLE]",
+    "FROM [SHOW SYSTEM GRANTS]"
+  ]),
+  "demo-entry": Object.freeze([
+    "createPublicDemoHandler({",
+    "expectedApiId: process.env.EXPECTED_API_ID",
+    "sourceCommit: process.env.SOURCE_COMMIT",
+    "functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION",
+    "runScenario"
+  ]),
   "local-server": Object.freeze([
     "if (request.method !== \"GET\")",
     "frame-ancestors 'none'",
@@ -273,6 +406,8 @@ const SOURCE_MARKERS = Object.freeze({
     "https://cockroachlabs.cloud/mcp",
     "redirect: \"error\"",
     "AbortSignal.timeout(30_000)",
+    "RECOVERY_MCP_RESPONSE_TOO_LARGE",
+    "TextDecoder(\"utf-8\", { fatal: true })",
     "RECOVERY_MCP_RESPONSE_ID_MISMATCH",
     "recoveryQueryBindingsFor(query)"
   ]),
@@ -282,13 +417,29 @@ const SOURCE_MARKERS = Object.freeze({
     "ALTER DEFAULT PRIVILEGES FOR ROLE",
     "SECURITY DEFINER",
     "session_user <> 'tp_gate2_authorizer_user'",
-    "REVOKE tp_authorizer_role FROM tp_gate2_authorizer_user",
-    "REVOKE tp_gate2_authorizer_role FROM tp_authorizer_user",
+    "collectValidatedPosture(",
+    "ALTER ROLE ${role} WITH NOLOGIN",
+    "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA tp_private, tp_ledger, tp_api FROM ${principal}",
+    "GRANT USAGE ON SCHEMA tp_api TO ${role}",
     "FROM tp_authorizer_role",
     "FROM tp_gate2_authorizer_role",
     "TO tp_gate2_authorizer_role",
     "p_agent_id NOT IN ('aws-authority-alpha', 'aws-authority-bravo')",
     "tp_api.g2_spend_authority_race_v1"
+  ]),
+  "protocol-runtime": Object.freeze([
+    "receiptOperationId",
+    "checkpoint receipt binding is ambiguous",
+    "receiptReference",
+    "operationalCapabilitiesReturned: false"
+  ]),
+  "proposal-runtime": Object.freeze([
+    "parsed.proposal.action !== \"REQUEST_FRESH_AUTHORIZATION\"",
+    "parsed.proposal.resourceId !== \"synthetic-rescue-unit-7\"",
+    "It requests deterministic authorization; it never claims permission.",
+    "BEDROCK_PROMPT_SIZE_REJECTED",
+    "BEDROCK_RESPONSE_SIZE_REJECTED",
+    "BEDROCK_TOKEN_TOTAL_REJECTED"
   ]),
   "public-demo-runtime": Object.freeze([
     "event?.requestContext?.apiId !== expectedApiId",
@@ -308,7 +459,32 @@ const SOURCE_MARKERS = Object.freeze({
     "REVOKE ALL ON DATABASE tideproof_recovery FROM public",
     "REVOKE CREATE ON SCHEMA public FROM public",
     "ALTER DEFAULT PRIVILEGES FOR ROLE",
-    "SECURITY DEFINER"
+    "SECURITY DEFINER",
+    "collectValidatedRecoveryPosture(",
+    "GRANT USAGE ON SCHEMA mcp_api TO ${RECOVERY_PUBLISHER_ROLE}",
+    "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED"
+  ]),
+  "recovery-broker": Object.freeze([
+    "runtimeDatabaseConfig({",
+    "RECOVERY_CLUSTER_SEPARATION_REQUIRED",
+    "RECOVERY_PRINCIPAL_BINDING_MISMATCH",
+    "RECOVERY_MCP_RESULT_CARDINALITY_INVALID"
+  ]),
+  "recovery-broker-runner": Object.freeze([
+    "RECOVERY_SOURCE_OPERATION_ID",
+    "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "operationalCapabilitiesReturned: false"
+  ]),
+  "recovery-evidence-runner": Object.freeze([
+    "RECOVERY_SOURCE_OPERATION_ID",
+    "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "publisher unexpectedly read the base recovery table"
+  ]),
+  "recovery-store": Object.freeze([
+    "runtimeDatabaseConfig({",
+    "bootstrapDatabaseConfig({",
+    "RECOVERY_AUTHORITY_INVARIANT_VIOLATION",
+    "RECOVERY_SIGNATURE_INVALID"
   ]),
   "release-security-ledger": Object.freeze([
     "CURRENT SOURCE SECURITY PASS — LIVE AND PRIVATE REVIEW PENDING",
@@ -320,6 +496,19 @@ const SOURCE_MARKERS = Object.freeze({
     "Do not open a public issue for a suspected vulnerability.",
     "CURRENT_SOURCE_SECURITY_PASS",
     "not a vulnerability-free claim"
+  ]),
+  "signed-ingest": Object.freeze([
+    "runtimeDatabaseConfig({",
+    "connectionStringForDatabase(",
+    "VERIFICATION_KEY_NOT_ADMISSIBLE",
+    "SIGNATURE_INVALID"
+  ]),
+  "signer-runtime": Object.freeze([
+    "SigningAlgorithms.includes(\"ECDSA_SHA_256\")",
+    "MessageType: \"DIGEST\"",
+    "SigningAlgorithm: \"ECDSA_SHA_256\"",
+    "new VerifyCommand({",
+    "KMS_SIGNATURE_VERIFICATION_FAILED"
   ])
 });
 
@@ -687,6 +876,13 @@ function assertRuntimeContract() {
 }
 
 function assertSourceMarkers(sources) {
+  assert(
+    sameJson(
+      sorted(Object.keys(SOURCE_MARKERS)),
+      sorted(Object.keys(EXPECTED_SURFACES))
+    ),
+    "RELEASE_SECURITY_MARKER_SET"
+  );
   for (const [id, markers] of Object.entries(SOURCE_MARKERS)) {
     const source = sources.get(id);
     assert(typeof source === "string", "RELEASE_SECURITY_MARKER_SOURCE");

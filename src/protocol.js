@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const EvidenceStatus = Object.freeze({
   ADMITTED: "admitted",
   CONFLICTED: "conflicted",
@@ -18,6 +20,23 @@ export class MemoryUnavailableError extends Error {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function requireText(value, name) {
@@ -97,6 +116,7 @@ export class TideproofMemory {
   #evidence = new Map();
   #fencingTokens = new Map();
   #leases = new Map();
+  #operationRequests = new Map();
   #receipts = new Map();
   #vectorIndex;
 
@@ -268,9 +288,7 @@ export class TideproofMemory {
     // Provenance, valid-time, and scope are applied before vector ranking.
     const candidates = [...this.#evidence.values()].filter((record) => {
       const status = this.#statusAt(record, atMs);
-      const current =
-        status === EvidenceStatus.ADMITTED ||
-        status === EvidenceStatus.CONFLICTED;
+      const current = status === EvidenceStatus.ADMITTED;
       const inScope =
         record.scopes.includes("*") || record.scopes.includes(requester);
       return record.incidentId === incident && current && inScope;
@@ -359,11 +377,37 @@ export class TideproofMemory {
     const incident = requireText(incidentId, "incidentId");
     const resource = requireText(resourceId, "resourceId");
     const agent = requireText(agentId, "agentId");
+    const requester = requireText(agency, "agency");
+    if (!Array.isArray(evidenceIds) || evidenceIds.length === 0) {
+      throw new TypeError("evidenceIds must contain at least one evidence id");
+    }
+    const normalizedEvidenceIds = evidenceIds.map((evidenceId) =>
+      requireText(evidenceId, "evidenceId")
+    );
+    if (!Number.isSafeInteger(leaseMs) || leaseMs <= 0) {
+      throw new TypeError("leaseMs must be a positive safe integer");
+    }
+    const request = {
+      agentId: agent,
+      agency: requester,
+      evidenceIds: normalizedEvidenceIds,
+      incidentId: incident,
+      leaseMs,
+      resourceId: resource
+    };
 
     const previous = this.#receipts.get(operation);
     if (previous) {
+      const previousRequest = this.#operationRequests.get(operation);
+      if (canonicalJson(previousRequest) !== canonicalJson(request)) {
+        return {
+          outcome: "operation_digest_mismatch_denied",
+          operationId: operation,
+          reason: "operation_parameters_changed"
+        };
+      }
       return {
-        outcome: "duplicate_operation_denied",
+        outcome: "operation_replay",
         operationId: operation,
         originalReceipt: clone(previous)
       };
@@ -372,8 +416,8 @@ export class TideproofMemory {
     const now = this.#now();
     const decision = this.evaluateDecision({
       incidentId: incident,
-      agency,
-      evidenceIds,
+      agency: requester,
+      evidenceIds: normalizedEvidenceIds,
       at: new Date(now).toISOString()
     });
 
@@ -385,9 +429,10 @@ export class TideproofMemory {
         agentId: agent,
         outcome: "authorization_denied",
         reason: decision.reason,
-        evidenceIds: [...evidenceIds],
+        evidenceIds: [...normalizedEvidenceIds],
         recordedAt: new Date(now).toISOString()
       };
+      this.#operationRequests.set(operation, clone(request));
       this.#receipts.set(operation, receipt);
       return clone(receipt);
     }
@@ -403,9 +448,10 @@ export class TideproofMemory {
         outcome: "resource_held_denied",
         heldBy: currentLease.agentId,
         fencingToken: currentLease.fencingToken,
-        evidenceIds: [...evidenceIds],
+        evidenceIds: [...normalizedEvidenceIds],
         recordedAt: new Date(now).toISOString()
       };
+      this.#operationRequests.set(operation, clone(request));
       this.#receipts.set(operation, receipt);
       return clone(receipt);
     }
@@ -432,9 +478,10 @@ export class TideproofMemory {
       agentId: agent,
       outcome: "resource_reserved",
       fencingToken,
-      evidenceIds: [...evidenceIds],
+      evidenceIds: [...normalizedEvidenceIds],
       recordedAt: new Date(now).toISOString()
     };
+    this.#operationRequests.set(operation, clone(request));
     this.#receipts.set(operation, receipt);
     return clone(receipt);
   }
@@ -444,18 +491,92 @@ export class TideproofMemory {
     incidentId,
     agentId,
     lastEvidenceIds,
+    receiptOperationId,
     state
   }) {
     this.#assertAvailable();
-    if (!Array.isArray(lastEvidenceIds)) {
-      throw new TypeError("lastEvidenceIds must be an array");
+    if (
+      !Array.isArray(lastEvidenceIds) ||
+      lastEvidenceIds.length > 100
+    ) {
+      throw new TypeError("lastEvidenceIds must be an array of at most 100 ids");
     }
 
+    const incident = requireText(incidentId, "incidentId");
+    const agent = requireText(agentId, "agentId");
+    const normalizedEvidenceIds = lastEvidenceIds.map((value) => {
+      const evidenceId = requireText(value, "lastEvidenceId");
+      if (Buffer.byteLength(evidenceId, "utf8") > 128) {
+        throw new TypeError("lastEvidenceId exceeds 128 bytes");
+      }
+      return evidenceId;
+    });
+    if (new Set(normalizedEvidenceIds).size !== normalizedEvidenceIds.length) {
+      throw new TypeError("lastEvidenceIds must be unique");
+    }
+    for (const evidenceId of normalizedEvidenceIds) {
+      const record = this.#evidence.get(evidenceId);
+      if (!record || record.incidentId !== incident) {
+        throw new Error("checkpoint evidence binding mismatch");
+      }
+    }
+    const matchingReceipts = [...this.#receipts.values()].filter(
+      (receipt) =>
+        receipt.incidentId === incident && receipt.agentId === agent
+    );
+    let boundReceipt = null;
+    if (receiptOperationId !== undefined) {
+      const operation = requireText(receiptOperationId, "receiptOperationId");
+      boundReceipt = this.#receipts.get(operation) ?? null;
+      if (
+        !boundReceipt ||
+        boundReceipt.incidentId !== incident ||
+        boundReceipt.agentId !== agent
+      ) {
+        throw new Error("checkpoint receipt binding mismatch");
+      }
+    } else if (matchingReceipts.length > 1) {
+      throw new Error("checkpoint receipt binding is ambiguous");
+    } else {
+      boundReceipt = matchingReceipts[0] ?? null;
+    }
+    const boundRequest = boundReceipt
+      ? this.#operationRequests.get(boundReceipt.operationId) ?? null
+      : null;
+    if (
+      boundReceipt &&
+      (
+        !boundRequest ||
+        canonicalJson([...normalizedEvidenceIds].sort()) !==
+          canonicalJson([...(boundReceipt.evidenceIds ?? [])].sort())
+      )
+    ) {
+      throw new Error("checkpoint receipt evidence binding mismatch");
+    }
+    const receiptSummary = boundReceipt
+      ? {
+          durableIntentPresent: false,
+          outcome: boundReceipt.outcome,
+          reason: boundReceipt.reason ?? null,
+          resourceLabel: boundReceipt.resourceId
+        }
+      : null;
     const checkpoint = {
       checkpointId: requireText(checkpointId, "checkpointId"),
-      incidentId: requireText(incidentId, "incidentId"),
-      agentId: requireText(agentId, "agentId"),
-      lastEvidenceIds: [...lastEvidenceIds],
+      incidentId: incident,
+      agentId: agent,
+      lastEvidenceIds: normalizedEvidenceIds,
+      receiptReference: receiptSummary
+        ? {
+            receiptDigest: sha256(
+              `tideproof.local-receipt-reference.v1\0${canonicalJson({
+                receipt: boundReceipt,
+                request: boundRequest
+              })}`
+            ),
+            receiptSummary
+          }
+        : null,
       state: clone(state ?? {}),
       recordedAt: new Date(this.#now()).toISOString()
     };
@@ -475,26 +596,49 @@ export class TideproofMemory {
         (candidate) =>
           candidate.incidentId === incident && candidate.agentId === failed
       );
-    const receipts = [...this.#receipts.values()].filter(
-      (receipt) =>
-        receipt.incidentId === incident && receipt.agentId === failed
-    );
-    const leases = [...this.#leases.values()]
-      .filter(
-        (lease) =>
-          lease.incidentId === incident && lease.agentId === failed
-      )
-      .map(({ expiresAtMs: _, ...lease }) => lease);
+    const evidenceIds = checkpoint?.lastEvidenceIds ?? [];
+    const evidence = evidenceIds
+      .map((evidenceId) => this.#evidence.get(evidenceId))
+      .filter(Boolean);
+    const now = this.#now();
+    const unresolvedCount = evidence.filter(
+      (record) => this.#statusAt(record, now) === EvidenceStatus.CONFLICTED
+    ).length;
+    const receiptReference = checkpoint?.receiptReference ?? null;
 
     return clone({
       incidentId: incident,
       failedAgentId: failed,
       successorAgentId: successor,
-      checkpoint: checkpoint ?? null,
-      receipts,
-      leases,
+      checkpointSummary: checkpoint
+        ? {
+            checkpointVersion: 1,
+            failedAgent: failed,
+            phase: "successor-context-recovery",
+            scenario: "synthetic-highwater"
+          }
+        : null,
+      evidenceSummary: {
+        admittedCount: evidence.filter(
+          (record) =>
+            this.#statusAt(record, now) === EvidenceStatus.ADMITTED
+        ).length,
+        classification: "synthetic",
+        evidenceDigest: sha256(canonicalJson([...evidenceIds].sort()))
+      },
+      conflictSummary: {
+        status: unresolvedCount > 0 ? "quarantined" : "none",
+        unresolvedCount
+      },
+      receiptReference: receiptReference
+        ? {
+            receiptDigest: receiptReference.receiptDigest,
+            receiptSummary: receiptReference.receiptSummary
+          }
+        : null,
       authorityTransferred: false,
-      requiresFreshAuthorization: true
+      requiresFreshAuthorization: true,
+      operationalCapabilitiesReturned: false
     });
   }
 }

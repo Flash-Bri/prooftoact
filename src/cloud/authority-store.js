@@ -4,6 +4,11 @@ import {
   verify as verifySignature
 } from "node:crypto";
 import { Client, Pool } from "pg";
+import {
+  bootstrapDatabaseConfig,
+  connectionStringForExactDatabase,
+  runtimeDatabaseConfig
+} from "./database-runtime.js";
 
 const RETRYABLE_TRANSACTION_CODE = "40001";
 const AMBIGUOUS_TRANSACTION_CODE = "40003";
@@ -140,10 +145,7 @@ function sha256(value) {
 }
 
 export function connectionStringForDatabase(connectionString, databaseName) {
-  const database = requireText(databaseName, "databaseName");
-  const url = new URL(connectionString);
-  url.pathname = `/${database}`;
-  return url.toString();
+  return connectionStringForExactDatabase(connectionString, databaseName);
 }
 
 function normalizeRequest(input) {
@@ -473,12 +475,12 @@ export class AuthorityStore {
       connectionString,
       databaseName
     );
-    this.#pool = new Pool({
+    this.#pool = new Pool(runtimeDatabaseConfig({
       connectionString: this.#connectionString,
       max: maxConnections,
       idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 20_000
-    });
+      applicationName: "tideproof-authority-runtime"
+    }));
   }
 
   async close() {
@@ -486,11 +488,17 @@ export class AuthorityStore {
   }
 
   async migrate() {
-    await this.#pool.query("CREATE SCHEMA IF NOT EXISTS tp_private");
-    await this.#pool.query("CREATE SCHEMA IF NOT EXISTS tp_ledger");
-    await this.#pool.query("CREATE SCHEMA IF NOT EXISTS tp_api");
+    const bootstrapPool = new Pool(bootstrapDatabaseConfig({
+      connectionString: this.#connectionString,
+      max: 2,
+      applicationName: "tideproof-authority-migrate"
+    }));
+    try {
+    await bootstrapPool.query("CREATE SCHEMA IF NOT EXISTS tp_private");
+    await bootstrapPool.query("CREATE SCHEMA IF NOT EXISTS tp_ledger");
+    await bootstrapPool.query("CREATE SCHEMA IF NOT EXISTS tp_api");
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_private.g1_evidence (
         tenant_id UUID NOT NULL,
         evidence_id UUID NOT NULL,
@@ -524,29 +532,29 @@ export class AuthorityStore {
         CHECK (evidence_digest IS NULL OR length(evidence_digest) = 64)
       )
     `);
-    await this.#pool.query(
+    await bootstrapPool.query(
       "ALTER TABLE tp_private.g1_evidence ADD COLUMN IF NOT EXISTS claim_key STRING NULL"
     );
-    await this.#pool.query(
+    await bootstrapPool.query(
       "ALTER TABLE tp_private.g1_evidence ADD COLUMN IF NOT EXISTS claim_value STRING NULL"
     );
-    await this.#pool.query(
+    await bootstrapPool.query(
       "ALTER TABLE tp_private.g1_evidence ADD COLUMN IF NOT EXISTS verification_key_id STRING NULL"
     );
-    await this.#pool.query(
+    await bootstrapPool.query(
       "ALTER TABLE tp_private.g1_evidence ADD COLUMN IF NOT EXISTS verifier_version STRING NULL"
     );
-    await this.#pool.query(
+    await bootstrapPool.query(
       "ALTER TABLE tp_private.g1_evidence ADD COLUMN IF NOT EXISTS signed_payload_digest STRING(64) NULL"
     );
-    await this.#pool.query(
+    await bootstrapPool.query(
       "ALTER TABLE tp_private.g1_evidence ADD COLUMN IF NOT EXISTS signature_digest STRING(64) NULL"
     );
-    await this.#pool.query(
+    await bootstrapPool.query(
       "ALTER TABLE tp_private.g1_evidence ADD COLUMN IF NOT EXISTS evidence_digest STRING(64) NULL"
     );
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_private.g1_verification_keys (
         tenant_id UUID NOT NULL,
         verification_key_id STRING NOT NULL,
@@ -571,7 +579,7 @@ export class AuthorityStore {
       )
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_ledger.g1_evidence_verification_receipts (
         tenant_id UUID NOT NULL,
         evidence_id UUID NOT NULL,
@@ -604,7 +612,55 @@ export class AuthorityStore {
       )
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
+      CREATE TABLE IF NOT EXISTS tp_private.g1_vector_retrieval_sets (
+        tenant_id UUID NOT NULL,
+        retrieval_id UUID NOT NULL,
+        incident_id UUID NOT NULL,
+        agency STRING NOT NULL,
+        policy_version STRING NOT NULL,
+        admitted_at TIMESTAMPTZ NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        cleaned_at TIMESTAMPTZ NULL,
+        candidate_count INT8 NOT NULL,
+        PRIMARY KEY (tenant_id, retrieval_id),
+        CHECK (policy_version = 'g1-admissibility-v2'),
+        CHECK (expires_at > admitted_at),
+        CHECK (cleaned_at IS NULL OR cleaned_at >= admitted_at),
+        CHECK (candidate_count >= 0 AND candidate_count <= 10000)
+      )
+    `);
+    await bootstrapPool.query(
+      "ALTER TABLE tp_private.g1_vector_retrieval_sets ADD COLUMN IF NOT EXISTS cleaned_at TIMESTAMPTZ NULL"
+    );
+    await bootstrapPool.query(`
+      CREATE INDEX IF NOT EXISTS g1_vector_retrieval_sets_expiry_idx
+      ON tp_private.g1_vector_retrieval_sets (tenant_id, expires_at)
+      STORING (retrieval_id, cleaned_at)
+    `);
+
+    await bootstrapPool.query(`
+      CREATE TABLE IF NOT EXISTS tp_private.g1_vector_candidates (
+        tenant_id UUID NOT NULL,
+        retrieval_id UUID NOT NULL,
+        evidence_id UUID NOT NULL,
+        evidence_digest STRING(64) NOT NULL,
+        assertion STRING NOT NULL,
+        embedding VECTOR(3) NOT NULL,
+        PRIMARY KEY (tenant_id, retrieval_id, evidence_id),
+        CHECK (length(evidence_digest) = 64),
+        CHECK (octet_length(assertion) BETWEEN 1 AND 4096)
+      )
+    `);
+
+    await bootstrapPool.query(`
+      CREATE VECTOR INDEX IF NOT EXISTS
+        g1_vector_candidates_embedding_idx
+      ON tp_private.g1_vector_candidates
+        (tenant_id, retrieval_id, embedding vector_cosine_ops)
+    `);
+
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_private.g1_resources (
         tenant_id UUID NOT NULL,
         resource_id STRING NOT NULL,
@@ -635,7 +691,7 @@ export class AuthorityStore {
       )
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_private.g1_retry_probes (
         tenant_id UUID NOT NULL,
         probe_id UUID NOT NULL,
@@ -645,7 +701,7 @@ export class AuthorityStore {
       )
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_ledger.g1_authority_receipts (
         tenant_id UUID NOT NULL,
         operation_id UUID NOT NULL,
@@ -689,7 +745,7 @@ export class AuthorityStore {
       )
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS g1_unique_winning_fence
       ON tp_ledger.g1_authority_receipts (
         tenant_id,
@@ -699,7 +755,7 @@ export class AuthorityStore {
       WHERE outcome = 'resource_reserved'
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_ledger.g1_outbox_intents (
         tenant_id UUID NOT NULL,
         intent_id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -724,7 +780,7 @@ export class AuthorityStore {
       )
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE TABLE IF NOT EXISTS tp_ledger.g1_protected_effects (
         tenant_id UUID NOT NULL,
         effect_key UUID NOT NULL,
@@ -743,7 +799,7 @@ export class AuthorityStore {
       )
     `);
 
-    await this.#pool.query(`
+    await bootstrapPool.query(`
       CREATE VIEW IF NOT EXISTS tp_api.g1_recovery_bundle_v1 AS
       SELECT
         receipt.operation_id AS recovery_session_id,
@@ -776,6 +832,9 @@ export class AuthorityStore {
         ON outbox.tenant_id = receipt.tenant_id
        AND outbox.operation_id = receipt.operation_id
     `);
+    } finally {
+      await bootstrapPool.end().catch(() => {});
+    }
   }
 
   async registerVerificationKey(input) {
@@ -2170,7 +2229,11 @@ export class AuthorityStore {
 
   async reconcileRequest(input) {
     const request = normalizeRequest(input);
-    const client = new Client({ connectionString: this.#connectionString });
+    const client = new Client(runtimeDatabaseConfig({
+      connectionString: this.#connectionString,
+      max: 1,
+      applicationName: "tideproof-authority-reconcile"
+    }));
     try {
       await client.connect();
       await client.query(

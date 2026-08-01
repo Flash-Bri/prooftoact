@@ -7,7 +7,7 @@ export const AUTHORITY_RESPONSE_SCHEMA =
 export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
 export const AUTHORITY_RACE_RECEIPT_SCHEMA =
-  "tideproof.aws-authority-race-receipt.v2";
+  "tideproof.aws-authority-race-receipt.v3";
 const AUTHORITY_RACE_OBSERVATION_SCHEMA =
   "tideproof.aws-authority-race-observation.v1";
 
@@ -31,6 +31,28 @@ function sha256Hex(value) {
     .createHash("sha256")
     .update(String(value))
     .digest("hex");
+}
+
+function validatedCallerBinding(value) {
+  if (
+    !exactKeys(value, [
+      "bindingDigest",
+      "callerIdentityDigest",
+      "contextDigest",
+      "expectedIdentityDigest",
+      "expectedPrincipalDigest",
+      "principalType"
+    ]) ||
+    !SHA256_PATTERN.test(value.bindingDigest) ||
+    !SHA256_PATTERN.test(value.callerIdentityDigest) ||
+    !SHA256_PATTERN.test(value.contextDigest) ||
+    value.expectedIdentityDigest !== value.callerIdentityDigest ||
+    !SHA256_PATTERN.test(value.expectedPrincipalDigest) ||
+    value.principalType !== "assumed-role"
+  ) {
+    throw new Error("AUTHORITY_RACE_CALLER_BINDING_REJECTED");
+  }
+  return Object.freeze({ ...value });
 }
 
 function parseIso(value, code) {
@@ -388,8 +410,10 @@ export function validateAuthorityRaceInvocations(
 export function validateAuthorityRaceProof(
   invocation,
   observation,
-  expected
+  expected,
+  callerBinding
 ) {
+  const acceptedCallerBinding = validatedCallerBinding(callerBinding);
   if (
     !exactKeys(expected, [
       "configDigest",
@@ -572,6 +596,7 @@ export function validateAuthorityRaceProof(
     ...observation,
     schemaVersion: AUTHORITY_RACE_RECEIPT_SCHEMA,
     status: "PASS",
+    callerBinding: acceptedCallerBinding,
     durableStateVerified: true,
     durableState: {
       observedAt: state.observedAt,
@@ -606,6 +631,7 @@ export async function runAuthorityRace({
   functionArn,
   raceId,
   sourceCommit,
+  callerBinding,
   invoke
 }) {
   if (typeof invoke !== "function") {
@@ -617,6 +643,7 @@ export async function runAuthorityRace({
     raceId,
     sourceCommit
   };
+  const acceptedCallerBinding = validatedCallerBinding(callerBinding);
   const responses = await Promise.all(
     CONTENDERS.map(async (contender) => [
       contender,
@@ -637,6 +664,7 @@ export async function runAuthorityRace({
   return validateAuthorityRaceProof(
     proof,
     observation,
-    expected
+    expected,
+    acceptedCallerBinding
   );
 }

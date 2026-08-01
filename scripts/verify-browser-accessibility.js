@@ -8,10 +8,14 @@ import { pathToFileURL } from "node:url";
 import axeCore from "axe-core";
 
 import { createTideproofServer } from "../src/server.js";
+import { runScenario } from "../src/scenario.js";
 import { verifyAccessibility } from "./verify-accessibility.js";
 
 const SCHEMA = "tideproof.accessibility-browser.v1";
 const STANDARD_TARGET = "WCAG_2_2_AA";
+const EXPECTED_INVARIANT_COUNT = Object.keys(
+  runScenario().invariants
+).length;
 const AXE_TAGS = Object.freeze([
   "wcag2a",
   "wcag2aa",
@@ -389,9 +393,9 @@ function validateBrowserSnapshot(snapshot) {
   );
   invariant(
     snapshot.document.status ===
-      "Local deterministic replay loaded. 8 scoped checks rendered." &&
+      `Local deterministic replay loaded. ${EXPECTED_INVARIANT_COUNT} scoped checks rendered.` &&
       snapshot.document.progress === "Act 1 of 3 · Step 1 of 8" &&
-      snapshot.document.invariantCount === 8 &&
+      snapshot.document.invariantCount === EXPECTED_INVARIANT_COUNT &&
       snapshot.document.failedInvariantCount === 0,
     "BROWSER_ACCESSIBILITY_VERIFIED_STATE"
   );
@@ -665,7 +669,7 @@ async function collectBrowserSnapshot(client, origin) {
     client,
     `document.readyState === "complete" &&
       document.querySelector("#load-status")?.textContent.includes("loaded") &&
-      document.querySelectorAll("#invariants .check-passed").length === 8`
+      document.querySelectorAll("#invariants .check-passed").length === ${EXPECTED_INVARIANT_COUNT}`
   );
   const axeDesktop = await runAxe(client);
   const faviconStatus = await evaluate(
@@ -933,6 +937,7 @@ export async function verifyBrowserAccessibility({ chromePath } = {}) {
 export const __test = Object.freeze({
   AXE_TAGS,
   EXPECTED_BUTTON_NAMES,
+  EXPECTED_INVARIANT_COUNT,
   REMAINING_REQUIREMENTS,
   SCHEMA,
   STANDARD_TARGET,

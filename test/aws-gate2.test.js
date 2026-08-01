@@ -944,7 +944,8 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   assert.deepEqual(allowedActions(resources.AdvisoryCallerRole), [
     "execute-api:Invoke"
   ]);
-  assert.deepEqual(allowedActions(resources.AuthorityRaceCallerRole), [
+  assert.deepEqual(allowedActions(resources.AuthorityRaceCallerRole).sort(), [
+    "cloudformation:DescribeStackResource",
     "lambda:InvokeFunction"
   ]);
   const authorityStatements =
@@ -991,6 +992,17 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
         Sid === "InvokeOnlyAuthorityProof" &&
         Effect === "Allow" &&
         Resource["Fn::GetAtt"][0] === "AuthorityAlias"
+    )
+  );
+  assert.ok(
+    authorityCallerStatements.some(
+      ({ Sid, Effect, Action, Resource }) =>
+        Sid === "ReadOwnStackRoleBinding" &&
+        Effect === "Allow" &&
+        Action.includes?.("cloudformation:DescribeStackResource") &&
+        Resource["Fn::Sub"].includes(
+          "stack/${AWS::StackName}/*"
+        )
     )
   );
   assert.ok(
@@ -1196,11 +1208,7 @@ test("primary security separates Gate One and Gate Two database authority", () =
   );
   assert.match(
     source,
-    /REVOKE tp_authorizer_role FROM tp_gate2_authorizer_user/
-  );
-  assert.match(
-    source,
-    /REVOKE tp_gate2_authorizer_role FROM tp_authorizer_user/
+    /for \(const role of RUNTIME_ROLES\)[\s\S]*for \(const principal of MANAGED_PRINCIPALS\)[\s\S]*REVOKE \$\{role\} FROM \$\{principal\}/
   );
   assert.match(
     source,

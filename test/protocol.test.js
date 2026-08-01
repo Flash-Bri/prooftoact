@@ -107,6 +107,16 @@ test("preserves conflict and denies action authorization", () => {
   );
 
   assert.deepEqual(
+    memory.retrieveEvidence({
+      incidentId: INCIDENT,
+      agency: "rescue",
+      queryVector: [1, 0],
+      limit: 10
+    }),
+    []
+  );
+
+  assert.deepEqual(
     memory.evaluateDecision({
       incidentId: INCIDENT,
       agency: "rescue",
@@ -151,7 +161,24 @@ test("allows exactly one local resource-race winner", async () => {
   );
 });
 
-test("successor recovers context without authority and replay is denied", () => {
+function containsForbiddenCapabilityKey(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const forbidden = new Set([
+    "effectKey",
+    "fencingToken",
+    "leases",
+    "operationId",
+    "receipts"
+  ]);
+  return Object.entries(value).some(
+    ([key, nested]) =>
+      forbidden.has(key) || containsForbiddenCapabilityKey(nested)
+  );
+}
+
+test("successor recovers context without capabilities and replay is digest-bound", () => {
   const memory = new TideproofMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
   const original = memory.reserveResource({
@@ -168,6 +195,7 @@ test("successor recovers context without authority and replay is denied", () => 
     incidentId: INCIDENT,
     agentId: "agent-alpha",
     lastEvidenceIds: [accepted.id],
+    receiptOperationId: "operation-alpha",
     state: { phase: "reserved" }
   });
 
@@ -178,9 +206,31 @@ test("successor recovers context without authority and replay is denied", () => 
   });
   assert.equal(recovery.authorityTransferred, false);
   assert.equal(recovery.requiresFreshAuthorization, true);
-  assert.equal(recovery.receipts[0].operationId, original.operationId);
+  assert.equal(recovery.operationalCapabilitiesReturned, false);
+  assert.equal(recovery.checkpointSummary.phase, "successor-context-recovery");
+  assert.equal(recovery.evidenceSummary.admittedCount, 1);
+  assert.equal(
+    recovery.receiptReference.receiptSummary.outcome,
+    "resource_reserved"
+  );
+  assert.equal(
+    recovery.receiptReference.receiptSummary.durableIntentPresent,
+    false
+  );
+  assert.equal(containsForbiddenCapabilityKey(recovery), false);
 
-  const replay = memory.reserveResource({
+  const exactReplay = memory.reserveResource({
+    operationId: original.operationId,
+    incidentId: INCIDENT,
+    resourceId: "rescue-unit-7",
+    agentId: "agent-alpha",
+    agency: "rescue",
+    evidenceIds: [accepted.id]
+  });
+  assert.equal(exactReplay.outcome, "operation_replay");
+  assert.equal(exactReplay.originalReceipt.outcome, "resource_reserved");
+
+  const changedReplay = memory.reserveResource({
     operationId: original.operationId,
     incidentId: INCIDENT,
     resourceId: "rescue-unit-7",
@@ -188,8 +238,154 @@ test("successor recovers context without authority and replay is denied", () => 
     agency: "rescue",
     evidenceIds: [accepted.id]
   });
-  assert.equal(replay.outcome, "duplicate_operation_denied");
-  assert.equal(replay.originalReceipt.outcome, "resource_reserved");
+  assert.deepEqual(changedReplay, {
+    outcome: "operation_digest_mismatch_denied",
+    operationId: original.operationId,
+    reason: "operation_parameters_changed"
+  });
+});
+
+test("successor recovery is bound to the checkpoint's explicit receipt summary", () => {
+  const memory = new TideproofMemory({ clock: () => NOW });
+  const accepted = memory.ingestEvidence(record({ id: "capacity" }));
+  for (const [operationId, resourceId] of [
+    ["operation-old", "rescue-unit-old"],
+    ["operation-new", "rescue-unit-new"]
+  ]) {
+    memory.reserveResource({
+      operationId,
+      incidentId: INCIDENT,
+      resourceId,
+      agentId: "agent-alpha",
+      agency: "rescue",
+      evidenceIds: [accepted.id]
+    });
+  }
+  const checkpoint = memory.checkpointAgent({
+    checkpointId: "checkpoint-latest",
+    incidentId: INCIDENT,
+    agentId: "agent-alpha",
+    lastEvidenceIds: [accepted.id],
+    receiptOperationId: "operation-new",
+    state: { phase: "reserved" }
+  });
+  const recovery = memory.recoverSuccessor({
+    incidentId: INCIDENT,
+    failedAgentId: "agent-alpha",
+    successorAgentId: "agent-successor"
+  });
+  assert.equal(
+    checkpoint.receiptReference.receiptSummary.resourceLabel,
+    "rescue-unit-new"
+  );
+  assert.deepEqual(
+    recovery.receiptReference,
+    checkpoint.receiptReference
+  );
+  assert.equal(
+    containsForbiddenCapabilityKey(recovery),
+    false
+  );
+});
+
+test("checkpoint receipt digests bind the full durable receipt", () => {
+  const checkpoints = ["operation-alpha", "operation-bravo"].map(
+    (operationId) => {
+      const memory = new TideproofMemory({ clock: () => NOW });
+      const accepted = memory.ingestEvidence(record({ id: "capacity" }));
+      memory.reserveResource({
+        operationId,
+        incidentId: INCIDENT,
+        resourceId: "rescue-unit-7",
+        agentId: "agent-alpha",
+        agency: "rescue",
+        evidenceIds: [accepted.id]
+      });
+      return memory.checkpointAgent({
+        checkpointId: `checkpoint-${operationId}`,
+        incidentId: INCIDENT,
+        agentId: "agent-alpha",
+        lastEvidenceIds: [accepted.id],
+        receiptOperationId: operationId
+      });
+    }
+  );
+  assert.deepEqual(
+    checkpoints[0].receiptReference.receiptSummary,
+    checkpoints[1].receiptReference.receiptSummary
+  );
+  assert.notEqual(
+    checkpoints[0].receiptReference.receiptDigest,
+    checkpoints[1].receiptReference.receiptDigest
+  );
+});
+
+test("checkpointing fails closed for ambiguous receipts and unsafe evidence ids", () => {
+  const memory = new TideproofMemory({ clock: () => NOW });
+  const accepted = memory.ingestEvidence(record({ id: "capacity" }));
+  for (const operationId of ["operation-one", "operation-two"]) {
+    memory.reserveResource({
+      operationId,
+      incidentId: INCIDENT,
+      resourceId: `resource-${operationId}`,
+      agentId: "agent-alpha",
+      agency: "rescue",
+      evidenceIds: [accepted.id]
+    });
+  }
+  assert.throws(
+    () => memory.checkpointAgent({
+      checkpointId: "ambiguous-checkpoint",
+      incidentId: INCIDENT,
+      agentId: "agent-alpha",
+      lastEvidenceIds: [accepted.id]
+    }),
+    /binding is ambiguous/u
+  );
+  assert.throws(
+    () => memory.checkpointAgent({
+      checkpointId: "duplicate-evidence-checkpoint",
+      incidentId: INCIDENT,
+      agentId: "agent-alpha",
+      lastEvidenceIds: [accepted.id, accepted.id],
+      receiptOperationId: "operation-one"
+    }),
+    /must be unique/u
+  );
+  assert.throws(
+    () => memory.checkpointAgent({
+      checkpointId: "oversized-evidence-checkpoint",
+      incidentId: INCIDENT,
+      agentId: "agent-alpha",
+      lastEvidenceIds: ["x".repeat(129)],
+      receiptOperationId: "operation-one"
+    }),
+    /exceeds 128 bytes/u
+  );
+  assert.throws(
+    () => memory.checkpointAgent({
+      checkpointId: "missing-evidence-checkpoint",
+      incidentId: INCIDENT,
+      agentId: "agent-alpha",
+      lastEvidenceIds: ["missing-evidence"],
+      receiptOperationId: "operation-one"
+    }),
+    /evidence binding mismatch/u
+  );
+  const otherEvidence = memory.ingestEvidence(record({
+    id: "other-capacity",
+    claimKey: "different-safe-claim"
+  }));
+  assert.throws(
+    () => memory.checkpointAgent({
+      checkpointId: "receipt-evidence-mismatch-checkpoint",
+      incidentId: INCIDENT,
+      agentId: "agent-alpha",
+      lastEvidenceIds: [otherEvidence.id],
+      receiptOperationId: "operation-one"
+    }),
+    /receipt evidence binding mismatch/u
+  );
 });
 
 test("fails closed when memory is unavailable", () => {

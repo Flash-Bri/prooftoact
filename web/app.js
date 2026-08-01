@@ -5,7 +5,9 @@ const invariantLabels = {
   unresolvedConflictDenied: "Unresolved conflict denied authority",
   exactlyOneLocalWinner: "Exactly one local race winner",
   authorityNotTransferred: "Recovery transferred no authority",
-  replayDenied: "Duplicate operation returned its original receipt",
+  recoveredCapabilitiesAbsent: "Recovery returned no operational capability",
+  exactOperationReplay: "Exact duplicate returned its original receipt",
+  changedOperationRejected: "Changed operation inputs were rejected",
   outageFailsClosed: "Local memory outage returned UNKNOWN_DO_NOT_ACT"
 };
 
@@ -60,10 +62,15 @@ const eventPresentation = {
     claim:
       "The successor receives evidence and receipt lineage, but no inherited right to act; the linked cloud receipt proves the bounded recovery path."
   },
-  "replay-denied": {
-    state: "DUPLICATE_DENIED",
+  "exact-operation-replay": {
+    state: "EXACT_REPLAY",
     claim:
-      "This local replay returns the original durable receipt and creates no second authority intent; the linked Gate One receipt proves the CockroachDB boundary."
+      "Only an exact duplicate returns the original durable decision and creates no second authority intent; the linked Gate One receipt proves the CockroachDB boundary."
+  },
+  "changed-operation-rejected": {
+    state: "DIGEST_MISMATCH_DENIED",
+    claim:
+      "Changing the agent or any authority input under the same operation ID is rejected before authority state can change."
   },
   "memory-outage": {
     state: "UNKNOWN_DO_NOT_ACT",
@@ -119,7 +126,8 @@ const actDefinitions = [
     steps: [
       "checkpoint-termination",
       "successor-recovery",
-      "replay-denied",
+      "exact-operation-replay",
+      "changed-operation-rejected",
       "memory-outage"
     ]
   }
@@ -138,7 +146,11 @@ const evidenceForStep = {
     href: "/evidence/gate1-recovery",
     label: "Recorded Gate One recovery receipt"
   },
-  "replay-denied": {
+  "exact-operation-replay": {
+    href: "/evidence/gate1-authority",
+    label: "Recorded Gate One authority receipt"
+  },
+  "changed-operation-rejected": {
     href: "/evidence/gate1-authority",
     label: "Recorded Gate One authority receipt"
   }
@@ -315,31 +327,37 @@ function stepHighlights(step) {
     case "checkpoint-termination":
       return {
         checkpointId: detail.checkpoint.checkpointId,
-        operationId: detail.checkpoint.state.operationId,
         agentId: detail.checkpoint.agentId,
         terminationStatus: detail.termination.status
       };
     case "successor-recovery": {
-      const receipt = detail.receipts[0];
       return {
         failedAgentId: detail.failedAgentId,
         successorAgentId: detail.successorAgentId,
-        checkpointId: detail.checkpoint.checkpointId,
-        originalOperationId: receipt?.operationId,
-        originalReceiptOutcome: receipt?.outcome,
-        resourceId: receipt?.resourceId,
-        fencingToken: receipt?.fencingToken,
+        checkpointPhase: detail.checkpointSummary?.phase,
+        admittedEvidenceCount: detail.evidenceSummary.admittedCount,
+        conflictStatus: detail.conflictSummary.status,
+        priorOutcome:
+          detail.receiptReference?.receiptSummary?.outcome,
+        resourceLabel:
+          detail.receiptReference?.receiptSummary?.resourceLabel,
         authorityTransferred: detail.authorityTransferred,
-        requiresFreshAuthorization: detail.requiresFreshAuthorization
+        requiresFreshAuthorization: detail.requiresFreshAuthorization,
+        operationalCapabilitiesReturned:
+          detail.operationalCapabilitiesReturned
       };
     }
-    case "replay-denied":
+    case "exact-operation-replay":
       return {
-        operationId: detail.operationId,
         replayOutcome: detail.outcome,
         originalReceiptOutcome: detail.originalReceipt.outcome,
-        resourceId: detail.originalReceipt.resourceId,
-        fencingToken: detail.originalReceipt.fencingToken
+        requestBinding: "exact original request"
+      };
+    case "changed-operation-rejected":
+      return {
+        replayOutcome: detail.outcome,
+        reason: detail.reason,
+        requestBinding: "successor changed agent identity"
       };
     case "memory-outage":
       return {

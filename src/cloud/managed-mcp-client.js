@@ -4,6 +4,7 @@ import { recoveryQueryBindingsFor } from "./recovery-store.js";
 const MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 const RECOVERY_DATABASE = "tideproof_recovery";
+export const RECOVERY_MCP_RESPONSE_LIMIT_BYTES = 256 * 1024;
 
 function requireText(value, name) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -45,6 +46,84 @@ function messageFromSse(text, expectedId) {
   );
 }
 
+async function cancelResponseBody(response) {
+  try {
+    await response?.body?.cancel();
+  } catch {
+    // Cancellation is best-effort after the response is no longer needed.
+  }
+}
+
+export async function readBoundedUtf8Response(
+  response,
+  { limitBytes = RECOVERY_MCP_RESPONSE_LIMIT_BYTES } = {}
+) {
+  if (!Number.isSafeInteger(limitBytes) || limitBytes < 1) {
+    throw new TypeError("limitBytes must be a positive safe integer");
+  }
+  const contentLength = response?.headers?.get?.("content-length");
+  if (contentLength !== null && contentLength !== undefined) {
+    if (!/^\d+$/u.test(contentLength)) {
+      await cancelResponseBody(response);
+      throw new Error("RECOVERY_MCP_CONTENT_LENGTH_INVALID");
+    }
+    const advertised = Number(contentLength);
+    if (!Number.isSafeInteger(advertised)) {
+      await cancelResponseBody(response);
+      throw new Error("RECOVERY_MCP_CONTENT_LENGTH_INVALID");
+    }
+    if (advertised > limitBytes) {
+      await cancelResponseBody(response);
+      throw new Error("RECOVERY_MCP_RESPONSE_TOO_LARGE");
+    }
+  }
+
+  if (!response?.body) {
+    return "";
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!(value instanceof Uint8Array)) {
+        throw new Error("RECOVERY_MCP_RESPONSE_ENCODING_INVALID");
+      }
+      received += value.byteLength;
+      if (received > limitBytes) {
+        await reader.cancel();
+        throw new Error("RECOVERY_MCP_RESPONSE_TOO_LARGE");
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    try {
+      await reader.cancel();
+    } catch {
+      // Preserve the primary bounded-read error.
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("RECOVERY_MCP_RESPONSE_ENCODING_INVALID");
+  }
+}
+
 export class CockroachManagedMcpRecoveryClient {
   #apiKey;
   #clusterId;
@@ -73,7 +152,9 @@ export class CockroachManagedMcpRecoveryClient {
       headers: this.#headers(),
       redirect: "error",
       signal: AbortSignal.timeout(10_000)
-    }).catch(() => {});
+    })
+      .then(cancelResponseBody)
+      .catch(() => {});
     this.#sessionId = null;
   }
 
@@ -120,8 +201,10 @@ export class CockroachManagedMcpRecoveryClient {
       signal: AbortSignal.timeout(20_000)
     });
     if (!response.ok) {
+      await cancelResponseBody(response);
       throw new Error(`RECOVERY_MCP_HTTP_${response.status}`);
     }
+    await cancelResponseBody(response);
   }
 
   async #rpc(method, params) {
@@ -139,14 +222,20 @@ export class CockroachManagedMcpRecoveryClient {
       this.#sessionId = receivedSessionId;
     }
     if (!response.ok) {
+      await cancelResponseBody(response);
       throw new Error(`RECOVERY_MCP_HTTP_${response.status}`);
     }
     const contentType = response.headers.get("content-type") ?? "";
+    const responseText = await readBoundedUtf8Response(response);
     let message;
     if (contentType.includes("application/json")) {
-      message = await response.json();
+      try {
+        message = JSON.parse(responseText);
+      } catch {
+        throw new Error("RECOVERY_MCP_RESPONSE_JSON_INVALID");
+      }
     } else if (contentType.includes("text/event-stream")) {
-      message = messageFromSse(await response.text(), id);
+      message = messageFromSse(responseText, id);
     } else {
       throw new Error("RECOVERY_MCP_CONTENT_TYPE_INVALID");
     }
