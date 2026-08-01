@@ -22,6 +22,7 @@
     "gate2:aws-readiness:local": "node scripts/gate2-aws-readiness.js --local-only",
     "gate2:config-digest": "node scripts/gate2-config-digest.js",
     "gate2:verify-public-demo": "node scripts/gate2-public-demo-verify.js",
+    "governance:verify": "node scripts/verify-release-governance.js",
     "demo": "node src/demo.js",
     "dev": "node src/server.js",
     "proof:verify": "node scripts/verify-proof-manifest.js",

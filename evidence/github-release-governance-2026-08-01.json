@@ -1,0 +1,68 @@
+{
+  "schema": "tideproof.github-release-governance-snapshot.v1",
+  "status": "OBSERVED_NONFINAL_GITHUB_GOVERNANCE",
+  "observedAt": "2026-08-01T01:45:38Z",
+  "source": {
+    "commit": "68f112f97e7439ac2ab1ecdde4c6379453c825c6",
+    "tree": "eee1f22f99fb7b5edd4113e622f177510388dea8",
+    "branch": "main"
+  },
+  "repository": {
+    "fullName": "Flash-Bri/tideproof",
+    "htmlUrl": "https://github.com/Flash-Bri/tideproof",
+    "visibility": "public",
+    "defaultBranch": "main",
+    "licenseSpdxId": "MIT",
+    "description": "Admissibility memory for high-stakes agents: similarity proposes, CockroachDB commits.",
+    "topics": [
+      "agentic-memory",
+      "aws",
+      "cockroachdb",
+      "distributed-systems",
+      "hackathon"
+    ]
+  },
+  "branchProtection": {
+    "pullRequestRequired": true,
+    "requiredApprovingReviewCount": 0,
+    "dismissStaleReviews": false,
+    "requireCodeOwnerReviews": false,
+    "requireLastPushApproval": false,
+    "strictStatusChecks": true,
+    "requiredChecks": [
+      {
+        "context": "verify",
+        "appId": 15368
+      }
+    ],
+    "administratorsEnforced": true,
+    "conversationResolutionRequired": true,
+    "forcePushAllowed": false,
+    "deletionAllowed": false,
+    "signaturesRequired": false,
+    "linearHistoryRequired": false
+  },
+  "security": {
+    "vulnerabilityAlerts": "enabled",
+    "secretScanning": "enabled",
+    "secretScanningPushProtection": "enabled",
+    "dependabotSecurityUpdates": "disabled",
+    "dependabotSecurityUpdatesBoundary": "Deliberately disabled at this checkpoint to preserve the single-writer release lane; vulnerability alerts remain enabled and dependency review remains an explicit release gate."
+  },
+  "continuousIntegration": {
+    "workflow": "CI",
+    "requiredCheck": "verify",
+    "runId": 30674588891,
+    "runUrl": "https://github.com/Flash-Bri/tideproof/actions/runs/30674588891",
+    "headSha": "68f112f97e7439ac2ab1ecdde4c6379453c825c6",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "claimBoundary": "This sanitized snapshot records read-only GitHub API observations at one time for one commit. It does not prove that settings remain unchanged, require a human approval, establish vulnerability absence, authorize deployment or submission, or replace final signed-out repository and governance review.",
+  "finalReleaseRequirements": [
+    "Requery repository visibility, security settings, and complete branch protection at the exact final release commit.",
+    "Verify the required CI run succeeds at the exact final release commit and that the protected check identity still matches the intended GitHub Actions workflow.",
+    "Complete signed-out repository, release metadata, and public-link review before publication and submission."
+  ],
+  "finalReleaseReady": false
+}

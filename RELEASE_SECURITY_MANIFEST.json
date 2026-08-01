@@ -30,7 +30,7 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "3d8e59218dcc37cc2e0842cf9809ce58fc749c36c2195a11531506a2bada0ea8"
+      "sha256": "8940a41ba7fd33cf041a542427c0ff340208b484761f9f98721cfee52adc8bf4"
     },
     {
       "id": "aws-template-generated",
@@ -108,7 +108,7 @@
       "id": "security-policy",
       "path": "SECURITY.md",
       "role": "VULNERABILITY_POLICY",
-      "sha256": "4141eadb0a9a106724bbeb27167c9340944a65424feced81a3203313118b7828"
+      "sha256": "e024a73c8000001ef4fba9318814a423e7cf8f59e8fd74ebfe03e296d10db13b"
     },
     {
       "id": "signer-runtime",

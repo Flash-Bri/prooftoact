@@ -566,6 +566,8 @@ export function validateReleaseProvenance(
   const claimsChecks = claims?.checks;
   const cost = receipt?.cost;
   const costChecks = cost?.checks;
+  const governance = receipt?.governance;
+  const governanceChecks = governance?.checks;
   const privacy = receipt?.privacy;
   const privacyChecks = privacy?.checks;
   const rights = receipt?.rights;
@@ -590,6 +592,7 @@ export function validateReleaseProvenance(
       "claimBoundary",
       "cost",
       "dependencies",
+      "governance",
       "history",
       "privacy",
       "rights",
@@ -686,6 +689,37 @@ export function validateReleaseProvenance(
         "recordedSpendArithmeticExact",
         "runtimeAndLogBoundsExact",
         "unapprovedPurchasesRemainBlocked"
+      ]) &&
+      exactKeys(governance, [
+        "checks",
+        "claimBoundary",
+        "finalReleaseReady",
+        "finalReleaseRequirements",
+        "manifestPath",
+        "manifestSha256",
+        "observedAt",
+        "requiredApprovingReviewCount",
+        "requiredCheckCount",
+        "reviewedOn",
+        "schemaVersion",
+        "snapshotPath",
+        "snapshotSha256",
+        "sourceCommit",
+        "sourceTree",
+        "status",
+        "surfaceCount"
+      ]) &&
+      exactKeys(governanceChecks, [
+        "branchProtectionSnapshotExact",
+        "canonicalManifest",
+        "canonicalSnapshot",
+        "exactSurfaceHashes",
+        "localWorkflowIdentityExact",
+        "nonfinalBoundaryPreserved",
+        "publicBoundariesExplicit",
+        "publicRepositoryCoordinatesExact",
+        "requiredCiSnapshotExact",
+        "securitySnapshotExact"
       ]) &&
       exactKeys(privacy, [
         "allowanceCount",
@@ -911,12 +945,13 @@ export function validateReleaseProvenance(
         "officialCleanCheckout",
         "replaceRefsAbsent",
         "releasePrivacyVerified",
+        "repositoryGovernanceSnapshotVerified",
         "staticAccessibilityVerified",
         "submodulesAbsent",
         "submissionDraftFailClosed",
         "trackedSymlinksAbsent"
       ]) &&
-      receipt.schemaVersion === "tideproof.release-provenance.v7" &&
+      receipt.schemaVersion === "tideproof.release-provenance.v8" &&
       receipt.status === "PASS" &&
       typeof receipt.claimBoundary === "string" &&
       receipt.claimBoundary.length > 0 &&
@@ -995,6 +1030,27 @@ export function validateReleaseProvenance(
       Object.values(costChecks).every((value) => value === true) &&
       typeof cost.claimBoundary === "string" &&
       cost.claimBoundary.length > 0 &&
+      governance.schemaVersion ===
+        "tideproof.release-governance-verification.v1" &&
+      governance.status === "CURRENT_REPOSITORY_GOVERNANCE_PASS" &&
+      governance.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(governance.reviewedOn) &&
+      governance.manifestPath === "RELEASE_GOVERNANCE_MANIFEST.json" &&
+      HEX_64.test(governance.manifestSha256) &&
+      governance.snapshotPath ===
+        "evidence/github-release-governance-2026-08-01.json" &&
+      HEX_64.test(governance.snapshotSha256) &&
+      Number.isFinite(Date.parse(governance.observedAt)) &&
+      HEX_40.test(governance.sourceCommit) &&
+      HEX_40.test(governance.sourceTree) &&
+      governance.surfaceCount === 5 &&
+      governance.requiredCheckCount === 1 &&
+      governance.requiredApprovingReviewCount === 0 &&
+      Array.isArray(governance.finalReleaseRequirements) &&
+      governance.finalReleaseRequirements.length === 3 &&
+      Object.values(governanceChecks).every((value) => value === true) &&
+      typeof governance.claimBoundary === "string" &&
+      governance.claimBoundary.length > 0 &&
       privacy.schemaVersion ===
         "tideproof.release-privacy-verification.v1" &&
       privacy.status === "CURRENT_PUBLIC_HISTORY_PASS" &&
