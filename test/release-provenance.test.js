@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   __test,
   runReleaseProvenance,
+  validateIndexFlags,
   validateInstalledTree,
   validateTrackedTree,
   verifyRepositoryHistory
@@ -346,6 +347,10 @@ function treeOutput() {
   ].join("\0") + "\0";
 }
 
+function indexOutput() {
+  return "H README.md\0H scripts/check\0";
+}
+
 function repositoryRunner({ branch = "main", calls = [] } = {}) {
   return (command, args) => {
     const call = [command, ...args];
@@ -354,7 +359,10 @@ function repositoryRunner({ branch = "main", calls = [] } = {}) {
     const outputs = new Map([
       ["git remote get-url origin", `${__test.OFFICIAL_REMOTE}\n`],
       ["git symbolic-ref --short HEAD", `${branch}\n`],
-      ["git status --porcelain=v1 --untracked-files=all", ""],
+      [
+        "git -c core.fsmonitor=false status --porcelain=v1 --untracked-files=all",
+        ""
+      ],
       ["git rev-parse HEAD", `${SOURCE_COMMIT}\n`],
       ["git rev-parse refs/remotes/origin/main", `${SOURCE_COMMIT}\n`],
       ["git rev-parse HEAD^{tree}", `${TREE_DIGEST}\n`],
@@ -377,6 +385,7 @@ function repositoryRunner({ branch = "main", calls = [] } = {}) {
         "2026-07-31T10:00:00-04:00\t2026-07-31T10:00:00-04:00\n"
       ],
       ["git ls-tree -r -z --full-tree HEAD", treeOutput()],
+      ["git ls-files -v -z --cached", indexOutput()],
       ["git fsck --strict --no-dangling HEAD", ""]
     ]);
     if (command === "git" && args.includes("fetch")) {
@@ -479,6 +488,22 @@ test("tracked release tree accepts only regular blobs", () => {
   );
 });
 
+test("tracked release index rejects skip-worktree and assume-unchanged flags", () => {
+  assert.deepEqual(validateIndexFlags(indexOutput(), 2), {
+    indexEntryCount: 2,
+    skipWorktreeEntryCount: 0,
+    assumeUnchangedEntryCount: 0
+  });
+  assert.throws(
+    () => validateIndexFlags("S README.md\0H scripts/check\0", 2),
+    /RELEASE_PROVENANCE_INDEX_FLAGS/u
+  );
+  assert.throws(
+    () => validateIndexFlags("h README.md\0H scripts/check\0", 2),
+    /RELEASE_PROVENANCE_INDEX_FLAGS/u
+  );
+});
+
 test("repository history binds the official full clean-room ancestry", () => {
   const calls = [];
   const receipt = verifyRepositoryHistory({
@@ -490,8 +515,12 @@ test("repository history binds the official full clean-room ancestry", () => {
   assert.equal(receipt.history.commitCount, 41);
   assert.equal(receipt.history.mergeCommitCount, 9);
   assert.equal(receipt.history.legacyGraftFilePresent, false);
+  assert.equal(receipt.history.replacementObjectsDisabled, true);
+  assert.equal(receipt.history.filesystemMonitorDisabled, true);
   assert.equal(receipt.history.alternateObjectDatabaseCount, 0);
   assert.equal(receipt.trackedTree.symlinkCount, 0);
+  assert.equal(receipt.trackedTree.skipWorktreeEntryCount, 0);
+  assert.equal(receipt.trackedTree.assumeUnchangedEntryCount, 0);
   assert.equal(calls.some((call) => call.includes("fsck")), true);
   assert.equal(calls.filter((call) => call.includes("fetch")).length, 1);
 });
@@ -624,5 +653,6 @@ test("provenance child environment removes credentials and Git overrides", () =>
   assert.equal(isolated.GITHUB_TOKEN, undefined);
   assert.equal(isolated.NODE_OPTIONS, undefined);
   assert.equal(isolated.GIT_CONFIG_GLOBAL, "/dev/null");
+  assert.equal(isolated.GIT_NO_REPLACE_OBJECTS, "1");
   assert.equal(isolated.npm_config_userconfig, "/dev/null");
 });
