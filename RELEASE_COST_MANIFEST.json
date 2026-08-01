@@ -1,0 +1,128 @@
+{
+  "schema": "tideproof.release-cost-manifest.v1",
+  "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
+  "reviewedOn": "2026-07-31",
+  "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
+  "limits": {
+    "awsBudgetLimitUsd": 15,
+    "dailyStopUsd": 5,
+    "effectiveAwsSpendCeilingUsd": 13.14,
+    "expectedMeteredSpendHighUsd": 12,
+    "expectedMeteredSpendLowUsd": 3,
+    "minimumBudgetCoverageEnd": "2026-09-16T00:00:00.000Z",
+    "projectCostWindowStart": "2026-07-01",
+    "recordedNonAwsSpendUsd": 11.86,
+    "releaseHorizonEnd": "2026-09-15",
+    "totalProjectExposureCeilingUsd": 25,
+    "unexplainedSpendStopUsd": 3
+  },
+  "budgetAlerts": [
+    {
+      "metric": "ACTUAL",
+      "comparison": "GREATER_THAN",
+      "thresholdUsd": 1,
+      "thresholdType": "ABSOLUTE_VALUE"
+    },
+    {
+      "metric": "ACTUAL",
+      "comparison": "GREATER_THAN",
+      "thresholdUsd": 5,
+      "thresholdType": "ABSOLUTE_VALUE"
+    },
+    {
+      "metric": "ACTUAL",
+      "comparison": "GREATER_THAN",
+      "thresholdUsd": 10,
+      "thresholdType": "ABSOLUTE_VALUE"
+    },
+    {
+      "metric": "FORECASTED",
+      "comparison": "GREATER_THAN",
+      "thresholdUsd": 15,
+      "thresholdType": "ABSOLUTE_VALUE"
+    }
+  ],
+  "forbiddenResourceTypes": [
+    "AWS::EC2::Instance",
+    "AWS::EC2::NatGateway",
+    "AWS::ECS::Service",
+    "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    "AWS::RDS::DBInstance"
+  ],
+  "unapprovedPurchaseClasses": [
+    "ADDITIONAL_DOMAIN",
+    "DOMAIN_RENEWAL_OR_AUTO_RENEW_CHANGE",
+    "PAID_DNS_OR_HOSTING_ADD_ON",
+    "PROVISIONED_OR_ALWAYS_ON_COMPUTE",
+    "UNNECESSARY_PERSISTENT_INFRASTRUCTURE"
+  ],
+  "surfaces": [
+    {
+      "id": "aws-bootstrap-template",
+      "path": "infra/aws/bootstrap-template.json",
+      "role": "BUDGET_PREREQUISITE",
+      "sha256": "63b7fdb71319df83dfae2b14eeb3df5f77d386a5c8a6166f7cad3e4a3443c95c"
+    },
+    {
+      "id": "aws-gate2-template",
+      "path": "infra/aws/gate2-template.json",
+      "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
+      "sha256": "7828eff99cbfe0c26f07218a7b9e6ab2721a776f51378d8813609f2f4a96bb3d"
+    },
+    {
+      "id": "aws-preflight-library",
+      "path": "src/cloud/aws-gate2-preflight.js",
+      "role": "FAIL_CLOSED_COST_POLICY",
+      "sha256": "f6f4cf0a0a291a998b40ecac7746f427824152967e2c8bb6c8267bec6bbfbdc2"
+    },
+    {
+      "id": "aws-preflight-runner",
+      "path": "scripts/gate2-aws-preflight.js",
+      "role": "READ_ONLY_AWS_PREFLIGHT",
+      "sha256": "4eb00f49c18fd4c786a6a5066093c563a8f063c2f77f5a448d4ca7009ec051ed"
+    },
+    {
+      "id": "aws-readiness-runner",
+      "path": "scripts/gate2-aws-readiness.js",
+      "role": "EXACT_CHECKOUT_RELEASE_GATE",
+      "sha256": "3d8e59218dcc37cc2e0842cf9809ce58fc749c36c2195a11531506a2bada0ea8"
+    },
+    {
+      "id": "cost-boundary-ledger",
+      "path": "docs/COST_GATES.md",
+      "role": "COST_AND_RESOURCE_BOUNDARY",
+      "sha256": "67e3f80e78b57fc037788812c70e034992950f8571cd196b85674b1526dd20a9"
+    },
+    {
+      "id": "cost-control-ledger",
+      "path": "docs/RELEASE_COST.md",
+      "role": "RELEASE_COST_CONTROL_LEDGER",
+      "sha256": "86236a88d0100b0503802c9485c07c73c5bb18bb3b6e98e40519ac6fd3342069"
+    },
+    {
+      "id": "cost-guard-receipt",
+      "path": "evidence/gate2-cost-guard-2026-07-30.json",
+      "role": "SANITIZED_BUDGET_RECEIPT",
+      "sha256": "b9e0e8487329d86b9c8fd614ce65fc0dd859ab6035701acff3d079a1be693b14"
+    },
+    {
+      "id": "domain-cost-owner-record",
+      "path": "evidence/domain-cost-owner-record-2026-07-30.md",
+      "role": "OWNER_REPORTED_NON_AWS_SPEND",
+      "sha256": "752cdbbb2488c51e6d47ed80c748b653d731f1b7eea7d0cf2d34dc4e701ce566"
+    },
+    {
+      "id": "gate2-console-stop-receipt",
+      "path": "evidence/gate2-console-stop-receipt-2026-07-30.md",
+      "role": "SANITIZED_FAIL_CLOSED_STOP_RECEIPT",
+      "sha256": "7a891b1810d8343e19c3cff40591302b2c483b8fdacf7b68edf68596ad18258d"
+    }
+  ],
+  "finalReleaseRequirements": [
+    "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with current account-wide AWS spend below 13.14 USD and the main stack absent.",
+    "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
+    "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",
+    "Final complete spend ledger plus teardown or explicitly approved keep-alive receipt after the judged keep-alive window."
+  ],
+  "finalReleaseReady": false
+}

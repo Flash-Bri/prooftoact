@@ -30,7 +30,7 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "583bc204e2878f78ca1b36d27f9495edaad9b9d79975fac08e2124d138f4359d"
+      "sha256": "3d8e59218dcc37cc2e0842cf9809ce58fc749c36c2195a11531506a2bada0ea8"
     },
     {
       "id": "aws-template-generated",
