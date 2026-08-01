@@ -5,6 +5,12 @@
   "allowedFindings": [
     {
       "rule": "basic-auth-url",
+      "path": "test/admissible-vector-retrieval.test.js",
+      "matchSha256": "4668de8f10203760472c7a4884e84aa51459ec545355336cf2299a6c41f8edcc",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
       "path": "test/aws-authority-lambda.test.js",
       "matchSha256": "45e01dec8dc41714cde6a6be35f16806b4f95c5e7ddffaef9ec18a3a8a8109c8",
       "classification": "SYNTHETIC_TEST_FIXTURE"
@@ -13,6 +19,54 @@
       "rule": "basic-auth-url",
       "path": "test/aws-authority-lambda.test.js",
       "matchSha256": "ec5b7569923e2d470d35870d83f61243c1f7db6488e224615077e71c543a0ba0",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "4cb30e491accfb8226b861a06cd250ace678cf3fa9ff5ce16695e05430cd2e99",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "5503596d0331933e081a8d6c57d094d9cf9f88886220785e7f060de0ae988472",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "861b733260afc76c2066f9ff25292446a74a1447746f318cee624ef49bdf48cc",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "876b6b33b2d39dd1d5c8a664a6495f8145b6c86b176a650917ae7347afb149d5",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "9334dac107c6144dc8fd602f94b6685f448585ea0cb3725f7728e7b5bad1e0d0",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "a27588a2810b7366d50c4e08a9f3d2328f7d2e4f5784d62fde023a554775987c",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "bbc516eb8f61e6da590dbed405681771dac09ad5c694d0b5a42924b2a0bfbd23",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/database-runtime.test.js",
+      "matchSha256": "e44f16fe36c38a3893ac76b277ad7931b6acdec5e9dc6d41ddeffb38362f4b39",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
@@ -26,6 +80,12 @@
       "path": "THIRD_PARTY_NOTICES.txt",
       "matchSha256": "690f4c6c980dbb44683092eb398a6339311642351247d0559b24854c4be34d35",
       "classification": "PUBLIC_UPSTREAM_ATTRIBUTION"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/admissible-vector-retrieval.test.js",
+      "matchSha256": "ceecf6b4e4151b4beafa1d17f1aad0f2b14b0cfd13a4b174cd1a3d383e2426c1",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
       "rule": "email-address",
