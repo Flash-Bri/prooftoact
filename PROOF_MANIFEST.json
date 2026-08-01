@@ -367,13 +367,13 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "8264424bd6065bb7681b78c1cba2541a6fea4844020b42cf15b111a57578cd38",
+      "sha256": "424d06612632ce55a2df0f9ddb1d0d2aa2d4127b0a470f2ce606baa0a54a20e0",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "79e5aceaec9edd0f34cced73f1890da32d967f477b4b00c2b107f1b11946a118",
+      "sha256": "fdd1829a86c3678b48c5d187aa0488af6369387113ba56f8539ad82c0506ad2c",
       "kind": "verification-code"
     },
     {
