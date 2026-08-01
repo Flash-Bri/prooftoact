@@ -29,6 +29,18 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate1-admissible-vector.js",
     role: "ADMISSIBLE_VECTOR_EVIDENCE_RUNNER"
   }),
+  "authority-identity-contract": Object.freeze({
+    path: "src/cloud/authority-identity.js",
+    role: "AUTHORITY_IDENTITY_CONTRACT"
+  }),
+  "authority-identity-ledger": Object.freeze({
+    path: "docs/AUTHORITY_IDENTITY.md",
+    role: "AUTHORITY_IDENTITY_BOUNDARY"
+  }),
+  "authority-identity-tests": Object.freeze({
+    path: "test/authority-identity.test.js",
+    role: "AUTHORITY_IDENTITY_VERIFICATION"
+  }),
   "authority-runtime": Object.freeze({
     path: "infra/aws/lambda/authority.cjs",
     role: "AWS_AUTHORITY_RUNTIME"
@@ -322,6 +334,29 @@ const SOURCE_MARKERS = Object.freeze({
     "ADMISSIBLE_VECTOR_POOL_CLOSE_FAILED",
     "--proof",
     "not an accepted DVI plan/exclusion receipt"
+  ]),
+  "authority-identity-contract": Object.freeze([
+    "tideproof.authority.identity-contract.v1",
+    "tideproof.authority.logical-action.v1",
+    "tideproof.authority.dvi-proposal-identity.v1",
+    "proposalContextOnlyFields",
+    "attemptOnlyFields",
+    "databaseOwnedFields",
+    "AUTHORITY_DVI_PROPOSAL_TIME",
+    "logicalAuthorityKeySha256",
+    "authorizationBindingSha256"
+  ]),
+  "authority-identity-ledger": Object.freeze([
+    "FROZEN_CONTRACT_RUNTIME_MIGRATION_PENDING",
+    "Only an explicit durable database transition may create a later epoch.",
+    "Client input cannot select, increment, or reset the epoch.",
+    "must not be treated as satisfying this contract"
+  ]),
+  "authority-identity-tests": Object.freeze([
+    "attempt and proposal context cannot enter logical action identity",
+    "only an explicit authorization epoch remints a logical authority key",
+    "a new proposal changes authorization binding but not the authority key",
+    "identity inputs reject noncanonical text, digests, and timestamps"
   ]),
   "authority-runtime": Object.freeze([
     "parsed.username !== \"tp_gate2_authorizer_user\"",

@@ -21,6 +21,24 @@
       "sha256": "5bc27a62f30dfe8ca9173192fee34f3475d4d3fa55ccdfa934c15320c30ebfa4"
     },
     {
+      "id": "authority-identity-contract",
+      "path": "src/cloud/authority-identity.js",
+      "role": "AUTHORITY_IDENTITY_CONTRACT",
+      "sha256": "a92b00268d3c1adf2cb6fe158e8fecea8b088c89cb64f70eacf23e30903b090e"
+    },
+    {
+      "id": "authority-identity-ledger",
+      "path": "docs/AUTHORITY_IDENTITY.md",
+      "role": "AUTHORITY_IDENTITY_BOUNDARY",
+      "sha256": "7b4149ae0bf710a165af24265fdf2cfe70edb52e6d6706629766d68feb1f78a9"
+    },
+    {
+      "id": "authority-identity-tests",
+      "path": "test/authority-identity.test.js",
+      "role": "AUTHORITY_IDENTITY_VERIFICATION",
+      "sha256": "03dac3d60771effe0924c038a397440094dcfe9794e08934c23a6b01f7288d30"
+    },
+    {
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
