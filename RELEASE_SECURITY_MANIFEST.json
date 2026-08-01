@@ -12,7 +12,7 @@
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
       "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
-      "sha256": "4792a40d9f32a34356bfd1b7c4eb368cb1e86ed5e92077785a997e2c44fa9615"
+      "sha256": "d534ac0a417e2cca2d7184259304093b02bb6a58b34623f0c528e1bdb96a5e57"
     },
     {
       "id": "admissible-vector-runner",
