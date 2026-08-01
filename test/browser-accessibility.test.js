@@ -20,9 +20,10 @@ function passingSnapshot() {
       title: "Tideproof — Admissibility Memory",
       language: "en",
       readyState: "complete",
-      status: "Local deterministic replay loaded. 8 scoped checks rendered.",
+      status:
+        `Local deterministic replay loaded. ${__test.EXPECTED_INVARIANT_COUNT} scoped checks rendered.`,
       progress: "Act 1 of 3 · Step 1 of 8",
-      invariantCount: 8,
+      invariantCount: __test.EXPECTED_INVARIANT_COUNT,
       failedInvariantCount: 0,
       buttonCount: 7,
       enabledButtonCount: 6,

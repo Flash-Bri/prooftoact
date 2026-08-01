@@ -78,13 +78,13 @@ test("current proof manifest binds every claim and exact artifact", () => {
 
   assert.equal(receipt.status, "PASS");
   assert.equal(receipt.manifestStatus, "INCOMPLETE_LIVE_GATES_PENDING");
-  assert.equal(receipt.claimCount, 11);
+  assert.equal(receipt.claimCount, 12);
   assert.deepEqual(receipt.claimStates, {
-    VERIFIED: 7,
-    PARTIAL: 4,
+    VERIFIED: 5,
+    PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 71);
+  assert.equal(receipt.artifactCount, 72);
   assert.equal(receipt.releaseControlCount, 16);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });

@@ -132,7 +132,13 @@ export function runScenario() {
     label: "Admissibility filters run before vector ranking",
     detail: {
       returnedIds: retrieved.map(({ id }) => id),
-      excludedIds: [expired.id, invalid.id, outOfScope.id]
+      excludedIds: [
+        expired.id,
+        invalid.id,
+        outOfScope.id,
+        roadOpen.id,
+        roadClosed.id
+      ]
     }
   });
 
@@ -178,7 +184,8 @@ export function runScenario() {
     incidentId: INCIDENT_ID,
     agentId: winner.agentId,
     lastEvidenceIds: [admitted.id],
-    state: { phase: "resource-reserved", operationId: winner.operationId }
+    receiptOperationId: winner.operationId,
+    state: { phase: "resource-reserved" }
   });
   timeline.push({
     step: "checkpoint-termination",
@@ -203,7 +210,21 @@ export function runScenario() {
     detail: recovery
   });
 
-  const replay = memory.reserveResource({
+  const exactReplay = memory.reserveResource({
+    operationId: winner.operationId,
+    incidentId: INCIDENT_ID,
+    resourceId: "synthetic-rescue-unit-7",
+    agentId: winner.agentId,
+    agency: "rescue",
+    evidenceIds: [admitted.id]
+  });
+  timeline.push({
+    step: "exact-operation-replay",
+    label: "Exact duplicate returns the original durable decision",
+    detail: exactReplay
+  });
+
+  const changedReplay = memory.reserveResource({
     operationId: winner.operationId,
     incidentId: INCIDENT_ID,
     resourceId: "synthetic-rescue-unit-7",
@@ -212,9 +233,9 @@ export function runScenario() {
     evidenceIds: [admitted.id]
   });
   timeline.push({
-    step: "replay-denied",
-    label: "Original operation cannot be replayed",
-    detail: replay
+    step: "changed-operation-rejected",
+    label: "Successor cannot reuse the operation with changed authority inputs",
+    detail: changedReplay
   });
 
   memory.setAvailable(false);
@@ -247,11 +268,21 @@ export function runScenario() {
       invalidProvenanceExcluded: !retrieved.some(({ id }) => id === invalid.id),
       outOfScopeEvidenceExcluded:
         !retrieved.some(({ id }) => id === outOfScope.id),
+      unresolvedConflictExcludedFromRanking:
+        !retrieved.some(
+          ({ id }) => id === roadOpen.id || id === roadClosed.id
+        ),
       unresolvedConflictDenied: conflictDecision.allowed === false,
       exactlyOneLocalWinner:
         race.filter(({ outcome }) => outcome === "resource_reserved").length === 1,
       authorityNotTransferred: recovery.authorityTransferred === false,
-      replayDenied: replay.outcome === "duplicate_operation_denied",
+      recoveredCapabilitiesAbsent:
+        recovery.operationalCapabilitiesReturned === false,
+      exactOperationReplay:
+        exactReplay.outcome === "operation_replay" &&
+        exactReplay.originalReceipt.outcome === "resource_reserved",
+      changedOperationRejected:
+        changedReplay.outcome === "operation_digest_mismatch_denied",
       outageFailsClosed: outage?.code === "MEMORY_UNAVAILABLE_FAIL_CLOSED"
     },
     timeline,

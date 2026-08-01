@@ -33,6 +33,7 @@
     "release:provenance": "node scripts/verify-release-provenance.js",
     "gate1:ambiguity": "node scripts/gate1-ambiguity.js",
     "gate1:ambiguity:full": "AMBIGUITY_RUNS=100 node scripts/gate1-ambiguity.js",
+    "gate1:admissible-vector": "node scripts/gate1-admissible-vector.js",
     "gate1:authority": "node scripts/gate1-authority.js",
     "gate1:authority:full": "RACE_RUNS=100 CONTENDERS=50 node scripts/gate1-authority.js",
     "gate1:capability-race": "node scripts/gate1-capability-race.js",
@@ -48,9 +49,11 @@
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "3.1098.0",
+    "@aws-sdk/client-cloudformation": "3.1098.0",
     "@aws-sdk/client-kms": "3.1098.0",
     "@aws-sdk/client-lambda": "3.1098.0",
     "@aws-sdk/client-secrets-manager": "3.1098.0",
+    "@aws-sdk/client-sts": "3.1098.0",
     "@smithy/node-http-handler": "4.9.13",
     "pg": "8.22.0"
   },

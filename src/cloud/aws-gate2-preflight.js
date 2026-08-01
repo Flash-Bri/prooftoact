@@ -1,3 +1,5 @@
+import { validateAwsEvidenceCaller } from "./aws-evidence-identity.js";
+
 const EXPECTED_REGION = "us-east-1";
 const EXPECTED_MODEL_ID = "amazon.nova-micro-v1:0";
 const EXPECTED_BUDGET_USD = 15;
@@ -432,15 +434,19 @@ export function validateAwsGate2Preflight(
   requireCondition(snapshot?.workingTreeClean === true, "WORKING_TREE_DIRTY");
 
   const caller = snapshot?.callerIdentity;
-  requireCondition(/^\d{12}$/.test(caller?.Account), "AWS_CALLER_ACCOUNT");
-  requireCondition(
-    typeof caller?.Arn === "string" && caller.Arn.startsWith("arn:"),
-    "AWS_CALLER_ARN"
-  );
-  requireCondition(
-    typeof caller?.UserId === "string" && caller.UserId.length > 0,
-    "AWS_CALLER_USER"
-  );
+  const callerBinding = validateAwsEvidenceCaller(caller, {
+    expectedAccountId: snapshot?.expectedAccountId,
+    expectedPrincipalArn: snapshot?.expectedPrincipalArn,
+    expectedCallerArn: snapshot?.expectedCallerArn,
+    expectedCallerUserId: snapshot?.expectedCallerUserId,
+    bindingContext: {
+      purpose: "gate2-read-only-preflight",
+      sourceCommit: snapshot?.sourceCommit,
+      treeDigest: snapshot?.treeDigest,
+      region: snapshot?.region,
+      bootstrapStackName: snapshot?.bootstrapStackName
+    }
+  });
 
   const bootstrap = snapshot?.bootstrapStack;
   requireCondition(
@@ -573,7 +579,7 @@ export function validateAwsGate2Preflight(
   );
 
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v3",
+    schemaVersion: "tideproof.gate2.aws-preflight.v4",
     status: "PASS",
     observedAt: snapshot.observedAt,
     sourceCommit: snapshot.sourceCommit,
@@ -581,6 +587,7 @@ export function validateAwsGate2Preflight(
     region: expectedRegion,
     controls: {
       authenticatedAwsCaller: true,
+      callerBinding,
       bootstrapStack: {
         name: snapshot.bootstrapStackName,
         status: bootstrap.StackStatus
@@ -626,7 +633,7 @@ export function validateAwsGate2Preflight(
       bedrock
     },
     privacy:
-      "AWS account, caller ARN, bucket name, and subscriber addresses were validated but omitted.",
+      "AWS account, caller ARN, expected principal ARN, bucket name, and subscriber addresses were validated but omitted; only caller-binding digests are public.",
     claimBoundary:
       "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
   };

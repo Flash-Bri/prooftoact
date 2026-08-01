@@ -34,7 +34,7 @@
       "id": "browser-app",
       "ledgerRowId": "C04",
       "path": "web/app.js",
-      "sha256": "f5980c1968417d0c8ebde0256bd56a9f61c6a4c347ccc822839ce8ddb00ecbe2",
+      "sha256": "825b5466035432c30598aa4b43c4a9e428d4ec88df8599cfacc25ee208a02a10",
       "rightsState": "CLEARED_CURRENT",
       "roles": [
         "browser-source"
@@ -80,7 +80,7 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "57cf348467c9df69f29ba0bfb04a5f96a54645ffb49b50578a61e59e56503fb1"
+      "sha256": "720bab8ec891819c1b3f43772cb885e836ad7bfa999efd5cbf63ab7886e0e9be"
     },
     {
       "id": "public-demo-response-verifier",
@@ -90,7 +90,7 @@
     {
       "id": "readme-surface",
       "path": "README.md",
-      "sha256": "0e935a3cff53d13476c383baf23d576efb1e510efe3d5e1307749cdb1a03be09"
+      "sha256": "2518df83b01b5813a158d762cf0b9b985e7e1f7c6ca51f0dbd58d6dea6773c8a"
     },
     {
       "id": "server-surface",

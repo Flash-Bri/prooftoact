@@ -541,9 +541,9 @@ export async function runReleaseProvenance({
       claims.manifestPath === "RELEASE_CLAIMS_MANIFEST.json" &&
       HEX_64.test(claims.manifestSha256) &&
       HEX_64.test(claims.proofManifestSha256) &&
-      claims.claimCount === 11 &&
-      claims.claimStates?.VERIFIED === 7 &&
-      claims.claimStates?.PARTIAL === 4 &&
+      claims.claimCount === 12 &&
+      claims.claimStates?.VERIFIED === 5 &&
+      claims.claimStates?.PARTIAL === 7 &&
       claims.claimStates?.PENDING === 0 &&
       claims.surfaceCount === 13 &&
       claims.stopTokenCount === 13 &&
@@ -711,7 +711,7 @@ export async function runReleaseProvenance({
       /^\d{4}-\d{2}-\d{2}$/.test(security.reviewedOn) &&
       security.manifestPath === "RELEASE_SECURITY_MANIFEST.json" &&
       HEX_64.test(security.manifestSha256) &&
-      security.surfaceCount === 18 &&
+      security.surfaceCount === 31 &&
       security.publicPathCount === 10 &&
       security.securityHeaderCount === 9 &&
       security.negativeProbeCount === 6 &&

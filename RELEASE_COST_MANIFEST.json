@@ -67,25 +67,25 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "7828eff99cbfe0c26f07218a7b9e6ab2721a776f51378d8813609f2f4a96bb3d"
+      "sha256": "5a9031007ffe335b757fa84cd1fcde10ef47dcbb938c5730c56d881450c2fc3b"
     },
     {
       "id": "aws-preflight-library",
       "path": "src/cloud/aws-gate2-preflight.js",
       "role": "FAIL_CLOSED_COST_POLICY",
-      "sha256": "f6f4cf0a0a291a998b40ecac7746f427824152967e2c8bb6c8267bec6bbfbdc2"
+      "sha256": "79052b93d041189de28fde24ac6e52f5d2929d851a5f87295a87b728dcd426ac"
     },
     {
       "id": "aws-preflight-runner",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "4eb00f49c18fd4c786a6a5066093c563a8f063c2f77f5a448d4ca7009ec051ed"
+      "sha256": "49f992eb850aae506a6f2f99b9250d35f8c05d73ac84978cacea0d2753038ff6"
     },
     {
       "id": "aws-readiness-runner",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
-      "sha256": "8940a41ba7fd33cf041a542427c0ff340208b484761f9f98721cfee52adc8bf4"
+      "sha256": "25884babc1536420937bf1c4155144234d7f436b555430cb44403f821ea99b16"
     },
     {
       "id": "cost-boundary-ledger",

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CockroachManagedMcpRecoveryClient } from "../src/cloud/managed-mcp-client.js";
+import {
+  CockroachManagedMcpRecoveryClient,
+  readBoundedUtf8Response,
+  RECOVERY_MCP_RESPONSE_LIMIT_BYTES
+} from "../src/cloud/managed-mcp-client.js";
 import { renderRecoveryQuery } from "../src/cloud/recovery-store.js";
 
 const CLUSTER_ID = "44444444-4444-4444-8444-444444444444";
@@ -17,14 +21,88 @@ function fixedQuery() {
   });
 }
 
+test("Managed MCP bounded reader rejects an oversized advertised body before reading", async () => {
+  let cancelled = false;
+  let readerRequested = false;
+  const response = {
+    headers: new Headers({
+      "content-length": String(RECOVERY_MCP_RESPONSE_LIMIT_BYTES + 1)
+    }),
+    body: {
+      async cancel() {
+        cancelled = true;
+      },
+      getReader() {
+        readerRequested = true;
+        throw new Error("reader must not be requested");
+      }
+    }
+  };
+  await assert.rejects(
+    readBoundedUtf8Response(response),
+    /RECOVERY_MCP_RESPONSE_TOO_LARGE/
+  );
+  assert.equal(readerRequested, false);
+  assert.equal(cancelled, true);
+});
+
+test("Managed MCP bounded reader cancels a chunked body that crosses its cap", async () => {
+  let cancelled = false;
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+        controller.enqueue(new Uint8Array([4, 5, 6]));
+      },
+      cancel() {
+        cancelled = true;
+      }
+    })
+  );
+  await assert.rejects(
+    readBoundedUtf8Response(response, { limitBytes: 5 }),
+    /RECOVERY_MCP_RESPONSE_TOO_LARGE/
+  );
+  assert.equal(cancelled, true);
+});
+
+test("Managed MCP bounded reader accepts exact-cap UTF-8 and rejects invalid UTF-8", async () => {
+  const text = '{"ok":true}';
+  const accepted = new Response(text);
+  assert.equal(
+    await readBoundedUtf8Response(accepted, {
+      limitBytes: Buffer.byteLength(text)
+    }),
+    text
+  );
+  const invalid = new Response(
+    new Uint8Array([0xc3, 0x28]),
+    { headers: { "content-type": "application/json" } }
+  );
+  await assert.rejects(
+    readBoundedUtf8Response(invalid),
+    /RECOVERY_MCP_RESPONSE_ENCODING_INVALID/
+  );
+});
+
 test("Managed MCP client initializes and invokes only fixed select_query", async () => {
   const calls = [];
+  let cancelledUnusedBodies = 0;
+  const unusedResponse = (status) =>
+    new Response(
+      new ReadableStream({
+        cancel() {
+          cancelledUnusedBodies += 1;
+        }
+      }),
+      { status }
+    );
   const fetchImpl = async (url, options) => {
     const payload =
       options.body === undefined ? null : JSON.parse(options.body);
     calls.push({ url, options, payload });
     if (options.method === "DELETE") {
-      return new Response(null, { status: 204 });
+      return unusedResponse(200);
     }
     if (payload.method === "initialize") {
       return new Response(
@@ -43,7 +121,7 @@ test("Managed MCP client initializes and invokes only fixed select_query", async
       );
     }
     if (payload.method === "notifications/initialized") {
-      return new Response(null, { status: 202 });
+      return unusedResponse(202);
     }
     return new Response(
       JSON.stringify({
@@ -94,6 +172,7 @@ test("Managed MCP client initializes and invokes only fixed select_query", async
     "synthetic-session"
   );
   assert.equal(toolCall.options.redirect, "error");
+  assert.equal(cancelledUnusedBodies, 2);
 });
 
 test("Managed MCP client rejects any query outside the fixed template", async () => {

@@ -5,6 +5,7 @@ import {
   __test,
   forbiddenTrackedPath,
   reviewFindings,
+  safeFailureCode,
   scanBuffer,
   validateManifest
 } from "../scripts/verify-release-privacy.js";
@@ -203,5 +204,20 @@ test("batch parser rejects truncated or mismatched Git blob output", () => {
         { oid, path: "fixture.txt", size: body.length }
       ]),
     /RELEASE_PRIVACY_BATCH_BODY/
+  );
+});
+
+test("privacy CLI preserves a safe base code without leaking finding detail", () => {
+  assert.equal(
+    safeFailureCode(
+      new Error(
+        "RELEASE_PRIVACY_UNREVIEWED_FINDING:basic-auth-url:test/fixture.js:deadbeef"
+      )
+    ),
+    "RELEASE_PRIVACY_UNREVIEWED_FINDING"
+  );
+  assert.equal(
+    safeFailureCode(new Error("/private/path:credential-like-value")),
+    "RELEASE_PRIVACY_UNKNOWN"
   );
 });

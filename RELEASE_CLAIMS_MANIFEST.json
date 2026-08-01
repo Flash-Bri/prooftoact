@@ -18,7 +18,7 @@
       "id": "aws-boundary",
       "path": "docs/AWS_GATE2.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "25061fd425b0d5b67d269ee822dbc010231f234192b329daf3b746d469774f3a"
+      "sha256": "81bda9315b2efae993bd478221c6078ac2a215c3a39683ad6e19778fdad27f0d"
     },
     {
       "id": "aws-demo-entry",
@@ -30,7 +30,7 @@
       "id": "browser-app",
       "path": "web/app.js",
       "role": "PUBLIC_BROWSER_CONTROLLER",
-      "sha256": "f5980c1968417d0c8ebde0256bd56a9f61c6a4c347ccc822839ce8ddb00ecbe2"
+      "sha256": "825b5466035432c30598aa4b43c4a9e428d4ec88df8599cfacc25ee208a02a10"
     },
     {
       "id": "browser-document",
@@ -42,19 +42,19 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "4a3fd2b7e0e7d1cc4f86081bbe8a36ad28760e116eccaad7bbef7b7dcb1f1a5e"
+      "sha256": "06643266ccfd66076d7f942e4de82fa5021d8f5b581dcb9f19f7c0e3c234c7d8"
     },
     {
       "id": "contest-matrix",
       "path": "docs/CONTEST_MATRIX.md",
       "role": "CONTEST_DRAFT",
-      "sha256": "37c56302ef48c4b0cb14f1cb8e3420e38e73b078d00adef687d131c79e533fd3"
+      "sha256": "3aaf84ea8544489d31677c57c1690ee83d0d6db1882a1f17084883e51ffeb3e9"
     },
     {
       "id": "demo-script",
       "path": "docs/DEMO_SCRIPT.md",
       "role": "VIDEO_DRAFT",
-      "sha256": "c005238dd0ffd9d814af0318b72b59d65bb6f93615cce73ea3fba69b7226997b"
+      "sha256": "75ef2bfd774943e0bf446239df3726df880d51fba39b14a8d4ad1111b2046dc6"
     },
     {
       "id": "public-demo-runtime",
@@ -66,7 +66,7 @@
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "0e935a3cff53d13476c383baf23d576efb1e510efe3d5e1307749cdb1a03be09"
+      "sha256": "2518df83b01b5813a158d762cf0b9b985e7e1f7c6ca51f0dbd58d6dea6773c8a"
     },
     {
       "id": "release-claims-ledger",
@@ -78,13 +78,13 @@
       "id": "scenario-source",
       "path": "src/scenario.js",
       "role": "SCENARIO_SOURCE",
-      "sha256": "49fffe83d44a4e66239667e1111c98fffa7b0622294338d48b95f41e5daa2eaa"
+      "sha256": "d9b85729b16c334ce5720b2a9c51a550c37c3b6f8b03e6c147e0c7888838dc7f"
     },
     {
       "id": "submission-packet",
       "path": "docs/SUBMISSION_PACKET.md",
       "role": "SUBMISSION_DRAFT",
-      "sha256": "7ee9e2fc068effaae298f289a24d6a12dd9388756194f66903f978f790208f0f"
+      "sha256": "74c5678718fcb788025d0636020b0d50bc21effdd373c134236d5ffd17236eac"
     }
   ],
   "finalReleaseReady": false

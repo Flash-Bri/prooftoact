@@ -312,8 +312,8 @@ function releaseClaimsReceipt() {
     manifestPath: "RELEASE_CLAIMS_MANIFEST.json",
     manifestSha256: "7".repeat(64),
     proofManifestSha256: "8".repeat(64),
-    claimCount: 11,
-    claimStates: { VERIFIED: 7, PARTIAL: 4, PENDING: 0 },
+    claimCount: 12,
+    claimStates: { VERIFIED: 5, PARTIAL: 7, PENDING: 0 },
     surfaceCount: 13,
     stopTokenCount: 13,
     uncheckedGateCount: 14,
@@ -424,7 +424,7 @@ function releaseSecurityReceipt() {
     reviewedOn: "2026-07-31",
     manifestPath: "RELEASE_SECURITY_MANIFEST.json",
     manifestSha256: "9".repeat(64),
-    surfaceCount: 18,
+    surfaceCount: 31,
     publicPathCount: 10,
     securityHeaderCount: 9,
     negativeProbeCount: 6,
@@ -605,7 +605,7 @@ function releaseProvenanceReceipt() {
 
 function preflightReceipt() {
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v3",
+    schemaVersion: "tideproof.gate2.aws-preflight.v4",
     status: "PASS",
     observedAt: "2026-07-31T05:30:00.000Z",
     sourceCommit: SOURCE_COMMIT,
@@ -613,6 +613,14 @@ function preflightReceipt() {
     region: "us-east-1",
     controls: {
       authenticatedAwsCaller: true,
+      callerBinding: {
+        bindingDigest: "7".repeat(64),
+        callerIdentityDigest: "8".repeat(64),
+        contextDigest: "6".repeat(64),
+        expectedIdentityDigest: "8".repeat(64),
+        expectedPrincipalDigest: "9".repeat(64),
+        principalType: "iam-user"
+      },
       bootstrapStack: {
         name: "tideproof-gate2-artifacts",
         status: "UPDATE_COMPLETE"
@@ -1097,9 +1105,24 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
     PATH: "/usr/bin",
     AWS_ACCESS_KEY_ID: "temporary-access",
     AWS_SESSION_TOKEN: "temporary-session",
+    aws_access_key_id: "lowercase-secret",
+    AWS_ENDPOINT_URL: "http://127.0.0.1:9000",
+    AWS_ENDPOINT_URL_STS: "http://127.0.0.1:9001",
+    AWS_CONFIG_FILE: "/tmp/aws-config",
+    AWS_PROFILE: "unreviewed",
+    AWS_EVIDENCE_EXPECTED_ACCOUNT_ID: "111111111111",
+    AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN:
+      "arn:aws:iam::111111111111:user/tideproof-deployer",
+    AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN:
+      "arn:aws:iam::111111111111:user/tideproof-deployer",
+    AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID: "AIDATIDEPROOF",
     DATABASE_URL: "postgresql://private",
     GIT_OBJECT_DIRECTORY: "/tmp/objects",
     NODE_OPTIONS: "--require=/tmp/inject.js",
+    NODE_DEBUG: "child_process",
+    NODE_TLS_REJECT_UNAUTHORIZED: "0",
+    NODE_EXTRA_CA_CERTS: "/tmp/untrusted-ca.pem",
+    NODE_V8_COVERAGE: "/tmp/coverage",
     npm_config_userconfig: "/tmp/npmrc",
     OPENAI_API_KEY: "private-model-key",
     SAFE_VALUE: "retained"
@@ -1117,12 +1140,29 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
     isolated.AWS_SHARED_CREDENTIALS_FILE,
     "/dev/null"
   );
+  assert.equal(isolated.AWS_ENDPOINT_URL, undefined);
+  assert.equal(isolated.AWS_ENDPOINT_URL_STS, undefined);
+  assert.equal(isolated.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID, undefined);
+  assert.equal(isolated.aws_access_key_id, undefined);
+  assert.equal(isolated.NODE_DEBUG, undefined);
   assert.equal(isolated.GIT_TERMINAL_PROMPT, "0");
   assert.equal(isolated.npm_config_userconfig, "/dev/null");
 
-  const authenticated = __test.childEnvironment(source, {
-    awsAuthenticated: true
-  });
+  assert.throws(
+    () =>
+      __test.childEnvironment(source, {
+        awsAuthenticated: true
+      }),
+    /AWS_EVIDENCE_ENDPOINT_OVERRIDE/
+  );
+  const authenticated = __test.childEnvironment(
+    Object.fromEntries(
+      Object.entries(source).filter(
+        ([name]) => !name.startsWith("AWS_ENDPOINT_URL")
+      )
+    ),
+    { awsAuthenticated: true }
+  );
   assert.equal(
     authenticated.AWS_ACCESS_KEY_ID,
     "temporary-access"
@@ -1131,10 +1171,28 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
     authenticated.AWS_SESSION_TOKEN,
     "temporary-session"
   );
-  assert.equal(authenticated.DATABASE_URL, undefined);
-  assert.equal(authenticated.OPENAI_API_KEY, undefined);
+  assert.equal(authenticated.AWS_ENDPOINT_URL, undefined);
+  assert.equal(authenticated.AWS_ENDPOINT_URL_STS, undefined);
+  assert.equal(authenticated.aws_access_key_id, undefined);
+  assert.equal(authenticated.AWS_PROFILE, undefined);
+  assert.equal(authenticated.NODE_DEBUG, undefined);
+  assert.equal(authenticated.NODE_TLS_REJECT_UNAUTHORIZED, undefined);
+  assert.equal(authenticated.NODE_EXTRA_CA_CERTS, undefined);
+  assert.equal(authenticated.NODE_V8_COVERAGE, undefined);
+  assert.equal(
+    authenticated.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID,
+    "111111111111"
+  );
+  assert.equal(authenticated.AWS_CONFIG_FILE, "/dev/null");
   assert.equal(
     authenticated.AWS_SHARED_CREDENTIALS_FILE,
-    undefined
+    "/dev/null"
   );
+  assert.equal(
+    authenticated.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS,
+    "true"
+  );
+  assert.equal(authenticated.DATABASE_URL, undefined);
+  assert.equal(authenticated.OPENAI_API_KEY, undefined);
+  assert.equal(authenticated.AWS_CONFIG_FILE, "/dev/null");
 });

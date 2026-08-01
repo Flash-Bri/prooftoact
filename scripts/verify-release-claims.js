@@ -407,10 +407,10 @@ export function verifyReleaseClaims({
       proof.status === "PASS" &&
       proof.manifestStatus === "INCOMPLETE_LIVE_GATES_PENDING" &&
       HEX_64.test(proof.manifestSha256) &&
-      proof.claimCount === 11 &&
+      proof.claimCount === 12 &&
       sameJson(proof.claimStates, {
-        VERIFIED: 7,
-        PARTIAL: 4,
+        VERIFIED: 5,
+        PARTIAL: 7,
         PENDING: 0
       }),
     "RELEASE_CLAIMS_PROOF_MANIFEST"

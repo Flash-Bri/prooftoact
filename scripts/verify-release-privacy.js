@@ -118,6 +118,14 @@ function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+export function safeFailureCode(error) {
+  const message = String(error?.message ?? "");
+  const match = /^(RELEASE_PRIVACY_[A-Z0-9_]{1,120})(?::.*)?$/.exec(
+    message
+  );
+  return match?.[1] ?? "RELEASE_PRIVACY_UNKNOWN";
+}
+
 function safeRelativePath(value) {
   return (
     typeof value === "string" &&
@@ -616,10 +624,7 @@ const startedDirectly =
 
 if (startedDirectly) {
   main().catch((error) => {
-    const message = String(error?.message ?? "");
-    const code = /^RELEASE_PRIVACY_[A-Z0-9_]{1,120}$/.test(message)
-      ? message
-      : "RELEASE_PRIVACY_UNKNOWN";
+    const code = safeFailureCode(error);
     process.stderr.write(`TIDEPROOF_RELEASE_PRIVACY_FAILED:${code}\n`);
     process.exitCode = 1;
   });

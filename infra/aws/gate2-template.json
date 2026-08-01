@@ -1937,6 +1937,16 @@
                   }
                 },
                 {
+                  "Sid": "ReadOwnStackRoleBinding",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeStackResource"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+                  }
+                },
+                {
                   "Sid": "DenyOtherLambdaTargets",
                   "Effect": "Deny",
                   "Action": [

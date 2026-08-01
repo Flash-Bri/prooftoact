@@ -24,8 +24,8 @@ live IAM enforcement, or permission to deploy or publish.
 | Signed-out judge surface | Ten enumerated `GET` routes, exact API event validation, no ambient credentials, no CORS, no cookies, strict browser headers, bounded response size, and a logs-only Demo role | Exact deployed-byte, route, header, throttle, IAM, abuse, and signed-out review |
 | Advisory proposal | One `AWS_IAM` `POST /advisory` route, one immutable coordinator alias, exact dedicated-role STS principal validation, schema-bound input, one bounded Bedrock model, and an explicitly untrusted proposal | Live dedicated-role allow plus alternate-principal denial receipts, model invocation receipt, and private payload/log review |
 | Receipt signing | One P-256 `SIGN_VERIFY` KMS key, digest-only ECDSA signing, one immutable signer alias, and no model, secret, or arbitrary Lambda capability | Live key-policy, public-key, sign/verify, direct-invoke-denial, and teardown receipts |
-| Authority spend | One exact project secret ARN and `AWSCURRENT` VersionId, exact Cockroach host/port, `sslmode=verify-full`, bounded database timeouts, derived operation fields, a two-contender typed `SECURITY DEFINER` wrapper, serializable one-winner logic, and no model/signing/arbitrary-Lambda capability | Live secret/version/endpoint/IAM audit, overlapping two-Lambda race, ambiguous-commit behavior, and later read-only durable-state reconciliation |
-| CockroachDB memory and recovery | Public privileges revoked, default privileges constrained, typed APIs, fixed recovery query, response identity binding, redirect rejection, timeouts, and context-only recovery | Final exact-release database grants, MCP audit, credential isolation, and private human review |
+| Authority spend | One exact project secret ARN and `AWSCURRENT` VersionId, exact Cockroach host/port, `sslmode=verify-full`, bounded database timeouts, derived operation fields, a two-contender typed `SECURITY DEFINER` wrapper, serializable one-winner logic, and no model/signing/arbitrary-Lambda capability. The evidence runner rejects endpoint/profile/proxy/CA and Git-object indirection, resolves the expected caller role from CloudFormation, and binds the observed STS caller triple before invocation. | Live secret/version/endpoint/IAM audit, overlapping two-Lambda race, ambiguous-commit behavior, private raw STS receipt, and later read-only durable-state reconciliation |
+| CockroachDB memory and recovery | Pre-mutation reused-cluster posture checks reject unsafe role options, external/admin memberships, system grants, and out-of-scope grants; managed privileges are scrubbed and rebuilt through NOLOGIN capability roles. Runtime URLs cannot override the reviewed query/statement/idle timeouts. Managed MCP uses one fixed query, redirect rejection, a 256 KiB streamed response cap, fatal UTF-8 decoding, and context-only release after both audits. | Disposable-cluster validation against the exact CockroachDB Cloud version, final grants/options/membership inventory, MCP audit, credential isolation, and private human review |
 | Repository and evidence | Exact dependency lock, bundle notices, full-history provenance, bounded privacy scan, claim ledger, and proof manifest | Final official-main rerun plus private review of repository, receipts, screenshots, video, URLs, and submission fields |
 
 ## Threat and abuse cases
@@ -55,7 +55,10 @@ enforcement:
   `tp_gate2_authorizer_user`
   CockroachDB URL with the configured host/port and only
   `sslmode=verify-full`; the Managed MCP client uses the fixed Cockroach Cloud
-  endpoint, rejects redirects, bounds requests, and validates response IDs.
+  endpoint, rejects redirects, bounds requests and streamed response bytes,
+  rejects invalid UTF-8, and validates response IDs. Database runtime URLs
+  reject timeout/application override parameters and ambient libpq control
+  variables; migration clients use a separate, longer bounded profile.
 - **Database actor and name resolution:** Gate One and Gate Two use separate
   database users and roles. The Gate Two role can execute only its fixed-two-
   contender wrapper plus the exact read-only resolver/observer, while explicit
@@ -67,6 +70,15 @@ enforcement:
   documented function-level `SET search_path`, so each database credential
   remains an authority capability within its grant surface and live
   grant/session review remains required.
+- **Dirty or reused database state:** both security bootstraps inventory the
+  managed users, roles, memberships, system grants, and object grants before
+  changing credentials, ownership, or grants. Unknown options, external or
+  admin memberships, system privileges, and out-of-scope grants fail closed.
+  Managed-scope grants are broadly revoked from runtime roles and users,
+  capability roles are forced to `NOLOGIN`, only exact memberships are
+  rebuilt, and a post-attestation digest is returned. Catalog formatting,
+  membership propagation, and convergence still require a live disposable-
+  cluster test on the exact provider version.
 - **Replay, ambiguous commit, and inherited authority:** these are enforced by
   the accepted Gate One transaction/recovery controls and the local Gate Two
   candidate. The static security gate binds those sources but does not upgrade
@@ -104,6 +116,12 @@ receipt to the exact deployed bundle and public URL, and preserve accepted live
 receipts for IAM allow/deny behavior, API routes and headers, throttles,
 concurrency, KMS, the one bounded model call, the authority race, durable-state
 reconciliation, logs, cost controls, and teardown.
+
+Before any release deployment, seed a disposable CockroachDB cluster with a
+login-capable owner, stale direct runtime-user grant, unrelated inherited
+role, and system privilege. The bootstrap must reject unsafe posture before
+credential mutation; after explicit cleanup, an idempotent rerun must attest
+the exact options, memberships, grants, timeouts, and private-schema denial.
 
 A separate private human security and abuse review must inspect the deployed
 application, repository metadata, CloudFormation change set, IAM policies,

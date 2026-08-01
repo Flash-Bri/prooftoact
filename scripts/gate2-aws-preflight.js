@@ -1,12 +1,17 @@
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   AWS_GATE2_PREFLIGHT_DEFAULTS,
   awsBudgetDescribeArguments,
   awsCostExplorerPeriod,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
+import {
+  assertAwsSdkEvidenceEnvironment,
+  isolatedAwsCliEnvironment,
+  isolatedEvidenceProcessEnvironment
+} from "../src/cloud/aws-evidence-identity.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -15,11 +20,7 @@ function commandJson(command, args, code) {
   const result = spawnSync(command, args, {
     cwd: root,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      AWS_PAGER: "",
-      AWS_EC2_METADATA_DISABLED: "true"
-    },
+    env: isolatedAwsCliEnvironment(process.env),
     maxBuffer: 10 * 1024 * 1024
   });
   if (result.error || result.status !== 0) {
@@ -35,7 +36,8 @@ function commandJson(command, args, code) {
 function commandText(command, args, code) {
   const result = spawnSync(command, args, {
     cwd: root,
-    encoding: "utf8"
+    encoding: "utf8",
+    env: isolatedEvidenceProcessEnvironment(process.env)
   });
   if (result.error || result.status !== 0) {
     throw new Error(code);
@@ -106,7 +108,13 @@ function readBucketPolicy(region, bucketName) {
   }
 }
 
+export function assertAwsPreflightParentEnvironment(environment) {
+  assertAwsSdkEvidenceEnvironment(environment);
+  return true;
+}
+
 function collectSnapshot(now = new Date()) {
+  assertAwsPreflightParentEnvironment(process.env);
   const {
     region,
     modelId,
@@ -131,6 +139,30 @@ function collectSnapshot(now = new Date()) {
     ).length === 0;
   if (!workingTreeClean) {
     throw new Error("WORKING_TREE_DIRTY");
+  }
+
+  const expectedAccountId =
+    process.env.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID;
+  const expectedPrincipalArn =
+    process.env.AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN;
+  const expectedCallerArn =
+    process.env.AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN;
+  const expectedCallerUserId =
+    process.env.AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID;
+  if (!/^\d{12}$/.test(expectedAccountId ?? "")) {
+    throw new Error("AWS_EXPECTED_ACCOUNT_REQUIRED");
+  }
+  if (
+    typeof expectedPrincipalArn !== "string" ||
+    !expectedPrincipalArn.startsWith("arn:aws:iam::")
+  ) {
+    throw new Error("AWS_EXPECTED_PREFLIGHT_PRINCIPAL_REQUIRED");
+  }
+  if (
+    typeof expectedCallerArn !== "string" ||
+    typeof expectedCallerUserId !== "string"
+  ) {
+    throw new Error("AWS_EXPECTED_PREFLIGHT_IDENTITY_REQUIRED");
   }
 
   const callerIdentity = awsJson(region, "sts", "get-caller-identity");
@@ -208,6 +240,10 @@ function collectSnapshot(now = new Date()) {
     treeDigest,
     workingTreeClean,
     region,
+    expectedAccountId,
+    expectedPrincipalArn,
+    expectedCallerArn,
+    expectedCallerUserId,
     callerIdentity,
     bootstrapStackName,
     bootstrapStack,
@@ -266,22 +302,31 @@ function collectSnapshot(now = new Date()) {
   };
 }
 
-function main() {
-  if (process.argv.length !== 2) {
+export function main(argv = process.argv.slice(2)) {
+  if (argv.length !== 0) {
     throw new Error("UNEXPECTED_ARGUMENT");
   }
   const receipt = validateAwsGate2Preflight(collectSnapshot());
   process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
 }
 
-try {
-  main();
-} catch (error) {
-  const code = String(error?.message ?? "UNKNOWN_FAILURE")
-    .replaceAll(/[^A-Z0-9_]/g, "_")
-    .slice(0, 160);
-  process.stderr.write(
-    `TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${code}\n`
-  );
-  process.exitCode = 1;
+const startedDirectly =
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (startedDirectly) {
+  try {
+    main();
+  } catch (error) {
+    const candidate = String(error?.message ?? "");
+    const code = /^(?:AWS|GIT|WORKING_TREE|UNEXPECTED)_[A-Z0-9_]{1,120}$/.test(
+      candidate
+    )
+      ? candidate
+      : "UNKNOWN_FAILURE";
+    process.stderr.write(
+      `TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${code}\n`
+    );
+    process.exitCode = 1;
+  }
 }

@@ -1,5 +1,12 @@
 import { Client } from "pg";
+import { setTimeout as sleepTimer } from "node:timers/promises";
 import { AuthorityStore, connectionStringForDatabase } from "./authority-store.js";
+import { bootstrapDatabaseConfig } from "./database-runtime.js";
+import {
+  collectDatabaseSecurityPosture,
+  quoteIdentifier,
+  validateDatabaseSecurityPosture
+} from "./database-security-posture.js";
 
 const ROLE_BINDINGS = [
   ["tp_ingest_role", "tp_ingest_user"],
@@ -11,6 +18,16 @@ const ROLE_BINDINGS = [
 ];
 
 const RUNTIME_ROLES = ROLE_BINDINGS.map(([role]) => role);
+const RUNTIME_USERS = ROLE_BINDINGS.map(([, user]) => user);
+const CAPABILITY_ROLES = ["tp_owner", ...RUNTIME_ROLES];
+const MANAGED_PRINCIPALS = [...CAPABILITY_ROLES, ...RUNTIME_USERS];
+const PRIMARY_POSTURE_SPEC = Object.freeze({
+  databaseName: "tideproof",
+  managedSchemas: ["tp_private", "tp_ledger", "tp_api"],
+  roles: CAPABILITY_ROLES,
+  users: RUNTIME_USERS,
+  bindings: ROLE_BINDINGS
+});
 
 function requirePassword(passwords, user) {
   const value = passwords?.[user];
@@ -20,22 +37,87 @@ function requirePassword(passwords, user) {
   return value;
 }
 
-async function createRolesAndUsers(client, passwords) {
+function validatedPasswords(passwords) {
+  return Object.fromEntries(
+    RUNTIME_USERS.map((user) => [user, requirePassword(passwords, user)])
+  );
+}
+
+async function createPrincipalShells(client) {
   await client.query("CREATE ROLE IF NOT EXISTS tp_owner");
   for (const [role, user] of ROLE_BINDINGS) {
     await client.query(`CREATE ROLE IF NOT EXISTS ${role}`);
     await client.query(`CREATE USER IF NOT EXISTS ${user}`);
-    await client.query(`ALTER USER ${user} WITH PASSWORD $1`, [
-      requirePassword(passwords, user)
-    ]);
+  }
+}
+
+async function scrubManagedMemberships(client) {
+  for (const role of RUNTIME_ROLES) {
+    for (const principal of MANAGED_PRINCIPALS) {
+      if (role !== principal) {
+        await client.query(`REVOKE ${role} FROM ${principal}`);
+      }
+    }
+  }
+}
+
+async function enforcePrincipalCredentials(client, passwords) {
+  for (const role of CAPABILITY_ROLES) {
+    await client.query(`ALTER ROLE ${role} WITH NOLOGIN`);
+    await client.query(`ALTER ROLE ${role} WITH PASSWORD NULL`);
+  }
+  for (const user of RUNTIME_USERS) {
+    await client.query(`ALTER USER ${user} WITH PASSWORD $1`, [passwords[user]]);
+  }
+}
+
+async function grantExactMemberships(client) {
+  for (const [role, user] of ROLE_BINDINGS) {
     await client.query(`GRANT ${role} TO ${user}`);
   }
-  await client.query(
-    "REVOKE tp_authorizer_role FROM tp_gate2_authorizer_user"
-  );
-  await client.query(
-    "REVOKE tp_gate2_authorizer_role FROM tp_authorizer_user"
-  );
+}
+
+async function scrubManagedPrivileges(client) {
+  for (const principal of [...RUNTIME_ROLES, ...RUNTIME_USERS]) {
+    await client.query(`REVOKE ALL ON DATABASE tideproof FROM ${principal}`);
+    await client.query(
+      `REVOKE ALL ON SCHEMA tp_private, tp_ledger, tp_api FROM ${principal}`
+    );
+    await client.query(
+      `REVOKE ALL ON ALL TABLES IN SCHEMA tp_private, tp_ledger, tp_api FROM ${principal}`
+    );
+    await client.query(
+      `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA tp_private, tp_ledger, tp_api FROM ${principal}`
+    );
+  }
+}
+
+async function collectValidatedPosture(
+  client,
+  options,
+  { attempts = 1, delayMs = 0 } = {}
+) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const posture = await collectDatabaseSecurityPosture(
+        client,
+        PRIMARY_POSTURE_SPEC
+      );
+      const summary = validateDatabaseSecurityPosture(
+        posture,
+        PRIMARY_POSTURE_SPEC,
+        options
+      );
+      return { posture, summary };
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) {
+        await sleepTimer(delayMs);
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function prepareOwnerPrivileges(client) {
@@ -516,21 +598,24 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
-    CREATE OR REPLACE FUNCTION tp_api.g1_observe_admissibility_v2(
+    CREATE OR REPLACE FUNCTION tp_private.g1_list_admissibility_internal_v1(
       p_tenant_id UUID,
-      p_evidence_id UUID,
       p_incident_id UUID,
       p_agency STRING
     )
     RETURNS TABLE(
+      evidence_id UUID,
       admissibility STRING,
       evidence_digest STRING,
+      assertion STRING,
+      embedding VECTOR(3),
       database_now TIMESTAMPTZ
     )
     LANGUAGE SQL
     SECURITY DEFINER
     AS $$
       SELECT
+        evidence.evidence_id,
         CASE
           WHEN evidence.verification_key_id IS NULL
             OR evidence.verifier_version IS NULL
@@ -621,6 +706,8 @@ async function createFunctions(client) {
           ELSE 'admissible'
         END,
         evidence.evidence_digest,
+        evidence.assertion,
+        evidence.embedding,
         transaction_timestamp()
       FROM tp_private.g1_evidence AS evidence
       LEFT JOIN tp_ledger.g1_evidence_verification_receipts AS verification
@@ -631,8 +718,326 @@ async function createFunctions(client) {
        AND verification_key.verification_key_id =
          evidence.verification_key_id
       WHERE evidence.tenant_id = p_tenant_id
-        AND evidence.evidence_id = p_evidence_id
         AND evidence.incident_id = p_incident_id
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_observe_admissibility_v2(
+      p_tenant_id UUID,
+      p_evidence_id UUID,
+      p_incident_id UUID,
+      p_agency STRING
+    )
+    RETURNS TABLE(
+      admissibility STRING,
+      evidence_digest STRING,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        listed.admissibility,
+        listed.evidence_digest,
+        listed.database_now
+      FROM tp_private.g1_list_admissibility_internal_v1(
+        p_tenant_id,
+        p_incident_id,
+        p_agency
+      ) AS listed
+      WHERE listed.evidence_id = p_evidence_id
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_prepare_vector_set_v1(
+      p_tenant_id UUID,
+      p_retrieval_id UUID,
+      p_incident_id UUID,
+      p_agency STRING,
+      p_policy_version STRING,
+      p_ttl_ms INT8
+    )
+    RETURNS TABLE(
+      retrieval_id UUID,
+      candidate_count INT8,
+      admitted_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_candidate_count INT8;
+      v_admitted_at TIMESTAMPTZ;
+      v_expires_at TIMESTAMPTZ;
+    BEGIN
+      IF session_user <> 'tp_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate One authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF p_policy_version <> 'g1-admissibility-v2' THEN
+        RAISE EXCEPTION 'unsupported admissibility policy version'
+          USING ERRCODE = '22023';
+      END IF;
+      IF length(p_agency) < 1 OR length(p_agency) > 128 THEN
+        RAISE EXCEPTION 'agency outside policy'
+          USING ERRCODE = '22023';
+      END IF;
+      IF p_ttl_ms < 1000 OR p_ttl_ms > 300000 THEN
+        RAISE EXCEPTION 'retrieval TTL outside policy'
+          USING ERRCODE = '22023';
+      END IF;
+      IF EXISTS (
+        SELECT 1
+        FROM tp_private.g1_vector_retrieval_sets AS retrieval
+        WHERE retrieval.tenant_id = p_tenant_id
+          AND retrieval.retrieval_id = p_retrieval_id
+      ) OR EXISTS (
+        SELECT 1
+        FROM tp_private.g1_vector_candidates AS candidate
+        WHERE candidate.tenant_id = p_tenant_id
+          AND candidate.retrieval_id = p_retrieval_id
+      ) THEN
+        RAISE EXCEPTION 'retrieval identifier already used'
+          USING ERRCODE = '23505';
+      END IF;
+
+      SELECT count(*)::INT8
+      INTO v_candidate_count
+      FROM tp_private.g1_list_admissibility_internal_v1(
+        p_tenant_id,
+        p_incident_id,
+        p_agency
+      ) AS listed
+      WHERE listed.admissibility = 'admissible';
+      IF v_candidate_count > 10000 THEN
+        RAISE EXCEPTION 'admissible candidate set exceeds policy cap'
+          USING ERRCODE = '54000';
+      END IF;
+      IF EXISTS (
+        SELECT 1
+        FROM tp_private.g1_list_admissibility_internal_v1(
+          p_tenant_id,
+          p_incident_id,
+          p_agency
+        ) AS listed
+        WHERE listed.admissibility = 'admissible'
+          AND octet_length(listed.assertion) NOT BETWEEN 1 AND 4096
+      ) THEN
+        RAISE EXCEPTION 'admissible assertion exceeds policy cap'
+          USING ERRCODE = '54000';
+      END IF;
+
+      v_admitted_at := transaction_timestamp();
+      v_expires_at :=
+        v_admitted_at + p_ttl_ms * INTERVAL '1 millisecond';
+
+      INSERT INTO tp_private.g1_vector_retrieval_sets (
+        tenant_id,
+        retrieval_id,
+        incident_id,
+        agency,
+        policy_version,
+        admitted_at,
+        expires_at,
+        candidate_count
+      ) VALUES (
+        p_tenant_id,
+        p_retrieval_id,
+        p_incident_id,
+        p_agency,
+        p_policy_version,
+        v_admitted_at,
+        v_expires_at,
+        v_candidate_count
+      );
+
+      INSERT INTO tp_private.g1_vector_candidates (
+        tenant_id,
+        retrieval_id,
+        evidence_id,
+        evidence_digest,
+        assertion,
+        embedding
+      )
+      SELECT
+        p_tenant_id,
+        p_retrieval_id,
+        listed.evidence_id,
+        listed.evidence_digest,
+        listed.assertion,
+        listed.embedding
+      FROM tp_private.g1_list_admissibility_internal_v1(
+        p_tenant_id,
+        p_incident_id,
+        p_agency
+      ) AS listed
+      WHERE listed.admissibility = 'admissible';
+
+      RETURN QUERY SELECT
+        p_retrieval_id,
+        v_candidate_count,
+        v_admitted_at,
+        v_expires_at;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_rank_vector_set_v1(
+      p_tenant_id UUID,
+      p_retrieval_id UUID,
+      p_incident_id UUID,
+      p_agency STRING,
+      p_policy_version STRING,
+      p_query_embedding STRING,
+      p_limit INT8
+    )
+    RETURNS TABLE(
+      evidence_id UUID,
+      evidence_digest STRING,
+      assertion STRING,
+      distance FLOAT8
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_set_count INT8;
+    BEGIN
+      IF session_user <> 'tp_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate One authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF p_limit IS NULL OR p_limit < 1 OR p_limit > 100 THEN
+        RAISE EXCEPTION 'vector result limit outside policy'
+          USING ERRCODE = '22023';
+      END IF;
+      IF p_query_embedding IS NULL THEN
+        RAISE EXCEPTION 'query embedding required'
+          USING ERRCODE = '22023';
+      END IF;
+      SELECT count(*)::INT8
+      INTO v_set_count
+      FROM tp_private.g1_vector_retrieval_sets AS retrieval
+      WHERE retrieval.tenant_id = p_tenant_id
+        AND retrieval.retrieval_id = p_retrieval_id
+        AND retrieval.incident_id = p_incident_id
+        AND retrieval.agency = p_agency
+        AND retrieval.policy_version = p_policy_version
+        AND retrieval.cleaned_at IS NULL
+        AND retrieval.expires_at > transaction_timestamp();
+      IF v_set_count <> 1 THEN
+        RAISE EXCEPTION 'retrieval set missing, mismatched, or expired'
+          USING ERRCODE = '22023';
+      END IF;
+
+      RETURN QUERY
+      SELECT
+        candidate.evidence_id,
+        candidate.evidence_digest,
+        candidate.assertion,
+        candidate.embedding <=> p_query_embedding::VECTOR(3)
+      FROM tp_private.g1_vector_candidates AS candidate
+      WHERE candidate.tenant_id = p_tenant_id
+        AND candidate.retrieval_id = p_retrieval_id
+      ORDER BY candidate.embedding <=> p_query_embedding::VECTOR(3)
+      LIMIT p_limit;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_delete_vector_set_v1(
+      p_tenant_id UUID,
+      p_retrieval_id UUID
+    )
+    RETURNS TABLE(deleted_candidates INT8, retired_sets INT8)
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_deleted_candidates INT8;
+      v_retired_sets INT8;
+    BEGIN
+      IF session_user <> 'tp_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate One authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      SELECT count(*)::INT8
+      INTO v_deleted_candidates
+      FROM tp_private.g1_vector_candidates AS candidate
+      WHERE candidate.tenant_id = p_tenant_id
+        AND candidate.retrieval_id = p_retrieval_id;
+      DELETE FROM tp_private.g1_vector_candidates AS candidate
+      WHERE candidate.tenant_id = p_tenant_id
+        AND candidate.retrieval_id = p_retrieval_id;
+      UPDATE tp_private.g1_vector_retrieval_sets AS retrieval
+      SET cleaned_at = COALESCE(
+        retrieval.cleaned_at,
+        transaction_timestamp()
+      )
+      WHERE retrieval.tenant_id = p_tenant_id
+        AND retrieval.retrieval_id = p_retrieval_id
+      RETURNING 1::INT8 INTO v_retired_sets;
+      v_retired_sets := COALESCE(v_retired_sets, 0);
+      RETURN QUERY SELECT v_deleted_candidates, v_retired_sets;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_purge_expired_vector_sets_v1(
+      p_tenant_id UUID,
+      p_limit INT8
+    )
+    RETURNS TABLE(deleted_candidates INT8, retired_sets INT8)
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_retrieval_id UUID;
+      v_deleted_candidates INT8 := 0;
+      v_retired_sets INT8 := 0;
+      v_row_count INT8;
+    BEGIN
+      IF session_user <> 'tp_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate One authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+        RAISE EXCEPTION 'vector purge limit outside policy'
+          USING ERRCODE = '22023';
+      END IF;
+
+      FOR v_retrieval_id IN
+        SELECT retrieval.retrieval_id
+        FROM tp_private.g1_vector_retrieval_sets AS retrieval
+        WHERE retrieval.tenant_id = p_tenant_id
+          AND retrieval.cleaned_at IS NULL
+          AND retrieval.expires_at <= transaction_timestamp()
+        ORDER BY retrieval.expires_at, retrieval.retrieval_id
+        LIMIT p_limit
+      LOOP
+        DELETE FROM tp_private.g1_vector_candidates AS candidate
+        WHERE candidate.tenant_id = p_tenant_id
+          AND candidate.retrieval_id = v_retrieval_id;
+        GET DIAGNOSTICS v_row_count = ROW_COUNT;
+        v_deleted_candidates := v_deleted_candidates + v_row_count;
+
+        UPDATE tp_private.g1_vector_retrieval_sets AS retrieval
+        SET cleaned_at = transaction_timestamp()
+        WHERE retrieval.tenant_id = p_tenant_id
+          AND retrieval.retrieval_id = v_retrieval_id
+          AND retrieval.cleaned_at IS NULL;
+        GET DIAGNOSTICS v_row_count = ROW_COUNT;
+        v_retired_sets := v_retired_sets + v_row_count;
+      END LOOP;
+
+      RETURN QUERY SELECT v_deleted_candidates, v_retired_sets;
+    END
     $$
   `);
 
@@ -1731,6 +2136,8 @@ async function transferOwnership(client) {
   for (const object of [
     "tp_private.g1_evidence",
     "tp_private.g1_verification_keys",
+    "tp_private.g1_vector_retrieval_sets",
+    "tp_private.g1_vector_candidates",
     "tp_private.g1_resources",
     "tp_private.g1_retry_probes",
     "tp_ledger.g1_evidence_verification_receipts",
@@ -1754,8 +2161,13 @@ async function transferOwnership(client) {
     "tp_api.g1_append_verified_evidence_v1(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)",
     "tp_api.g1_get_verification_key_v1(UUID, STRING)",
     "tp_api.g1_append_verified_evidence_v2(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)",
+    "tp_private.g1_list_admissibility_internal_v1(UUID, UUID, STRING)",
     "tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING)",
     "tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
+    "tp_api.g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
+    "tp_api.g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
+    "tp_api.g1_delete_vector_set_v1(UUID, UUID)",
+    "tp_api.g1_purge_expired_vector_sets_v1(UUID, INT8)",
     "tp_api.g1_spend_authority_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
     "tp_api.g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
     "tp_api.g1_resolve_request_v1(UUID, UUID, STRING)",
@@ -1775,7 +2187,7 @@ async function transferOwnership(client) {
   }
 }
 
-async function applyGrants(client) {
+async function applyGrants(client, bootstrapOwner) {
   await client.query("REVOKE ALL ON DATABASE tideproof FROM public");
   await client.query("REVOKE CREATE ON SCHEMA public FROM public");
   await client.query(
@@ -1784,19 +2196,17 @@ async function applyGrants(client) {
   await client.query(
     "REVOKE ALL ON ALL TABLES IN SCHEMA tp_private, tp_ledger, tp_api FROM public"
   );
+  await client.query(
+    "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA tp_private, tp_ledger, tp_api FROM public"
+  );
 
+  await scrubManagedPrivileges(client);
   for (const role of RUNTIME_ROLES) {
     await client.query(`GRANT CONNECT ON DATABASE tideproof TO ${role}`);
     await client.query(
-      `GRANT USAGE ON SCHEMA tp_private, tp_ledger, tp_api TO ${role}`
-    );
-    await client.query(
-      `REVOKE ALL ON ALL TABLES IN SCHEMA tp_private, tp_ledger FROM ${role}`
+      `GRANT USAGE ON SCHEMA tp_api TO ${role}`
     );
   }
-  await client.query(
-    "REVOKE USAGE ON SCHEMA tp_private, tp_ledger FROM tp_gate2_authorizer_role"
-  );
 
   await client.query(`
     REVOKE EXECUTE ON FUNCTION
@@ -1828,6 +2238,14 @@ async function applyGrants(client) {
     GRANT EXECUTE ON FUNCTION
       tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING),
       tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING),
+      tp_api.g1_prepare_vector_set_v1(
+        UUID, UUID, UUID, STRING, STRING, INT8
+      ),
+      tp_api.g1_rank_vector_set_v1(
+        UUID, UUID, UUID, STRING, STRING, STRING, INT8
+      ),
+      tp_api.g1_delete_vector_set_v1(UUID, UUID),
+      tp_api.g1_purge_expired_vector_sets_v1(UUID, INT8),
       tp_api.g1_spend_authority_v1(
         UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
         UUID, UUID, JSONB, STRING, STRING, INT8
@@ -1842,6 +2260,14 @@ async function applyGrants(client) {
     REVOKE EXECUTE ON FUNCTION
       tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING),
       tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING),
+      tp_api.g1_prepare_vector_set_v1(
+        UUID, UUID, UUID, STRING, STRING, INT8
+      ),
+      tp_api.g1_rank_vector_set_v1(
+        UUID, UUID, UUID, STRING, STRING, STRING, INT8
+      ),
+      tp_api.g1_delete_vector_set_v1(UUID, UUID),
+      tp_api.g1_purge_expired_vector_sets_v1(UUID, INT8),
       tp_api.g1_spend_authority_v1(
         UUID, UUID, STRING, JSONB, UUID, UUID, STRING, STRING, STRING,
         UUID, UUID, JSONB, STRING, STRING, INT8
@@ -1891,7 +2317,7 @@ async function applyGrants(client) {
     "GRANT SELECT ON tp_api.g1_receipt_audit_v1 TO tp_audit_role"
   );
 
-  for (const owner of ["bc", "tp_owner"]) {
+  for (const owner of [quoteIdentifier(bootstrapOwner), "tp_owner"]) {
     for (const schema of ["tp_private", "tp_ledger", "tp_api"]) {
       await client.query(
         `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA ${schema} REVOKE ALL ON TABLES FROM public`
@@ -1921,51 +2347,73 @@ export async function bootstrapPrimarySecurity({
   adminConnectionString,
   passwords
 }) {
-  const store = new AuthorityStore({
-    connectionString: adminConnectionString,
-    databaseName: "tideproof",
-    maxConnections: 2
-  });
-  await store.migrate();
-  await store.close();
-
-  const client = new Client({
+  const acceptedPasswords = validatedPasswords(passwords);
+  const client = new Client(bootstrapDatabaseConfig({
     connectionString: connectionStringForDatabase(
       adminConnectionString,
       "tideproof"
-    )
-  });
+    ),
+    max: 1,
+    applicationName: "tideproof-primary-security"
+  }));
+  let store;
   try {
     await client.connect();
-    await createRolesAndUsers(client, passwords);
+    const preflight = await collectValidatedPosture(
+      client,
+      { allowMissing: true, allowManagedDrift: true }
+    );
+    await createPrincipalShells(client);
+    await collectValidatedPosture(
+      client,
+      { allowMissing: false, allowManagedDrift: true }
+    );
+
+    store = new AuthorityStore({
+      connectionString: adminConnectionString,
+      databaseName: "tideproof",
+      maxConnections: 2
+    });
+    await store.migrate();
+    await store.close();
+    store = undefined;
+
+    await scrubManagedPrivileges(client);
+    await scrubManagedMemberships(client);
+    await enforcePrincipalCredentials(client, acceptedPasswords);
     await prepareOwnerPrivileges(client);
     await createAuditObjects(client);
     await createFunctions(client);
     await transferOwnership(client);
-    await applyGrants(client);
+    const bootstrapOwnerResult = await client.query(
+      "SELECT current_user AS bootstrap_owner"
+    );
+    if (
+      bootstrapOwnerResult.rowCount !== 1 ||
+      typeof bootstrapOwnerResult.rows[0]?.bootstrap_owner !== "string"
+    ) {
+      throw new Error("DATABASE_POSTURE_BOOTSTRAP_OWNER_INVALID");
+    }
+    await applyGrants(
+      client,
+      bootstrapOwnerResult.rows[0].bootstrap_owner
+    );
+    await grantExactMemberships(client);
 
-    const roles = await client.query(`
-      SELECT username, options
-      FROM [SHOW USERS]
-      WHERE username IN (
-        'tp_owner',
-        'tp_ingest_role',
-        'tp_ingest_user',
-        'tp_authorizer_role',
-        'tp_authorizer_user',
-        'tp_gate2_authorizer_role',
-        'tp_gate2_authorizer_user',
-        'tp_dispatch_role',
-        'tp_dispatch_user',
-        'tp_recovery_audit_role',
-        'tp_recovery_audit_user',
-        'tp_audit_role',
-        'tp_audit_user'
-      )
-      ORDER BY username
-    `);
-    return { roles: roles.rows };
+    const attested = await collectValidatedPosture(
+      client,
+      { allowMissing: false, allowManagedDrift: false },
+      { attempts: 30, delayMs: 2_000 }
+    );
+    return {
+      roles: attested.posture.principals,
+      preflightPostureDigest: preflight.summary.postureDigest,
+      finalPostureDigest: attested.summary.postureDigest
+    };
   } finally {
+    if (store) {
+      await store.close().catch(() => {});
+    }
     await client.end().catch(() => {});
   }
 }

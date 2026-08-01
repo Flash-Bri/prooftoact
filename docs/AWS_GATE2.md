@@ -368,7 +368,14 @@ evidence only and must not be used to deploy the repaired candidate.
 13. Assume only `AuthorityRaceCallerRole`. From the exact clean deployment
     checkout, run `npm run gate2:authority-race` with the immutable Authority
     alias ARN, configured race UUID, exact source commit, and final
-    configuration digest. Require two distinct Lambda request bindings, two
+    configuration digest. The evidence runner rejects endpoint, profile,
+    proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and
+    tree-digest contamination; it resolves the expected role from the exact
+    CloudFormation stack resource and validates the exact account plus the
+    precommitted observed STS caller ARN/UserId triple before invoking Lambda.
+    This binds the observed caller but does not prove a globally unique
+    AssumeRole issuance when a session name can be reused. Require two
+    distinct Lambda request bindings, two
     distinct CockroachDB session digests, overlapping database-clock
     intervals, `SERIALIZABLE` on both contenders, exactly one
     `resource_reserved`, and exactly one `resource_held_denied`. Then require
@@ -378,7 +385,7 @@ evidence only and must not be used to deploy the repaired candidate.
     no pending receipt, and zero protected effects after both database
     intervals. Preserve the private invocations and database receipts;
     publish only the reviewed sanitized
-    `tideproof.aws-authority-race-receipt.v2`. Any sequential, ambiguous,
+    `tideproof.aws-authority-race-receipt.v3`. Any sequential, ambiguous,
     replayed, expanded, stale, extra, or unresolved result is not evidence.
 14. From a signed-out browser, request only the ten enumerated public `GET`
     routes. From the exact clean deployment checkout, run:

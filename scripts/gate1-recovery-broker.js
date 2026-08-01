@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { connectionStringForDatabase } from "../src/cloud/authority-store.js";
+import { runtimeDatabaseConfig } from "../src/cloud/database-runtime.js";
 import {
   assertSeparatedDatabaseEndpoints,
   DeterministicRecoveryBroker,
@@ -49,10 +50,24 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-async function latestSyntheticReceipt(connectionString) {
-  const client = new Client({
-    connectionString: connectionStringForDatabase(connectionString, "tideproof")
-  });
+function exactSourceBinding() {
+  return {
+    tenantId: requiredEnvironment("RECOVERY_SOURCE_TENANT_ID"),
+    runId: requiredEnvironment("RECOVERY_SOURCE_RUN_ID"),
+    incidentId: requiredEnvironment("RECOVERY_SOURCE_INCIDENT_ID"),
+    evidenceId: requiredEnvironment("RECOVERY_SOURCE_EVIDENCE_ID"),
+    resourceId: requiredEnvironment("RECOVERY_SOURCE_RESOURCE_ID"),
+    operationId: requiredEnvironment("RECOVERY_SOURCE_OPERATION_ID"),
+    requestDigest: requiredEnvironment("RECOVERY_SOURCE_REQUEST_DIGEST")
+  };
+}
+
+async function exactSyntheticReceipt(connectionString, binding) {
+  const client = new Client(runtimeDatabaseConfig({
+    connectionString: connectionStringForDatabase(connectionString, "tideproof"),
+    max: 1,
+    applicationName: "tideproof-recovery-broker-source"
+  }));
   try {
     await client.connect();
     await client.query(
@@ -61,8 +76,10 @@ async function latestSyntheticReceipt(connectionString) {
     const result = await client.query(`
       SELECT
         receipt.tenant_id,
+        receipt.run_id,
         receipt.incident_id,
         receipt.evidence_id,
+        receipt.operation_id,
         receipt.recorded_at,
         receipt.request_digest,
         receipt.policy_version,
@@ -86,12 +103,25 @@ async function latestSyntheticReceipt(connectionString) {
       LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
         ON outbox.tenant_id = receipt.tenant_id
        AND outbox.operation_id = receipt.operation_id
-      WHERE receipt.outcome = 'resource_reserved'
+      WHERE receipt.tenant_id = $1::UUID
+        AND receipt.run_id = $2::UUID
+        AND receipt.incident_id = $3::UUID
+        AND receipt.evidence_id = $4::UUID
+        AND receipt.resource_id = $5
+        AND receipt.operation_id = $6::UUID
+        AND receipt.request_digest = $7
+        AND receipt.outcome = 'resource_reserved'
         AND receipt.recorded_at >
           transaction_timestamp() - INTERVAL '50 minutes'
-      ORDER BY receipt.recorded_at DESC
-      LIMIT 1
-    `);
+    `, [
+      binding.tenantId,
+      binding.runId,
+      binding.incidentId,
+      binding.evidenceId,
+      binding.resourceId,
+      binding.operationId,
+      binding.requestDigest
+    ]);
     assert(result.rowCount === 1, "fresh signed authority receipt is absent");
     const receipt = result.rows[0];
     const observed = await client.query(
@@ -138,9 +168,11 @@ async function readAuditEvents({
   tenantId,
   interactionId
 }) {
-  const client = new Client({
-    connectionString: connectionStringForDatabase(connectionString, "tideproof")
-  });
+  const client = new Client(runtimeDatabaseConfig({
+    connectionString: connectionStringForDatabase(connectionString, "tideproof"),
+    max: 1,
+    applicationName: "tideproof-recovery-broker-audit"
+  }));
   try {
     await client.connect();
     const result = await client.query(
@@ -200,7 +232,10 @@ async function main() {
     primaryClusterId,
     recoveryClusterId
   });
-  const receipt = await latestSyntheticReceipt(primaryUrl);
+  const receipt = await exactSyntheticReceipt(
+    primaryUrl,
+    exactSourceBinding()
+  );
   const recoverySessionId = randomUUID();
   const subjectBindingHash = principalBindingHash(SYNTHETIC_PRINCIPAL);
   const signer = createSyntheticRecoverySigner();

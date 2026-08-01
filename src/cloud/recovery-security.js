@@ -1,14 +1,39 @@
 import { Client } from "pg";
+import { performance } from "node:perf_hooks";
+import { setTimeout as sleepTimer } from "node:timers/promises";
 import { connectionStringForDatabase } from "./authority-store.js";
+import {
+  bootstrapDatabaseConfig,
+  databaseClientMustBeDiscarded,
+  runtimeDatabaseConfig
+} from "./database-runtime.js";
+import {
+  collectDatabaseSecurityPosture,
+  quoteIdentifier,
+  validateDatabaseSecurityPosture
+} from "./database-security-posture.js";
 import {
   normalizedRecoveryBundleFor,
   RECOVERY_PUBLISHER_VERSION,
   RECOVERY_SIGNATURE_ALGORITHM,
+  RecoveryStore,
   RecoveryBundleMismatchError
 } from "./recovery-store.js";
 
 export const RECOVERY_PUBLISHER_ROLE = "tp_recovery_publisher_role";
 export const RECOVERY_PUBLISHER_USER = "tp_recovery_publisher_user";
+const RECOVERY_ROLE_BINDINGS = [
+  [RECOVERY_PUBLISHER_ROLE, RECOVERY_PUBLISHER_USER]
+];
+const RECOVERY_ROLES = ["tp_recovery_owner", RECOVERY_PUBLISHER_ROLE];
+const RECOVERY_USERS = [RECOVERY_PUBLISHER_USER];
+const RECOVERY_POSTURE_SPEC = Object.freeze({
+  databaseName: "tideproof_recovery",
+  managedSchemas: ["mcp_private", "mcp_public", "mcp_api"],
+  roles: RECOVERY_ROLES,
+  users: RECOVERY_USERS,
+  bindings: RECOVERY_ROLE_BINDINGS
+});
 
 const APPEND_SIGNATURE =
   "mcp_api.append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)";
@@ -23,11 +48,73 @@ const APPEND_SQL = `
   )
 `;
 
+const RECOVERY_PUBLISH_MAX_ATTEMPTS = 10;
+const RECOVERY_PUBLISH_RETRY_DEADLINE_MS = 10_000;
+const RECOVERY_PUBLISH_MAX_BACKOFF_MS = 500;
+
+function stablePublisherError(code, cause) {
+  const error = new Error(code, cause ? { cause } : undefined);
+  error.code = code;
+  return error;
+}
+
+function retryBackoffMs(attempt) {
+  return Math.min(
+    RECOVERY_PUBLISH_MAX_BACKOFF_MS,
+    25 * (2 ** attempt)
+  );
+}
+
 function requireStrongPassword(value) {
   if (typeof value !== "string" || value.length < 24) {
     throw new Error(`${RECOVERY_PUBLISHER_USER} requires a strong password`);
   }
   return value;
+}
+
+async function collectValidatedRecoveryPosture(
+  client,
+  options,
+  { attempts = 1, delayMs = 0 } = {}
+) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const posture = await collectDatabaseSecurityPosture(
+        client,
+        RECOVERY_POSTURE_SPEC
+      );
+      const summary = validateDatabaseSecurityPosture(
+        posture,
+        RECOVERY_POSTURE_SPEC,
+        options
+      );
+      return { posture, summary };
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) {
+        await sleepTimer(delayMs);
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function scrubRecoveryPrivileges(client) {
+  for (const principal of [RECOVERY_PUBLISHER_ROLE, RECOVERY_PUBLISHER_USER]) {
+    await client.query(
+      `REVOKE ALL ON DATABASE tideproof_recovery FROM ${principal}`
+    );
+    await client.query(
+      `REVOKE ALL ON SCHEMA mcp_private, mcp_public, mcp_api FROM ${principal}`
+    );
+    await client.query(
+      `REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public, mcp_api FROM ${principal}`
+    );
+    await client.query(
+      `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mcp_private, mcp_public, mcp_api FROM ${principal}`
+    );
+  }
 }
 
 export function connectionStringForRecoveryUser(
@@ -73,25 +160,50 @@ export async function bootstrapRecoverySecurity({
   publisherPassword
 }) {
   const password = requireStrongPassword(publisherPassword);
-  const client = new Client({
+  const client = new Client(bootstrapDatabaseConfig({
     connectionString: connectionStringForDatabase(
       adminConnectionString,
       "tideproof_recovery"
-    )
-  });
+    ),
+    max: 1,
+    applicationName: "tideproof-recovery-security"
+  }));
   try {
     await client.connect();
+    const preflight = await collectValidatedRecoveryPosture(
+      client,
+      { allowMissing: true, allowManagedDrift: true }
+    );
     await client.query("CREATE ROLE IF NOT EXISTS tp_recovery_owner");
     await client.query(
       `CREATE ROLE IF NOT EXISTS ${RECOVERY_PUBLISHER_ROLE}`
     );
     await client.query(`CREATE USER IF NOT EXISTS ${RECOVERY_PUBLISHER_USER}`);
+    await collectValidatedRecoveryPosture(
+      client,
+      { allowMissing: false, allowManagedDrift: true }
+    );
+    const migrationStore = new RecoveryStore({
+      connectionString: adminConnectionString,
+      databaseName: "tideproof_recovery",
+      maxConnections: 1
+    });
+    try {
+      await migrationStore.migrate();
+    } finally {
+      await migrationStore.close().catch(() => {});
+    }
+    await client.query(
+      `REVOKE ${RECOVERY_PUBLISHER_ROLE} FROM ${RECOVERY_PUBLISHER_USER}`
+    );
+    await scrubRecoveryPrivileges(client);
+    for (const role of RECOVERY_ROLES) {
+      await client.query(`ALTER ROLE ${role} WITH NOLOGIN`);
+      await client.query(`ALTER ROLE ${role} WITH PASSWORD NULL`);
+    }
     await client.query(
       `ALTER USER ${RECOVERY_PUBLISHER_USER} WITH PASSWORD $1`,
       [password]
-    );
-    await client.query(
-      `GRANT ${RECOVERY_PUBLISHER_ROLE} TO ${RECOVERY_PUBLISHER_USER}`
     );
     await client.query(
       "GRANT ALL ON DATABASE tideproof_recovery TO tp_recovery_owner"
@@ -243,14 +355,17 @@ export async function bootstrapRecoverySecurity({
       "REVOKE ALL ON SCHEMA mcp_private, mcp_public, mcp_api FROM public"
     );
     await client.query(
-      "REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public FROM public"
+      "REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public, mcp_api FROM public"
     );
-    await client.query(`REVOKE ALL ON FUNCTION ${APPEND_SIGNATURE} FROM public`);
+    await client.query(
+      "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mcp_private, mcp_public, mcp_api FROM public"
+    );
+    await scrubRecoveryPrivileges(client);
     await client.query(
       `GRANT CONNECT ON DATABASE tideproof_recovery TO ${RECOVERY_PUBLISHER_ROLE}`
     );
     await client.query(
-      `GRANT USAGE ON SCHEMA mcp_api, mcp_private TO ${RECOVERY_PUBLISHER_ROLE}`
+      `GRANT USAGE ON SCHEMA mcp_api TO ${RECOVERY_PUBLISHER_ROLE}`
     );
     await client.query(
       `GRANT EXECUTE ON FUNCTION ${APPEND_SIGNATURE} TO ${RECOVERY_PUBLISHER_ROLE}`
@@ -258,7 +373,19 @@ export async function bootstrapRecoverySecurity({
     await client.query(
       `REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public FROM ${RECOVERY_PUBLISHER_ROLE}`
     );
-    for (const owner of ["bc", "tp_recovery_owner"]) {
+    const bootstrapOwnerResult = await client.query(
+      "SELECT current_user AS bootstrap_owner"
+    );
+    if (
+      bootstrapOwnerResult.rowCount !== 1 ||
+      typeof bootstrapOwnerResult.rows[0]?.bootstrap_owner !== "string"
+    ) {
+      throw new Error("DATABASE_POSTURE_BOOTSTRAP_OWNER_INVALID");
+    }
+    for (const owner of [
+      quoteIdentifier(bootstrapOwnerResult.rows[0].bootstrap_owner),
+      "tp_recovery_owner"
+    ]) {
       for (const schema of ["mcp_private", "mcp_public", "mcp_api"]) {
         await client.query(
           `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA ${schema} REVOKE ALL ON TABLES FROM public`
@@ -268,18 +395,19 @@ export async function bootstrapRecoverySecurity({
         );
       }
     }
-
-    const roles = await client.query(`
-      SELECT username, options
-      FROM [SHOW USERS]
-      WHERE username IN (
-        'tp_recovery_owner',
-        '${RECOVERY_PUBLISHER_ROLE}',
-        '${RECOVERY_PUBLISHER_USER}'
-      )
-      ORDER BY username
-    `);
-    return { roles: roles.rows };
+    await client.query(
+      `GRANT ${RECOVERY_PUBLISHER_ROLE} TO ${RECOVERY_PUBLISHER_USER}`
+    );
+    const attested = await collectValidatedRecoveryPosture(
+      client,
+      { allowMissing: false, allowManagedDrift: false },
+      { attempts: 30, delayMs: 2_000 }
+    );
+    return {
+      roles: attested.posture.principals,
+      preflightPostureDigest: preflight.summary.postureDigest,
+      finalPostureDigest: attested.summary.postureDigest
+    };
   } finally {
     await client.end().catch(() => {});
   }
@@ -300,38 +428,109 @@ export class RecoveryPublisher {
 
   async appendSignedBundle(input) {
     const bundle = normalizedRecoveryBundleFor(input);
-    const client = new Client({ connectionString: this.#connectionString });
+    const client = new Client(runtimeDatabaseConfig({
+      connectionString: this.#connectionString,
+      max: 1,
+      applicationName: "tideproof-recovery-publisher"
+    }));
     try {
       await client.connect();
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        try {
-          await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
-          const result = await client.query(
-            APPEND_SQL,
-            recoveryBundleValues(bundle)
-          );
-          await client.query("COMMIT");
-          if (
-            result.rowCount !== 1 ||
-            result.rows[0].bundle_digest !== bundle.bundleDigest
-          ) {
-            throw new RecoveryBundleMismatchError();
-          }
-          return {
-            outcome: result.rows[0].outcome,
-            bundleDigest: bundle.bundleDigest
-          };
-        } catch (error) {
-          await client.query("ROLLBACK").catch(() => {});
-          if (error.code === "40001" && attempt < 9) {
-            continue;
-          }
-          throw error;
-        }
-      }
-      throw new Error("recovery publisher retry loop exhausted");
+      return await appendRecoveryBundleWithClient(client, bundle);
     } finally {
       await client.end().catch(() => {});
     }
   }
 }
+
+export async function appendRecoveryBundleWithClient(
+  client,
+  bundle,
+  {
+    now = () => performance.now(),
+    sleep = (delayMs) => sleepTimer(delayMs),
+    maxAttempts = RECOVERY_PUBLISH_MAX_ATTEMPTS,
+    retryDeadlineMs = RECOVERY_PUBLISH_RETRY_DEADLINE_MS
+  } = {}
+) {
+  if (typeof client?.query !== "function") {
+    throw new TypeError("RECOVERY_PUBLISH_CLIENT_REQUIRED");
+  }
+  if (
+    !Number.isSafeInteger(maxAttempts) ||
+    maxAttempts < 1 ||
+    maxAttempts > RECOVERY_PUBLISH_MAX_ATTEMPTS ||
+    !Number.isSafeInteger(retryDeadlineMs) ||
+    retryDeadlineMs < 1 ||
+    retryDeadlineMs > RECOVERY_PUBLISH_RETRY_DEADLINE_MS
+  ) {
+    throw new RangeError("RECOVERY_PUBLISH_RETRY_POLICY_INVALID");
+  }
+  const startedAt = now();
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (now() - startedAt >= retryDeadlineMs) {
+      throw stablePublisherError(
+        "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED"
+      );
+    }
+    let transactionStarted = false;
+    let committed = false;
+    try {
+      await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+      transactionStarted = true;
+      const result = await client.query(
+        APPEND_SQL,
+        recoveryBundleValues(bundle)
+      );
+      await client.query("COMMIT");
+      committed = true;
+      transactionStarted = false;
+      if (
+        result.rowCount !== 1 ||
+        result.rows[0].bundle_digest !== bundle.bundleDigest
+      ) {
+        throw new RecoveryBundleMismatchError();
+      }
+      return {
+        outcome: result.rows[0].outcome,
+        bundleDigest: bundle.bundleDigest
+      };
+    } catch (error) {
+      const unsafeConnection = databaseClientMustBeDiscarded(error);
+      if (transactionStarted && !committed && !unsafeConnection) {
+        try {
+          await client.query("ROLLBACK");
+        } catch (rollbackError) {
+          throw stablePublisherError(
+            "RECOVERY_PUBLISH_ROLLBACK_FAILED",
+            new AggregateError([error, rollbackError])
+          );
+        }
+      }
+      if (error?.code !== "40001") {
+        throw error;
+      }
+      if (attempt + 1 >= maxAttempts) {
+        throw stablePublisherError(
+          "RECOVERY_PUBLISH_RETRY_LIMIT_EXCEEDED",
+          error
+        );
+      }
+      const delayMs = retryBackoffMs(attempt);
+      if (now() - startedAt + delayMs >= retryDeadlineMs) {
+        throw stablePublisherError(
+          "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED",
+          error
+        );
+      }
+      await sleep(delayMs);
+    }
+  }
+  throw stablePublisherError("RECOVERY_PUBLISH_RETRY_LIMIT_EXCEEDED");
+}
+
+export const __test = Object.freeze({
+  APPEND_SQL,
+  RECOVERY_PUBLISH_MAX_ATTEMPTS,
+  RECOVERY_PUBLISH_RETRY_DEADLINE_MS,
+  retryBackoffMs
+});
