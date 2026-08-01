@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { assertNoAwsEndpointOverrides } from "../src/cloud/aws-evidence-identity.js";
+import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -596,6 +597,13 @@ export function validateReleaseProvenance(
   const inventory = dependencies?.inventory;
   const notices = dependencies?.bundledThirdPartyNotices;
   const checks = receipt?.checks;
+  let securityContractValid = false;
+  try {
+    validateReleaseSecurityReceipt(security);
+    securityContractValid = true;
+  } catch {
+    securityContractValid = false;
+  }
   requireCondition(
     exactKeys(receipt, [
       "accessibility",
@@ -837,43 +845,7 @@ export function validateReleaseProvenance(
         "uniqueIdsAndAriaReferences",
         "unsafeDynamicHtmlAbsent"
       ]) &&
-      exactKeys(security, [
-        "boundedFunctionCount",
-        "checks",
-        "claimBoundary",
-        "finalReleaseReady",
-        "finalReleaseRequirements",
-        "iamRoleCount",
-        "lambdaPermissionCount",
-        "logGroupCount",
-        "manifestPath",
-        "manifestSha256",
-        "negativeProbeCount",
-        "publicPathCount",
-        "publicRouteCount",
-        "reviewedOn",
-        "schemaVersion",
-        "securityHeaderCount",
-        "status",
-        "surfaceCount"
-      ]) &&
-      exactKeys(securityChecks, [
-        "advisoryRouteIamAuthenticated",
-        "apiGatewayInvokePermissionsBounded",
-        "asymmetricSigningKeyBounded",
-        "canonicalManifest",
-        "criticalRoleDenialsPresent",
-        "exactPublicRouteSet",
-        "exactSurfaceHashes",
-        "generatedTemplateMatchesSource",
-        "immutableVersionedLambdaTargets",
-        "leastPrivilegeRoleActionsBounded",
-        "logsBoundedAndPrivacyMinimized",
-        "publicCorsAndLambdaUrlsAbsent",
-        "publicHeadersAndNegativeProbesBounded",
-        "sourceSecurityMarkersPresent",
-        "throttlesAndConcurrencyBounded"
-      ]) &&
+      securityContractValid &&
       exactKeys(submission, [
         "checklistItemCount",
         "checks",
@@ -1190,27 +1162,6 @@ export function validateReleaseProvenance(
       Object.values(accessibilityChecks).every((value) => value === true) &&
       typeof accessibility.claimBoundary === "string" &&
       accessibility.claimBoundary.length > 0 &&
-      security.schemaVersion ===
-        "tideproof.release-security-verification.v1" &&
-      security.status === "CURRENT_SOURCE_SECURITY_PASS" &&
-      security.finalReleaseReady === false &&
-      /^\d{4}-\d{2}-\d{2}$/.test(security.reviewedOn) &&
-      security.manifestPath === "RELEASE_SECURITY_MANIFEST.json" &&
-      HEX_64.test(security.manifestSha256) &&
-      security.surfaceCount === 35 &&
-      security.publicPathCount === 10 &&
-      security.securityHeaderCount === 9 &&
-      security.negativeProbeCount === 6 &&
-      security.publicRouteCount === 10 &&
-      security.iamRoleCount === 7 &&
-      security.lambdaPermissionCount === 3 &&
-      security.boundedFunctionCount === 5 &&
-      security.logGroupCount === 11 &&
-      Array.isArray(security.finalReleaseRequirements) &&
-      security.finalReleaseRequirements.length === 2 &&
-      Object.values(securityChecks).every((value) => value === true) &&
-      typeof security.claimBoundary === "string" &&
-      security.claimBoundary.length > 0 &&
       submission.schemaVersion ===
         "tideproof.release-submission-verification.v1" &&
       submission.status === "DRAFT_SAFELY_BLOCKED" &&

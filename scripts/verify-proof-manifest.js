@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { verifyReleaseSecurity } from "./verify-release-security.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_NAME = "PROOF_MANIFEST.json";
@@ -185,6 +186,7 @@ function verifyReferences({
 export function verifyProofManifest({
   rootDir = DEFAULT_ROOT,
   manifestPath = path.join(rootDir, MANIFEST_NAME),
+  verifySecurity = verifyReleaseSecurity,
 } = {}) {
   const resolvedRoot = path.resolve(rootDir);
   const resolvedManifest = path.resolve(manifestPath);
@@ -260,6 +262,13 @@ export function verifyProofManifest({
     JSON.stringify(artifactIds) === JSON.stringify(sorted(artifactIds)),
     "proof manifest artifacts must be sorted by id"
   );
+  if (artifactById.has("release-security-manifest")) {
+    try {
+      verifySecurity({ rootDir: resolvedRoot });
+    } catch {
+      throw new Error("proof manifest nested release-security verification failed");
+    }
+  }
 
   const claimsLedgerArtifact = artifactById.get("claims-ledger");
   assert(claimsLedgerArtifact, "proof manifest must include claims-ledger");

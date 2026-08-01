@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import { buildGate2Template } from "../src/cloud/aws-gate2-template.js";
 import {
+  RELEASE_SECURITY_SURFACE_COUNT,
   __test,
   validateManifest,
+  validateReleaseSecurityReceipt,
   verifyReleaseSecurity
 } from "../scripts/verify-release-security.js";
 
@@ -38,7 +40,7 @@ test("current source security and abuse boundaries match reviewed state", () => 
   const receipt = verifyReleaseSecurity({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_SOURCE_SECURITY_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 35);
+  assert.equal(receipt.surfaceCount, RELEASE_SECURITY_SURFACE_COUNT);
   assert.equal(receipt.publicPathCount, 10);
   assert.equal(receipt.securityHeaderCount, 9);
   assert.equal(receipt.negativeProbeCount, 6);
@@ -51,6 +53,19 @@ test("current source security and abuse boundaries match reviewed state", () => 
     Object.values(receipt.checks).every((value) => value === true),
     true
   );
+});
+
+test("security receipt contract is shared and rejects stale surface counts", () => {
+  const receipt = verifyReleaseSecurity({ rootDir: ROOT });
+  assert.equal(validateReleaseSecurityReceipt(receipt), receipt);
+  for (const offset of [-1, 1]) {
+    const stale = structuredClone(receipt);
+    stale.surfaceCount = RELEASE_SECURITY_SURFACE_COUNT + offset;
+    assert.throws(
+      () => validateReleaseSecurityReceipt(stale),
+      /RELEASE_SECURITY_RECEIPT_CONTRACT/
+    );
+  }
 });
 
 test("security manifest rejects final approval and changed surface contract", () => {
@@ -109,7 +124,10 @@ test("security template contract rejects new public-demo capability", () => {
 });
 
 test("security source contract rejects a removed fail-closed marker", () => {
-  assert.equal(Object.keys(__test.SOURCE_MARKERS).length, 35);
+  assert.equal(
+    Object.keys(__test.SOURCE_MARKERS).length,
+    RELEASE_SECURITY_SURFACE_COUNT
+  );
   const sources = new Map(
     Object.entries(__test.SOURCE_MARKERS).map(([id, markers]) => [
       id,

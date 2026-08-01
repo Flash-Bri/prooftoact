@@ -12,7 +12,10 @@ import { verifyReleaseCost } from "./verify-release-cost.js";
 import { verifyReleaseGovernance } from "./verify-release-governance.js";
 import { verifyReleasePrivacy } from "./verify-release-privacy.js";
 import { verifyReleaseRights } from "./verify-release-rights.js";
-import { verifyReleaseSecurity } from "./verify-release-security.js";
+import {
+  validateReleaseSecurityReceipt,
+  verifyReleaseSecurity
+} from "./verify-release-security.js";
 import { verifyReleaseSubmission } from "./verify-release-submission.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -26,6 +29,14 @@ const HEX_64 = /^[0-9a-f]{64}$/;
 function assert(condition, code) {
   if (!condition) {
     throw new Error(code);
+  }
+}
+
+export function validateReleaseSecurityForProvenance(receipt) {
+  try {
+    return validateReleaseSecurityReceipt(receipt);
+  } catch {
+    throw new Error("RELEASE_PROVENANCE_SECURITY");
   }
 }
 
@@ -752,31 +763,7 @@ export async function runReleaseProvenance({
     "RELEASE_PROVENANCE_ACCESSIBILITY"
   );
   const security = verifySecurity({ rootDir: projectRoot });
-  assert(
-    security?.schemaVersion ===
-      "tideproof.release-security-verification.v1" &&
-      security.status === "CURRENT_SOURCE_SECURITY_PASS" &&
-      security.finalReleaseReady === false &&
-      /^\d{4}-\d{2}-\d{2}$/.test(security.reviewedOn) &&
-      security.manifestPath === "RELEASE_SECURITY_MANIFEST.json" &&
-      HEX_64.test(security.manifestSha256) &&
-      security.surfaceCount === 35 &&
-      security.publicPathCount === 10 &&
-      security.securityHeaderCount === 9 &&
-      security.negativeProbeCount === 6 &&
-      security.publicRouteCount === 10 &&
-      security.iamRoleCount === 7 &&
-      security.lambdaPermissionCount === 3 &&
-      security.boundedFunctionCount === 5 &&
-      security.logGroupCount === 11 &&
-      Array.isArray(security.finalReleaseRequirements) &&
-      security.finalReleaseRequirements.length === 2 &&
-      security.checks &&
-      Object.values(security.checks).every((value) => value === true) &&
-      typeof security.claimBoundary === "string" &&
-      security.claimBoundary.length > 0,
-    "RELEASE_PROVENANCE_SECURITY"
-  );
+  validateReleaseSecurityForProvenance(security);
   const submission = verifySubmission({ rootDir: projectRoot });
   assert(
     submission?.schemaVersion ===

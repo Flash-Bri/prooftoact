@@ -4,19 +4,26 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   __test,
   runReleaseProvenance,
+  validateReleaseSecurityForProvenance,
   validateIndexFlags,
   validateInstalledTree,
   validateTrackedTree,
   verifyRepositoryHistory
 } from "../scripts/verify-release-provenance.js";
+import {
+  RELEASE_SECURITY_SURFACE_COUNT,
+  verifyReleaseSecurity
+} from "../scripts/verify-release-security.js";
 
 const SOURCE_COMMIT = "a".repeat(40);
 const TREE_DIGEST = "b".repeat(40);
 const PACKAGE_LOCK_SHA = /^[0-9a-f]{64}$/;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -286,32 +293,6 @@ function accessibilityReceipt() {
     ],
     checks: { fixtureAccessibilityPass: true },
     claimBoundary: "Fixture static accessibility only."
-  };
-}
-
-function securityReceipt() {
-  return {
-    schemaVersion: "tideproof.release-security-verification.v1",
-    status: "CURRENT_SOURCE_SECURITY_PASS",
-    finalReleaseReady: false,
-    reviewedOn: "2026-07-31",
-    manifestPath: "RELEASE_SECURITY_MANIFEST.json",
-    manifestSha256: "9".repeat(64),
-    surfaceCount: 35,
-    publicPathCount: 10,
-    securityHeaderCount: 9,
-    negativeProbeCount: 6,
-    publicRouteCount: 10,
-    iamRoleCount: 7,
-    lambdaPermissionCount: 3,
-    boundedFunctionCount: 5,
-    logGroupCount: 11,
-    finalReleaseRequirements: [
-      "Exact-release live security receipts.",
-      "Separate private human security review."
-    ],
-    checks: { fixtureSecurityPass: true },
-    claimBoundary: "Fixture current source security only."
   };
 }
 
@@ -601,7 +582,7 @@ test("complete provenance receipt binds source, install, inventory, and notices"
       verifyGovernance: () => governanceReceipt(),
       verifyPrivacy: () => privacyReceipt(),
       verifyRights: () => rightsReceipt(),
-      verifySecurity: () => securityReceipt(),
+      verifySecurity: () => verifyReleaseSecurity({ rootDir: ROOT }),
       verifySubmission: () => submissionReceipt()
     });
     assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v8");
@@ -631,6 +612,19 @@ test("complete provenance receipt binds source, install, inventory, and notices"
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);
   } finally {
     fixture.cleanup();
+  }
+});
+
+test("provenance consumes the shared current security receipt contract", () => {
+  const receipt = verifyReleaseSecurity({ rootDir: ROOT });
+  assert.equal(validateReleaseSecurityForProvenance(receipt), receipt);
+  for (const offset of [-1, 1]) {
+    const stale = structuredClone(receipt);
+    stale.surfaceCount = RELEASE_SECURITY_SURFACE_COUNT + offset;
+    assert.throws(
+      () => validateReleaseSecurityForProvenance(stale),
+      /RELEASE_PROVENANCE_SECURITY/
+    );
   }
 });
 
