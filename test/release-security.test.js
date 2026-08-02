@@ -68,6 +68,26 @@ test("security receipt contract is shared and rejects stale surface counts", () 
   }
 });
 
+test("security manifest binds every AWS provider runtime and template-security control", () => {
+  const surfaces = __test.EXPECTED_SURFACES;
+  for (const [id, path] of [
+    ["aws-provider-bundle-entry", "scripts/lib/aws-provider-bundle-entry.js"],
+    ["aws-provider-runtime", "scripts/lib/aws-provider-runtime.js"],
+    [
+      "aws-provider-runtime-loader",
+      "scripts/lib/aws-provider-runtime-loader.js"
+    ],
+    ["aws-provider-clients-tests", "test/aws-provider-clients.test.js"],
+    [
+      "aws-template-security-tests",
+      "test/aws-gate2-template-security.test.js"
+    ]
+  ]) {
+    assert.equal(surfaces[id]?.path, path);
+    assert.equal(__test.SOURCE_MARKERS[id]?.length > 0, true);
+  }
+});
+
 test("security manifest rejects final approval and changed surface contract", () => {
   assert.equal(validateManifest(fixtureManifest()).finalReleaseReady, false);
   assert.throws(

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  deploymentAttestationDigest,
   signDeploymentAttestationReceipt,
   validateDeploymentExpectation
 } from "../src/cloud/aws-deployment-attestation.js";
@@ -12,7 +13,14 @@ import {
   explicitAwsCredentials,
   validateAwsEvidenceCaller
 } from "../src/cloud/aws-evidence-identity.js";
+import { validateBuildReceipt } from "./gate2-aws-readiness.js";
+import {
+  exactBuildRecord,
+  reproduceExactBuild,
+  validateExactBuildReproduction
+} from "./lib/exact-build-reproduction.js";
 import { assertCleanExactGitCheckout } from "./lib/exact-git-source.js";
+import { loadAwsProviderRuntime } from "./lib/aws-provider-runtime-loader.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -25,6 +33,10 @@ function requireCondition(condition, code) {
 
 function sha256(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+function sha256Bytes(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
 }
 
 function readPrivateFile(filePath, code, { secret = false } = {}) {
@@ -54,7 +66,7 @@ function readPrivateJson(filePath, code) {
 
 function parseArguments(argv) {
   requireCondition(
-    Array.isArray(argv) && argv.length === 4,
+    Array.isArray(argv) && argv.length === 6,
     "AWS_ATTEST_DENIAL_ARGUMENTS"
   );
   const parsed = {};
@@ -62,7 +74,7 @@ function parseArguments(argv) {
     const name = argv[index];
     const value = argv[index + 1];
     requireCondition(
-      ["--expectation", "--receipt-key"].includes(name) &&
+      ["--build-receipt", "--expectation", "--receipt-key"].includes(name) &&
         typeof value === "string" &&
         value.length > 0 &&
         parsed[name] === undefined,
@@ -71,10 +83,13 @@ function parseArguments(argv) {
     parsed[name] = value;
   }
   requireCondition(
-    parsed["--expectation"] && parsed["--receipt-key"],
+    parsed["--build-receipt"] &&
+      parsed["--expectation"] &&
+      parsed["--receipt-key"],
     "AWS_ATTEST_DENIAL_ARGUMENTS"
   );
   return Object.freeze({
+    buildReceiptPath: parsed["--build-receipt"],
     expectationPath: parsed["--expectation"],
     receiptKeyPath: parsed["--receipt-key"]
   });
@@ -85,43 +100,6 @@ export function safeAlternateDenialFailureCode(error) {
   return /^AWS_ATTEST_DENIAL_[A-Z0-9_]{1,100}$/.test(candidate)
     ? candidate
     : "AWS_ATTEST_DENIAL_UNKNOWN";
-}
-
-async function clients(credentials) {
-  const {
-    AssumeRoleCommand,
-    GetCallerIdentityCommand,
-    STSClient
-  } = await import("@aws-sdk/client-sts");
-  const { NodeHttpHandler } = await import("@smithy/node-http-handler");
-  const client = new STSClient({
-    region: "us-east-1",
-    credentials,
-    ignoreConfiguredEndpointUrls: true,
-    maxAttempts: 1,
-    requestHandler: new NodeHttpHandler({
-      connectionTimeout: 1_000,
-      socketTimeout: 8_000
-    })
-  });
-  return {
-    async assume(targetRoleArn) {
-      return client.send(
-        new AssumeRoleCommand({
-          RoleArn: targetRoleArn,
-          RoleSessionName: "tideproof-evidence-denial"
-        })
-      );
-    },
-    async identity() {
-      const value = await client.send(new GetCallerIdentityCommand({}));
-      return {
-        Account: value.Account,
-        Arn: value.Arn,
-        UserId: value.UserId
-      };
-    }
-  };
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -143,6 +121,47 @@ export async function main(argv = process.argv.slice(2)) {
     sourceCommit: expectation.sourceCommit,
     treeDigest: expectation.treeDigest
   });
+  const buildReceiptBytes = readPrivateFile(
+    options.buildReceiptPath,
+    "AWS_ATTEST_DENIAL_BUILD_RECEIPT_FILE"
+  );
+  const buildRecord = exactBuildRecord(
+    buildReceiptBytes,
+    "AWS_ATTEST_DENIAL_BUILD_RECEIPT_FILE"
+  );
+  const reproducedBuild = reproduceExactBuild({
+    projectRoot: root,
+    codePrefix: "AWS_ATTEST_DENIAL_EXACT_BUILD"
+  });
+  validateExactBuildReproduction(
+    buildRecord,
+    reproducedBuild,
+    "AWS_ATTEST_DENIAL_EXACT_BUILD_MISMATCH"
+  );
+  const buildReceipt = buildRecord.value;
+  validateBuildReceipt(buildReceipt, {
+    projectRoot: root,
+    sourceCommit: expectation.sourceCommit,
+    treeDigest: expectation.treeDigest
+  });
+  validateBuildReceipt(reproducedBuild.value, {
+    projectRoot: root,
+    sourceCommit: expectation.sourceCommit,
+    treeDigest: expectation.treeDigest
+  });
+  requireCondition(
+    expectation.basis.buildReceiptSha256 === sha256Bytes(buildReceiptBytes) &&
+      expectation.basis.providerDependencyTreeDigest ===
+        buildReceipt.dependencySnapshot.treeDigest &&
+      expectation.basis.providerRuntimeSha256 ===
+        buildReceipt.evidenceProviderRuntime.sha256,
+    "AWS_ATTEST_DENIAL_BUILD_RECEIPT_BINDING"
+  );
+  const providerRuntime = await loadAwsProviderRuntime({
+    buildReceipt,
+    projectRoot: root
+  });
+  const { createAwsProviderClients } = providerRuntime;
   const credentials = explicitAwsCredentials(process.env, {
     requireSessionToken: true
   });
@@ -158,9 +177,33 @@ export async function main(argv = process.argv.slice(2)) {
       alternatePrincipalArn === expectation.alternatePrincipal.roleArn,
     "AWS_ATTEST_DENIAL_EXPECTATION"
   );
+  const aws = await createAwsProviderClients({
+    credentials,
+    region: expectation.region
+  });
+  const callerIdentity = await aws.callerIdentity();
+  let denied;
+  try {
+    await aws.assumeRole(expectation.evidenceOperator.roleArn);
+    throw new Error("AWS_ATTEST_DENIAL_UNEXPECTEDLY_ALLOWED");
+  } catch (error) {
+    if (error?.message === "AWS_ATTEST_DENIAL_UNEXPECTEDLY_ALLOWED") {
+      throw error;
+    }
+    requireCondition(
+      error?.name === "AccessDenied" &&
+        error?.$fault === "client" &&
+        error?.$metadata?.httpStatusCode === 403 &&
+        typeof error?.$metadata?.requestId === "string" &&
+        /^[A-Za-z0-9-]{8,128}$/.test(error.$metadata.requestId) &&
+        error.$metadata.attempts === 1 &&
+        error.$metadata.totalRetryDelay === 0,
+      "AWS_ATTEST_DENIAL_PROVIDER_RESPONSE"
+    );
+    denied = error;
+  }
   const observedAt = new Date().toISOString();
-  const aws = await clients(credentials);
-  const callerBinding = validateAwsEvidenceCaller(await aws.identity(), {
+  const callerBinding = validateAwsEvidenceCaller(callerIdentity, {
     expectedAccountId,
     expectedPrincipalArn: alternatePrincipalArn,
     expectedCallerArn,
@@ -175,24 +218,8 @@ export async function main(argv = process.argv.slice(2)) {
       observedAt
     }
   });
-  let denied;
-  try {
-    await aws.assume(expectation.evidenceOperator.roleArn);
-    throw new Error("AWS_ATTEST_DENIAL_UNEXPECTEDLY_ALLOWED");
-  } catch (error) {
-    if (error?.message === "AWS_ATTEST_DENIAL_UNEXPECTEDLY_ALLOWED") {
-      throw error;
-    }
-    requireCondition(
-      /accessdenied/i.test(String(error?.name ?? "")) &&
-        typeof error?.$metadata?.requestId === "string" &&
-        error.$metadata.requestId.length >= 8,
-      "AWS_ATTEST_DENIAL_PROVIDER_RESPONSE"
-    );
-    denied = error;
-  }
   const unsignedReceipt = {
-    schemaVersion: "tideproof.gate2.aws-alternate-principal-denial.v2",
+    schemaVersion: "tideproof.gate2.aws-alternate-principal-denial.v3",
     sourceCommit: expectation.sourceCommit,
     treeDigest: expectation.treeDigest,
     configDigest: expectation.configDigest,
@@ -200,8 +227,11 @@ export async function main(argv = process.argv.slice(2)) {
     alternatePrincipalDigest: sha256(alternatePrincipalArn),
     callerBinding,
     errorCode: "AccessDenied",
+    expectationDigest: deploymentAttestationDigest(expectation),
     observedAt,
     outcome: "DENIED",
+    providerDependencyTreeDigest: buildReceipt.dependencySnapshot.treeDigest,
+    providerRuntimeSha256: providerRuntime.runtimeSha256,
     requestIdDigest: sha256(denied.$metadata.requestId),
     targetRoleArn: expectation.evidenceOperator.roleArn
   };

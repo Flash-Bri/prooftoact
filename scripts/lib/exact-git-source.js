@@ -9,10 +9,11 @@ const SAFE_ENVIRONMENT_NAMES = new Set([
   "LANG",
   "LC_ALL",
   "LC_CTYPE",
-  "NO_COLOR",
-  "PATH",
-  "TMPDIR"
+  "NO_COLOR"
 ]);
+const TRUSTED_GIT_PATH = "/usr/bin/git";
+const FORBIDDEN_LOCAL_GIT_CONFIG =
+  /^(?:filter\.|include(?:if)?\.|extensions\.worktreeconfig$|core\.(?:attributesfile|autocrlf|eol|hookspath|safecrlf|worktree)$)/i;
 const LOADERS = Object.freeze({
   ".cjs": "js",
   ".css": "css",
@@ -23,6 +24,8 @@ const LOADERS = Object.freeze({
   ".svg": "text",
   ".txt": "text"
 });
+const FORBIDDEN_TREE_PATH =
+  /(^|\/)(?:\.gitattributes|\.gitmodules|\.npmrc)$/i;
 
 function requireCondition(condition, code) {
   if (!condition) {
@@ -37,6 +40,8 @@ export function gitEnvironment(source = process.env) {
         SAFE_ENVIRONMENT_NAMES.has(name)
       )
     ),
+    PATH: "/usr/bin:/bin",
+    GIT_ATTR_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_NO_REPLACE_OBJECTS: "1",
@@ -44,10 +49,175 @@ export function gitEnvironment(source = process.env) {
   };
 }
 
+export function gitInvariantArguments() {
+  return [
+    "-c",
+    "core.attributesFile=/dev/null",
+    "-c",
+    "core.autocrlf=false",
+    "-c",
+    "core.eol=lf",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.hooksPath=/dev/null"
+  ];
+}
+
+export function assertSafeLocalGitConfiguration(names) {
+  requireCondition(
+    Array.isArray(names) &&
+      names.every(
+        (name) =>
+          typeof name === "string" &&
+          name.length > 0 &&
+          !FORBIDDEN_LOCAL_GIT_CONFIG.test(name)
+      ),
+    "EXACT_GIT_SOURCE_LOCAL_CONFIG"
+  );
+}
+
+export function assertSafeExactTreePaths({ rootDir, sourceCommit }) {
+  requireCondition(COMMIT.test(sourceCommit), "EXACT_GIT_SOURCE_COMMIT");
+  const paths = git(
+    path.resolve(rootDir),
+    ["ls-tree", "-r", "--name-only", "-z", sourceCommit],
+    "EXACT_GIT_SOURCE_TREE_PATHS"
+  )
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean);
+  requireCondition(
+    paths.length > 0 &&
+      paths.every(
+        (candidate) =>
+          typeof candidate === "string" &&
+          candidate.length > 0 &&
+          !FORBIDDEN_TREE_PATH.test(candidate)
+      ),
+    "EXACT_GIT_SOURCE_TREE_PATHS"
+  );
+  return Object.freeze([...paths]);
+}
+
+export function assertExactWorktreeBytes({ rootDir, sourceCommit }) {
+  const resolvedRoot = path.resolve(rootDir);
+  requireCondition(COMMIT.test(sourceCommit), "EXACT_GIT_WORKTREE_COMMIT");
+  const entries = git(
+    resolvedRoot,
+    ["ls-files", "--stage", "-z"],
+    "EXACT_GIT_WORKTREE_INDEX"
+  )
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean);
+  requireCondition(entries.length > 0, "EXACT_GIT_WORKTREE_INDEX");
+  for (const entry of entries) {
+    const match = /^(100644|100755|120000) ([0-9a-f]{40}) 0\t([^\0]+)$/.exec(
+      entry
+    );
+    requireCondition(match, "EXACT_GIT_WORKTREE_INDEX");
+    const [, mode, objectId, relativePath] = match;
+    requireCondition(
+      !FORBIDDEN_TREE_PATH.test(relativePath),
+      "EXACT_GIT_SOURCE_TREE_PATHS"
+    );
+    const candidate = path.resolve(resolvedRoot, relativePath);
+    const relative = path.relative(resolvedRoot, candidate);
+    requireCondition(
+      relative === relativePath.split("/").join(path.sep) &&
+        relative !== ".." &&
+        !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative),
+      "EXACT_GIT_WORKTREE_PATH"
+    );
+    const expected = git(
+      resolvedRoot,
+      ["cat-file", "blob", objectId],
+      "EXACT_GIT_WORKTREE_BLOB"
+    );
+    const stat = fs.lstatSync(candidate);
+    const observed =
+      mode === "120000"
+        ? Buffer.from(fs.readlinkSync(candidate), "utf8")
+        : fs.readFileSync(candidate);
+    requireCondition(
+      (mode === "120000"
+        ? stat.isSymbolicLink()
+        : stat.isFile() && !stat.isSymbolicLink()) &&
+        observed.equals(expected),
+      "EXACT_GIT_WORKTREE_BYTES"
+    );
+  }
+  requireCondition(
+    gitText(
+      resolvedRoot,
+      ["rev-parse", "HEAD"],
+      "EXACT_GIT_WORKTREE_HEAD"
+    ) === sourceCommit,
+    "EXACT_GIT_WORKTREE_HEAD"
+  );
+  return Object.freeze({ fileCount: entries.length, sourceCommit });
+}
+
+export function trustedGitExecutable() {
+  let candidate = TRUSTED_GIT_PATH;
+  if (process.platform === "darwin") {
+    const xcrun = "/usr/bin/xcrun";
+    const xcrunStat = fs.lstatSync(xcrun);
+    requireCondition(
+      xcrunStat.isFile() &&
+        !xcrunStat.isSymbolicLink() &&
+        xcrunStat.uid === 0 &&
+        (xcrunStat.mode & 0o022) === 0,
+      "EXACT_GIT_SOURCE_EXECUTABLE"
+    );
+    const discovered = spawnSync(xcrun, ["--find", "git"], {
+      encoding: "utf8",
+      env: gitEnvironment(),
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    requireCondition(
+      !discovered.error &&
+        discovered.status === 0 &&
+        /^\/(?:Applications\/Xcode[^/]*\.app\/Contents\/Developer|Library\/Developer\/CommandLineTools)\/usr\/bin\/git\n?$/.test(
+          discovered.stdout
+        ),
+      "EXACT_GIT_SOURCE_EXECUTABLE"
+    );
+    candidate = discovered.stdout.trim();
+  }
+  const resolved = fs.realpathSync(candidate);
+  const stat = fs.lstatSync(resolved);
+  requireCondition(
+    resolved === candidate &&
+      stat.isFile() &&
+      !stat.isSymbolicLink() &&
+      stat.uid === 0 &&
+      (stat.mode & 0o022) === 0,
+    "EXACT_GIT_SOURCE_EXECUTABLE"
+  );
+  return resolved;
+}
+
+export function trustedTemporaryRoot() {
+  const resolved = fs.realpathSync("/tmp");
+  const stat = fs.lstatSync(resolved);
+  requireCondition(
+    ["/tmp", "/private/tmp"].includes(resolved) &&
+      stat.isDirectory() &&
+      !stat.isSymbolicLink() &&
+      stat.uid === 0 &&
+      (stat.mode & 0o1000) !== 0,
+    "EXACT_GIT_TEMPORARY_ROOT"
+  );
+  return resolved;
+}
+
 function git(rootDir, args, code) {
   const result = spawnSync(
-    "git",
-    ["-c", "core.fsmonitor=false", ...args],
+    trustedGitExecutable(),
+    [...gitInvariantArguments(), ...args],
     {
       cwd: rootDir,
       encoding: null,
@@ -85,6 +255,40 @@ function safeRelativePath(rootDir, filePath) {
     "EXACT_GIT_SOURCE_PATH"
   );
   return { resolved, relative: normalized };
+}
+
+export function assertSafeProjectPath({
+  rootDir,
+  filePath,
+  code = "EXACT_GIT_PROJECT_PATH"
+}) {
+  const resolvedRoot = path.resolve(rootDir);
+  const resolved = path.resolve(filePath);
+  const relative = path.relative(resolvedRoot, resolved);
+  const rootStat = fs.lstatSync(resolvedRoot);
+  requireCondition(
+    fs.realpathSync(resolvedRoot) === resolvedRoot &&
+      rootStat.isDirectory() &&
+      !rootStat.isSymbolicLink() &&
+      relative.length > 0 &&
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative),
+    code
+  );
+  let current = resolvedRoot;
+  for (const component of relative.split(path.sep)) {
+    current = path.join(current, component);
+    if (!fs.existsSync(current)) {
+      continue;
+    }
+    const stat = fs.lstatSync(current);
+    requireCondition(!stat.isSymbolicLink(), code);
+    if (current !== resolved) {
+      requireCondition(stat.isDirectory(), code);
+    }
+  }
+  return resolved;
 }
 
 export function assertExactGitSourceContext({ rootDir, sourceCommit }) {
@@ -153,6 +357,43 @@ export function assertCleanExactGitCheckout({
     ) === "",
     "EXACT_GIT_SOURCE_DIRTY"
   );
+  const localConfigNames = gitText(
+    context.rootDir,
+    ["config", "--local", "--includes", "--name-only", "--list"],
+    "EXACT_GIT_SOURCE_LOCAL_CONFIG"
+  )
+    .split("\n")
+    .filter(Boolean);
+  assertSafeLocalGitConfiguration(localConfigNames);
+  const indexEntries = git(
+    context.rootDir,
+    ["ls-files", "-v", "-z"],
+    "EXACT_GIT_SOURCE_INDEX"
+  )
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean);
+  requireCondition(
+    indexEntries.length > 0 &&
+      indexEntries.every((entry) => /^H .+/.test(entry)),
+    "EXACT_GIT_SOURCE_INDEX"
+  );
+  assertSafeExactTreePaths({ rootDir: context.rootDir, sourceCommit });
+  for (const gitPath of ["info/attributes", "info/sparse-checkout"]) {
+    const candidatePath = gitText(
+      context.rootDir,
+      ["rev-parse", "--git-path", gitPath],
+      "EXACT_GIT_SOURCE_CHECKOUT_PATH"
+    );
+    const candidate = path.isAbsolute(candidatePath)
+      ? candidatePath
+      : path.resolve(context.rootDir, candidatePath);
+    requireCondition(
+      !fs.existsSync(candidate),
+      "EXACT_GIT_SOURCE_CHECKOUT_PATH"
+    );
+  }
+  assertExactWorktreeBytes({ rootDir: context.rootDir, sourceCommit });
   return Object.freeze({ ...context, treeDigest });
 }
 
@@ -228,15 +469,16 @@ export function exactGitSourcePlugin({
     setup(build) {
       build.onResolve({ filter: /\?raw$/ }, (args) => {
         const target = path.resolve(args.resolveDir, args.path.slice(0, -4));
-        safeRelativePath(context.rootDir, target);
+        const exactTarget = safeRelativePath(context.rootDir, target);
         return {
           namespace: "tideproof-exact-git-raw",
-          path: target
+          path: exactTarget.relative
         };
       });
       build.onLoad(
         { filter: /.*/, namespace: "tideproof-exact-git-raw" },
-        (args) => exactInput(args.path, "text")
+        (args) =>
+          exactInput(path.join(context.rootDir, args.path), "text")
       );
       build.onLoad({ filter: /.*/, namespace: "file" }, (args) => {
         const resolved = path.resolve(args.path);
@@ -271,6 +513,7 @@ export function exactGitSourcePlugin({
 
 export const __test = Object.freeze({
   COMMIT,
+  FORBIDDEN_TREE_PATH,
   LOADERS,
   gitEnvironment,
   isWithinRoot(rootDir, candidate) {

@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -9,6 +8,16 @@ import {
   createBuildToolchain,
   createDependencySnapshot
 } from "./lib/dependency-snapshot.js";
+import {
+  assertCleanExactGitCheckout,
+  assertExactWorktreeBytes,
+  assertSafeLocalGitConfiguration,
+  assertSafeExactTreePaths,
+  assertSafeProjectPath,
+  gitInvariantArguments,
+  trustedGitExecutable,
+  trustedTemporaryRoot
+} from "./lib/exact-git-source.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -16,9 +25,7 @@ const SAFE_ENVIRONMENT_NAMES = new Set([
   "LANG",
   "LC_ALL",
   "LC_CTYPE",
-  "NO_COLOR",
-  "PATH",
-  "TMPDIR"
+  "NO_COLOR"
 ]);
 
 function requireCondition(condition, code) {
@@ -34,6 +41,8 @@ export function isolatedEnvironment(source = process.env) {
         SAFE_ENVIRONMENT_NAMES.has(name)
       )
     ),
+    PATH: "/usr/bin:/bin",
+    GIT_ATTR_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_NO_REPLACE_OBJECTS: "1",
@@ -67,10 +76,10 @@ function run(command, args, { cwd = root, env, encoding = "utf8" } = {}) {
   return result.stdout;
 }
 
-function git(args, cwd = root) {
+function git(args, cwd = root, gitExecutable = trustedGitExecutable()) {
   return run(
-    "git",
-    ["-c", "core.fsmonitor=false", ...args],
+    gitExecutable,
+    [...gitInvariantArguments(), ...args],
     { cwd }
   ).trim();
 }
@@ -79,7 +88,17 @@ function sha256(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-function copyExactFile(source, destination) {
+function copyExactFile(source, destination, { sourceRoot, destinationRoot }) {
+  assertSafeProjectPath({
+    rootDir: sourceRoot,
+    filePath: source,
+    code: "EXACT_BUILD_OUTPUT_PATH"
+  });
+  assertSafeProjectPath({
+    rootDir: destinationRoot,
+    filePath: destination,
+    code: "EXACT_BUILD_OUTPUT_PATH"
+  });
   const stat = fs.lstatSync(source);
   requireCondition(stat.isFile() && !stat.isSymbolicLink(), "EXACT_BUILD_OUTPUT");
   fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -128,7 +147,8 @@ function copyOutputs(stagingRoot, receipt) {
   for (const relativePath of expectedTemplates) {
     copyExactFile(
       path.join(stagingRoot, relativePath),
-      path.join(root, relativePath)
+      path.join(root, relativePath),
+      { sourceRoot: stagingRoot, destinationRoot: root }
     );
   }
   for (const artifact of receipt.artifacts ?? []) {
@@ -141,32 +161,102 @@ function copyOutputs(stagingRoot, receipt) {
     );
     copyExactFile(
       path.join(stagingRoot, artifact.artifactPath),
-      path.join(root, artifact.artifactPath)
+      path.join(root, artifact.artifactPath),
+      { sourceRoot: stagingRoot, destinationRoot: root }
     );
   }
+  const runtime = receipt.evidenceProviderRuntime;
+  requireCondition(
+    runtime &&
+      typeof runtime.path === "string" &&
+      /^dist\/aws\/evidence-provider-[0-9a-f]{64}\.mjs$/.test(runtime.path),
+    "EXACT_BUILD_PROVIDER_RUNTIME_OUTPUT"
+  );
+  copyExactFile(
+    path.join(stagingRoot, runtime.path),
+    path.join(root, runtime.path),
+    { sourceRoot: stagingRoot, destinationRoot: root }
+  );
 }
 
 export function main(argv = process.argv.slice(2)) {
   requireCondition(argv.length === 0, "EXACT_BUILD_ARGUMENTS");
-  const sourceCommit = git(["rev-parse", "HEAD"]);
-  const treeDigest = git(["rev-parse", "HEAD^{tree}"]);
+  const gitExecutable = trustedGitExecutable();
+  const gitBuiltins = new Set(
+    run(gitExecutable, ["--list-cmds=builtins"])
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+  requireCondition(
+    [
+      "cat-file",
+      "config",
+      "ls-files",
+      "ls-tree",
+      "replace",
+      "rev-parse",
+      "status",
+      "worktree"
+    ].every((name) => gitBuiltins.has(name)),
+    "EXACT_BUILD_GIT_BUILTINS"
+  );
+  const sourceCommit = git(["rev-parse", "HEAD"], root, gitExecutable);
+  const treeDigest = git(["rev-parse", "HEAD^{tree}"], root, gitExecutable);
   requireCondition(/^[0-9a-f]{40}$/.test(sourceCommit), "EXACT_BUILD_HEAD");
   requireCondition(/^[0-9a-f]{40}$/.test(treeDigest), "EXACT_BUILD_TREE");
   requireCondition(
-    git(["rev-parse", "--show-toplevel"]) === root,
+    git(["rev-parse", "--show-toplevel"], root, gitExecutable) === root,
     "EXACT_BUILD_ROOT"
   );
   requireCondition(
-    git(["status", "--porcelain=v1", "--untracked-files=all"]) === "",
+    git(
+      ["status", "--porcelain=v1", "--untracked-files=all"],
+      root,
+      gitExecutable
+    ) === "",
     "EXACT_BUILD_DIRTY_TREE"
   );
   requireCondition(
-    git(["rev-parse", "--is-shallow-repository"]) === "false" &&
-      git(["replace", "-l"]) === "",
+    git(
+      ["rev-parse", "--is-shallow-repository"],
+      root,
+      gitExecutable
+    ) === "false" && git(["replace", "-l"], root, gitExecutable) === "",
     "EXACT_BUILD_OBJECT_STORE"
   );
-  for (const gitPath of ["info/grafts", "objects/info/alternates"]) {
-    const candidatePath = git(["rev-parse", "--git-path", gitPath]);
+  const localConfigNames = git(
+    ["config", "--local", "--includes", "--name-only", "--list"],
+    root,
+    gitExecutable
+  )
+    .split("\n")
+    .filter(Boolean);
+  assertSafeLocalGitConfiguration(localConfigNames);
+  assertSafeExactTreePaths({ rootDir: root, sourceCommit });
+  const indexEntries = git(
+    ["ls-files", "-v", "-z"],
+    root,
+    gitExecutable
+  )
+    .split("\0")
+    .filter(Boolean);
+  requireCondition(
+    indexEntries.length > 0 &&
+      indexEntries.every((entry) => /^H .+/.test(entry)),
+    "EXACT_BUILD_INDEX_FLAGS"
+  );
+  for (const gitPath of [
+    "info/attributes",
+    "info/grafts",
+    "info/sparse-checkout",
+    "objects/info/alternates"
+  ]) {
+    const candidatePath = git(
+      ["rev-parse", "--git-path", gitPath],
+      root,
+      gitExecutable
+    );
     const candidate = path.isAbsolute(candidatePath)
       ? candidatePath
       : path.resolve(root, candidatePath);
@@ -174,23 +264,31 @@ export function main(argv = process.argv.slice(2)) {
   }
   const npmCli = exactNpmCli();
   const npmVersion = run(process.execPath, [npmCli, "--version"]).trim();
+  let packageManager;
+  try {
+    packageManager = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf8")
+    ).packageManager;
+  } catch {
+    throw new Error("EXACT_BUILD_PACKAGE_MANAGER");
+  }
   requireCondition(
-    /^[0-9]+\.[0-9]+\.[0-9]+$/.test(npmVersion),
+    /^[0-9]+\.[0-9]+\.[0-9]+$/.test(npmVersion) &&
+      packageManager === `npm@${npmVersion}`,
     "EXACT_BUILD_NPM_VERSION"
   );
 
   const temporaryRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "tideproof-exact-build-")
+    path.join(trustedTemporaryRoot(), "tideproof-exact-build-")
   );
   const checkoutRoot = path.join(temporaryRoot, "checkout");
   const stagingRoot = path.join(temporaryRoot, "output");
   let worktreeAdded = false;
   try {
     run(
-      "git",
+      gitExecutable,
       [
-        "-c",
-        "core.fsmonitor=false",
+        ...gitInvariantArguments(),
         "worktree",
         "add",
         "--detach",
@@ -200,6 +298,10 @@ export function main(argv = process.argv.slice(2)) {
       { cwd: root }
     );
     worktreeAdded = true;
+    assertExactWorktreeBytes({
+      rootDir: checkoutRoot,
+      sourceCommit
+    });
     run(
       process.execPath,
       [
@@ -224,7 +326,7 @@ export function main(argv = process.argv.slice(2)) {
       packageJsonDigest: sha256(path.join(checkoutRoot, "package.json")),
       packageLockDigest: sha256(path.join(checkoutRoot, "package-lock.json"))
     });
-    const toolchain = createBuildToolchain({ npmCli });
+    const toolchain = createBuildToolchain({ gitExecutable, npmCli });
     requireCondition(
       toolchain.npmVersion === npmVersion,
       "EXACT_BUILD_NPM_VERSION"
@@ -246,15 +348,28 @@ export function main(argv = process.argv.slice(2)) {
       ],
       { cwd: checkoutRoot, env: childEnvironment }
     );
+    const postBuildCheckout = assertCleanExactGitCheckout({
+      rootDir: checkoutRoot,
+      sourceCommit,
+      treeDigest
+    });
+    requireCondition(
+      postBuildCheckout.sourceCommit === sourceCommit &&
+        postBuildCheckout.treeDigest === treeDigest,
+      "EXACT_BUILD_POST_CHECKOUT"
+    );
     const receipt = JSON.parse(output);
     const postBuildDependencySnapshot = createDependencySnapshot({
       dependencyRoot,
       packageJsonDigest: sha256(path.join(checkoutRoot, "package.json")),
       packageLockDigest: sha256(path.join(checkoutRoot, "package-lock.json"))
     });
-    const postBuildToolchain = createBuildToolchain({ npmCli });
+    const postBuildToolchain = createBuildToolchain({
+      gitExecutable,
+      npmCli
+    });
     requireCondition(
-      receipt?.schemaVersion === "tideproof.gate2-build.v5" &&
+      receipt?.schemaVersion === "tideproof.gate2-build.v6" &&
         receipt.mode === "CLEAN_ARTIFACT_BUILD" &&
         receipt.projectSourceMode ===
           "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS" &&
@@ -267,7 +382,11 @@ export function main(argv = process.argv.slice(2)) {
     );
     copyOutputs(stagingRoot, receipt);
     requireCondition(
-      git(["status", "--porcelain=v1", "--untracked-files=all"]) === "",
+      git(
+        ["status", "--porcelain=v1", "--untracked-files=all"],
+        root,
+        gitExecutable
+      ) === "",
       "EXACT_BUILD_POST_DIRTY_TREE"
     );
     process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
@@ -275,10 +394,9 @@ export function main(argv = process.argv.slice(2)) {
     let cleanupError = null;
     if (worktreeAdded) {
       const removed = spawnSync(
-        "git",
+        gitExecutable,
         [
-          "-c",
-          "core.fsmonitor=false",
+          ...gitInvariantArguments(),
           "worktree",
           "remove",
           "--force",

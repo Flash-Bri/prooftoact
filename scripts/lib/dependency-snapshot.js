@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const HEX_64 = /^[0-9a-f]{64}$/;
 const SNAPSHOT_SCHEMA = "tideproof.dependency-snapshot.v1";
-const TOOLCHAIN_SCHEMA = "tideproof.build-toolchain.v1";
+const TOOLCHAIN_SCHEMA = "tideproof.build-toolchain.v2";
 
 function requireCondition(condition, code) {
   if (!condition) {
@@ -46,6 +47,9 @@ function walkDependencyTree(rootDir) {
   function visit(directory, relativeDirectory = "") {
     const names = fs.readdirSync(directory).sort();
     for (const name of names) {
+      if (relativeDirectory === "" && name === ".bin") {
+        continue;
+      }
       requireCondition(
         name.length > 0 && name !== "." && name !== ".." && !name.includes("\0"),
         "DEPENDENCY_SNAPSHOT_PATH"
@@ -92,9 +96,7 @@ export function createDependencySnapshot({
   const resolvedRoot = path.resolve(dependencyRoot);
   const rootStat = fs.lstatSync(resolvedRoot);
   requireCondition(
-    rootStat.isDirectory() &&
-      !rootStat.isSymbolicLink() &&
-      !fs.existsSync(path.join(resolvedRoot, ".bin")),
+    rootStat.isDirectory() && !rootStat.isSymbolicLink(),
     "DEPENDENCY_SNAPSHOT_ROOT"
   );
   requireCondition(
@@ -154,11 +156,34 @@ function npmPackageRoot(npmCli) {
 
 export function createBuildToolchain({
   architecture = process.arch,
+  gitExecutable,
   nodeExecutable = process.execPath,
   nodeVersion = process.version,
   npmCli,
   platform = process.platform
 }) {
+  const resolvedGit = fs.realpathSync(gitExecutable);
+  const gitStat = fs.lstatSync(resolvedGit);
+  requireCondition(
+    path.isAbsolute(gitExecutable) &&
+      resolvedGit === gitExecutable &&
+      gitStat.isFile() &&
+      !gitStat.isSymbolicLink(),
+    "DEPENDENCY_SNAPSHOT_GIT_EXECUTABLE"
+  );
+  const gitResult = spawnSync(resolvedGit, ["--version"], {
+    encoding: "utf8",
+    env: { LANG: "C", LC_ALL: "C", PATH: "/usr/bin:/bin" },
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  requireCondition(
+    !gitResult.error &&
+      gitResult.status === 0 &&
+      /^git version [0-9]+\.[0-9]+\.[0-9]+(?: \(.+\))?$/.test(
+        gitResult.stdout.trim()
+      ),
+    "DEPENDENCY_SNAPSHOT_GIT_VERSION"
+  );
   const resolvedNode = fs.realpathSync(nodeExecutable);
   const nodeStat = fs.lstatSync(resolvedNode);
   requireCondition(
@@ -171,6 +196,8 @@ export function createBuildToolchain({
   return Object.freeze({
     schemaVersion: TOOLCHAIN_SCHEMA,
     architecture,
+    gitExecutableSha256: sha256(fs.readFileSync(resolvedGit)),
+    gitVersion: gitResult.stdout.trim().slice("git version ".length),
     nodeExecutableSha256: sha256(fs.readFileSync(resolvedNode)),
     nodeVersion,
     npmCliSha256: sha256(fs.readFileSync(fs.realpathSync(npmCli))),
@@ -216,6 +243,8 @@ export function validateBuildToolchain(value) {
   requireCondition(
     exactKeys(value, [
       "architecture",
+      "gitExecutableSha256",
+      "gitVersion",
       "nodeExecutableSha256",
       "nodeVersion",
       "npmCliSha256",
@@ -227,11 +256,13 @@ export function validateBuildToolchain(value) {
       "schemaVersion"
     ]) &&
       value.schemaVersion === TOOLCHAIN_SCHEMA &&
+      /^[0-9]+\.[0-9]+\.[0-9]+(?: \(.+\))?$/.test(value.gitVersion) &&
       /^v22\.[0-9]+\.[0-9]+$/.test(value.nodeVersion) &&
       /^[0-9]+\.[0-9]+\.[0-9]+$/.test(value.npmVersion) &&
       ["arm64", "x64"].includes(value.architecture) &&
       ["darwin", "linux"].includes(value.platform) &&
       HEX_64.test(value.nodeExecutableSha256) &&
+      HEX_64.test(value.gitExecutableSha256) &&
       HEX_64.test(value.npmCliSha256) &&
       Number.isSafeInteger(value.npmPackageBytes) &&
       value.npmPackageBytes > 0 &&

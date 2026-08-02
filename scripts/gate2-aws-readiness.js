@@ -5,10 +5,17 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { assertNoAwsEndpointOverrides } from "../src/cloud/aws-evidence-identity.js";
 import { templateReceipt } from "../src/cloud/aws-gate2-template.js";
+import { exactNpmCli } from "./build-gate2-exact.js";
 import {
   validateBuildToolchain,
   validateDependencySnapshot
 } from "./lib/dependency-snapshot.js";
+import {
+  assertSafeProjectPath,
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +33,10 @@ const ARTIFACT_NAMES = Object.freeze([
   "probe",
   "signer"
 ]);
+const BUNDLED_COMPONENT_NAMES = Object.freeze([
+  ...ARTIFACT_NAMES,
+  "evidenceProvider"
+]);
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
 const FIXED_ZIP_DATE = ((2026 - 1980) << 9) | (7 << 5) | 30;
@@ -38,28 +49,12 @@ const CRC32_TABLE = Array.from({ length: 256 }, (_, value) => {
   }
   return crc >>> 0;
 });
-const SECRET_ENVIRONMENT_NAME =
-  /(TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIAL)/i;
-const APPLICATION_ENVIRONMENT_NAME = new RegExp(
-  [
-    "^(",
-    "DATABASE_URL",
-    "|PG(HOST|PORT|DATABASE|USER|PASSWORD|SERVICE|SERVICEFILE|PASSFILE)",
-    "|COCKROACH_.+",
-    "|CRDB_.+",
-    "|OPENAI_.+",
-    "|ANTHROPIC_.+",
-    "|GOOGLE_.+",
-    "|OPENCLAW_.+",
-    "|CODEX_.+",
-    "|GH_TOKEN",
-    "|GITHUB_TOKEN",
-    ")$"
-  ].join(""),
-  "i"
-);
-const TOOL_OVERRIDE_ENVIRONMENT_NAME =
-  /^(?:BASH_ENV|CDPATH|DYLD_.+|ENV|GIT_.+|LD_PRELOAD|NODE_DEBUG|NODE_EXTRA_CA_CERTS|NODE_OPTIONS|NODE_PATH|NODE_TLS_REJECT_UNAUTHORIZED|NODE_V8_COVERAGE|NPM_CONFIG_.+)$/i;
+const SAFE_CHILD_ENVIRONMENT_NAMES = new Set([
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "NO_COLOR"
+]);
 const AUTHENTICATED_AWS_ENVIRONMENT_NAMES = new Set([
   "AWS_ACCESS_KEY_ID",
   "AWS_DEFAULT_REGION",
@@ -129,6 +124,11 @@ function resolvedFile(projectRoot, relativePath, code) {
       !path.isAbsolute(relative),
     code
   );
+  assertSafeProjectPath({
+    rootDir: projectRoot,
+    filePath: resolved,
+    code
+  });
   const stat = fs.lstatSync(resolved);
   requireCondition(stat.isFile() && !stat.isSymbolicLink(), code);
   return { resolved, stat };
@@ -431,6 +431,7 @@ export function validateBuildReceipt(
       "bootstrapTemplate",
       "buildControlInputs",
       "dependencySnapshot",
+      "evidenceProviderRuntime",
       "gate2Template",
       "mode",
       "packageJsonDigest",
@@ -444,7 +445,7 @@ export function validateBuildReceipt(
       "workingTreeClean",
       "workingTreeCleanBeforeGeneration"
     ]) &&
-      receipt.schemaVersion === "tideproof.gate2-build.v5" &&
+      receipt.schemaVersion === "tideproof.gate2-build.v6" &&
       receipt.mode === "CLEAN_ARTIFACT_BUILD" &&
       receipt.projectSourceMode ===
         "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS" &&
@@ -458,14 +459,21 @@ export function validateBuildReceipt(
     "AWS_READINESS_BUILD_RECEIPT"
   );
   const expectedBuildControlPaths = [
+    "infra/aws/lambda/agent.cjs",
     "scripts/build-gate2-exact.js",
     "scripts/build-gate2-template.js",
+    "scripts/lib/aws-provider-bundle-entry.js",
+    "scripts/lib/aws-provider-runtime.js",
+    "scripts/lib/aws-provider-runtime-loader.js",
     "scripts/lib/bundled-third-party-notices.js",
     "scripts/lib/dependency-snapshot.js",
     "scripts/lib/deterministic-zip.js",
+    "scripts/lib/exact-build-reproduction.js",
     "scripts/lib/exact-git-source.js",
+    "scripts/lib/raw-text-plugin.js",
     "scripts/verify-bundled-third-party-notices.js",
-    "src/cloud/aws-gate2-template.js"
+    "src/cloud/aws-gate2-template.js",
+    "src/cloud/public-demo.js"
   ];
   const buildControlInputs = Array.isArray(receipt.buildControlInputs)
     ? receipt.buildControlInputs
@@ -672,6 +680,100 @@ export function validateBuildReceipt(
       suggestedS3Key: artifact.suggestedS3Key
     };
   }
+  const providerRuntime = receipt.evidenceProviderRuntime;
+  const providerInputs = Array.isArray(providerRuntime?.exactGitInputs)
+    ? providerRuntime.exactGitInputs
+    : [];
+  requireCondition(
+    exactKeys(providerRuntime, [
+      "bundledPackages",
+      "bytes",
+      "exactGitInputs",
+      "externalImports",
+      "path",
+      "sha256"
+    ]) &&
+      HEX_64.test(providerRuntime.sha256) &&
+      providerRuntime.path ===
+        `dist/aws/evidence-provider-${providerRuntime.sha256}.mjs` &&
+      Number.isSafeInteger(providerRuntime.bytes) &&
+      providerRuntime.bytes > 0 &&
+      providerRuntime.bytes <= 5 * 1024 * 1024 &&
+      Array.isArray(providerRuntime.bundledPackages) &&
+      providerRuntime.bundledPackages.length > 0 &&
+      JSON.stringify(providerRuntime.bundledPackages) ===
+        JSON.stringify([...providerRuntime.bundledPackages].sort()) &&
+      new Set(providerRuntime.bundledPackages).size ===
+        providerRuntime.bundledPackages.length &&
+      providerRuntime.bundledPackages.every(
+        (packageName) =>
+          typeof packageName === "string" &&
+          /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(
+            packageName
+          )
+      ) &&
+      providerInputs.length >= 2 &&
+      providerInputs.length <= 64 &&
+      JSON.stringify(providerInputs.map((input) => input?.path)) ===
+        JSON.stringify(providerInputs.map((input) => input?.path).sort()) &&
+      new Set(providerInputs.map((input) => input?.path)).size ===
+        providerInputs.length &&
+      Array.isArray(providerRuntime.externalImports) &&
+      providerRuntime.externalImports.length > 0 &&
+      JSON.stringify(providerRuntime.externalImports) ===
+        JSON.stringify([...providerRuntime.externalImports].sort()) &&
+      new Set(providerRuntime.externalImports).size ===
+        providerRuntime.externalImports.length &&
+      providerRuntime.externalImports.every((candidate) =>
+        /^node:[a-z0-9_./-]+$/.test(candidate)
+      ),
+    "AWS_READINESS_PROVIDER_RUNTIME_RECEIPT"
+  );
+  const acceptedProviderInputs = [];
+  for (const input of providerInputs) {
+    requireCondition(
+      exactKeys(input, ["gitBlobId", "path", "sha256"]) &&
+        /^[0-9a-f]{40}$/.test(input.gitBlobId) &&
+        HEX_64.test(input.sha256) &&
+        typeof input.path === "string" &&
+        !input.path.split("/").includes("node_modules"),
+      "AWS_READINESS_PROVIDER_RUNTIME_INPUT"
+    );
+    const inputFile = resolvedFile(
+      projectRoot,
+      input.path,
+      "AWS_READINESS_PROVIDER_RUNTIME_INPUT_FILE"
+    );
+    const inputBytes = fs.readFileSync(inputFile.resolved);
+    requireCondition(
+      sha256(inputBytes) === input.sha256 &&
+        gitBlobId(inputBytes) === input.gitBlobId,
+      "AWS_READINESS_PROVIDER_RUNTIME_INPUT_DIGEST"
+    );
+    acceptedProviderInputs.push({ ...input });
+  }
+  requireCondition(
+    providerInputs.some(
+      (input) => input.path === "scripts/lib/aws-provider-bundle-entry.js"
+    ) &&
+      providerInputs.some(
+        (input) => input.path === "scripts/lib/aws-provider-runtime.js"
+      ),
+    "AWS_READINESS_PROVIDER_RUNTIME_SOURCE"
+  );
+  const providerFile = resolvedFile(
+    projectRoot,
+    providerRuntime.path,
+    "AWS_READINESS_PROVIDER_RUNTIME_FILE"
+  );
+  requireCondition(
+    providerFile.stat.size === providerRuntime.bytes &&
+      sha256File(providerFile.resolved) === providerRuntime.sha256,
+    "AWS_READINESS_PROVIDER_RUNTIME_DIGEST"
+  );
+  providerRuntime.bundledPackages.forEach((packageName) =>
+    bundledPackageUnion.add(packageName)
+  );
   requireCondition(
     JSON.stringify([...bundledPackageUnion].sort()) ===
       JSON.stringify(thirdPartyNotices.accepted.packageNames),
@@ -688,6 +790,14 @@ export function validateBuildReceipt(
     packageLockDigest: receipt.packageLockDigest,
     toolchain,
     thirdPartyNotices: thirdPartyNotices.accepted,
+    evidenceProviderRuntime: {
+      bundledPackages: providerRuntime.bundledPackages,
+      bytes: providerRuntime.bytes,
+      exactGitInputs: acceptedProviderInputs,
+      externalImports: providerRuntime.externalImports,
+      path: providerRuntime.path,
+      sha256: providerRuntime.sha256
+    },
     bootstrapTemplate: validateTemplateReceipt(
       projectRoot,
       receipt.bootstrapTemplate,
@@ -1423,7 +1533,7 @@ export function validateReleaseProvenance(
       typeof notices.artifactPackages === "object" &&
       !Array.isArray(notices.artifactPackages) &&
       Object.keys(notices.artifactPackages).sort().join("\n") ===
-        [...ARTIFACT_NAMES].sort().join("\n") &&
+        [...BUNDLED_COMPONENT_NAMES].sort().join("\n") &&
       Object.values(notices.artifactPackages).every(
         (packages) =>
           Array.isArray(packages) &&
@@ -1492,6 +1602,7 @@ export function validatePreflightReceipt(
         "contextDigest",
         "expectedIdentityDigest",
         "expectedPrincipalDigest",
+        "principalIdDigest",
         "principalType"
       ]) &&
       exactKeys(budget, [
@@ -1568,6 +1679,9 @@ export function validatePreflightReceipt(
         controls?.callerBinding?.callerIdentityDigest &&
       /^[0-9a-f]{64}$/.test(
         controls?.callerBinding?.expectedPrincipalDigest
+      ) &&
+      /^[0-9a-f]{64}$/.test(
+        controls?.callerBinding?.principalIdDigest
       ) &&
       ["assumed-role", "iam-user"].includes(
         controls?.callerBinding?.principalType
@@ -1668,20 +1782,14 @@ function childEnvironment(
   const environment = {};
   for (const [name, value] of Object.entries(sourceEnvironment)) {
     const normalizedName = name.toUpperCase();
-    const awsNamed = normalizedName.startsWith("AWS_");
     if (
-      (awsNamed &&
-        (!awsAuthenticated ||
-          name !== normalizedName ||
-          !AUTHENTICATED_AWS_ENVIRONMENT_NAMES.has(normalizedName))) ||
-      (!awsNamed &&
-        (SECRET_ENVIRONMENT_NAME.test(name) ||
-          APPLICATION_ENVIRONMENT_NAME.test(name) ||
-          TOOL_OVERRIDE_ENVIRONMENT_NAME.test(name)))
+      SAFE_CHILD_ENVIRONMENT_NAMES.has(name) ||
+      (awsAuthenticated &&
+        name === normalizedName &&
+        AUTHENTICATED_AWS_ENVIRONMENT_NAMES.has(normalizedName))
     ) {
-      continue;
+      environment[name] = value;
     }
-    environment[name] = value;
   }
   environment.AWS_EC2_METADATA_DISABLED = "true";
   environment.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS = "true";
@@ -1691,21 +1799,48 @@ function childEnvironment(
   environment.GIT_CONFIG_GLOBAL = "/dev/null";
   environment.GIT_CONFIG_NOSYSTEM = "1";
   environment.GIT_TERMINAL_PROMPT = "0";
+  environment.PATH = "/usr/bin:/bin";
   environment.npm_config_always_auth = "false";
+  environment.npm_config_globalconfig =
+    "/etc/tideproof-npm-globalconfig";
+  environment.npm_config_ignore_scripts = "true";
   environment.npm_config_registry = "https://registry.npmjs.org/";
+  environment.npm_config_script_shell = "/bin/sh";
   environment.npm_config_update_notifier = "false";
-  environment.npm_config_userconfig = "/dev/null";
+  environment.npm_config_userconfig =
+    "/etc/tideproof-npm-userconfig";
   return environment;
 }
 
-function defaultRunner(projectRoot) {
-  return (command, args, options) =>
-    spawnSync(command, args, {
+function defaultRunner(projectRoot, sourceEnvironment = process.env) {
+  requireCondition(
+    !fs.existsSync("/etc/tideproof-npm-globalconfig") &&
+      !fs.existsSync("/etc/tideproof-npm-userconfig"),
+    "AWS_READINESS_NPM_CONFIGURATION"
+  );
+  const gitExecutable = trustedGitExecutable();
+  const npmCli = exactNpmCli(sourceEnvironment);
+  return (command, args, options = {}) => {
+    requireCondition(
+      command === "git" || command === "npm",
+      "AWS_READINESS_COMMAND"
+    );
+    const executable = command === "git" ? gitExecutable : process.execPath;
+    const exactArguments =
+      command === "git"
+        ? [...gitInvariantArguments(), ...args]
+        : [npmCli, ...args];
+    const environment = childEnvironment(sourceEnvironment, options);
+    if (command === "git") {
+      Object.assign(environment, gitEnvironment(environment));
+    }
+    return spawnSync(executable, exactArguments, {
       cwd: projectRoot,
       encoding: "utf8",
-      env: childEnvironment(process.env, options),
+      env: environment,
       maxBuffer: 32 * 1024 * 1024
     });
+  };
 }
 
 function checkedCommand(
@@ -2011,6 +2146,7 @@ export const __test = Object.freeze({
   EXPECTED_REGION,
   OFFICIAL_REMOTE,
   childEnvironment,
+  defaultRunner,
   gitBlobId,
   isOfficialRemote,
   validateStoredTwoFileZip

@@ -59,7 +59,7 @@ test("dependency snapshot detects a tampered installed dependency byte", () => {
   }
 });
 
-test("dependency snapshot rejects installed-tree symlinks", () => {
+test("dependency snapshot rejects installed-tree symlinks outside unused root shims", () => {
   const root = fixture();
   try {
     fs.symlinkSync(
@@ -80,10 +80,37 @@ test("dependency snapshot rejects installed-tree symlinks", () => {
   }
 });
 
+test("dependency snapshot excludes only the sanitized-path root .bin shims", () => {
+  const root = fixture();
+  try {
+    const baseline = createDependencySnapshot({
+      dependencyRoot: root,
+      packageJsonDigest: PACKAGE_JSON_DIGEST,
+      packageLockDigest: PACKAGE_LOCK_DIGEST
+    });
+    fs.mkdirSync(path.join(root, ".bin"));
+    fs.symlinkSync(
+      path.join(root, "example", "lib", "index.js"),
+      path.join(root, ".bin", "example")
+    );
+    const snapshot = createDependencySnapshot({
+      dependencyRoot: root,
+      packageJsonDigest: PACKAGE_JSON_DIGEST,
+      packageLockDigest: PACKAGE_LOCK_DIGEST
+    });
+    assert.deepEqual(snapshot, baseline);
+    assert.equal(snapshot.fileCount, 2);
+  } finally {
+    fs.rmSync(root, { force: true, recursive: true });
+  }
+});
+
 test("build toolchain receipt requires executable and npm CLI digests", () => {
   const receipt = {
-    schemaVersion: "tideproof.build-toolchain.v1",
+    schemaVersion: "tideproof.build-toolchain.v2",
     architecture: "arm64",
+    gitExecutableSha256: "6".repeat(64),
+    gitVersion: "2.50.1 (Apple Git-155)",
     nodeExecutableSha256: "3".repeat(64),
     nodeVersion: "v22.23.1",
     npmCliSha256: "4".repeat(64),
@@ -108,6 +135,7 @@ test("build toolchain binds the complete npm package tree", () => {
     const npmRoot = path.join(root, "npm");
     const npmCli = path.join(npmRoot, "bin", "npm-cli.js");
     const nodeExecutable = path.join(root, "node");
+    const gitExecutable = path.join(root, "git");
     fs.mkdirSync(path.dirname(npmCli), { recursive: true });
     fs.writeFileSync(
       path.join(npmRoot, "package.json"),
@@ -115,8 +143,14 @@ test("build toolchain binds the complete npm package tree", () => {
     );
     fs.writeFileSync(npmCli, "export {};\n");
     fs.writeFileSync(nodeExecutable, "fixture-node\n");
+    fs.writeFileSync(
+      gitExecutable,
+      "#!/bin/sh\necho 'git version 2.50.1'\n"
+    );
+    fs.chmodSync(gitExecutable, 0o755);
     const first = createBuildToolchain({
       architecture: "arm64",
+      gitExecutable,
       nodeExecutable,
       nodeVersion: "v22.23.1",
       npmCli,
@@ -125,6 +159,7 @@ test("build toolchain binds the complete npm package tree", () => {
     fs.writeFileSync(path.join(npmRoot, "lib.js"), "tampered\n");
     const changed = createBuildToolchain({
       architecture: "arm64",
+      gitExecutable,
       nodeExecutable,
       nodeVersion: "v22.23.1",
       npmCli,

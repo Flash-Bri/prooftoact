@@ -27,7 +27,9 @@ and private human review remain required.
   They did not model a concurrent local edit during bundling, an import that
   escaped to the host filesystem, an alias or role replacement between
   observations, an expectation rewritten independently of the reviewed build,
-  or a fabricated pre/denial receipt as separate substitution paths. Tests
+  a fabricated pre/denial receipt, a symlinked ignored output parent, or an
+  API control plane whose desired routes had not reached the active stage as
+  separate substitution paths. Tests
   also omitted tampered dependency bytes, a fabricated-but-hash-bound receipt,
   and a same-account shadow function substituted for one stack resource.
 - **Earliest detection point:** the deterministic artifact builder and
@@ -37,11 +39,15 @@ and private human review remain required.
   checkout, creates a detached exact-commit worktree, executes the committed
   builder there, runs `npm ci --ignore-scripts` from the lockfile with a new
   isolated cache and distinct empty user/global npm configuration paths,
-  rejects installed-tree symlinks, hashes every installed file byte and mode,
-  and records the Node/npm toolchain plus every build-control and project blob.
+  rejects installed-tree symlinks outside npm's unused root `.bin` shims,
+  excludes those shims under a fixed `/usr/bin:/bin` build `PATH`, hashes every
+  remaining installed file byte and mode, and records the Git/Node/npm
+  toolchain plus every build-control and project blob.
   The distinct paths prevent npm from rejecting a duplicated configuration
   source while still excluding ambient npm configuration. The esbuild
-  loader rejects every non-dependency path outside that worktree. Runtime
+  loader rejects every non-dependency path outside that worktree and gives
+  raw Git inputs repository-relative virtual identities so temporary worktree
+  names cannot change bundle bytes. Runtime
   roles, API integrations, permissions, probe targets, and authority-race
   invocation target numeric Lambda versions. `proof` aliases remain monitored
   pointers only. Three distinct Ed25519 public keys are committed into the
@@ -49,13 +55,24 @@ and private human review remain required.
   keys authenticate the pre snapshot, post snapshot/final pair, and
   alternate-principal denial. The validator recomputes caller/context
   bindings, fully validates and reproduces the raw build receipt byte-for-byte
-  from the exact clean commit before any provider query, and binds the
+  from the exact clean commit in both provider-credentialed runners before any
+  provider query, rejects symlinked path components before copying or loading
+  ignored artifacts, and binds the
   expectation to that receipt and the configuration hashes. It enumerates
   every inline and attached role policy plus permissions
   boundary, preserves role IDs, binds security-relevant Lambda configuration,
   binds each attested function, version, alias, and role to its exact
-  CloudFormation physical resource, and requires two identical full provider
-  observations per snapshot.
+  CloudFormation physical resource. It directly enumerates the API,
+  integrations, routes, stage, paginated deployments, and the stage's active
+  deployment; requires auto-deploy to be disabled and the stage to name the
+  exact CloudFormation deployment physical ID created after every route, then
+  requires a never-updated `CREATE_COMPLETE` stack and proves that explicit
+  deployment was created during that stack creation and is the newest
+  successful deployment with no status warning; rejects CORS, shadow routes,
+  integrations, stages, request/response rewrites, and a substituted access-log
+  destination; enumerates aliases, function URLs, event-source mappings, and
+  function/role tags; and requires two identical full provider observations
+  per snapshot.
 - **Preventive controls:** the build receipt records every exact Git input's
   path, Git blob ID, and SHA-256, including the outer and inner builders. Its
   dependency-tree and toolchain snapshots make ambient changes receipt-visible,
@@ -69,11 +86,20 @@ and private human review remain required.
   stable role ID before and after canaries. Layers, filesystem mounts, VPC,
   KMS environment encryption, dead letters, runtime, handler, logging,
   tracing, signing metadata, concurrency, revisions, versions, and aliases are
-  bound or rejected.
+  bound or rejected. AWS does not expose resource scoping for
+  `lambda:ListEventSourceMappings`, so the collector has one explicitly
+  reviewed account-wide read for that action; reviewed code supplies each of
+  the five exact function names and the signed snapshot accepts no mapping for
+  those functions. This is a read-capability exception, not an account-wide
+  Lambda inventory claim.
 - **Verification:** focused tests substitute dirty working-tree bytes, reject
   untracked and escaped paths, tamper an installed dependency, reject an
-  installed-tree symlink, reject alias invocation targets, fabricate or stale
-  the exact build receipt, substitute a shadow function, fabricate unsigned
+  installed-tree symlink outside the unused root shim boundary, prove that
+  boundary excludes only `.bin`, reject temporary-worktree path leakage, reject alias
+  invocation targets, fabricate or stale the exact build receipt, substitute a
+  shadow function, shadow access-log destination, permissive CORS, pending or
+  failed/newer API deployment, hidden alias, function URL, event source, tag,
+  or fabricated provider runtime; fabricate unsigned
   receipts, attach `AdministratorAccess`, add an extra inline policy and
   Lambda layer, replace the evidence role, break the observation fence, and
   mutate every attested deployment field. The full source security, proof,
@@ -89,12 +115,58 @@ and private human review remain required.
   roles, and the two evidence roles; conditional probe-function configuration
   remains stage-four provider evidence. A stable pre/post snapshot does not prove
   application correctness, CockroachDB concurrency, availability, or release
-  safety.
+  safety. The build receipt measures the selected Node, npm, esbuild, Git, and
+  installed dependency bytes, but does not independently certify those local
+  binaries. A process with the same operating-system identity could still
+  attempt a transient edit-and-restore between checks; detached exact-Git blob
+  reads, component-walk path checks, receipt reproduction, and two provider
+  observations narrow that risk but do not create a hostile-host boundary.
 - **Claim impact:** source wording may say that the candidate builds project
   inputs from exact Git blobs, invokes numeric Lambda versions, and contains a
   fail-closed pre/post attestation contract. It must not say that live AWS
   deployment identity, alternate-principal denial, administrator exclusion,
   canary stability, or production security has been proven.
+
+## Accepted create-only lifecycle finding
+
+- **Root cause:** one stable `ApiDeployment` logical ID let CloudFormation
+  update only the deployment description without replacing the immutable API
+  Gateway snapshot. The old snapshot could therefore carry current source and
+  configuration labels. The probe runbook also instructed operators to toggle
+  `EnableProbeFunctions` on that same stack, which necessarily made the final
+  stack updated and incompatible with the corrected attestation invariant.
+- **Why it was missed:** source review bound the description, routes, stage,
+  and physical deployment ID, but did not model CloudFormation update
+  semantics for `AWS::ApiGatewayV2::Deployment.Description` or reconcile the
+  operational probe sequence against the new never-updated stack rule.
+- **Earliest detection point:** template update-semantics review and the live
+  runbook, before a change set, upload, or provider mutation.
+- **Repair:** final evidence accepts only an initially created, never-updated
+  `CREATE_COMPLETE` stack whose exact active deployment was created during the
+  initial stack creation. Capability probes run only in a distinct disposable
+  stack created with probes enabled; that stack is fully deleted before a
+  fresh final stack is created with probes disabled. Any final-stack change
+  requires teardown and a new create.
+- **Regression and preventive controls:** negative tests reject the
+  same-physical-ID metadata relabel on an updated stack, validate initial
+  stack/deployment timestamps, and bind the stage to the exact CloudFormation
+  deployment physical ID. A separate runbook/template test requires the
+  disposable-probe-to-fresh-final lifecycle and rejects instructions to toggle
+  the probe parameter in place.
+- **Verification:** the focused template and deployment-attestation suites,
+  full source suite, generated-template equality, security gate, and proof gate
+  must pass together. Provider-backed API Gateway and CloudFormation behavior
+  remains unverified until the approved live lane produces accepted receipts.
+- **Residual risk:** the create-only rule deliberately gives up in-place
+  updates; every correction requires complete teardown and fresh creation.
+  Probe-stack deletion schedules its KMS signing key for deletion after seven
+  days rather than erasing it immediately; its exact pending-deletion identity
+  and date must be recorded, its alias must be absent, and cancellation or
+  reuse is forbidden. Provider propagation, teardown completeness, and
+  same-account administrator behavior remain live or human-review boundaries.
+- **Claim impact:** source may claim a fail-closed create-only deployment
+  contract. It must not claim update-safe API snapshot replacement, live
+  provider validation, or administrator exclusion.
 
 ## Required live sequence
 
@@ -107,7 +179,11 @@ and private human review remain required.
    build-receipt bytes, configuration bytes, commit, tree, generated template,
    uploaded object versions, numeric Lambda versions, code hashes, the exact
    five-primary-function configuration census, their shared-role census, both
-   evidence roles, concurrency, and trusted evidence principal. Conditional
+   evidence roles, concurrency, exact API route/integration/stage and explicit
+   active-deployment census, and trusted evidence principal. The default stage
+   must have auto-deploy disabled and reference the exact create-time
+   CloudFormation deployment physical ID. The attestation rejects every
+   updated stack; changes require teardown and a fresh create. Conditional
    probe-function configuration remains a separate stage-four requirement.
 3. Assume the generated evidence role as that trusted principal and run the
    `pre` attestation. A failure is a stop.

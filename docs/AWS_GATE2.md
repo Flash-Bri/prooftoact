@@ -90,11 +90,25 @@ boundary:
   Lambda versions, code hashes, layers and other security-relevant
   configuration for the five primary runtime functions, their shared role
   policy censuses, both evidence roles, concurrency, revisions,
-  monitored alias targets, stable role IDs, and fresh drift status. Each
+  monitored alias targets, alias/function-URL/event-source/tag censuses,
+  stable role IDs, the exact API/integration/route/stage and explicit
+  active-deployment census, the exact API access-log destination, 35
+  drift-supported resources, two directly attested integration resources that
+  CloudFormation drift does not support, and the directly attested explicit
+  API deployment. The stage has auto-deploy disabled and must name the exact
+  CloudFormation deployment physical ID created after every declared route.
+  Attestation accepts only a never-updated `CREATE_COMPLETE` stack, requires
+  that deployment to have been created during that stack creation, be the
+  newest observed deployment, report `DEPLOYED`, and carry no status warning.
+  Any application or configuration change therefore requires teardown and a
+  fresh stack create; an in-place stack update is deliberately fail-closed. Each
   snapshot requires two identical complete observations. A dedicated
   alternate role whose only positive permission targets the collector must
   receive `AccessDenied`. These controls are unrun and do not exclude
   administrators or the independently protected receipt-key custodian.
+  AWS requires `lambda:ListEventSourceMappings` to use `Resource: "*"`; this
+  is one explicit read-only collector exception, while reviewed code queries
+  the five exact primary function names and accepts no mappings for them.
   Conditional probe-function configurations remain outside this stage-three
   census and require separate stage-four provider evidence.
 
@@ -194,7 +208,10 @@ path escape, untracked inputs, and unsupported loaders fail closed. On that
 commit it bundles each runtime role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
-the 42-package union present across the six esbuild input graphs.
+the 46-package union present across the six Lambda graphs and the separately
+content-addressed evidence-provider runtime graph. Over-inclusion in each ZIP
+is intentional so every independently distributed ZIP carries the complete
+reviewed notice set.
 The Demo artifact embeds the exact reviewed browser source, scenario
 implementation, claims ledger, and Gate One evidence through build-time raw
 imports. The receipt records:
@@ -215,7 +232,10 @@ All runtime roles, API integrations, permissions, probes, and authority-race
 calls target numeric Lambda versions. The `proof` aliases are monitored
 pointers for inspection and metadata only, not invocation authority. Run
 accepted builds in an isolated one-writer checkout and preserve the emitted
-source, blob, and artifact digests.
+source, blob, and artifact digests. The receipt measures but does not
+independently certify the local Node/npm/esbuild/Git toolchain. Component-walk
+checks reject symlinked artifact parents, but a same-identity hostile host is
+still outside the claim and requires independent exact-release reproduction.
 
 The reviewed JSON is pretty printed for auditability and is larger than
 CloudFormation's 51,200-byte inline `TemplateBody` limit. Deploy it through a
@@ -371,26 +391,37 @@ The sanitized historical receipt in
 private receipt for the superseded `0ef4dba` upload without publishing AWS
 account, bucket, notification, or object-version identifiers. It is historical
 evidence only and must not be used to deploy the repaired candidate.
-9. Upload the reviewed template to the private versioned bucket and deploy the
-   main stack from its exact `TemplateURL` with probes left at their default
-   `false`.
-10. Verify every Lambda version's reported `CodeSha256`, numeric version ARN,
-   monitored alias target, execution role and inline policy, environment,
-   timeout, reserved concurrency, revisions, access-log destination, and
-   CloudFormation resource drift.
-11. Temporarily update `EnableProbeFunctions` to `true`. Prove the exact allowed
-   capability and required denials for every role. Probe concurrency is one;
-   the probe canary and functions exist only during this phase. Label all
-   probe-phase receipts non-final because the signer-role probe uses the
-   evidence key outside the receipt schema.
-12. Update probes back to `false`; verify all probe functions, probe log
-    groups, and the canary secret are removed. Recompute the final
-    configuration digest and reverify aliases and roles. Create one private
-    exact deployment expectation from the reviewed build/upload receipts and
-    stack outputs. The configuration must bind three distinct Ed25519 public
-    keys; the matching private key files must remain outside the repository,
-    regular, and mode `0600`. As the generated bounded deployment-evidence
-    collector, run:
+9. Upload the reviewed template to the private versioned bucket and create the
+   disposable `tideproof-gate2-probe` stack from its exact `TemplateURL` with
+   `EnableProbeFunctions=true` in the initial create. Never update this stack.
+   Prove the exact allowed capability and required denials for every role.
+   Probe concurrency is one; the probe canary and functions exist only in this
+   disposable stack. Label every probe-phase receipt non-final because the
+   signer-role probe uses the evidence key outside the receipt schema and the
+   probe stack is not eligible for deployment attestation.
+10. Delete the disposable probe stack and require stack `DELETE_COMPLETE`.
+    Verify its endpoints, functions, aliases, log groups, canary secret, API,
+    stage, deployment, and every other reusable CloudFormation-owned resource
+    are absent. The one expected residue is `ReceiptSigningKey` in KMS
+    `PendingDeletion` for its seven-day window: record its exact ARN, key ID,
+    scheduled deletion date, and removed alias. That deletion must not be
+    canceled or reused. Do not reuse the probe receipts, configuration digest,
+    or any physical ID for the final stack.
+11. Recompute the final configuration digest with probes disabled, then create
+    a fresh `tideproof-gate2` main stack from the exact `TemplateURL` with
+    `EnableProbeFunctions=false` in the initial create. This attested stack
+    must never be updated—not for parameters, tags, metadata, artifacts, or
+    configuration. Any correction or change requires complete teardown and a
+    fresh create. Verify every Lambda version's reported `CodeSha256`, numeric
+    version ARN, monitored alias target, execution role and inline policy,
+    environment, timeout, reserved concurrency, revisions, access-log
+    destination, CloudFormation resource drift, and absence of every
+    conditional probe resource.
+12. Create one private exact deployment expectation from the reviewed
+    build/upload receipts and fresh main-stack outputs. The configuration must
+    bind three distinct Ed25519 public keys; the matching private key files
+    must remain outside the repository, regular, and mode `0600`. As the
+    generated bounded deployment-evidence collector, run:
 
     ```sh
     npm run gate2:aws-attest -- \
@@ -407,10 +438,12 @@ evidence only and must not be used to deploy the repaired candidate.
     ```sh
     npm run gate2:aws-alternate-denial -- \
       --expectation "$EXPECTATION_PATH" \
+      --build-receipt "$BUILD_RECEIPT_PATH" \
       --receipt-key "$ALTERNATE_DENIAL_KEY_PATH"
     ```
 
-    Require a signed provider `AccessDenied` receipt. Either command failing
+    Require a signed provider `AccessDenied` receipt bound to the exact build
+    receipt and its content-addressed provider runtime. Either command failing
     is a stop. This proves neither administrator exclusion nor application
     correctness.
 13. Assume only `AuthorityRaceCallerRole`. From the exact clean deployment
@@ -482,7 +515,9 @@ evidence only and must not be used to deploy the repaired candidate.
     digests, all five numeric versions and revisions unchanged, all monitored
     alias targets unchanged, stable function/evidence/alternate role IDs,
     exact zero-extra policy censuses, and fresh stack/resource drift status
-    `IN_SYNC`. A stable attestation does not prove administrator exclusion, canary
+    `IN_SYNC`; also require the exact route/integration/stage census and newest
+    active API deployment to remain stable and `DEPLOYED`. A stable attestation
+    does not prove administrator exclusion, canary
     correctness, CockroachDB concurrency, or public-release readiness.
 
 Ambiguous, malformed, unsigned, or unavailable application state returns

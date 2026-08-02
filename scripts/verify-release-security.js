@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { buildGate2Template } from "../src/cloud/aws-gate2-template.js";
+import { DEPLOYMENT_API_ROUTE_KEYS } from "../src/cloud/aws-deployment-attestation.js";
 import { PUBLIC_DEMO_PATHS } from "../src/cloud/public-demo.js";
 import { __test as publicDemoVerifierContract } from "../src/cloud/public-demo-verifier.js";
 
@@ -93,6 +94,26 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/aws-evidence-identity.js",
     role: "AWS_EVIDENCE_IDENTITY_BOUNDARY"
   }),
+  "aws-provider-bundle-entry": Object.freeze({
+    path: "scripts/lib/aws-provider-bundle-entry.js",
+    role: "AWS_ATTESTATION_PROVIDER_BUNDLE_ENTRY"
+  }),
+  "aws-provider-runtime": Object.freeze({
+    path: "scripts/lib/aws-provider-runtime.js",
+    role: "AWS_ATTESTATION_PROVIDER_RUNTIME"
+  }),
+  "aws-provider-runtime-loader": Object.freeze({
+    path: "scripts/lib/aws-provider-runtime-loader.js",
+    role: "AWS_ATTESTATION_PROVIDER_RUNTIME_LOADER"
+  }),
+  "aws-provider-clients-tests": Object.freeze({
+    path: "test/aws-provider-clients.test.js",
+    role: "AWS_ATTESTATION_PROVIDER_CLIENT_VERIFICATION"
+  }),
+  "exact-build-reproduction": Object.freeze({
+    path: "scripts/lib/exact-build-reproduction.js",
+    role: "EXACT_BUILD_REPRODUCTION_CONTRACT"
+  }),
   "aws-preflight": Object.freeze({
     path: "scripts/gate2-aws-preflight.js",
     role: "READ_ONLY_AWS_PREFLIGHT"
@@ -112,6 +133,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "aws-template-source": Object.freeze({
     path: "src/cloud/aws-gate2-template.js",
     role: "CLOUDFORMATION_SOURCE"
+  }),
+  "aws-template-security-tests": Object.freeze({
+    path: "test/aws-gate2-template-security.test.js",
+    role: "AWS_TEMPLATE_LEAST_PRIVILEGE_VERIFICATION"
   }),
   "boundary-runtime": Object.freeze({
     path: "infra/aws/lambda/boundary.cjs",
@@ -406,19 +431,33 @@ const EXPECTED_ROLE_ALLOW_ACTIONS = Object.freeze({
     "logs:PutLogEvents"
   ]),
   DeploymentEvidenceRole: Object.freeze([
+    "apigateway:GET",
+    "cloudformation:BatchDescribeTypeConfigurations",
     "cloudformation:DescribeStackDriftDetectionStatus",
     "cloudformation:DescribeStackResourceDrifts",
     "cloudformation:DescribeStackResources",
     "cloudformation:DescribeStacks",
     "cloudformation:DetectStackDrift",
+    "cloudformation:DetectStackResourceDrift",
     "cloudformation:GetTemplate",
     "iam:GetRole",
     "iam:GetRolePolicy",
     "iam:ListAttachedRolePolicies",
     "iam:ListRolePolicies",
+    "iam:ListRoleTags",
     "lambda:GetAlias",
+    "lambda:GetFunction",
+    "lambda:GetFunctionCodeSigningConfig",
     "lambda:GetFunctionConcurrency",
-    "lambda:GetFunctionConfiguration"
+    "lambda:GetFunctionConfiguration",
+    "lambda:GetPolicy",
+    "lambda:GetFunctionRecursionConfig",
+    "lambda:GetRuntimeManagementConfig",
+    "lambda:ListAliases",
+    "lambda:ListEventSourceMappings",
+    "lambda:ListFunctionUrlConfigs",
+    "lambda:ListTags",
+    "lambda:ListProvisionedConcurrencyConfigs"
   ]),
   DeploymentEvidenceAlternateRole: Object.freeze(["sts:AssumeRole"]),
   SignerRole: Object.freeze([
@@ -432,69 +471,76 @@ const EXPECTED_ROLE_ALLOW_ACTIONS = Object.freeze({
 
 const REQUIRED_DENY_ACTIONS = Object.freeze({
   AdvisoryCallerRole: Object.freeze([
-    "bedrock:InvokeModel",
+    "bedrock:Invoke*",
     "iam:*",
+    "kms:GenerateMac",
     "kms:Sign",
-    "lambda:InvokeFunction",
+    "lambda:Invoke*",
     "secretsmanager:GetSecretValue",
     "sts:AssumeRole"
   ]),
   AgentRole: Object.freeze([
     "iam:*",
+    "kms:GenerateMac",
     "kms:Sign",
-    "lambda:InvokeFunction",
+    "lambda:Invoke*",
     "secretsmanager:GetSecretValue",
     "sts:AssumeRole"
   ]),
   AuthorityRaceCallerRole: Object.freeze([
-    "bedrock:InvokeModel",
+    "bedrock:Invoke*",
     "iam:*",
+    "kms:GenerateMac",
     "kms:Sign",
     "lambda:InvokeFunction",
     "secretsmanager:GetSecretValue",
     "sts:AssumeRole"
   ]),
   AuthorityRole: Object.freeze([
-    "bedrock:InvokeModel",
+    "bedrock:Invoke*",
     "iam:*",
+    "kms:GenerateMac",
     "kms:Sign",
-    "lambda:InvokeFunction",
+    "lambda:Invoke*",
     "secretsmanager:ListSecrets",
     "sts:AssumeRole"
   ]),
   BoundaryRole: Object.freeze([
-    "bedrock:InvokeModel",
+    "bedrock:Invoke*",
     "iam:*",
+    "kms:GenerateMac",
     "kms:Sign",
     "secretsmanager:GetSecretValue",
     "sts:AssumeRole"
   ]),
   DemoRole: Object.freeze([
-    "bedrock:InvokeModel",
+    "bedrock:Invoke*",
     "iam:*",
+    "kms:GenerateMac",
     "kms:Sign",
-    "lambda:InvokeFunction",
+    "lambda:Invoke*",
     "secretsmanager:GetSecretValue",
     "sts:AssumeRole"
   ]),
   DeploymentEvidenceRole: Object.freeze([
-    "bedrock:InvokeModel",
-    "kms:Sign",
-    "lambda:InvokeFunction",
-    "secretsmanager:GetSecretValue"
+    "bedrock:*",
+    "kms:*",
+    "lambda:Invoke*",
+    "secretsmanager:*",
+    "sts:AssumeRole"
   ]),
   DeploymentEvidenceAlternateRole: Object.freeze([
-    "bedrock:InvokeModel",
+    "bedrock:*",
     "iam:*",
-    "kms:Sign",
-    "lambda:InvokeFunction",
-    "secretsmanager:GetSecretValue",
+    "kms:*",
+    "lambda:Invoke*",
+    "secretsmanager:*",
     "sts:AssumeRole"
   ]),
   SignerRole: Object.freeze([
-    "bedrock:InvokeModel",
+    "bedrock:Invoke*",
     "iam:*",
-    "lambda:InvokeFunction",
+    "lambda:Invoke*",
     "secretsmanager:GetSecretValue",
     "sts:AssumeRole"
   ])
@@ -657,8 +703,16 @@ const SOURCE_MARKERS = Object.freeze({
     "AWS_EVIDENCE_EXPECTED_ALTERNATE_PRINCIPAL_ARN",
     "AWS_ATTEST_DENIAL_UNEXPECTEDLY_ALLOWED",
     "expectedPrincipalArn: alternatePrincipalArn",
-    "tideproof.gate2.aws-alternate-principal-denial.v2",
-    "errorCode: \"AccessDenied\""
+    "tideproof.gate2.aws-alternate-principal-denial.v3",
+    "errorCode: \"AccessDenied\"",
+    "reproduceExactBuild({",
+    "validateExactBuildReproduction(",
+    "AWS_ATTEST_DENIAL_EXACT_BUILD_MISMATCH",
+    "validateBuildReceipt(buildReceipt",
+    "loadAwsProviderRuntime({",
+    "providerRuntime.runtimeSha256",
+    "error?.name === \"AccessDenied\"",
+    "error.$metadata.attempts === 1"
   ]),
   "aws-authority-race": Object.freeze([
     "GIT_NO_REPLACE_OBJECTS: \"1\"",
@@ -690,11 +744,16 @@ const SOURCE_MARKERS = Object.freeze({
     "Every project input is then read as a regular tracked blob from the exact `HEAD` commit",
     "The `proof` aliases are monitored pointers for inspection and metadata only, not invocation authority.",
     "npm run gate2:aws-attest",
+    "Attestation accepts only a never-updated `CREATE_COMPLETE` stack",
+    "disposable `tideproof-gate2-probe` stack",
+    "fresh `tideproof-gate2` main stack",
+    "must never be updated",
     "Any wrong-run, sequential, ambiguous, replayed, expanded, stale, extra, or unresolved result is not evidence."
   ]),
   "aws-deployment-attestation": Object.freeze([
-    "tideproof.gate2.aws-deployment-expectation.v2",
-    "tideproof.gate2.aws-deployment-attestation.v2",
+    "tideproof.gate2.aws-deployment-expectation.v4",
+    "tideproof.gate2.aws-deployment-attestation-snapshot.v5",
+    "tideproof.gate2.aws-deployment-attestation.v5",
     "signDeploymentAttestationReceipt(",
     "validateDeploymentEvidenceBasis({",
     "validateEvidenceOperatorTrust(",
@@ -702,21 +761,46 @@ const SOURCE_MARKERS = Object.freeze({
     "primaryRuntimeConfigurationsBound: true",
     "validateStackResourceBindings(",
     "revisionFencedSnapshots: true",
+    "apiGatewayActiveDeploymentBound: true",
+    "AWS_ATTEST_API_GATEWAY_ACTIVE_DEPLOYMENT",
+    "AWS_ATTEST_API_GATEWAY_DEPLOYMENT_CENSUS",
+    "AWS_ATTEST_CREATE_ONLY_API_DEPLOYMENT",
+    "snapshot.stack.lastUpdatedAt === null",
+    "snapshot.stack.stackStatus === \"CREATE_COMPLETE\"",
+    "eventSourceMappings",
     "numericVersionArn",
-    "stackAndResourceDriftInSync: true",
+    "attestedResourceDriftInSync: true",
     "alternatePrincipalDenied: true",
     "not administrator exclusion"
   ]),
   "aws-deployment-attestation-runner": Object.freeze([
-    "detect-stack-drift",
-    "describe-stack-resource-drifts",
-    "describe-stack-resources",
-    "get-function-configuration",
-    "get-function-concurrency",
-    "get-role-policy",
-    "list-attached-role-policies",
-    "list-role-policies",
+    "loadAwsProviderRuntime({",
+    "providerRuntime.runtimeSha256",
+    "provider.detectStackDrift(",
+    "provider.describeStackResourceDrifts(",
+    "provider.describeStackResources(",
+    "provider.getApi(",
+    "provider.getDeployment(",
+    "provider.getDeployments(",
+    "provider.getIntegration(",
+    "provider.getRoute(",
+    "provider.getStage(",
+    "provider.getFunctionConfiguration(",
+    "provider.getFunctionConcurrency(",
+    "provider.listProvisionedConcurrencyConfigs(",
+    "provider.listAliases(",
+    "provider.listEventSourceMappings(",
+    "provider.listFunctionUrlConfigs(",
+    "provider.listRoleTags(",
+    "provider.listTags(",
+    "provider.getRolePolicy(name, policyName)",
+    "provider.listAttachedRolePolicies(name)",
+    "provider.listRolePolicies(name)",
+    "AWS_ATTEST_COLLECT_PROVISIONED_CONCURRENCY",
     "AWS_ATTEST_COLLECT_REVISION_FENCE",
+    "AWS_ATTEST_COLLECT_API_DEPLOYMENT_CENSUS",
+    "AWS_ATTEST_COLLECT_STACK_TIME",
+    "stack.LastUpdatedTime === undefined",
     "validateBuildReceipt(buildRecord.value",
     "validateExactBuildReproduction(buildRecord, reproducedBuild)",
     "stackResourceBindings(",
@@ -726,10 +810,47 @@ const SOURCE_MARKERS = Object.freeze({
     "deployment expectation and basis bind exact build and configuration evidence",
     "attestation runners accept only exact private-evidence modes",
     "one signed snapshot binds the five primary runtime functions and roles",
+    "an old API deployment cannot be relabeled across a stack update",
     "same-account-shadow-function",
+    "API active deployment pending",
+    "API newer pending deployment",
+    "API permissive CORS",
+    "API access log destination",
     "AWS_ATTEST_EXACT_BUILD_MISMATCH",
     "pre/post pair rejects forged evidence, role replacement, and revision drift",
     "snapshot revision fence must bind two identical provider observations"
+  ]),
+  "aws-provider-bundle-entry": Object.freeze([
+    "export { createAwsProviderClients } from \"./aws-provider-runtime.js\";"
+  ]),
+  "aws-provider-runtime": Object.freeze([
+    "createAwsProviderClients({",
+    "authSchemePreference: [\"sigv4\"]",
+    "ignoreConfiguredEndpointUrls: true",
+    "maxAttempts: 1",
+    "ListProvisionedConcurrencyConfigsCommand",
+    "GetDeploymentCommand",
+    "GetDeploymentsCommand",
+    "ListEventSourceMappingsCommand",
+    "decodePolicyDocument(",
+    "RoleSessionName: \"tideproof-evidence-denial\""
+  ]),
+  "aws-provider-runtime-loader": Object.freeze([
+    "RUNTIME_PATH = /^dist\\/aws\\/evidence-provider-",
+    "receipt.path === `dist/aws/evidence-provider-${receipt.sha256}.mjs`",
+    "assertSafeProjectPath({",
+    "stat.isFile() && !stat.isSymbolicLink()",
+    "sha256(bytes) === receipt.sha256",
+    "data:text/javascript;base64",
+    "Object.keys(providerModule).join(\"\\n\") === \"createAwsProviderClients\""
+  ]),
+  "aws-provider-clients-tests": Object.freeze([
+    "AWS provider policy decoding accepts only structured JSON policies",
+    "AWS provider clients load only the pinned explicit-credential SDK surface",
+    "content-addressed production provider bundle loads every client",
+    "AWS evidence runners do not execute a PATH-selected AWS CLI",
+    "alternate denial rejects a fabricated provider receipt before runtime load",
+    "AWS provider runtime imports the exact receipt-hashed bytes"
   ]),
   "boundary-runtime": Object.freeze([
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN",
@@ -787,8 +908,9 @@ const SOURCE_MARKERS = Object.freeze({
     "awsPreflight: preflight ? \"PASS\" : \"NOT_RUN\"",
     "AWS was not queried or mutated",
     "upload and deployment remain separate reviewed actions",
-    "tideproof.gate2-build.v5",
+    "tideproof.gate2-build.v6",
     "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
+    "evidenceProviderRuntime",
     "AWS_READINESS_BUILD_CONTROL_SET",
     "validateDependencySnapshot(",
     "templateReceipt(JSON.parse",
@@ -810,6 +932,9 @@ const SOURCE_MARKERS = Object.freeze({
     "\"Type\": \"AWS::KMS::Key\"",
     "\"ReservedConcurrentExecutions\": 2",
     "\"DisableExecuteApiEndpoint\": false",
+    "\"ApiKeySelectionExpression\": \"$request.header.x-api-key\"",
+    "\"IpAddressType\": \"ipv4\"",
+    "\"IntegrationMethod\": \"POST\"",
     "\"EvidenceOperatorPrincipalArn\": {",
     "\"DeploymentEvidenceRole\": {",
     "\"DeploymentEvidenceAlternateRole\": {",
@@ -824,6 +949,12 @@ const SOURCE_MARKERS = Object.freeze({
     "properties.ReservedConcurrentExecutions = concurrency;",
     "Type: \"AWS::KMS::Key\"",
     "DisableExecuteApiEndpoint: false",
+    "ApiKeySelectionExpression: \"$request.header.x-api-key\"",
+    "IpAddressType: \"ipv4\"",
+    "IntegrationMethod: \"POST\"",
+    "ReadLambdaEventSourceCensus",
+    "denyAllBedrockCapabilities()",
+    "denyAllKmsCapabilities()",
     "EvidenceOperatorPrincipalArn: {",
     "resources.DeploymentEvidenceRole = roleResource({",
     "resources.DeploymentEvidenceAlternateRole = roleResource({",
@@ -835,6 +966,14 @@ const SOURCE_MARKERS = Object.freeze({
     "AuthorizationType: \"AWS_IAM\"",
     "ThrottlingBurstLimit: 1",
     "Type: \"AWS::Lambda::Permission\""
+  ]),
+  "aws-template-security-tests": Object.freeze([
+    "deployment evidence role explicitly denies privilege escalation",
+    "deployment evidence drift permission is scoped to attested resources",
+    "denied.has(\"iam:*\"), false",
+    "assert.equal(expected.length, 35)",
+    "HTTP API integrations bind numeric versions and explicit POST semantics",
+    "expected.includes(\"BoundaryIntegration\"), false"
   ]),
   "database-runtime": Object.freeze([
     "DATABASE_CONNECTION_RUNTIME_OVERRIDE_REJECTED",
@@ -926,7 +1065,12 @@ const SOURCE_MARKERS = Object.freeze({
     "cat-file\", \"blob\", match[1]",
     "tideproof-exact-git-source",
     "EXACT_GIT_SOURCE_LOADER",
-    "assertCleanExactGitCheckout({"
+    "assertCleanExactGitCheckout({",
+    "trustedGitExecutable()",
+    "assertExactWorktreeBytes({",
+    "assertSafeProjectPath({",
+    "FORBIDDEN_TREE_PATH",
+    "gitInvariantArguments()"
   ]),
   "exact-git-source-tests": Object.freeze([
     "Gate Two bundling reads project inputs from immutable Git blobs",
@@ -936,12 +1080,23 @@ const SOURCE_MARKERS = Object.freeze({
     "EXACT_GIT_SOURCE_PATH",
     "exact Git bundling rejects every non-dependency path escape",
     "exact build Git processes reject ambient repository redirection",
+    "exact checkout validation rejects hidden index mutations",
+    "artifact paths reject symlinked parent components",
+    "exact build rejects committed checkout transforms",
     "exact build selects one canonical npm CLI and sanitized install environment"
+  ]),
+  "exact-build-reproduction": Object.freeze([
+    "exactBuildRecord(bytes, code)",
+    "reproduceExactBuild({",
+    "validateExactBuildReproduction(",
+    "npm_execpath: npmCli",
+    "npm_node_execpath: process.execPath"
   ]),
   "dependency-snapshot": Object.freeze([
     "tideproof.dependency-snapshot.v1",
     "NPM_CI_IGNORE_SCRIPTS_CLEAN_CACHE",
     "DEPENDENCY_SNAPSHOT_SYMLINK",
+    "relativeDirectory === \"\" && name === \".bin\"",
     "treeDigest",
     "npmCliSha256",
     "npmPackageTreeDigest"
@@ -949,6 +1104,7 @@ const SOURCE_MARKERS = Object.freeze({
   "dependency-snapshot-tests": Object.freeze([
     "dependency snapshot detects a tampered installed dependency byte",
     "dependency snapshot rejects installed-tree symlinks",
+    "dependency snapshot excludes only the sanitized-path root .bin shims",
     "build toolchain receipt requires executable and npm CLI digests",
     "build toolchain binds the complete npm package tree"
   ]),
@@ -957,7 +1113,9 @@ const SOURCE_MARKERS = Object.freeze({
     "exactGitSourcePlugin({",
     "exactGitInputs: exactSource.inputRecords()",
     "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
-    "tideproof.gate2-build.v5",
+    "tideproof.gate2-build.v6",
+    "buildEvidenceProviderRuntime(",
+    "evidenceProviderRuntime",
     "TIDEPROOF_EXACT_BUILD_DEPENDENCY_SNAPSHOT",
     "TIDEPROOF_EXACT_BUILD_TOOLCHAIN",
     "GATE2_GENERATED_TEMPLATE_DRIFT_REQUIRES_COMMIT"
@@ -971,7 +1129,10 @@ const SOURCE_MARKERS = Object.freeze({
     "TIDEPROOF_EXACT_BUILD_SOURCE_COMMIT",
     "TIDEPROOF_EXACT_BUILD_TREE_DIGEST",
     "EXACT_BUILD_POST_DIRTY_TREE",
-    "GIT_NO_REPLACE_OBJECTS: \"1\""
+    "GIT_NO_REPLACE_OBJECTS: \"1\"",
+    "trustedGitExecutable()",
+    "trustedTemporaryRoot()",
+    "assertExactWorktreeBytes({"
   ]),
   "immutable-deployment-attestation-ledger": Object.freeze([
     "SOURCE_CLOSED_PROVIDER_VALIDATION_PENDING",
@@ -1425,7 +1586,8 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
   const stage = resources.DefaultStage?.Properties;
   assert(
     stage?.StageName === "$default" &&
-      stage.AutoDeploy === true &&
+      stage.AutoDeploy === false &&
+      sameJson(stage.DeploymentId, { Ref: "ApiDeployment" }) &&
       sameJson(stage.DefaultRouteSettings, {
         ThrottlingBurstLimit: 8,
         ThrottlingRateLimit: 0.05
@@ -1440,6 +1602,25 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
         stage.AccessLogSettings.Format
       ),
     "RELEASE_SECURITY_STAGE"
+  );
+  const apiDeployment = resources.ApiDeployment;
+  assert(
+    apiDeployment?.Type === "AWS::ApiGatewayV2::Deployment" &&
+      sameJson(apiDeployment.Properties?.ApiId, { Ref: "HttpApi" }) &&
+      sameJson(apiDeployment.Properties?.Description, {
+        "Fn::Sub":
+          "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+      }) &&
+      sameJson(
+        apiDeployment.DependsOn,
+        [
+          "AdvisoryRoute",
+          ...Object.keys(DEPLOYMENT_API_ROUTE_KEYS).filter(
+            (logicalId) => logicalId !== "AdvisoryRoute"
+          )
+        ].sort()
+      ),
+    "RELEASE_SECURITY_API_DEPLOYMENT"
   );
 
   const functionCaps = {
@@ -1632,17 +1813,26 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
         roleName === "DeploymentEvidenceRole" &&
         statement.Sid === "ReadOwnDriftDetection" &&
         sameJson(actionList(statement.Action), [
+          "cloudformation:BatchDescribeTypeConfigurations",
           "cloudformation:DescribeStackDriftDetectionStatus"
         ]);
+      const reviewedGlobalEventSourceRead =
+        roleName === "DeploymentEvidenceRole" &&
+        statement.Sid === "ReadLambdaEventSourceCensus" &&
+        sameJson(actionList(statement.Action), [
+          "lambda:ListEventSourceMappings"
+        ]);
       assert(
-        statement.Resource !== "*" || reviewedGlobalDriftRead,
+        statement.Resource !== "*" ||
+          reviewedGlobalDriftRead ||
+          reviewedGlobalEventSourceRead,
         `RELEASE_SECURITY_${roleName}_WILDCARD_ALLOW`
       );
     }
     if (roleName === "DeploymentEvidenceRole") {
       assert(
         allowStatements.filter((statement) => statement.Resource === "*")
-          .length === 1,
+          .length === 2,
         "RELEASE_SECURITY_DeploymentEvidenceRole_WILDCARD_ALLOW"
       );
     }

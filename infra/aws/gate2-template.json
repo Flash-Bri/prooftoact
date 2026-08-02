@@ -124,7 +124,7 @@
         "true",
         "false"
       ],
-      "Description": "Opt in to same-role evidence probes temporarily; update to false after non-final probe receipts are captured."
+      "Description": "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
     },
     "EvidenceOperatorPrincipalArn": {
       "Type": "String",
@@ -676,12 +676,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -689,6 +698,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -697,7 +707,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -849,8 +859,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -868,12 +877,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -881,7 +899,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -997,8 +1015,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1006,12 +1023,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1019,6 +1045,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1027,7 +1054,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1114,8 +1141,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1133,12 +1159,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1146,6 +1181,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1154,7 +1190,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1752,8 +1788,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1771,12 +1806,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1784,6 +1828,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1819,9 +1864,13 @@
         "Name": {
           "Fn::Sub": "${AWS::StackName}-api"
         },
+        "ApiKeySelectionExpression": "$request.header.x-api-key",
         "Description": "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
         "ProtocolType": "HTTP",
         "DisableExecuteApiEndpoint": false,
+        "DisableSchemaValidation": false,
+        "IpAddressType": "ipv4",
+        "RouteSelectionExpression": "$request.method $request.path",
         "Tags": {
           "Project": "Tideproof",
           "Gate": "Two"
@@ -1868,7 +1917,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1876,8 +1925,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1895,12 +1943,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1908,6 +1965,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1997,8 +2055,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -2016,12 +2073,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -2029,6 +2095,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -2061,7 +2128,7 @@
     "DeploymentEvidenceRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "Description": "Bounded exact-deployment evidence collector; cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
+        "Description": "Bounded deployment evidence collector; AWS requires one account-wide read to enumerate event-source mappings, while reviewed code queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -2099,6 +2166,7 @@
                     "cloudformation:DescribeStackResources",
                     "cloudformation:DescribeStacks",
                     "cloudformation:DetectStackDrift",
+                    "cloudformation:DetectStackResourceDrift",
                     "cloudformation:GetTemplate"
                   ],
                   "Resource": {
@@ -2109,17 +2177,42 @@
                   "Sid": "ReadOwnDriftDetection",
                   "Effect": "Allow",
                   "Action": [
+                    "cloudformation:BatchDescribeTypeConfigurations",
                     "cloudformation:DescribeStackDriftDetectionStatus"
                   ],
                   "Resource": "*"
+                },
+                {
+                  "Sid": "ReadExactHttpApiDeployment",
+                  "Effect": "Allow",
+                  "Action": [
+                    "apigateway:GET"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}/*"
+                    }
+                  ]
                 },
                 {
                   "Sid": "ReadExactLambdaDeployment",
                   "Effect": "Allow",
                   "Action": [
                     "lambda:GetAlias",
+                    "lambda:GetFunction",
+                    "lambda:GetFunctionCodeSigningConfig",
                     "lambda:GetFunctionConcurrency",
-                    "lambda:GetFunctionConfiguration"
+                    "lambda:GetFunctionConfiguration",
+                    "lambda:GetPolicy",
+                    "lambda:GetFunctionRecursionConfig",
+                    "lambda:GetRuntimeManagementConfig",
+                    "lambda:ListAliases",
+                    "lambda:ListFunctionUrlConfigs",
+                    "lambda:ListTags",
+                    "lambda:ListProvisionedConcurrencyConfigs"
                   ],
                   "Resource": [
                     {
@@ -2200,13 +2293,22 @@
                   ]
                 },
                 {
+                  "Sid": "ReadLambdaEventSourceCensus",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:ListEventSourceMappings"
+                  ],
+                  "Resource": "*"
+                },
+                {
                   "Sid": "ReadExactExecutionRoles",
                   "Effect": "Allow",
                   "Action": [
                     "iam:GetRole",
                     "iam:GetRolePolicy",
                     "iam:ListAttachedRolePolicies",
-                    "iam:ListRolePolicies"
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags"
                   ],
                   "Resource": [
                     {
@@ -2251,47 +2353,39 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
                 {
-                  "Sid": "DenyBedrock",
+                  "Sid": "DenyAllBedrockCapabilities",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:*"
                   ],
                   "Resource": "*"
                 },
                 {
-                  "Sid": "DenySecretAccess",
+                  "Sid": "DenyAllSecretCapabilities",
                   "Effect": "Deny",
                   "Action": [
-                    "secretsmanager:BatchGetSecretValue",
-                    "secretsmanager:GetSecretValue",
-                    "secretsmanager:ListSecrets"
+                    "secretsmanager:*"
                   ],
                   "Resource": "*"
                 },
                 {
-                  "Sid": "DenySecretMutation",
+                  "Sid": "DenyAllKmsCapabilities",
                   "Effect": "Deny",
                   "Action": [
-                    "secretsmanager:CreateSecret",
-                    "secretsmanager:DeleteSecret",
-                    "secretsmanager:PutResourcePolicy",
-                    "secretsmanager:PutSecretValue",
-                    "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "kms:*"
                   ],
                   "Resource": "*"
                 },
                 {
-                  "Sid": "DenyKmsSigning",
+                  "Sid": "DenyRoleChaining",
                   "Effect": "Deny",
                   "Action": [
-                    "kms:Sign"
+                    "sts:AssumeRole"
                   ],
                   "Resource": "*"
                 }
@@ -2372,47 +2466,31 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
                 {
-                  "Sid": "DenyBedrock",
+                  "Sid": "DenyAllBedrockCapabilities",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:*"
                   ],
                   "Resource": "*"
                 },
                 {
-                  "Sid": "DenySecretAccess",
+                  "Sid": "DenyAllSecretCapabilities",
                   "Effect": "Deny",
                   "Action": [
-                    "secretsmanager:BatchGetSecretValue",
-                    "secretsmanager:GetSecretValue",
-                    "secretsmanager:ListSecrets"
+                    "secretsmanager:*"
                   ],
                   "Resource": "*"
                 },
                 {
-                  "Sid": "DenySecretMutation",
+                  "Sid": "DenyAllKmsCapabilities",
                   "Effect": "Deny",
                   "Action": [
-                    "secretsmanager:CreateSecret",
-                    "secretsmanager:DeleteSecret",
-                    "secretsmanager:PutResourcePolicy",
-                    "secretsmanager:PutSecretValue",
-                    "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
-                  ],
-                  "Resource": "*"
-                },
-                {
-                  "Sid": "DenyKmsSigning",
-                  "Effect": "Deny",
-                  "Action": [
-                    "kms:Sign"
+                    "kms:*"
                   ],
                   "Resource": "*"
                 }
@@ -3152,6 +3230,7 @@
         "IntegrationUri": {
           "Ref": "BoundaryVersion"
         },
+        "IntegrationMethod": "POST",
         "PayloadFormatVersion": "2.0",
         "TimeoutInMillis": 29000
       }
@@ -3187,6 +3266,7 @@
         "IntegrationUri": {
           "Ref": "DemoVersion"
         },
+        "IntegrationMethod": "POST",
         "PayloadFormatVersion": "2.0",
         "TimeoutInMillis": 6000
       }
@@ -3401,6 +3481,30 @@
         }
       }
     },
+    "ApiDeployment": {
+      "Type": "AWS::ApiGatewayV2::Deployment",
+      "DependsOn": [
+        "AdvisoryRoute",
+        "DemoAmbiguityEvidenceRoute",
+        "DemoAppRoute",
+        "DemoArchitectureRoute",
+        "DemoAuthorityEvidenceRoute",
+        "DemoClaimsRoute",
+        "DemoHealthRoute",
+        "DemoIndexRoute",
+        "DemoRecoveryEvidenceRoute",
+        "DemoScenarioRoute",
+        "DemoStylesRoute"
+      ],
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "Description": {
+          "Fn::Sub": "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+        }
+      }
+    },
     "DefaultStage": {
       "Type": "AWS::ApiGatewayV2::Stage",
       "Properties": {
@@ -3408,7 +3512,10 @@
           "Ref": "HttpApi"
         },
         "StageName": "$default",
-        "AutoDeploy": true,
+        "AutoDeploy": false,
+        "DeploymentId": {
+          "Ref": "ApiDeployment"
+        },
         "AccessLogSettings": {
           "DestinationArn": {
             "Fn::GetAtt": [

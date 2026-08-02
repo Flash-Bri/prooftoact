@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import {
@@ -23,8 +23,11 @@ import {
 import {
   assertExactGitSourceContext,
   exactGitSourcePlugin,
+  gitInvariantArguments,
   gitEnvironment,
-  readExactGitBlob
+  readExactGitBlob,
+  trustedGitExecutable,
+  trustedTemporaryRoot
 } from "./lib/exact-git-source.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +41,26 @@ const artifactNames = [
   "probe",
   "signer"
 ];
+const buildControlPaths = Object.freeze([
+  "infra/aws/lambda/agent.cjs",
+  "scripts/build-gate2-exact.js",
+  "scripts/build-gate2-template.js",
+  "scripts/lib/aws-provider-bundle-entry.js",
+  "scripts/lib/aws-provider-runtime.js",
+  "scripts/lib/aws-provider-runtime-loader.js",
+  "scripts/lib/bundled-third-party-notices.js",
+  "scripts/lib/dependency-snapshot.js",
+  "scripts/lib/deterministic-zip.js",
+  "scripts/lib/exact-build-reproduction.js",
+  "scripts/lib/exact-git-source.js",
+  "scripts/lib/raw-text-plugin.js",
+  "scripts/verify-bundled-third-party-notices.js",
+  "src/cloud/aws-gate2-template.js",
+  "src/cloud/public-demo.js"
+]);
+const nodeBuiltins = new Set(
+  builtinModules.map((name) => name.replace(/^node:/, ""))
+);
 const argumentsList = process.argv.slice(2);
 const templatesOnly =
   argumentsList.length === 1 && argumentsList[0] === "--templates-only";
@@ -67,11 +90,15 @@ function sha256FileBase64(filePath) {
 }
 
 function gitValue(args) {
-  const result = spawnSync("git", args, {
-    cwd: root,
-    encoding: "utf8",
-    env: gitEnvironment()
-  });
+  const result = spawnSync(
+    trustedGitExecutable(),
+    [...gitInvariantArguments(), ...args],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: gitEnvironment()
+    }
+  );
   if (result.status !== 0) {
     throw new Error(`git ${args.join(" ")} failed`);
   }
@@ -79,11 +106,15 @@ function gitValue(args) {
 }
 
 function gitStatus() {
-  const result = spawnSync("git", ["status", "--short"], {
-    cwd: root,
-    encoding: "utf8",
-    env: gitEnvironment()
-  });
+  const result = spawnSync(
+    trustedGitExecutable(),
+    [...gitInvariantArguments(), "status", "--short"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: gitEnvironment()
+    }
+  );
   if (result.status !== 0) {
     throw new Error("git status --short failed");
   }
@@ -112,7 +143,7 @@ async function buildArtifact(
     dependencyRoot: fs.realpathSync(path.join(root, "node_modules"))
   });
   const temporaryDirectory = fs.mkdtempSync(
-    path.join(os.tmpdir(), "tideproof-gate2-")
+    path.join(trustedTemporaryRoot(), "tideproof-gate2-")
   );
   const stagedPath = path.join(temporaryDirectory, "index.js");
   const provisionalPath = path.join(
@@ -180,6 +211,106 @@ async function buildArtifact(
     exactGitInputs: exactSource.inputRecords(),
     suggestedS3Key: `gate2/${sourceCommit}/${name}-${artifactDigest}.zip`
   };
+}
+
+function nodeBuiltinExternalPlugin() {
+  return {
+    name: "tideproof-node-builtins",
+    setup(context) {
+      context.onResolve({ filter: /.*/ }, (args) => {
+        const candidate = args.path.replace(/^node:/, "");
+        if (nodeBuiltins.has(candidate)) {
+          return { external: true, path: `node:${candidate}` };
+        }
+        return null;
+      });
+    }
+  };
+}
+
+async function buildEvidenceProviderRuntime(
+  sourceCommit,
+  expectedPackages
+) {
+  const sourcePath = path.join(
+    root,
+    "scripts/lib/aws-provider-bundle-entry.js"
+  );
+  const exactSource = exactGitSourcePlugin({
+    rootDir: root,
+    sourceCommit,
+    dependencyRoot: fs.realpathSync(path.join(root, "node_modules"))
+  });
+  const temporaryDirectory = fs.mkdtempSync(
+    path.join(trustedTemporaryRoot(), "tideproof-provider-")
+  );
+  const stagedPath = path.join(temporaryDirectory, "provider.mjs");
+  let result;
+  try {
+    result = await build({
+      absWorkingDir: root,
+      entryPoints: [sourcePath],
+      bundle: true,
+      platform: "node",
+      target: "node22",
+      format: "esm",
+      legalComments: "none",
+      logLevel: "silent",
+      metafile: true,
+      outfile: stagedPath,
+      splitting: false,
+      banner: {
+        js:
+          "import { builtinModules as __tideproofBuiltins, createRequire as __tideproofCreateRequire } from \"node:module\"; const __tideproofNativeRequire = __tideproofCreateRequire(\"/tideproof-evidence-provider-runtime.mjs\"); const __tideproofAllowedRequires = new Set(__tideproofBuiltins.flatMap((name) => [name, name.startsWith(\"node:\") ? name : `node:${name}`])); const require = (specifier) => { if (!__tideproofAllowedRequires.has(specifier)) throw new Error(\"AWS_PROVIDER_RUNTIME_EXTERNAL_REQUIRE\"); return __tideproofNativeRequire(specifier.startsWith(\"node:\") ? specifier : `node:${specifier}`); };"
+      },
+      plugins: [nodeBuiltinExternalPlugin(), exactSource.plugin]
+    });
+  } catch (error) {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    throw new Error(`EVIDENCE_PROVIDER_BUILD:${error.message}`);
+  }
+  const bundledPackages = packageNamesFromMetafile(result.metafile);
+  if (JSON.stringify(bundledPackages) !== JSON.stringify(expectedPackages)) {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    throw new Error("EVIDENCE_PROVIDER_PACKAGE_SET_DRIFT");
+  }
+  const externalImports = [
+    ...new Set(
+      Object.values(result.metafile.outputs).flatMap((output) =>
+        output.imports
+          .filter((candidate) => candidate.external)
+          .map((candidate) => candidate.path)
+      )
+    )
+  ].sort();
+  if (
+    externalImports.length === 0 ||
+    externalImports.some((candidate) => !/^node:[a-z0-9_./-]+$/.test(candidate))
+  ) {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    throw new Error("EVIDENCE_PROVIDER_EXTERNAL_IMPORT");
+  }
+  const bytes = fs.readFileSync(stagedPath);
+  const digest = crypto.createHash("sha256").update(bytes).digest("hex");
+  const relativePath = `dist/aws/evidence-provider-${digest}.mjs`;
+  const outputPath = path.join(outputRoot, relativePath);
+  if (fs.existsSync(outputPath)) {
+    if (sha256File(outputPath) !== digest) {
+      fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+      throw new Error("EXISTING_PROVIDER_RUNTIME_DIGEST_MISMATCH");
+    }
+  } else {
+    fs.renameSync(stagedPath, outputPath);
+  }
+  fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+  return Object.freeze({
+    bundledPackages,
+    bytes: bytes.length,
+    exactGitInputs: exactSource.inputRecords(),
+    externalImports,
+    path: relativePath,
+    sha256: digest
+  });
 }
 
 const sourceCommit = gitValue(["rev-parse", "HEAD"]);
@@ -271,6 +402,7 @@ if (isolatedBuild && !workingTreeClean) {
 
 let artifacts = [];
 let thirdPartyNotices = null;
+let evidenceProviderRuntime = null;
 if (!templatesOnly) {
   const bundled = await collectBundledPackageNames({ rootDir: root });
   thirdPartyNotices = verifyBundledThirdPartyNotices({
@@ -283,6 +415,10 @@ if (!templatesOnly) {
     filePath: path.join(root, thirdPartyNotices.noticePath)
   }).bytes;
   fs.mkdirSync(distRoot, { recursive: true });
+  evidenceProviderRuntime = await buildEvidenceProviderRuntime(
+    sourceCommit,
+    bundled.artifactPackages.evidenceProvider
+  );
   for (const name of artifactNames) {
     artifacts.push(
       await buildArtifact(
@@ -296,7 +432,7 @@ if (!templatesOnly) {
 }
 
 const receipt = {
-  schemaVersion: "tideproof.gate2-build.v5",
+  schemaVersion: "tideproof.gate2-build.v6",
   mode: templatesOnly ? "TEMPLATES_ONLY_UNBOUND" : "CLEAN_ARTIFACT_BUILD",
   projectSourceMode: templatesOnly
     ? "WORKTREE_UNBOUND"
@@ -307,18 +443,10 @@ const receipt = {
   workingTreeCleanBeforeGeneration,
   archiveFormat: "ZIP_STORED_TWO_FILE_V2",
   dependencySnapshot,
+  evidenceProviderRuntime,
   toolchain,
   buildControlInputs: isolatedBuild
-    ? [
-        "scripts/build-gate2-exact.js",
-        "scripts/build-gate2-template.js",
-        "scripts/lib/bundled-third-party-notices.js",
-        "scripts/lib/dependency-snapshot.js",
-        "scripts/lib/deterministic-zip.js",
-        "scripts/lib/exact-git-source.js",
-        "scripts/verify-bundled-third-party-notices.js",
-        "src/cloud/aws-gate2-template.js"
-      ].map((filePath) => {
+    ? buildControlPaths.map((filePath) => {
         const record = readExactGitBlob({
           rootDir: root,
           sourceCommit,

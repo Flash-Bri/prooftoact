@@ -114,6 +114,15 @@ function denyPrivilegeEscalation() {
   };
 }
 
+function denyRoleChaining() {
+  return {
+    Sid: "DenyRoleChaining",
+    Effect: "Deny",
+    Action: ["sts:AssumeRole"],
+    Resource: "*"
+  };
+}
+
 function denySecretAccess() {
   return {
     Sid: "DenySecretAccess",
@@ -132,13 +141,31 @@ function denySecretMutation() {
     Sid: "DenySecretMutation",
     Effect: "Deny",
     Action: [
+      "secretsmanager:CancelRotateSecret",
       "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteResourcePolicy",
       "secretsmanager:DeleteSecret",
       "secretsmanager:PutResourcePolicy",
       "secretsmanager:PutSecretValue",
+      "secretsmanager:RemoveRegionsFromReplication",
+      "secretsmanager:ReplicateSecretToRegions",
+      "secretsmanager:RestoreSecret",
       "secretsmanager:RotateSecret",
-      "secretsmanager:UpdateSecret"
+      "secretsmanager:StopReplicationToReplica",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:UpdateSecret",
+      "secretsmanager:UpdateSecretVersionStage"
     ],
+    Resource: "*"
+  };
+}
+
+function denyAllSecretCapabilities() {
+  return {
+    Sid: "DenyAllSecretCapabilities",
+    Effect: "Deny",
+    Action: ["secretsmanager:*"],
     Resource: "*"
   };
 }
@@ -168,7 +195,16 @@ function denyBedrock() {
   return {
     Sid: "DenyBedrock",
     Effect: "Deny",
-    Action: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+    Action: ["bedrock:Invoke*"],
+    Resource: "*"
+  };
+}
+
+function denyAllBedrockCapabilities() {
+  return {
+    Sid: "DenyAllBedrockCapabilities",
+    Effect: "Deny",
+    Action: ["bedrock:*"],
     Resource: "*"
   };
 }
@@ -177,7 +213,16 @@ function denyKmsSigning() {
   return {
     Sid: "DenyKmsSigning",
     Effect: "Deny",
-    Action: ["kms:Sign"],
+    Action: ["kms:GenerateMac", "kms:Sign"],
+    Resource: "*"
+  };
+}
+
+function denyAllKmsCapabilities() {
+  return {
+    Sid: "DenyAllKmsCapabilities",
+    Effect: "Deny",
+    Action: ["kms:*"],
     Resource: "*"
   };
 }
@@ -186,7 +231,7 @@ function denyLambdaInvoke() {
   return {
     Sid: "DenyLambdaInvoke",
     Effect: "Deny",
-    Action: ["lambda:InvokeFunction"],
+    Action: ["lambda:Invoke*"],
     Resource: "*"
   };
 }
@@ -635,7 +680,7 @@ export function buildGate2Template() {
       Default: "false",
       AllowedValues: ["true", "false"],
       Description:
-        "Opt in to same-role evidence probes temporarily; update to false after non-final probe receipts are captured."
+        "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
     },
     EvidenceOperatorPrincipalArn: {
       Type: "String",
@@ -1037,10 +1082,14 @@ export function buildGate2Template() {
     Type: "AWS::ApiGatewayV2::Api",
     Properties: {
       Name: sub("${AWS::StackName}-api"),
+      ApiKeySelectionExpression: "$request.header.x-api-key",
       Description:
         "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
       ProtocolType: "HTTP",
       DisableExecuteApiEndpoint: false,
+      DisableSchemaValidation: false,
+      IpAddressType: "ipv4",
+      RouteSelectionExpression: "$request.method $request.path",
       Tags: { Project: "Tideproof", Gate: "Two" }
     }
   };
@@ -1102,7 +1151,7 @@ export function buildGate2Template() {
 
   resources.DeploymentEvidenceRole = roleResource({
     description:
-      "Bounded exact-deployment evidence collector; cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
+      "Bounded deployment evidence collector; AWS requires one account-wide read to enumerate event-source mappings, while reviewed code queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
     assumeRolePolicy: assumeExactEvidencePrincipalPolicy(),
     statements: [
       {
@@ -1113,6 +1162,7 @@ export function buildGate2Template() {
           "cloudformation:DescribeStackResources",
           "cloudformation:DescribeStacks",
           "cloudformation:DetectStackDrift",
+          "cloudformation:DetectStackResourceDrift",
           "cloudformation:GetTemplate"
         ],
         Resource: sub(
@@ -1122,16 +1172,41 @@ export function buildGate2Template() {
       {
         Sid: "ReadOwnDriftDetection",
         Effect: "Allow",
-        Action: ["cloudformation:DescribeStackDriftDetectionStatus"],
+        Action: [
+          "cloudformation:BatchDescribeTypeConfigurations",
+          "cloudformation:DescribeStackDriftDetectionStatus"
+        ],
         Resource: "*"
+      },
+      {
+        Sid: "ReadExactHttpApiDeployment",
+        Effect: "Allow",
+        Action: ["apigateway:GET"],
+        Resource: [
+          sub(
+            "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}"
+          ),
+          sub(
+            "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}/*"
+          )
+        ]
       },
       {
         Sid: "ReadExactLambdaDeployment",
         Effect: "Allow",
         Action: [
           "lambda:GetAlias",
+          "lambda:GetFunction",
+          "lambda:GetFunctionCodeSigningConfig",
           "lambda:GetFunctionConcurrency",
-          "lambda:GetFunctionConfiguration"
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetPolicy",
+          "lambda:GetFunctionRecursionConfig",
+          "lambda:GetRuntimeManagementConfig",
+          "lambda:ListAliases",
+          "lambda:ListFunctionUrlConfigs",
+          "lambda:ListTags",
+          "lambda:ListProvisionedConcurrencyConfigs"
         ],
         Resource: [
           getAtt("AgentFunction", "Arn"),
@@ -1152,13 +1227,20 @@ export function buildGate2Template() {
         ]
       },
       {
+        Sid: "ReadLambdaEventSourceCensus",
+        Effect: "Allow",
+        Action: ["lambda:ListEventSourceMappings"],
+        Resource: "*"
+      },
+      {
         Sid: "ReadExactExecutionRoles",
         Effect: "Allow",
         Action: [
           "iam:GetRole",
           "iam:GetRolePolicy",
           "iam:ListAttachedRolePolicies",
-          "iam:ListRolePolicies"
+          "iam:ListRolePolicies",
+          "iam:ListRoleTags"
         ],
         Resource: [
           getAtt("AgentRole", "Arn"),
@@ -1175,10 +1257,10 @@ export function buildGate2Template() {
         ]
       },
       denyLambdaInvoke(),
-      denyBedrock(),
-      denySecretAccess(),
-      denySecretMutation(),
-      denyKmsSigning()
+      denyAllBedrockCapabilities(),
+      denyAllSecretCapabilities(),
+      denyAllKmsCapabilities(),
+      denyRoleChaining()
     ]
   });
   resources.DeploymentEvidenceRole.Properties.RoleName = sub(
@@ -1212,10 +1294,9 @@ export function buildGate2Template() {
         Resource: "*"
       },
       denyLambdaInvoke(),
-      denyBedrock(),
-      denySecretAccess(),
-      denySecretMutation(),
-      denyKmsSigning()
+      denyAllBedrockCapabilities(),
+      denyAllSecretCapabilities(),
+      denyAllKmsCapabilities()
     ]
   });
   resources.DeploymentEvidenceAlternateRole.Properties.RoleName = sub(
@@ -1347,6 +1428,7 @@ export function buildGate2Template() {
       ApiId: ref("HttpApi"),
       IntegrationType: "AWS_PROXY",
       IntegrationUri: ref("BoundaryVersion"),
+      IntegrationMethod: "POST",
       PayloadFormatVersion: "2.0",
       TimeoutInMillis: 29_000
     }
@@ -1371,6 +1453,7 @@ export function buildGate2Template() {
       ApiId: ref("HttpApi"),
       IntegrationType: "AWS_PROXY",
       IntegrationUri: ref("DemoVersion"),
+      IntegrationMethod: "POST",
       PayloadFormatVersion: "2.0",
       TimeoutInMillis: 6_000
     }
@@ -1395,12 +1478,26 @@ export function buildGate2Template() {
       }
     };
   }
+  resources.ApiDeployment = {
+    Type: "AWS::ApiGatewayV2::Deployment",
+    DependsOn: [
+      "AdvisoryRoute",
+      ...Object.values(PUBLIC_DEMO_ROUTE_IDS)
+    ].sort(),
+    Properties: {
+      ApiId: ref("HttpApi"),
+      Description: sub(
+        "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+      )
+    }
+  };
   resources.DefaultStage = {
     Type: "AWS::ApiGatewayV2::Stage",
     Properties: {
       ApiId: ref("HttpApi"),
       StageName: "$default",
-      AutoDeploy: true,
+      AutoDeploy: false,
+      DeploymentId: ref("ApiDeployment"),
       AccessLogSettings: {
         DestinationArn: getAtt("ApiAccessLogGroup", "Arn"),
         Format: JSON.stringify({

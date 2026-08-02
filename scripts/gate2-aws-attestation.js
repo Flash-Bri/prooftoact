@@ -1,28 +1,33 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  DEPLOYMENT_API_INTEGRATIONS,
+  DEPLOYMENT_API_ROUTE_KEYS,
   DEPLOYMENT_FUNCTIONS,
   deploymentAttestationDigest,
+  deploymentStackParameterBindings,
   signDeploymentAttestationReceipt,
   validateDeploymentAttestationPair,
   validateDeploymentEvidenceBasis,
   validateDeploymentExpectation,
-  validateDeploymentSnapshot
+  validateDeploymentSnapshot,
+  validateSignedDeploymentAttestationPair
 } from "../src/cloud/aws-deployment-attestation.js";
 import {
   assertAwsSdkEvidenceEnvironment,
-  isolatedAwsCliEnvironment
+  explicitAwsCredentials
 } from "../src/cloud/aws-evidence-identity.js";
-import {
-  exactNpmCli,
-  isolatedEnvironment
-} from "./build-gate2-exact.js";
 import { validateBuildReceipt } from "./gate2-aws-readiness.js";
+import {
+  exactBuildRecord,
+  reproduceExactBuild,
+  validateExactBuildReproduction
+} from "./lib/exact-build-reproduction.js";
 import { assertCleanExactGitCheckout } from "./lib/exact-git-source.js";
+import { loadAwsProviderRuntime } from "./lib/aws-provider-runtime-loader.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -33,6 +38,36 @@ const LOGICAL_TITLES = Object.freeze({
   demo: "Demo",
   signer: "Signer"
 });
+const ATTESTED_DRIFT_LOGICAL_IDS = Object.freeze(
+  [
+    "DefaultStage",
+    "DeploymentEvidenceAlternateRole",
+    "DeploymentEvidenceRole",
+    "HttpApi",
+    ...Object.keys(DEPLOYMENT_API_ROUTE_KEYS),
+    ...DEPLOYMENT_FUNCTIONS.flatMap((name) => {
+      const title = LOGICAL_TITLES[name];
+      return [
+        `${title}Alias`,
+        `${title}Function`,
+        `${title}Role`,
+        `${title}Version`
+      ];
+    })
+  ].sort()
+);
+const CONDITIONAL_PROBE_LOGICAL_IDS = Object.freeze(
+  [
+    "CapabilityCanarySecret",
+    ...["Agent", "Authority", "Boundary", "Demo", "Signer"].flatMap(
+      (title) => [
+        `${title}ProbeFunction`,
+        `${title}ProbeLogGroup`,
+        `${title}ProbeVersion`
+      ]
+    )
+  ].sort()
+);
 
 function requireCondition(condition, code) {
   if (!condition) {
@@ -42,69 +77,6 @@ function requireCondition(condition, code) {
 
 function sha256(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
-}
-
-function exactBuildRecord(bytes, code) {
-  requireCondition(
-    Buffer.isBuffer(bytes) &&
-      bytes.length > 0 &&
-      bytes.length <= 5 * 1024 * 1024,
-    code
-  );
-  try {
-    return Object.freeze({
-      bytes,
-      digest: sha256(bytes),
-      value: JSON.parse(bytes.toString("utf8"))
-    });
-  } catch {
-    throw new Error(code);
-  }
-}
-
-function reproduceExactBuild() {
-  const npmCli = exactNpmCli(process.env);
-  const result = spawnSync(
-    process.execPath,
-    [npmCli, "run", "--silent", "build:gate2"],
-    {
-      cwd: root,
-      encoding: null,
-      env: {
-        ...isolatedEnvironment(process.env),
-        npm_execpath: npmCli,
-        npm_node_execpath: process.execPath
-      },
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"]
-    }
-  );
-  requireCondition(
-    !result.error && result.status === 0,
-    "AWS_ATTEST_EXACT_BUILD_REPRODUCTION"
-  );
-  return exactBuildRecord(
-    result.stdout,
-    "AWS_ATTEST_EXACT_BUILD_RECEIPT"
-  );
-}
-
-function validateExactBuildReproduction(provided, reproduced) {
-  requireCondition(
-    provided &&
-      reproduced &&
-      Buffer.isBuffer(provided.bytes) &&
-      Buffer.isBuffer(reproduced.bytes) &&
-      provided.digest === sha256(provided.bytes) &&
-      reproduced.digest === sha256(reproduced.bytes) &&
-      provided.digest === reproduced.digest &&
-      provided.bytes.equals(reproduced.bytes),
-    "AWS_ATTEST_EXACT_BUILD_MISMATCH"
-  );
-  return Object.freeze({
-    buildReceiptSha256: provided.digest,
-    reproducedBuildReceiptSha256: reproduced.digest
-  });
 }
 
 function readPrivateFile(filePath, code, { secret = false } = {}) {
@@ -131,42 +103,6 @@ function readPrivateJson(filePath, code) {
     });
   } catch {
     throw new Error(code);
-  }
-}
-
-function commandJson(service, operation, args = []) {
-  const result = spawnSync(
-    "aws",
-    [
-      service,
-      operation,
-      ...args,
-      "--region",
-      "us-east-1",
-      "--output",
-      "json",
-      "--no-cli-pager"
-    ],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env: isolatedAwsCliEnvironment(process.env, {
-        requireSessionToken: true
-      }),
-      maxBuffer: 16 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"]
-    }
-  );
-  requireCondition(
-    !result.error && result.status === 0,
-    `AWS_ATTEST_COLLECT_${service.toUpperCase()}_${operation
-      .replaceAll("-", "_")
-      .toUpperCase()}`
-  );
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    throw new Error("AWS_ATTEST_COLLECT_JSON");
   }
 }
 
@@ -243,12 +179,36 @@ function roleName(roleArn) {
   return match[1];
 }
 
-function stackParameter(stack, key) {
-  return exactOne(
-    stack.Parameters,
-    (candidate) => candidate.ParameterKey === key,
-    `AWS_ATTEST_COLLECT_PARAMETER_${key.toUpperCase()}`
-  ).ParameterValue;
+function stackParameterCensus(stack, expected) {
+  requireCondition(
+    Array.isArray(stack.Parameters) &&
+      stack.Parameters.length === Object.keys(expected).length,
+    "AWS_ATTEST_COLLECT_PARAMETERS"
+  );
+  const actual = {};
+  for (const candidate of stack.Parameters) {
+    requireCondition(
+      candidate &&
+        typeof candidate.ParameterKey === "string" &&
+        typeof candidate.ParameterValue === "string" &&
+        actual[candidate.ParameterKey] === undefined,
+      "AWS_ATTEST_COLLECT_PARAMETERS"
+    );
+    actual[candidate.ParameterKey] = candidate.ParameterValue;
+  }
+  const sorted = Object.fromEntries(
+    Object.entries(actual).sort(([left], [right]) =>
+      left.localeCompare(right)
+    )
+  );
+  requireCondition(
+    JSON.stringify(sorted) === JSON.stringify(expected),
+    "AWS_ATTEST_COLLECT_PARAMETERS"
+  );
+  return Object.freeze({
+    parameterCount: Object.keys(sorted).length,
+    parametersDigest: deploymentAttestationDigest(sorted)
+  });
 }
 
 function parsedTemplateBody(value) {
@@ -295,7 +255,7 @@ function stackResourceBinding(
   requireCondition(
     resource.ResourceType === resourceType &&
       resource.PhysicalResourceId === physicalResourceId &&
-      ["CREATE_COMPLETE", "UPDATE_COMPLETE"].includes(resource.ResourceStatus),
+      resource.ResourceStatus === "CREATE_COMPLETE",
     "AWS_ATTEST_COLLECT_STACK_RESOURCE_BINDING"
   );
   return Object.freeze({
@@ -356,21 +316,372 @@ function stackResourceBindings(expectation, stackResources) {
   );
 }
 
-async function freshDrift(stackName) {
-  const started = commandJson("cloudformation", "detect-stack-drift", [
-    "--stack-name",
-    stackName
+function stackHttpApiId(stackResources) {
+  const resource = exactOne(
+    stackResources,
+    (candidate) => candidate.LogicalResourceId === "HttpApi",
+    "AWS_ATTEST_COLLECT_HTTP_API"
+  );
+  requireCondition(
+    resource.ResourceType === "AWS::ApiGatewayV2::Api" &&
+      resource.ResourceStatus === "CREATE_COMPLETE" &&
+      /^[a-z0-9]{10}$/.test(resource.PhysicalResourceId),
+    "AWS_ATTEST_COLLECT_HTTP_API"
+  );
+  return resource.PhysicalResourceId;
+}
+
+function generatedStackResourceBinding(
+  stackResources,
+  logicalResourceId,
+  resourceType,
+  physicalPattern
+) {
+  const resource = exactOne(
+    stackResources,
+    (candidate) => candidate.LogicalResourceId === logicalResourceId,
+    "AWS_ATTEST_COLLECT_API_RESOURCE"
+  );
+  requireCondition(
+    resource.ResourceType === resourceType &&
+      resource.ResourceStatus === "CREATE_COMPLETE" &&
+      physicalPattern.test(resource.PhysicalResourceId ?? ""),
+    "AWS_ATTEST_COLLECT_API_RESOURCE_BINDING"
+  );
+  return Object.freeze({
+    physicalResourceId: resource.PhysicalResourceId,
+    resourceStatus: resource.ResourceStatus,
+    resourceType: resource.ResourceType
+  });
+}
+
+function stackApiGatewayBindings(stackResources) {
+  const bindings = {
+    ApiAccessLogGroup: generatedStackResourceBinding(
+      stackResources,
+      "ApiAccessLogGroup",
+      "AWS::Logs::LogGroup",
+      /^[A-Za-z0-9._/#-]{1,512}$/
+    ),
+    ApiDeployment: generatedStackResourceBinding(
+      stackResources,
+      "ApiDeployment",
+      "AWS::ApiGatewayV2::Deployment",
+      /^[a-z0-9]{1,64}$/
+    ),
+    DefaultStage: generatedStackResourceBinding(
+      stackResources,
+      "DefaultStage",
+      "AWS::ApiGatewayV2::Stage",
+      /^\$default$/
+    ),
+    HttpApi: generatedStackResourceBinding(
+      stackResources,
+      "HttpApi",
+      "AWS::ApiGatewayV2::Api",
+      /^[a-z0-9]{10}$/
+    )
+  };
+  for (const logicalResourceId of Object.keys(
+    DEPLOYMENT_API_INTEGRATIONS
+  )) {
+    bindings[logicalResourceId] = generatedStackResourceBinding(
+      stackResources,
+      logicalResourceId,
+      "AWS::ApiGatewayV2::Integration",
+      /^[a-z0-9]{1,64}$/
+    );
+  }
+  for (const logicalResourceId of Object.keys(DEPLOYMENT_API_ROUTE_KEYS)) {
+    bindings[logicalResourceId] = generatedStackResourceBinding(
+      stackResources,
+      logicalResourceId,
+      "AWS::ApiGatewayV2::Route",
+      /^[a-z0-9]{1,64}$/
+    );
+  }
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(bindings).sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    )
+  );
+}
+
+function sortedStringMap(value) {
+  return Object.fromEntries(
+    Object.entries(value ?? {})
+      .map(([key, candidate]) => [key, String(candidate)])
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function sortedJsonValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortedJsonValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, candidate]) => [key, sortedJsonValue(candidate)])
+        .sort(([left], [right]) => left.localeCompare(right))
+    );
+  }
+  return value;
+}
+
+function normalizedRouteSettings(value) {
+  return {
+    dataTraceEnabled: value?.DataTraceEnabled ?? false,
+    detailedMetricsEnabled: value?.DetailedMetricsEnabled ?? false,
+    loggingLevel: value?.LoggingLevel ?? null,
+    throttlingBurstLimit: value?.ThrottlingBurstLimit ?? null,
+    throttlingRateLimit: value?.ThrottlingRateLimit ?? null
+  };
+}
+
+function normalizedApiIntegration(value) {
+  return {
+    apiGatewayManaged: value.ApiGatewayManaged ?? false,
+    connectionType: value.ConnectionType ?? null,
+    connectionId: value.ConnectionId ?? null,
+    contentHandlingStrategy: value.ContentHandlingStrategy ?? null,
+    credentialsArn: value.CredentialsArn ?? null,
+    description: value.Description ?? "",
+    integrationId: value.IntegrationId,
+    integrationMethod: value.IntegrationMethod ?? null,
+    integrationResponseSelectionExpression:
+      value.IntegrationResponseSelectionExpression ?? null,
+    integrationSubtype: value.IntegrationSubtype ?? null,
+    integrationType: value.IntegrationType,
+    integrationUri: value.IntegrationUri,
+    passthroughBehavior: value.PassthroughBehavior ?? null,
+    payloadFormatVersion: value.PayloadFormatVersion ?? null,
+    requestParameters: sortedJsonValue(value.RequestParameters ?? {}),
+    requestTemplates: sortedJsonValue(value.RequestTemplates ?? {}),
+    responseParameters: sortedJsonValue(value.ResponseParameters ?? {}),
+    templateSelectionExpression: value.TemplateSelectionExpression ?? null,
+    timeoutInMillis: value.TimeoutInMillis ?? null,
+    tlsConfig: value.TlsConfig ?? null
+  };
+}
+
+function normalizedApiRoute(value) {
+  return {
+    apiKeyRequired: value.ApiKeyRequired ?? false,
+    authorizationScopes: [...(value.AuthorizationScopes ?? [])].sort(),
+    authorizationType: value.AuthorizationType,
+    authorizerId: value.AuthorizerId ?? null,
+    modelSelectionExpression: value.ModelSelectionExpression ?? null,
+    operationName: value.OperationName ?? "",
+    requestModels: sortedJsonValue(value.RequestModels ?? {}),
+    requestParameters: sortedJsonValue(value.RequestParameters ?? {}),
+    routeResponseSelectionExpression:
+      value.RouteResponseSelectionExpression ?? null,
+    routeId: value.RouteId,
+    routeKey: value.RouteKey,
+    target: value.Target
+  };
+}
+
+function normalizedApiDeployment(value, { includeDetail = false } = {}) {
+  const createdAt = new Date(value.CreatedDate);
+  requireCondition(
+    typeof value.DeploymentId === "string" &&
+      !Number.isNaN(createdAt.getTime()),
+    "AWS_ATTEST_COLLECT_API_DEPLOYMENT"
+  );
+  return {
+    autoDeployed: value.AutoDeployed ?? false,
+    createdAt: createdAt.toISOString(),
+    deploymentId: value.DeploymentId,
+    deploymentStatus: value.DeploymentStatus ?? null,
+    ...(includeDetail
+      ? {
+          deploymentStatusMessage:
+            value.DeploymentStatusMessage ?? "",
+          description: value.Description ?? ""
+        }
+      : {})
+  };
+}
+
+async function apiDeploymentCensus(provider, apiId) {
+  const items = [];
+  const seenTokens = new Set();
+  let nextToken;
+  for (let page = 0; page < 100; page += 1) {
+    const response = await provider.getDeployments(apiId, nextToken);
+    requireCondition(
+      response && Array.isArray(response.Items),
+      "AWS_ATTEST_COLLECT_API_DEPLOYMENT_CENSUS"
+    );
+    items.push(...response.Items.map((item) => normalizedApiDeployment(item)));
+    if (response.NextToken === undefined) {
+      return items.sort((left, right) =>
+        left.createdAt.localeCompare(right.createdAt) ||
+        left.deploymentId.localeCompare(right.deploymentId)
+      );
+    }
+    requireCondition(
+      typeof response.NextToken === "string" &&
+        response.NextToken.length > 0 &&
+        !seenTokens.has(response.NextToken),
+      "AWS_ATTEST_COLLECT_API_DEPLOYMENT_CENSUS"
+    );
+    seenTokens.add(response.NextToken);
+    nextToken = response.NextToken;
+  }
+  throw new Error("AWS_ATTEST_COLLECT_API_DEPLOYMENT_CENSUS");
+}
+
+async function apiGatewaySnapshot(
+  provider,
+  stackResources,
+  resourceDrifts
+) {
+  const bindings = stackApiGatewayBindings(stackResources);
+  const apiId = bindings.HttpApi.physicalResourceId;
+  const [api, integrationCensus, routeCensus, stageCensus, stage] =
+    await Promise.all([
+      provider.getApi(apiId),
+      provider.getIntegrations(apiId),
+      provider.getRoutes(apiId),
+      provider.getStages(apiId),
+      provider.getStage(apiId, "$default")
+    ]);
+  requireCondition(
+    integrationCensus.NextToken === undefined &&
+      routeCensus.NextToken === undefined &&
+      stageCensus.NextToken === undefined &&
+      Array.isArray(integrationCensus.Items) &&
+      Array.isArray(routeCensus.Items) &&
+      Array.isArray(stageCensus.Items),
+    "AWS_ATTEST_COLLECT_API_CENSUS"
+  );
+  const integrationEntries = await Promise.all(
+    Object.entries(DEPLOYMENT_API_INTEGRATIONS).map(
+      async ([logicalResourceId]) => {
+        const physicalResourceId =
+          bindings[logicalResourceId].physicalResourceId;
+        return [
+          logicalResourceId,
+          {
+            ...normalizedApiIntegration(
+              await provider.getIntegration(apiId, physicalResourceId)
+            )
+          }
+        ];
+      }
+    )
+  );
+  const routeEntries = await Promise.all(
+    Object.entries(DEPLOYMENT_API_ROUTE_KEYS).map(
+      async ([logicalResourceId]) => {
+        const physicalResourceId =
+          bindings[logicalResourceId].physicalResourceId;
+        return [
+          logicalResourceId,
+          {
+            ...normalizedApiRoute(
+              await provider.getRoute(apiId, physicalResourceId)
+            ),
+            resourceDrift: driftFor(resourceDrifts, logicalResourceId)
+          }
+        ];
+      }
+    )
+  );
+  requireCondition(
+    typeof stage.DeploymentId === "string" && stage.DeploymentId.length > 0,
+    "AWS_ATTEST_COLLECT_API_DEPLOYMENT"
+  );
+  const [activeDeployment, deployments] = await Promise.all([
+    provider.getDeployment(apiId, stage.DeploymentId),
+    apiDeploymentCensus(provider, apiId)
   ]);
+  return {
+    activeDeployment: normalizedApiDeployment(activeDeployment, {
+      includeDetail: true
+    }),
+    api: {
+      apiGatewayManaged: api.ApiGatewayManaged ?? false,
+      apiKeySelectionExpression: api.ApiKeySelectionExpression ?? null,
+      apiEndpoint: api.ApiEndpoint,
+      apiId: api.ApiId,
+      corsConfiguration: sortedJsonValue(api.CorsConfiguration ?? {}),
+      description: api.Description ?? "",
+      disableExecuteApiEndpoint: api.DisableExecuteApiEndpoint ?? false,
+      disableSchemaValidation: api.DisableSchemaValidation ?? false,
+      importInfo: [...(api.ImportInfo ?? [])].sort(),
+      ipAddressType: api.IpAddressType ?? null,
+      name: api.Name,
+      protocolType: api.ProtocolType,
+      resourceDrift: driftFor(resourceDrifts, "HttpApi"),
+      routeSelectionExpression: api.RouteSelectionExpression,
+      tags: sortedStringMap(api.Tags),
+      version: api.Version ?? "",
+      warnings: [...(api.Warnings ?? [])].sort()
+    },
+    census: {
+      deployments,
+      integrationIds: integrationCensus.Items.map(
+        (candidate) => candidate.IntegrationId
+      ).sort(),
+      routeIds: routeCensus.Items.map((candidate) => candidate.RouteId).sort(),
+      stageNames: stageCensus.Items.map((candidate) => candidate.StageName).sort()
+    },
+    integrations: Object.fromEntries(
+      integrationEntries.sort(([left], [right]) => left.localeCompare(right))
+    ),
+    routes: Object.fromEntries(
+      routeEntries.sort(([left], [right]) => left.localeCompare(right))
+    ),
+    stage: {
+      accessLogSettings: {
+        destinationArn: stage.AccessLogSettings?.DestinationArn ?? null,
+        format: stage.AccessLogSettings?.Format ?? null
+      },
+      autoDeploy: stage.AutoDeploy ?? false,
+      clientCertificateId: stage.ClientCertificateId ?? null,
+      defaultRouteSettings: normalizedRouteSettings(
+        stage.DefaultRouteSettings
+      ),
+      deploymentId: stage.DeploymentId ?? null,
+      description: stage.Description ?? "",
+      lastDeploymentStatusMessage:
+        stage.LastDeploymentStatusMessage ?? "",
+      resourceDrift: driftFor(resourceDrifts, "DefaultStage"),
+      routeSettings: Object.fromEntries(
+        Object.entries(stage.RouteSettings ?? {})
+          .map(([routeKey, settings]) => [
+            routeKey,
+            normalizedRouteSettings(settings)
+          ])
+          .sort(([left], [right]) => left.localeCompare(right))
+      ),
+      stageName: stage.StageName,
+      stageVariables: sortedStringMap(stage.StageVariables),
+      tags: sortedStringMap(stage.Tags)
+    },
+    stackResourceBindings: bindings
+  };
+}
+
+async function freshDrift(provider, stackName, deadlineMs) {
+  const started = await provider.detectStackDrift(
+    stackName,
+    ATTESTED_DRIFT_LOGICAL_IDS
+  );
   const detectionId = started.StackDriftDetectionId;
   requireCondition(
     typeof detectionId === "string" && detectionId.length >= 20,
     "AWS_ATTEST_COLLECT_DRIFT_ID"
   );
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const result = commandJson(
-      "cloudformation",
-      "describe-stack-drift-detection-status",
-      ["--stack-drift-detection-id", detectionId]
+  while (Date.now() < deadlineMs) {
+    const result = await provider.describeStackDriftDetectionStatus(
+      detectionId
     );
     if (result.DetectionStatus === "DETECTION_COMPLETE") {
       requireCondition(
@@ -383,25 +694,26 @@ async function freshDrift(stackName) {
       result.DetectionStatus === "DETECTION_IN_PROGRESS",
       "AWS_ATTEST_COLLECT_DRIFT_STATUS"
     );
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(2_000, Math.max(1, deadlineMs - Date.now())))
+    );
   }
   throw new Error("AWS_ATTEST_COLLECT_DRIFT_TIMEOUT");
 }
 
-function roleSnapshot(roleArn, resourceDrift) {
+async function roleSnapshot(provider, roleArn, resourceDrift) {
   const name = roleName(roleArn);
-  const role = commandJson("iam", "get-role", ["--role-name", name]).Role;
-  const inline = commandJson("iam", "list-role-policies", [
-    "--role-name",
-    name
-  ]);
-  const attached = commandJson("iam", "list-attached-role-policies", [
-    "--role-name",
-    name
-  ]);
+  const role = (await provider.getRole(name)).Role;
+  const inline = await provider.listRolePolicies(name);
+  const attached = await provider.listAttachedRolePolicies(name);
+  const tags = await provider.listRoleTags(name);
   requireCondition(
     inline.IsTruncated !== true &&
+      inline.Marker === undefined &&
       attached.IsTruncated !== true &&
+      attached.Marker === undefined &&
+      tags.IsTruncated !== true &&
+      tags.Marker === undefined &&
       Array.isArray(inline.PolicyNames) &&
       inline.PolicyNames.length <= 16 &&
       Array.isArray(attached.AttachedPolicies) &&
@@ -414,15 +726,16 @@ function roleSnapshot(roleArn, resourceDrift) {
       policyArn: policy.PolicyArn,
       policyName: policy.PolicyName
     })).sort((left, right) => left.policyArn.localeCompare(right.policyArn)),
-    inlinePolicies: inline.PolicyNames.map((policyName) => ({
-      document: commandJson("iam", "get-role-policy", [
-        "--role-name",
-        name,
-        "--policy-name",
-        policyName
-      ]).PolicyDocument,
-      name: policyName
-    })).sort((left, right) => left.name.localeCompare(right.name)),
+    inlinePolicies: (
+      await Promise.all(
+        inline.PolicyNames.map(async (policyName) => ({
+          document: (
+            await provider.getRolePolicy(name, policyName)
+          ).PolicyDocument,
+          name: policyName
+        }))
+      )
+    ).sort((left, right) => left.name.localeCompare(right.name)),
     maxSessionDuration: role.MaxSessionDuration,
     permissionsBoundary: role.PermissionsBoundary
       ? {
@@ -432,6 +745,9 @@ function roleSnapshot(roleArn, resourceDrift) {
       : null,
     resourceDrift,
     roleId: role.RoleId,
+    tags: (tags.Tags ?? [])
+      .map((tag) => ({ key: tag.Key, value: tag.Value }))
+      .sort((left, right) => left.key.localeCompare(right.key)),
     trustPolicy: role.AssumeRolePolicyDocument
   };
 }
@@ -484,38 +800,92 @@ function normalizedFunctionConfiguration(configuration) {
   };
 }
 
-function functionSnapshot(name, expected, resourceDrifts) {
+async function functionSnapshot(provider, name, expected, resourceDrifts) {
   const title = LOGICAL_TITLES[name];
-  const configuration = commandJson(
-    "lambda",
-    "get-function-configuration",
-    ["--function-name", expected.numericVersionArn]
-  );
-  const concurrency = commandJson(
-    "lambda",
-    "get-function-concurrency",
-    ["--function-name", expected.functionName]
-  );
-  const alias = commandJson("lambda", "get-alias", [
-    "--function-name",
-    expected.functionName,
-    "--name",
-    "proof"
+  const [
+    configuration,
+    concurrency,
+    provisioned,
+    alias,
+    codeSigningConfig,
+    recursionConfig,
+    runtimeManagementConfig,
+    unqualifiedPolicy,
+    numericPolicy,
+    aliasPolicy,
+    aliases,
+    eventSourceMappings,
+    functionUrlConfigs,
+    tags
+  ] = await Promise.all([
+    provider.getFunctionConfiguration(expected.numericVersionArn),
+    provider.getFunctionConcurrency(expected.functionName),
+    provider.listProvisionedConcurrencyConfigs(expected.functionName),
+    provider.getAlias(expected.functionName, "proof"),
+    provider.getFunctionCodeSigningConfig(expected.functionName),
+    provider.getFunctionRecursionConfig(expected.functionName),
+    provider.getRuntimeManagementConfig(
+      expected.functionName,
+      expected.numericVersion
+    ),
+    provider.getFunctionPolicy(expected.functionName),
+    provider.getFunctionPolicy(
+      expected.functionName,
+      expected.numericVersion
+    ),
+    provider.getFunctionPolicy(expected.functionName, "proof"),
+    provider.listAliases(expected.functionName),
+    provider.listEventSourceMappings(expected.functionName),
+    provider.listFunctionUrlConfigs(expected.functionName),
+    provider.listTags(expected.functionArn)
   ]);
+  requireCondition(
+    provisioned.NextMarker === undefined &&
+      Array.isArray(provisioned.ProvisionedConcurrencyConfigs),
+    "AWS_ATTEST_COLLECT_PROVISIONED_CONCURRENCY"
+  );
+  requireCondition(
+    aliases.NextMarker === undefined &&
+      eventSourceMappings.NextMarker === undefined &&
+      functionUrlConfigs.NextMarker === undefined &&
+      Array.isArray(aliases.Aliases) &&
+      Array.isArray(eventSourceMappings.EventSourceMappings) &&
+      Array.isArray(functionUrlConfigs.FunctionUrlConfigs),
+    "AWS_ATTEST_COLLECT_LAMBDA_INGRESS_CENSUS"
+  );
   return {
+    aliases: aliases.Aliases.map((candidate) => ({
+      aliasArn: candidate.AliasArn,
+      description: candidate.Description ?? "",
+      functionVersion: candidate.FunctionVersion,
+      name: candidate.Name,
+      revisionId: candidate.RevisionId,
+      routingConfiguration: candidate.RoutingConfig ?? {}
+    })).sort((left, right) => left.name.localeCompare(right.name)),
     aliasArn: alias.AliasArn,
     aliasName: alias.Name,
     aliasRevisionId: alias.RevisionId,
     aliasRoutingConfiguration: alias.RoutingConfig ?? {},
     aliasTargetVersion: alias.FunctionVersion,
     codeSha256: configuration.CodeSha256,
+    codeSigningConfig,
     configuration: normalizedFunctionConfiguration(configuration),
     functionArn: expected.functionArn,
     functionName: configuration.FunctionName,
+    functionTags: Object.fromEntries(
+      Object.entries(tags.Tags ?? {}).sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    ),
+    functionUrlConfigs: functionUrlConfigs.FunctionUrlConfigs,
     lastUpdateStatus: configuration.LastUpdateStatus,
     numericRevisionId: configuration.RevisionId,
     numericVersion: configuration.Version,
     numericVersionArn: configuration.FunctionArn,
+    eventSourceMappings: eventSourceMappings.EventSourceMappings,
+    provisionedConcurrencyConfigurations:
+      provisioned.ProvisionedConcurrencyConfigs,
+    recursionConfig,
     reservedConcurrency: concurrency.ReservedConcurrentExecutions,
     resourceDrift: {
       alias: driftFor(resourceDrifts, `${title}Alias`),
@@ -523,71 +893,136 @@ function functionSnapshot(name, expected, resourceDrifts) {
       role: driftFor(resourceDrifts, `${title}Role`),
       version: driftFor(resourceDrifts, `${title}Version`)
     },
-    role: roleSnapshot(
+    resourcePolicies: {
+      alias: aliasPolicy,
+      numeric: numericPolicy,
+      unqualified: unqualifiedPolicy
+    },
+    role: await roleSnapshot(
+      provider,
       configuration.Role,
       driftFor(resourceDrifts, `${title}Role`)
     ),
+    runtimeManagementConfig,
     state: configuration.State
   };
 }
 
-async function collectState(expectation) {
-  const stackResponse = commandJson("cloudformation", "describe-stacks", [
-    "--stack-name",
-    expectation.stackName
-  ]);
+async function collectState(
+  provider,
+  expectation,
+  deadlineMs,
+  expectedStackParameters
+) {
+  const stackResponse = await provider.describeStacks(expectation.stackName);
   const stack = exactOne(
     stackResponse.Stacks,
     (candidate) => candidate.StackId === expectation.stackId,
     "AWS_ATTEST_COLLECT_STACK"
   );
-  const driftStatus = await freshDrift(expectation.stackName);
-  const driftResponse = commandJson(
-    "cloudformation",
-    "describe-stack-resource-drifts",
-    ["--stack-name", expectation.stackName]
+  const stackCreatedAt = new Date(stack.CreationTime);
+  const stackLastUpdatedAt =
+    stack.LastUpdatedTime === undefined
+      ? null
+      : new Date(stack.LastUpdatedTime);
+  requireCondition(
+    !Number.isNaN(stackCreatedAt.getTime()) &&
+      (stackLastUpdatedAt === null ||
+        !Number.isNaN(stackLastUpdatedAt.getTime())),
+    "AWS_ATTEST_COLLECT_STACK_TIME"
   );
-  const template = commandJson("cloudformation", "get-template", [
-    "--stack-name",
+  const driftStatus = await freshDrift(
+    provider,
     expectation.stackName,
-    "--template-stage",
-    "Processed"
-  ]);
-  const stackResources = commandJson(
-    "cloudformation",
-    "describe-stack-resources",
-    ["--stack-name", expectation.stackName]
+    deadlineMs
+  );
+  const driftResponse = await provider.describeStackResourceDrifts(
+    expectation.stackName
+  );
+  const template = await provider.getTemplate(expectation.stackName);
+  const stackResources = await provider.describeStackResources(
+    expectation.stackName
+  );
+  requireCondition(
+    driftResponse.NextToken === undefined &&
+      stackResources.NextToken === undefined,
+    "AWS_ATTEST_COLLECT_PAGINATION"
+  );
+  requireCondition(
+    (stackResources.StackResources ?? []).every(
+      (candidate) =>
+        !CONDITIONAL_PROBE_LOGICAL_IDS.includes(candidate.LogicalResourceId)
+    ),
+    "AWS_ATTEST_COLLECT_PROBE_RESOURCES"
   );
   const resourceDrifts = driftResponse.StackResourceDrifts ?? [];
+  const attestedResourceDrifts = resourceDrifts.filter((candidate) =>
+    ATTESTED_DRIFT_LOGICAL_IDS.includes(candidate.LogicalResourceId)
+  );
+  requireCondition(
+    attestedResourceDrifts.length === ATTESTED_DRIFT_LOGICAL_IDS.length &&
+      new Set(
+        attestedResourceDrifts.map((candidate) => candidate.LogicalResourceId)
+      ).size === ATTESTED_DRIFT_LOGICAL_IDS.length,
+    "AWS_ATTEST_COLLECT_DRIFT_SCOPE"
+  );
+  const parameterCensus = stackParameterCensus(
+    stack,
+    expectedStackParameters
+  );
+  const apiGateway = await apiGatewaySnapshot(
+    provider,
+    stackResources.StackResources ?? [],
+    attestedResourceDrifts
+  );
   return {
-    alternatePrincipalRole: roleSnapshot(
+    alternatePrincipalRole: await roleSnapshot(
+      provider,
       expectation.alternatePrincipal.roleArn,
-      driftFor(resourceDrifts, "DeploymentEvidenceAlternateRole")
+      driftFor(attestedResourceDrifts, "DeploymentEvidenceAlternateRole")
     ),
-    callerIdentity: commandJson("sts", "get-caller-identity"),
-    evidenceOperatorRole: roleSnapshot(
+    apiGateway,
+    callerIdentity: await provider.callerIdentity(),
+    evidenceOperatorRole: await roleSnapshot(
+      provider,
       expectation.evidenceOperator.roleArn,
-      driftFor(resourceDrifts, "DeploymentEvidenceRole")
+      driftFor(attestedResourceDrifts, "DeploymentEvidenceRole")
     ),
     functions: Object.fromEntries(
-      DEPLOYMENT_FUNCTIONS.map((name) => [
-        name,
-        functionSnapshot(name, expectation.functions[name], resourceDrifts)
-      ])
+      await Promise.all(
+        DEPLOYMENT_FUNCTIONS.map(async (name) => [
+          name,
+          await functionSnapshot(
+            provider,
+            name,
+            expectation.functions[name],
+            attestedResourceDrifts
+          )
+        ])
+      )
     ),
     region: expectation.region,
     stack: {
       bindings: {
-        configDigest: stackParameter(stack, "ConfigDigest"),
-        sourceCommit: stackParameter(stack, "SourceCommit"),
-        treeDigest: stackParameter(stack, "TreeDigest")
+        configDigest: expectedStackParameters.ConfigDigest,
+        probesEnabled: expectedStackParameters.EnableProbeFunctions,
+        sourceCommit: expectedStackParameters.SourceCommit,
+        treeDigest: expectedStackParameters.TreeDigest
       },
+      cloudFormationServiceRoleArn: stack.RoleARN ?? null,
+      createdAt: stackCreatedAt.toISOString(),
       driftStatus,
+      httpApiId: apiGateway.api.apiId,
+      ...parameterCensus,
       resourceBindings: stackResourceBindings(
         expectation,
         stackResources.StackResources ?? []
       ),
       stackId: stack.StackId,
+      lastUpdatedAt:
+        stackLastUpdatedAt === null
+          ? null
+          : stackLastUpdatedAt.toISOString(),
       stackName: stack.StackName,
       stackStatus: stack.StackStatus,
       templateCanonicalDigest: deploymentAttestationDigest(
@@ -597,11 +1032,37 @@ async function collectState(expectation) {
   };
 }
 
-async function collectSnapshot(expectation, phase) {
+async function collectSnapshot(
+  provider,
+  expectation,
+  phase,
+  providerDependencyTreeDigest,
+  providerRuntimeSha256,
+  expectedStackParameters
+) {
   const startedAt = new Date().toISOString();
-  const first = await collectState(expectation);
+  const deadlineMs = Date.now() + 9 * 60 * 1_000;
+  const first = {
+    ...(await collectState(
+      provider,
+      expectation,
+      deadlineMs,
+      expectedStackParameters
+    )),
+    providerDependencyTreeDigest,
+    providerRuntimeSha256
+  };
   const firstStateDigest = deploymentAttestationDigest(first);
-  const second = await collectState(expectation);
+  const second = {
+    ...(await collectState(
+      provider,
+      expectation,
+      deadlineMs,
+      expectedStackParameters
+    )),
+    providerDependencyTreeDigest,
+    providerRuntimeSha256
+  };
   const secondStateDigest = deploymentAttestationDigest(second);
   requireCondition(
     firstStateDigest === secondStateDigest,
@@ -654,7 +1115,7 @@ export async function main(argv = process.argv.slice(2)) {
     sourceCommit: expectation.sourceCommit,
     treeDigest: expectation.treeDigest
   });
-  const reproducedBuild = reproduceExactBuild();
+  const reproducedBuild = reproduceExactBuild({ projectRoot: root });
   validateBuildReceipt(buildRecord.value, {
     projectRoot: root,
     sourceCommit: expectation.sourceCommit,
@@ -673,11 +1134,29 @@ export async function main(argv = process.argv.slice(2)) {
     configurationSha256: configurationRecord.digest,
     buildReceiptSha256: buildRecord.digest
   });
+  const providerRuntime = await loadAwsProviderRuntime({
+    buildReceipt: buildRecord.value,
+    projectRoot: root
+  });
+  const { createAwsProviderClients } = providerRuntime;
+  const provider = await createAwsProviderClients({
+    credentials: explicitAwsCredentials(process.env, {
+      requireSessionToken: true
+    }),
+    region: expectation.region
+  });
   const expectedCallerArn =
     process.env.AWS_EVIDENCE_EXPECTED_ATTESTATION_CALLER_ARN;
   const expectedCallerUserId =
     process.env.AWS_EVIDENCE_EXPECTED_ATTESTATION_CALLER_USER_ID;
-  const snapshot = await collectSnapshot(expectation, options.phase);
+  const snapshot = await collectSnapshot(
+    provider,
+    expectation,
+    options.phase,
+    buildRecord.value.dependencySnapshot.treeDigest,
+    providerRuntime.runtimeSha256,
+    deploymentStackParameterBindings(configurationRecord.value)
+  );
   const callerExpectation = {
     expectedCallerArn,
     expectedCallerUserId
@@ -711,6 +1190,7 @@ export async function main(argv = process.argv.slice(2)) {
       keyRecord.bytes,
       expectation.receiptPublicKeys.post
     );
+    validateSignedDeploymentAttestationPair(receipt, expectation);
   }
   process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
 }
@@ -732,6 +1212,7 @@ if (startedDirectly) {
 }
 
 export const __test = Object.freeze({
+  ATTESTED_DRIFT_LOGICAL_IDS,
   collectSnapshot,
   exactBuildRecord,
   normalizedFunctionConfiguration,
@@ -740,5 +1221,9 @@ export const __test = Object.freeze({
   validateExactBuildReproduction,
   roleName,
   roleSnapshot,
+  apiGatewaySnapshot,
+  stackApiGatewayBindings,
+  stackHttpApiId,
+  stackParameterCensus,
   stackResourceBindings
 });

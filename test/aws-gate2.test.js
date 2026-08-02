@@ -21,6 +21,53 @@ const signer = require("../infra/aws/lambda/signer.cjs").__test;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 
+test("Gate Two probe evidence uses a disposable create-only stack", () => {
+  const template = buildGate2Template();
+  const description =
+    template.Parameters.EnableProbeFunctions.Description;
+  const ledger = fs.readFileSync(
+    path.join(root, "docs", "AWS_GATE2.md"),
+    "utf8"
+  );
+  const liveSequence = ledger.slice(
+    ledger.indexOf("## Live acceptance sequence"),
+    ledger.indexOf("## Teardown", ledger.indexOf("## Live acceptance sequence"))
+  );
+  const normalizedLiveSequence = liveSequence.replace(/\s+/g, " ");
+
+  assert.equal(
+    description,
+    "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
+  );
+  const orderedMarkers = [
+    "disposable `tideproof-gate2-probe` stack",
+    "`EnableProbeFunctions=true`",
+    "Delete the disposable probe stack",
+    "`DELETE_COMPLETE`",
+    "every other reusable CloudFormation-owned resource",
+    "`PendingDeletion`",
+    "must not be canceled or reused",
+    "Recompute the final configuration digest",
+    "fresh `tideproof-gate2` main stack",
+    "`EnableProbeFunctions=false`",
+    "must never be updated"
+  ];
+  let previousIndex = -1;
+  for (const marker of orderedMarkers) {
+    const markerIndex = normalizedLiveSequence.indexOf(marker);
+    assert.ok(markerIndex > previousIndex, `${marker} must remain ordered`);
+    previousIndex = markerIndex;
+  }
+  assert.doesNotMatch(
+    liveSequence,
+    /(?:Temporarily update|Update probes back to) `EnableProbeFunctions`/
+  );
+  assert.doesNotMatch(
+    liveSequence,
+    /(?:update|toggle|change)\s+`?EnableProbeFunctions(?:`|=|\b)/i
+  );
+});
+
 const HEX_40 = "a".repeat(40);
 const HEX_64 = "b".repeat(64);
 const DIGESTS = {
@@ -741,6 +788,17 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
     resources.AdvisoryRoute.Properties.AuthorizationType,
     "AWS_IAM"
   );
+  assert.equal(resources.DefaultStage.Properties.AutoDeploy, false);
+  assert.deepEqual(resources.DefaultStage.Properties.DeploymentId, {
+    Ref: "ApiDeployment"
+  });
+  assert.equal(
+    resources.ApiDeployment.Type,
+    "AWS::ApiGatewayV2::Deployment"
+  );
+  assert.deepEqual(resources.ApiDeployment.Properties.ApiId, {
+    Ref: "HttpApi"
+  });
   assert.equal(
     resources.DefaultStage.Properties.DefaultRouteSettings
       .ThrottlingBurstLimit,
@@ -955,10 +1013,10 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
         Array.isArray(Action) ? Action : [Action]
       );
   for (const action of [
-    "bedrock:InvokeModel",
+    "bedrock:Invoke*",
     "iam:*",
     "kms:Sign",
-    "lambda:InvokeFunction",
+    "lambda:Invoke*",
     "secretsmanager:GetSecretValue",
     "sts:AssumeRole"
   ]) {
@@ -1054,7 +1112,7 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
     callerStatements.some(
       ({ Effect, Action }) =>
         Effect === "Deny" &&
-        Action.includes?.("lambda:InvokeFunction")
+        Action.includes?.("lambda:Invoke*")
     )
   );
   const authorityCallerStatements =

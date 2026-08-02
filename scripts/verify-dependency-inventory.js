@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -359,12 +359,33 @@ const startedDirectly =
 
 if (startedDirectly) {
   try {
-    if (process.argv.length === 3 && process.argv[2] === "--print") {
-      process.stdout.write(renderDependencyInventory().content);
+    if (
+      process.argv.length === 3 &&
+      ["--print", "--write"].includes(process.argv[2])
+    ) {
+      const rendered = renderDependencyInventory();
+      if (process.argv[2] === "--write") {
+        writeFileSync(
+          path.join(DEFAULT_ROOT, INVENTORY_PATH),
+          rendered.content,
+          { encoding: "utf8", mode: 0o644 }
+        );
+        process.stdout.write(
+          `${JSON.stringify({
+            status: "WROTE",
+            inventoryPath: INVENTORY_PATH,
+            inventorySha256: sha256(rendered.content),
+            sourceLockSha256: rendered.sourceLockSha256,
+            packageCount: rendered.packageCount
+          }, null, 2)}\n`
+        );
+      } else {
+        process.stdout.write(rendered.content);
+      }
     } else {
       assert(
         process.argv.length === 2,
-        "usage: node scripts/verify-dependency-inventory.js [--print]"
+        "usage: node scripts/verify-dependency-inventory.js [--print|--write]"
       );
       process.stdout.write(
         `${JSON.stringify(verifyDependencyInventory(), null, 2)}\n`

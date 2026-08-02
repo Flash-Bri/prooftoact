@@ -72,7 +72,7 @@
       "id": "aws-alternate-principal-denial-runner",
       "path": "scripts/gate2-evidence-operator-denial.js",
       "role": "AWS_EVIDENCE_TRUST_NEGATIVE_CONTROL",
-      "sha256": "b879633060ce634c39243d3d1d311e417cb5be46beaa5eb83021bee4fcd03734"
+      "sha256": "a3118d3526d9f5b8e3a635769e1159b03346519bf2f2b6a75a8f0b87b433bac1"
     },
     {
       "id": "aws-authority-race",
@@ -90,31 +90,61 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "f572397e6a44b441cc378a62ebadff43912958717befda1eae5773ca3b4dee26"
+      "sha256": "a07341342f5ae3f99f68a2441de3bcfc4a723a37d32b2544b52af32385c3c3e4"
     },
     {
       "id": "aws-deployment-attestation",
       "path": "src/cloud/aws-deployment-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
-      "sha256": "ba279e906dcc58684ecaed44418ad6c31dd078339616c6cad4a133a654b3a8fb"
+      "sha256": "c10506c065059a2f0838644ba0d7d2dde8dce52cd314c5f3e018d9b1db79ae25"
     },
     {
       "id": "aws-deployment-attestation-runner",
       "path": "scripts/gate2-aws-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_RUNNER",
-      "sha256": "5803f16db3e961baa4b4de594d7e2d67bd09afc820bd85dbe2c37cb2ce1306f9"
+      "sha256": "06b2de0dfb8da303673f0cf4c71c5e6efaceaf5b7cd4449aa0a57d4599c3da88"
     },
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "ffd50c2888eef658300f6532a7cf75c18f7bc7d832b9046cab5f95ef95c37122"
+      "sha256": "cc4f7bf68136c8e1da0ac5882663dbb4a3bf524106bfae3afbdff189f81a0835"
     },
     {
       "id": "aws-evidence-identity",
       "path": "src/cloud/aws-evidence-identity.js",
       "role": "AWS_EVIDENCE_IDENTITY_BOUNDARY",
-      "sha256": "1271ae0a0892c7d05d5ff8c1a7676b918f31044239a1ac806c8d12ad3425c570"
+      "sha256": "3ac2ec40b99cf58314c89ce69136f4f56e2a3015ddb56937b01624556c3fea31"
+    },
+    {
+      "id": "aws-provider-bundle-entry",
+      "path": "scripts/lib/aws-provider-bundle-entry.js",
+      "role": "AWS_ATTESTATION_PROVIDER_BUNDLE_ENTRY",
+      "sha256": "94d1a66af061cf4b6ddb7f51894d4f9b6cae06971a218e051fcace47d0338527"
+    },
+    {
+      "id": "aws-provider-runtime",
+      "path": "scripts/lib/aws-provider-runtime.js",
+      "role": "AWS_ATTESTATION_PROVIDER_RUNTIME",
+      "sha256": "c0088da767c3429a9cca4f1599e529c0aa1ef9346279592722f6115c17ba30db"
+    },
+    {
+      "id": "aws-provider-runtime-loader",
+      "path": "scripts/lib/aws-provider-runtime-loader.js",
+      "role": "AWS_ATTESTATION_PROVIDER_RUNTIME_LOADER",
+      "sha256": "38d70d97f977a52af5c93d25b925017f25fa862c384e3d13c41bf186e14ed272"
+    },
+    {
+      "id": "aws-provider-clients-tests",
+      "path": "test/aws-provider-clients.test.js",
+      "role": "AWS_ATTESTATION_PROVIDER_CLIENT_VERIFICATION",
+      "sha256": "f351edd75aa9361e6b0119e01f05a8218da1a270eb0f5aee67863d4548790f60"
+    },
+    {
+      "id": "exact-build-reproduction",
+      "path": "scripts/lib/exact-build-reproduction.js",
+      "role": "EXACT_BUILD_REPRODUCTION_CONTRACT",
+      "sha256": "fcaef60eaeeb40d1f2148def3038cc43d476101f211f398d89fa09c08cc82d05"
     },
     {
       "id": "aws-preflight",
@@ -126,25 +156,31 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "0f65823609321dee0c98acb321e684aa271f36f30c634aee25787eb6f51f4fc3"
+      "sha256": "406a93eeca2cd5c085e69e25430f353ec271e1a9222e8c1ac0cfebcdf0446f9b"
     },
     {
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "00add003c125494df7dae24c04aca1a04ac91018263c5aa291e0e4b8c7a74c28"
+      "sha256": "b86ad1ab0c5621a2d47e735544144803130fbbc6de3b65f5e0e5e6489ad65a91"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "a3e4dbfc7f6e0d86ec6a675e79aef999ca30ba10baf557485dcead44411aa5d5"
+      "sha256": "515faec16865b4ac3491b75bd49891e6e9df905e1def2cfe915561a65de50710"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "fc4d36c3a3e5f79ba84ce31d92c7f4ac4105462166efec4ffe14c68e63ce15e7"
+      "sha256": "a5b5d098f46ae1fe70ad96e1a69c91084a9dd8896c33bd5439d5978a8270386f"
+    },
+    {
+      "id": "aws-template-security-tests",
+      "path": "test/aws-gate2-template-security.test.js",
+      "role": "AWS_TEMPLATE_LEAST_PRIVILEGE_VERIFICATION",
+      "sha256": "19e149d600aa0d39ceaf302c143e3c5f0d114021a3473b3ea9035b17dcc132fb"
     },
     {
       "id": "boundary-runtime",
@@ -204,13 +240,13 @@
       "id": "dependency-snapshot",
       "path": "scripts/lib/dependency-snapshot.js",
       "role": "IMMUTABLE_DEPENDENCY_AND_TOOLCHAIN_BINDING",
-      "sha256": "2e7cdbc75f3ddecd8cd89bcef70def738ff4a74f4277a3604af4e450fc68a9f2"
+      "sha256": "c6b08041cca41f6ffa3083324b891355251df9a1d958ecf94b8d288704adef07"
     },
     {
       "id": "dependency-snapshot-tests",
       "path": "test/dependency-snapshot.test.js",
       "role": "DEPENDENCY_SNAPSHOT_TAMPER_VERIFICATION",
-      "sha256": "6186d5c8312d92ec332a9ff8b20875b794343062d05a66d5e5a294f83ef6e70f"
+      "sha256": "41359651aae4a51b970ca66230a7091be23dd7b4dd6b628a138a89b75b0aa391"
     },
     {
       "id": "demo-entry",
@@ -246,31 +282,31 @@
       "id": "exact-git-source",
       "path": "scripts/lib/exact-git-source.js",
       "role": "IMMUTABLE_GIT_BUILD_INPUT",
-      "sha256": "3deb7dbb2ac0aa1eb13a71774dc43356fb8688460d6e78ee931688758501ab9e"
+      "sha256": "db8da309b3f54c3ba79896895172d85b8d945764a7b4631ddd2570a562581701"
     },
     {
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
       "role": "IMMUTABLE_GIT_BUILD_VERIFICATION",
-      "sha256": "fe495978513222a1362525ecdff6c4264525ddf6923aa03a0767334325212daa"
+      "sha256": "0d25a382cb25d6c3d7c6a09566971101781994fd707d1aae7c2392934d283cf9"
     },
     {
       "id": "gate2-build-runner",
       "path": "scripts/build-gate2-template.js",
       "role": "EXACT_GIT_ARTIFACT_BUILDER",
-      "sha256": "d768f69674542e2b9880525d70311d0b38b9871acdd24896d90491f83485118b"
+      "sha256": "15af85c14a3d6048ea43cafa626f54b11539a19eb01e2601657f5233b9a70188"
     },
     {
       "id": "gate2-exact-build-bootstrap",
       "path": "scripts/build-gate2-exact.js",
       "role": "ISOLATED_EXACT_GIT_BUILD_BOOTSTRAP",
-      "sha256": "7c2bf230f5d806aca43e6b28baea4a42da7246b88ba26eb6e852cca314f02c8d"
+      "sha256": "1d272f1564fdc65ede236079776cf82c1bd4108ac791bfe5a8abe22e7995a3b8"
     },
     {
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
-      "sha256": "b9480e9d56628548bac6a72456bca041c05a54cf35505d528c02ac62e05ff6ea"
+      "sha256": "dc88aadad5783ac4c2d8dce984ee0c082b5c3d9502b9db44f7e38bcb1a7f2b61"
     },
     {
       "id": "local-server",
