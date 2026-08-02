@@ -46,7 +46,8 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
       "g1_get_verification_key_v1(UUID, STRING)",
-      "g1_append_verified_evidence_v2(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)"
+      "g1_append_verified_evidence_v2(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)",
+      "g1_resolve_verified_evidence_v1(UUID, UUID, STRING, STRING)"
     ])
   }),
   tp_authorizer_role: Object.freeze({
@@ -54,19 +55,20 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
       "g1_observe_admissibility_v1(UUID, UUID, UUID, STRING)",
       "g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
       "g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
+      "g1_resolve_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
       "g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
       "g1_commit_dvi_selection_v1(UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, INT8, STRING)",
       "g1_delete_vector_set_v1(UUID, UUID)",
       "g1_purge_expired_vector_sets_v1(UUID, INT8)",
       "g1_spend_authority_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
-      "g1_resolve_request_v1(UUID, UUID, STRING)",
+      "g1_resolve_request_v1(UUID, UUID, STRING, STRING)",
       "g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)"
     ])
   }),
   tp_gate2_authorizer_role: Object.freeze({
     functions: Object.freeze([
       "g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
-      "g1_resolve_request_v1(UUID, UUID, STRING)",
+      "g1_resolve_request_v1(UUID, UUID, STRING, STRING)",
       "g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)"
     ])
   }),
@@ -77,7 +79,8 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   }),
   tp_recovery_audit_role: Object.freeze({
     functions: Object.freeze([
-      "g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)"
+      "g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
+      "g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)"
     ])
   }),
   tp_audit_role: Object.freeze({
@@ -656,6 +659,43 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_verified_evidence_v1(
+      p_tenant_id UUID,
+      p_evidence_id UUID,
+      p_verification_request_digest STRING,
+      p_evidence_digest STRING
+    )
+    RETURNS TABLE(
+      evidence_id UUID,
+      verification_request_digest STRING,
+      evidence_digest STRING,
+      outcome STRING,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        evidence.evidence_id,
+        verification.verification_request_digest,
+        evidence.evidence_digest,
+        'evidence_verified'::STRING,
+        transaction_timestamp()
+      FROM tp_ledger.g1_evidence_verification_receipts AS verification
+      JOIN tp_private.g1_evidence AS evidence
+        ON evidence.tenant_id = verification.tenant_id
+       AND evidence.evidence_id = verification.evidence_id
+      WHERE session_user = 'tp_ingest_user'
+        AND verification.tenant_id = p_tenant_id
+        AND verification.evidence_id = p_evidence_id
+        AND verification.verification_request_digest =
+          p_verification_request_digest
+        AND verification.outcome = 'verified'
+        AND evidence.evidence_digest = p_evidence_digest
+    $$
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_observe_admissibility_v1(
       p_tenant_id UUID,
       p_evidence_id UUID,
@@ -995,6 +1035,49 @@ async function createFunctions(client) {
         v_admitted_at,
         v_expires_at;
     END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_vector_set_v1(
+      p_tenant_id UUID,
+      p_retrieval_id UUID,
+      p_incident_id UUID,
+      p_agency STRING,
+      p_policy_version STRING,
+      p_ttl_ms INT8
+    )
+    RETURNS TABLE(
+      retrieval_id UUID,
+      candidate_count INT8,
+      admitted_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        retrieval.retrieval_id,
+        retrieval.candidate_count,
+        retrieval.admitted_at,
+        retrieval.expires_at,
+        transaction_timestamp()
+      FROM tp_private.g1_vector_retrieval_sets AS retrieval
+      WHERE session_user = 'tp_authorizer_user'
+        AND retrieval.tenant_id = p_tenant_id
+        AND retrieval.retrieval_id = p_retrieval_id
+        AND retrieval.incident_id = p_incident_id
+        AND retrieval.agency = p_agency
+        AND retrieval.policy_version = p_policy_version
+        AND retrieval.expires_at = retrieval.admitted_at +
+          (p_ttl_ms * INTERVAL '1 millisecond')
+        AND retrieval.candidate_count = (
+          SELECT count(*)::INT8
+          FROM tp_private.g1_vector_candidates AS candidate
+          WHERE candidate.tenant_id = retrieval.tenant_id
+            AND candidate.retrieval_id = retrieval.retrieval_id
+        )
     $$
   `);
 
@@ -1933,6 +2016,27 @@ async function createFunctions(client) {
           AND receipt.proposal_digest = resource.holder_proposal_digest
           AND receipt.logical_authority_key_sha256 =
             resource.holder_logical_authority_key_sha256
+          AND outbox.request_digest = receipt.request_digest
+          AND outbox.proposal_digest = receipt.proposal_digest
+          AND outbox.logical_action_digest = receipt.logical_action_digest
+          AND outbox.authorization_epoch = receipt.authorization_epoch
+          AND outbox.logical_authority_key_sha256 =
+            receipt.logical_authority_key_sha256
+          AND outbox.authorization_binding_sha256 =
+            receipt.authorization_binding_sha256
+          AND outbox.run_id = receipt.run_id
+          AND outbox.incident_id = receipt.incident_id
+          AND outbox.resource_id = receipt.resource_id
+          AND outbox.fencing_token = receipt.fencing_token
+          AND outbox.effect_key = receipt.effect_key
+          AND outbox.intent_kind = 'dispatch_rescue_unit'
+          AND outbox.payload_digest = receipt.payload_digest
+          AND proposal.payload = outbox.payload
+          AND proposal.payload_digest = outbox.payload_digest
+          AND encode(
+            sha256(proposal.payload_canonical::BYTES),
+            'hex'
+          ) = outbox.payload_digest
           AND receipt.lease_expires_at > transaction_timestamp()
           AND resource.lease_expires_at > transaction_timestamp()
           AND proposal.expires_at > transaction_timestamp()
@@ -1940,6 +2044,9 @@ async function createFunctions(client) {
         JOIN tp_private.g1_resources AS resource
           ON resource.tenant_id = receipt.tenant_id
          AND resource.resource_id = receipt.resource_id
+        JOIN tp_ledger.g1_outbox_intents AS outbox
+          ON outbox.tenant_id = receipt.tenant_id
+         AND outbox.operation_id = receipt.operation_id
         JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
           ON proposal.tenant_id = receipt.tenant_id
          AND proposal.proposal_digest = receipt.proposal_digest
@@ -2888,7 +2995,10 @@ async function createFunctions(client) {
       decision_logical_authority_key_sha256 STRING,
       decision_authorization_binding_sha256 STRING,
       decision_authority_current BOOL,
-      decision_database_now TIMESTAMPTZ
+      decision_database_now TIMESTAMPTZ,
+      decision_durable_receipt BOOL,
+      decision_committed_evidence_id UUID,
+      decision_committed_evidence_digest STRING
     )
     LANGUAGE PLpgSQL
     SECURITY DEFINER
@@ -2903,27 +3013,38 @@ async function createFunctions(client) {
           USING ERRCODE = '42501';
       END IF;
       RETURN QUERY
-      SELECT *
-      FROM tp_api.g1_spend_authority_v1(
-        p_tenant_id,
-        p_operation_id,
-        p_request_digest,
-        p_request_payload,
-        p_proposal_digest,
-        p_logical_action_digest,
-        p_selected_evidence_digest,
-        p_run_id,
-        p_incident_id,
-        p_resource_id,
-        p_agent_id,
-        p_agency,
-        p_evidence_id,
-        p_effect_key,
-        p_payload,
-        p_payload_digest,
-        p_policy_version,
-        p_lease_ms
-      );
+      WITH decision AS (
+        SELECT *
+        FROM tp_api.g1_spend_authority_v1(
+          p_tenant_id,
+          p_operation_id,
+          p_request_digest,
+          p_request_payload,
+          p_proposal_digest,
+          p_logical_action_digest,
+          p_selected_evidence_digest,
+          p_run_id,
+          p_incident_id,
+          p_resource_id,
+          p_agent_id,
+          p_agency,
+          p_evidence_id,
+          p_effect_key,
+          p_payload,
+          p_payload_digest,
+          p_policy_version,
+          p_lease_ms
+        )
+      )
+      SELECT
+        decision.*,
+        receipt.operation_id IS NOT NULL,
+        receipt.evidence_id,
+        receipt.evidence_digest
+      FROM decision
+      LEFT JOIN tp_ledger.g1_authority_receipts AS receipt
+        ON receipt.tenant_id = p_tenant_id
+       AND receipt.operation_id = decision.decision_operation_id;
     END
     $$
   `);
@@ -2935,73 +3056,216 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_resolve_request_v1(
+      UUID, UUID, STRING, STRING
+    )
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_resolve_request_v1(
       p_tenant_id UUID,
       p_operation_id UUID,
-      p_request_digest STRING
+      p_request_digest STRING,
+      p_logical_action_digest STRING
     )
     RETURNS TABLE(
       operation_id UUID,
       request_digest STRING,
+      request_payload JSONB,
       proposal_digest STRING,
       logical_action_digest STRING,
       authorization_epoch INT8,
       logical_authority_key_sha256 STRING,
       authorization_binding_sha256 STRING,
+      run_id UUID,
+      incident_id UUID,
+      resource_id STRING,
+      agent_id STRING,
+      agency STRING,
+      evidence_id UUID,
+      evidence_digest STRING,
+      effect_key UUID,
+      payload_digest STRING,
+      policy_version STRING,
       outcome STRING,
       reason STRING,
       fencing_token INT8,
       lease_expires_at TIMESTAMPTZ,
+      observed_holder_operation_id UUID,
+      observed_fence INT8,
+      replay_kind STRING,
       outbox_intent_id UUID,
+      outbox_operation_id UUID,
+      outbox_request_digest STRING,
+      outbox_proposal_digest STRING,
+      outbox_logical_action_digest STRING,
+      outbox_authorization_epoch INT8,
+      outbox_logical_authority_key_sha256 STRING,
+      outbox_authorization_binding_sha256 STRING,
+      outbox_run_id UUID,
+      outbox_incident_id UUID,
+      outbox_resource_id STRING,
+      outbox_fencing_token INT8,
+      outbox_effect_key UUID,
+      outbox_intent_kind STRING,
+      outbox_payload JSONB,
+      outbox_payload_digest STRING,
       current_fence INT8,
       active_run_id UUID,
       holder_operation_id UUID,
       holder_proposal_digest STRING,
       holder_logical_authority_key_sha256 STRING,
+      resource_lease_expires_at TIMESTAMPTZ,
+      receipt_proposal_tenant_id UUID,
+      receipt_proposal_digest STRING,
+      receipt_proposal_logical_action_digest STRING,
+      receipt_proposal_resource_id STRING,
+      receipt_proposal_agency STRING,
+      receipt_proposal_action_kind STRING,
+      receipt_proposal_payload JSONB,
+      receipt_proposal_payload_canonical STRING,
+      receipt_proposal_payload_digest STRING,
+      receipt_proposal_retrieval_id UUID,
+      receipt_proposal_run_id UUID,
+      receipt_proposal_incident_id UUID,
+      receipt_proposal_authority_evidence_binding_sha256 STRING,
+      receipt_proposal_policy_version STRING,
+      receipt_proposal_selected_rank INT8,
+      receipt_proposal_selected_evidence_id UUID,
+      receipt_proposal_selected_evidence_digest STRING,
+      receipt_proposal_admitted_at TIMESTAMPTZ,
+      receipt_proposal_expires_at TIMESTAMPTZ,
+      receipt_proposal_authorization_epoch INT8,
+      receipt_proposal_logical_authority_key_sha256 STRING,
+      receipt_proposal_authorization_binding_sha256 STRING,
       authority_current BOOL,
       database_now TIMESTAMPTZ
     )
     LANGUAGE SQL
     SECURITY DEFINER
     AS $$
+      WITH operation_candidate AS (
+        SELECT receipt.*, 'operation_replay'::STRING AS replay_kind
+        FROM tp_ledger.g1_authority_receipts AS receipt
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.operation_id = p_operation_id
+        LIMIT 2
+      ),
+      logical_candidate AS (
+        SELECT
+          receipt.*,
+          'logical_authority_replay'::STRING AS replay_kind
+        FROM tp_ledger.g1_authority_receipts AS receipt
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.logical_action_digest = p_logical_action_digest
+          AND receipt.outcome = 'resource_reserved'
+          AND NOT EXISTS (SELECT 1 FROM operation_candidate)
+        LIMIT 2
+      ),
+      semantic_candidate AS (
+        SELECT receipt.*, 'semantic_replay'::STRING AS replay_kind
+        FROM tp_ledger.g1_authority_receipts AS receipt
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.request_digest = p_request_digest
+          AND NOT EXISTS (SELECT 1 FROM operation_candidate)
+          AND NOT EXISTS (SELECT 1 FROM logical_candidate)
+        LIMIT 2
+      ),
+      selected_receipt AS (
+        SELECT * FROM operation_candidate
+        UNION ALL
+        SELECT * FROM logical_candidate
+        UNION ALL
+        SELECT * FROM semantic_candidate
+      )
       SELECT
         receipt.operation_id,
         receipt.request_digest,
+        receipt.request_payload,
         receipt.proposal_digest,
         receipt.logical_action_digest,
         receipt.authorization_epoch,
         receipt.logical_authority_key_sha256,
         receipt.authorization_binding_sha256,
+        receipt.run_id,
+        receipt.incident_id,
+        receipt.resource_id,
+        receipt.agent_id,
+        receipt.agency,
+        receipt.evidence_id,
+        receipt.evidence_digest,
+        receipt.effect_key,
+        receipt.payload_digest,
+        receipt.policy_version,
         receipt.outcome,
         receipt.reason,
         receipt.fencing_token,
         receipt.lease_expires_at,
+        receipt.observed_holder_operation_id,
+        receipt.observed_fence,
+        receipt.replay_kind,
         outbox.intent_id,
+        outbox.operation_id,
+        outbox.request_digest,
+        outbox.proposal_digest,
+        outbox.logical_action_digest,
+        outbox.authorization_epoch,
+        outbox.logical_authority_key_sha256,
+        outbox.authorization_binding_sha256,
+        outbox.run_id,
+        outbox.incident_id,
+        outbox.resource_id,
+        outbox.fencing_token,
+        outbox.effect_key,
+        outbox.intent_kind,
+        outbox.payload,
+        outbox.payload_digest,
         resource.current_fence,
         resource.active_run_id,
         resource.holder_operation_id,
         resource.holder_proposal_digest,
         resource.holder_logical_authority_key_sha256,
+        resource.lease_expires_at,
+        proposal.tenant_id,
+        proposal.proposal_digest,
+        proposal.logical_action_digest,
+        proposal.resource_id,
+        proposal.agency,
+        proposal.action_kind,
+        proposal.payload,
+        proposal.payload_canonical,
+        proposal.payload_digest,
+        proposal.retrieval_id,
+        proposal.run_id,
+        proposal.incident_id,
+        proposal.authority_evidence_binding_sha256,
+        proposal.policy_version,
+        proposal.selected_rank,
+        proposal.selected_evidence_id,
+        proposal.selected_evidence_digest,
+        proposal.admitted_at,
+        proposal.expires_at,
+        proposal.authorization_epoch,
+        proposal.logical_authority_key_sha256,
+        proposal.authorization_binding_sha256,
         tp_private.g1_authority_receipt_current_v1(
           receipt.tenant_id,
           receipt.operation_id
         ),
         transaction_timestamp()
-      FROM tp_ledger.g1_authority_receipts AS receipt
+      FROM selected_receipt AS receipt
       LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
         ON outbox.tenant_id = receipt.tenant_id
        AND outbox.operation_id = receipt.operation_id
       LEFT JOIN tp_private.g1_resources AS resource
         ON resource.tenant_id = receipt.tenant_id
        AND resource.resource_id = receipt.resource_id
-      WHERE receipt.tenant_id = p_tenant_id
-        AND session_user IN (
+      LEFT JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+        ON proposal.tenant_id = receipt.tenant_id
+       AND proposal.proposal_digest = receipt.proposal_digest
+      WHERE session_user IN (
           'tp_authorizer_user',
           'tp_gate2_authorizer_user'
-        )
-        AND (
-          receipt.operation_id = p_operation_id
-          OR receipt.request_digest = p_request_digest
         )
       LIMIT 2
     $$
@@ -3514,6 +3778,34 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_audit_event_v1(
+      p_event_id UUID,
+      p_tenant_id UUID,
+      p_event_digest STRING
+    )
+    RETURNS TABLE(
+      event_id UUID,
+      event_digest STRING,
+      outcome STRING,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        event.event_id,
+        event.event_digest,
+        event.outcome,
+        transaction_timestamp()
+      FROM tp_ledger.g1_recovery_audit_events_v3 AS event
+      WHERE session_user = 'tp_recovery_audit_user'
+        AND event.tenant_id = p_tenant_id
+        AND event.event_id = p_event_id
+        AND event.event_digest = p_event_digest
+    $$
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_record_protected_effect_v1(
       p_tenant_id UUID,
       p_effect_key UUID,
@@ -3598,6 +3890,7 @@ async function createFunctions(client) {
        AND proposal.run_id = outbox.run_id
        AND proposal.incident_id = outbox.incident_id
        AND proposal.resource_id = outbox.resource_id
+       AND proposal.payload = outbox.payload
        AND proposal.payload_digest = outbox.payload_digest
       WHERE resource.tenant_id = p_tenant_id
         AND resource.resource_id = p_resource_id
@@ -3610,6 +3903,10 @@ async function createFunctions(client) {
         AND resource.holder_logical_authority_key_sha256 =
           outbox.logical_authority_key_sha256
         AND resource.current_fence = p_fencing_token
+        AND encode(
+          sha256(proposal.payload_canonical::BYTES),
+          'hex'
+        ) = outbox.payload_digest
         AND resource.lease_expires_at > transaction_timestamp()
         AND proposal.expires_at > transaction_timestamp()
       ON CONFLICT DO NOTHING
@@ -3650,10 +3947,12 @@ async function transferOwnership(client) {
     "tp_api.g1_append_verified_evidence_v1(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)",
     "tp_api.g1_get_verification_key_v1(UUID, STRING)",
     "tp_api.g1_append_verified_evidence_v2(UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING, STRING)",
+    "tp_api.g1_resolve_verified_evidence_v1(UUID, UUID, STRING, STRING)",
     "tp_private.g1_list_admissibility_internal_v1(UUID, UUID, STRING)",
     "tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING)",
     "tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
     "tp_api.g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
+    "tp_api.g1_resolve_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
     "tp_api.g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
     "tp_api.g1_commit_dvi_selection_v1(UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, INT8, STRING)",
     "tp_api.g1_authorize_dvi_proposal_v1(UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB)",
@@ -3662,11 +3961,12 @@ async function transferOwnership(client) {
     "tp_api.g1_purge_expired_vector_sets_v1(UUID, INT8)",
     "tp_api.g1_spend_authority_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
     "tp_api.g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
-    "tp_api.g1_resolve_request_v1(UUID, UUID, STRING)",
+    "tp_api.g1_resolve_request_v1(UUID, UUID, STRING, STRING)",
     "tp_api.g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)",
     "tp_api.g1_append_recovery_audit_v1(UUID, UUID, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING)",
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
+    "tp_api.g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
     "tp_api.g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
   ];
   for (const functionSignature of functions) {
@@ -3715,6 +4015,9 @@ async function applyGrants(client, bootstrapOwner) {
         UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING,
         STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ,
         TIMESTAMPTZ, STRING, STRING, STRING
+      ),
+      tp_api.g1_resolve_verified_evidence_v1(
+        UUID, UUID, STRING, STRING
       )
     TO tp_ingest_role
   `);
@@ -3733,6 +4036,9 @@ async function applyGrants(client, bootstrapOwner) {
       tp_api.g1_prepare_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, INT8
       ),
+      tp_api.g1_resolve_vector_set_v1(
+        UUID, UUID, UUID, STRING, STRING, INT8
+      ),
       tp_api.g1_rank_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, STRING, INT8
       ),
@@ -3749,7 +4055,7 @@ async function applyGrants(client, bootstrapOwner) {
         UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
         STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
       ),
-      tp_api.g1_resolve_request_v1(UUID, UUID, STRING),
+      tp_api.g1_resolve_request_v1(UUID, UUID, STRING, STRING),
       tp_api.g1_observe_authority_race_v1(
         UUID, UUID, STRING, UUID, STRING, UUID, STRING
       )
@@ -3760,6 +4066,9 @@ async function applyGrants(client, bootstrapOwner) {
       tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING),
       tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING),
       tp_api.g1_prepare_vector_set_v1(
+        UUID, UUID, UUID, STRING, STRING, INT8
+      ),
+      tp_api.g1_resolve_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, INT8
       ),
       tp_api.g1_rank_vector_set_v1(
@@ -3786,7 +4095,7 @@ async function applyGrants(client, bootstrapOwner) {
         UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID,
         STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8
       ),
-      tp_api.g1_resolve_request_v1(UUID, UUID, STRING),
+      tp_api.g1_resolve_request_v1(UUID, UUID, STRING, STRING),
       tp_api.g1_observe_authority_race_v1(
         UUID, UUID, STRING, UUID, STRING, UUID, STRING
       )
@@ -3816,6 +4125,9 @@ async function applyGrants(client, bootstrapOwner) {
         UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING,
         STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ,
         TIMESTAMPTZ
+      ),
+      tp_api.g1_resolve_recovery_audit_event_v1(
+        UUID, UUID, STRING
       )
     TO tp_recovery_audit_role
   `);

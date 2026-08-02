@@ -7,9 +7,9 @@ export const AUTHORITY_RESPONSE_SCHEMA =
 export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
 export const AUTHORITY_RACE_RECEIPT_SCHEMA =
-  "tideproof.aws-authority-race-receipt.v4";
+  "tideproof.aws-authority-race-receipt.v5";
 const AUTHORITY_RACE_OBSERVATION_SCHEMA =
-  "tideproof.aws-authority-race-observation.v2";
+  "tideproof.aws-authority-race-observation.v3";
 
 const CONTENDERS = Object.freeze(["alpha", "bravo"]);
 const INITIAL_FENCING_TOKEN = "1";
@@ -33,6 +33,19 @@ function sha256Hex(value) {
     .createHash("sha256")
     .update(String(value))
     .digest("hex");
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function validatedCallerBinding(value) {
@@ -180,7 +193,11 @@ function validateCommittedResponse(
     "authorizationBindingSha256",
     "authorizationEpoch",
     "committedOperationId",
+    "committedProposalDigest",
     "committedRequestDigest",
+    "committedSelectedEvidenceDigest",
+    "committedSelectedEvidenceId",
+    "commit",
     "configDigest",
     "contender",
     "fencingToken",
@@ -227,8 +244,11 @@ function validateCommittedResponse(
     !SHA256_PATTERN.test(value.logicalAuthorityKeySha256) ||
     !SHA256_PATTERN.test(value.authorizationBindingSha256) ||
     !SHA256_PATTERN.test(value.proposalDigest) ||
+    value.committedProposalDigest !== value.proposalDigest ||
     !SHA256_PATTERN.test(value.logicalActionDigest) ||
     !SHA256_PATTERN.test(value.selectedEvidenceDigest) ||
+    value.committedSelectedEvidenceDigest !== value.selectedEvidenceDigest ||
+    !UUID_PATTERN.test(value.committedSelectedEvidenceId) ||
     !SHA256_PATTERN.test(value.authorityArtifactDigest) ||
     !SHA256_PATTERN.test(value.authoritySourceDigest) ||
     !SHA256_PATTERN.test(value.packageLockDigest) ||
@@ -242,6 +262,59 @@ function validateCommittedResponse(
       value.outcome
     ) ||
     value.replayKind !== null
+  ) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  if (
+    !exactKeys(value.commit, [
+      "authority",
+      "databaseNow",
+      "observation",
+      "operation",
+      "operationDigest",
+      "outcome",
+      "reason",
+      "schemaVersion",
+      "status"
+    ]) ||
+    value.commit.schemaVersion !== "tideproof.database-commit-result.v1" ||
+    value.commit.status !== "COMMITTED" ||
+    value.commit.operation !== "authority" ||
+    value.commit.operationDigest !== value.committedRequestDigest ||
+    value.commit.observation !== "direct_ack" ||
+    value.commit.outcome !== value.outcome ||
+    value.commit.reason !== value.reason ||
+    !exactKeys(value.commit.authority, [
+      "current",
+      "requiresFreshAuthorization"
+    ]) ||
+    value.commit.authority.current !== value.authorityCurrent ||
+    value.commit.authority.requiresFreshAuthorization !==
+      value.requiresFreshAuthorization
+  ) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  const commitDatabaseNow = parseIso(
+    value.commit.databaseNow,
+    "AUTHORITY_RACE_RESPONSE_REJECTED"
+  );
+  const expectedLogicalAuthorityKeySha256 = sha256Hex(canonicalJson({
+    schemaVersion: "tideproof.authority.logical-authority-key.v1",
+    logicalActionDigest: value.logicalActionDigest,
+    authorizationEpoch: value.authorizationEpoch
+  }));
+  const expectedAuthorizationBindingSha256 = sha256Hex(canonicalJson({
+    schemaVersion: "tideproof.authority.authorization-binding.v1",
+    logicalActionDigest: value.logicalActionDigest,
+    proposalDigest: value.committedProposalDigest,
+    authorizationEpoch: value.authorizationEpoch,
+    logicalAuthorityKeySha256: expectedLogicalAuthorityKeySha256
+  }));
+  if (
+    value.logicalAuthorityKeySha256 !==
+      expectedLogicalAuthorityKeySha256 ||
+    value.authorizationBindingSha256 !==
+      expectedAuthorizationBindingSha256
   ) {
     throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
   }
@@ -273,6 +346,9 @@ function validateCommittedResponse(
     "AUTHORITY_RACE_RESPONSE_REJECTED"
   );
   if (completedAt <= startedAt) {
+    throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
+  }
+  if (commitDatabaseNow > completedAt) {
     throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
   }
   let leaseExpiresAt = null;
@@ -380,21 +456,21 @@ export function validateAuthorityRaceInvocations(
         ({ authorityArtifactDigest }) => authorityArtifactDigest
       )
     ).size !== 1 ||
-    new Set(values.map(({ proposalDigest }) => proposalDigest)).size !== 1 ||
+    new Set(values.map(({ proposalDigest }) => proposalDigest)).size !== 2 ||
     new Set(values.map(({ logicalActionDigest }) => logicalActionDigest))
-      .size !== 1 ||
+      .size !== 2 ||
     new Set(values.map(({ authorizationEpoch }) => authorizationEpoch))
       .size !== 1 ||
     new Set(
       values.map(
         ({ logicalAuthorityKeySha256 }) => logicalAuthorityKeySha256
       )
-    ).size !== 1 ||
+    ).size !== 2 ||
     new Set(
       values.map(
         ({ authorizationBindingSha256 }) => authorizationBindingSha256
       )
-    ).size !== 1
+    ).size !== 2
   ) {
     throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
   }
@@ -426,6 +502,8 @@ export function validateAuthorityRaceInvocations(
     serializableTransactions: true,
     overlappingDatabaseIntervals: true,
     distinctDatabaseSessions: true,
+    distinctLogicalActions: true,
+    distinctProposals: true,
     winner: {
       contender: winner.contender,
       operationId: winner.operationId,
@@ -492,6 +570,8 @@ export function validateAuthorityRaceProof(
       "databaseInterval",
       "denial",
       "distinctDatabaseSessions",
+      "distinctLogicalActions",
+      "distinctProposals",
       "durableStateVerified",
       "functionArnDigest",
       "functionVersion",
@@ -515,6 +595,8 @@ export function validateAuthorityRaceProof(
     observation.raceId !== expected.raceId ||
     observation.runId !== expected.runId ||
     observation.functionArnDigest !== sha256Hex(expected.functionArn)
+    || observation.distinctLogicalActions !== true
+    || observation.distinctProposals !== true
   ) {
     throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
   }

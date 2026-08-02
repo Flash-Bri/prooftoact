@@ -20,6 +20,10 @@ import {
   RecoveryStore,
   RecoveryBundleMismatchError
 } from "./recovery-store.js";
+import {
+  committedDatabaseResult,
+  databaseTimestampFromDriver
+} from "./database-commit-result.js";
 
 export const RECOVERY_PUBLISHER_ROLE = "tp_recovery_publisher_role";
 export const RECOVERY_PUBLISHER_USER = "tp_recovery_publisher_user";
@@ -69,7 +73,8 @@ const RECOVERY_POSTURE_SPEC = Object.freeze({
   roleGrantPolicies: Object.freeze({
     [RECOVERY_PUBLISHER_ROLE]: Object.freeze({
       functions: Object.freeze([
-        "append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)"
+        "append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)",
+        "resolve_recovery_bundle_v1(UUID, UUID, INT8, STRING)"
       ])
     })
   }),
@@ -83,6 +88,8 @@ const RECOVERY_POSTURE_SPEC = Object.freeze({
 
 const APPEND_SIGNATURE =
   "mcp_api.append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)";
+const RESOLVE_SIGNATURE =
+  "mcp_api.resolve_recovery_bundle_v1(UUID, UUID, INT8, STRING)";
 
 const APPEND_SQL = `
   SELECT *
@@ -91,6 +98,13 @@ const APPEND_SQL = `
     $7::TIMESTAMPTZ, $8, $9, $10, $11, $12, $13, $14, $15,
     $16::JSONB, $17::JSONB, $18::JSONB, $19::JSONB,
     $20::TIMESTAMPTZ
+  )
+`;
+
+const RESOLVE_SQL = `
+  SELECT *
+  FROM mcp_api.resolve_recovery_bundle_v1(
+    $1::UUID, $2::UUID, $3::INT8, $4
   )
 `;
 
@@ -109,6 +123,31 @@ function retryBackoffMs(attempt) {
     RECOVERY_PUBLISH_MAX_BACKOFF_MS,
     25 * (2 ** attempt)
   );
+}
+
+function committedBundleResult(row, bundle, observation) {
+  if (
+    !row ||
+    row.bundle_digest !== bundle.bundleDigest ||
+    !["bundle_appended", "bundle_replay", "bundle_present"].includes(
+      row.outcome
+    )
+  ) {
+    throw new RecoveryBundleMismatchError();
+  }
+  return {
+    outcome: row.outcome,
+    bundleDigest: bundle.bundleDigest,
+    commit: committedDatabaseResult({
+      operation: "recovery_publication",
+      operationDigest: bundle.bundleDigest,
+      observation,
+      databaseNow: databaseTimestampFromDriver(row.database_now),
+      outcome: "bundle_present",
+      authorityCurrent: null,
+      requiresFreshAuthorization: true
+    })
+  };
 }
 
 function requireStrongPassword(value) {
@@ -322,6 +361,7 @@ export async function bootstrapRecoverySecurity({
       "GRANT ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public TO tp_recovery_owner"
     );
 
+    await client.query(`DROP FUNCTION IF EXISTS ${APPEND_SIGNATURE}`);
     await client.query(`
       CREATE OR REPLACE FUNCTION mcp_api.append_recovery_bundle_v2(
         p_tenant_id UUID,
@@ -345,7 +385,11 @@ export async function bootstrapRecoverySecurity({
         p_receipt_summary JSONB,
         p_expires_at TIMESTAMPTZ
       )
-      RETURNS TABLE(bundle_digest STRING, outcome STRING)
+      RETURNS TABLE(
+        bundle_digest STRING,
+        outcome STRING,
+        database_now TIMESTAMPTZ
+      )
       LANGUAGE PLpgSQL
       SECURITY DEFINER
       AS $$
@@ -390,7 +434,10 @@ export async function bootstrapRecoverySecurity({
         END IF;
 
         IF v_existing_count = 1 THEN
-          RETURN QUERY SELECT p_bundle_digest, 'bundle_replay'::STRING;
+          RETURN QUERY SELECT
+            p_bundle_digest,
+            'bundle_replay'::STRING,
+            transaction_timestamp();
           RETURN;
         END IF;
 
@@ -443,8 +490,39 @@ export async function bootstrapRecoverySecurity({
           p_expires_at
         );
 
-        RETURN QUERY SELECT p_bundle_digest, 'bundle_appended'::STRING;
+        RETURN QUERY SELECT
+          p_bundle_digest,
+          'bundle_appended'::STRING,
+          transaction_timestamp();
       END
+      $$
+    `);
+
+    await client.query(`
+      CREATE OR REPLACE FUNCTION mcp_api.resolve_recovery_bundle_v1(
+        p_tenant_id UUID,
+        p_recovery_session_id UUID,
+        p_snapshot_version INT8,
+        p_bundle_digest STRING
+      )
+      RETURNS TABLE(
+        bundle_digest STRING,
+        outcome STRING,
+        database_now TIMESTAMPTZ
+      )
+      LANGUAGE SQL
+      SECURITY DEFINER
+      AS $$
+        SELECT
+          bundle.bundle_digest,
+          'bundle_present'::STRING,
+          transaction_timestamp()
+        FROM mcp_private.recovery_bundles_v2 AS bundle
+        WHERE session_user = '${RECOVERY_PUBLISHER_USER}'
+          AND bundle.tenant_id = p_tenant_id
+          AND bundle.recovery_session_id = p_recovery_session_id
+          AND bundle.snapshot_version = p_snapshot_version
+          AND bundle.bundle_digest = p_bundle_digest
       $$
     `);
 
@@ -458,6 +536,9 @@ export async function bootstrapRecoverySecurity({
     );
     await client.query(
       `ALTER FUNCTION ${APPEND_SIGNATURE} OWNER TO tp_recovery_owner`
+    );
+    await client.query(
+      `ALTER FUNCTION ${RESOLVE_SIGNATURE} OWNER TO tp_recovery_owner`
     );
 
     await client.query("REVOKE ALL ON DATABASE tideproof_recovery FROM public");
@@ -485,6 +566,9 @@ export async function bootstrapRecoverySecurity({
     );
     await client.query(
       `GRANT EXECUTE ON FUNCTION ${APPEND_SIGNATURE} TO ${RECOVERY_PUBLISHER_ROLE}`
+    );
+    await client.query(
+      `GRANT EXECUTE ON FUNCTION ${RESOLVE_SIGNATURE} TO ${RECOVERY_PUBLISHER_ROLE}`
     );
     await client.query(
       `REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public FROM ${RECOVERY_PUBLISHER_ROLE}`
@@ -552,11 +636,38 @@ export class RecoveryPublisher {
       max: 1,
       applicationName: "tideproof-recovery-publisher"
     }));
+    let clientClosed = false;
+    const closeOriginal = async () => {
+      if (!clientClosed) {
+        clientClosed = true;
+        await client.end().catch(() => {});
+      }
+    };
     try {
       await client.connect();
-      return await appendRecoveryBundleWithClient(client, bundle);
+      return await appendRecoveryBundleWithClient(client, bundle, {
+        beforeReconcile: closeOriginal,
+        reconcile: async () => {
+          const reconciler = new Client(runtimeDatabaseConfig({
+            connectionString: this.#connectionString,
+            max: 1,
+            applicationName: "tideproof-recovery-publisher-reconcile"
+          }));
+          try {
+            await reconciler.connect();
+            return await reconciler.query(RESOLVE_SQL, [
+              bundle.tenantId,
+              bundle.recoverySessionId,
+              bundle.snapshotVersion,
+              bundle.bundleDigest
+            ]);
+          } finally {
+            await reconciler.end().catch(() => {});
+          }
+        }
+      });
     } finally {
-      await client.end().catch(() => {});
+      await closeOriginal();
     }
   }
 }
@@ -568,11 +679,19 @@ export async function appendRecoveryBundleWithClient(
     now = () => performance.now(),
     sleep = (delayMs) => sleepTimer(delayMs),
     maxAttempts = RECOVERY_PUBLISH_MAX_ATTEMPTS,
-    retryDeadlineMs = RECOVERY_PUBLISH_RETRY_DEADLINE_MS
+    retryDeadlineMs = RECOVERY_PUBLISH_RETRY_DEADLINE_MS,
+    beforeReconcile = null,
+    reconcile = null
   } = {}
 ) {
   if (typeof client?.query !== "function") {
     throw new TypeError("RECOVERY_PUBLISH_CLIENT_REQUIRED");
+  }
+  if (
+    beforeReconcile !== null &&
+    typeof beforeReconcile !== "function"
+  ) {
+    throw new TypeError("RECOVERY_PUBLISH_CLOSE_HOOK_INVALID");
   }
   if (
     !Number.isSafeInteger(maxAttempts) ||
@@ -593,6 +712,7 @@ export async function appendRecoveryBundleWithClient(
     }
     let transactionStarted = false;
     let committed = false;
+    let commitDispatched = false;
     try {
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
       transactionStarted = true;
@@ -600,22 +720,41 @@ export async function appendRecoveryBundleWithClient(
         APPEND_SQL,
         recoveryBundleValues(bundle)
       );
+      commitDispatched = true;
       await client.query("COMMIT");
       committed = true;
       transactionStarted = false;
-      if (
-        result.rowCount !== 1 ||
-        result.rows[0].bundle_digest !== bundle.bundleDigest
-      ) {
+      if (result.rowCount !== 1) {
         throw new RecoveryBundleMismatchError();
       }
-      return {
-        outcome: result.rows[0].outcome,
-        bundleDigest: bundle.bundleDigest
-      };
+      return committedBundleResult(result.rows[0], bundle, "direct_ack");
     } catch (error) {
       const unsafeConnection = databaseClientMustBeDiscarded(error);
-      if (transactionStarted && !committed && !unsafeConnection) {
+      const commitDefinitivelyAborted =
+        commitDispatched && error?.code === "40001";
+      if (
+        commitDispatched &&
+        !commitDefinitivelyAborted &&
+        typeof reconcile === "function"
+      ) {
+        if (beforeReconcile) {
+          await beforeReconcile();
+        }
+        const resolved = await reconcile(bundle);
+        if (resolved?.rowCount === 1) {
+          return committedBundleResult(
+            resolved.rows[0],
+            bundle,
+            "read_reconciled"
+          );
+        }
+      }
+      if (
+        transactionStarted &&
+        !committed &&
+        (!commitDispatched || commitDefinitivelyAborted) &&
+        !unsafeConnection
+      ) {
         try {
           await client.query("ROLLBACK");
         } catch (rollbackError) {
@@ -649,6 +788,7 @@ export async function appendRecoveryBundleWithClient(
 
 export const __test = Object.freeze({
   APPEND_SQL,
+  RESOLVE_SQL,
   RECOVERY_PUBLISH_MAX_ATTEMPTS,
   RECOVERY_PUBLISH_RETRY_DEADLINE_MS,
   retryBackoffMs

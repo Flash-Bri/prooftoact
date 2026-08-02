@@ -41,7 +41,7 @@ const SPEND_SQL = `
 const RESOLVE_SQL = `
   SELECT *
   FROM tp_api.g1_resolve_request_v1(
-    $1::UUID, $2::UUID, $3
+    $1::UUID, $2::UUID, $3, $4
   )
 `;
 
@@ -199,9 +199,20 @@ function configuration() {
     evidenceId: requiredUuidEnvironment("AUTHORITY_EVIDENCE_ID"),
     raceId: requiredUuidEnvironment("AUTHORITY_RACE_ID"),
     resourceId: requiredEnvironment("AUTHORITY_RESOURCE_ID", 160),
-    proposalDigest: requiredEnvironment("AUTHORITY_PROPOSAL_DIGEST", 64),
-    logicalActionDigest: requiredEnvironment(
-      "AUTHORITY_LOGICAL_ACTION_DIGEST",
+    alphaProposalDigest: requiredEnvironment(
+      "AUTHORITY_ALPHA_PROPOSAL_DIGEST",
+      64
+    ),
+    bravoProposalDigest: requiredEnvironment(
+      "AUTHORITY_BRAVO_PROPOSAL_DIGEST",
+      64
+    ),
+    alphaLogicalActionDigest: requiredEnvironment(
+      "AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST",
+      64
+    ),
+    bravoLogicalActionDigest: requiredEnvironment(
+      "AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST",
       64
     ),
     selectedEvidenceDigest: requiredEnvironment(
@@ -233,10 +244,15 @@ function configuration() {
       config.packageLockDigest,
       config.authoritySourceDigest,
       config.authorityArtifactDigest,
-      config.proposalDigest,
-      config.logicalActionDigest,
+      config.alphaProposalDigest,
+      config.bravoProposalDigest,
+      config.alphaLogicalActionDigest,
+      config.bravoLogicalActionDigest,
       config.selectedEvidenceDigest
     ].every((value) => /^[0-9a-f]{64}$/.test(value))
+    || config.alphaProposalDigest === config.bravoProposalDigest
+    || config.alphaLogicalActionDigest ===
+      config.bravoLogicalActionDigest
   ) {
     throw new Error("AUTHORITY_CONFIGURATION_REJECTED");
   }
@@ -280,7 +296,8 @@ function authorityRequestFor(event, config) {
   const payload = {
     scenario: "synthetic-highwater",
     action: "dispatch_rescue_unit",
-    destination: "synthetic-zone-aws-race"
+    destination: "synthetic-zone-aws-race",
+    logicalDispatch: contender
   };
   const request = {
     digestVersion: 2,
@@ -308,8 +325,14 @@ function authorityRequestFor(event, config) {
     actionKind: "dispatch_rescue_unit",
     payload,
     payloadDigest: sha256Hex(payload),
-    proposalDigest: config.proposalDigest,
-    logicalActionDigest: config.logicalActionDigest,
+    proposalDigest:
+      contender === "alpha"
+        ? config.alphaProposalDigest
+        : config.bravoProposalDigest,
+    logicalActionDigest:
+      contender === "alpha"
+        ? config.alphaLogicalActionDigest
+        : config.bravoLogicalActionDigest,
     selectedEvidenceDigest: config.selectedEvidenceDigest
   };
   request.requestPayload = {
@@ -468,6 +491,33 @@ function normalizeTimestamp(value) {
   return parsed.toISOString();
 }
 
+function databaseCommitResult(decision, request, observation) {
+  const requiresFreshAuthorization = !decision.authorityCurrent;
+  return {
+    schemaVersion: "tideproof.database-commit-result.v1",
+    status:
+      decision.durableReceipt === false
+        ? "DENIED_NOT_DURABLE"
+        : decision.authorityCurrent === false &&
+      !decision.outcome.includes("denied")
+        ? "COMMITTED_BUT_NO_LONGER_CURRENT"
+        : "COMMITTED",
+    operation: "authority",
+    operationDigest:
+      decision.durableReceipt === false
+        ? request.requestDigest
+        : decision.committedRequestDigest,
+    observation,
+    databaseNow: decision.databaseNow,
+    outcome: decision.outcome,
+    authority: {
+      current: decision.authorityCurrent,
+      requiresFreshAuthorization
+    },
+    reason: decision.reason ?? null
+  };
+}
+
 function normalizeSpendRow(row, request) {
   const allowedOutcomes = new Set([
     "authorization_denied",
@@ -475,8 +525,25 @@ function normalizeSpendRow(row, request) {
     "resource_reserved"
   ]);
   const replayKind = row?.decision_replay_kind ?? null;
+  const committedSelectedEvidenceId =
+    row?.decision_committed_evidence_id;
+  const committedSelectedEvidenceDigest =
+    row?.decision_committed_evidence_digest;
+  const durableReceipt = row?.decision_durable_receipt;
+  const reason = row?.decision_reason ?? null;
+  const fencingToken =
+    row?.decision_fencing_token === null ||
+    row?.decision_fencing_token === undefined
+      ? null
+      : String(row.decision_fencing_token);
+  const leaseExpiresAt = normalizeTimestamp(
+    row?.decision_lease_expires_at
+  );
+  const databaseNow = normalizeTimestamp(row?.decision_database_now);
+  const authorityCurrent = row?.decision_authority_current;
   if (
     !row ||
+    typeof durableReceipt !== "boolean" ||
     !allowedOutcomes.has(row.decision_outcome) ||
     ![
       null,
@@ -487,7 +554,98 @@ function normalizeSpendRow(row, request) {
     row.decision_logical_action_digest !== request.logicalActionDigest ||
     (replayKind !== "logical_authority_replay" &&
       row.decision_proposal_digest !== request.proposalDigest) ||
-    !/^[0-9a-f]{64}$/.test(row.decision_proposal_digest ?? "")
+    !/^[0-9a-f]{64}$/.test(row.decision_proposal_digest ?? "") ||
+    row.decision_operation_id !== request.operationId && replayKind === null ||
+    row.decision_request_digest !== request.requestDigest &&
+      [null, "operation_replay", "semantic_replay"].includes(replayKind) ||
+    databaseNow === null
+  ) {
+    throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
+  }
+  if (!durableReceipt) {
+    const missingProposal =
+      reason === "proposal_authorization_missing_or_stale";
+    const boundEarlyDenial = [
+      "proposal_authorization_expired",
+      "proposal_authorization_superseded"
+    ].includes(reason);
+    const hasNoCommittedEvidence =
+      committedSelectedEvidenceId === null &&
+      committedSelectedEvidenceDigest === null;
+    const hasNoAuthorityIdentity =
+      row.decision_authorization_epoch === null &&
+      row.decision_logical_authority_key_sha256 === null &&
+      row.decision_authorization_binding_sha256 === null;
+    let boundIdentityValid = false;
+    if (boundEarlyDenial) {
+      try {
+        const identity = authorityIdentityFor(
+          request,
+          row.decision_authorization_epoch
+        );
+        boundIdentityValid =
+          row.decision_logical_authority_key_sha256 ===
+            identity.logicalAuthorityKeySha256 &&
+          row.decision_authorization_binding_sha256 ===
+            identity.authorizationBindingSha256;
+      } catch {
+        boundIdentityValid = false;
+      }
+    }
+    if (
+      row.decision_outcome !== "authorization_denied" ||
+      replayKind !== null ||
+      row.decision_operation_id !== request.operationId ||
+      row.decision_request_digest !== request.requestDigest ||
+      row.decision_proposal_digest !== request.proposalDigest ||
+      row.decision_logical_action_digest !== request.logicalActionDigest ||
+      authorityCurrent !== false ||
+      fencingToken !== null ||
+      leaseExpiresAt !== null ||
+      !hasNoCommittedEvidence ||
+      (!missingProposal && !boundEarlyDenial) ||
+      (missingProposal && !hasNoAuthorityIdentity) ||
+      (boundEarlyDenial && !boundIdentityValid)
+    ) {
+      throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
+    }
+    return {
+      durableReceipt: false,
+      outcome: row.decision_outcome,
+      reason,
+      fencingToken: null,
+      leaseExpiresAt: null,
+      authorityCurrent: false,
+      databaseNow,
+      replayKind: null
+    };
+  }
+  const committedEvidenceIdValid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      committedSelectedEvidenceId ?? ""
+    );
+  const committedEvidenceDigestValid =
+    /^[0-9a-f]{64}$/.test(committedSelectedEvidenceDigest ?? "");
+  const selectedDigestMismatch =
+    row.decision_outcome === "authorization_denied" &&
+    reason === "selected_evidence_digest_mismatch";
+  const evidenceMissing =
+    row.decision_outcome === "authorization_denied" &&
+    reason === "evidence_missing";
+  if (
+    !committedEvidenceIdValid ||
+    (replayKind !== "logical_authority_replay" &&
+      committedSelectedEvidenceId !== request.evidenceId) ||
+    (evidenceMissing && committedSelectedEvidenceDigest !== null) ||
+    (selectedDigestMismatch &&
+      (!committedEvidenceDigestValid ||
+        committedSelectedEvidenceDigest === request.selectedEvidenceDigest)) ||
+    (!evidenceMissing &&
+      !selectedDigestMismatch &&
+      (!committedEvidenceDigestValid ||
+        (replayKind !== "logical_authority_replay" &&
+          committedSelectedEvidenceDigest !==
+            request.selectedEvidenceDigest)))
   ) {
     throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
   }
@@ -514,17 +672,6 @@ function normalizeSpendRow(row, request) {
     throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
   }
   const winning = row.decision_outcome === "resource_reserved";
-  const authorityCurrent = row.decision_authority_current;
-  const reason = row.decision_reason ?? null;
-  const fencingToken =
-    row.decision_fencing_token === null ||
-    row.decision_fencing_token === undefined
-      ? null
-      : String(row.decision_fencing_token);
-  const leaseExpiresAt = normalizeTimestamp(
-    row.decision_lease_expires_at
-  );
-  const databaseNow = normalizeTimestamp(row.decision_database_now);
   if (
     (winning &&
       (reason !== null ||
@@ -547,6 +694,7 @@ function normalizeSpendRow(row, request) {
     throw new Error("AUTHORITY_DATABASE_RESPONSE_REJECTED");
   }
   return {
+    durableReceipt: true,
     outcome: row.decision_outcome,
     reason,
     fencingToken,
@@ -556,8 +704,131 @@ function normalizeSpendRow(row, request) {
     replayKind,
     committedOperationId: row.decision_operation_id,
     committedRequestDigest: row.decision_request_digest,
+    committedProposalDigest: row.decision_proposal_digest,
+    committedSelectedEvidenceId,
+    committedSelectedEvidenceDigest,
     ...identity
   };
+}
+
+function normalizeReceiptProposal(row, request) {
+  const validUuid = (value) =>
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    );
+  const validSha256 = (value) =>
+    typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+  const admittedAt = normalizeTimestamp(
+    row.receipt_proposal_admitted_at
+  );
+  const expiresAt = normalizeTimestamp(
+    row.receipt_proposal_expires_at
+  );
+  const payload = row.receipt_proposal_payload;
+  const payloadDigest = row.receipt_proposal_payload_digest;
+  const selectedRank = Number(row.receipt_proposal_selected_rank);
+  const proposalEpoch = Number(row.receipt_proposal_authorization_epoch);
+  if (
+    !validUuid(row.receipt_proposal_tenant_id) ||
+    !validUuid(row.receipt_proposal_run_id) ||
+    !validUuid(row.receipt_proposal_incident_id) ||
+    !validUuid(row.receipt_proposal_retrieval_id) ||
+    !validUuid(row.receipt_proposal_selected_evidence_id) ||
+    !validSha256(row.receipt_proposal_digest) ||
+    !validSha256(row.receipt_proposal_logical_action_digest) ||
+    !validSha256(
+      row.receipt_proposal_authority_evidence_binding_sha256
+    ) ||
+    !validSha256(payloadDigest) ||
+    !validSha256(row.receipt_proposal_selected_evidence_digest) ||
+    !validSha256(
+      row.receipt_proposal_logical_authority_key_sha256
+    ) ||
+    !validSha256(
+      row.receipt_proposal_authorization_binding_sha256
+    ) ||
+    admittedAt === null ||
+    expiresAt === null ||
+    typeof row.receipt_proposal_resource_id !== "string" ||
+    row.receipt_proposal_resource_id.length === 0 ||
+    typeof row.receipt_proposal_agency !== "string" ||
+    row.receipt_proposal_agency.length === 0 ||
+    typeof row.receipt_proposal_policy_version !== "string" ||
+    row.receipt_proposal_policy_version.length === 0 ||
+    !payload ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    typeof row.receipt_proposal_payload_canonical !== "string" ||
+    row.receipt_proposal_payload_canonical !== canonicalJson(payload) ||
+    sha256Hex(payload) !== payloadDigest ||
+    selectedRank !== 1 ||
+    !Number.isSafeInteger(proposalEpoch) ||
+    proposalEpoch < 1 ||
+    String(proposalEpoch) !==
+      String(row.receipt_proposal_authorization_epoch) ||
+    Date.parse(expiresAt) <= Date.parse(admittedAt)
+  ) {
+    throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
+  }
+  const logicalActionDigest = sha256Hex({
+    schemaVersion: "tideproof.authority.logical-action.v1",
+    tenantId: row.receipt_proposal_tenant_id,
+    incidentId: row.receipt_proposal_incident_id,
+    resourceId: row.receipt_proposal_resource_id,
+    agency: row.receipt_proposal_agency,
+    actionKind: row.receipt_proposal_action_kind,
+    payloadDigest
+  });
+  const proposalDigest = sha256Hex({
+    schemaVersion: "tideproof.authority.dvi-proposal-identity.v1",
+    tenantId: row.receipt_proposal_tenant_id,
+    runId: row.receipt_proposal_run_id,
+    incidentId: row.receipt_proposal_incident_id,
+    retrievalId: row.receipt_proposal_retrieval_id,
+    logicalActionDigest,
+    authorityEvidenceBindingSha256:
+      row.receipt_proposal_authority_evidence_binding_sha256,
+    selectedEvidenceId: row.receipt_proposal_selected_evidence_id,
+    selectedEvidenceDigest:
+      row.receipt_proposal_selected_evidence_digest,
+    policyVersion: row.receipt_proposal_policy_version,
+    selectedRank,
+    admittedAt,
+    expiresAt
+  });
+  const identity = authorityIdentityFor(
+    {
+      ...request,
+      logicalActionDigest,
+      proposalDigest
+    },
+    proposalEpoch
+  );
+  if (
+    row.receipt_proposal_tenant_id !== request.tenantId ||
+    row.receipt_proposal_digest !== row.proposal_digest ||
+    proposalDigest !== row.proposal_digest ||
+    logicalActionDigest !== row.logical_action_digest ||
+    row.receipt_proposal_logical_action_digest !==
+      row.logical_action_digest ||
+    row.receipt_proposal_resource_id !== row.resource_id ||
+    row.receipt_proposal_agency !== row.agency ||
+    row.receipt_proposal_action_kind !== "dispatch_rescue_unit" ||
+    payloadDigest !== row.payload_digest ||
+    canonicalJson(payload) !== canonicalJson(request.payload) ||
+    row.receipt_proposal_run_id !== row.run_id ||
+    row.receipt_proposal_incident_id !== row.incident_id ||
+    row.receipt_proposal_selected_evidence_id !== row.evidence_id ||
+    String(proposalEpoch) !== String(row.authorization_epoch) ||
+    row.receipt_proposal_logical_authority_key_sha256 !==
+      identity.logicalAuthorityKeySha256 ||
+    row.receipt_proposal_authorization_binding_sha256 !==
+      identity.authorizationBindingSha256
+  ) {
+    throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
+  }
+  return { expiresAt };
 }
 
 function normalizeResolvedRow(row, request) {
@@ -566,19 +837,60 @@ function normalizeResolvedRow(row, request) {
     "resource_held_denied",
     "resource_reserved"
   ]);
+  const replayKinds = new Set([
+    "operation_replay",
+    "semantic_replay",
+    "logical_authority_replay"
+  ]);
   if (
     !row ||
-    row.operation_id !== request.operationId ||
-    row.request_digest !== request.requestDigest ||
-    row.proposal_digest !== request.proposalDigest ||
     row.logical_action_digest !== request.logicalActionDigest ||
-    !allowedOutcomes.has(row.outcome)
+    !allowedOutcomes.has(row.outcome) ||
+    !replayKinds.has(row.replay_kind) ||
+    !row.request_payload ||
+    typeof row.request_payload !== "object" ||
+    Array.isArray(row.request_payload) ||
+    sha256Hex(row.request_payload) !== row.request_digest ||
+    row.request_payload.logicalActionDigest !== row.logical_action_digest ||
+    row.request_payload.proposalDigest !== row.proposal_digest ||
+    row.request_payload.runId !== row.run_id ||
+    row.request_payload.incidentId !== row.incident_id ||
+    row.request_payload.resourceId !== row.resource_id ||
+    row.request_payload.agentId !== row.agent_id ||
+    row.request_payload.agency !== row.agency ||
+    row.request_payload.evidenceId !== row.evidence_id ||
+    row.request_payload.selectedEvidenceId !==
+      row.receipt_proposal_selected_evidence_id ||
+    row.request_payload.selectedEvidenceDigest !==
+      row.receipt_proposal_selected_evidence_digest ||
+    row.evidence_id !== row.receipt_proposal_selected_evidence_id ||
+    row.request_payload.effectKey !== row.effect_key ||
+    row.request_payload.payloadDigest !== row.payload_digest ||
+    row.request_payload.policyVersion !== row.policy_version
+  ) {
+    throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
+  }
+  const logicalReplay = row.replay_kind === "logical_authority_replay";
+  if (
+    (!logicalReplay &&
+      (row.request_digest !== request.requestDigest ||
+        row.proposal_digest !== request.proposalDigest ||
+        canonicalJson(row.request_payload) !==
+          canonicalJson(request.requestPayload))) ||
+    (row.replay_kind === "operation_replay" &&
+      row.operation_id !== request.operationId) ||
+    (logicalReplay && row.outcome !== "resource_reserved")
   ) {
     throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
   }
   let identity;
+  let receiptProposal;
   try {
-    identity = authorityIdentityFor(request, row.authorization_epoch);
+    identity = authorityIdentityFor(
+      { ...request, proposalDigest: row.proposal_digest },
+      row.authorization_epoch
+    );
+    receiptProposal = normalizeReceiptProposal(row, request);
   } catch {
     throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
   }
@@ -599,18 +911,74 @@ function normalizeResolvedRow(row, request) {
       ? null
       : String(row.fencing_token);
   const leaseExpiresAt = normalizeTimestamp(row.lease_expires_at);
+  const resourceLeaseExpiresAt = normalizeTimestamp(
+    row.resource_lease_expires_at
+  );
+  const receiptProposalExpiresAt = receiptProposal.expiresAt;
+  const outboxFencingToken =
+    row.outbox_fencing_token === null ||
+    row.outbox_fencing_token === undefined
+      ? null
+      : String(row.outbox_fencing_token);
+  const exactOutbox =
+    row.outbox_intent_id &&
+    row.outbox_operation_id === row.operation_id &&
+    row.outbox_request_digest === row.request_digest &&
+    row.outbox_proposal_digest === row.proposal_digest &&
+    row.outbox_logical_action_digest === row.logical_action_digest &&
+    String(row.outbox_authorization_epoch) ===
+      String(row.authorization_epoch) &&
+    row.outbox_logical_authority_key_sha256 ===
+      row.logical_authority_key_sha256 &&
+    row.outbox_authorization_binding_sha256 ===
+      row.authorization_binding_sha256 &&
+    row.outbox_run_id === row.run_id &&
+    row.outbox_incident_id === row.incident_id &&
+    row.outbox_resource_id === row.resource_id &&
+    outboxFencingToken === fencingToken &&
+    row.outbox_effect_key === row.effect_key &&
+    row.outbox_intent_kind === "dispatch_rescue_unit" &&
+    row.outbox_payload &&
+    typeof row.outbox_payload === "object" &&
+    !Array.isArray(row.outbox_payload) &&
+    row.receipt_proposal_payload &&
+    typeof row.receipt_proposal_payload === "object" &&
+    !Array.isArray(row.receipt_proposal_payload) &&
+    canonicalJson(row.outbox_payload) ===
+      canonicalJson(row.receipt_proposal_payload) &&
+    canonicalJson(row.outbox_payload) === canonicalJson(request.payload) &&
+    sha256Hex(row.outbox_payload) === row.outbox_payload_digest &&
+    row.outbox_payload_digest === row.payload_digest;
+  const committedEvidenceDigestValid =
+    /^[0-9a-f]{64}$/.test(row.evidence_digest ?? "");
+  const selectedEvidenceMatches =
+    row.evidence_digest === row.receipt_proposal_selected_evidence_digest;
+  const selectedDigestMismatch =
+    row.outcome === "authorization_denied" &&
+    reason === "selected_evidence_digest_mismatch";
+  const evidenceMissing =
+    row.outcome === "authorization_denied" &&
+      reason === "evidence_missing";
+  const observedHolderOperationId =
+    row.observed_holder_operation_id ?? null;
+  const observedFence =
+    row.observed_fence === null || row.observed_fence === undefined
+      ? null
+      : String(row.observed_fence);
   if (
     (winning &&
-      (!row.outbox_intent_id ||
+      (!exactOutbox ||
         reason !== null ||
         fencingToken === null ||
         !/^[1-9][0-9]*$/.test(fencingToken) ||
         leaseExpiresAt === null ||
+        resourceLeaseExpiresAt === null ||
+        receiptProposalExpiresAt === null ||
         (authorityCurrent &&
           (fencingToken !== String(row.current_fence) ||
-            row.active_run_id !== request.runId ||
-            row.holder_operation_id !== request.operationId ||
-            row.holder_proposal_digest !== request.proposalDigest ||
+            row.active_run_id !== row.run_id ||
+            row.holder_operation_id !== row.operation_id ||
+            row.holder_proposal_digest !== row.proposal_digest ||
             row.holder_logical_authority_key_sha256 !==
               identity.logicalAuthorityKeySha256)))) ||
     (!winning &&
@@ -620,12 +988,31 @@ function normalizeResolvedRow(row, request) {
         fencingToken !== null ||
         leaseExpiresAt !== null)) ||
     (row.outcome === "resource_held_denied" &&
-      reason !== "active_holder") ||
+      (reason !== "active_holder" ||
+        !selectedEvidenceMatches ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          observedHolderOperationId ?? ""
+        ) ||
+        !/^[1-9][0-9]*$/.test(observedFence ?? ""))) ||
+    (row.outcome !== "resource_held_denied" &&
+      (observedHolderOperationId !== null || observedFence !== null)) ||
+    (winning && !selectedEvidenceMatches) ||
+    (evidenceMissing && row.evidence_digest !== null) ||
+    (selectedDigestMismatch &&
+      (!committedEvidenceDigestValid || selectedEvidenceMatches)) ||
+    (!evidenceMissing &&
+      !selectedDigestMismatch &&
+      !committedEvidenceDigestValid) ||
     typeof authorityCurrent !== "boolean" ||
     (!winning && authorityCurrent) ||
     databaseNow === null ||
     (authorityCurrent &&
-      new Date(leaseExpiresAt).getTime() <= new Date(databaseNow).getTime())
+      (new Date(leaseExpiresAt).getTime() <=
+        new Date(databaseNow).getTime() ||
+        new Date(resourceLeaseExpiresAt).getTime() <=
+          new Date(databaseNow).getTime() ||
+        new Date(receiptProposalExpiresAt).getTime() <=
+          new Date(databaseNow).getTime()))
   ) {
     throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
   }
@@ -636,9 +1023,15 @@ function normalizeResolvedRow(row, request) {
     leaseExpiresAt,
     authorityCurrent,
     databaseNow,
-    replayKind: "reconciled_after_ambiguous_commit",
+    replayKind:
+      row.replay_kind === "operation_replay"
+        ? "reconciled_after_ambiguous_commit"
+        : row.replay_kind,
     committedOperationId: row.operation_id,
     committedRequestDigest: row.request_digest,
+    committedProposalDigest: row.proposal_digest,
+    committedSelectedEvidenceId: row.evidence_id,
+    committedSelectedEvidenceDigest: row.evidence_digest,
     ...identity
   };
 }
@@ -795,7 +1188,8 @@ async function reconcile({
     const result = await client.query(RESOLVE_SQL, [
       request.tenantId,
       request.operationId,
-      request.requestDigest
+      request.requestDigest,
+      request.logicalActionDigest
     ]);
     await client.query("COMMIT");
     if (result.rowCount !== 1 || result.rows.length !== 1) {
@@ -889,6 +1283,7 @@ async function spendAuthority({
   for (let attempt = 0; attempt <= MAX_TRANSACTION_RETRIES; attempt += 1) {
     const client = createClient(connectionString);
     let commitDispatched = false;
+    let clientClosed = false;
     try {
       await client.connect();
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
@@ -958,6 +1353,8 @@ async function spendAuthority({
         commitDispatched ||
         AMBIGUOUS_TRANSACTION_CODES.has(error?.code)
       ) {
+        await closeQuietly(client);
+        clientClosed = true;
         const decision = await reconcile({
           connectionString,
           request,
@@ -975,27 +1372,32 @@ async function spendAuthority({
       }
       throw error;
     } finally {
-      await closeQuietly(client);
+      if (!clientClosed) {
+        await closeQuietly(client);
+      }
     }
   }
   throw new Error("AUTHORITY_RETRY_EXHAUSTED");
 }
 
-function buildBindings(config) {
-  return {
+function buildBindings(config, request = null) {
+  const bindings = {
     sourceCommit: config.sourceCommit,
     configDigest: config.configDigest,
     treeDigest: config.treeDigest,
     packageLockDigest: config.packageLockDigest,
     authoritySourceDigest: config.authoritySourceDigest,
-    authorityArtifactDigest: config.authorityArtifactDigest,
-    proposalDigest: config.proposalDigest,
-    logicalActionDigest: config.logicalActionDigest,
-    selectedEvidenceDigest: config.selectedEvidenceDigest
+    authorityArtifactDigest: config.authorityArtifactDigest
   };
+  if (request !== null) {
+    bindings.proposalDigest = request.proposalDigest;
+    bindings.logicalActionDigest = request.logicalActionDigest;
+    bindings.selectedEvidenceDigest = request.selectedEvidenceDigest;
+  }
+  return bindings;
 }
 
-function failClosed(code, config = null, parsed = null) {
+function failClosed(code, config = null, parsed = null, request = null) {
   return {
     schemaVersion: RESPONSE_SCHEMA,
     status: "UNKNOWN_DO_NOT_ACT",
@@ -1005,7 +1407,7 @@ function failClosed(code, config = null, parsed = null) {
     authorityTransferred: false,
     requiresFreshAuthorization: true,
     modelAccess: false,
-    ...(config ? buildBindings(config) : {})
+    ...(config ? buildBindings(config, request) : {})
   };
 }
 
@@ -1035,6 +1437,7 @@ async function runAuthority({
 }) {
   let config;
   let parsed;
+  let request;
   try {
     config = configuration();
     if (exactKeys(event, ["mode"]) && event.mode === "status") {
@@ -1082,7 +1485,7 @@ async function runAuthority({
       };
     }
     parsed = parseReserveEvent(event, config);
-    const request = authorityRequestFor(event, config);
+    request = authorityRequestFor(event, config);
     request.raceId = parsed.raceId;
     const connectionString = await getConnectionString(config);
     const clientFactory =
@@ -1102,6 +1505,34 @@ async function runAuthority({
       createClient: clientFactory,
       now
     });
+    if (result.decision.durableReceipt === false) {
+      return {
+        schemaVersion: RESPONSE_SCHEMA,
+        status: "DENIED_NOT_DURABLE",
+        raceId: parsed.raceId,
+        contender: parsed.contender,
+        operationId: request.operationId,
+        requestDigest: request.requestDigest,
+        outcome: result.decision.outcome,
+        reason: result.decision.reason,
+        authorityCurrent: false,
+        commit: databaseCommitResult(
+          result.decision,
+          request,
+          "direct_ack"
+        ),
+        transaction: result.transaction,
+        invocationRequestId:
+          typeof context?.awsRequestId === "string"
+            ? context.awsRequestId.slice(0, 160)
+            : null,
+        functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
+        authorityTransferred: false,
+        requiresFreshAuthorization: true,
+        modelAccess: false,
+        ...buildBindings(config, request)
+      };
+    }
     return {
       schemaVersion: RESPONSE_SCHEMA,
       status: "COMMITTED",
@@ -1121,7 +1552,20 @@ async function runAuthority({
         result.decision.logicalAuthorityKeySha256,
       authorizationBindingSha256:
         result.decision.authorizationBindingSha256,
+      committedProposalDigest:
+        result.decision.committedProposalDigest,
+      committedSelectedEvidenceId:
+        result.decision.committedSelectedEvidenceId,
+      committedSelectedEvidenceDigest:
+        result.decision.committedSelectedEvidenceDigest,
       authorityCurrent: result.decision.authorityCurrent,
+      commit: databaseCommitResult(
+        result.decision,
+        request,
+        result.transaction.reconciled === true
+          ? "read_reconciled"
+          : "direct_ack"
+      ),
       transaction: result.transaction,
       invocationRequestId:
         typeof context?.awsRequestId === "string"
@@ -1131,10 +1575,10 @@ async function runAuthority({
       authorityTransferred: false,
       requiresFreshAuthorization: !result.decision.authorityCurrent,
       modelAccess: false,
-      ...buildBindings(config)
+      ...buildBindings(config, request)
     };
   } catch (error) {
-    return failClosed(safeCode(error), config, parsed);
+    return failClosed(safeCode(error), config, parsed, request);
   }
 }
 
@@ -1157,6 +1601,7 @@ exports.__test = {
   canonicalJson,
   configuration,
   connectionStringFromSecret,
+  databaseCommitResult,
   databaseClientConfiguration,
   exactKeys,
   normalizeResolvedRow,

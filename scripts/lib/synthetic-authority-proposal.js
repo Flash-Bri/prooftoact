@@ -126,15 +126,26 @@ export async function authorizeSyntheticContenders(store, requests, options) {
   if (!Array.isArray(requests) || requests.length === 0) {
     throw new TypeError("requests must contain at least one contender");
   }
-  const authorized = await authorizeSyntheticProposal(
-    store,
-    requests[0],
-    options
-  );
-  return requests.map((request) => ({
-    ...request,
-    dviAuthorization: authorized.dviAuthorization
-  }));
+  const contenders = [];
+  for (let index = 0; index < requests.length; index += 1) {
+    const request = {
+      ...requests[index],
+      payload: {
+        ...requests[index].payload,
+        logicalDispatch: `contender-${String(index + 1).padStart(3, "0")}`
+      }
+    };
+    const authorized = await authorizeSyntheticProposal(
+      store,
+      request,
+      options
+    );
+    contenders.push({
+      ...request,
+      dviAuthorization: authorized.dviAuthorization
+    });
+  }
+  return contenders;
 }
 
 export const __test = Object.freeze({ canonicalJson, sha256 });

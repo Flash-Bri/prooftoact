@@ -51,8 +51,10 @@ tests.
 - A later epoch is valid only after a separate durable database authorization
   transition. Client input cannot select, increment, or reset the epoch.
 - Every durable proposal, request, decision, outbox intent, recovery record,
-  audit record, and drill receipt must carry the applicable identity digests
-  once the runtime migration lands.
+  audit record, and drill receipt carries its applicable identity digests on
+  the current source paths. Direct acknowledgements and exact read
+  reconciliation share the commit envelope documented in
+  `docs/COMMIT_RECONCILIATION.md`.
 
 The executable identity contract is `src/cloud/authority-identity.js`.
 `src/cloud/dvi-selection.js` supplies the shared selection-receipt binding and
@@ -64,7 +66,13 @@ transition and primary runtime binding. `src/cloud/primary-security.js` and
 `infra/aws/lambda/authority.cjs` require the same database-owned identity on
 their least-privilege spend path. The database spend surface hashes the stored
 canonical payload and derives the logical-action and request digests again
-before mutation; all replay branches return stored receipt identity. Focused
+before mutation; all replay branches return stored receipt identity. The AWS
+response separates invocation proposal/evidence bindings from
+`committedProposalDigest`, `committedSelectedEvidenceId`, and
+`committedSelectedEvidenceDigest`, so a logical replay's authorization binding
+can be independently recomputed from the durable identity. Direct currentness,
+read reconciliation, and protected-effect dispatch all require the same exact
+outbox and canonical proposal payload. Focused
 tests lock canonical encoding, strict schemas, field separation, and epoch
 behavior. The Gate One authority drill also contains failure-first cases for a
 DVI binding A/evidence B forgery, a selected-evidence request mismatch, a new
@@ -72,6 +80,13 @@ retrieval after spend, and a post-expiry replacement that changes all transport
 identity while reusing the existing logical authority. It additionally races a
 pre-expiry spend against post-expiry authorization and denies protected-effect
 recording at the exact database-time proposal-expiry boundary.
+
+The AWS resource-contention proof is intentionally different from the
+same-logical-action replacement proof. Its two contenders carry distinct
+logical-action and proposal digests but target one resource, so a held denial
+is meaningful. A replacement retry keeps one logical action and must resolve
+to one receipt and one protected effect; it is never counted as the losing
+contender in the resource race.
 
 ## Accepted finding records
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
@@ -42,6 +43,22 @@ const CALLER_BINDING = Object.freeze({
   principalType: "assumed-role"
 });
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map(
+      (key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`
+    ).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
 function response(contender, options = {}) {
   const winner =
     options.outcome ??
@@ -58,6 +75,22 @@ function response(contender, options = {}) {
     (contender === "alpha"
       ? "2026-08-01T12:00:02.000Z"
       : "2026-08-01T12:00:03.000Z");
+  const proposalDigest =
+    contender === "alpha" ? "8".repeat(64) : "a".repeat(64);
+  const logicalActionDigest =
+    contender === "alpha" ? "9".repeat(64) : "b".repeat(64);
+  const logicalAuthorityKeySha256 = sha256({
+    schemaVersion: "tideproof.authority.logical-authority-key.v1",
+    logicalActionDigest,
+    authorizationEpoch: 1
+  });
+  const authorizationBindingSha256 = sha256({
+    schemaVersion: "tideproof.authority.authorization-binding.v1",
+    logicalActionDigest,
+    proposalDigest,
+    authorizationEpoch: 1,
+    logicalAuthorityKeySha256
+  });
   const body = {
     schemaVersion: "tideproof.aws-authority-boundary.v2",
     status: "COMMITTED",
@@ -69,12 +102,15 @@ function response(contender, options = {}) {
       contender === "alpha" ? "1".repeat(64) : "2".repeat(64),
     committedRequestDigest:
       contender === "alpha" ? "1".repeat(64) : "2".repeat(64),
-    proposalDigest: "8".repeat(64),
-    logicalActionDigest: "9".repeat(64),
+    proposalDigest,
+    committedProposalDigest: proposalDigest,
+    logicalActionDigest,
     selectedEvidenceDigest: "0".repeat(64),
+    committedSelectedEvidenceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    committedSelectedEvidenceDigest: "0".repeat(64),
     authorizationEpoch: 1,
-    logicalAuthorityKeySha256: "6".repeat(64),
-    authorizationBindingSha256: "7".repeat(64),
+    logicalAuthorityKeySha256,
+    authorizationBindingSha256,
     outcome: winner,
     reason: winner === "resource_reserved" ? null : "active_holder",
     fencingToken: winner === "resource_reserved" ? "1" : null,
@@ -83,6 +119,21 @@ function response(contender, options = {}) {
         ? "2026-08-01T12:05:00.000Z"
         : null,
     replayKind: null,
+    commit: {
+      schemaVersion: "tideproof.database-commit-result.v1",
+      status: "COMMITTED",
+      operation: "authority",
+      operationDigest:
+        contender === "alpha" ? "1".repeat(64) : "2".repeat(64),
+      observation: "direct_ack",
+      databaseNow: start,
+      outcome: winner,
+      authority: {
+        current: winner === "resource_reserved",
+        requiresFreshAuthorization: winner !== "resource_reserved"
+      },
+      reason: winner === "resource_reserved" ? null : "active_holder"
+    },
     transaction: {
       isolation: "serializable",
       attempts: 1,
@@ -406,6 +457,8 @@ test("authority race requires one overlapping winner and one durable denial", as
   assert.equal(receipt.contenders, 2);
   assert.equal(receipt.overlappingDatabaseIntervals, true);
   assert.equal(receipt.distinctDatabaseSessions, true);
+  assert.equal(receipt.distinctLogicalActions, true);
+  assert.equal(receipt.distinctProposals, true);
   assert.equal(receipt.durableStateVerified, true);
   assert.equal(receipt.winner.contender, "alpha");
   assert.equal(receipt.denial.contender, "bravo");

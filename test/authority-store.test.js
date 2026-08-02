@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   connectionStringForDatabase,
+  databaseFailureRequiresReconciliation,
   isRetryableTransactionError,
+  normalizeAuthorityReconciliationRow,
+  normalizedAuthorityRequestFor,
   requestDigestFor,
   signedEvidenceDigestFor
 } from "../src/cloud/authority-store.js";
+import {
+  authorizationBindingFor,
+  logicalAuthorityKeyFor
+} from "../src/cloud/authority-identity.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 
 function dviAuthorization({
   tenantId,
@@ -55,6 +64,115 @@ const REQUEST = {
     evidenceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
   })
 };
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function reconciliationFixture(overrides = {}) {
+  const request = normalizedAuthorityRequestFor(REQUEST);
+  const authorizationEpoch = 1;
+  const logicalAuthority = logicalAuthorityKeyFor({
+    logicalActionDigest: request.logicalActionDigest,
+    authorizationEpoch
+  });
+  const authorizationBinding = authorizationBindingFor({
+    logicalActionDigest: request.logicalActionDigest,
+    proposalDigest: request.proposalDigest,
+    authorizationEpoch
+  });
+  const databaseNow = "2026-08-01T18:01:00.000Z";
+  const leaseExpiresAt = "2026-08-01T18:04:00.000Z";
+  return {
+    request,
+    row: {
+      tenant_id: request.tenantId,
+      operation_id: request.operationId,
+      request_digest: request.requestDigest,
+      request_payload: structuredClone(request.requestPayload),
+      proposal_digest: request.proposalDigest,
+      logical_action_digest: request.logicalActionDigest,
+      authorization_epoch: String(authorizationEpoch),
+      logical_authority_key_sha256:
+        logicalAuthority.logicalAuthorityKeySha256,
+      authorization_binding_sha256:
+        authorizationBinding.authorizationBindingSha256,
+      run_id: request.runId,
+      incident_id: request.incidentId,
+      resource_id: request.resourceId,
+      agent_id: request.agentId,
+      agency: request.agency,
+      evidence_id: request.evidenceId,
+      evidence_digest: request.selectedEvidenceDigest,
+      effect_key: request.effectKey,
+      payload_digest: request.payloadDigest,
+      policy_version: request.policyVersion,
+      outcome: "resource_reserved",
+      reason: null,
+      fencing_token: "1",
+      lease_expires_at: leaseExpiresAt,
+      observed_holder_operation_id: null,
+      observed_fence: null,
+      reconciliation_kind: "operation_replay",
+      intent_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      outbox_operation_id: request.operationId,
+      outbox_request_digest: request.requestDigest,
+      outbox_proposal_digest: request.proposalDigest,
+      outbox_logical_action_digest: request.logicalActionDigest,
+      outbox_authorization_epoch: String(authorizationEpoch),
+      outbox_logical_authority_key_sha256:
+        logicalAuthority.logicalAuthorityKeySha256,
+      outbox_authorization_binding_sha256:
+        authorizationBinding.authorizationBindingSha256,
+      outbox_run_id: request.runId,
+      outbox_incident_id: request.incidentId,
+      outbox_resource_id: request.resourceId,
+      outbox_effect_key: request.effectKey,
+      outbox_intent_kind: "dispatch_rescue_unit",
+      outbox_payload: structuredClone(request.payload),
+      outbox_payload_digest: request.payloadDigest,
+      outbox_fencing_token: "1",
+      current_fence: "1",
+      active_run_id: request.runId,
+      holder_operation_id: request.operationId,
+      holder_proposal_digest: request.proposalDigest,
+      holder_logical_authority_key_sha256:
+        logicalAuthority.logicalAuthorityKeySha256,
+      resource_lease_expires_at: leaseExpiresAt,
+      receipt_proposal_tenant_id: request.tenantId,
+      receipt_proposal_digest: request.proposalDigest,
+      receipt_proposal_logical_action_digest:
+        request.logicalActionDigest,
+      receipt_proposal_resource_id: request.resourceId,
+      receipt_proposal_agency: request.agency,
+      receipt_proposal_action_kind: request.actionKind,
+      receipt_proposal_payload: structuredClone(request.payload),
+      receipt_proposal_payload_canonical: canonicalJson(request.payload),
+      receipt_proposal_payload_digest: request.payloadDigest,
+      receipt_proposal_retrieval_id: request.dviProposal.retrievalId,
+      receipt_proposal_run_id: request.dviProposal.runId,
+      receipt_proposal_incident_id: request.dviProposal.incidentId,
+      receipt_proposal_authority_evidence_binding_sha256:
+        request.dviProposal.authorityEvidenceBindingSha256,
+      receipt_proposal_policy_version: request.dviProposal.policyVersion,
+      receipt_proposal_selected_rank: String(
+        request.dviProposal.selectedRank
+      ),
+      receipt_proposal_selected_evidence_id: request.evidenceId,
+      receipt_proposal_selected_evidence_digest:
+        request.selectedEvidenceDigest,
+      receipt_proposal_admitted_at: request.dviProposal.admittedAt,
+      receipt_proposal_expires_at: request.dviProposal.expiresAt,
+      receipt_proposal_authorization_epoch: String(authorizationEpoch),
+      receipt_proposal_logical_authority_key_sha256:
+        logicalAuthority.logicalAuthorityKeySha256,
+      receipt_proposal_authorization_binding_sha256:
+        authorizationBinding.authorizationBindingSha256,
+      database_now: databaseNow,
+      ...overrides
+    }
+  };
+}
 
 test("request digests are deterministic and bind every authority input", () => {
   const first = requestDigestFor(REQUEST);
@@ -144,6 +262,164 @@ test("only CockroachDB serialization failures are transaction-retryable", () => 
   assert.equal(isRetryableTransactionError({ code: "40001" }), true);
   assert.equal(isRetryableTransactionError({ code: "23505" }), false);
   assert.equal(isRetryableTransactionError(new Error("connection reset")), false);
+});
+
+test("every post-COMMIT authority failure requires exact reconciliation", () => {
+  assert.equal(
+    databaseFailureRequiresReconciliation(
+      { code: "XX000" },
+      { commitDispatched: true }
+    ),
+    true
+  );
+  assert.equal(
+    databaseFailureRequiresReconciliation(
+      { code: "40001" },
+      { commitDispatched: false }
+    ),
+    false
+  );
+  assert.equal(
+    databaseFailureRequiresReconciliation(
+      { code: "40003" },
+      { commitDispatched: false }
+    ),
+    true
+  );
+});
+
+test("authority reconciliation accepts one fully bound terminal receipt", () => {
+  const { row, request } = reconciliationFixture();
+  assert.deepEqual(normalizeAuthorityReconciliationRow(row, {
+    ...request,
+    authorizationEpoch: 1
+  }), {
+    authorityStillCurrent: true,
+    committedOutcome: "resource_reserved",
+    storedEpoch: 1
+  });
+});
+
+test("authority reconciliation rejects per-field receipt and outbox drift", () => {
+  const mutations = [
+    (row) => ({
+      ...row,
+      request_payload: { ...row.request_payload, agentId: "changed-agent" }
+    }),
+    (row) => ({ ...row, request_digest: "f".repeat(64) }),
+    (row) => ({
+      ...row,
+      operation_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+    }),
+    (row) => ({ ...row, reason: "invented_positive_reason" }),
+    (row) => ({ ...row, fencing_token: null }),
+    (row) => ({ ...row, lease_expires_at: null }),
+    (row) => ({ ...row, proposal_digest: "e".repeat(64) }),
+    (row) => ({
+      ...row,
+      outbox_operation_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+    }),
+    (row) => ({ ...row, outbox_request_digest: "e".repeat(64) }),
+    (row) => ({ ...row, outbox_payload_digest: "e".repeat(64) }),
+    (row) => ({ ...row, receipt_proposal_payload: { action: "changed" } }),
+    (row) => ({
+      ...row,
+      receipt_proposal_selected_evidence_digest: "e".repeat(64)
+    }),
+    (row) => ({ ...row, receipt_proposal_digest: "e".repeat(64) }),
+    (row) => ({
+      ...row,
+      receipt_proposal_logical_action_digest: "e".repeat(64)
+    }),
+    (row) => ({ ...row, receipt_proposal_run_id: REQUEST.operationId }),
+    (row) => ({ ...row, receipt_proposal_incident_id: REQUEST.operationId }),
+    (row) => ({ ...row, receipt_proposal_resource_id: "changed-resource" }),
+    (row) => ({ ...row, receipt_proposal_agency: "changed-agency" }),
+    (row) => ({
+      ...row,
+      receipt_proposal_authority_evidence_binding_sha256: "e".repeat(64)
+    }),
+    (row) => ({ ...row, receipt_proposal_policy_version: "changed-policy" }),
+    (row) => ({ ...row, receipt_proposal_selected_rank: "2" }),
+    (row) => ({ ...row, receipt_proposal_admitted_at: row.database_now }),
+    (row) => ({ ...row, receipt_proposal_authorization_epoch: "2" }),
+    (row) => ({
+      ...row,
+      receipt_proposal_authorization_binding_sha256: "e".repeat(64)
+    }),
+    (row) => {
+      const requestPayload = {
+        ...row.request_payload,
+        selectedEvidenceDigest: "9".repeat(64)
+      };
+      return {
+        ...row,
+        receipt_proposal_selected_evidence_digest: "9".repeat(64),
+        evidence_digest: "9".repeat(64),
+        request_payload: requestPayload,
+        request_digest: sha256(canonicalJson(requestPayload))
+      };
+    }
+  ];
+
+  for (const mutate of mutations) {
+    const { row, request } = reconciliationFixture();
+    assert.throws(
+      () => normalizeAuthorityReconciliationRow(mutate(row), {
+        ...request,
+        authorizationEpoch: 1
+      }),
+      /authority reconciliation/u
+    );
+  }
+});
+
+test("authority reconciliation binds held-denial observation fields", () => {
+  const { row, request } = reconciliationFixture({
+    outcome: "resource_held_denied",
+    reason: "active_holder",
+    fencing_token: null,
+    lease_expires_at: null,
+    observed_holder_operation_id:
+      "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    observed_fence: "1",
+    intent_id: null,
+    outbox_operation_id: null,
+    outbox_request_digest: null,
+    outbox_proposal_digest: null,
+    outbox_logical_action_digest: null,
+    outbox_authorization_epoch: null,
+    outbox_logical_authority_key_sha256: null,
+    outbox_authorization_binding_sha256: null,
+    outbox_run_id: null,
+    outbox_incident_id: null,
+    outbox_resource_id: null,
+    outbox_effect_key: null,
+    outbox_intent_kind: null,
+    outbox_payload: null,
+    outbox_payload_digest: null,
+    outbox_fencing_token: null
+  });
+  assert.equal(
+    normalizeAuthorityReconciliationRow(row, {
+      ...request,
+      authorizationEpoch: 1
+    }).authorityStillCurrent,
+    false
+  );
+  for (const changes of [
+    { observed_holder_operation_id: null },
+    { observed_fence: null },
+    { observed_fence: "0" }
+  ]) {
+    assert.throws(
+      () => normalizeAuthorityReconciliationRow({ ...row, ...changes }, {
+        ...request,
+        authorizationEpoch: 1
+      }),
+      /terminal state mismatch/u
+    );
+  }
 });
 
 test("authority connections are pinned to the requested database", () => {

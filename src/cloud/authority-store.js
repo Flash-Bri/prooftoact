@@ -10,6 +10,12 @@ import {
   runtimeDatabaseConfig
 } from "./database-runtime.js";
 import {
+  committedDatabaseResult,
+  databaseTimestampFromDriver,
+  nonDurableDatabaseResult,
+  unknownDatabaseResult
+} from "./database-commit-result.js";
+import {
   authorizationBindingFor,
   dviProposalIdentityDigestFor,
   dviProposalIdentityFor,
@@ -554,6 +560,340 @@ export function isRetryableTransactionError(error) {
 
 export function isAmbiguousTransactionError(error) {
   return error?.code === AMBIGUOUS_TRANSACTION_CODE;
+}
+
+export function databaseFailureRequiresReconciliation(
+  error,
+  { commitDispatched = false } = {}
+) {
+  return commitDispatched || isAmbiguousTransactionError(error);
+}
+
+export function normalizeAuthorityReconciliationRow(row, request) {
+  const replayKind = row?.reconciliation_kind;
+  const allowedOutcomes = new Set([
+    "authorization_denied",
+    "resource_held_denied",
+    "resource_reserved"
+  ]);
+  const requestPayload = row?.request_payload;
+  const requestPayloadKeys = request?.requestPayload
+    ? Object.keys(request.requestPayload).sort()
+    : [];
+  const sameRequestPayloadShape =
+    requestPayload &&
+    typeof requestPayload === "object" &&
+    !Array.isArray(requestPayload) &&
+    JSON.stringify(Object.keys(requestPayload).sort()) ===
+      JSON.stringify(requestPayloadKeys);
+  const proposalSelectedEvidenceId =
+    row?.receipt_proposal_selected_evidence_id;
+  const proposalSelectedEvidenceDigest =
+    row?.receipt_proposal_selected_evidence_digest;
+  if (
+    !row ||
+    !allowedOutcomes.has(row.outcome) ||
+    ![
+      "operation_replay",
+      "semantic_replay",
+      "logical_authority_replay"
+    ].includes(replayKind) ||
+    !sameRequestPayloadShape ||
+    sha256(canonicalJson(requestPayload)) !== row.request_digest ||
+    requestPayload.digestVersion !== 2 ||
+    requestPayload.tenantId !== row.tenant_id ||
+    requestPayload.runId !== row.run_id ||
+    requestPayload.incidentId !== row.incident_id ||
+    requestPayload.resourceId !== row.resource_id ||
+    requestPayload.agentId !== row.agent_id ||
+    requestPayload.agency !== row.agency ||
+    requestPayload.evidenceId !== row.evidence_id ||
+    requestPayload.selectedEvidenceId !== row.evidence_id ||
+    requestPayload.selectedEvidenceId !== proposalSelectedEvidenceId ||
+    requestPayload.selectedEvidenceDigest !==
+      proposalSelectedEvidenceDigest ||
+    requestPayload.effectKey !== row.effect_key ||
+    requestPayload.payloadDigest !== row.payload_digest ||
+    requestPayload.policyVersion !== row.policy_version ||
+    requestPayload.logicalActionDigest !== row.logical_action_digest ||
+    requestPayload.proposalDigest !== row.proposal_digest ||
+    requestPayload.actionKind !== ACTION_KIND ||
+    !Number.isSafeInteger(requestPayload.leaseMs) ||
+    requestPayload.leaseMs < MIN_LEASE_MS ||
+    requestPayload.leaseMs > MAX_LEASE_MS ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      requestPayload.intentNonce ?? ""
+    ) ||
+    row.logical_action_digest !== request.logicalActionDigest
+  ) {
+    throw new InvariantViolationError(
+      "authority reconciliation receipt binding mismatch"
+    );
+  }
+
+  const storedEpoch = authorizationEpochFromRow(row.authorization_epoch);
+  const storedLogicalAuthority = logicalAuthorityKeyFor({
+    logicalActionDigest: row.logical_action_digest,
+    authorizationEpoch: storedEpoch
+  });
+  const storedAuthorizationBinding = authorizationBindingFor({
+    logicalActionDigest: row.logical_action_digest,
+    proposalDigest: row.proposal_digest,
+    authorizationEpoch: storedEpoch
+  });
+  let proposalExpiresAt;
+  try {
+    const proposalPayload = requireJsonObject(
+      row.receipt_proposal_payload,
+      "receiptProposal.payload"
+    );
+    const proposalPayloadDigest = requireSha256(
+      row.receipt_proposal_payload_digest,
+      "receiptProposal.payloadDigest"
+    );
+    const proposalInput = {
+      tenantId: requireUuid(
+        row.receipt_proposal_tenant_id,
+        "receiptProposal.tenantId"
+      ),
+      runId: requireUuid(
+        row.receipt_proposal_run_id,
+        "receiptProposal.runId"
+      ),
+      incidentId: requireUuid(
+        row.receipt_proposal_incident_id,
+        "receiptProposal.incidentId"
+      ),
+      retrievalId: requireUuid(
+        row.receipt_proposal_retrieval_id,
+        "receiptProposal.retrievalId"
+      ),
+      logicalActionDigest: requireSha256(
+        row.receipt_proposal_logical_action_digest,
+        "receiptProposal.logicalActionDigest"
+      ),
+      authorityEvidenceBindingSha256: requireSha256(
+        row.receipt_proposal_authority_evidence_binding_sha256,
+        "receiptProposal.authorityEvidenceBindingSha256"
+      ),
+      selectedEvidenceId: requireUuid(
+        proposalSelectedEvidenceId,
+        "receiptProposal.selectedEvidenceId"
+      ),
+      selectedEvidenceDigest: requireSha256(
+        proposalSelectedEvidenceDigest,
+        "receiptProposal.selectedEvidenceDigest"
+      ),
+      policyVersion: requireText(
+        row.receipt_proposal_policy_version,
+        "receiptProposal.policyVersion"
+      ),
+      selectedRank: Number(row.receipt_proposal_selected_rank),
+      admittedAt: databaseTimestampFromDriver(
+        row.receipt_proposal_admitted_at,
+        "receiptProposal.admittedAt"
+      ),
+      expiresAt: databaseTimestampFromDriver(
+        row.receipt_proposal_expires_at,
+        "receiptProposal.expiresAt"
+      )
+    };
+    const proposalEpoch = authorizationEpochFromRow(
+      row.receipt_proposal_authorization_epoch
+    );
+    const proposalLogicalActionDigest = logicalActionDigestFor({
+      tenantId: proposalInput.tenantId,
+      incidentId: proposalInput.incidentId,
+      resourceId: row.receipt_proposal_resource_id,
+      agency: row.receipt_proposal_agency,
+      actionKind: row.receipt_proposal_action_kind,
+      payloadDigest: proposalPayloadDigest
+    });
+    if (
+      proposalInput.tenantId !== request.tenantId ||
+      row.receipt_proposal_digest !== row.proposal_digest ||
+      proposalInput.logicalActionDigest !== row.logical_action_digest ||
+      proposalLogicalActionDigest !== row.logical_action_digest ||
+      row.receipt_proposal_resource_id !== row.resource_id ||
+      row.receipt_proposal_agency !== row.agency ||
+      row.receipt_proposal_action_kind !== ACTION_KIND ||
+      canonicalJson(proposalPayload) !==
+        row.receipt_proposal_payload_canonical ||
+      sha256(canonicalJson(proposalPayload)) !== proposalPayloadDigest ||
+      proposalPayloadDigest !== row.payload_digest ||
+      proposalInput.runId !== row.run_id ||
+      proposalInput.incidentId !== row.incident_id ||
+      proposalInput.selectedEvidenceId !== row.evidence_id ||
+      dviProposalIdentityDigestFor(proposalInput) !== row.proposal_digest ||
+      proposalEpoch !== storedEpoch ||
+      row.receipt_proposal_logical_authority_key_sha256 !==
+        storedLogicalAuthority.logicalAuthorityKeySha256 ||
+      row.receipt_proposal_authorization_binding_sha256 !==
+        storedAuthorizationBinding.authorizationBindingSha256
+    ) {
+      throw new Error("receipt proposal identity mismatch");
+    }
+    proposalExpiresAt = new Date(proposalInput.expiresAt).getTime();
+  } catch {
+    throw new InvariantViolationError(
+      "authority reconciliation proposal binding mismatch"
+    );
+  }
+  const exactRequestReplay = replayKind !== "logical_authority_replay";
+  if (
+    row.logical_authority_key_sha256 !==
+      storedLogicalAuthority.logicalAuthorityKeySha256 ||
+    row.authorization_binding_sha256 !==
+      storedAuthorizationBinding.authorizationBindingSha256 ||
+    (exactRequestReplay &&
+      (row.request_digest !== request.requestDigest ||
+        row.proposal_digest !== request.proposalDigest ||
+        storedEpoch !== request.authorizationEpoch ||
+        canonicalJson(requestPayload) !==
+          canonicalJson(request.requestPayload))) ||
+    (replayKind === "operation_replay" &&
+      row.operation_id !== request.operationId) ||
+    (replayKind === "logical_authority_replay" &&
+      row.outcome !== "resource_reserved")
+  ) {
+    throw new InvariantViolationError(
+      "authority reconciliation identity mismatch"
+    );
+  }
+
+  const reason = row.reason ?? null;
+  const fence =
+    row.fencing_token === null || row.fencing_token === undefined
+      ? null
+      : String(row.fencing_token);
+  const leaseExpiresAt =
+    row.lease_expires_at === null || row.lease_expires_at === undefined
+      ? null
+      : new Date(row.lease_expires_at).getTime();
+  const databaseNow = new Date(row.database_now).getTime();
+  const resourceLeaseExpiresAt =
+    row.resource_lease_expires_at === null ||
+    row.resource_lease_expires_at === undefined
+      ? null
+      : new Date(row.resource_lease_expires_at).getTime();
+  const observedFence =
+    row.observed_fence === null || row.observed_fence === undefined
+      ? null
+      : String(row.observed_fence);
+  const observedHolderOperationId =
+    row.observed_holder_operation_id ?? null;
+  const outboxFence =
+    row.outbox_fencing_token === null ||
+    row.outbox_fencing_token === undefined
+      ? null
+      : String(row.outbox_fencing_token);
+  const winning = row.outcome === "resource_reserved";
+  const hasOutboxState = [
+    row.intent_id,
+    row.outbox_operation_id,
+    row.outbox_request_digest,
+    row.outbox_proposal_digest,
+    row.outbox_logical_action_digest,
+    row.outbox_authorization_epoch,
+    row.outbox_logical_authority_key_sha256,
+    row.outbox_authorization_binding_sha256,
+    row.outbox_run_id,
+    row.outbox_incident_id,
+    row.outbox_resource_id,
+    row.outbox_effect_key,
+    row.outbox_intent_kind,
+    row.outbox_payload,
+    row.outbox_payload_digest,
+    row.outbox_fencing_token
+  ].some((value) => value !== null && value !== undefined);
+  const exactOutbox =
+    row.intent_id &&
+    row.outbox_operation_id === row.operation_id &&
+    row.outbox_request_digest === row.request_digest &&
+    row.outbox_proposal_digest === row.proposal_digest &&
+    row.outbox_logical_action_digest === row.logical_action_digest &&
+    authorizationEpochFromRow(row.outbox_authorization_epoch) ===
+      storedEpoch &&
+    row.outbox_logical_authority_key_sha256 ===
+      row.logical_authority_key_sha256 &&
+    row.outbox_authorization_binding_sha256 ===
+      row.authorization_binding_sha256 &&
+    row.outbox_run_id === row.run_id &&
+    row.outbox_incident_id === row.incident_id &&
+    row.outbox_resource_id === row.resource_id &&
+    row.outbox_effect_key === row.effect_key &&
+    row.outbox_intent_kind === ACTION_KIND &&
+    row.outbox_payload &&
+    typeof row.outbox_payload === "object" &&
+    !Array.isArray(row.outbox_payload) &&
+    row.receipt_proposal_payload &&
+    typeof row.receipt_proposal_payload === "object" &&
+    !Array.isArray(row.receipt_proposal_payload) &&
+    canonicalJson(row.outbox_payload) ===
+      canonicalJson(row.receipt_proposal_payload) &&
+    canonicalJson(row.outbox_payload) === canonicalJson(request.payload) &&
+    sha256(canonicalJson(row.outbox_payload)) ===
+      row.outbox_payload_digest &&
+    row.outbox_payload_digest === row.payload_digest &&
+    outboxFence === fence;
+  const selectedEvidenceMatches =
+    row.evidence_id === proposalSelectedEvidenceId &&
+    row.evidence_digest === proposalSelectedEvidenceDigest;
+  if (
+    !Number.isFinite(databaseNow) ||
+    (winning &&
+      (!exactOutbox ||
+        !selectedEvidenceMatches ||
+        reason !== null ||
+        fence === null ||
+        !/^[1-9][0-9]*$/.test(fence) ||
+        !Number.isFinite(leaseExpiresAt) ||
+        !Number.isFinite(resourceLeaseExpiresAt) ||
+        !Number.isFinite(proposalExpiresAt))) ||
+    (!winning &&
+      (hasOutboxState ||
+        typeof reason !== "string" ||
+        reason.length === 0 ||
+        fence !== null ||
+        leaseExpiresAt !== null)) ||
+    (row.outcome === "resource_held_denied" &&
+      (reason !== "active_holder" ||
+        !selectedEvidenceMatches ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          observedHolderOperationId ?? ""
+        ) ||
+        !/^[1-9][0-9]*$/.test(observedFence ?? ""))) ||
+    (row.outcome === "authorization_denied" &&
+      (reason === "active_holder" ||
+        observedHolderOperationId !== null ||
+        observedFence !== null)) ||
+    (winning &&
+      (observedHolderOperationId !== null || observedFence !== null)) ||
+    (reason === "selected_evidence_digest_mismatch" &&
+      (row.evidence_digest === null || selectedEvidenceMatches)) ||
+    (reason === "evidence_missing" && row.evidence_digest !== null)
+  ) {
+    throw new InvariantViolationError(
+      "authority reconciliation terminal state mismatch"
+    );
+  }
+
+  const authorityStillCurrent =
+    winning &&
+    fence === String(row.current_fence) &&
+    row.operation_id === row.holder_operation_id &&
+    row.run_id === row.active_run_id &&
+    row.proposal_digest === row.holder_proposal_digest &&
+    row.logical_authority_key_sha256 ===
+      row.holder_logical_authority_key_sha256 &&
+    leaseExpiresAt > databaseNow &&
+    resourceLeaseExpiresAt > databaseNow &&
+    proposalExpiresAt > databaseNow;
+  return {
+    authorityStillCurrent,
+    committedOutcome: row.outcome,
+    storedEpoch
+  };
 }
 
 function isTransportError(error) {
@@ -2211,7 +2551,7 @@ export class AuthorityStore {
     return this.#runSerializable(async (client) => {
       const findExisting = async () => client.query(
         `
-          SELECT *
+          SELECT *, transaction_timestamp() AS database_now
           FROM tp_ledger.g1_dvi_proposal_receipts
           WHERE tenant_id = $1::UUID
             AND proposal_digest = $2
@@ -2225,9 +2565,23 @@ export class AuthorityStore {
             "proposal digest matched a different durable authorization"
           );
         }
+        const databaseNow = new Date(
+          existing.rows[0].database_now
+        ).getTime();
+        if (new Date(existing.rows[0].expires_at).getTime() <= databaseNow) {
+          return {
+            outcome: "proposal_authorization_denied",
+            reason: "explicit_new_authorization_required",
+            proposal: existing.rows[0],
+            authorityCurrent: false,
+            requiresFreshAuthorization: true
+          };
+        }
         return {
           outcome: "proposal_authorization_replay",
-          proposal: existing.rows[0]
+          proposal: existing.rows[0],
+          authorityCurrent: true,
+          requiresFreshAuthorization: false
         };
       }
       if (existing.rowCount !== 0) {
@@ -2711,6 +3065,9 @@ export class AuthorityStore {
           attempt,
           barrier: attempt === 0 ? barrier : null
         });
+        const databaseClock = await client.query(
+          "SELECT transaction_timestamp() AS database_now"
+        );
         const restoreCommitObserver = observeCommitDispatch(
           client,
           commitDispatchObserver
@@ -2731,7 +3088,10 @@ export class AuthorityStore {
             initialBackendId,
             backendIds: [...backendIds],
             serializableRetries: attempt,
-            retryCodes
+            retryCodes,
+            databaseNow: new Date(
+              databaseClock.rows[0].database_now
+            ).toISOString()
           }
         };
       } catch (error) {
@@ -2740,6 +3100,7 @@ export class AuthorityStore {
         }
 
         if (
+          !commitDispatched &&
           isRetryableTransactionError(error) &&
           attempt < maxRetries &&
           Date.now() - startedAt < retryDeadlineMs
@@ -2752,10 +3113,9 @@ export class AuthorityStore {
           continue;
         }
 
-        if (
-          isAmbiguousTransactionError(error) ||
-          (commitDispatched && isTransportError(error))
-        ) {
+        if (databaseFailureRequiresReconciliation(error, {
+          commitDispatched
+        })) {
           releaseError = error;
           throw new AmbiguousCommitError(
             "COMMIT outcome is unknown; reconcile by exact request digest.",
@@ -2834,23 +3194,74 @@ export class AuthorityStore {
           resource.holder_proposal_digest,
           resource.holder_logical_authority_key_sha256,
           resource.lease_expires_at AS resource_lease_expires_at,
+          outbox.intent_id AS outbox_intent_id,
+          outbox.request_digest AS outbox_request_digest,
+          outbox.proposal_digest AS outbox_proposal_digest,
+          outbox.logical_action_digest AS outbox_logical_action_digest,
+          outbox.authorization_epoch AS outbox_authorization_epoch,
+          outbox.logical_authority_key_sha256 AS
+            outbox_logical_authority_key_sha256,
+          outbox.authorization_binding_sha256 AS
+            outbox_authorization_binding_sha256,
+          outbox.run_id AS outbox_run_id,
+          outbox.incident_id AS outbox_incident_id,
+          outbox.resource_id AS outbox_resource_id,
+          outbox.fencing_token AS outbox_fencing_token,
+          outbox.effect_key AS outbox_effect_key,
+          outbox.intent_kind AS outbox_intent_kind,
+          outbox.payload AS outbox_payload,
+          outbox.payload_digest AS outbox_payload_digest,
+          proposal.payload AS proposal_payload,
+          proposal.payload_digest AS proposal_payload_digest,
           proposal.expires_at AS proposal_expires_at,
           transaction_timestamp() AS database_now
         FROM tp_private.g1_resources AS resource
+        JOIN tp_ledger.g1_outbox_intents AS outbox
+          ON outbox.tenant_id = resource.tenant_id
+         AND outbox.operation_id = $4::UUID
         JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
           ON proposal.tenant_id = resource.tenant_id
          AND proposal.proposal_digest = $3
         WHERE resource.tenant_id = $1::UUID
           AND resource.resource_id = $2
       `,
-      [receipt.tenant_id, receipt.resource_id, receipt.proposal_digest]
+      [
+        receipt.tenant_id,
+        receipt.resource_id,
+        receipt.proposal_digest,
+        receipt.operation_id
+      ]
     );
     if (result.rowCount !== 1) {
       return false;
     }
     const state = result.rows[0];
     const databaseNow = new Date(state.database_now).getTime();
+    const exactOutbox =
+      state.outbox_intent_id &&
+      state.outbox_request_digest === receipt.request_digest &&
+      state.outbox_proposal_digest === receipt.proposal_digest &&
+      state.outbox_logical_action_digest === receipt.logical_action_digest &&
+      authorizationEpochFromRow(state.outbox_authorization_epoch) ===
+        authorizationEpochFromRow(receipt.authorization_epoch) &&
+      state.outbox_logical_authority_key_sha256 ===
+        receipt.logical_authority_key_sha256 &&
+      state.outbox_authorization_binding_sha256 ===
+        receipt.authorization_binding_sha256 &&
+      state.outbox_run_id === receipt.run_id &&
+      state.outbox_incident_id === receipt.incident_id &&
+      state.outbox_resource_id === receipt.resource_id &&
+      state.outbox_fencing_token === receipt.fencing_token &&
+      state.outbox_effect_key === receipt.effect_key &&
+      state.outbox_intent_kind === ACTION_KIND &&
+      state.outbox_payload_digest === receipt.payload_digest &&
+      state.proposal_payload_digest === receipt.payload_digest &&
+      canonicalJson(state.outbox_payload) ===
+        canonicalJson(state.proposal_payload) &&
+      sha256(canonicalJson(state.outbox_payload)) ===
+        state.outbox_payload_digest;
     return (
+      exactOutbox &&
       receipt.fencing_token === state.current_fence &&
       receipt.run_id === state.active_run_id &&
       receipt.operation_id === state.holder_operation_id &&
@@ -2864,6 +3275,29 @@ export class AuthorityStore {
   }
 
   async #existingReceipt(client, request) {
+    const replay = async (receipt, replayKind) => {
+      if (receipt.outcome !== "resource_reserved") {
+        return {
+          outcome: "authorization_denied",
+          reason:
+            receipt.reason ?? "explicit_new_authorization_required",
+          replayKind,
+          receipt,
+          authorityCurrent: false,
+          requiresFreshAuthorization: true
+        };
+      }
+      const authorityCurrent = await this.#receiptAuthorityCurrent(
+        client,
+        receipt
+      );
+      return {
+        outcome: replayKind,
+        receipt,
+        authorityCurrent,
+        requiresFreshAuthorization: !authorityCurrent
+      };
+    };
     const byOperation = await client.query(
       `
         SELECT *
@@ -2886,11 +3320,7 @@ export class AuthorityStore {
       if (receipt.outcome === "pending") {
         throw new InvariantViolationError("committed pending receipt found");
       }
-      return {
-        outcome: "operation_replay",
-        receipt,
-        authorityCurrent: await this.#receiptAuthorityCurrent(client, receipt)
-      };
+      return replay(receipt, "operation_replay");
     }
 
     const byLogicalAuthority = await client.query(
@@ -2910,11 +3340,7 @@ export class AuthorityStore {
     }
     if (byLogicalAuthority.rowCount === 1) {
       const receipt = byLogicalAuthority.rows[0];
-      return {
-        outcome: "logical_authority_replay",
-        receipt,
-        authorityCurrent: await this.#receiptAuthorityCurrent(client, receipt)
-      };
+      return replay(receipt, "logical_authority_replay");
     }
 
     const byDigest = await client.query(
@@ -2938,11 +3364,7 @@ export class AuthorityStore {
     if (receipt.outcome === "pending") {
       throw new InvariantViolationError("committed pending receipt found");
     }
-    return {
-      outcome: "semantic_replay",
-      receipt,
-      authorityCurrent: await this.#receiptAuthorityCurrent(client, receipt)
-    };
+    return replay(receipt, "semantic_replay");
   }
 
   async spendAuthority(
@@ -2957,7 +3379,7 @@ export class AuthorityStore {
   ) {
     const unboundRequest = normalizeRequest(input);
 
-    return this.#runSerializable(
+    const result = await this.#runSerializable(
       async (client, transactionContext) => {
         const boundProposal = await this.#boundProposal(client, unboundRequest, {
           requireCurrent: false
@@ -3514,6 +3936,41 @@ export class AuthorityStore {
       },
       { barrier, commitDispatchObserver, afterCommitObserver }
     );
+    const committedOutcome = result.receipt?.outcome ?? result.outcome;
+    const committedRequestDigest =
+      result.receipt?.request_digest ??
+      result.requestDigest ??
+      unboundRequest.requestDigest;
+    const authorityCurrent = result.authorityCurrent === true;
+    const requiresFreshAuthorization =
+      result.requiresFreshAuthorization === true ||
+      result.authorityCurrent === false ||
+      committedOutcome.includes("denied");
+    const databaseNow = result.transaction.databaseNow;
+    return {
+      ...result,
+      requiresFreshAuthorization,
+      commit:
+        result.durableMutation === false
+          ? nonDurableDatabaseResult({
+              operation: "authority",
+              operationDigest: unboundRequest.requestDigest,
+              observation: "direct_ack",
+              databaseNow,
+              outcome: committedOutcome,
+              reason: result.reason
+            })
+          : committedDatabaseResult({
+              operation: "authority",
+              operationDigest: committedRequestDigest,
+              observation: "direct_ack",
+              databaseNow,
+              outcome: committedOutcome,
+              authorityCurrent,
+              requiresFreshAuthorization,
+              reason: result.reason ?? result.receipt?.reason ?? null
+            })
+    };
   }
 
   async proveSerializableRetry({ tenantId, probeId }, { barrier } = {}) {
@@ -3588,6 +4045,18 @@ export class AuthorityStore {
 
   async reconcileRequest(input) {
     const unboundRequest = normalizeRequest(input);
+    const unknown = (reason, details = {}) => ({
+      status: "UNKNOWN_DO_NOT_ACT",
+      requestDigest: unboundRequest.requestDigest,
+      reason,
+      ...details,
+      commit: unknownDatabaseResult({
+        operation: "authority",
+        operationDigest: unboundRequest.requestDigest,
+        reason,
+        requiresFreshAuthorization: true
+      })
+    });
     const client = new Client(runtimeDatabaseConfig({
       connectionString: this.#connectionString,
       max: 1,
@@ -3605,11 +4074,7 @@ export class AuthorityStore {
       );
       if (!boundProposal.ok) {
         await client.query("COMMIT");
-        return {
-          status: "UNKNOWN_DO_NOT_ACT",
-          requestDigest: unboundRequest.requestDigest,
-          reason: boundProposal.reason
-        };
+        return unknown(boundProposal.reason);
       }
       const request = {
         ...unboundRequest,
@@ -3621,9 +4086,59 @@ export class AuthorityStore {
       };
       const result = await client.query(
         `
+          WITH operation_candidate AS (
+            SELECT receipt.*, 'operation_replay'::STRING AS reconciliation_kind
+            FROM tp_ledger.g1_authority_receipts AS receipt
+            WHERE receipt.tenant_id = $1::UUID
+              AND receipt.operation_id = $2::UUID
+            LIMIT 2
+          ),
+          logical_candidate AS (
+            SELECT
+              receipt.*,
+              'logical_authority_replay'::STRING AS reconciliation_kind
+            FROM tp_ledger.g1_authority_receipts AS receipt
+            WHERE receipt.tenant_id = $1::UUID
+              AND receipt.logical_action_digest = $4
+              AND receipt.outcome = 'resource_reserved'
+              AND NOT EXISTS (SELECT 1 FROM operation_candidate)
+            LIMIT 2
+          ),
+          semantic_candidate AS (
+            SELECT receipt.*, 'semantic_replay'::STRING AS reconciliation_kind
+            FROM tp_ledger.g1_authority_receipts AS receipt
+            WHERE receipt.tenant_id = $1::UUID
+              AND receipt.request_digest = $3
+              AND NOT EXISTS (SELECT 1 FROM operation_candidate)
+              AND NOT EXISTS (SELECT 1 FROM logical_candidate)
+            LIMIT 2
+          ),
+          selected_receipt AS (
+            SELECT * FROM operation_candidate
+            UNION ALL
+            SELECT * FROM logical_candidate
+            UNION ALL
+            SELECT * FROM semantic_candidate
+          )
           SELECT
             receipt.*,
             outbox.intent_id,
+            outbox.operation_id AS outbox_operation_id,
+            outbox.request_digest AS outbox_request_digest,
+            outbox.proposal_digest AS outbox_proposal_digest,
+            outbox.logical_action_digest AS outbox_logical_action_digest,
+            outbox.authorization_epoch AS outbox_authorization_epoch,
+            outbox.logical_authority_key_sha256 AS
+              outbox_logical_authority_key_sha256,
+            outbox.authorization_binding_sha256 AS
+              outbox_authorization_binding_sha256,
+            outbox.run_id AS outbox_run_id,
+            outbox.incident_id AS outbox_incident_id,
+            outbox.resource_id AS outbox_resource_id,
+            outbox.effect_key AS outbox_effect_key,
+            outbox.intent_kind AS outbox_intent_kind,
+            outbox.payload AS outbox_payload,
+            outbox.payload_digest AS outbox_payload_digest,
             outbox.fencing_token AS outbox_fencing_token,
             resource.current_fence,
             resource.active_run_id,
@@ -3631,115 +4146,98 @@ export class AuthorityStore {
             resource.holder_proposal_digest,
             resource.holder_logical_authority_key_sha256,
             resource.lease_expires_at AS resource_lease_expires_at,
+            proposal.tenant_id AS receipt_proposal_tenant_id,
+            proposal.proposal_digest AS receipt_proposal_digest,
+            proposal.logical_action_digest AS
+              receipt_proposal_logical_action_digest,
+            proposal.resource_id AS receipt_proposal_resource_id,
+            proposal.agency AS receipt_proposal_agency,
+            proposal.action_kind AS receipt_proposal_action_kind,
+            proposal.payload AS receipt_proposal_payload,
+            proposal.payload_canonical AS receipt_proposal_payload_canonical,
+            proposal.payload_digest AS receipt_proposal_payload_digest,
+            proposal.retrieval_id AS receipt_proposal_retrieval_id,
+            proposal.run_id AS receipt_proposal_run_id,
+            proposal.incident_id AS receipt_proposal_incident_id,
+            proposal.authority_evidence_binding_sha256 AS
+              receipt_proposal_authority_evidence_binding_sha256,
+            proposal.policy_version AS receipt_proposal_policy_version,
+            proposal.selected_rank AS receipt_proposal_selected_rank,
+            proposal.selected_evidence_id AS
+              receipt_proposal_selected_evidence_id,
+            proposal.selected_evidence_digest AS
+              receipt_proposal_selected_evidence_digest,
+            proposal.admitted_at AS receipt_proposal_admitted_at,
+            proposal.expires_at AS receipt_proposal_expires_at,
+            proposal.authorization_epoch AS
+              receipt_proposal_authorization_epoch,
+            proposal.logical_authority_key_sha256 AS
+              receipt_proposal_logical_authority_key_sha256,
+            proposal.authorization_binding_sha256 AS
+              receipt_proposal_authorization_binding_sha256,
             transaction_timestamp() AS database_now
-          FROM tp_ledger.g1_authority_receipts AS receipt
+          FROM selected_receipt AS receipt
           LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
             ON outbox.tenant_id = receipt.tenant_id
            AND outbox.operation_id = receipt.operation_id
           LEFT JOIN tp_private.g1_resources AS resource
             ON resource.tenant_id = receipt.tenant_id
            AND resource.resource_id = receipt.resource_id
-          WHERE receipt.tenant_id = $1::UUID
-            AND (
-              receipt.operation_id = $2::UUID
-              OR receipt.request_digest = $3
-              OR (
-                receipt.logical_authority_key_sha256 = $4
-                AND receipt.outcome = 'resource_reserved'
-              )
-            )
+          LEFT JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+            ON proposal.tenant_id = receipt.tenant_id
+           AND proposal.proposal_digest = receipt.proposal_digest
           LIMIT 2
         `,
         [
           request.tenantId,
           request.operationId,
           request.requestDigest,
-          request.logicalAuthorityKeySha256
+          request.logicalActionDigest
         ]
       );
       await client.query("COMMIT");
 
       if (result.rowCount !== 1) {
-        return {
-          status: "UNKNOWN_DO_NOT_ACT",
-          requestDigest: request.requestDigest,
-          reason:
-            result.rowCount === 0
-              ? "terminal_receipt_not_observed"
-              : "multiple_receipts_observed"
-        };
+        return unknown(
+          result.rowCount === 0
+            ? "terminal_receipt_not_observed"
+            : "multiple_receipts_observed"
+        );
       }
       const row = result.rows[0];
-      if (row.outcome === "pending") {
-        return {
-          status: "UNKNOWN_DO_NOT_ACT",
-          requestDigest: request.requestDigest,
-          reason: "committed_pending_receipt_invariant"
-        };
+      let normalized;
+      try {
+        normalized = normalizeAuthorityReconciliationRow(row, request);
+      } catch {
+        return unknown("partial_or_superseded_authority_state");
       }
-      if (
-        row.request_digest !== request.requestDigest &&
-        row.logical_authority_key_sha256 !==
-          request.logicalAuthorityKeySha256
-      ) {
-        return {
-          status: "UNKNOWN_DO_NOT_ACT",
-          requestDigest: request.requestDigest,
-          reason: "digest_mismatch"
-        };
-      }
-      if (
-        row.proposal_digest !== request.proposalDigest ||
-        row.logical_action_digest !== request.logicalActionDigest ||
-        authorizationEpochFromRow(row.authorization_epoch) !==
-          request.authorizationEpoch ||
-        row.logical_authority_key_sha256 !==
-          request.logicalAuthorityKeySha256 ||
-        row.authorization_binding_sha256 !==
-          request.authorizationBindingSha256
-      ) {
-        return {
-          status: "UNKNOWN_DO_NOT_ACT",
-          requestDigest: request.requestDigest,
-          reason: "authority_identity_mismatch"
-        };
-      }
-      if (
-        row.outcome === "resource_reserved" &&
-        (!row.intent_id ||
-          row.fencing_token !== row.outbox_fencing_token)
-      ) {
-        return {
-          status: "UNKNOWN_DO_NOT_ACT",
-          requestDigest: request.requestDigest,
-          reason: "partial_or_superseded_authority_state"
-        };
-      }
-      const authorityStillCurrent =
-        row.outcome !== "resource_reserved" ||
-        (row.fencing_token === row.current_fence &&
-          row.operation_id === row.holder_operation_id &&
-          row.run_id === row.active_run_id &&
-          row.proposal_digest === row.holder_proposal_digest &&
-          row.logical_authority_key_sha256 ===
-            row.holder_logical_authority_key_sha256 &&
-          new Date(row.resource_lease_expires_at).getTime() >
-            new Date(row.database_now).getTime());
+      const { authorityStillCurrent, committedOutcome } = normalized;
+      const requiresFreshAuthorization =
+        !authorityStillCurrent || committedOutcome.includes("denied");
+      const commit = committedDatabaseResult({
+        operation: "authority",
+        operationDigest: row.request_digest,
+        observation: "read_reconciled",
+        databaseNow: databaseTimestampFromDriver(row.database_now),
+        outcome: committedOutcome,
+        authorityCurrent: authorityStillCurrent,
+        requiresFreshAuthorization,
+        reason: row.reason ?? null
+      });
       return {
-        status: authorityStillCurrent
-          ? "COMMITTED"
-          : "COMMITTED_BUT_NO_LONGER_CURRENT",
+        status: commit.status,
         requestDigest: request.requestDigest,
-        receipt: row
+        committedRequestDigest: row.request_digest,
+        replayKind: row.reconciliation_kind,
+        receipt: row,
+        requiresFreshAuthorization,
+        commit
       };
     } catch (error) {
       await rollbackQuietly(client);
-      return {
-        status: "UNKNOWN_DO_NOT_ACT",
-        requestDigest: unboundRequest.requestDigest,
-        reason: "reconciliation_unavailable",
+      return unknown("reconciliation_unavailable", {
         errorCode: error.code ?? error.name
-      };
+      });
     } finally {
       await client.end().catch(() => {});
     }
@@ -3905,6 +4403,7 @@ export class AuthorityStore {
            AND proposal.run_id = outbox.run_id
            AND proposal.incident_id = outbox.incident_id
            AND proposal.resource_id = outbox.resource_id
+           AND proposal.payload = outbox.payload
            AND proposal.payload_digest = outbox.payload_digest
           WHERE resource.tenant_id = $1::UUID
             AND resource.resource_id = $12
@@ -3915,6 +4414,10 @@ export class AuthorityStore {
             AND resource.holder_proposal_digest = $5
             AND resource.holder_logical_authority_key_sha256 = $8
             AND resource.current_fence = $14::INT8
+            AND encode(
+              sha256(proposal.payload_canonical::BYTES),
+              'hex'
+            ) = outbox.payload_digest
             AND resource.lease_expires_at > transaction_timestamp()
             AND proposal.expires_at > transaction_timestamp()
           ON CONFLICT DO NOTHING

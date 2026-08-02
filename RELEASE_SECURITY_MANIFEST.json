@@ -12,7 +12,7 @@
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
       "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
-      "sha256": "31016593c3e3af972e940afe317231d8371bc1eae09431da1092cf9ddbb6ede9"
+      "sha256": "5d1e325bb5fb62d94f2b402ac60f39e24d5a0a12bc52c5d91a210d42074a8eab"
     },
     {
       "id": "admissible-vector-runner",
@@ -30,7 +30,7 @@
       "id": "authority-identity-ledger",
       "path": "docs/AUTHORITY_IDENTITY.md",
       "role": "AUTHORITY_IDENTITY_BOUNDARY",
-      "sha256": "795559a00ec36f86f5e55d795fa3027b939cfb2a25f1fac58c94d151b4ff1e61"
+      "sha256": "8e0e87f70702d85cc612975a76030838f9ed583f2db492fc9a233353b0291ae4"
     },
     {
       "id": "authority-identity-tests",
@@ -48,7 +48,7 @@
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
-      "sha256": "560880c4e225a4ad58b966fdc2087eb2974052703c17c987ff1b1137f0c66f5b"
+      "sha256": "21d51a3ca181c3ed7b04fd8f7cd23ad1092159e3f256755fc4a9fd28af99a429"
     },
     {
       "id": "authority-runtime-identity-tests",
@@ -57,10 +57,16 @@
       "sha256": "3ffc2c31c45124ddb83b12bec88f8a051d04a128947534ac81daa9bf54445781"
     },
     {
+      "id": "authority-runtime-reconciliation-tests",
+      "path": "test/aws-authority-lambda.test.js",
+      "role": "AUTHORITY_RUNTIME_RECONCILIATION_VERIFICATION",
+      "sha256": "80d4dcc3edd6c8f23769ed49d748f6d3c293c0875992f51cbe2cfbaea5a6c45f"
+    },
+    {
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "c6e8903c7fd1534162f45557302ca17513dc443cea3deda5dc5db2bd9861d429"
+      "sha256": "5b6f80f63510f36ba9b2afd7b44337d2e25d888b8518a9efd0cebdea3c08f46a"
     },
     {
       "id": "aws-authority-race",
@@ -72,7 +78,7 @@
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "0d6e053287c9fc830259cb6bab7ab7bb74a959543995fef1a1dd3857758aef92"
+      "sha256": "1e239e153ea2faa72925a1ca2e9b5303ee89dc07443e800aaacfdc43d9a83303"
     },
     {
       "id": "aws-boundary-ledger",
@@ -99,16 +105,22 @@
       "sha256": "b344724e1c7b550b82d1518c20452ed65ab62de2b6cd1a15e21aa756ed41b9a3"
     },
     {
+      "id": "aws-security-tests",
+      "path": "test/aws-gate2.test.js",
+      "role": "AWS_GATE2_SECURITY_VERIFICATION",
+      "sha256": "b229f9bfc12c94a32d12635c005c07fadde071da1bc290ce942d9051a1bd3159"
+    },
+    {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "80342ab3c6f30514a803f24c07ae43c1884a816ccfd8590b8e07377863013c57"
+      "sha256": "2e502231a67dc74c20bffd1ecc4f4a3f23a92c2a9c83c93b29be5e785f0862c6"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "dcf6a43f7709ab27a2272c849f10bd662ae95a0e08ad6fec6b5cb3c8f3046bd1"
+      "sha256": "6fad4a992beb395f2c527a67f5807fd7f1d06dbac66e68240606fff2ecf4ff0d"
     },
     {
       "id": "boundary-runtime",
@@ -123,6 +135,24 @@
       "sha256": "f122c70bc5985e9cb32856775fcbe20b25ad1121b2260009d707b25e34da654c"
     },
     {
+      "id": "commit-reconciliation-contract",
+      "path": "src/cloud/database-commit-result.js",
+      "role": "DATABASE_COMMIT_RESULT_CONTRACT",
+      "sha256": "712181f7c337c3e6de23b74e60e71496f21163282681593ca5649833e7b875b4"
+    },
+    {
+      "id": "commit-reconciliation-ledger",
+      "path": "docs/COMMIT_RECONCILIATION.md",
+      "role": "DATABASE_COMMIT_RECONCILIATION_BOUNDARY",
+      "sha256": "01885c2920068142f8ae222da2fe643fe1c4394bbec899c6ae2e629d60eb64f7"
+    },
+    {
+      "id": "commit-reconciliation-tests",
+      "path": "test/database-commit-result.test.js",
+      "role": "DATABASE_COMMIT_RECONCILIATION_VERIFICATION",
+      "sha256": "5d69bdf011a204e99ae6047aac7cd55b1bd8addf4c603a128b53b514c6dfb07a"
+    },
+    {
       "id": "database-runtime",
       "path": "src/cloud/database-runtime.js",
       "role": "DATABASE_RUNTIME_BOUNDARY",
@@ -132,7 +162,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "1252505cf2ec79e59bbb63aa349894a67e1cefebd327c96164ea63a483134b60"
+      "sha256": "9d80aec4892aade70118f8f230e2cb067c95b37d93b8731ffeff3010ba74570c"
     },
     {
       "id": "database-security-posture",
@@ -171,6 +201,12 @@
       "sha256": "41f9acc0e62438acc31e6e86dd48bcdf5d6c364a938ac59ee99870b1666a7417"
     },
     {
+      "id": "dvi-reconciliation-tests",
+      "path": "test/admissible-vector-retrieval.test.js",
+      "role": "DVI_PREPARATION_RECONCILIATION_VERIFICATION",
+      "sha256": "b90834e5cec111cd1867009b99f6b1c18072f85980e43134cb7071e4a4d24bb5"
+    },
+    {
       "id": "local-server",
       "path": "src/server.js",
       "role": "LOOPBACK_DEVELOPMENT_SERVER",
@@ -186,7 +222,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "ac05e042ad7570087f6781240523b67c1f2dac52f0620a548c5fee70f474805d"
+      "sha256": "c25a9c2ec59565471c6e5a84720c064d7ef51afed948ca887a6c31a2a9a4ff68"
     },
     {
       "id": "primary-security-runner",
@@ -228,13 +264,19 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "3de2ca1af2d7fe853d2f6781a73411d641f7e5e56cb3a92742ee65ca0976822f"
+      "sha256": "779cfe060f9d8bac920fd17101d421038e8956aed245a4ae24514b60652fdb2b"
+    },
+    {
+      "id": "recovery-audit-reconciliation-tests",
+      "path": "test/recovery-audit-sink.test.js",
+      "role": "RECOVERY_AUDIT_RECONCILIATION_VERIFICATION",
+      "sha256": "27c2dcf476c462f590ee115165aeead268dbff347e0efc0a46dc2bc0dcb38cae"
     },
     {
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "c3a53eb43d5f285fe0ae0c62cc03a9112a2a32402ff3dcaf7ef643aa28e8bc9a"
+      "sha256": "db14cd6bd6c84d81daf114dfe7b6d0da1895e73205695cdc832d7482c9d574d6"
     },
     {
       "id": "recovery-broker-runner",
@@ -249,10 +291,16 @@
       "sha256": "5289c93080830b4e6e0c1132519374cad8efc7328f8a3e1f42043fc3952b9fd1"
     },
     {
+      "id": "recovery-publication-reconciliation-tests",
+      "path": "test/recovery-security.test.js",
+      "role": "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION",
+      "sha256": "9e0d823dd5a5c3a4ead4fb2b8a179f23b6d25202539a4ea9ffe16e6920bec1dd"
+    },
+    {
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "7163a07094faad8f1c32cc88f02f5a2003bb953ef7d15480b170ba893f98311c"
+      "sha256": "840a13f7e5bd2d33a540d4751abaaa0f2bd116ec59a2641ce63889ccd4f3c928"
     },
     {
       "id": "release-security-ledger",
@@ -270,7 +318,13 @@
       "id": "signed-ingest",
       "path": "src/cloud/signed-ingest.js",
       "role": "SIGNED_EVIDENCE_INGEST",
-      "sha256": "34a917550367cdfa7624c7e9057255e9b26e7d475485f274df592af74661fcd4"
+      "sha256": "892b26e2a2e4d00475af12af48bdf575aa7c9647bb09150ae0415172a2d2c38d"
+    },
+    {
+      "id": "signed-ingest-reconciliation-tests",
+      "path": "test/signed-ingest.test.js",
+      "role": "SIGNED_INGEST_RECONCILIATION_VERIFICATION",
+      "sha256": "14cadd226f2618ab0aa4d3d4ff3a127daa6e3a7e52735acd4efc1a7ed8569233"
     },
     {
       "id": "signer-runtime",
@@ -282,7 +336,7 @@
       "id": "synthetic-authority-proposal",
       "path": "scripts/lib/synthetic-authority-proposal.js",
       "role": "SYNTHETIC_AUTHORITY_PROPOSAL_FIXTURE",
-      "sha256": "aecdca29465e4503e8d08fe54e6240230edfed2cd3752e5610a5c422b995eaa4"
+      "sha256": "e4c0714d10f5377aa3660f2d62edc516c64317859b830734087890a915d8b7c7"
     }
   ],
   "finalReleaseReady": false

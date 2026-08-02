@@ -8,6 +8,13 @@ const authorityStoreUrl = new URL(
   import.meta.url
 );
 const recoveryUrl = new URL("../src/cloud/recovery-security.js", import.meta.url);
+const recoveryStoreUrl = new URL("../src/cloud/recovery-store.js", import.meta.url);
+const recoveryBrokerUrl = new URL("../src/cloud/recovery-broker.js", import.meta.url);
+const signedIngestUrl = new URL("../src/cloud/signed-ingest.js", import.meta.url);
+const admissibleVectorUrl = new URL(
+  "../src/cloud/admissible-vector-retrieval.js",
+  import.meta.url
+);
 const recoveryScriptUrls = [
   new URL("../scripts/gate1-recovery.js", import.meta.url),
   new URL("../scripts/gate1-recovery-broker.js", import.meta.url)
@@ -129,10 +136,12 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_verified_evidence_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_get_verification_key_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_append_verified_evidence_v2", /session_user <> 'tp_ingest_user'/u],
+    ["g1_resolve_verified_evidence_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_observe_admissibility_v1", /session_user = 'tp_authorizer_user'/u],
     ["g1_list_admissibility_internal_v1", sharedAuthorizerGuard],
     ["g1_observe_admissibility_v2", sharedAuthorizerGuard],
     ["g1_prepare_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
+    ["g1_resolve_vector_set_v1", /session_user = 'tp_authorizer_user'/u],
     ["g1_rank_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_delete_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_purge_expired_vector_sets_v1", /session_user <> 'tp_authorizer_user'/u],
@@ -146,14 +155,21 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_recovery_audit_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
+    ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user = 'tp_dispatch_user'/u]
   ]);
   for (const [url, expectedGuards] of [
     [primaryUrl, expectedPrimaryGuards],
-    [recoveryUrl, new Map([[
-      "append_recovery_bundle_v2",
-      /session_user <> '\$\{RECOVERY_PUBLISHER_USER\}'/u
-    ]])]
+    [recoveryUrl, new Map([
+      [
+        "append_recovery_bundle_v2",
+        /session_user <> '\$\{RECOVERY_PUBLISHER_USER\}'/u
+      ],
+      [
+        "resolve_recovery_bundle_v1",
+        /session_user = '\$\{RECOVERY_PUBLISHER_USER\}'/u
+      ]
+    ])]
   ]) {
     const source = await readFile(url, "utf8");
     const definitions = [...source.matchAll(
@@ -263,6 +279,133 @@ test("expired unspent proposals cannot implicitly mint a replacement epoch", asy
   );
 });
 
+test("authority reconciliation binds the exact receipt, outbox, and current proposal", async () => {
+  const [source, primarySource] = await Promise.all([
+    readFile(authorityStoreUrl, "utf8"),
+    readFile(primaryUrl, "utf8")
+  ]);
+  assert.match(
+    source,
+    /WITH operation_candidate AS[\s\S]*logical_candidate AS[\s\S]*'logical_authority_replay'[\s\S]*receipt\.logical_action_digest = \$4[\s\S]*semantic_candidate AS/u
+  );
+  assert.match(
+    source,
+    /const exactRequestReplay =[\s\S]*row\.request_digest !== request\.requestDigest[\s\S]*row\.operation_id !== request\.operationId[\s\S]*row\.outcome !== "resource_reserved"/u
+  );
+  assert.match(
+    source,
+    /const exactOutbox =[\s\S]*row\.outbox_operation_id === row\.operation_id[\s\S]*row\.outbox_request_digest === row\.request_digest[\s\S]*row\.outbox_authorization_binding_sha256 ===[\s\S]*row\.authorization_binding_sha256[\s\S]*row\.outbox_intent_kind === ACTION_KIND[\s\S]*row\.outbox_payload_digest === row\.payload_digest/u
+  );
+  assert.match(
+    source,
+    /canonicalJson\(row\.outbox_payload\)[\s\S]*canonicalJson\(row\.receipt_proposal_payload\)[\s\S]*sha256\(canonicalJson\(row\.outbox_payload\)\)[\s\S]*row\.outbox_payload_digest/u
+  );
+  assert.match(
+    source,
+    /proposalExpiresAt = new Date\(proposalInput\.expiresAt\)[\s\S]*leaseExpiresAt =[^;]*new Date\(row\.lease_expires_at\)[\s\S]*resourceLeaseExpiresAt =[^;]*new Date\(row\.resource_lease_expires_at\)[\s\S]*leaseExpiresAt > databaseNow[\s\S]*resourceLeaseExpiresAt > databaseNow[\s\S]*proposalExpiresAt > databaseNow/u
+  );
+  assert.match(source, /operationDigest: committedRequestDigest/u);
+  assert.match(
+    source,
+    /reason: result\.reason \?\? result\.receipt\?\.reason \?\? null/u
+  );
+  assert.match(source, /status: commit\.status/u);
+  const resolver = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_request_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(resolver);
+  assert.match(
+    primarySource,
+    /g1_resolve_request_v1\([\s\S]*p_logical_action_digest STRING[\s\S]*RETURNS TABLE/u
+  );
+  assert.match(
+    resolver,
+    /logical_candidate AS[\s\S]*receipt\.logical_action_digest = p_logical_action_digest/u
+  );
+  assert.match(
+    resolver,
+    /outbox\.request_digest[\s\S]*outbox\.authorization_binding_sha256[\s\S]*outbox\.payload[\s\S]*outbox\.payload_digest[\s\S]*resource\.lease_expires_at[\s\S]*proposal\.payload[\s\S]*proposal\.expires_at/u
+  );
+});
+
+test("direct authority replay currentness requires the exact outbox payload", async () => {
+  const [primarySource, authorityStoreSource] = await Promise.all([
+    readFile(primaryUrl, "utf8"),
+    readFile(authorityStoreUrl, "utf8")
+  ]);
+  const currentBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_authority_receipt_current_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(currentBody);
+  assert.match(
+    currentBody,
+    /outbox\.request_digest = receipt\.request_digest[\s\S]*outbox\.authorization_binding_sha256 =[\s\S]*receipt\.authorization_binding_sha256[\s\S]*proposal\.payload = outbox\.payload/u
+  );
+  assert.match(
+    currentBody,
+    /JOIN tp_ledger\.g1_outbox_intents AS outbox[\s\S]*outbox\.operation_id = receipt\.operation_id/u
+  );
+  assert.match(
+    currentBody,
+    /sha256\(proposal\.payload_canonical::BYTES\)[\s\S]*outbox\.payload_digest/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /async #receiptAuthorityCurrent[\s\S]*JOIN tp_ledger\.g1_outbox_intents AS outbox[\s\S]*const exactOutbox =[\s\S]*canonicalJson\(state\.outbox_payload\)[\s\S]*sha256\(canonicalJson\(state\.outbox_payload\)\)/u
+  );
+});
+
+test("post-COMMIT ambiguity cannot enter a rollback branch", async () => {
+  const [
+    authorityStore,
+    admissibleVector,
+    signedIngest,
+    recoveryStore,
+    recoveryAudit,
+    recoveryPublisher
+  ] =
+    await Promise.all([
+      readFile(authorityStoreUrl, "utf8"),
+      readFile(admissibleVectorUrl, "utf8"),
+      readFile(signedIngestUrl, "utf8"),
+      readFile(recoveryStoreUrl, "utf8"),
+      readFile(recoveryBrokerUrl, "utf8"),
+      readFile(recoveryUrl, "utf8")
+    ]);
+  for (const [name, source] of [
+    ["signed ingest", signedIngest],
+    ["recovery store", recoveryStore],
+    ["recovery audit", recoveryAudit]
+  ]) {
+    assert.match(
+      source,
+      /const commitDefinitivelyAborted =[\s\S]*commitDispatched && error\?\.code === "40001"/u,
+      name
+    );
+    assert.match(
+      source,
+      /databaseClientMustBeDiscarded\(error\) \|\|[\s\S]*\(commitDispatched && !commitDefinitivelyAborted\)/u,
+      name
+    );
+  }
+  assert.match(
+    recoveryPublisher,
+    /commitDispatched &&[\s\S]*!commitDefinitivelyAborted[\s\S]*await beforeReconcile\(\)[\s\S]*await reconcile\(bundle\)/u
+  );
+  assert.match(
+    recoveryPublisher,
+    /\(!commitDispatched \|\| commitDefinitivelyAborted\)[\s\S]*!unsafeConnection/u
+  );
+  assert.match(
+    authorityStore,
+    /!commitDispatched &&[\s\S]*isRetryableTransactionError\(error\)[\s\S]*databaseFailureRequiresReconciliation\(error, \{[\s\S]*commitDispatched/u
+  );
+  assert.match(
+    admissibleVector,
+    /commitDispatched = true;[\s\S]*await client\.query\("COMMIT"\)[\s\S]*if \(!commitDispatched\) \{[\s\S]*rollbackQuietly\(client\)[\s\S]*throw preparationCommitUnknown\(error\)/u
+  );
+});
+
 test("protected-effect SQL denies the exact proposal-expiry boundary", async () => {
   const source = await readFile(primaryUrl, "utf8");
   const body = source.match(
@@ -274,5 +417,10 @@ test("protected-effect SQL denies the exact proposal-expiry boundary", async () 
     /JOIN tp_ledger\.g1_dvi_proposal_receipts AS proposal[\s\S]*proposal\.proposal_digest = outbox\.proposal_digest[\s\S]*proposal\.authorization_epoch = outbox\.authorization_epoch/u
   );
   assert.match(body, /proposal\.expires_at > transaction_timestamp\(\)/u);
+  assert.match(body, /proposal\.payload = outbox\.payload/u);
+  assert.match(
+    body,
+    /sha256\(proposal\.payload_canonical::BYTES\)[\s\S]*outbox\.payload_digest/u
+  );
   assert.doesNotMatch(body, /proposal\.expires_at >= transaction_timestamp\(\)/u);
 });

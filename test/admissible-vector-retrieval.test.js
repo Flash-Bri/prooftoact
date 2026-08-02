@@ -32,14 +32,30 @@ const INPUT = Object.freeze({
 function fakePool({
   rankError,
   cleanupError,
+  prepareCommitError,
   preparedRow,
   rankedRows
 } = {}) {
   const calls = [];
   let releasedWith;
+  const releases = [];
+  let prepareCommitFailed = false;
   const client = {
     async query(text, values) {
       calls.push({ text, values });
+      if (
+        text === "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE" ||
+        text === "ROLLBACK"
+      ) {
+        return { rowCount: 0, rows: [] };
+      }
+      if (text === "COMMIT") {
+        if (prepareCommitError && !prepareCommitFailed) {
+          prepareCommitFailed = true;
+          throw prepareCommitError;
+        }
+        return { rowCount: 0, rows: [] };
+      }
       if (text.includes("g1_prepare_vector_set_v1")) {
         return {
           rowCount: 1,
@@ -98,6 +114,7 @@ function fakePool({
     },
     release(error) {
       releasedWith = error;
+      releases.push(error);
     }
   };
   return {
@@ -108,6 +125,9 @@ function fakePool({
     },
     get releasedWith() {
       return releasedWith;
+    },
+    get releases() {
+      return releases;
     }
   };
 }
@@ -119,7 +139,7 @@ test("integrated retrieval prepares, ranks, and retires one immutable snapshot",
   assert.deepEqual(
     pool.calls.map(({ text }) =>
       /g1_(prepare|rank|delete)_vector_set_v1/.exec(text)?.[1]
-    ),
+    ).filter(Boolean),
     ["prepare", "rank", "delete"]
   );
   assert.equal(result.candidateCount, 2);
@@ -127,7 +147,130 @@ test("integrated retrieval prepares, ranks, and retires one immutable snapshot",
   assert.equal(result.results[0].distance, 0.125);
   assert.equal(result.approximateNearestNeighbor, true);
   assert.equal(result.authorizationRecheckRequired, true);
+  assert.equal(result.preparationCommit.observation, "direct_ack");
   assert.equal(pool.releasedWith, undefined);
+});
+
+test("integrated retrieval reconciles exact DVI preparation after ACK loss", async () => {
+  const released = [];
+  const events = [];
+  let connections = 0;
+  const broken = {
+    async query(text) {
+      if (text === "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE") {
+        return { rowCount: 0, rows: [] };
+      }
+      if (text.includes("g1_prepare_vector_set_v1")) {
+        return {
+          rowCount: 1,
+          rows: [{
+            retrieval_id: INPUT.retrievalId,
+            candidate_count: "2",
+            admitted_at: "2026-08-01T12:00:00.000Z",
+            expires_at: "2026-08-01T12:00:30.000Z"
+          }]
+        };
+      }
+      if (text === "COMMIT") {
+        throw Object.assign(new Error("synthetic prepare ACK loss"), {
+          code: "XX000"
+        });
+      }
+      throw new Error("unexpected broken-client query");
+    },
+    release(error) {
+      released.push(error);
+      events.push("broken_released");
+    }
+  };
+  const live = {
+    async query(text) {
+      if (text.includes("g1_rank_vector_set_v1")) {
+        return {
+          rowCount: 1,
+          rows: [{
+            evidence_id: "44444444-4444-4444-8444-444444444444",
+            evidence_digest: "a".repeat(64),
+            assertion: "Synthetic admissible evidence.",
+            distance: "0.125"
+          }]
+        };
+      }
+      if (text.includes("g1_delete_vector_set_v1")) {
+        return {
+          rowCount: 1,
+          rows: [{ deleted_candidates: "2", retired_sets: "1" }]
+        };
+      }
+      throw new Error("unexpected live-client query");
+    },
+    release(error) { released.push(error); }
+  };
+  const pool = {
+    async connect() {
+      connections += 1;
+      return connections === 1 ? broken : live;
+    }
+  };
+  const retriever = new AdmissibleVectorRetriever({
+    pool,
+    reconcilePreparation: async () => {
+      events.push("reconciliation_started");
+      return {
+        rowCount: 1,
+        rows: [{
+          retrieval_id: INPUT.retrievalId,
+          candidate_count: "2",
+          admitted_at: "2026-08-01T12:00:00.000Z",
+          expires_at: "2026-08-01T12:00:30.000Z",
+          database_now: new Date("2026-08-01T12:00:01.000Z")
+        }]
+      };
+    }
+  });
+
+  const result = await retriever.retrieve(INPUT);
+  assert.equal(result.preparationCommit.status, "COMMITTED");
+  assert.equal(result.preparationCommit.observation, "read_reconciled");
+  assert.equal(connections, 2);
+  assert.equal(released.length, 2);
+  assert.deepEqual(events, ["broken_released", "reconciliation_started"]);
+});
+
+test("integrated retrieval fails closed on zero, multiple, or drifted preparation receipts", async () => {
+  const validRow = {
+    retrieval_id: INPUT.retrievalId,
+    candidate_count: "2",
+    admitted_at: "2026-08-01T12:00:00.000Z",
+    expires_at: "2026-08-01T12:00:30.000Z",
+    database_now: new Date("2026-08-01T12:00:01.000Z")
+  };
+  for (const rows of [
+    [],
+    [validRow, { ...validRow }],
+    [{
+      ...validRow,
+      retrieval_id: "99999999-9999-4999-8999-999999999999"
+    }]
+  ]) {
+    const commitError = Object.assign(
+      new Error("synthetic unclassified post-COMMIT failure"),
+      { code: "XX000" }
+    );
+    const pool = fakePool({ prepareCommitError: commitError });
+    const retriever = new AdmissibleVectorRetriever({
+      pool,
+      reconcilePreparation: async () => ({
+        rowCount: rows.length,
+        rows
+      })
+    });
+    await assert.rejects(
+      retriever.retrieve(INPUT),
+      /ADMISSIBLE_VECTOR_(?:PREPARE_COMMIT_UNKNOWN|PREPARE_BINDING_INVALID)/u
+    );
+    assert.equal(pool.releases[0], commitError);
+  }
 });
 
 test("integrated retrieval retires its snapshot when ranking fails", async () => {
@@ -287,6 +430,8 @@ function proofPools({
   changedExclusionReason = null,
   candidateIds = PROOF_CANDIDATE_IDS,
   prepareError = null,
+  prepareCommitError = null,
+  resolvedPreparationRows = null,
   cleanupError = null,
   auditorRankDrift = false,
   authorizerClusterId = "77777777-7777-4777-8777-777777777777",
@@ -295,11 +440,27 @@ function proofPools({
   const spec = proofSpec();
   const authorizerCalls = [];
   const auditorCalls = [];
+  let authorizerConnections = 0;
   let authorizerReleasedWith;
+  const authorizerReleases = [];
+  let prepareCommitFailed = false;
   let auditorReleasedWith;
   const authorizer = {
     async query(text, values) {
       authorizerCalls.push({ text, values });
+      if (
+        text === "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE" ||
+        text === "ROLLBACK"
+      ) {
+        return { rowCount: 0, rows: [] };
+      }
+      if (text === "COMMIT") {
+        if (prepareCommitError && !prepareCommitFailed) {
+          prepareCommitFailed = true;
+          throw prepareCommitError;
+        }
+        return { rowCount: 0, rows: [] };
+      }
       if (text.includes("current_database()")) {
         return {
           rowCount: 1,
@@ -324,6 +485,19 @@ function proofPools({
           }]
         };
       }
+      if (text.includes("g1_resolve_vector_set_v1")) {
+        const rows = resolvedPreparationRows ?? [{
+          retrieval_id: spec.retrievalId,
+          candidate_count: String(__test.PROOF_CANDIDATE_COUNT),
+          admitted_at: "2026-08-01T12:00:00.000Z",
+          expires_at: "2026-08-01T12:01:00.000Z",
+          database_now: new Date("2026-08-01T12:00:01.000Z")
+        }];
+        return {
+          rowCount: rows.length,
+          rows
+        };
+      }
       if (text.includes("g1_observe_admissibility_v2")) {
         const exclusion = PROOF_EXCLUSIONS.find(
           ({ evidenceId }) => evidenceId === values[1]
@@ -334,7 +508,7 @@ function proofPools({
             admissibility:
               changedExclusionReason ?? exclusion?.reason ?? "admissible",
             evidence_digest: "e".repeat(64),
-            database_now: "2026-08-01T12:00:01.000Z"
+            database_now: new Date("2026-08-01T12:00:01.000Z")
           }]
         };
       }
@@ -392,6 +566,7 @@ function proofPools({
     },
     release(error) {
       authorizerReleasedWith = error;
+      authorizerReleases.push(error);
     }
   };
   const auditor = {
@@ -475,9 +650,16 @@ function proofPools({
   return {
     authorizerCalls,
     auditorCalls,
-    authorizerPool: { async connect() { return authorizer; } },
+    authorizerPool: {
+      async connect() {
+        authorizerConnections += 1;
+        return authorizer;
+      }
+    },
     auditorPool: { async connect() { return auditor; } },
     get authorizerReleasedWith() { return authorizerReleasedWith; },
+    get authorizerConnections() { return authorizerConnections; },
+    get authorizerReleases() { return authorizerReleases; },
     get auditorReleasedWith() { return auditorReleasedWith; }
   };
 }
@@ -509,6 +691,7 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
   assert.equal(receipt.fixture.nearestExcludedCloserThanRanked, true);
   assert.match(receipt.database.clusterIdSha256, /^[0-9a-f]{64}$/u);
   assert.equal(receipt.snapshot.ttlMs, 60_000);
+  assert.equal(receipt.snapshot.commit.observation, "direct_ack");
   assert.equal(receipt.snapshot.admittedAt, "2026-08-01T12:00:00.000Z");
   assert.deepEqual(
     Object.keys(receipt.fixture.exclusionReasons).sort(),
@@ -530,6 +713,53 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
   assert.equal(publicReceipt.includes(PROOF_CANDIDATE_IDS[0]), false);
   assert.equal(pools.authorizerReleasedWith, undefined);
   assert.equal(pools.auditorReleasedWith, undefined);
+});
+
+test("integrated DVI proof reconciles exact preparation after ACK loss", async () => {
+  const prepareCommitError = Object.assign(
+    new Error("synthetic provider prepare ACK loss"),
+    { code: "XX000" }
+  );
+  const pools = proofPools({ prepareCommitError });
+  const receipt = await runProof(pools);
+
+  assert.equal(receipt.snapshot.commit.status, "COMMITTED");
+  assert.equal(receipt.snapshot.commit.observation, "read_reconciled");
+  assert.equal(pools.authorizerConnections, 2);
+  assert.equal(pools.authorizerReleases[0], prepareCommitError);
+  assert.equal(pools.authorizerReleases[1], undefined);
+});
+
+test("integrated DVI proof fails closed on zero, multiple, or drifted preparation receipts", async () => {
+  const validRow = {
+    retrieval_id: proofSpec().retrievalId,
+    candidate_count: String(__test.PROOF_CANDIDATE_COUNT),
+    admitted_at: "2026-08-01T12:00:00.000Z",
+    expires_at: "2026-08-01T12:01:00.000Z",
+    database_now: new Date("2026-08-01T12:00:01.000Z")
+  };
+  for (const rows of [
+    [],
+    [validRow, { ...validRow }],
+    [{
+      ...validRow,
+      retrieval_id: "99999999-9999-4999-8999-999999999999"
+    }]
+  ]) {
+    const commitError = Object.assign(
+      new Error("synthetic unclassified provider post-COMMIT failure"),
+      { code: "XX000" }
+    );
+    const pools = proofPools({
+      prepareCommitError: commitError,
+      resolvedPreparationRows: rows
+    });
+    await assert.rejects(
+      runProof(pools),
+      /ADMISSIBLE_VECTOR_(?:PREPARE_COMMIT_UNKNOWN|PREPARE_BINDING_INVALID)/u
+    );
+    assert.equal(pools.authorizerReleases[0], commitError);
+  }
 });
 
 test("integrated DVI proof binding changes with the run and selected evidence", () => {
