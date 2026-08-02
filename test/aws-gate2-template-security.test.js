@@ -68,7 +68,17 @@ test("deployment evidence role explicitly denies privilege escalation", () => {
       Resource: "*"
     }
   );
+  assert.deepEqual(
+    statementBySid.ReadSemanticAlarmDrift,
+    {
+      Sid: "ReadSemanticAlarmDrift",
+      Effect: "Allow",
+      Action: ["cloudwatch:DescribeAlarms"],
+      Resource: "*"
+    }
+  );
   for (const action of [
+    "cloudwatch:DescribeAlarms",
     "iam:ListRoleTags",
     "lambda:ListAliases",
     "lambda:ListFunctionUrlConfigs",

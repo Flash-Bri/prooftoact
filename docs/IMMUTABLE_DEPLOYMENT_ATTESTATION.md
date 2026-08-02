@@ -302,6 +302,35 @@ and private human review remain required.
 - **Claim impact:** `drift-bound` and `two custom series` remain source-only
   claims until exact-commit provider receipts pass.
 
+### Provider-read and early-return closure
+
+- **Root cause:** adding the two alarms to stack drift scope did not add the
+  CloudWatch read action needed to inspect them, and the boundary returned
+  caller/request validation failures before its single semantic-emission
+  point.
+- **Why it was missed:** the local drift fixtures supplied already-complete
+  alarm rows without exercising provider authorization, while metric tests
+  called the formatter directly instead of the handler's early-return path.
+- **Earliest detection point:** derive the provider read action for every new
+  drift-supported resource type and capture handler stdout for every handled
+  `UNKNOWN_DO_NOT_ACT` exit before accepting the nested verifiers.
+- **Repair:** the evidence role now permits only the AWS-required global
+  `cloudwatch:DescribeAlarms` read for alarm drift, and boundary validation
+  failures emit the same payload-free stack/service metric before returning.
+- **Regression and preventive controls:** the IAM test and security verifier
+  freeze the exact new action, statement, and reviewed wildcard exception;
+  a handler-level test proves one fixed-cardinality record is emitted without
+  request content for an invalid provider binding.
+- **Verification:** both controls first failed against the reviewed PR head,
+  then passed with the focused runtime/template suite, generated-template
+  equality, full test suite, and current security and cost verifiers.
+- **Residual risk:** AWS still must prove `DescribeAlarms` is sufficient for
+  CloudFormation alarm drift in the target account, IAM propagation may delay
+  a first read, and EMF ingestion and alarm transitions remain provider-only.
+- **Claim impact:** source may claim the alarm drift-read contract and complete
+  handled boundary semantic emission are encoded. It must not claim live drift
+  success, metric ingestion, alarm transition, or operator response.
+
 ## Required live sequence
 
 1. Before deployment, generate three distinct Ed25519 key pairs outside the

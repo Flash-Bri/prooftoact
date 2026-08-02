@@ -73,7 +73,7 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "20279b5a232d8bfb2511fdb4e97c98e6cbb85f710812684f2cd1d1eb3a590f0a"
+      "sha256": "f5177c49b7f94446a0a38a958a26405d9cd049900f7f5507ed6f42247fec8e2f"
     },
     {
       "id": "aws-preflight-library",
@@ -97,7 +97,7 @@
       "id": "boundary-semantic-metric-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "SEMANTIC_METRIC_CARDINALITY",
-      "sha256": "7bb9806977491ef74a9ec19cb69e0aecfea9d5f5cacf26a3776cb1423e72cff5"
+      "sha256": "3307cf6e9b0c5346aac8642e59a9d0ecc1876f8362eda9d2f57eb567fdd5682a"
     },
     {
       "id": "cost-boundary-ledger",

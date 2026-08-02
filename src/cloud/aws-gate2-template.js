@@ -1178,7 +1178,7 @@ export function buildGate2Template() {
 
   resources.DeploymentEvidenceRole = roleResource({
     description:
-      "Bounded deployment evidence collector; AWS requires one account-wide read to enumerate event-source mappings, while reviewed code queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
+      "Bounded deployment evidence collector; AWS requires account-wide read-only APIs for alarm drift and event-source enumeration, while reviewed code binds two alarms and queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
     assumeRolePolicy: assumeExactEvidencePrincipalPolicy(),
     statements: [
       {
@@ -1257,6 +1257,12 @@ export function buildGate2Template() {
         Sid: "ReadLambdaEventSourceCensus",
         Effect: "Allow",
         Action: ["lambda:ListEventSourceMappings"],
+        Resource: "*"
+      },
+      {
+        Sid: "ReadSemanticAlarmDrift",
+        Effect: "Allow",
+        Action: ["cloudwatch:DescribeAlarms"],
         Resource: "*"
       },
       {

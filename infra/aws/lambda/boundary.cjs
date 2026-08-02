@@ -705,15 +705,15 @@ async function handler(event, context) {
     validateHttpCaller(event);
     parsedRequest = parsePublicRequest(event);
   } catch {
+    const code = event?.requestContext?.authorizer?.iam
+      ? "INVALID_REQUEST"
+      : "SIGNED_CALLER_REQUIRED";
+    emitSemanticFailure(code, context);
     return response(
       event?.requestContext?.authorizer?.iam
         ? 400
         : 403,
-      publicFailure(
-        event?.requestContext?.authorizer?.iam
-          ? "INVALID_REQUEST"
-          : "SIGNED_CALLER_REQUIRED"
-      )
+      publicFailure(code)
     );
   }
   const result = await runAdvisory({

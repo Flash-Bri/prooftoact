@@ -463,6 +463,55 @@ test("boundary rejects unsigned or shape-expanded public requests", () => {
   );
 });
 
+test("boundary early fail-closed responses emit one semantic metric", async () => {
+  configureTestEnvironment();
+  const event = {
+    version: "2.0",
+    body: JSON.stringify({ scenarioId: "highwater-v1" }),
+    requestContext: {
+      accountId: process.env.EXPECTED_ACCOUNT_ID,
+      apiId: "wrong-api",
+      routeKey: "POST /advisory",
+      stage: "$default",
+      requestId: "api-request-early-failure",
+      timeEpoch: Date.now(),
+      http: { method: "POST", path: "/advisory" },
+      authorizer: {
+        iam: {
+          userArn:
+            "arn:aws:sts::111111111111:assumed-role/tideproof-advisory-caller/review-session"
+        }
+      }
+    }
+  };
+  const writes = [];
+  const originalWrite = process.stdout.write;
+  let result;
+  try {
+    process.stdout.write = (chunk) => {
+      writes.push(String(chunk));
+      return true;
+    };
+    result = await boundaryModule.handler(event, {
+      awsRequestId: "request-early-failure"
+    });
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(JSON.parse(result.body).code, "INVALID_REQUEST");
+  assert.equal(writes.length, 1);
+  const metric = JSON.parse(writes[0]);
+  assert.equal(metric.code, "INVALID_REQUEST");
+  assert.equal(metric.awsRequestId, "request-early-failure");
+  assert.equal(metric.SemanticFailures, 1);
+  assert.equal(JSON.stringify(metric).includes("api-request-early-failure"), false);
+  assert.deepEqual(metric._aws.CloudWatchMetrics[0].Dimensions, [
+    ["Deployment", "Service"]
+  ]);
+});
+
 test("boundary returns a signed advisory or fail-closed receipt without authority", async () => {
   configureTestEnvironment();
   const context = boundary.buildContext();

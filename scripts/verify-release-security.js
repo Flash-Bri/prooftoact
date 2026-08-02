@@ -432,6 +432,7 @@ const EXPECTED_ROLE_ALLOW_ACTIONS = Object.freeze({
   ]),
   DeploymentEvidenceRole: Object.freeze([
     "apigateway:GET",
+    "cloudwatch:DescribeAlarms",
     "cloudformation:BatchDescribeTypeConfigurations",
     "cloudformation:DescribeStackDriftDetectionStatus",
     "cloudformation:DescribeStackResourceDrifts",
@@ -971,6 +972,8 @@ const SOURCE_MARKERS = Object.freeze({
     "IpAddressType: \"ipv4\"",
     "IntegrationMethod: \"POST\"",
     "ReadLambdaEventSourceCensus",
+    "ReadSemanticAlarmDrift",
+    "cloudwatch:DescribeAlarms",
     "denyAllBedrockCapabilities()",
     "denyAllKmsCapabilities()",
     "EvidenceOperatorPrincipalArn: {",
@@ -1893,17 +1896,24 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
         sameJson(actionList(statement.Action), [
           "lambda:ListEventSourceMappings"
         ]);
+      const reviewedGlobalAlarmRead =
+        roleName === "DeploymentEvidenceRole" &&
+        statement.Sid === "ReadSemanticAlarmDrift" &&
+        sameJson(actionList(statement.Action), [
+          "cloudwatch:DescribeAlarms"
+        ]);
       assert(
         statement.Resource !== "*" ||
           reviewedGlobalDriftRead ||
-          reviewedGlobalEventSourceRead,
+          reviewedGlobalEventSourceRead ||
+          reviewedGlobalAlarmRead,
         `RELEASE_SECURITY_${roleName}_WILDCARD_ALLOW`
       );
     }
     if (roleName === "DeploymentEvidenceRole") {
       assert(
         allowStatements.filter((statement) => statement.Resource === "*")
-          .length === 2,
+          .length === 3,
         "RELEASE_SECURITY_DeploymentEvidenceRole_WILDCARD_ALLOW"
       );
     }

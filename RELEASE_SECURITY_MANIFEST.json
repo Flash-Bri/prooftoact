@@ -162,31 +162,31 @@
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "aae0ea861df1b46e7baf70ea2fc92a678d5848364408dfcc024fd1e25fab215f"
+      "sha256": "ef93c0f726d696fcfc7813553adbb2aadf5df79dc8e7383a9a3ed5da1016d4cc"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "20279b5a232d8bfb2511fdb4e97c98e6cbb85f710812684f2cd1d1eb3a590f0a"
+      "sha256": "f5177c49b7f94446a0a38a958a26405d9cd049900f7f5507ed6f42247fec8e2f"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "8718929a7e12a8f3894ff60af21aba5a36951ec246f19eaf3e7678a0ab0b0d35"
+      "sha256": "17f3f547cc9a9e1e375e890bbe918dcbf085ae33457a4fd41005996bf958d9ce"
     },
     {
       "id": "aws-template-security-tests",
       "path": "test/aws-gate2-template-security.test.js",
       "role": "AWS_TEMPLATE_LEAST_PRIVILEGE_VERIFICATION",
-      "sha256": "1a28d2f42151a5dc93594fb32cfde0c4b0c284a3d3bda5e3abb36655be8e0de5"
+      "sha256": "fee0683f9a052308bfe12b544306c392d7bee4a510bd2e2c065515e56e89e856"
     },
     {
       "id": "boundary-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "AWS_COORDINATOR_RUNTIME",
-      "sha256": "7bb9806977491ef74a9ec19cb69e0aecfea9d5f5cacf26a3776cb1423e72cff5"
+      "sha256": "3307cf6e9b0c5346aac8642e59a9d0ecc1876f8362eda9d2f57eb567fdd5682a"
     },
     {
       "id": "canonical-json-contract",
@@ -306,7 +306,7 @@
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
-      "sha256": "376db5da8b7d1f52b6b7ba4f3d2d72fd85aaeb8d291b9ddca0e6ab80c0a80842"
+      "sha256": "b2801a5c1cf4ba0b46c473c62668eedc9503c98fed351f943b975639f19f0c9f"
     },
     {
       "id": "local-server",
