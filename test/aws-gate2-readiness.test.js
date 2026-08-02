@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { templateReceipt } from "../src/cloud/aws-gate2-template.js";
 import { deterministicZip } from "../scripts/lib/deterministic-zip.js";
 import {
   __test,
@@ -41,15 +42,27 @@ function fixture() {
     '{"lockfileVersion":3}\n',
     "utf8"
   );
-  const bootstrapTemplate = Buffer.from("{}\n", "utf8");
+  const packageJson = Buffer.from(
+    '{"name":"fixture","private":true}\n',
+    "utf8"
+  );
+  const bootstrapTemplateValue = {};
+  const gate2TemplateValue = { Resources: {} };
+  const bootstrapTemplateReceipt = templateReceipt(bootstrapTemplateValue);
+  const gate2TemplateReceipt = templateReceipt(gate2TemplateValue);
+  const bootstrapTemplate = Buffer.from(
+    `${JSON.stringify(bootstrapTemplateValue, null, 2)}\n`,
+    "utf8"
+  );
   const gate2Template = Buffer.from(
-    '{"Resources":{}}\n',
+    `${JSON.stringify(gate2TemplateValue, null, 2)}\n`,
     "utf8"
   );
   const thirdPartyNotices = Buffer.from(
     "Fixture bundled third-party notices.\n",
     "utf8"
   );
+  writeFile(projectRoot, "package.json", packageJson);
   writeFile(projectRoot, "package-lock.json", packageLock);
   writeFile(
     projectRoot,
@@ -66,16 +79,43 @@ function fixture() {
     "infra/aws/gate2-template.json",
     gate2Template
   );
+  const buildControlInputs = [
+    "infra/aws/lambda/agent.cjs",
+    "scripts/build-gate2-exact.js",
+    "scripts/build-gate2-template.js",
+    "scripts/lib/aws-provider-bundle-entry.js",
+    "scripts/lib/aws-provider-runtime.js",
+    "scripts/lib/aws-provider-runtime-loader.js",
+    "scripts/lib/bundled-third-party-notices.js",
+    "scripts/lib/dependency-snapshot.js",
+    "scripts/lib/deterministic-zip.js",
+    "scripts/lib/exact-build-reproduction.js",
+    "scripts/lib/exact-git-source.js",
+    "scripts/lib/raw-text-plugin.js",
+    "scripts/verify-bundled-third-party-notices.js",
+    "src/cloud/aws-gate2-template.js",
+    "src/cloud/public-demo.js"
+  ].map((controlPath, index) => {
+    const bytes = Buffer.from(`fixture build control ${index}\n`, "utf8");
+    writeFile(projectRoot, controlPath, bytes);
+    return {
+      gitBlobId: __test.gitBlobId(bytes),
+      path: controlPath,
+      sha256: sha256(bytes)
+    };
+  });
 
   const artifacts = [];
   for (const name of __test.ARTIFACT_NAMES) {
     const extension = name === "demo" ? "js" : "cjs";
     const sourcePath = `infra/aws/lambda/${name}.${extension}`;
-    const source = Buffer.from(
-      `exports.handler = async () => "${name}";\n`,
-      "utf8"
-    );
-    writeFile(projectRoot, sourcePath, source);
+    const source =
+      name === "agent"
+        ? fs.readFileSync(path.join(projectRoot, sourcePath))
+        : Buffer.from(`exports.handler = async () => "${name}";\n`, "utf8");
+    if (name !== "agent") {
+      writeFile(projectRoot, sourcePath, source);
+    }
     const archive = deterministicZip([
       {
         fileName: "THIRD_PARTY_NOTICES.txt",
@@ -97,20 +137,82 @@ function fixture() {
       artifactCodeSha256: sha256(archive, "base64"),
       artifactBytes: archive.length,
       bundledPackages: ["@fixture/runtime"],
+      exactGitInputs: [
+        {
+          gitBlobId: __test.gitBlobId(source),
+          path: sourcePath,
+          sha256: sha256(source)
+        }
+      ],
       suggestedS3Key:
         `gate2/${SOURCE_COMMIT}/${artifactFile}`
     });
   }
 
+  const providerBytes = Buffer.from(
+    "export async function createAwsProviderClients(){return {};}\n",
+    "utf8"
+  );
+  const providerDigest = sha256(providerBytes);
+  const providerPath = `dist/aws/evidence-provider-${providerDigest}.mjs`;
+  writeFile(projectRoot, providerPath, providerBytes);
+  const providerInputPaths = [
+    "scripts/lib/aws-provider-bundle-entry.js",
+    "scripts/lib/aws-provider-runtime.js"
+  ];
+  const evidenceProviderRuntime = {
+    bundledPackages: ["@fixture/provider"],
+    bytes: providerBytes.length,
+    exactGitInputs: providerInputPaths.map((inputPath) => {
+      const bytes = fs.readFileSync(path.join(projectRoot, inputPath));
+      return {
+        gitBlobId: __test.gitBlobId(bytes),
+        path: inputPath,
+        sha256: sha256(bytes)
+      };
+    }),
+    externalImports: ["node:module"],
+    path: providerPath,
+    sha256: providerDigest
+  };
+
   const buildReceipt = {
-    schemaVersion: "tideproof.gate2-build.v3",
+    schemaVersion: "tideproof.gate2-build.v6",
     mode: "CLEAN_ARTIFACT_BUILD",
+    projectSourceMode: "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
     sourceCommit: SOURCE_COMMIT,
     treeDigest: TREE_DIGEST,
     workingTreeClean: true,
     workingTreeCleanBeforeGeneration: true,
     archiveFormat: "ZIP_STORED_TWO_FILE_V2",
+    buildControlInputs,
+    dependencySnapshot: {
+      schemaVersion: "tideproof.dependency-snapshot.v1",
+      installMode: "NPM_CI_IGNORE_SCRIPTS_CLEAN_CACHE",
+      fileCount: 321,
+      totalBytes: 123456,
+      symlinkCount: 0,
+      packageJsonDigest: sha256(packageJson),
+      packageLockDigest: sha256(packageLock),
+      treeDigest: "9".repeat(64)
+    },
+    evidenceProviderRuntime,
+    packageJsonDigest: sha256(packageJson),
     packageLockDigest: sha256(packageLock),
+    toolchain: {
+      schemaVersion: "tideproof.build-toolchain.v2",
+      architecture: "arm64",
+      gitExecutableSha256: "5".repeat(64),
+      gitVersion: "2.50.1 (Apple Git-155)",
+      nodeExecutableSha256: "7".repeat(64),
+      nodeVersion: "v22.23.1",
+      npmCliSha256: "8".repeat(64),
+      npmPackageBytes: 123456,
+      npmPackageFileCount: 321,
+      npmPackageTreeDigest: "6".repeat(64),
+      npmVersion: "11.6.2",
+      platform: "darwin"
+    },
     thirdPartyNotices: {
       schema: "tideproof.bundled-third-party-notices.v1",
       status: "PASS",
@@ -118,22 +220,22 @@ function fixture() {
       noticeSha256: sha256(thirdPartyNotices),
       noticeBytes: thirdPartyNotices.length,
       packageLockSha256: sha256(packageLock),
-      packageNames: ["@fixture/runtime"],
-      packageCount: 1,
-      licenseTextCount: 1,
+      packageNames: ["@fixture/provider", "@fixture/runtime"],
+      packageCount: 2,
+      licenseTextCount: 2,
       fallbackCount: 0,
-      licenses: { MIT: 1 }
+      licenses: { MIT: 2 }
     },
     bootstrapTemplate: {
       path: "infra/aws/bootstrap-template.json",
       templateDigest: sha256(bootstrapTemplate),
-      canonicalDigest: "c".repeat(64),
+      canonicalDigest: bootstrapTemplateReceipt.canonicalDigest,
       bytes: bootstrapTemplate.length
     },
     gate2Template: {
       path: "infra/aws/gate2-template.json",
       templateDigest: sha256(gate2Template),
-      canonicalDigest: "d".repeat(64),
+      canonicalDigest: gate2TemplateReceipt.canonicalDigest,
       bytes: gate2Template.length
     },
     artifacts
@@ -433,7 +535,7 @@ function releaseSecurityReceipt() {
     securityHeaderCount: 9,
     negativeProbeCount: 6,
     publicRouteCount: 10,
-    iamRoleCount: 7,
+    iamRoleCount: 9,
     lambdaPermissionCount: 3,
     boundedFunctionCount: 5,
     logGroupCount: 11,
@@ -449,9 +551,12 @@ function releaseSecurityReceipt() {
       advisoryRouteIamAuthenticated: true,
       publicCorsAndLambdaUrlsAbsent: true,
       throttlesAndConcurrencyBounded: true,
-      immutableVersionedLambdaTargets: true,
+      numericLambdaInvocationTargetsBounded: true,
       leastPrivilegeRoleActionsBounded: true,
       criticalRoleDenialsPresent: true,
+      evidenceOperatorTrustBounded: true,
+      deploymentAttestationContractBounded: true,
+      exactGitArtifactInputsBounded: true,
       apiGatewayInvokePermissionsBounded: true,
       asymmetricSigningKeyBounded: true,
       logsBoundedAndPrivacyMinimized: true,
@@ -581,7 +686,10 @@ function releaseProvenanceReceipt() {
         fallbackCount: 5,
         licenses: { MIT: 42 },
         artifactPackages: Object.fromEntries(
-          __test.ARTIFACT_NAMES.map((name) => [name, []])
+          [...__test.ARTIFACT_NAMES, "evidenceProvider"].map((name) => [
+            name,
+            []
+          ])
         )
       }
     },
@@ -627,6 +735,7 @@ function preflightReceipt() {
         contextDigest: "6".repeat(64),
         expectedIdentityDigest: "8".repeat(64),
         expectedPrincipalDigest: "9".repeat(64),
+        principalIdDigest: "5".repeat(64),
         principalType: "iam-user"
       },
       bootstrapStack: {
@@ -766,6 +875,54 @@ test("AWS readiness validates every exact-head artifact byte", () => {
       current.buildReceipt.artifacts.find(
         (artifact) => artifact.name === "demo"
       ).artifactDigest
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects substituted exact-Git input identity", () => {
+  const current = fixture();
+  try {
+    current.buildReceipt.artifacts[0].exactGitInputs[0].gitBlobId =
+      "0".repeat(40);
+    assert.throws(
+      () =>
+        validateBuildReceipt(current.buildReceipt, {
+          projectRoot: current.projectRoot,
+          sourceCommit: SOURCE_COMMIT,
+          treeDigest: TREE_DIGEST
+        }),
+      /AWS_READINESS_EXACT_GIT_INPUT_DIGEST/
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects a fabricated dependency or toolchain snapshot", () => {
+  const current = fixture();
+  try {
+    current.buildReceipt.dependencySnapshot.treeDigest = "0";
+    assert.throws(
+      () =>
+        validateBuildReceipt(current.buildReceipt, {
+          projectRoot: current.projectRoot,
+          sourceCommit: SOURCE_COMMIT,
+          treeDigest: TREE_DIGEST
+        }),
+      /DEPENDENCY_SNAPSHOT_RECEIPT/
+    );
+    current.buildReceipt.dependencySnapshot.treeDigest = "9".repeat(64);
+    current.buildReceipt.toolchain.npmCliSha256 = "0";
+    assert.throws(
+      () =>
+        validateBuildReceipt(current.buildReceipt, {
+          projectRoot: current.projectRoot,
+          sourceCommit: SOURCE_COMMIT,
+          treeDigest: TREE_DIGEST
+        }),
+      /DEPENDENCY_SNAPSHOT_TOOLCHAIN/
     );
   } finally {
     current.cleanup();
@@ -1164,13 +1321,17 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
     NODE_TLS_REJECT_UNAUTHORIZED: "0",
     NODE_EXTRA_CA_CERTS: "/tmp/untrusted-ca.pem",
     NODE_V8_COVERAGE: "/tmp/coverage",
+    LD_AUDIT: "/tmp/injected-audit.so",
+    LD_DEBUG: "all",
+    LD_LIBRARY_PATH: "/tmp/injected-libraries",
+    DYLD_INSERT_LIBRARIES: "/tmp/injected.dylib",
     npm_config_userconfig: "/tmp/npmrc",
     OPENAI_API_KEY: "private-model-key",
     SAFE_VALUE: "retained"
   };
   const isolated = __test.childEnvironment(source);
-  assert.equal(isolated.PATH, "/usr/bin");
-  assert.equal(isolated.SAFE_VALUE, "retained");
+  assert.equal(isolated.PATH, "/usr/bin:/bin");
+  assert.equal(isolated.SAFE_VALUE, undefined);
   assert.equal(isolated.AWS_ACCESS_KEY_ID, undefined);
   assert.equal(isolated.AWS_SESSION_TOKEN, undefined);
   assert.equal(isolated.DATABASE_URL, undefined);
@@ -1186,8 +1347,21 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(isolated.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID, undefined);
   assert.equal(isolated.aws_access_key_id, undefined);
   assert.equal(isolated.NODE_DEBUG, undefined);
+  assert.equal(isolated.LD_AUDIT, undefined);
+  assert.equal(isolated.LD_DEBUG, undefined);
+  assert.equal(isolated.LD_LIBRARY_PATH, undefined);
+  assert.equal(isolated.DYLD_INSERT_LIBRARIES, undefined);
   assert.equal(isolated.GIT_TERMINAL_PROMPT, "0");
-  assert.equal(isolated.npm_config_userconfig, "/dev/null");
+  assert.equal(
+    isolated.npm_config_userconfig,
+    "/etc/tideproof-npm-userconfig"
+  );
+  assert.equal(
+    isolated.npm_config_globalconfig,
+    "/etc/tideproof-npm-globalconfig"
+  );
+  assert.equal(isolated.npm_config_ignore_scripts, "true");
+  assert.equal(isolated.npm_config_script_shell, "/bin/sh");
 
   assert.throws(
     () =>
@@ -1220,6 +1394,9 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(authenticated.NODE_TLS_REJECT_UNAUTHORIZED, undefined);
   assert.equal(authenticated.NODE_EXTRA_CA_CERTS, undefined);
   assert.equal(authenticated.NODE_V8_COVERAGE, undefined);
+  assert.equal(authenticated.LD_AUDIT, undefined);
+  assert.equal(authenticated.LD_LIBRARY_PATH, undefined);
+  assert.equal(authenticated.SAFE_VALUE, undefined);
   assert.equal(
     authenticated.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID,
     "111111111111"
@@ -1236,4 +1413,41 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(authenticated.DATABASE_URL, undefined);
   assert.equal(authenticated.OPENAI_API_KEY, undefined);
   assert.equal(authenticated.AWS_CONFIG_FILE, "/dev/null");
+});
+
+test("AWS readiness ignores PATH-selected Git and npm wrappers", () => {
+  const projectRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "tideproof-readiness-tools-")
+  );
+  try {
+    for (const name of ["git", "npm"]) {
+      fs.writeFileSync(
+        path.join(projectRoot, name),
+        `#!/bin/sh\necho PATH_WRAPPER_${name.toUpperCase()}\n`,
+        { mode: 0o755 }
+      );
+    }
+    const runner = __test.defaultRunner(projectRoot, {
+      ...process.env,
+      npm_execpath:
+        process.env.npm_execpath ??
+        fs.realpathSync(path.join(path.dirname(process.execPath), "npm")),
+      npm_node_execpath: process.execPath,
+      PATH: projectRoot
+    });
+    const gitResult = runner("git", ["--version"]);
+    const npmResult = runner("npm", ["--version"]);
+    assert.equal(gitResult.status, 0);
+    assert.equal(npmResult.status, 0);
+    assert.match(gitResult.stdout, /^git version /);
+    assert.match(npmResult.stdout, /^[0-9]+\.[0-9]+\.[0-9]+\n$/);
+    assert.doesNotMatch(gitResult.stdout, /PATH_WRAPPER/);
+    assert.doesNotMatch(npmResult.stdout, /PATH_WRAPPER/);
+    assert.throws(
+      () => runner("node", ["--version"]),
+      /AWS_READINESS_COMMAND/
+    );
+  } finally {
+    fs.rmSync(projectRoot, { force: true, recursive: true });
+  }
 });

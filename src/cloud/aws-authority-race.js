@@ -111,7 +111,7 @@ export function parseAuthorityRaceArguments(argv) {
     !SHA1_PATTERN.test(parsed["--source-commit"]) ||
     !UUID_PATTERN.test(parsed["--race-id"]) ||
     !UUID_PATTERN.test(parsed["--run-id"]) ||
-    !/^arn:aws[a-zA-Z-]*:lambda:us-east-1:\d{12}:function:[A-Za-z0-9-_]{1,64}:proof$/.test(
+    !/^arn:aws[a-zA-Z-]*:lambda:us-east-1:\d{12}:function:[A-Za-z0-9-_]{1,64}:[1-9][0-9]*$/.test(
       parsed["--function-arn"]
     )
   ) {

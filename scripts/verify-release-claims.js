@@ -76,11 +76,13 @@ const EXPECTED_SURFACES = Object.freeze({
 const REQUIRED_MARKERS = Object.freeze({
   "architecture-boundary": Object.freeze([
     "It proves the intended software and IAM shape locally, not live AWS hosting or a live CockroachDB-to-AWS handoff.",
+    "its monitored alias is not invocation authority",
     "None of those cloud or database boundaries are proven live until the accepted race receipt includes the later durable-state observation and its private database evidence."
   ]),
   "aws-boundary": Object.freeze([
     "The strongest current claim is that this software, the bundled public-demo artifact path, the isolated CockroachDB authority candidate, and generated CloudFormation passed local review.",
     "Do not claim live public hosting, Bedrock inference, KMS-backed evidence, IAM denial, API authentication, an overlapping Lambda race, or CockroachDB-to-AWS handoff until their cloud receipts exist.",
+    "These controls are unrun and do not exclude administrators or the independently protected receipt-key custodian.",
     "That mode includes the hash-bound public claim-surface control, emits `LOCAL_ONLY_PASS`, records `awsPreflight: NOT_RUN`, and is never authorization to upload or deploy."
   ]),
   "aws-demo-entry": Object.freeze([
@@ -102,6 +104,7 @@ const REQUIRED_MARKERS = Object.freeze({
   "claims-ledger": Object.freeze([
     "Every public claim must remain **unverified** until the listed artifact exists and its acceptance condition passes.",
     "Synthetic scenarios are always labeled synthetic and non-operational.",
+    "the unrun deployment-attestation contract do not prove Lambda concurrency",
     "The repository does not claim invention of provenance-aware memory, temporal memory, fencing, replay protection, or exactly-once real-world effects."
   ]),
   "contest-matrix": Object.freeze([
@@ -127,6 +130,7 @@ const REQUIRED_MARKERS = Object.freeze({
     "This repository contains a deterministic local vertical slice, an accepted CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:",
     "It does **not** yet contain or claim:",
     "a deployed public AWS judge URL;",
+    "monitored aliases are not invocation authority",
     "Tideproof is a synthetic demonstration, not operational emergency software."
   ]),
   "release-claims-ledger": Object.freeze([

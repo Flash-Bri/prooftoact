@@ -21,15 +21,15 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 
 ## Bound source
 
-- Package lock SHA-256: `af5fe003b6df5da1d2d142684c39e64fcb90d60c97dcf34cb73c86b0dd6fb218`
-- Direct runtime declarations: **8**
+- Package lock SHA-256: `b0fa37a180101a5144848b4b1b73e5a98ef6c5d0d55b9195d7ecae0b1310a4df`
+- Direct runtime declarations: **10**
 - Direct development declarations: **2**
-- Complete locked package records: **74**
-- Runtime package records: **46**
+- Complete locked package records: **76**
+- Runtime package records: **48**
 - Development-only package records: **28**
 - Optional platform package records: **27**
 - Packages declaring an install script: **1**
-- Reviewed package-lock license identifiers: 0BSD: 1; Apache-2.0: 30; ISC: 2; MIT: 40; MPL-2.0: 1
+- Reviewed package-lock license identifiers: 0BSD: 1; Apache-2.0: 32; ISC: 2; MIT: 40; MPL-2.0: 1
 - CI install boundary: `npm ci --ignore-scripts`; the deterministic Gate Two
   build separately proves the exact bundled artifacts and embeds the verified
   third-party notice file in every ZIP.
@@ -38,8 +38,10 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 
 | Package | Declared | Locked | Use | License |
 | --- | --- | --- | --- | --- |
+| `@aws-sdk/client-apigatewayv2` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-bedrock-runtime` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-cloudformation` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
+| `@aws-sdk/client-iam` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-kms` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-lambda` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
 | `@aws-sdk/client-secrets-manager` | `3.1098.0` | `3.1098.0` | runtime | `Apache-2.0` |
@@ -53,8 +55,10 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 
 | Package | Version | Lock path | Use | Optional | Install script | License |
 | --- | --- | --- | --- | --- | --- | --- |
+| `@aws-sdk/client-apigatewayv2` | `3.1098.0` | `node_modules/@aws-sdk/client-apigatewayv2` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-bedrock-runtime` | `3.1098.0` | `node_modules/@aws-sdk/client-bedrock-runtime` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-cloudformation` | `3.1098.0` | `node_modules/@aws-sdk/client-cloudformation` | runtime | no | no | `Apache-2.0` |
+| `@aws-sdk/client-iam` | `3.1098.0` | `node_modules/@aws-sdk/client-iam` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-kms` | `3.1098.0` | `node_modules/@aws-sdk/client-kms` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-lambda` | `3.1098.0` | `node_modules/@aws-sdk/client-lambda` | runtime | no | no | `Apache-2.0` |
 | `@aws-sdk/client-secrets-manager` | `3.1098.0` | `node_modules/@aws-sdk/client-secrets-manager` | runtime | no | no | `Apache-2.0` |

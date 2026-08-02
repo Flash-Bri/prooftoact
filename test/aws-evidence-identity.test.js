@@ -16,7 +16,7 @@ const ROLE_ARN =
 const CALLER_ARN =
   `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
   "AuthorityRaceCallerRole/release-proof";
-const CALLER_USER_ID = "AROATIDEPROOF:release-proof";
+const CALLER_USER_ID = "AROATIDEPROOFROLE1:release-proof";
 const BINDING_CONTEXT = Object.freeze({
   purpose: "test-authority-race",
   sourceCommit: "a".repeat(40)
@@ -53,7 +53,13 @@ test("AWS evidence environment rejects every endpoint override form", () => {
 test("AWS SDK evidence rejects profile, proxy, and custom-CA injection", () => {
   for (const name of [
     "AWS_CONFIG_FILE",
+    "AWS_DEFAULTS_MODE",
     "AWS_PROFILE",
+    "AWS_RETRY_MODE",
+    "AWS_AUTH_SCHEME_PREFERENCE",
+    "AWS_SIGV4A_SIGNING_REGION_SET",
+    "AWS_USE_DUALSTACK_ENDPOINT",
+    "AWS_USE_FIPS_ENDPOINT",
     "AWS_CA_BUNDLE",
     "HTTPS_PROXY",
     "http_proxy",
@@ -135,6 +141,7 @@ test("caller binding accepts only the exact expected account and principal", () 
   assert.match(binding.callerIdentityDigest, /^[0-9a-f]{64}$/);
   assert.equal(binding.callerIdentityDigest, binding.expectedIdentityDigest);
   assert.match(binding.expectedPrincipalDigest, /^[0-9a-f]{64}$/);
+  assert.match(binding.principalIdDigest, /^[0-9a-f]{64}$/);
   assert.match(binding.contextDigest, /^[0-9a-f]{64}$/);
   assert.match(binding.bindingDigest, /^[0-9a-f]{64}$/);
   assert.equal(binding.principalType, "assumed-role");
@@ -165,7 +172,7 @@ test("caller binding accepts only the exact expected account and principal", () 
       Arn:
         "arn:aws:sts::222222222222:assumed-role/" +
         "AuthorityRaceCallerRole/release-proof",
-      UserId: "AROATIDEPROOF:release-proof"
+      UserId: "AROATIDEPROOFROLE1:release-proof"
     },
     {
       Account: ACCOUNT_ID,
@@ -177,19 +184,19 @@ test("caller binding accepts only the exact expected account and principal", () 
       Arn:
         `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
         "OtherRole/release-proof",
-      UserId: "AROATIDEPROOF:release-proof"
+      UserId: "AROATIDEPROOFROLE1:release-proof"
     },
     {
       Account: ACCOUNT_ID,
       Arn:
         `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
         "AuthorityRaceCallerRole/different-session",
-      UserId: "AROATIDEPROOF:different-session"
+      UserId: "AROATIDEPROOFROLE1:different-session"
     },
     {
       Account: ACCOUNT_ID,
       Arn: CALLER_ARN,
-      UserId: "AROATIDEPROOF:different-session"
+      UserId: "AROATIDEPROOFROLE1:different-session"
     }
   ]) {
     assert.throws(
@@ -223,6 +230,31 @@ test("caller binding accepts only the exact expected account and principal", () 
         }
       ),
     /AWS_EVIDENCE_EXPECTED_PRINCIPAL/
+  );
+});
+
+test("assumed-role caller binding links STS UserId to the censused RoleId", () => {
+  const identity = {
+    Account: "111111111111",
+    Arn: "arn:aws:sts::111111111111:assumed-role/example/session",
+    UserId: "AROATIDEPROOFROLE1:session"
+  };
+  const input = {
+    expectedAccountId: "111111111111",
+    expectedPrincipalArn: "arn:aws:iam::111111111111:role/example",
+    expectedCallerArn: identity.Arn,
+    expectedCallerUserId: identity.UserId,
+    expectedRoleId: "AROATIDEPROOFROLE1",
+    bindingContext: { purpose: "role-id-test" }
+  };
+  assert.doesNotThrow(() => validateAwsEvidenceCaller(identity, input));
+  assert.throws(
+    () =>
+      validateAwsEvidenceCaller(identity, {
+        ...input,
+        expectedRoleId: "AROATIDEPROOFROLE2"
+      }),
+    /AWS_EVIDENCE_CALLER_ROLE_ID/
   );
 });
 

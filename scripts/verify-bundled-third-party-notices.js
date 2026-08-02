@@ -12,14 +12,15 @@ import { rawTextPlugin } from "./lib/raw-text-plugin.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NOTICE_PATH = "THIRD_PARTY_NOTICES.txt";
-const ARTIFACT_NAMES = Object.freeze([
-  "agent",
-  "authority",
-  "boundary",
-  "demo",
-  "probe",
-  "signer"
-]);
+const BUNDLED_COMPONENTS = Object.freeze({
+  agent: "infra/aws/lambda/agent.cjs",
+  authority: "infra/aws/lambda/authority.cjs",
+  boundary: "infra/aws/lambda/boundary.cjs",
+  demo: "infra/aws/lambda/demo.js",
+  evidenceProvider: "scripts/lib/aws-provider-bundle-entry.js",
+  probe: "infra/aws/lambda/probe.cjs",
+  signer: "infra/aws/lambda/signer.cjs"
+});
 
 function assert(condition, message) {
   if (!condition) {
@@ -39,15 +40,21 @@ export async function collectBundledPackageNames({
   const resolvedRoot = path.resolve(rootDir);
   const artifactPackages = {};
   const packageUnion = new Set();
-  for (const name of ARTIFACT_NAMES) {
-    const extension = name === "demo" ? "js" : "cjs";
+  for (const [name, entryPoint] of Object.entries(BUNDLED_COMPONENTS)) {
+    const providerRuntime = name === "evidenceProvider";
     const result = await build({
       absWorkingDir: resolvedRoot,
-      entryPoints: [`infra/aws/lambda/${name}.${extension}`],
+      entryPoints: [entryPoint],
       bundle: true,
       platform: "node",
       target: "node22",
-      format: "cjs",
+      format: providerRuntime ? "esm" : "cjs",
+      banner: providerRuntime
+        ? {
+            js:
+              "import { builtinModules as __tideproofBuiltins, createRequire as __tideproofCreateRequire } from \"node:module\"; const __tideproofNativeRequire = __tideproofCreateRequire(\"/tideproof-evidence-provider-runtime.mjs\"); const __tideproofAllowedRequires = new Set(__tideproofBuiltins.flatMap((name) => [name, name.startsWith(\"node:\") ? name : `node:${name}`])); const require = (specifier) => { if (!__tideproofAllowedRequires.has(specifier)) throw new Error(\"AWS_PROVIDER_RUNTIME_EXTERNAL_REQUIRE\"); return __tideproofNativeRequire(specifier.startsWith(\"node:\") ? specifier : `node:${specifier}`); };"
+          }
+        : undefined,
       legalComments: "none",
       logLevel: "silent",
       metafile: true,

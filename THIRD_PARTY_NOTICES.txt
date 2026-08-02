@@ -1,22 +1,33 @@
 TIDEPROOF BUNDLED THIRD-PARTY NOTICES
 
 This file is generated deterministically from the exact integrity-locked npm
-packages whose source is present in the six Gate Two Lambda bundles. It is
-embedded byte-for-byte in every release ZIP so each independently distributed
-artifact carries the complete reviewed package union and license text set.
+packages whose source is present in the six Gate Two Lambda bundles and the
+evidence-provider runtime. It is embedded byte-for-byte in every release ZIP
+so each independently distributed artifact carries the complete reviewed
+package union and license text set.
 Over-inclusion is intentional; an individual ZIP may use only a subset.
 
 This is a provenance and distribution control, not legal advice. A final audit
 must still bind the exact release commit, installed tree, deployed ZIP hashes,
 vulnerability report, repository history, and any changed upstream metadata.
 
-Package lock SHA-256: af5fe003b6df5da1d2d142684c39e64fcb90d60c97dcf34cb73c86b0dd6fb218
-Bundled package union: 42
+Package lock SHA-256: b0fa37a180101a5144848b4b1b73e5a98ef6c5d0d55b9195d7ecae0b1310a4df
+Bundled package union: 46
 Distinct normalized license texts: 17
 Explicit published-package fallbacks: 5
-License identifiers: Apache-2.0=27, ISC=2, MIT=13
+License identifiers: Apache-2.0=31, ISC=2, MIT=13
 
 PACKAGE RECORDS
+
+@aws-sdk/client-apigatewayv2@3.1098.0
+  License: Apache-2.0
+  Registry: https://registry.npmjs.org/@aws-sdk/client-apigatewayv2/-/client-apigatewayv2-3.1098.0.tgz
+  Integrity: sha512-pvmPfB57rt6GXlfgWyj0gnNarLp9N0zvIqarCaalNspskKkRMivtClxEdz/aHounHqdfI1FJJ1Cv7HWPbXOyuw==
+  Text: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
+    Source: @aws-sdk/client-apigatewayv2/LICENSE
+    Source SHA-256: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
+    Source kind: package-file
+    Review note: Exact license or notice file from the integrity-locked npm package.
 
 @aws-sdk/client-bedrock-runtime@3.1098.0
   License: Apache-2.0
@@ -25,6 +36,26 @@ PACKAGE RECORDS
   Text: 18c295fdd68d4f68418b0209829f241481e93549d9e7b9fcd4b4c029322c8a45
     Source: @aws-sdk/client-bedrock-runtime/LICENSE
     Source SHA-256: 18c295fdd68d4f68418b0209829f241481e93549d9e7b9fcd4b4c029322c8a45
+    Source kind: package-file
+    Review note: Exact license or notice file from the integrity-locked npm package.
+
+@aws-sdk/client-cloudformation@3.1098.0
+  License: Apache-2.0
+  Registry: https://registry.npmjs.org/@aws-sdk/client-cloudformation/-/client-cloudformation-3.1098.0.tgz
+  Integrity: sha512-p92g5KtAu07MCFznbHCYYT36QaZJJvmitVrSjY7XHJsrmrB4XM0TcVUk6HZS4iASL0oKG/CAO6SbM4n5EOglWA==
+  Text: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
+    Source: @aws-sdk/client-cloudformation/LICENSE
+    Source SHA-256: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
+    Source kind: package-file
+    Review note: Exact license or notice file from the integrity-locked npm package.
+
+@aws-sdk/client-iam@3.1098.0
+  License: Apache-2.0
+  Registry: https://registry.npmjs.org/@aws-sdk/client-iam/-/client-iam-3.1098.0.tgz
+  Integrity: sha512-w3Nvj49Ws1qaefIL5efei495mKoVYO3vNVIUzArmifeYhhAnsxD0ls6etmiu124rDMcVapTC+0Wl6punOdIgBw==
+  Text: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
+    Source: @aws-sdk/client-iam/LICENSE
+    Source SHA-256: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
     Source kind: package-file
     Review note: Exact license or notice file from the integrity-locked npm package.
 
@@ -54,6 +85,16 @@ PACKAGE RECORDS
   Integrity: sha512-XdFhAffKIWY+dAsiWXnIwH57iFAdtiUFdsBACLmWOoSg54KsANtZuk5pTxsSyU7c+DQdUJTg/eknKNNk2lvLfg==
   Text: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
     Source: @aws-sdk/client-secrets-manager/LICENSE
+    Source SHA-256: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
+    Source kind: package-file
+    Review note: Exact license or notice file from the integrity-locked npm package.
+
+@aws-sdk/client-sts@3.1098.0
+  License: Apache-2.0
+  Registry: https://registry.npmjs.org/@aws-sdk/client-sts/-/client-sts-3.1098.0.tgz
+  Integrity: sha512-sUJG66pXP6TU7KVReLuoDTXsbpjq8nkF1S8ORg42I2/HGRQKm+r7eXXKA1M2DGBkM6/oaGYusGsR+1RrODkD/Q==
+  Text: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
+    Source: @aws-sdk/client-sts/LICENSE
     Source SHA-256: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
     Source kind: package-file
     Review note: Exact license or notice file from the integrity-locked npm package.
@@ -1873,8 +1914,8 @@ programs and associated documentation files created by the
 Original Author, when distributed with the Software.
 ================================================================================
 Normalized text SHA-256: e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c
-Applies to: @aws-sdk/client-kms, @aws-sdk/client-lambda, @aws-sdk/client-secrets-manager, @aws-sdk/middleware-eventstream
-Sources: @aws-sdk/client-kms/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-lambda/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-secrets-manager/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/middleware-eventstream/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c)
+Applies to: @aws-sdk/client-apigatewayv2, @aws-sdk/client-cloudformation, @aws-sdk/client-iam, @aws-sdk/client-kms, @aws-sdk/client-lambda, @aws-sdk/client-secrets-manager, @aws-sdk/client-sts, @aws-sdk/middleware-eventstream
+Sources: @aws-sdk/client-apigatewayv2/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-cloudformation/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-iam/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-kms/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-lambda/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-secrets-manager/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/client-sts/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c); @aws-sdk/middleware-eventstream/LICENSE (package-file; source SHA-256 e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c)
 --------------------------------------------------------------------------------
                                 Apache License
                            Version 2.0, January 2004

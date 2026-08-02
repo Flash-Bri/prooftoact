@@ -10,13 +10,13 @@ test("current Gate Two bundle union has exact verified license notices", async (
   assert.equal(receipt.status, "PASS");
   assert.equal(receipt.noticePath, "THIRD_PARTY_NOTICES.txt");
   assert.match(receipt.noticeSha256, /^[a-f0-9]{64}$/);
-  assert.equal(receipt.packageCount, 42);
-  assert.equal(receipt.packageNames.length, 42);
+  assert.equal(receipt.packageCount, 46);
+  assert.equal(receipt.packageNames.length, 46);
   assert(receipt.packageNames.includes("pg"));
   assert.equal(receipt.licenseTextCount, 17);
   assert.equal(receipt.fallbackCount, 5);
   assert.deepEqual(receipt.licenses, {
-    "Apache-2.0": 27,
+    "Apache-2.0": 31,
     ISC: 2,
     MIT: 13
   });
@@ -24,6 +24,16 @@ test("current Gate Two bundle union has exact verified license notices", async (
   assert(receipt.artifactPackages.agent.includes("@aws-sdk/client-bedrock-runtime"));
   assert(receipt.artifactPackages.authority.includes("pg"));
   assert(receipt.artifactPackages.signer.includes("@aws-sdk/client-kms"));
+  assert(
+    receipt.artifactPackages.evidenceProvider.includes(
+      "@aws-sdk/client-cloudformation"
+    )
+  );
+  assert(
+    receipt.artifactPackages.evidenceProvider.includes(
+      "@aws-sdk/client-apigatewayv2"
+    )
+  );
 });
 
 test("metafile package extraction is sorted, unique, and scoped", () => {

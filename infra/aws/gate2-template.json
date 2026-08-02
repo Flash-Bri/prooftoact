@@ -124,7 +124,12 @@
         "true",
         "false"
       ],
-      "Description": "Opt in to same-role evidence probes temporarily; update to false after non-final probe receipts are captured."
+      "Description": "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
+    },
+    "EvidenceOperatorPrincipalArn": {
+      "Type": "String",
+      "Description": "Exact same-account IAM role or user allowed to assume the bounded deployment-evidence collector.",
+      "AllowedPattern": "^arn:aws[a-zA-Z-]*:iam::[0-9]{12}:(?:role|user)/[A-Za-z0-9+=,.@_-]{1,64}$"
     },
     "AgentArtifactKey": {
       "Type": "String",
@@ -598,6 +603,7 @@
             }
           ]
         },
+        "ManagedPolicyArns": [],
         "MaxSessionDuration": 3600,
         "Policies": [
           {
@@ -670,12 +676,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -683,6 +698,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -691,7 +707,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -736,6 +752,7 @@
             }
           ]
         },
+        "ManagedPolicyArns": [],
         "MaxSessionDuration": 3600,
         "Policies": [
           {
@@ -842,8 +859,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -861,12 +877,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -874,7 +899,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -919,6 +944,7 @@
             }
           ]
         },
+        "ManagedPolicyArns": [],
         "MaxSessionDuration": 3600,
         "Policies": [
           {
@@ -989,8 +1015,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -998,12 +1023,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1011,6 +1045,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1019,7 +1054,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1064,6 +1099,7 @@
             }
           ]
         },
+        "ManagedPolicyArns": [],
         "MaxSessionDuration": 3600,
         "Policies": [
           {
@@ -1105,8 +1141,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1124,12 +1159,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1137,6 +1181,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1145,7 +1190,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1291,7 +1336,7 @@
             "Version"
           ]
         },
-        "Description": "Immutable Gate Two proof alias."
+        "Description": "Monitored proof pointer; all reviewed invocations use the numeric version ARN."
       }
     },
     "AgentFunction": {
@@ -1393,7 +1438,7 @@
             "Version"
           ]
         },
-        "Description": "Immutable Gate Two proof alias."
+        "Description": "Monitored proof pointer; all reviewed invocations use the numeric version ARN."
       }
     },
     "AuthorityFunction": {
@@ -1537,7 +1582,7 @@
             "Version"
           ]
         },
-        "Description": "Immutable Gate Two proof alias."
+        "Description": "Monitored proof pointer; all reviewed invocations use the numeric version ARN."
       }
     },
     "DemoFunction": {
@@ -1639,13 +1684,13 @@
             "Version"
           ]
         },
-        "Description": "Immutable Gate Two proof alias."
+        "Description": "Monitored proof pointer; all reviewed invocations use the numeric version ARN."
       }
     },
     "BoundaryRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "Description": "Signed-caller coordinator that invokes only the immutable proposal and receipt-signing aliases.",
+        "Description": "Signed-caller coordinator that invokes only exact numeric proposal and receipt-signing versions.",
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -1658,6 +1703,7 @@
             }
           ]
         },
+        "ManagedPolicyArns": [],
         "MaxSessionDuration": 3600,
         "Policies": [
           {
@@ -1703,16 +1749,10 @@
                   ],
                   "Resource": [
                     {
-                      "Fn::GetAtt": [
-                        "AgentAlias",
-                        "AliasArn"
-                      ]
+                      "Ref": "AgentVersion"
                     },
                     {
-                      "Fn::GetAtt": [
-                        "SignerAlias",
-                        "AliasArn"
-                      ]
+                      "Ref": "SignerVersion"
                     }
                   ]
                 },
@@ -1724,16 +1764,10 @@
                   ],
                   "NotResource": [
                     {
-                      "Fn::GetAtt": [
-                        "AgentAlias",
-                        "AliasArn"
-                      ]
+                      "Ref": "AgentVersion"
                     },
                     {
-                      "Fn::GetAtt": [
-                        "SignerAlias",
-                        "AliasArn"
-                      ]
+                      "Ref": "SignerVersion"
                     }
                   ]
                 },
@@ -1754,8 +1788,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1773,12 +1806,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1786,6 +1828,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1821,9 +1864,13 @@
         "Name": {
           "Fn::Sub": "${AWS::StackName}-api"
         },
+        "ApiKeySelectionExpression": "$request.header.x-api-key",
         "Description": "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
         "ProtocolType": "HTTP",
         "DisableExecuteApiEndpoint": false,
+        "DisableSchemaValidation": false,
+        "IpAddressType": "ipv4",
+        "RouteSelectionExpression": "$request.method $request.path",
         "Tags": {
           "Project": "Tideproof",
           "Gate": "Two"
@@ -1848,6 +1895,7 @@
             }
           ]
         },
+        "ManagedPolicyArns": [],
         "MaxSessionDuration": 3600,
         "Policies": [
           {
@@ -1869,7 +1917,7 @@
                   "Sid": "DenyLambdaInvoke",
                   "Effect": "Deny",
                   "Action": [
-                    "lambda:InvokeFunction"
+                    "lambda:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1877,8 +1925,7 @@
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -1896,12 +1943,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -1909,6 +1965,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -1941,7 +1998,7 @@
     "AuthorityRaceCallerRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "Description": "Short-lived human-assumed caller for the exact immutable authority alias; no model, secret, signing, IAM, or other Lambda capability.",
+        "Description": "Short-lived human-assumed caller for one exact numeric authority version; no model, secret, signing, IAM, or other Lambda capability.",
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -1956,6 +2013,7 @@
             }
           ]
         },
+        "ManagedPolicyArns": [],
         "MaxSessionDuration": 3600,
         "Policies": [
           {
@@ -1970,10 +2028,7 @@
                     "lambda:InvokeFunction"
                   ],
                   "Resource": {
-                    "Fn::GetAtt": [
-                      "AuthorityAlias",
-                      "AliasArn"
-                    ]
+                    "Ref": "AuthorityVersion"
                   }
                 },
                 {
@@ -1993,18 +2048,14 @@
                     "lambda:InvokeFunction"
                   ],
                   "NotResource": {
-                    "Fn::GetAtt": [
-                      "AuthorityAlias",
-                      "AliasArn"
-                    ]
+                    "Ref": "AuthorityVersion"
                   }
                 },
                 {
                   "Sid": "DenyBedrock",
                   "Effect": "Deny",
                   "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream"
+                    "bedrock:Invoke*"
                   ],
                   "Resource": "*"
                 },
@@ -2022,12 +2073,21 @@
                   "Sid": "DenySecretMutation",
                   "Effect": "Deny",
                   "Action": [
+                    "secretsmanager:CancelRotateSecret",
                     "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteResourcePolicy",
                     "secretsmanager:DeleteSecret",
                     "secretsmanager:PutResourcePolicy",
                     "secretsmanager:PutSecretValue",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
                     "secretsmanager:RotateSecret",
-                    "secretsmanager:UpdateSecret"
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage"
                   ],
                   "Resource": "*"
                 },
@@ -2035,6 +2095,7 @@
                   "Sid": "DenyKmsSigning",
                   "Effect": "Deny",
                   "Action": [
+                    "kms:GenerateMac",
                     "kms:Sign"
                   ],
                   "Resource": "*"
@@ -2064,6 +2125,394 @@
         ]
       }
     },
+    "DeploymentEvidenceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Bounded deployment evidence collector; AWS requires one account-wide read to enumerate event-source mappings, while reviewed code queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Ref": "EvidenceOperatorPrincipalArn"
+                }
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalArn": {
+                    "Ref": "EvidenceOperatorPrincipalArn"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadOwnStackAttestation",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeStackResourceDrifts",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:DetectStackDrift",
+                    "cloudformation:DetectStackResourceDrift",
+                    "cloudformation:GetTemplate"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+                  }
+                },
+                {
+                  "Sid": "ReadOwnDriftDetection",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:BatchDescribeTypeConfigurations",
+                    "cloudformation:DescribeStackDriftDetectionStatus"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadExactHttpApiDeployment",
+                  "Effect": "Allow",
+                  "Action": [
+                    "apigateway:GET"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactLambdaDeployment",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:GetAlias",
+                    "lambda:GetFunction",
+                    "lambda:GetFunctionCodeSigningConfig",
+                    "lambda:GetFunctionConcurrency",
+                    "lambda:GetFunctionConfiguration",
+                    "lambda:GetPolicy",
+                    "lambda:GetFunctionRecursionConfig",
+                    "lambda:GetRuntimeManagementConfig",
+                    "lambda:ListAliases",
+                    "lambda:ListFunctionUrlConfigs",
+                    "lambda:ListTags",
+                    "lambda:ListProvisionedConcurrencyConfigs"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "AgentFunction",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Ref": "AgentVersion"
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "AgentAlias",
+                        "AliasArn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "BoundaryFunction",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Ref": "BoundaryVersion"
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "BoundaryAlias",
+                        "AliasArn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "DemoFunction",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Ref": "DemoVersion"
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "DemoAlias",
+                        "AliasArn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "SignerFunction",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Ref": "SignerVersion"
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "SignerAlias",
+                        "AliasArn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "AuthorityFunction",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Ref": "AuthorityVersion"
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "AuthorityAlias",
+                        "AliasArn"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadLambdaEventSourceCensus",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:ListEventSourceMappings"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadExactExecutionRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "AgentRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "BoundaryRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "DemoRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "SignerRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "AuthorityRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence-alternate"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyLambdaInvoke",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:Invoke*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyAllBedrockCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyAllSecretCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyAllKmsCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyRoleChaining",
+                  "Effect": "Deny",
+                  "Action": [
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "RoleName": {
+          "Fn::Sub": "${AWS::StackName}-evidence"
+        }
+      }
+    },
+    "DeploymentEvidenceAlternateRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Dedicated negative-control principal whose only positive capability is attempting the deployment-evidence role.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyName": "TideproofExactCapabilities",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AttemptOnlyDeploymentEvidenceRole",
+                  "Effect": "Allow",
+                  "Action": [
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence"
+                  }
+                },
+                {
+                  "Sid": "DenyOtherAssumeRoleTargets",
+                  "Effect": "Deny",
+                  "Action": [
+                    "sts:AssumeRole"
+                  ],
+                  "NotResource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence"
+                  }
+                },
+                {
+                  "Sid": "DenyIamCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyLambdaInvoke",
+                  "Effect": "Deny",
+                  "Action": [
+                    "lambda:Invoke*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyAllBedrockCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyAllSecretCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "secretsmanager:*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyAllKmsCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "kms:*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Tideproof"
+          },
+          {
+            "Key": "Gate",
+            "Value": "Two"
+          }
+        ],
+        "RoleName": {
+          "Fn::Sub": "${AWS::StackName}-evidence-alternate"
+        }
+      }
+    },
     "BoundaryFunction": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
@@ -2084,16 +2533,10 @@
         "Environment": {
           "Variables": {
             "AGENT_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AgentAlias",
-                "AliasArn"
-              ]
+              "Ref": "AgentVersion"
             },
             "SIGNER_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "SignerAlias",
-                "AliasArn"
-              ]
+              "Ref": "SignerVersion"
             },
             "AGENT_FUNCTION_VERSION": {
               "Fn::GetAtt": [
@@ -2219,7 +2662,7 @@
             "Version"
           ]
         },
-        "Description": "Immutable Gate Two proof alias."
+        "Description": "Monitored proof pointer; all reviewed invocations use the numeric version ARN."
       }
     },
     "AgentProbeFunction": {
@@ -2256,28 +2699,16 @@
               "Ref": "CapabilityCanarySecret"
             },
             "PROBE_AGENT_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AgentAlias",
-                "AliasArn"
-              ]
+              "Ref": "AgentVersion"
             },
             "PROBE_BOUNDARY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "BoundaryAlias",
-                "AliasArn"
-              ]
+              "Ref": "BoundaryVersion"
             },
             "PROBE_SIGNER_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "SignerAlias",
-                "AliasArn"
-              ]
+              "Ref": "SignerVersion"
             },
             "PROBE_AUTHORITY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AuthorityAlias",
-                "AliasArn"
-              ]
+              "Ref": "AuthorityVersion"
             },
             "SOURCE_COMMIT": {
               "Ref": "SourceCommit"
@@ -2379,28 +2810,16 @@
               "Ref": "CapabilityCanarySecret"
             },
             "PROBE_AGENT_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AgentAlias",
-                "AliasArn"
-              ]
+              "Ref": "AgentVersion"
             },
             "PROBE_BOUNDARY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "BoundaryAlias",
-                "AliasArn"
-              ]
+              "Ref": "BoundaryVersion"
             },
             "PROBE_SIGNER_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "SignerAlias",
-                "AliasArn"
-              ]
+              "Ref": "SignerVersion"
             },
             "PROBE_AUTHORITY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AuthorityAlias",
-                "AliasArn"
-              ]
+              "Ref": "AuthorityVersion"
             },
             "SOURCE_COMMIT": {
               "Ref": "SourceCommit"
@@ -2502,28 +2921,16 @@
               "Ref": "CapabilityCanarySecret"
             },
             "PROBE_AGENT_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AgentAlias",
-                "AliasArn"
-              ]
+              "Ref": "AgentVersion"
             },
             "PROBE_BOUNDARY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "BoundaryAlias",
-                "AliasArn"
-              ]
+              "Ref": "BoundaryVersion"
             },
             "PROBE_SIGNER_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "SignerAlias",
-                "AliasArn"
-              ]
+              "Ref": "SignerVersion"
             },
             "PROBE_AUTHORITY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AuthorityAlias",
-                "AliasArn"
-              ]
+              "Ref": "AuthorityVersion"
             },
             "SOURCE_COMMIT": {
               "Ref": "SourceCommit"
@@ -2625,28 +3032,16 @@
               "Ref": "CapabilityCanarySecret"
             },
             "PROBE_AGENT_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AgentAlias",
-                "AliasArn"
-              ]
+              "Ref": "AgentVersion"
             },
             "PROBE_BOUNDARY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "BoundaryAlias",
-                "AliasArn"
-              ]
+              "Ref": "BoundaryVersion"
             },
             "PROBE_SIGNER_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "SignerAlias",
-                "AliasArn"
-              ]
+              "Ref": "SignerVersion"
             },
             "PROBE_AUTHORITY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AuthorityAlias",
-                "AliasArn"
-              ]
+              "Ref": "AuthorityVersion"
             },
             "SOURCE_COMMIT": {
               "Ref": "SourceCommit"
@@ -2748,28 +3143,16 @@
               "Ref": "CapabilityCanarySecret"
             },
             "PROBE_AGENT_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AgentAlias",
-                "AliasArn"
-              ]
+              "Ref": "AgentVersion"
             },
             "PROBE_BOUNDARY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "BoundaryAlias",
-                "AliasArn"
-              ]
+              "Ref": "BoundaryVersion"
             },
             "PROBE_SIGNER_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "SignerAlias",
-                "AliasArn"
-              ]
+              "Ref": "SignerVersion"
             },
             "PROBE_AUTHORITY_FUNCTION_ARN": {
-              "Fn::GetAtt": [
-                "AuthorityAlias",
-                "AliasArn"
-              ]
+              "Ref": "AuthorityVersion"
             },
             "SOURCE_COMMIT": {
               "Ref": "SourceCommit"
@@ -2845,11 +3228,9 @@
         },
         "IntegrationType": "AWS_PROXY",
         "IntegrationUri": {
-          "Fn::GetAtt": [
-            "BoundaryAlias",
-            "AliasArn"
-          ]
+          "Ref": "BoundaryVersion"
         },
+        "IntegrationMethod": "POST",
         "PayloadFormatVersion": "2.0",
         "TimeoutInMillis": 29000
       }
@@ -2883,11 +3264,9 @@
         },
         "IntegrationType": "AWS_PROXY",
         "IntegrationUri": {
-          "Fn::GetAtt": [
-            "DemoAlias",
-            "AliasArn"
-          ]
+          "Ref": "DemoVersion"
         },
+        "IntegrationMethod": "POST",
         "PayloadFormatVersion": "2.0",
         "TimeoutInMillis": 6000
       }
@@ -3102,6 +3481,30 @@
         }
       }
     },
+    "ApiDeployment": {
+      "Type": "AWS::ApiGatewayV2::Deployment",
+      "DependsOn": [
+        "AdvisoryRoute",
+        "DemoAmbiguityEvidenceRoute",
+        "DemoAppRoute",
+        "DemoArchitectureRoute",
+        "DemoAuthorityEvidenceRoute",
+        "DemoClaimsRoute",
+        "DemoHealthRoute",
+        "DemoIndexRoute",
+        "DemoRecoveryEvidenceRoute",
+        "DemoScenarioRoute",
+        "DemoStylesRoute"
+      ],
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "Description": {
+          "Fn::Sub": "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+        }
+      }
+    },
     "DefaultStage": {
       "Type": "AWS::ApiGatewayV2::Stage",
       "Properties": {
@@ -3109,7 +3512,10 @@
           "Ref": "HttpApi"
         },
         "StageName": "$default",
-        "AutoDeploy": true,
+        "AutoDeploy": false,
+        "DeploymentId": {
+          "Ref": "ApiDeployment"
+        },
         "AccessLogSettings": {
           "DestinationArn": {
             "Fn::GetAtt": [
@@ -3140,10 +3546,7 @@
       "Properties": {
         "Action": "lambda:InvokeFunction",
         "FunctionName": {
-          "Fn::GetAtt": [
-            "BoundaryAlias",
-            "AliasArn"
-          ]
+          "Ref": "BoundaryVersion"
         },
         "Principal": "apigateway.amazonaws.com",
         "SourceAccount": {
@@ -3159,10 +3562,7 @@
       "Properties": {
         "Action": "lambda:InvokeFunction",
         "FunctionName": {
-          "Fn::GetAtt": [
-            "DemoAlias",
-            "AliasArn"
-          ]
+          "Ref": "DemoVersion"
         },
         "Principal": "apigateway.amazonaws.com",
         "SourceAccount": {
@@ -3178,10 +3578,7 @@
       "Properties": {
         "Action": "lambda:InvokeFunction",
         "FunctionName": {
-          "Fn::GetAtt": [
-            "DemoAlias",
-            "AliasArn"
-          ]
+          "Ref": "DemoVersion"
         },
         "Principal": "apigateway.amazonaws.com",
         "SourceAccount": {
@@ -3352,6 +3749,22 @@
         ]
       }
     },
+    "DeploymentEvidenceRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "DeploymentEvidenceRole",
+          "Arn"
+        ]
+      }
+    },
+    "DeploymentEvidenceAlternateRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "DeploymentEvidenceAlternateRole",
+          "Arn"
+        ]
+      }
+    },
     "ApiAccessLogGroupName": {
       "Value": {
         "Ref": "ApiAccessLogGroup"
@@ -3395,6 +3808,31 @@
           "AuthorityAlias",
           "AliasArn"
         ]
+      }
+    },
+    "AgentVersionArn": {
+      "Value": {
+        "Ref": "AgentVersion"
+      }
+    },
+    "BoundaryVersionArn": {
+      "Value": {
+        "Ref": "BoundaryVersion"
+      }
+    },
+    "DemoVersionArn": {
+      "Value": {
+        "Ref": "DemoVersion"
+      }
+    },
+    "SignerVersionArn": {
+      "Value": {
+        "Ref": "SignerVersion"
+      }
+    },
+    "AuthorityVersionArn": {
+      "Value": {
+        "Ref": "AuthorityVersion"
       }
     },
     "AgentProbeVersionArn": {

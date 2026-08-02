@@ -11,12 +11,18 @@ const UNSAFE_SDK_ENVIRONMENT = new Set([
   "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
   "AWS_CONTAINER_CREDENTIALS_FULL_URI",
   "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+  "AWS_DEFAULTS_MODE",
   "AWS_DEFAULT_PROFILE",
+  "AWS_AUTH_SCHEME_PREFERENCE",
   "AWS_PROFILE",
   "AWS_ROLE_ARN",
   "AWS_ROLE_SESSION_NAME",
+  "AWS_RETRY_MODE",
   "AWS_SDK_LOAD_CONFIG",
+  "AWS_SIGV4A_SIGNING_REGION_SET",
   "AWS_SHARED_CREDENTIALS_FILE",
+  "AWS_USE_DUALSTACK_ENDPOINT",
+  "AWS_USE_FIPS_ENDPOINT",
   "AWS_WEB_IDENTITY_TOKEN_FILE",
   "CURL_CA_BUNDLE",
   "HTTPS_PROXY",
@@ -233,6 +239,7 @@ export function validateAwsEvidenceCaller(
     expectedPrincipalArn,
     expectedCallerArn,
     expectedCallerUserId,
+    expectedRoleId,
     bindingContext
   }
 ) {
@@ -276,6 +283,22 @@ export function validateAwsEvidenceCaller(
     identity.UserId === expectedCallerUserId,
     "AWS_EVIDENCE_CALLER_USER"
   );
+  let principalId;
+  if (expected.principalType === "assumed-role") {
+    const sessionName = identity.Arn.split("/").at(-1);
+    const delimiter = identity.UserId.lastIndexOf(":");
+    principalId = identity.UserId.slice(0, delimiter);
+    requireCondition(
+      delimiter > 0 &&
+        /^[A-Z0-9]{16,128}$/.test(principalId) &&
+        SESSION_NAME.test(sessionName) &&
+        identity.UserId === `${principalId}:${sessionName}` &&
+        (expectedRoleId === undefined || expectedRoleId === principalId),
+      "AWS_EVIDENCE_CALLER_ROLE_ID"
+    );
+  } else {
+    principalId = identity.UserId;
+  }
   requireCondition(
     bindingContext &&
       typeof bindingContext === "object" &&
@@ -315,15 +338,17 @@ export function validateAwsEvidenceCaller(
     "AWS_EVIDENCE_CALLER_BINDING"
   );
   const expectedPrincipalDigest = sha256(expectedPrincipalArn);
+  const principalIdDigest = sha256(principalId);
   const contextDigest = sha256(
     `tideproof.aws-evidence-context.v1\0${canonicalContext}`
   );
   const bindingDigest = sha256(
     [
-      "tideproof.aws-evidence-caller-binding.v1",
+      "tideproof.aws-evidence-caller-binding.v2",
       callerIdentityDigest,
       expectedIdentityDigest,
       expectedPrincipalDigest,
+      principalIdDigest,
       contextDigest
     ].join("\0")
   );
@@ -333,6 +358,7 @@ export function validateAwsEvidenceCaller(
     contextDigest,
     expectedIdentityDigest,
     expectedPrincipalDigest,
+    principalIdDigest,
     principalType: expected.principalType
   });
 }

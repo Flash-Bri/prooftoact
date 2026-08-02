@@ -67,6 +67,24 @@ function assumeAccountRolePolicy() {
   };
 }
 
+function assumeExactEvidencePrincipalPolicy() {
+  return {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: ref("EvidenceOperatorPrincipalArn") },
+        Action: "sts:AssumeRole",
+        Condition: {
+          StringEquals: {
+            "aws:PrincipalArn": ref("EvidenceOperatorPrincipalArn")
+          }
+        }
+      }
+    ]
+  };
+}
+
 function artifactCode(name) {
   const title = `${name[0].toUpperCase()}${name.slice(1)}`;
   return {
@@ -96,6 +114,15 @@ function denyPrivilegeEscalation() {
   };
 }
 
+function denyRoleChaining() {
+  return {
+    Sid: "DenyRoleChaining",
+    Effect: "Deny",
+    Action: ["sts:AssumeRole"],
+    Resource: "*"
+  };
+}
+
 function denySecretAccess() {
   return {
     Sid: "DenySecretAccess",
@@ -114,13 +141,31 @@ function denySecretMutation() {
     Sid: "DenySecretMutation",
     Effect: "Deny",
     Action: [
+      "secretsmanager:CancelRotateSecret",
       "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteResourcePolicy",
       "secretsmanager:DeleteSecret",
       "secretsmanager:PutResourcePolicy",
       "secretsmanager:PutSecretValue",
+      "secretsmanager:RemoveRegionsFromReplication",
+      "secretsmanager:ReplicateSecretToRegions",
+      "secretsmanager:RestoreSecret",
       "secretsmanager:RotateSecret",
-      "secretsmanager:UpdateSecret"
+      "secretsmanager:StopReplicationToReplica",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:UpdateSecret",
+      "secretsmanager:UpdateSecretVersionStage"
     ],
+    Resource: "*"
+  };
+}
+
+function denyAllSecretCapabilities() {
+  return {
+    Sid: "DenyAllSecretCapabilities",
+    Effect: "Deny",
+    Action: ["secretsmanager:*"],
     Resource: "*"
   };
 }
@@ -150,7 +195,16 @@ function denyBedrock() {
   return {
     Sid: "DenyBedrock",
     Effect: "Deny",
-    Action: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+    Action: ["bedrock:Invoke*"],
+    Resource: "*"
+  };
+}
+
+function denyAllBedrockCapabilities() {
+  return {
+    Sid: "DenyAllBedrockCapabilities",
+    Effect: "Deny",
+    Action: ["bedrock:*"],
     Resource: "*"
   };
 }
@@ -159,7 +213,16 @@ function denyKmsSigning() {
   return {
     Sid: "DenyKmsSigning",
     Effect: "Deny",
-    Action: ["kms:Sign"],
+    Action: ["kms:GenerateMac", "kms:Sign"],
+    Resource: "*"
+  };
+}
+
+function denyAllKmsCapabilities() {
+  return {
+    Sid: "DenyAllKmsCapabilities",
+    Effect: "Deny",
+    Action: ["kms:*"],
     Resource: "*"
   };
 }
@@ -168,7 +231,7 @@ function denyLambdaInvoke() {
   return {
     Sid: "DenyLambdaInvoke",
     Effect: "Deny",
-    Action: ["lambda:InvokeFunction"],
+    Action: ["lambda:Invoke*"],
     Resource: "*"
   };
 }
@@ -183,6 +246,7 @@ function roleResource({
     Properties: {
       Description: description,
       AssumeRolePolicyDocument: assumeRolePolicy,
+      ManagedPolicyArns: [],
       MaxSessionDuration: 3600,
       Policies: [
         {
@@ -270,7 +334,8 @@ function alias(functionName, versionName) {
       Name: "proof",
       FunctionName: ref(functionName),
       FunctionVersion: getAtt(versionName, "Version"),
-      Description: "Immutable Gate Two proof alias."
+      Description:
+        "Monitored proof pointer; all reviewed invocations use the numeric version ARN."
     }
   };
 }
@@ -350,10 +415,10 @@ function commonProbeEnvironment(roleClass) {
     PROBE_OTHER_MODEL_ID: "amazon.nova-lite-v1:0",
     PROBE_KMS_KEY_ARN: getAtt("ReceiptSigningKey", "Arn"),
     PROBE_SECRET_ARN: ref("CapabilityCanarySecret"),
-    PROBE_AGENT_FUNCTION_ARN: getAtt("AgentAlias", "AliasArn"),
-    PROBE_BOUNDARY_FUNCTION_ARN: getAtt("BoundaryAlias", "AliasArn"),
-    PROBE_SIGNER_FUNCTION_ARN: getAtt("SignerAlias", "AliasArn"),
-    PROBE_AUTHORITY_FUNCTION_ARN: getAtt("AuthorityAlias", "AliasArn"),
+    PROBE_AGENT_FUNCTION_ARN: ref("AgentVersion"),
+    PROBE_BOUNDARY_FUNCTION_ARN: ref("BoundaryVersion"),
+    PROBE_SIGNER_FUNCTION_ARN: ref("SignerVersion"),
+    PROBE_AUTHORITY_FUNCTION_ARN: ref("AuthorityVersion"),
     SOURCE_COMMIT: ref("SourceCommit"),
     CONFIG_DIGEST: ref("ConfigDigest"),
     PROBE_SOURCE_DIGEST: ref("ProbeSourceDigest"),
@@ -615,7 +680,14 @@ export function buildGate2Template() {
       Default: "false",
       AllowedValues: ["true", "false"],
       Description:
-        "Opt in to same-role evidence probes temporarily; update to false after non-final probe receipts are captured."
+        "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
+    },
+    EvidenceOperatorPrincipalArn: {
+      Type: "String",
+      Description:
+        "Exact same-account IAM role or user allowed to assume the bounded deployment-evidence collector.",
+      AllowedPattern:
+        "^arn:aws[a-zA-Z-]*:iam::[0-9]{12}:(?:role|user)/[A-Za-z0-9+=,.@_-]{1,64}$"
     },
     ...artifactParameters("agent"),
     ...artifactParameters("boundary"),
@@ -967,7 +1039,7 @@ export function buildGate2Template() {
 
   resources.BoundaryRole = roleResource({
     description:
-      "Signed-caller coordinator that invokes only the immutable proposal and receipt-signing aliases.",
+      "Signed-caller coordinator that invokes only exact numeric proposal and receipt-signing versions.",
     statements: [
       exactLogStatement("BoundaryLogGroup"),
       fnIf(
@@ -979,8 +1051,8 @@ export function buildGate2Template() {
         Effect: "Allow",
         Action: ["lambda:InvokeFunction"],
         Resource: [
-          getAtt("AgentAlias", "AliasArn"),
-          getAtt("SignerAlias", "AliasArn")
+          ref("AgentVersion"),
+          ref("SignerVersion")
         ]
       },
       {
@@ -988,8 +1060,8 @@ export function buildGate2Template() {
         Effect: "Deny",
         Action: ["lambda:InvokeFunction"],
         NotResource: [
-          getAtt("AgentAlias", "AliasArn"),
-          getAtt("SignerAlias", "AliasArn")
+          ref("AgentVersion"),
+          ref("SignerVersion")
         ]
       },
       {
@@ -1010,10 +1082,14 @@ export function buildGate2Template() {
     Type: "AWS::ApiGatewayV2::Api",
     Properties: {
       Name: sub("${AWS::StackName}-api"),
+      ApiKeySelectionExpression: "$request.header.x-api-key",
       Description:
         "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
       ProtocolType: "HTTP",
       DisableExecuteApiEndpoint: false,
+      DisableSchemaValidation: false,
+      IpAddressType: "ipv4",
+      RouteSelectionExpression: "$request.method $request.path",
       Tags: { Project: "Tideproof", Gate: "Two" }
     }
   };
@@ -1042,14 +1118,14 @@ export function buildGate2Template() {
 
   resources.AuthorityRaceCallerRole = roleResource({
     description:
-      "Short-lived human-assumed caller for the exact immutable authority alias; no model, secret, signing, IAM, or other Lambda capability.",
+      "Short-lived human-assumed caller for one exact numeric authority version; no model, secret, signing, IAM, or other Lambda capability.",
     assumeRolePolicy: assumeAccountRolePolicy(),
     statements: [
       {
         Sid: "InvokeOnlyAuthorityProof",
         Effect: "Allow",
         Action: ["lambda:InvokeFunction"],
-        Resource: getAtt("AuthorityAlias", "AliasArn")
+        Resource: ref("AuthorityVersion")
       },
       {
         Sid: "ReadOwnStackRoleBinding",
@@ -1063,7 +1139,7 @@ export function buildGate2Template() {
         Sid: "DenyOtherLambdaTargets",
         Effect: "Deny",
         Action: ["lambda:InvokeFunction"],
-        NotResource: getAtt("AuthorityAlias", "AliasArn")
+        NotResource: ref("AuthorityVersion")
       },
       denyBedrock(),
       denySecretAccess(),
@@ -1072,6 +1148,160 @@ export function buildGate2Template() {
       denyPrivilegeEscalation()
     ]
   });
+
+  resources.DeploymentEvidenceRole = roleResource({
+    description:
+      "Bounded deployment evidence collector; AWS requires one account-wide read to enumerate event-source mappings, while reviewed code queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
+    assumeRolePolicy: assumeExactEvidencePrincipalPolicy(),
+    statements: [
+      {
+        Sid: "ReadOwnStackAttestation",
+        Effect: "Allow",
+        Action: [
+          "cloudformation:DescribeStackResourceDrifts",
+          "cloudformation:DescribeStackResources",
+          "cloudformation:DescribeStacks",
+          "cloudformation:DetectStackDrift",
+          "cloudformation:DetectStackResourceDrift",
+          "cloudformation:GetTemplate"
+        ],
+        Resource: sub(
+          "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+        )
+      },
+      {
+        Sid: "ReadOwnDriftDetection",
+        Effect: "Allow",
+        Action: [
+          "cloudformation:BatchDescribeTypeConfigurations",
+          "cloudformation:DescribeStackDriftDetectionStatus"
+        ],
+        Resource: "*"
+      },
+      {
+        Sid: "ReadExactHttpApiDeployment",
+        Effect: "Allow",
+        Action: ["apigateway:GET"],
+        Resource: [
+          sub(
+            "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}"
+          ),
+          sub(
+            "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${HttpApi}/*"
+          )
+        ]
+      },
+      {
+        Sid: "ReadExactLambdaDeployment",
+        Effect: "Allow",
+        Action: [
+          "lambda:GetAlias",
+          "lambda:GetFunction",
+          "lambda:GetFunctionCodeSigningConfig",
+          "lambda:GetFunctionConcurrency",
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetPolicy",
+          "lambda:GetFunctionRecursionConfig",
+          "lambda:GetRuntimeManagementConfig",
+          "lambda:ListAliases",
+          "lambda:ListFunctionUrlConfigs",
+          "lambda:ListTags",
+          "lambda:ListProvisionedConcurrencyConfigs"
+        ],
+        Resource: [
+          getAtt("AgentFunction", "Arn"),
+          ref("AgentVersion"),
+          getAtt("AgentAlias", "AliasArn"),
+          getAtt("BoundaryFunction", "Arn"),
+          ref("BoundaryVersion"),
+          getAtt("BoundaryAlias", "AliasArn"),
+          getAtt("DemoFunction", "Arn"),
+          ref("DemoVersion"),
+          getAtt("DemoAlias", "AliasArn"),
+          getAtt("SignerFunction", "Arn"),
+          ref("SignerVersion"),
+          getAtt("SignerAlias", "AliasArn"),
+          getAtt("AuthorityFunction", "Arn"),
+          ref("AuthorityVersion"),
+          getAtt("AuthorityAlias", "AliasArn")
+        ]
+      },
+      {
+        Sid: "ReadLambdaEventSourceCensus",
+        Effect: "Allow",
+        Action: ["lambda:ListEventSourceMappings"],
+        Resource: "*"
+      },
+      {
+        Sid: "ReadExactExecutionRoles",
+        Effect: "Allow",
+        Action: [
+          "iam:GetRole",
+          "iam:GetRolePolicy",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListRolePolicies",
+          "iam:ListRoleTags"
+        ],
+        Resource: [
+          getAtt("AgentRole", "Arn"),
+          getAtt("BoundaryRole", "Arn"),
+          getAtt("DemoRole", "Arn"),
+          getAtt("SignerRole", "Arn"),
+          getAtt("AuthorityRole", "Arn"),
+          sub(
+            "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence"
+          ),
+          sub(
+            "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence-alternate"
+          )
+        ]
+      },
+      denyLambdaInvoke(),
+      denyAllBedrockCapabilities(),
+      denyAllSecretCapabilities(),
+      denyAllKmsCapabilities(),
+      denyRoleChaining()
+    ]
+  });
+  resources.DeploymentEvidenceRole.Properties.RoleName = sub(
+    "${AWS::StackName}-evidence"
+  );
+
+  const deploymentEvidenceRoleArn = sub(
+    "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence"
+  );
+  resources.DeploymentEvidenceAlternateRole = roleResource({
+    description:
+      "Dedicated negative-control principal whose only positive capability is attempting the deployment-evidence role.",
+    assumeRolePolicy: assumeAccountRolePolicy(),
+    statements: [
+      {
+        Sid: "AttemptOnlyDeploymentEvidenceRole",
+        Effect: "Allow",
+        Action: ["sts:AssumeRole"],
+        Resource: deploymentEvidenceRoleArn
+      },
+      {
+        Sid: "DenyOtherAssumeRoleTargets",
+        Effect: "Deny",
+        Action: ["sts:AssumeRole"],
+        NotResource: deploymentEvidenceRoleArn
+      },
+      {
+        Sid: "DenyIamCapabilities",
+        Effect: "Deny",
+        Action: ["iam:*"],
+        Resource: "*"
+      },
+      denyLambdaInvoke(),
+      denyAllBedrockCapabilities(),
+      denyAllSecretCapabilities(),
+      denyAllKmsCapabilities()
+    ]
+  });
+  resources.DeploymentEvidenceAlternateRole.Properties.RoleName = sub(
+    "${AWS::StackName}-evidence-alternate"
+  );
 
   const promptTemplateDigest = sha256Hex(PROMPT_TEMPLATE_VERSION);
   const validatorDigest = sha256Hex(VALIDATOR_VERSION);
@@ -1085,8 +1315,8 @@ export function buildGate2Template() {
     timeout: 25,
     concurrency: 2,
     environment: {
-      AGENT_FUNCTION_ARN: getAtt("AgentAlias", "AliasArn"),
-      SIGNER_FUNCTION_ARN: getAtt("SignerAlias", "AliasArn"),
+      AGENT_FUNCTION_ARN: ref("AgentVersion"),
+      SIGNER_FUNCTION_ARN: ref("SignerVersion"),
       AGENT_FUNCTION_VERSION: getAtt("AgentVersion", "Version"),
       SIGNER_FUNCTION_VERSION: getAtt("SignerVersion", "Version"),
       SIGNING_KEY_ARN: getAtt("ReceiptSigningKey", "Arn"),
@@ -1197,7 +1427,8 @@ export function buildGate2Template() {
     Properties: {
       ApiId: ref("HttpApi"),
       IntegrationType: "AWS_PROXY",
-      IntegrationUri: getAtt("BoundaryAlias", "AliasArn"),
+      IntegrationUri: ref("BoundaryVersion"),
+      IntegrationMethod: "POST",
       PayloadFormatVersion: "2.0",
       TimeoutInMillis: 29_000
     }
@@ -1221,7 +1452,8 @@ export function buildGate2Template() {
     Properties: {
       ApiId: ref("HttpApi"),
       IntegrationType: "AWS_PROXY",
-      IntegrationUri: getAtt("DemoAlias", "AliasArn"),
+      IntegrationUri: ref("DemoVersion"),
+      IntegrationMethod: "POST",
       PayloadFormatVersion: "2.0",
       TimeoutInMillis: 6_000
     }
@@ -1246,12 +1478,26 @@ export function buildGate2Template() {
       }
     };
   }
+  resources.ApiDeployment = {
+    Type: "AWS::ApiGatewayV2::Deployment",
+    DependsOn: [
+      "AdvisoryRoute",
+      ...Object.values(PUBLIC_DEMO_ROUTE_IDS)
+    ].sort(),
+    Properties: {
+      ApiId: ref("HttpApi"),
+      Description: sub(
+        "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+      )
+    }
+  };
   resources.DefaultStage = {
     Type: "AWS::ApiGatewayV2::Stage",
     Properties: {
       ApiId: ref("HttpApi"),
       StageName: "$default",
-      AutoDeploy: true,
+      AutoDeploy: false,
+      DeploymentId: ref("ApiDeployment"),
       AccessLogSettings: {
         DestinationArn: getAtt("ApiAccessLogGroup", "Arn"),
         Format: JSON.stringify({
@@ -1283,7 +1529,7 @@ export function buildGate2Template() {
     Type: "AWS::Lambda::Permission",
     Properties: {
       Action: "lambda:InvokeFunction",
-      FunctionName: getAtt("BoundaryAlias", "AliasArn"),
+      FunctionName: ref("BoundaryVersion"),
       Principal: "apigateway.amazonaws.com",
       SourceAccount: ref("AWS::AccountId"),
       SourceArn: sub(
@@ -1295,7 +1541,7 @@ export function buildGate2Template() {
     Type: "AWS::Lambda::Permission",
     Properties: {
       Action: "lambda:InvokeFunction",
-      FunctionName: getAtt("DemoAlias", "AliasArn"),
+      FunctionName: ref("DemoVersion"),
       Principal: "apigateway.amazonaws.com",
       SourceAccount: ref("AWS::AccountId"),
       SourceArn: sub(
@@ -1307,7 +1553,7 @@ export function buildGate2Template() {
     Type: "AWS::Lambda::Permission",
     Properties: {
       Action: "lambda:InvokeFunction",
-      FunctionName: getAtt("DemoAlias", "AliasArn"),
+      FunctionName: ref("DemoVersion"),
       Principal: "apigateway.amazonaws.com",
       SourceAccount: ref("AWS::AccountId"),
       SourceArn: sub(
@@ -1381,6 +1627,12 @@ export function buildGate2Template() {
       AuthorityRaceCallerRoleArn: {
         Value: getAtt("AuthorityRaceCallerRole", "Arn")
       },
+      DeploymentEvidenceRoleArn: {
+        Value: getAtt("DeploymentEvidenceRole", "Arn")
+      },
+      DeploymentEvidenceAlternateRoleArn: {
+        Value: getAtt("DeploymentEvidenceAlternateRole", "Arn")
+      },
       ApiAccessLogGroupName: {
         Value: ref("ApiAccessLogGroup")
       },
@@ -1393,6 +1645,11 @@ export function buildGate2Template() {
       AuthorityAliasArn: {
         Value: getAtt("AuthorityAlias", "AliasArn")
       },
+      AgentVersionArn: { Value: ref("AgentVersion") },
+      BoundaryVersionArn: { Value: ref("BoundaryVersion") },
+      DemoVersionArn: { Value: ref("DemoVersion") },
+      SignerVersionArn: { Value: ref("SignerVersion") },
+      AuthorityVersionArn: { Value: ref("AuthorityVersion") },
       AgentProbeVersionArn: {
         Condition: "ShouldDeployProbes",
         Value: ref("AgentProbeVersion")
@@ -1491,9 +1748,11 @@ export function deploymentConfigDigest(configuration) {
     "artifactKeys",
     "artifactSourceDigests",
     "artifactVersions",
+    "attestation",
     "authority",
     "bedrockModelId",
     "budgetUsd",
+    "evidenceOperator",
     "logRetentionDays",
     "notificationEmailDigest",
     "packageLockDigest",
@@ -1534,6 +1793,89 @@ export function deploymentConfigDigest(configuration) {
       ]
         .sort()
         .join("\n")
+    ||
+    !configuration.evidenceOperator ||
+    typeof configuration.evidenceOperator !== "object" ||
+    Array.isArray(configuration.evidenceOperator) ||
+    Object.keys(configuration.evidenceOperator).sort().join("\n") !==
+      "principalArn"
+    ||
+    !configuration.attestation ||
+    typeof configuration.attestation !== "object" ||
+    Array.isArray(configuration.attestation) ||
+    Object.keys(configuration.attestation).sort().join("\n") !==
+      [
+        "alternateRolePolicyDigest",
+        "evidenceRolePolicyDigest",
+        "functionConfigurationDigests",
+        "functionRolePolicyDigests",
+        "receiptPublicKeys"
+      ]
+        .sort()
+        .join("\n") ||
+    !["functionConfigurationDigests", "functionRolePolicyDigests"].every(
+      (name) =>
+        configuration.attestation[name] &&
+        typeof configuration.attestation[name] === "object" &&
+        !Array.isArray(configuration.attestation[name]) &&
+        Object.keys(configuration.attestation[name]).sort().join("\n") ===
+          ["agent", "authority", "boundary", "demo", "signer"].join("\n") &&
+        Object.values(configuration.attestation[name]).every((value) =>
+          /^[0-9a-f]{64}$/.test(value)
+        )
+    ) ||
+    !/^[0-9a-f]{64}$/.test(
+      configuration.attestation.evidenceRolePolicyDigest ?? ""
+    ) ||
+    !/^[0-9a-f]{64}$/.test(
+      configuration.attestation.alternateRolePolicyDigest ?? ""
+    ) ||
+    !configuration.attestation.receiptPublicKeys ||
+    typeof configuration.attestation.receiptPublicKeys !== "object" ||
+    Array.isArray(configuration.attestation.receiptPublicKeys) ||
+    Object.keys(configuration.attestation.receiptPublicKeys)
+      .sort()
+      .join("\n") !== "alternateDenial\npost\npre" ||
+    !Object.values(configuration.attestation.receiptPublicKeys).every(
+      (value) =>
+        typeof value === "string" &&
+        value.length >= 56 &&
+        value.length <= 128 &&
+        /^[A-Za-z0-9+/]+={0,2}$/.test(value)
+    )
+  ) {
+    throw new Error("DEPLOYMENT_CONFIG_SHAPE_REJECTED");
+  }
+  const evidencePrincipalPattern = new RegExp(
+    `^arn:aws[a-zA-Z-]*:iam::${configuration.accountId}:` +
+      "(?:role|user)/[A-Za-z0-9+=,.@_-]{1,64}$"
+  );
+  if (!evidencePrincipalPattern.test(configuration.evidenceOperator.principalArn)) {
+    throw new Error("DEPLOYMENT_CONFIG_SHAPE_REJECTED");
+  }
+  for (const publicKey of Object.values(
+    configuration.attestation.receiptPublicKeys
+  )) {
+    try {
+      const key = crypto.createPublicKey({
+        key: Buffer.from(publicKey, "base64"),
+        format: "der",
+        type: "spki"
+      });
+      if (
+        key.asymmetricKeyType !== "ed25519" ||
+        key.export({ format: "der", type: "spki" }).toString("base64") !==
+          publicKey
+      ) {
+        throw new Error("DEPLOYMENT_CONFIG_SHAPE_REJECTED");
+      }
+    } catch {
+      throw new Error("DEPLOYMENT_CONFIG_SHAPE_REJECTED");
+    }
+  }
+  if (
+    new Set(Object.values(configuration.attestation.receiptPublicKeys)).size !==
+    3
   ) {
     throw new Error("DEPLOYMENT_CONFIG_SHAPE_REJECTED");
   }
