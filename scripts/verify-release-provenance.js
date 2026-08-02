@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyDependencyInventory } from "./verify-dependency-inventory.js";
 import { verifyCurrentBundledThirdPartyNotices } from "./verify-bundled-third-party-notices.js";
 import { verifyAccessibility } from "./verify-accessibility.js";
+import { exactNpmCli } from "./build-gate2-exact.js";
 import { verifyReleaseClaims } from "./verify-release-claims.js";
 import { verifyReleaseCost } from "./verify-release-cost.js";
 import { verifyReleaseGovernance } from "./verify-release-governance.js";
@@ -79,17 +80,34 @@ function childEnvironment(source) {
   return environment;
 }
 
-function defaultRunner(projectRoot) {
-  return (command, args, options = {}) =>
-    spawnSync(command, args, {
+function defaultRunner(
+  projectRoot,
+  sourceEnvironment = process.env,
+  spawn = spawnSync
+) {
+  const npmCli = exactNpmCli(sourceEnvironment);
+  return (command, args, options = {}) => {
+    assert(
+      command === "git" || command === "npm",
+      "RELEASE_PROVENANCE_COMMAND"
+    );
+    const executable = command === "npm" ? process.execPath : command;
+    const exactArguments = command === "npm" ? [npmCli, ...args] : args;
+    const environment = childEnvironment(sourceEnvironment);
+    if (command === "npm") {
+      environment.npm_execpath = npmCli;
+      environment.npm_node_execpath = process.execPath;
+    }
+    return spawn(executable, exactArguments, {
       cwd: projectRoot,
       encoding: Object.hasOwn(options, "encoding")
         ? options.encoding
         : "utf8",
-      env: childEnvironment(process.env),
+      env: environment,
       input: options.input,
       maxBuffer: options.maxBuffer ?? 32 * 1024 * 1024
     });
+  };
 }
 
 function checkedCommand(run, command, args, code) {
@@ -913,5 +931,6 @@ export const __test = Object.freeze({
   EXPECTED_BRANCH,
   OFFICIAL_REMOTE,
   childEnvironment,
+  defaultRunner,
   isOfficialRemote
 });

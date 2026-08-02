@@ -127,6 +127,41 @@ and private human review remain required.
   deployment identity, alternate-principal denial, administrator exclusion,
   canary stability, or production security has been proven.
 
+## Accepted nested provenance runner finding
+
+- **Root cause:** the official-main readiness wrapper launched its child npm
+  process through the exact invoking npm CLI and a sanitized `/usr/bin:/bin`
+  `PATH`, but the nested release-provenance runner later spawned `npm` by name.
+  On hosts where npm is outside that path, provenance stopped at its installed
+  dependency query even though the same command passed from the ambient shell.
+- **Why it was missed:** readiness unit tests injected a successful provenance
+  receipt instead of exercising the real nested runner, and the provenance
+  environment test checked credential removal without asserting executable
+  identity. Pull-request CI correctly skips official-main-only provenance and
+  readiness, so the first real nested execution occurred only after merge.
+- **Earliest detection point:** the exact-main local-readiness gate immediately
+  after merge and before any authenticated provider preflight, upload, or cloud
+  mutation.
+- **Repair:** release provenance now resolves the invoking npm CLI through the
+  same exact-CLI contract as the artifact builder, invokes it with the current
+  Node executable, restores only the canonical npm executable bindings for
+  that child, and rejects command families other than Git and npm.
+- **Regression and preventive controls:** a focused test supplies a sanitized
+  path and a synthetic absolute npm CLI, then proves that provenance bypasses
+  PATH lookup, preserves the exact Node/npm pair, and rejects an unreviewed
+  command family. The merged exact-main readiness command remains the final
+  integration control.
+- **Verification:** the focused provenance and readiness suites, full source
+  suite, release security/proof/provenance gates, exact build, artifact
+  integrity, and hosted exact-head CI must pass together. The identical
+  official-main readiness command that exposed the defect must pass after the
+  repair merges.
+- **Residual risk:** this repair proves deterministic executable selection for
+  the nested local provenance query. It does not validate AWS, CockroachDB,
+  network availability, registry integrity, or hostile-host resistance.
+- **Claim impact:** no live or deployment claim changes. The fix restores a
+  required local source gate and does not authorize provider mutation.
+
 ## Accepted create-only lifecycle finding
 
 - **Root cause:** one stable `ApiDeployment` logical ID let CloudFormation

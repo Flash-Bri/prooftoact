@@ -650,3 +650,51 @@ test("provenance child environment removes credentials and Git overrides", () =>
   assert.equal(isolated.GIT_NO_REPLACE_OBJECTS, "1");
   assert.equal(isolated.npm_config_userconfig, "/dev/null");
 });
+
+test("provenance binds npm to the invoking CLI under a sanitized PATH", () => {
+  const fixtureRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "tideproof-provenance-runner-")
+  );
+  try {
+    const npmCli = path.join(fixtureRoot, "npm-cli.js");
+    fs.writeFileSync(npmCli, "// synthetic npm CLI fixture\n");
+    const calls = [];
+    const run = __test.defaultRunner(
+      ROOT,
+      {
+        PATH: "/usr/bin:/bin",
+        npm_execpath: npmCli,
+        npm_node_execpath: process.execPath
+      },
+      (command, args, options) => {
+        calls.push({ command, args, options });
+        return { status: 0, stdout: "[]", stderr: "" };
+      }
+    );
+
+    run("npm", ["query", "*", "--json"]);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].command, process.execPath);
+    assert.deepEqual(calls[0].args, [
+      fs.realpathSync(npmCli),
+      "query",
+      "*",
+      "--json"
+    ]);
+    assert.equal(calls[0].options.env.PATH, "/usr/bin:/bin");
+    assert.equal(
+      calls[0].options.env.npm_execpath,
+      fs.realpathSync(npmCli)
+    );
+    assert.equal(
+      calls[0].options.env.npm_node_execpath,
+      process.execPath
+    );
+    assert.throws(
+      () => run("curl", ["https://example.invalid"]),
+      /RELEASE_PROVENANCE_COMMAND/
+    );
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});

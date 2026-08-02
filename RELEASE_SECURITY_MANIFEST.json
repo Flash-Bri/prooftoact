@@ -306,7 +306,7 @@
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
-      "sha256": "dc88aadad5783ac4c2d8dce984ee0c082b5c3d9502b9db44f7e38bcb1a7f2b61"
+      "sha256": "19d539046b977c91af6440235d1786e01117b00cf8d65309c3f77083de4299cc"
     },
     {
       "id": "local-server",

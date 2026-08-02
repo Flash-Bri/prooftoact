@@ -73,7 +73,7 @@
     {
       "id": "aws-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
-      "sha256": "dc88aadad5783ac4c2d8dce984ee0c082b5c3d9502b9db44f7e38bcb1a7f2b61",
+      "sha256": "19d539046b977c91af6440235d1786e01117b00cf8d65309c3f77083de4299cc",
       "kind": "boundary-ledger"
     },
     {
@@ -463,13 +463,13 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "09347d3c4cdef3d11f93bc60d8ae5ead0297781450505049e91829bf2d801493",
+      "sha256": "95b6c82e24699c21511c7580fccb31bc84c0bda173a89abf4cb8a1e0d54d26ff",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "9797171f62a670366aee3d98939308edbc4c12cb294de81712c0709067d0b328",
+      "sha256": "a6d981ce10582d8c8c6f687932fc79111f618b38593807e55f8467b4934292ba",
       "kind": "verification-code"
     },
     {
@@ -499,7 +499,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "801f9892e913c40f32dbb040730a2a286e2cfa6fbe43abc7adebdf6ea3b3e058",
+      "sha256": "2253f4181a33ce2f22923b2ac1e65f151b735cecb7f693ea977d76022464862a",
       "kind": "boundary-ledger"
     },
     {
