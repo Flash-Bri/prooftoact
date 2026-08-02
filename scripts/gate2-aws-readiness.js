@@ -1800,6 +1800,7 @@ function childEnvironment(
   environment.GIT_CONFIG_NOSYSTEM = "1";
   environment.GIT_TERMINAL_PROMPT = "0";
   environment.PATH = "/usr/bin:/bin";
+  environment.TMPDIR = fs.realpathSync("/tmp");
   environment.npm_config_always_auth = "false";
   environment.npm_config_globalconfig =
     "/etc/tideproof-npm-globalconfig";

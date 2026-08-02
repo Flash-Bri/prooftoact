@@ -162,6 +162,42 @@ and private human review remain required.
 - **Claim impact:** no live or deployment claim changes. The fix restores a
   required local source gate and does not authorize provider mutation.
 
+## Accepted sanitized test-runtime finding
+
+- **Root cause:** once nested provenance could complete, the exact-main
+  readiness wrapper reached the full test suite with its intentionally minimal
+  child environment. Removing `TMPDIR` made macOS resolve fixture paths through
+  the `/tmp` symlink while path-security assertions required canonical bytes,
+  and one npm-bootstrap test still selected `npm` through `PATH` even though
+  production runners had already adopted the exact invoking CLI contract.
+- **Why it was missed:** ordinary full-suite runs inherited the ambient
+  canonical temporary directory and npm path, readiness unit tests injected a
+  successful test command, and pull-request CI correctly skipped the
+  official-main-only wrapper. The earlier nested-provenance failure also
+  prevented readiness from reaching this stage.
+- **Earliest detection point:** the unchanged exact-main local-readiness command
+  immediately after the nested-runner repair merged and before any
+  authenticated provider action.
+- **Repair:** readiness now supplies the canonical real path of the fixed
+  system temporary directory while continuing to reject a caller-provided
+  `TMPDIR`. The npm-bootstrap regression invokes the resolved exact npm CLI
+  with the current Node executable instead of searching `PATH`.
+- **Regression and preventive controls:** the environment-isolation test proves
+  hostile temporary-directory input is discarded, the focused readiness and
+  exact-Git suites exercise canonical fixture roots and exact executable
+  identity, and the merged official-main readiness command remains the
+  end-to-end integration control.
+- **Verification:** focused tests, the full suite under the real sanitized
+  readiness child, release security/proof/provenance/cost gates, exact build,
+  artifact integrity, and hosted exact-head CI must all pass. The identical
+  command that exposed the failure must be rerun successfully after merge.
+- **Residual risk:** the canonical system temporary directory remains a shared
+  host facility; randomized fixture directories and existing path, symlink,
+  exact-byte, and clean-checkout controls bound its use. Host compromise and
+  npm/Node binary compromise remain outside scope.
+- **Claim impact:** no provider, deployment, or hostile-host claim changes. The
+  repair restores deterministic local verification only.
+
 ## Accepted create-only lifecycle finding
 
 - **Root cause:** one stable `ApiDeployment` logical ID let CloudFormation

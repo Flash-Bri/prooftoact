@@ -73,7 +73,7 @@
     {
       "id": "aws-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
-      "sha256": "19d539046b977c91af6440235d1786e01117b00cf8d65309c3f77083de4299cc",
+      "sha256": "e0a3c72434f3a25da69daac023fa1e34419cbab4393a51e58b143f521749c22b",
       "kind": "boundary-ledger"
     },
     {
@@ -235,7 +235,7 @@
     {
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
-      "sha256": "0d25a382cb25d6c3d7c6a09566971101781994fd707d1aae7c2392934d283cf9",
+      "sha256": "c651e264d747de43059ab2c13c1c407cd684bd37bd7acb0d1802a8cbc481f9e1",
       "kind": "verification-code"
     },
     {
@@ -313,13 +313,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "ebb95d72bac2936029a2add8d2c0d6ed2838be5308638b1717a13049321a26ad",
+      "sha256": "af82a35280c6efd1d810069a24dbecf22cee6714f955a6fd049ad32899e09f4e",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "406a93eeca2cd5c085e69e25430f353ec271e1a9222e8c1ac0cfebcdf0446f9b",
+      "sha256": "48716ad5eae7f099d27c712a4045a57e1d56c89d582f6c5f98599b8e25b37bee",
       "kind": "verification-code"
     },
     {
@@ -391,7 +391,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "dd71114b49c2b7dba98fcc70cbc84cfedfa33799e027402bfdb55e905e48bb05",
+      "sha256": "d3b8b17a7ec043b3a8bfa7bcb89a585115e57e12eee356fe274a9c92b0b5f8fe",
       "kind": "boundary-ledger"
     },
     {
@@ -499,7 +499,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "2253f4181a33ce2f22923b2ac1e65f151b735cecb7f693ea977d76022464862a",
+      "sha256": "a5f1d495ca8a443a810b14f897ae9166548136bc0fbde10635c7ae4d5bd62ef4",
       "kind": "boundary-ledger"
     },
     {

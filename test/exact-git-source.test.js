@@ -402,10 +402,20 @@ test("npm scripts use the invoking Node instead of node_modules bin", () => {
     fs.writeFileSync(shim, "#!/bin/sh\necho SHADOWED_NODE_SHIM\n", {
       mode: 0o755
     });
-    const stdout = execFileSync("npm", ["run", "--silent", "probe"], {
-      cwd: rootDir,
-      encoding: "utf8"
-    });
+    const npmCli = exactBuildTest.exactNpmCli(process.env);
+    const stdout = execFileSync(
+      process.execPath,
+      [npmCli, "run", "--silent", "probe"],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          npm_execpath: npmCli,
+          npm_node_execpath: process.execPath
+        }
+      }
+    );
     assert.equal(stdout, "RECEIPT_NODE\n");
   } finally {
     fs.rmSync(rootDir, { force: true, recursive: true });
