@@ -193,13 +193,13 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "966b3c956e709f02ff7fa481f561332c76046c60508d4d34a5db6269d7f2ba7a",
+      "sha256": "aea94a165294645ca1ff76076bcc755821666acec7701ced94b908cff2bebe5c",
       "kind": "verification-code"
     },
     {
       "id": "gate2-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
-      "sha256": "0d6e053287c9fc830259cb6bab7ab7bb74a959543995fef1a1dd3857758aef92",
+      "sha256": "1e239e153ea2faa72925a1ca2e9b5303ee89dc07443e800aaacfdc43d9a83303",
       "kind": "verification-code"
     },
     {
@@ -295,7 +295,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "dd51eedcfe7f7d556db6d0525661c89196bcee8314f16ca77eadf8150e6a86f3",
+      "sha256": "d89c87e069c8996d9ca407a963ad2befc67e478e4c2d94a17a08ef4aeb35cdc3",
       "kind": "boundary-ledger"
     },
     {
@@ -403,7 +403,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "72f86c41393bb70c4fc3c9a22cd53c2c9c24e93c08d83a764bd7e86c8a0351b2",
+      "sha256": "d4fd353856113696f8a67536613b1aab8ab4ea901de00522e00e8409f4c2f515",
       "kind": "boundary-ledger"
     },
     {
@@ -415,7 +415,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "b3b520691af6755ad77b9638135be84db74fba4a10e37d4522b4e2dcfd6bb2fd",
+      "sha256": "5e12f0519fb6c515dfa3a455ac1679094e7d1d03c10b7a0718d4acb1ff7466e1",
       "kind": "verification-code"
     },
     {

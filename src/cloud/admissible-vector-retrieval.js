@@ -4,6 +4,10 @@ import { connectionStringForDatabase } from "./authority-store.js";
 import { canonicalJson } from "./canonical-json.js";
 import { runtimeDatabaseConfig } from "./database-runtime.js";
 import {
+  committedDatabaseResult,
+  databaseTimestampFromDriver
+} from "./database-commit-result.js";
+import {
   dviRankedSequenceSha256For,
   dviSelectionBindingSha256For
 } from "./dvi-selection.js";
@@ -310,6 +314,109 @@ function preparedSnapshot(row, retrievalId, ttlMs) {
   };
 }
 
+function preparationDigestFor({
+  tenantId,
+  retrievalId,
+  incidentId,
+  agency,
+  ttlMs
+}) {
+  return sha256(canonicalJson({
+    agency,
+    incidentId,
+    policyVersion: POLICY_VERSION,
+    retrievalId,
+    schemaVersion: "tideproof.dvi.preparation-request.v1",
+    tenantId,
+    ttlMs
+  }));
+}
+
+function preparationCommitFor(row, input, observation) {
+  const snapshot = preparedSnapshot(row, input.retrievalId, input.ttlMs);
+  return committedDatabaseResult({
+    operation: "dvi_preparation",
+    operationDigest: preparationDigestFor(input),
+    observation,
+    databaseNow:
+      observation === "direct_ack"
+        ? snapshot.admittedAt
+        : databaseTimestampFromDriver(row.database_now),
+    outcome: "dvi_snapshot_prepared",
+    authorityCurrent: null,
+    requiresFreshAuthorization: true
+  });
+}
+
+async function resolveVectorPreparation(client, input) {
+  return client.query(
+    `
+      SELECT *
+      FROM tp_api.g1_resolve_vector_set_v1(
+        $1::UUID, $2::UUID, $3::UUID, $4, $5, $6::INT8
+      )
+    `,
+    [
+      input.tenantId,
+      input.retrievalId,
+      input.incidentId,
+      input.agency,
+      POLICY_VERSION,
+      input.ttlMs
+    ]
+  );
+}
+
+async function rollbackQuietly(client) {
+  try {
+    await client.query("ROLLBACK");
+  } catch {
+    // The original database failure remains authoritative.
+  }
+}
+
+function preparationCommitUnknown(cause) {
+  const error = new Error(
+    "ADMISSIBLE_VECTOR_PREPARE_COMMIT_UNKNOWN",
+    { cause }
+  );
+  error.code = "ADMISSIBLE_VECTOR_PREPARE_COMMIT_UNKNOWN";
+  error.commitOutcomeUnknown = true;
+  return error;
+}
+
+async function executeVectorPreparation(client, input) {
+  let commitDispatched = false;
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+    const prepared = await client.query(
+      `
+        SELECT *
+        FROM tp_api.g1_prepare_vector_set_v1(
+          $1::UUID, $2::UUID, $3::UUID, $4, $5, $6::INT8
+        )
+      `,
+      [
+        input.tenantId,
+        input.retrievalId,
+        input.incidentId,
+        input.agency,
+        POLICY_VERSION,
+        input.ttlMs
+      ]
+    );
+    commitDispatched = true;
+    await client.query("COMMIT");
+    return prepared;
+  } catch (error) {
+    if (!commitDispatched) {
+      await rollbackQuietly(client);
+      throw error;
+    }
+    throw preparationCommitUnknown(error);
+  }
+}
+
 export function admissibleVectorPoolConfig(
   connectionString,
   environment = process.env
@@ -468,22 +575,44 @@ export async function proveAdmissibleVectorSnapshot({
     );
 
     prepareAttempted = true;
-    const preparedResult = await authorizer.query(
-      `
-        SELECT *
-        FROM tp_api.g1_prepare_vector_set_v1(
-          $1::UUID, $2::UUID, $3::UUID, $4, $5, $6::INT8
-        )
-      `,
-      [
-        accepted.tenantId,
-        accepted.retrievalId,
-        accepted.incidentId,
-        accepted.agency,
-        POLICY_VERSION,
-        accepted.ttlMs
-      ]
-    );
+    const preparationInput = {
+      tenantId: accepted.tenantId,
+      retrievalId: accepted.retrievalId,
+      incidentId: accepted.incidentId,
+      agency: accepted.agency,
+      ttlMs: accepted.ttlMs
+    };
+    let preparationObservation = "direct_ack";
+    let preparedResult;
+    try {
+      preparedResult = await executeVectorPreparation(
+        authorizer,
+        preparationInput
+      );
+    } catch (error) {
+      if (error.commitOutcomeUnknown !== true) {
+        throw error;
+      }
+      authorizer.release(error.cause ?? error);
+      authorizer = await authorizerPool.connect();
+      const replacementIdentity = await databaseIdentity(authorizer, true);
+      assert(
+        replacementIdentity.clusterId === authorizerIdentity.clusterId &&
+          replacementIdentity.databaseVersionSha256 ===
+            authorizerIdentity.databaseVersionSha256 &&
+          replacementIdentity.sessionSha256 ===
+            authorizerIdentity.sessionSha256,
+        "ADMISSIBLE_VECTOR_RECONCILIATION_IDENTITY_MISMATCH"
+      );
+      preparedResult = await resolveVectorPreparation(
+        authorizer,
+        preparationInput
+      );
+      if (preparedResult.rowCount !== 1) {
+        throw error;
+      }
+      preparationObservation = "read_reconciled";
+    }
     assert(
       preparedResult.rowCount === 1,
       "ADMISSIBLE_VECTOR_PREPARE_INVALID"
@@ -782,7 +911,12 @@ export async function proveAdmissibleVectorSnapshot({
       },
       snapshot: {
         ...preparedTiming,
-        ttlMs: accepted.ttlMs
+        ttlMs: accepted.ttlMs,
+        commit: preparationCommitFor(
+          preparedResult.rows[0],
+          preparationInput,
+          preparationObservation
+        )
       },
       ranking: {
         ...plan,
@@ -905,14 +1039,16 @@ export async function proveAdmissibleVectorSnapshot({
 export class AdmissibleVectorRetriever {
   #ownsPool;
   #pool;
+  #reconcilePreparation;
 
-  constructor({ connectionString, pool } = {}) {
+  constructor({ connectionString, pool, reconcilePreparation = null } = {}) {
     if (pool) {
       if (typeof pool.connect !== "function") {
         throw new TypeError("pool must expose connect()");
       }
       this.#pool = pool;
       this.#ownsPool = false;
+      this.#reconcilePreparation = reconcilePreparation;
       return;
     }
     if (typeof connectionString !== "string" || connectionString === "") {
@@ -920,11 +1056,24 @@ export class AdmissibleVectorRetriever {
     }
     this.#pool = new Pool(admissibleVectorPoolConfig(connectionString));
     this.#ownsPool = true;
+    this.#reconcilePreparation = reconcilePreparation;
   }
 
   async close() {
     if (this.#ownsPool) {
       await this.#pool.end();
+    }
+  }
+
+  async #resolvePreparation(input) {
+    if (typeof this.#reconcilePreparation === "function") {
+      return this.#reconcilePreparation(input);
+    }
+    const client = await this.#pool.connect();
+    try {
+      return await resolveVectorPreparation(client, input);
+    } finally {
+      client.release();
     }
   }
 
@@ -944,29 +1093,41 @@ export class AdmissibleVectorRetriever {
     const vector = requireEmbedding(queryEmbedding);
     const acceptedLimit = requireInteger(limit, "limit", 1, 100);
     const acceptedTtl = requireInteger(ttlMs, "ttlMs", 1_000, 300_000);
-    const client = await this.#pool.connect();
+    let client = await this.#pool.connect();
     let prepared = false;
+    let preparationObservation = "direct_ack";
     let output;
     let preparedCandidateCount = null;
     let primaryError = null;
     let cleanupError = null;
     try {
-      const preparedResult = await client.query(
-        `
-          SELECT *
-          FROM tp_api.g1_prepare_vector_set_v1(
-            $1::UUID, $2::UUID, $3::UUID, $4, $5, $6::INT8
-          )
-        `,
-        [
-          tenant,
-          retrieval,
-          incident,
-          requester,
-          POLICY_VERSION,
-          acceptedTtl
-        ]
-      );
+      const preparationInput = {
+        tenantId: tenant,
+        retrievalId: retrieval,
+        incidentId: incident,
+        agency: requester,
+        ttlMs: acceptedTtl
+      };
+      let preparedResult;
+      try {
+        preparedResult = await executeVectorPreparation(
+          client,
+          preparationInput
+        );
+      } catch (error) {
+        if (error.commitOutcomeUnknown !== true) {
+          throw error;
+        }
+        client.release(error.cause ?? error);
+        client = null;
+        preparedResult = await this.#resolvePreparation(preparationInput);
+        if (preparedResult?.rowCount !== 1) {
+          throw error;
+        }
+        prepared = true;
+        preparationObservation = "read_reconciled";
+        client = await this.#pool.connect();
+      }
       if (preparedResult.rowCount !== 1) {
         throw new Error("ADMISSIBLE_VECTOR_PREPARE_INVALID");
       }
@@ -1011,6 +1172,11 @@ export class AdmissibleVectorRetriever {
         expiresAt: snapshot.expiresAt,
         approximateNearestNeighbor: true,
         authorizationRecheckRequired: true,
+        preparationCommit: preparationCommitFor(
+          preparedRow,
+          preparationInput,
+          preparationObservation
+        ),
         results
       };
     } catch (error) {
@@ -1044,7 +1210,7 @@ export class AdmissibleVectorRetriever {
           cleanupError = error;
         }
       }
-      client.release(primaryError ?? cleanupError ?? undefined);
+      client?.release(primaryError ?? cleanupError ?? undefined);
     }
     if (primaryError && cleanupError) {
       throw new AggregateError(
@@ -1097,6 +1263,7 @@ export const __test = Object.freeze({
   REQUIRED_EXCLUSION_REASONS,
   VECTOR_INDEX_NAME,
   authorityEvidenceBindingDigest,
+  executeVectorPreparation,
   identifierSetDigest,
   preparedSnapshot,
   validateProofSpec,

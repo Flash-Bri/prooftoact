@@ -32,7 +32,8 @@ function result() {
     rowCount: 1,
     rows: [{
       bundle_digest: BUNDLE.bundleDigest,
-      outcome: "bundle_appended"
+      outcome: "bundle_appended",
+      database_now: new Date("2026-08-01T00:00:01.000Z")
     }]
   };
 }
@@ -51,7 +52,70 @@ test("recovery publisher succeeds without retry", async () => {
   };
   const output = await appendRecoveryBundleWithClient(client, BUNDLE);
   assert.equal(output.outcome, "bundle_appended");
+  assert.equal(output.commit.observation, "direct_ack");
+  assert.equal(output.commit.outcome, "bundle_present");
   assert.deepEqual(calls, ["BEGIN TRANSACTION", "SELECT *", "COMMIT"]);
+});
+
+test("recovery publisher resolves an exact receipt after COMMIT ACK loss", async () => {
+  const calls = [];
+  const client = {
+    async query(text) {
+      calls.push(text.trim().split(/\s+/u).slice(0, 2).join(" "));
+      if (text.includes("append_recovery_bundle_v2")) return result();
+      if (text.trim() === "COMMIT") throw sqlState("ECONNRESET");
+      return {};
+    }
+  };
+  const output = await appendRecoveryBundleWithClient(client, BUNDLE, {
+    reconcile: async () => ({
+      rowCount: 1,
+      rows: [{
+        bundle_digest: BUNDLE.bundleDigest,
+        outcome: "bundle_present",
+        database_now: new Date("2026-08-01T00:00:02.000Z")
+      }]
+    })
+  });
+
+  assert.equal(output.outcome, "bundle_present");
+  assert.equal(output.commit.status, "COMMITTED");
+  assert.equal(output.commit.observation, "read_reconciled");
+  assert.equal(output.commit.outcome, "bundle_present");
+  assert.notEqual(output.outcome, "bundle_appended");
+  assert.notEqual(output.outcome, "bundle_replay");
+  assert.deepEqual(calls, ["BEGIN TRANSACTION", "SELECT *", "COMMIT"]);
+});
+
+test("recovery publisher never rolls back an unclassified post-COMMIT error", async () => {
+  const calls = [];
+  const events = [];
+  const client = {
+    async query(text) {
+      calls.push(text.trim().split(/\s+/u)[0]);
+      if (text.includes("append_recovery_bundle_v2")) return result();
+      if (text.trim() === "COMMIT") throw sqlState("XX000");
+      return {};
+    }
+  };
+  const output = await appendRecoveryBundleWithClient(client, BUNDLE, {
+    beforeReconcile: async () => events.push("ambiguous_closed"),
+    reconcile: async () => {
+      events.push("reconciliation_started");
+      return {
+        rowCount: 1,
+        rows: [{
+          bundle_digest: BUNDLE.bundleDigest,
+          outcome: "bundle_present",
+          database_now: new Date("2026-08-01T00:00:02.000Z")
+        }]
+      };
+    }
+  });
+
+  assert.equal(output.commit.observation, "read_reconciled");
+  assert.equal(calls.includes("ROLLBACK"), false);
+  assert.deepEqual(events, ["ambiguous_closed", "reconciliation_started"]);
 });
 
 test("recovery publisher retries only a rolled-back serialization failure", async () => {

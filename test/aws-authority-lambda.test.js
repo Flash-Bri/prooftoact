@@ -17,6 +17,73 @@ const FIXTURE = Object.freeze({
 const CONNECTION_STRING =
   "postgresql://tp_gate2_authorizer_user:0123456789abcdef@synthetic.cockroachlabs.cloud:26257/tideproof?sslmode=verify-full";
 const SECRET_VERSION_ID = "a".repeat(32);
+const PROPOSAL_FIXTURES = new Map();
+
+function proposalFixture({
+  contender,
+  evidenceId = FIXTURE.evidenceId,
+  selectedEvidenceDigest = "3".repeat(64),
+  runId = FIXTURE.runId,
+  retrievalId,
+  authorityEvidenceBindingSha256,
+  logicalActionDigest: suppliedLogicalActionDigest
+}) {
+  const payload = {
+    scenario: "synthetic-highwater",
+    action: "dispatch_rescue_unit",
+    destination: "synthetic-zone-aws-race",
+    logicalDispatch: contender
+  };
+  const payloadDigest = authority.sha256Hex(payload);
+  const logicalActionDigest = suppliedLogicalActionDigest ??
+    authority.sha256Hex({
+      schemaVersion: "tideproof.authority.logical-action.v1",
+      tenantId: FIXTURE.tenantId,
+      incidentId: FIXTURE.incidentId,
+      resourceId: FIXTURE.resourceId,
+      agency: "rescue",
+      actionKind: "dispatch_rescue_unit",
+      payloadDigest
+    });
+  const identity = {
+    schemaVersion: "tideproof.authority.dvi-proposal-identity.v1",
+    tenantId: FIXTURE.tenantId,
+    runId,
+    incidentId: FIXTURE.incidentId,
+    retrievalId,
+    logicalActionDigest,
+    authorityEvidenceBindingSha256,
+    selectedEvidenceId: evidenceId,
+    selectedEvidenceDigest,
+    policyVersion: "g1-admissibility-v2",
+    selectedRank: 1,
+    admittedAt: "2026-08-01T11:55:00.000Z",
+    expiresAt: "2026-08-01T12:05:00.000Z"
+  };
+  const fixture = {
+    ...identity,
+    proposalDigest: authority.sha256Hex(identity),
+    resourceId: FIXTURE.resourceId,
+    agency: "rescue",
+    actionKind: "dispatch_rescue_unit",
+    payload,
+    payloadCanonical: authority.canonicalJson(payload),
+    payloadDigest
+  };
+  PROPOSAL_FIXTURES.set(fixture.proposalDigest, fixture);
+  return fixture;
+}
+
+const ALPHA_PROPOSAL = proposalFixture({
+  contender: "alpha",
+  retrievalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  authorityEvidenceBindingSha256: "6".repeat(64)
+});
+const BRAVO_PROPOSAL = proposalFixture({
+  contender: "bravo",
+  retrievalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  authorityEvidenceBindingSha256: "7".repeat(64)
+});
 
 function configureEnvironment() {
   Object.assign(process.env, {
@@ -29,8 +96,12 @@ function configureEnvironment() {
     AUTHORITY_RUN_ID: FIXTURE.runId,
     AUTHORITY_INCIDENT_ID: FIXTURE.incidentId,
     AUTHORITY_EVIDENCE_ID: FIXTURE.evidenceId,
-    AUTHORITY_PROPOSAL_DIGEST: "1".repeat(64),
-    AUTHORITY_LOGICAL_ACTION_DIGEST: "2".repeat(64),
+    AUTHORITY_ALPHA_PROPOSAL_DIGEST: ALPHA_PROPOSAL.proposalDigest,
+    AUTHORITY_BRAVO_PROPOSAL_DIGEST: BRAVO_PROPOSAL.proposalDigest,
+    AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST:
+      ALPHA_PROPOSAL.logicalActionDigest,
+    AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST:
+      BRAVO_PROPOSAL.logicalActionDigest,
     AUTHORITY_SELECTED_EVIDENCE_DIGEST: "3".repeat(64),
     AUTHORITY_RACE_ID: FIXTURE.raceId,
     AUTHORITY_RESOURCE_ID: FIXTURE.resourceId,
@@ -66,7 +137,12 @@ function spendRow(request, outcome = "resource_reserved") {
   const identity = authority.authorityIdentityFor(request, 1);
   return {
     decision_outcome: outcome,
-    decision_reason: winner ? null : "active_holder",
+    decision_reason:
+      winner
+        ? null
+        : outcome === "resource_held_denied"
+          ? "active_holder"
+          : "proposal_authorization_denied",
     decision_fencing_token: winner ? "1" : null,
     decision_lease_expires_at: winner
       ? "2026-08-01T12:05:00.000Z"
@@ -82,7 +158,38 @@ function spendRow(request, outcome = "resource_reserved") {
     decision_authorization_binding_sha256:
       identity.authorizationBindingSha256,
     decision_authority_current: winner,
-    decision_database_now: "2026-08-01T12:00:01.000Z"
+    decision_database_now: "2026-08-01T12:00:01.000Z",
+    decision_durable_receipt: true,
+    decision_committed_evidence_id: request.evidenceId,
+    decision_committed_evidence_digest: request.selectedEvidenceDigest
+  };
+}
+
+function nonDurableSpendRow(request, reason) {
+  const bound = reason !== "proposal_authorization_missing_or_stale";
+  const identity = bound
+    ? authority.authorityIdentityFor(request, 1)
+    : null;
+  return {
+    decision_outcome: "authorization_denied",
+    decision_reason: reason,
+    decision_fencing_token: null,
+    decision_lease_expires_at: null,
+    decision_operation_id: request.operationId,
+    decision_request_digest: request.requestDigest,
+    decision_replay_kind: null,
+    decision_proposal_digest: request.proposalDigest,
+    decision_logical_action_digest: request.logicalActionDigest,
+    decision_authorization_epoch: bound ? "1" : null,
+    decision_logical_authority_key_sha256:
+      identity?.logicalAuthorityKeySha256 ?? null,
+    decision_authorization_binding_sha256:
+      identity?.authorizationBindingSha256 ?? null,
+    decision_authority_current: false,
+    decision_database_now: "2026-08-01T12:00:01.000Z",
+    decision_durable_receipt: false,
+    decision_committed_evidence_id: null,
+    decision_committed_evidence_digest: null
   };
 }
 
@@ -139,23 +246,79 @@ function successfulClient(request, options = {}) {
     },
     async end() {
       this.ended = true;
+      options.events?.push("ambiguous_closed");
     }
   };
 }
 
+function replacementAuthorityRequest(request) {
+  const replacement = {
+    ...request,
+    runId: "77777777-7777-4777-8777-777777777777",
+    operationId: "88888888-8888-4888-8888-888888888888",
+    agentId: "aws-authority-replacement",
+    evidenceId: "99999999-9999-4999-8999-999999999999",
+    intentNonce: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    effectKey: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    selectedEvidenceDigest: "5".repeat(64)
+  };
+  const storedProposal = proposalFixture({
+    contender: request.payload.logicalDispatch,
+    evidenceId: replacement.evidenceId,
+    selectedEvidenceDigest: replacement.selectedEvidenceDigest,
+    runId: replacement.runId,
+    retrievalId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    authorityEvidenceBindingSha256: "8".repeat(64),
+    logicalActionDigest: replacement.logicalActionDigest
+  });
+  replacement.proposalDigest = storedProposal.proposalDigest;
+  replacement.requestPayload = {
+    digestVersion: replacement.digestVersion,
+    tenantId: replacement.tenantId,
+    runId: replacement.runId,
+    incidentId: replacement.incidentId,
+    resourceId: replacement.resourceId,
+    agentId: replacement.agentId,
+    agency: replacement.agency,
+    evidenceId: replacement.evidenceId,
+    intentNonce: replacement.intentNonce,
+    effectKey: replacement.effectKey,
+    leaseMs: replacement.leaseMs,
+    policyVersion: replacement.policyVersion,
+    actionKind: replacement.actionKind,
+    payloadDigest: replacement.payloadDigest,
+    logicalActionDigest: replacement.logicalActionDigest,
+    proposalDigest: replacement.proposalDigest,
+    selectedEvidenceId: replacement.evidenceId,
+    selectedEvidenceDigest: replacement.selectedEvidenceDigest
+  };
+  replacement.requestDigest = authority.sha256Hex(
+    replacement.requestPayload
+  );
+  return replacement;
+}
+
 function resolvedClient(request, outcome = "resource_reserved", options = {}) {
   const identity = authority.authorityIdentityFor(request, 1);
+  const proposal = PROPOSAL_FIXTURES.get(request.proposalDigest);
+  assert.ok(proposal, "resolved fixture requires a registered proposal");
   return {
     ended: false,
-    async connect() {},
+    async connect() {
+      options.events?.push("reconciliation_started");
+    },
     async query(sql) {
       if (sql === authority.RESOLVE_SQL) {
+        if (options.rowCount === 0) {
+          return { rowCount: 0, rows: [] };
+        }
         return {
           rowCount: 1,
           rows: [
             {
               operation_id: request.operationId,
               request_digest: request.requestDigest,
+              request_payload: request.requestPayload,
               proposal_digest: request.proposalDigest,
               logical_action_digest: request.logicalActionDigest,
               authorization_epoch: String(identity.authorizationEpoch),
@@ -163,18 +326,80 @@ function resolvedClient(request, outcome = "resource_reserved", options = {}) {
                 identity.logicalAuthorityKeySha256,
               authorization_binding_sha256:
                 identity.authorizationBindingSha256,
+              run_id: request.runId,
+              incident_id: request.incidentId,
+              resource_id: request.resourceId,
+              agent_id: request.agentId,
+              agency: request.agency,
+              evidence_id: request.evidenceId,
+              evidence_digest: request.selectedEvidenceDigest,
+              effect_key: request.effectKey,
+              payload_digest: request.payloadDigest,
+              policy_version: request.policyVersion,
               outcome,
-              reason: null,
+              reason:
+                outcome === "resource_reserved"
+                  ? null
+                  : outcome === "resource_held_denied"
+                    ? "active_holder"
+                    : "proposal_authorization_denied",
               fencing_token:
                 outcome === "resource_reserved" ? "1" : null,
               lease_expires_at:
                 outcome === "resource_reserved"
                   ? "2026-08-01T12:05:00.000Z"
                   : null,
+              observed_holder_operation_id:
+                outcome === "resource_held_denied"
+                  ? "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+                  : null,
+              observed_fence:
+                outcome === "resource_held_denied" ? "1" : null,
+              replay_kind: "operation_replay",
               outbox_intent_id:
                 outcome === "resource_reserved"
                   ? "66666666-6666-4666-8666-666666666666"
                   : null,
+              outbox_operation_id:
+                outcome === "resource_reserved" ? request.operationId : null,
+              outbox_request_digest:
+                outcome === "resource_reserved" ? request.requestDigest : null,
+              outbox_proposal_digest:
+                outcome === "resource_reserved" ? request.proposalDigest : null,
+              outbox_logical_action_digest:
+                outcome === "resource_reserved"
+                  ? request.logicalActionDigest
+                  : null,
+              outbox_authorization_epoch:
+                outcome === "resource_reserved"
+                  ? String(identity.authorizationEpoch)
+                  : null,
+              outbox_logical_authority_key_sha256:
+                outcome === "resource_reserved"
+                  ? identity.logicalAuthorityKeySha256
+                  : null,
+              outbox_authorization_binding_sha256:
+                outcome === "resource_reserved"
+                  ? identity.authorizationBindingSha256
+                  : null,
+              outbox_run_id:
+                outcome === "resource_reserved" ? request.runId : null,
+              outbox_incident_id:
+                outcome === "resource_reserved" ? request.incidentId : null,
+              outbox_resource_id:
+                outcome === "resource_reserved" ? request.resourceId : null,
+              outbox_fencing_token:
+                outcome === "resource_reserved" ? "1" : null,
+              outbox_effect_key:
+                outcome === "resource_reserved" ? request.effectKey : null,
+              outbox_intent_kind:
+                outcome === "resource_reserved"
+                  ? "dispatch_rescue_unit"
+                  : null,
+              outbox_payload:
+                outcome === "resource_reserved" ? request.payload : null,
+              outbox_payload_digest:
+                outcome === "resource_reserved" ? request.payloadDigest : null,
               current_fence:
                 outcome === "resource_reserved" ? "1" : null,
               active_run_id: request.runId,
@@ -190,8 +415,42 @@ function resolvedClient(request, outcome = "resource_reserved", options = {}) {
                 outcome === "resource_reserved"
                   ? identity.logicalAuthorityKeySha256
                   : null,
+              resource_lease_expires_at:
+                outcome === "resource_reserved"
+                  ? "2026-08-01T12:05:00.000Z"
+                  : null,
+              receipt_proposal_tenant_id: proposal.tenantId,
+              receipt_proposal_digest: proposal.proposalDigest,
+              receipt_proposal_logical_action_digest:
+                proposal.logicalActionDigest,
+              receipt_proposal_resource_id: proposal.resourceId,
+              receipt_proposal_agency: proposal.agency,
+              receipt_proposal_action_kind: proposal.actionKind,
+              receipt_proposal_payload: proposal.payload,
+              receipt_proposal_payload_canonical:
+                proposal.payloadCanonical,
+              receipt_proposal_payload_digest: proposal.payloadDigest,
+              receipt_proposal_retrieval_id: proposal.retrievalId,
+              receipt_proposal_run_id: proposal.runId,
+              receipt_proposal_incident_id: proposal.incidentId,
+              receipt_proposal_authority_evidence_binding_sha256:
+                proposal.authorityEvidenceBindingSha256,
+              receipt_proposal_policy_version: proposal.policyVersion,
+              receipt_proposal_selected_rank: String(proposal.selectedRank),
+              receipt_proposal_selected_evidence_id:
+                proposal.selectedEvidenceId,
+              receipt_proposal_selected_evidence_digest:
+                proposal.selectedEvidenceDigest,
+              receipt_proposal_admitted_at: proposal.admittedAt,
+              receipt_proposal_expires_at: proposal.expiresAt,
+              receipt_proposal_authorization_epoch:
+                String(identity.authorizationEpoch),
+              receipt_proposal_logical_authority_key_sha256:
+                identity.logicalAuthorityKeySha256,
+              receipt_proposal_authorization_binding_sha256:
+                identity.authorizationBindingSha256,
               authority_current: outcome === "resource_reserved",
-              database_now: "2026-08-01T12:00:01.000Z",
+              database_now: new Date("2026-08-01T12:00:01.000Z"),
               ...(options.rowChanges ?? {})
             }
           ]
@@ -201,6 +460,7 @@ function resolvedClient(request, outcome = "resource_reserved", options = {}) {
     },
     async end() {
       this.ended = true;
+      options.events?.push("reconciliation_closed");
     }
   };
 }
@@ -274,7 +534,7 @@ function proofClient(row) {
   };
 }
 
-test("authority derives capability fields from one exact two-contender request", () => {
+test("authority derives two distinct logical acts that contend for one resource", () => {
   configureEnvironment();
   const config = authority.configuration();
   const alpha = authority.authorityRequestFor(validEvent("alpha"), config);
@@ -291,6 +551,10 @@ test("authority derives capability fields from one exact two-contender request",
   assert.notEqual(alpha.operationId, bravo.operationId);
   assert.notEqual(alpha.effectKey, bravo.effectKey);
   assert.notEqual(alpha.requestDigest, bravo.requestDigest);
+  assert.notEqual(alpha.proposalDigest, bravo.proposalDigest);
+  assert.notEqual(alpha.logicalActionDigest, bravo.logicalActionDigest);
+  assert.notDeepEqual(alpha.payload, bravo.payload);
+  assert.equal(alpha.resourceId, bravo.resourceId);
   assert.equal(alpha.agentId, "aws-authority-alpha");
   assert.equal(alpha.payload.action, "dispatch_rescue_unit");
   assert.match(alpha.operationId, /^[0-9a-f-]{36}$/);
@@ -401,6 +665,14 @@ test("authority requires exact endpoint/version configuration and bounded databa
     );
     process.env[name] = original;
   }
+  const originalBravo = process.env.AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST;
+  process.env.AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST =
+    process.env.AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST;
+  assert.throws(
+    () => authority.configuration(),
+    /AUTHORITY_CONFIGURATION_REJECTED/
+  );
+  process.env.AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST = originalBravo;
 
   assert.deepEqual(
     authority.databaseClientConfiguration(
@@ -497,6 +769,14 @@ test("logical-authority replay verifies and preserves the stored receipt identit
     normalized.authorizationBindingSha256,
     storedIdentity.authorizationBindingSha256
   );
+  assert.equal(
+    authority.databaseCommitResult(
+      normalized,
+      request,
+      "direct_ack"
+    ).operationDigest,
+    row.decision_request_digest
+  );
   assert.throws(
     () => authority.normalizeSpendRow({
       ...row,
@@ -551,6 +831,123 @@ test("historical positive receipts never claim current authority", async () => {
   assert.equal(response.outcome, "resource_reserved");
   assert.equal(response.authorityCurrent, false);
   assert.equal(response.requiresFreshAuthorization, true);
+  assert.equal(
+    response.commit.status,
+    "COMMITTED_BUT_NO_LONGER_CURRENT"
+  );
+  assert.equal(response.commit.authority.requiresFreshAuthorization, true);
+});
+
+test("direct and reconciled denied commits preserve one durable reason", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const directDecision = authority.normalizeSpendRow(
+    spendRow(request, "authorization_denied"),
+    request
+  );
+  const direct = authority.databaseCommitResult(
+    directDecision,
+    request,
+    "direct_ack"
+  );
+  const storedRequest = {
+    ...request,
+    operationId: "77777777-7777-4777-8777-777777777777"
+  };
+  const resolvedRow = (
+    await resolvedClient(storedRequest, "authorization_denied", {
+      rowChanges: { replay_kind: "semantic_replay" }
+    }).query(authority.RESOLVE_SQL)
+  ).rows[0];
+  const reconciledDecision = authority.normalizeResolvedRow(
+    resolvedRow,
+    request
+  );
+  const reconciled = authority.databaseCommitResult(
+    reconciledDecision,
+    request,
+    "read_reconciled"
+  );
+
+  assert.deepEqual(Object.keys(direct), Object.keys(reconciled));
+  assert.equal(direct.outcome, "authorization_denied");
+  assert.equal(reconciled.outcome, direct.outcome);
+  assert.equal(direct.reason, "proposal_authorization_denied");
+  assert.equal(reconciled.reason, direct.reason);
+  assert.deepEqual(reconciled.authority, direct.authority);
+});
+
+test("early authority denials are explicit, non-durable, and retry-safe", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  for (const reason of [
+    "proposal_authorization_missing_or_stale",
+    "proposal_authorization_expired",
+    "proposal_authorization_superseded"
+  ]) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const client = successfulClient(request, {
+        outcome: "authorization_denied",
+        decisionChanges: nonDurableSpendRow(request, reason)
+      });
+      const result = await authority.runAuthority({
+        event: validEvent(),
+        context: { awsRequestId: "77777777-7777-4777-8777-777777777777" },
+        getConnectionString: async () => CONNECTION_STRING,
+        createClient: () => client,
+        now: () => 1_000
+      });
+      assert.equal(result.status, "DENIED_NOT_DURABLE");
+      assert.equal(result.reason, reason);
+      assert.equal(result.commit.status, "DENIED_NOT_DURABLE");
+      assert.equal(result.commit.operationDigest, request.requestDigest);
+      assert.equal(result.requiresFreshAuthorization, true);
+      assert.equal("committedOperationId" in result, false);
+      assert.equal("committedRequestDigest" in result, false);
+      assert.equal("committedProposalDigest" in result, false);
+      assert.equal("committedSelectedEvidenceId" in result, false);
+      assert.equal(client.ended, true);
+    }
+  }
+});
+
+test("ACK loss after a non-durable denial never invents a commit", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const commitFailure = Object.assign(
+    new Error("synthetic ACK loss after non-durable denial"),
+    { code: "XX000" }
+  );
+  const spendClient = successfulClient(request, {
+    outcome: "authorization_denied",
+    decisionChanges: nonDurableSpendRow(
+      request,
+      "proposal_authorization_expired"
+    ),
+    commitError: commitFailure
+  });
+  const reconciliationClient = resolvedClient(request, "resource_reserved", {
+    rowCount: 0
+  });
+  const clients = [spendClient, reconciliationClient];
+  let created = 0;
+  const result = await authority.runAuthority({
+    event: validEvent(),
+    context: {},
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => clients[created++],
+    now: () => 1_000
+  });
+
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.code, "AUTHORITY_RECONCILIATION_REJECTED");
+  assert.equal("committedOperationId" in result, false);
+  assert.equal("committedRequestDigest" in result, false);
+  assert.equal(created, 2);
+  assert.equal(clients.every(({ ended }) => ended), true);
 });
 
 test("authority commits one strict SERIALIZABLE decision without returning the secret", async () => {
@@ -584,6 +981,16 @@ test("authority commits one strict SERIALIZABLE decision without returning the s
   assert.equal(result.authorityTransferred, false);
   assert.equal(result.authorityCurrent, true);
   assert.equal(result.requiresFreshAuthorization, false);
+  assert.equal(
+    result.commit.schemaVersion,
+    "tideproof.database-commit-result.v1"
+  );
+  assert.equal(result.commit.observation, "direct_ack");
+  assert.equal(result.commit.databaseNow, "2026-08-01T12:00:01.000Z");
+  assert.deepEqual(result.commit.authority, {
+    current: true,
+    requiresFreshAuthorization: false
+  });
   assert.equal(result.modelAccess, false);
   assert.equal(result.operationId, request.operationId);
   assert.equal(client.ended, true);
@@ -621,6 +1028,9 @@ test("authority retries only a pre-commit serialization failure", async () => {
   assert.equal(result.outcome, "resource_held_denied");
   assert.equal(result.transaction.attempts, 2);
   assert.deepEqual(result.transaction.retryCodes, ["40001"]);
+  assert.equal(result.commit.outcome, "resource_held_denied");
+  assert.equal(result.commit.reason, "active_holder");
+  assert.equal(result.commit.authority.requiresFreshAuthorization, true);
   assert.equal(clients.every(({ ended }) => ended), true);
 });
 
@@ -654,7 +1064,257 @@ test("authority reconciles an ambiguous COMMIT instead of retrying the spend", a
     "reconciled_after_ambiguous_commit"
   );
   assert.equal(result.transaction.reconciled, true);
+  assert.equal(result.commit.status, "COMMITTED");
+  assert.equal(result.commit.observation, "read_reconciled");
+  assert.equal(result.commit.operationDigest, request.requestDigest);
   assert.equal(clients.every(({ ended }) => ended), true);
+});
+
+test("authority reconciles an ACK-lost semantic denial through its durable identity", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const storedRequest = {
+    ...request,
+    operationId: "77777777-7777-4777-8777-777777777777"
+  };
+  const commitFailure = Object.assign(
+    new Error("connection lost after dispatch"),
+    { code: "ECONNRESET" }
+  );
+  const clients = [
+    successfulClient(request, { commitError: commitFailure }),
+    resolvedClient(storedRequest, "authorization_denied", {
+      rowChanges: { replay_kind: "semantic_replay" }
+    })
+  ];
+  let created = 0;
+  const result = await authority.runAuthority({
+    event: validEvent(),
+    context: {},
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => clients[created++],
+    now: () => 1_000
+  });
+
+  assert.equal(result.status, "COMMITTED");
+  assert.equal(result.outcome, "authorization_denied");
+  assert.equal(result.replayKind, "semantic_replay");
+  assert.equal(result.committedOperationId, storedRequest.operationId);
+  assert.equal(result.committedRequestDigest, request.requestDigest);
+  assert.equal(result.commit.operationDigest, request.requestDigest);
+  assert.equal(result.commit.reason, "proposal_authorization_denied");
+  assert.equal(result.requiresFreshAuthorization, true);
+  assert.equal(clients.every(({ ended }) => ended), true);
+});
+
+test("authority reconciles a full transport replacement by one stable logical action", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const storedRequest = replacementAuthorityRequest(request);
+  const commitFailure = Object.assign(
+    new Error("connection lost after dispatch"),
+    { code: "ECONNRESET" }
+  );
+  const events = [];
+  const clients = [
+    successfulClient(request, { commitError: commitFailure, events }),
+    resolvedClient(storedRequest, "resource_reserved", {
+      events,
+      rowChanges: { replay_kind: "logical_authority_replay" }
+    })
+  ];
+  let created = 0;
+  const result = await authority.runAuthority({
+    event: validEvent(),
+    context: {},
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => clients[created++],
+    now: () => 1_000
+  });
+
+  assert.equal(result.status, "COMMITTED");
+  assert.equal(result.outcome, "resource_reserved");
+  assert.equal(result.replayKind, "logical_authority_replay");
+  assert.equal(result.committedOperationId, storedRequest.operationId);
+  assert.equal(
+    result.committedRequestDigest,
+    storedRequest.requestDigest
+  );
+  assert.equal(result.commit.operationDigest, storedRequest.requestDigest);
+  assert.notEqual(result.operationId, result.committedOperationId);
+  assert.notEqual(result.requestDigest, result.committedRequestDigest);
+  assert.equal(result.logicalActionDigest, storedRequest.logicalActionDigest);
+  assert.equal(
+    result.committedProposalDigest,
+    storedRequest.proposalDigest
+  );
+  assert.equal(
+    result.committedSelectedEvidenceId,
+    storedRequest.evidenceId
+  );
+  assert.equal(
+    result.committedSelectedEvidenceDigest,
+    storedRequest.selectedEvidenceDigest
+  );
+  const committedIdentity = authority.authorityIdentityFor(
+    {
+      ...request,
+      proposalDigest: result.committedProposalDigest
+    },
+    result.authorizationEpoch
+  );
+  assert.equal(
+    result.authorizationBindingSha256,
+    committedIdentity.authorizationBindingSha256
+  );
+  assert.notEqual(result.proposalDigest, result.committedProposalDigest);
+  assert.notEqual(
+    result.selectedEvidenceDigest,
+    result.committedSelectedEvidenceDigest
+  );
+  assert.equal(result.authorityCurrent, true);
+  assert.equal(clients.every(({ ended }) => ended), true);
+  assert.deepEqual(events, [
+    "ambiguous_closed",
+    "reconciliation_started",
+    "reconciliation_closed"
+  ]);
+});
+
+test("authority reconciliation rejects every drifted outbox binding", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const row = (
+    await resolvedClient(request).query(authority.RESOLVE_SQL)
+  ).rows[0];
+  for (const [field, changed] of [
+    ["outbox_operation_id", FIXTURE.evidenceId],
+    ["outbox_request_digest", "6".repeat(64)],
+    ["outbox_proposal_digest", "6".repeat(64)],
+    ["outbox_logical_action_digest", "6".repeat(64)],
+    ["outbox_authorization_epoch", "2"],
+    ["outbox_logical_authority_key_sha256", "6".repeat(64)],
+    ["outbox_authorization_binding_sha256", "6".repeat(64)],
+    ["outbox_run_id", FIXTURE.evidenceId],
+    ["outbox_incident_id", FIXTURE.evidenceId],
+    ["outbox_resource_id", "drifted-resource"],
+    ["outbox_fencing_token", "2"],
+    ["outbox_effect_key", FIXTURE.evidenceId],
+    ["outbox_intent_kind", "drifted_intent"],
+    ["outbox_payload", { ...request.payload, destination: "drifted" }],
+    [
+      "receipt_proposal_payload",
+      { ...request.payload, destination: "drifted" }
+    ],
+    ["outbox_payload_digest", "6".repeat(64)]
+  ]) {
+    assert.throws(
+      () => authority.normalizeResolvedRow({ ...row, [field]: changed }, request),
+      /AUTHORITY_RECONCILIATION_REJECTED/u,
+      field
+    );
+  }
+});
+
+test("authority reconciliation rejects every drifted proposal binding", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const row = (
+    await resolvedClient(request).query(authority.RESOLVE_SQL)
+  ).rows[0];
+  for (const [field, changed] of [
+    ["receipt_proposal_tenant_id", FIXTURE.evidenceId],
+    ["receipt_proposal_digest", "6".repeat(64)],
+    ["receipt_proposal_logical_action_digest", "6".repeat(64)],
+    ["receipt_proposal_resource_id", "drifted-resource"],
+    ["receipt_proposal_agency", "drifted-agency"],
+    ["receipt_proposal_action_kind", "drifted_action"],
+    ["receipt_proposal_payload_canonical", "{}"],
+    ["receipt_proposal_payload_digest", "6".repeat(64)],
+    ["receipt_proposal_retrieval_id", FIXTURE.evidenceId],
+    ["receipt_proposal_run_id", FIXTURE.evidenceId],
+    ["receipt_proposal_incident_id", FIXTURE.evidenceId],
+    [
+      "receipt_proposal_authority_evidence_binding_sha256",
+      "9".repeat(64)
+    ],
+    ["receipt_proposal_policy_version", "drifted-policy"],
+    ["receipt_proposal_selected_rank", "2"],
+    ["receipt_proposal_selected_evidence_id", FIXTURE.runId],
+    ["receipt_proposal_selected_evidence_digest", "6".repeat(64)],
+    ["receipt_proposal_admitted_at", row.receipt_proposal_expires_at],
+    ["receipt_proposal_authorization_epoch", "2"],
+    ["receipt_proposal_logical_authority_key_sha256", "6".repeat(64)],
+    ["receipt_proposal_authorization_binding_sha256", "6".repeat(64)]
+  ]) {
+    assert.throws(
+      () => authority.normalizeResolvedRow({ ...row, [field]: changed }, request),
+      /AUTHORITY_RECONCILIATION_REJECTED/u,
+      field
+    );
+  }
+
+  const coordinatedForgedRequestPayload = {
+    ...row.request_payload,
+    selectedEvidenceDigest: "9".repeat(64)
+  };
+  assert.throws(
+    () => authority.normalizeResolvedRow({
+      ...row,
+      request_payload: coordinatedForgedRequestPayload,
+      request_digest: authority.sha256Hex(coordinatedForgedRequestPayload),
+      evidence_digest: "9".repeat(64),
+      receipt_proposal_selected_evidence_digest: "9".repeat(64)
+    }, request),
+    /AUTHORITY_RECONCILIATION_REJECTED/u
+  );
+});
+
+test("authority reconciliation binds held-denial observation fields", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const row = (
+    await resolvedClient(request, "resource_held_denied").query(
+      authority.RESOLVE_SQL
+    )
+  ).rows[0];
+  assert.equal(
+    authority.normalizeResolvedRow(row, request).authorityCurrent,
+    false
+  );
+  for (const changes of [
+    { observed_holder_operation_id: null },
+    { observed_fence: null },
+    { observed_fence: "0" }
+  ]) {
+    assert.throws(
+      () => authority.normalizeResolvedRow({ ...row, ...changes }, request),
+      /AUTHORITY_RECONCILIATION_REJECTED/u
+    );
+  }
+});
+
+test("authority reconciliation rejects a current claim with an expired receipt lease", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const request = authority.authorityRequestFor(validEvent(), config);
+  const row = (
+    await resolvedClient(request, "resource_reserved", {
+      rowChanges: {
+        lease_expires_at: "2000-01-01T00:00:00.000Z",
+        authority_current: true
+      }
+    }).query(authority.RESOLVE_SQL)
+  ).rows[0];
+  assert.throws(
+    () => authority.normalizeResolvedRow(row, request),
+    /AUTHORITY_RECONCILIATION_REJECTED/u
+  );
 });
 
 test("authority proves the exact durable race state through one read-only capability", async () => {

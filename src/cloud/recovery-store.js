@@ -1,11 +1,15 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 import { connectionStringForDatabase } from "./authority-store.js";
 import {
   bootstrapDatabaseConfig,
   databaseClientMustBeDiscarded,
   runtimeDatabaseConfig
 } from "./database-runtime.js";
+import {
+  committedDatabaseResult,
+  databaseTimestampFromDriver
+} from "./database-commit-result.js";
 
 const DEFAULT_DATABASE = "tideproof_recovery";
 const QUERY_SESSION_TOKEN = "__RECOVERY_SESSION_ID__";
@@ -728,6 +732,54 @@ export class RecoveryStore {
     await this.#pool.end();
   }
 
+  async #resolveBundle(bundle) {
+    const client = new Client(runtimeDatabaseConfig({
+      connectionString: this.#connectionString,
+      max: 1,
+      applicationName: "tideproof-recovery-store-reconcile"
+    }));
+    try {
+      await client.connect();
+      return await client.query(
+        `
+          SELECT *, transaction_timestamp() AS database_now
+          FROM mcp_private.recovery_bundles_v2
+          WHERE tenant_id = $1::UUID
+            AND recovery_session_id = $2::UUID
+            AND snapshot_version = $3::INT8
+            AND bundle_digest = $4
+        `,
+        [
+          bundle.tenantId,
+          bundle.recoverySessionId,
+          bundle.snapshotVersion,
+          bundle.bundleDigest
+        ]
+      );
+    } finally {
+      await client.end().catch(() => {});
+    }
+  }
+
+  #committedBundle(row, bundle, outcome, observation, databaseNow) {
+    if (row?.bundle_digest !== bundle.bundleDigest) {
+      throw new RecoveryBundleMismatchError();
+    }
+    return {
+      outcome,
+      row,
+      commit: committedDatabaseResult({
+        operation: "recovery_publication",
+        operationDigest: bundle.bundleDigest,
+        observation,
+        databaseNow: databaseTimestampFromDriver(databaseNow),
+        outcome: "bundle_present",
+        authorityCurrent: null,
+        requiresFreshAuthorization: true
+      })
+    };
+  }
+
   async migrate() {
     const bootstrapPool = new Pool(bootstrapDatabaseConfig({
       connectionString: this.#connectionString,
@@ -865,6 +917,8 @@ export class RecoveryStore {
     const client = await this.#pool.connect();
     let releaseError;
     let discardClient = false;
+    let commitDispatched = false;
+    let clientReleased = false;
     try {
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
       const existing = await client.query(
@@ -894,8 +948,18 @@ export class RecoveryStore {
         if (existing.rows[0].bundle_digest !== bundle.bundleDigest) {
           throw new RecoveryBundleMismatchError();
         }
+        const clock = await client.query(
+          "SELECT transaction_timestamp() AS database_now"
+        );
+        commitDispatched = true;
         await client.query("COMMIT");
-        return { outcome: "bundle_replay", row: existing.rows[0] };
+        return this.#committedBundle(
+          existing.rows[0],
+          bundle,
+          "bundle_replay",
+          "direct_ack",
+          clock.rows[0].database_now
+        );
       }
       const inserted = await client.query(
         `
@@ -972,11 +1036,39 @@ export class RecoveryStore {
           bundle.expiresAt
         ]
       );
+      const clock = await client.query(
+        "SELECT transaction_timestamp() AS database_now"
+      );
+      commitDispatched = true;
       await client.query("COMMIT");
-      return { outcome: "bundle_appended", row: inserted.rows[0] };
+      return this.#committedBundle(
+        inserted.rows[0],
+        bundle,
+        "bundle_appended",
+        "direct_ack",
+        clock.rows[0].database_now
+      );
     } catch (error) {
       releaseError = error;
-      discardClient = databaseClientMustBeDiscarded(error);
+      const commitDefinitivelyAborted =
+        commitDispatched && error?.code === "40001";
+      discardClient =
+        databaseClientMustBeDiscarded(error) ||
+        (commitDispatched && !commitDefinitivelyAborted);
+      if (commitDispatched && !commitDefinitivelyAborted) {
+        client.release(releaseError);
+        clientReleased = true;
+        const resolved = await this.#resolveBundle(bundle);
+        if (resolved.rowCount === 1) {
+          return this.#committedBundle(
+            resolved.rows[0],
+            bundle,
+            "bundle_present",
+            "read_reconciled",
+            resolved.rows[0].database_now
+          );
+        }
+      }
       if (!discardClient) {
         try {
           await client.query("ROLLBACK");
@@ -991,7 +1083,9 @@ export class RecoveryStore {
       }
       throw error;
     } finally {
-      client.release(discardClient ? releaseError : undefined);
+      if (!clientReleased) {
+        client.release(discardClient ? releaseError : undefined);
+      }
     }
   }
 

@@ -1,7 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { connectionStringForDatabase } from "./authority-store.js";
-import { runtimeDatabaseConfig } from "./database-runtime.js";
+import {
+  databaseClientMustBeDiscarded,
+  runtimeDatabaseConfig
+} from "./database-runtime.js";
+import {
+  committedDatabaseResult,
+  databaseTimestampFromDriver
+} from "./database-commit-result.js";
 import {
   recoveryQueryTemplateDigest,
   renderRecoveryQuery,
@@ -263,9 +270,14 @@ export function recoveryAuditEventDigest(event) {
 }
 
 export class RecoveryAuditSink {
+  #clientFactory;
   #connectionString;
 
-  constructor({ connectionString } = {}) {
+  constructor({ connectionString, clientFactory = null } = {}) {
+    if (typeof clientFactory === "function") {
+      this.#clientFactory = clientFactory;
+      return;
+    }
     if (!connectionString) {
       throw new Error("connectionString is required");
     }
@@ -275,15 +287,46 @@ export class RecoveryAuditSink {
     );
   }
 
-  async append(event) {
-    const eventDigest = recoveryAuditEventDigest(event);
-    const client = new Client(runtimeDatabaseConfig({
+  #client(applicationName) {
+    if (this.#clientFactory) {
+      return this.#clientFactory(applicationName);
+    }
+    return new Client(runtimeDatabaseConfig({
       connectionString: this.#connectionString,
       max: 1,
-      applicationName: "tideproof-recovery-audit"
+      applicationName
     }));
+  }
+
+  async #resolve(event, eventDigest) {
+    const client = this.#client("tideproof-recovery-audit-reconcile");
     try {
       await client.connect();
+      return await client.query(
+        `
+          SELECT *
+          FROM tp_api.g1_resolve_recovery_audit_event_v1(
+            $1::UUID, $2::UUID, $3
+          )
+        `,
+        [event.eventId, event.tenantId, eventDigest]
+      );
+    } finally {
+      await client.end().catch(() => {});
+    }
+  }
+
+  async append(event) {
+    const eventDigest = recoveryAuditEventDigest(event);
+    const client = this.#client("tideproof-recovery-audit");
+    let transactionStarted = false;
+    let commitDispatched = false;
+    let committed = false;
+    let clientClosed = false;
+    try {
+      await client.connect();
+      await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+      transactionStarted = true;
       const result = await client.query(
         `
           SELECT tp_api.g1_append_recovery_audit_event_v3(
@@ -319,9 +362,63 @@ export class RecoveryAuditSink {
       ) {
         throw new Error("RECOVERY_AUDIT_RECEIPT_MISMATCH");
       }
-      return { eventId: event.eventId, eventDigest };
+      const clock = await client.query(
+        "SELECT transaction_timestamp() AS database_now"
+      );
+      commitDispatched = true;
+      await client.query("COMMIT");
+      committed = true;
+      return {
+        eventId: event.eventId,
+        eventDigest,
+        commit: committedDatabaseResult({
+          operation: "recovery_audit",
+          operationDigest: eventDigest,
+          observation: "direct_ack",
+          databaseNow: databaseTimestampFromDriver(
+            clock.rows[0].database_now
+          ),
+          outcome: event.outcome
+        })
+      };
+    } catch (error) {
+      const commitDefinitivelyAborted =
+        commitDispatched && error?.code === "40001";
+      const discardClient =
+        databaseClientMustBeDiscarded(error) ||
+        (commitDispatched && !commitDefinitivelyAborted);
+      if (commitDispatched && !commitDefinitivelyAborted) {
+        await client.end().catch(() => {});
+        clientClosed = true;
+        const resolved = await this.#resolve(event, eventDigest);
+        const row = resolved?.rows?.[0];
+        if (
+          resolved?.rowCount === 1 &&
+          row.event_id === event.eventId &&
+          row.event_digest === eventDigest &&
+          row.outcome === event.outcome
+        ) {
+          return {
+            eventId: event.eventId,
+            eventDigest,
+            commit: committedDatabaseResult({
+              operation: "recovery_audit",
+              operationDigest: eventDigest,
+              observation: "read_reconciled",
+              databaseNow: databaseTimestampFromDriver(row.database_now),
+              outcome: row.outcome
+            })
+          };
+        }
+      }
+      if (transactionStarted && !committed && !discardClient) {
+        await client.query("ROLLBACK").catch(() => {});
+      }
+      throw error;
     } finally {
-      await client.end().catch(() => {});
+      if (!clientClosed) {
+        await client.end().catch(() => {});
+      }
     }
   }
 }

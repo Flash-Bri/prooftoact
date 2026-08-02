@@ -53,6 +53,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/authority-runtime-identity.test.js",
     role: "AUTHORITY_RUNTIME_IDENTITY_VERIFICATION"
   }),
+  "authority-runtime-reconciliation-tests": Object.freeze({
+    path: "test/aws-authority-lambda.test.js",
+    role: "AUTHORITY_RUNTIME_RECONCILIATION_VERIFICATION"
+  }),
   "authority-store": Object.freeze({
     path: "src/cloud/authority-store.js",
     role: "PRIMARY_AUTHORITY_STORE"
@@ -81,6 +85,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate2-aws-readiness.js",
     role: "EXACT_CHECKOUT_READINESS"
   }),
+  "aws-security-tests": Object.freeze({
+    path: "test/aws-gate2.test.js",
+    role: "AWS_GATE2_SECURITY_VERIFICATION"
+  }),
   "aws-template-generated": Object.freeze({
     path: "infra/aws/gate2-template.json",
     role: "GENERATED_CLOUDFORMATION"
@@ -96,6 +104,18 @@ const EXPECTED_SURFACES = Object.freeze({
   "canonical-json-contract": Object.freeze({
     path: "src/cloud/canonical-json.js",
     role: "CANONICAL_IDENTITY_SERIALIZATION"
+  }),
+  "commit-reconciliation-contract": Object.freeze({
+    path: "src/cloud/database-commit-result.js",
+    role: "DATABASE_COMMIT_RESULT_CONTRACT"
+  }),
+  "commit-reconciliation-ledger": Object.freeze({
+    path: "docs/COMMIT_RECONCILIATION.md",
+    role: "DATABASE_COMMIT_RECONCILIATION_BOUNDARY"
+  }),
+  "commit-reconciliation-tests": Object.freeze({
+    path: "test/database-commit-result.test.js",
+    role: "DATABASE_COMMIT_RECONCILIATION_VERIFICATION"
   }),
   "database-runtime": Object.freeze({
     path: "src/cloud/database-runtime.js",
@@ -128,6 +148,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "dvi-selection-contract": Object.freeze({
     path: "src/cloud/dvi-selection.js",
     role: "DURABLE_DVI_SELECTION_IDENTITY"
+  }),
+  "dvi-reconciliation-tests": Object.freeze({
+    path: "test/admissible-vector-retrieval.test.js",
+    role: "DVI_PREPARATION_RECONCILIATION_VERIFICATION"
   }),
   "local-server": Object.freeze({
     path: "src/server.js",
@@ -169,6 +193,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/recovery-security.js",
     role: "RECOVERY_DATABASE_SECURITY"
   }),
+  "recovery-audit-reconciliation-tests": Object.freeze({
+    path: "test/recovery-audit-sink.test.js",
+    role: "RECOVERY_AUDIT_RECONCILIATION_VERIFICATION"
+  }),
   "recovery-broker": Object.freeze({
     path: "src/cloud/recovery-broker.js",
     role: "RECOVERY_BROKER_RUNTIME"
@@ -180,6 +208,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "recovery-evidence-runner": Object.freeze({
     path: "scripts/gate1-recovery.js",
     role: "RECOVERY_EVIDENCE_RUNNER"
+  }),
+  "recovery-publication-reconciliation-tests": Object.freeze({
+    path: "test/recovery-security.test.js",
+    role: "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION"
   }),
   "recovery-store": Object.freeze({
     path: "src/cloud/recovery-store.js",
@@ -196,6 +228,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "signed-ingest": Object.freeze({
     path: "src/cloud/signed-ingest.js",
     role: "SIGNED_EVIDENCE_INGEST"
+  }),
+  "signed-ingest-reconciliation-tests": Object.freeze({
+    path: "test/signed-ingest.test.js",
+    role: "SIGNED_INGEST_RECONCILIATION_VERIFICATION"
   }),
   "signer-runtime": Object.freeze({
     path: "infra/aws/lambda/signer.cjs",
@@ -392,6 +428,7 @@ const SOURCE_MARKERS = Object.freeze({
     "connectionStringForDatabase(",
     "\"tideproof\"",
     "FROM tp_api.g1_prepare_vector_set_v1(",
+    "FROM tp_api.g1_resolve_vector_set_v1(",
     "FROM tp_api.g1_rank_vector_set_v1(",
     "FROM tp_api.g1_delete_vector_set_v1(",
     "g1_vector_candidates_embedding_idx",
@@ -404,6 +441,10 @@ const SOURCE_MARKERS = Object.freeze({
     "rankedSequenceSha256",
     "auditorRankMatchesAuthorizer: true",
     "prepareAttempted = true",
+    "executeVectorPreparation(",
+    "ADMISSIBLE_VECTOR_PREPARE_COMMIT_UNKNOWN",
+    "preparationCommit: preparationCommitFor(",
+    "\"read_reconciled\"",
     "authorizationRecheckRequired: true",
     "durableSelectionCommitted: true",
     "ADMISSIBLE_VECTOR_PLAN_INDEX_MISSING",
@@ -470,13 +511,47 @@ const SOURCE_MARKERS = Object.freeze({
     "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY",
     "authorityTransferred: false",
     "row.decision_proposal_digest",
-    "authorizationBindingSha256"
+    "authorizationBindingSha256",
+    "tideproof.database-commit-result.v1",
+    "\"read_reconciled\"",
+    "requiresFreshAuthorization",
+    "logical_authority_replay",
+    "row.outbox_request_digest",
+    "row.outbox_authorization_binding_sha256",
+    "canonicalJson(row.outbox_payload)",
+    "sha256Hex(row.outbox_payload)",
+    "row.outbox_payload_digest",
+    "row.lease_expires_at",
+    "normalizeReceiptProposal(row, request)",
+    "receipt_proposal_authority_evidence_binding_sha256",
+    "receipt_proposal_authorization_binding_sha256",
+    "receipt_proposal_selected_evidence_digest",
+    "row.observed_holder_operation_id",
+    "row.observed_fence",
+    "committedProposalDigest",
+    "committedSelectedEvidenceId",
+    "clientClosed = true"
   ]),
   "authority-runtime-identity-tests": Object.freeze([
     "derives all identity digests without a client epoch",
     "transport replacement cannot remint logical action or proposal identity",
     "Unicode-key insertion order",
     "AUTHORITY_DVI_SELECTION_MISMATCH"
+  ]),
+  "authority-runtime-reconciliation-tests": Object.freeze([
+    "authority reconciles an ambiguous COMMIT instead of retrying the spend",
+    "authority reconciles an ACK-lost semantic denial through its durable identity",
+    "authority reconciles a full transport replacement by one stable logical action",
+    "authority reconciliation rejects every drifted outbox binding",
+    "authority reconciliation rejects every drifted proposal binding",
+    "authority reconciliation binds held-denial observation fields",
+    "direct and reconciled denied commits preserve one durable reason",
+    "tideproof.database-commit-result.v1",
+    "COMMITTED_BUT_NO_LONGER_CURRENT",
+    "result.commit.observation, \"read_reconciled\"",
+    "result.committedProposalDigest",
+    "receipt_proposal_payload",
+    "destination: \"drifted\""
   ]),
   "authority-store": Object.freeze([
     "runtimeDatabaseConfig({",
@@ -485,7 +560,18 @@ const SOURCE_MARKERS = Object.freeze({
     "dvi_selection_receipt_mismatch",
     "logical_authority_already_spent",
     "authorization epoch advancement requires an explicit new-authorization receipt",
+    "SELECT transaction_timestamp() AS database_now",
+    "unknownDatabaseResult({",
+    "requiresFreshAuthorization",
     "payload_canonical STRING NOT NULL",
+    "const exactOutbox =",
+    "canonicalJson(state.outbox_payload)",
+    "canonicalJson(row.receipt_proposal_payload)",
+    "sha256(canonicalJson(row.outbox_payload))",
+    "dviProposalIdentityDigestFor(proposalInput)",
+    "proposalLogicalActionDigest",
+    "observed_holder_operation_id",
+    "observed_fence",
     "tp_private.g1_vector_retrieval_sets",
     "g1_vector_candidates_embedding_idx",
     "CHECK (octet_length(assertion) BETWEEN 1 AND 4096)"
@@ -507,7 +593,10 @@ const SOURCE_MARKERS = Object.freeze({
     "Math.max(...overlapStarts) >= Math.min(...overlapEnds)",
     "observation.runId !== expected.runId",
     "state.activeRunId !== expected.runId",
-    "stateObservedAt >= observationBinding.leaseExpiresAt"
+    "stateObservedAt >= observationBinding.leaseExpiresAt",
+    "committedProposalDigest",
+    "committedSelectedEvidenceDigest",
+    "expectedAuthorizationBindingSha256"
   ]),
   "aws-boundary-ledger": Object.freeze([
     "The command is read-only and fail closed.",
@@ -524,6 +613,34 @@ const SOURCE_MARKERS = Object.freeze({
     "compareCanonicalKeys(left, right)",
     ".sort(([left], [right]) => compareCanonicalKeys(left, right))",
     "return JSON.stringify(value);"
+  ]),
+  "commit-reconciliation-contract": Object.freeze([
+    "tideproof.database-commit-result.v1",
+    "COMMITTED_BUT_NO_LONGER_CURRENT",
+    "UNKNOWN_DO_NOT_ACT",
+    "direct_ack",
+    "read_reconciled",
+    "DATABASE_COMMIT_TIME_INVALID",
+    "databaseTimestampFromDriver",
+    "requiresFreshAuthorization"
+  ]),
+  "commit-reconciliation-ledger": Object.freeze([
+    "SOURCE_RUNTIME_BOUND_PROVIDER_VALIDATION_PENDING",
+    "Tideproof treats a lost database acknowledgement as an unknown observation",
+    "Unknown results carry `null`; client time is rejected",
+    "Denied receipts and expired or superseded positive receipts are durable history",
+    "no live exactly-once or provider-concurrency claim is added",
+    "Classifier-dependent rollback after COMMIT dispatch",
+    "Direct replay currentness omitted the outbox",
+    "Digest label without durable payload verification",
+    "Invocation identity projected as committed replay identity"
+  ]),
+  "commit-reconciliation-tests": Object.freeze([
+    "direct ACK and read reconciliation share one exact commit schema",
+    "stale or denied durable history requires fresh authorization",
+    "unknown reconciliation never invents database time or a commit",
+    "commit schema rejects client clocks and contradictory authority state",
+    "trusted pg TIMESTAMPTZ values normalize before commit construction"
   ]),
   "aws-evidence-identity": Object.freeze([
     "AWS_EVIDENCE_ENDPOINT_OVERRIDE",
@@ -543,6 +660,12 @@ const SOURCE_MARKERS = Object.freeze({
     "awsPreflight: preflight ? \"PASS\" : \"NOT_RUN\"",
     "AWS was not queried or mutated",
     "upload and deployment remain separate reviewed actions"
+  ]),
+  "aws-security-tests": Object.freeze([
+    "SECURITY DEFINER bodies resolve every application relation by schema",
+    "(?:\\bWITH|,)",
+    "cteNames.has(match[1].toLowerCase())",
+    "generated templates exactly match the reviewed builders"
   ]),
   "aws-template-generated": Object.freeze([
     "\"Type\": \"AWS::KMS::Key\"",
@@ -574,7 +697,10 @@ const SOURCE_MARKERS = Object.freeze({
     "lockInitialRecoveryPublicCapability(client, bootstrapOwner)",
     "expectedPrimaryGuards",
     "sharedAuthorizerGuard",
-    "schemaDefaultLock"
+    "schemaDefaultLock",
+    "direct authority replay currentness requires the exact outbox payload",
+    "post-COMMIT ambiguity cannot enter a rollback branch",
+    "proposal\\.payload = outbox\\.payload"
   ]),
   "database-security-posture": Object.freeze([
     "DATABASE_POSTURE_BOOTSTRAP_SESSION_UNSAFE",
@@ -632,6 +758,14 @@ const SOURCE_MARKERS = Object.freeze({
     "dviRankedSequenceSha256For(rows)",
     "DVI_SELECTION_RECEIPT_RANK"
   ]),
+  "dvi-reconciliation-tests": Object.freeze([
+    "integrated retrieval reconciles exact DVI preparation after ACK loss",
+    "integrated DVI proof reconciles exact preparation after ACK loss",
+    "receipt.snapshot.commit.observation, \"read_reconciled\"",
+    "pools.authorizerConnections, 2",
+    "broken_released",
+    "reconciliation_started"
+  ]),
   "dvi-proposal-authorization": Object.freeze([
     "FROM tp_api.g1_authorize_dvi_proposal_v1(",
     "normalizedDviAuthorizationFor({",
@@ -683,6 +817,9 @@ const SOURCE_MARKERS = Object.freeze({
     "TO tp_gate2_authorizer_role",
     "p_agent_id NOT IN ('aws-authority-alpha', 'aws-authority-bravo')",
     "tp_api.g1_commit_dvi_selection_v1",
+    "tp_api.g1_resolve_verified_evidence_v1",
+    "tp_api.g1_resolve_vector_set_v1",
+    "tp_api.g1_resolve_recovery_audit_event_v1",
     "tp_api.g1_authorize_dvi_proposal_v1",
     "dvi_selection_request_mismatch",
     "IF v_epoch.current_epoch = 1 THEN",
@@ -692,7 +829,16 @@ const SOURCE_MARKERS = Object.freeze({
     "v_expected_logical_action_digest",
     "v_expected_request_digest",
     "database-derived authority identity mismatch",
-    "tp_api.g2_spend_authority_race_v1"
+    "tp_api.g2_spend_authority_race_v1",
+    "decision_committed_evidence_id UUID",
+    "outbox_payload JSONB",
+    "receipt_proposal_payload JSONB",
+    "receipt_proposal_authority_evidence_binding_sha256 STRING",
+    "receipt_proposal_authorization_binding_sha256 STRING",
+    "observed_holder_operation_id UUID",
+    "observed_fence INT8",
+    "proposal.payload = outbox.payload",
+    "sha256(proposal.payload_canonical::BYTES)"
   ]),
   "primary-security-runner": Object.freeze([
     "sqlBindingNegatives",
@@ -750,13 +896,29 @@ const SOURCE_MARKERS = Object.freeze({
     "allowMissingExpectedCapabilities: false",
     "collectValidatedRecoveryPosture(",
     "GRANT USAGE ON SCHEMA mcp_api TO ${RECOVERY_PUBLISHER_ROLE}",
-    "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED"
+    "mcp_api.resolve_recovery_bundle_v1",
+    "read_reconciled",
+    "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED",
+    "beforeReconcile: closeOriginal",
+    "commitDefinitivelyAborted"
+  ]),
+  "recovery-audit-reconciliation-tests": Object.freeze([
+    "recovery audit resolves its exact event after COMMIT ACK loss",
+    "g1_resolve_recovery_audit_event_v1",
+    "result.commit.observation, \"read_reconciled\"",
+    "broken_closed",
+    "reconciliation_started",
+    "recovery audit reconciles an unclassified post-COMMIT error without rollback"
   ]),
   "recovery-broker": Object.freeze([
     "runtimeDatabaseConfig({",
     "RECOVERY_CLUSTER_SEPARATION_REQUIRED",
     "RECOVERY_PRINCIPAL_BINDING_MISMATCH",
-    "RECOVERY_MCP_RESULT_CARDINALITY_INVALID"
+    "RECOVERY_MCP_RESULT_CARDINALITY_INVALID",
+    "g1_resolve_recovery_audit_event_v1",
+    "databaseClientMustBeDiscarded(error)",
+    "read_reconciled",
+    "commitDefinitivelyAborted"
   ]),
   "recovery-broker-runner": Object.freeze([
     "RECOVERY_SOURCE_OPERATION_ID",
@@ -768,11 +930,22 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_SOURCE_REQUEST_DIGEST",
     "publisher unexpectedly read the base recovery table"
   ]),
+  "recovery-publication-reconciliation-tests": Object.freeze([
+    "recovery publisher resolves an exact receipt after COMMIT ACK loss",
+    "output.commit.observation, \"read_reconciled\"",
+    "sqlState(\"ECONNRESET\")",
+    "recovery publisher never rolls back an unclassified post-COMMIT error",
+    "ambiguous_closed"
+  ]),
   "recovery-store": Object.freeze([
     "runtimeDatabaseConfig({",
     "bootstrapDatabaseConfig({",
     "RECOVERY_AUTHORITY_INVARIANT_VIOLATION",
-    "RECOVERY_SIGNATURE_INVALID"
+    "RECOVERY_SIGNATURE_INVALID",
+    "mcp_private.recovery_bundles_v2",
+    "databaseClientMustBeDiscarded(error)",
+    "read_reconciled",
+    "commitDefinitivelyAborted"
   ]),
   "release-security-ledger": Object.freeze([
     "CURRENT SOURCE SECURITY PASS — LIVE AND PRIVATE REVIEW PENDING",
@@ -789,7 +962,19 @@ const SOURCE_MARKERS = Object.freeze({
     "runtimeDatabaseConfig({",
     "connectionStringForDatabase(",
     "VERIFICATION_KEY_NOT_ADMISSIBLE",
-    "SIGNATURE_INVALID"
+    "SIGNATURE_INVALID",
+    "g1_resolve_verified_evidence_v1",
+    "databaseClientMustBeDiscarded(error)",
+    "read_reconciled",
+    "commitDefinitivelyAborted"
+  ]),
+  "signed-ingest-reconciliation-tests": Object.freeze([
+    "signed ingest resolves its exact receipt after COMMIT ACK loss",
+    "result.commit.observation, \"read_reconciled\"",
+    "synthetic ACK loss",
+    "broken_released",
+    "reconciliation_started",
+    "signed ingest reconciles an unclassified post-COMMIT error without rollback"
   ]),
   "signer-runtime": Object.freeze([
     "SigningAlgorithms.includes(\"ECDSA_SHA_256\")",

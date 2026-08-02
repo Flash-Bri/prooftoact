@@ -807,9 +807,17 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       AUTHORITY_RUN_ID: { Ref: "AuthorityRunId" },
       AUTHORITY_INCIDENT_ID: { Ref: "AuthorityIncidentId" },
       AUTHORITY_EVIDENCE_ID: { Ref: "AuthorityEvidenceId" },
-      AUTHORITY_PROPOSAL_DIGEST: { Ref: "AuthorityProposalDigest" },
-      AUTHORITY_LOGICAL_ACTION_DIGEST: {
-        Ref: "AuthorityLogicalActionDigest"
+      AUTHORITY_ALPHA_PROPOSAL_DIGEST: {
+        Ref: "AuthorityAlphaProposalDigest"
+      },
+      AUTHORITY_BRAVO_PROPOSAL_DIGEST: {
+        Ref: "AuthorityBravoProposalDigest"
+      },
+      AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST: {
+        Ref: "AuthorityAlphaLogicalActionDigest"
+      },
+      AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST: {
+        Ref: "AuthorityBravoLogicalActionDigest"
       },
       AUTHORITY_SELECTED_EVIDENCE_DIGEST: {
         Ref: "AuthoritySelectedEvidenceDigest"
@@ -1301,7 +1309,7 @@ test("SECURITY DEFINER bodies resolve every application relation by schema", () 
     for (const [, body] of definitions) {
       count += 1;
       const cteNames = new Set(
-        [...body.matchAll(/\b(?:WITH|,)\s+([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(/gi)].map(
+        [...body.matchAll(/(?:\bWITH|,)\s+([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(/gi)].map(
           (match) => match[1].toLowerCase()
         )
       );
@@ -1390,8 +1398,10 @@ test("effective config digest changes with every deployment control", () => {
       evidenceId: "44444444-4444-4444-8444-444444444444",
       raceId: "55555555-5555-4555-8555-555555555555",
       resourceId: "synthetic-rescue-unit-aws-proof",
-      proposalDigest: "1".repeat(64),
-      logicalActionDigest: "2".repeat(64),
+      alphaProposalDigest: "1".repeat(64),
+      bravoProposalDigest: "4".repeat(64),
+      alphaLogicalActionDigest: "2".repeat(64),
+      bravoLogicalActionDigest: "5".repeat(64),
       selectedEvidenceDigest: "3".repeat(64),
     },
     bedrockModelId: "amazon.nova-micro-v1:0",

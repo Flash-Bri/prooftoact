@@ -584,11 +584,17 @@ export function buildGate2Template() {
     AuthorityEvidenceId: uuidParameter(
       "Verified synthetic evidence UUID admitted by CockroachDB."
     ),
-    AuthorityProposalDigest: hexParameter(
-      "Database-authorized DVI proposal identity consumed by Gate Two."
+    AuthorityAlphaProposalDigest: hexParameter(
+      "Database-authorized alpha DVI proposal identity consumed by Gate Two."
     ),
-    AuthorityLogicalActionDigest: hexParameter(
-      "Stable logical-action identity consumed by Gate Two."
+    AuthorityBravoProposalDigest: hexParameter(
+      "Database-authorized bravo DVI proposal identity consumed by Gate Two."
+    ),
+    AuthorityAlphaLogicalActionDigest: hexParameter(
+      "Stable alpha logical-action identity consumed by Gate Two."
+    ),
+    AuthorityBravoLogicalActionDigest: hexParameter(
+      "Stable bravo logical-action identity consumed by Gate Two."
     ),
     AuthoritySelectedEvidenceDigest: hexParameter(
       "Exact selected evidence digest bound by the authorized DVI proposal."
@@ -899,9 +905,17 @@ export function buildGate2Template() {
       AUTHORITY_RUN_ID: ref("AuthorityRunId"),
       AUTHORITY_INCIDENT_ID: ref("AuthorityIncidentId"),
       AUTHORITY_EVIDENCE_ID: ref("AuthorityEvidenceId"),
-      AUTHORITY_PROPOSAL_DIGEST: ref("AuthorityProposalDigest"),
-      AUTHORITY_LOGICAL_ACTION_DIGEST: ref(
-        "AuthorityLogicalActionDigest"
+      AUTHORITY_ALPHA_PROPOSAL_DIGEST: ref(
+        "AuthorityAlphaProposalDigest"
+      ),
+      AUTHORITY_BRAVO_PROPOSAL_DIGEST: ref(
+        "AuthorityBravoProposalDigest"
+      ),
+      AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST: ref(
+        "AuthorityAlphaLogicalActionDigest"
+      ),
+      AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST: ref(
+        "AuthorityBravoLogicalActionDigest"
       ),
       AUTHORITY_SELECTED_EVIDENCE_DIGEST: ref(
         "AuthoritySelectedEvidenceDigest"
@@ -1405,11 +1419,17 @@ export function buildGate2Template() {
       AuthorityArtifactDigest: {
         Value: ref("AuthorityArtifactDigest")
       },
-      AuthorityProposalDigest: {
-        Value: ref("AuthorityProposalDigest")
+      AuthorityAlphaProposalDigest: {
+        Value: ref("AuthorityAlphaProposalDigest")
       },
-      AuthorityLogicalActionDigest: {
-        Value: ref("AuthorityLogicalActionDigest")
+      AuthorityBravoProposalDigest: {
+        Value: ref("AuthorityBravoProposalDigest")
+      },
+      AuthorityAlphaLogicalActionDigest: {
+        Value: ref("AuthorityAlphaLogicalActionDigest")
+      },
+      AuthorityBravoLogicalActionDigest: {
+        Value: ref("AuthorityBravoLogicalActionDigest")
       },
       AuthoritySelectedEvidenceDigest: {
         Value: ref("AuthoritySelectedEvidenceDigest")
@@ -1502,8 +1522,10 @@ export function deploymentConfigDigest(configuration) {
         "databaseSecretVersionId",
         "evidenceId",
         "incidentId",
-        "logicalActionDigest",
-        "proposalDigest",
+        "alphaLogicalActionDigest",
+        "alphaProposalDigest",
+        "bravoLogicalActionDigest",
+        "bravoProposalDigest",
         "raceId",
         "resourceId",
         "runId",
