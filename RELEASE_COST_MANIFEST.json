@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
-  "reviewedOn": "2026-08-01",
+  "reviewedOn": "2026-08-02",
   "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
   "limits": {
     "awsBudgetLimitUsd": 15,
@@ -67,7 +67,7 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "515faec16865b4ac3491b75bd49891e6e9df905e1def2cfe915561a65de50710"
+      "sha256": "20279b5a232d8bfb2511fdb4e97c98e6cbb85f710812684f2cd1d1eb3a590f0a"
     },
     {
       "id": "aws-preflight-library",
@@ -97,7 +97,7 @@
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "86236a88d0100b0503802c9485c07c73c5bb18bb3b6e98e40519ac6fd3342069"
+      "sha256": "060275ddcff314167d582984ae5a84981db0f99b509c179d24aab402d64577cf"
     },
     {
       "id": "cost-guard-receipt",

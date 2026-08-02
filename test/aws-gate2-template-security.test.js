@@ -82,6 +82,8 @@ test("deployment evidence drift permission is scoped to attested resources", asy
   const { __test } = await import("../scripts/gate2-aws-attestation.js");
   const expected = [
     "DefaultStage",
+    "AuthoritySemanticFailureAlarm",
+    "BoundarySemanticFailureAlarm",
     "DeploymentEvidenceAlternateRole",
     "DeploymentEvidenceRole",
     "HttpApi",
@@ -96,7 +98,7 @@ test("deployment evidence drift permission is scoped to attested resources", asy
       ];
     })
   ].sort();
-  assert.equal(expected.length, 35);
+  assert.equal(expected.length, 37);
   assert.deepEqual(__test.ATTESTED_DRIFT_LOGICAL_IDS, expected);
   assert.equal(expected.includes("BoundaryIntegration"), false);
   assert.equal(expected.includes("DemoIntegration"), false);
@@ -114,6 +116,51 @@ test("HTTP API integrations bind numeric versions and explicit POST semantics", 
     assert.equal(properties.IntegrationType, "AWS_PROXY");
     assert.equal(properties.PayloadFormatVersion, "2.0");
   }
+});
+
+test("semantic failure alarms bind provider-emitted boundary and authority metrics", () => {
+  const template = buildGate2Template();
+  const expectedDimensions = (service) => [
+    { Name: "Deployment", Value: { Ref: "AWS::StackName" } },
+    { Name: "Service", Value: service }
+  ];
+
+  for (const [logicalId, service] of [
+    ["BoundarySemanticFailureAlarm", "boundary"],
+    ["AuthoritySemanticFailureAlarm", "authority"]
+  ]) {
+    assert.deepEqual(template.Resources[logicalId], {
+      Type: "AWS::CloudWatch::Alarm",
+      Properties: {
+        AlarmName: {
+          "Fn::Sub": `\${AWS::StackName}-${service}-semantic-failures`
+        },
+        AlarmDescription:
+          "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
+        Namespace: "Tideproof/GateTwo",
+        MetricName: "SemanticFailures",
+        Statistic: "Sum",
+        Period: 60,
+        EvaluationPeriods: 1,
+        DatapointsToAlarm: 1,
+        Threshold: 1,
+        ComparisonOperator: "GreaterThanOrEqualToThreshold",
+        TreatMissingData: "notBreaching",
+        Dimensions: expectedDimensions(service)
+      }
+    });
+  }
+
+  assert.deepEqual(
+    template.Resources.BoundaryFunction.Properties.Environment.Variables
+      .SEMANTIC_METRIC_DEPLOYMENT,
+    { Ref: "AWS::StackName" }
+  );
+  assert.deepEqual(
+    template.Resources.AuthorityFunction.Properties.Environment.Variables
+      .SEMANTIC_METRIC_DEPLOYMENT,
+    { Ref: "AWS::StackName" }
+  );
 });
 
 test("HTTP API stage binds one route-ordered explicit deployment", () => {

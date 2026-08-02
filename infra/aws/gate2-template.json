@@ -1517,6 +1517,9 @@
             "AUTHORITY_ARTIFACT_DIGEST": {
               "Ref": "AuthorityArtifactDigest"
             },
+            "SEMANTIC_METRIC_DEPLOYMENT": {
+              "Ref": "AWS::StackName"
+            },
             "TREE_DIGEST": {
               "Ref": "TreeDigest"
             },
@@ -2594,6 +2597,9 @@
             },
             "SIGNER_ARTIFACT_DIGEST": {
               "Ref": "SignerArtifactDigest"
+            },
+            "SEMANTIC_METRIC_DEPLOYMENT": {
+              "Ref": "AWS::StackName"
             },
             "TREE_DIGEST": {
               "Ref": "TreeDigest"
@@ -3715,6 +3721,66 @@
             "Value": {
               "Ref": "AuthorityFunction"
             }
+          }
+        ]
+      }
+    },
+    "BoundarySemanticFailureAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-boundary-semantic-failures"
+        },
+        "AlarmDescription": "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
+        "Namespace": "Tideproof/GateTwo",
+        "MetricName": "SemanticFailures",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "Deployment",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Name": "Service",
+            "Value": "boundary"
+          }
+        ]
+      }
+    },
+    "AuthoritySemanticFailureAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-authority-semantic-failures"
+        },
+        "AlarmDescription": "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
+        "Namespace": "Tideproof/GateTwo",
+        "MetricName": "SemanticFailures",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "Deployment",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Name": "Service",
+            "Value": "authority"
           }
         ]
       }

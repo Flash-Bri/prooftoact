@@ -122,7 +122,9 @@ function configureTestEnvironment() {
     PACKAGE_LOCK_DIGEST: "d".repeat(64),
     BEDROCK_MODEL_ID: "amazon.nova-micro-v1:0",
     AWS_REGION: "us-east-1",
+    AWS_LAMBDA_FUNCTION_NAME: "tideproof-gate2-boundary",
     AWS_LAMBDA_FUNCTION_VERSION: "7",
+    SEMANTIC_METRIC_DEPLOYMENT: "tideproof-gate2",
     AGENT_FUNCTION_VERSION: "3",
     SIGNER_FUNCTION_VERSION: "5",
     AGENT_FUNCTION_ARN: "arn:aws:lambda:us-east-1:111:function:agent:11",
@@ -137,6 +139,45 @@ function configureTestEnvironment() {
     ...DIGESTS
   });
 }
+
+test("boundary semantic failures emit provider-bound EMF without request data", () => {
+  configureTestEnvironment();
+  const metric = boundary.semanticFailureMetric(
+    "ADVISORY_UNAVAILABLE",
+    { awsRequestId: "request-123" },
+    () => 1_785_700_000_000
+  );
+
+  assert.deepEqual(metric, {
+    _aws: {
+      Timestamp: 1_785_700_000_000,
+      CloudWatchMetrics: [
+        {
+          Namespace: "Tideproof/GateTwo",
+          Dimensions: [["Deployment", "Service"]],
+          Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
+        }
+      ]
+    },
+    Deployment: "tideproof-gate2",
+    Service: "boundary",
+    SemanticFailures: 1,
+    schemaVersion: "tideproof.aws-semantic-failure.v1",
+    provider: "AWS_LAMBDA",
+    status: "UNKNOWN_DO_NOT_ACT",
+    code: "ADVISORY_UNAVAILABLE",
+    awsRequestId: "request-123",
+    region: "us-east-1",
+    functionName: "tideproof-gate2-boundary",
+    functionVersion: "7",
+    sourceCommit: HEX_40,
+    configDigest: HEX_64,
+    treeDigest: "c".repeat(40),
+    artifactDigest: DIGESTS.BOUNDARY_ARTIFACT_DIGEST
+  });
+  assert.equal(JSON.stringify(metric).includes("callerPrincipalHash"), false);
+  assert.equal(JSON.stringify(metric).includes("signedReceipt"), false);
+});
 
 function validRequestBinding() {
   return {
@@ -902,6 +943,7 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
       AUTHORITY_ARTIFACT_DIGEST: {
         Ref: "AuthorityArtifactDigest"
       },
+      SEMANTIC_METRIC_DEPLOYMENT: { Ref: "AWS::StackName" },
       TREE_DIGEST: { Ref: "TreeDigest" },
       PACKAGE_LOCK_DIGEST: { Ref: "PackageLockDigest" }
     }

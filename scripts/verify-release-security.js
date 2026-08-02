@@ -657,7 +657,11 @@ const SOURCE_MARKERS = Object.freeze({
     "row.observed_fence",
     "committedProposalDigest",
     "committedSelectedEvidenceId",
-    "clientClosed = true"
+    "clientClosed = true",
+    "tideproof.aws-semantic-failure.v1",
+    "Dimensions: [[\"Deployment\", \"Service\"]]",
+    "process.stdout.write(",
+    "result.code !== \"STATUS_ONLY_NO_AUTHORIZATION\""
   ]),
   "authority-runtime-identity-tests": Object.freeze([
     "derives all identity digests without a client epoch",
@@ -782,6 +786,8 @@ const SOURCE_MARKERS = Object.freeze({
     "loadAwsProviderRuntime({",
     "providerRuntime.runtimeSha256",
     "provider.detectStackDrift(",
+    "AuthoritySemanticFailureAlarm",
+    "BoundarySemanticFailureAlarm",
     "provider.describeStackResourceDrifts(",
     "provider.describeStackResources(",
     "provider.getApi(",
@@ -860,7 +866,11 @@ const SOURCE_MARKERS = Object.freeze({
   "boundary-runtime": Object.freeze([
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN",
     "assumed-role/${escapedRoleName}",
-    "SIGNED_CALLER_REJECTED"
+    "SIGNED_CALLER_REJECTED",
+    "tideproof.aws-semantic-failure.v1",
+    "Dimensions: [[\"Deployment\", \"Service\"]]",
+    "process.stdout.write(",
+    "result.body?.status === \"UNKNOWN_DO_NOT_ACT\""
   ]),
   "canonical-json-contract": Object.freeze([
     "compareCanonicalKeys(left, right)",
@@ -931,7 +941,8 @@ const SOURCE_MARKERS = Object.freeze({
     "SECURITY DEFINER bodies resolve every application relation by schema",
     "(?:\\bWITH|,)",
     "cteNames.has(match[1].toLowerCase())",
-    "generated templates exactly match the reviewed builders"
+    "generated templates exactly match the reviewed builders",
+    "boundary semantic failures emit provider-bound EMF without request data"
   ]),
   "aws-template-generated": Object.freeze([
     "\"Type\": \"AWS::KMS::Key\"",
@@ -948,7 +959,9 @@ const SOURCE_MARKERS = Object.freeze({
     "\"AgentVersionArn\": {",
     "\"EXPECTED_ADVISORY_CALLER_ROLE_ARN\": {",
     "\"AuthorizationType\": \"AWS_IAM\"",
-    "\"Type\": \"AWS::Lambda::Permission\""
+    "\"Type\": \"AWS::Lambda::Permission\"",
+    "\"Namespace\": \"Tideproof/GateTwo\"",
+    "\"MetricName\": \"SemanticFailures\""
   ]),
   "aws-template-source": Object.freeze([
     "properties.ReservedConcurrentExecutions = concurrency;",
@@ -970,15 +983,19 @@ const SOURCE_MARKERS = Object.freeze({
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN: getAtt(",
     "AuthorizationType: \"AWS_IAM\"",
     "ThrottlingBurstLimit: 1",
-    "Type: \"AWS::Lambda::Permission\""
+    "Type: \"AWS::Lambda::Permission\"",
+    "function semanticFailureAlarm(service)",
+    "semanticFailureAlarm(\"boundary\")",
+    "semanticFailureAlarm(\"authority\")"
   ]),
   "aws-template-security-tests": Object.freeze([
     "deployment evidence role explicitly denies privilege escalation",
     "deployment evidence drift permission is scoped to attested resources",
     "denied.has(\"iam:*\"), false",
-    "assert.equal(expected.length, 35)",
+    "assert.equal(expected.length, 37)",
     "HTTP API integrations bind numeric versions and explicit POST semantics",
-    "expected.includes(\"BoundaryIntegration\"), false"
+    "expected.includes(\"BoundaryIntegration\"), false",
+    "semantic failure alarms bind provider-emitted boundary and authority metrics"
   ]),
   "database-runtime": Object.freeze([
     "DATABASE_CONNECTION_RUNTIME_OVERRIDE_REJECTED",
@@ -1146,7 +1163,10 @@ const SOURCE_MARKERS = Object.freeze({
     "Earliest detection point:",
     "Preventive controls:",
     "Residual risk:",
-    "It must not say that live AWS deployment identity"
+    "It must not say that live AWS deployment identity",
+    "Accepted semantic-monitoring finding",
+    "CloudWatch Embedded Metric Format",
+    "alarm state transition"
   ]),
   "dvi-proposal-authorization": Object.freeze([
     "FROM tp_api.g1_authorize_dvi_proposal_v1(",
@@ -1679,6 +1699,51 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
     ),
     "RELEASE_SECURITY_ADVISORY_CALLER_BINDING"
   );
+  const semanticFailureAlarms = {
+    AuthoritySemanticFailureAlarm: "authority",
+    BoundarySemanticFailureAlarm: "boundary"
+  };
+  assert(
+    sameJson(authorityEnvironment.SEMANTIC_METRIC_DEPLOYMENT, {
+      Ref: "AWS::StackName"
+    }) &&
+      sameJson(
+        resources.BoundaryFunction.Properties.Environment?.Variables
+          ?.SEMANTIC_METRIC_DEPLOYMENT,
+        { Ref: "AWS::StackName" }
+      ) &&
+      Object.values(resources).filter(
+        (resource) =>
+          resource.Type === "AWS::CloudWatch::Alarm" &&
+          resource.Properties?.Namespace === "Tideproof/GateTwo"
+      ).length === 2,
+    "RELEASE_SECURITY_SEMANTIC_FAILURE_ALARM_SET"
+  );
+  for (const [logicalId, service] of Object.entries(
+    semanticFailureAlarms
+  )) {
+    const alarm = resources[logicalId];
+    assert(
+      alarm?.Type === "AWS::CloudWatch::Alarm" &&
+        alarm.Properties.AlarmName?.["Fn::Sub"] ===
+          `\${AWS::StackName}-${service}-semantic-failures` &&
+        alarm.Properties.Namespace === "Tideproof/GateTwo" &&
+        alarm.Properties.MetricName === "SemanticFailures" &&
+        alarm.Properties.Statistic === "Sum" &&
+        alarm.Properties.Period === 60 &&
+        alarm.Properties.EvaluationPeriods === 1 &&
+        alarm.Properties.DatapointsToAlarm === 1 &&
+        alarm.Properties.Threshold === 1 &&
+        alarm.Properties.ComparisonOperator ===
+          "GreaterThanOrEqualToThreshold" &&
+        alarm.Properties.TreatMissingData === "notBreaching" &&
+        sameJson(alarm.Properties.Dimensions, [
+          { Name: "Deployment", Value: { Ref: "AWS::StackName" } },
+          { Name: "Service", Value: service }
+        ]),
+      `RELEASE_SECURITY_${logicalId}`
+    );
+  }
   const functionTitles = [
     "Agent",
     "Authority",

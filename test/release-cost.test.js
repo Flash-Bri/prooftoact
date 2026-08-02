@@ -121,6 +121,14 @@ test("Gate Two template contract rejects fixed-charge or expanded runtime resour
     /RELEASE_COST_GATE2_FIXED_CHARGE_RESOURCE/
   );
 
+  const expandedMetrics = structuredClone(template);
+  expandedMetrics.Resources.UnreviewedSemanticAlarm =
+    structuredClone(template.Resources.BoundarySemanticFailureAlarm);
+  assert.throws(
+    () => assertGate2TemplateContract(expandedMetrics),
+    /RELEASE_COST_GATE2_SEMANTIC_ALARMS/
+  );
+
   const expanded = structuredClone(template);
   expanded.Resources.DemoFunction.Properties.ReservedConcurrentExecutions = 9;
   assert.throws(

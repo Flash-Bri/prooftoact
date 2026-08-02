@@ -417,6 +417,23 @@ export function assertGate2TemplateContract(template) {
       logGroups.every((resource) => resource.Properties?.RetentionInDays === 7),
     "RELEASE_COST_GATE2_LOGS"
   );
+  const semanticAlarms = Object.values(resources).filter(
+    (resource) =>
+      resource?.Type === "AWS::CloudWatch::Alarm" &&
+      resource.Properties?.Namespace === "Tideproof/GateTwo"
+  );
+  assert(
+    semanticAlarms.length === 2 &&
+      semanticAlarms.every(
+        (resource) =>
+          resource.Properties.MetricName === "SemanticFailures" &&
+          resource.Properties.Period === 60 &&
+          resource.Properties.AlarmActions === undefined &&
+          resource.Properties.OKActions === undefined &&
+          resource.Properties.InsufficientDataActions === undefined
+      ),
+    "RELEASE_COST_GATE2_SEMANTIC_ALARMS"
+  );
   const secrets = Object.values(resources).filter(
     (resource) => resource?.Type === "AWS::SecretsManager::Secret"
   );
@@ -569,7 +586,9 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       "CURRENT COST GUARDS PASS — LIVE SPEND AND FINAL REVIEW PENDING",
       "CURRENT_COST_GUARDS_PASS",
       "AWS preflight remains `NOT_RUN`",
-      "main-stack deployment, DNS change"
+      "main-stack deployment, DNS change",
+      "semantic-failure alarms",
+      "stack/service custom"
     ],
     "RELEASE_COST_LEDGER_MARKERS"
   );

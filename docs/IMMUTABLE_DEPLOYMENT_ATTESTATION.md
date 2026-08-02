@@ -242,6 +242,43 @@ and private human review remain required.
   contract. It must not claim update-safe API snapshot replacement, live
   provider validation, or administrator exclusion.
 
+## Accepted semantic-monitoring finding
+
+- **Root cause:** the standard `AWS/Lambda` `Errors` metric records thrown
+  invocation failures, but the boundary and authority deliberately catch
+  dependency and reconciliation failures and return `UNKNOWN_DO_NOT_ACT`.
+  Those correct fail-closed outcomes could therefore leave every platform
+  error alarm green.
+- **Why it was missed:** tests concentrated on preventing an unsafe response,
+  while the template review treated Lambda error alarms as coverage for every
+  operational failure mode.
+- **Earliest detection point:** compare each handled terminal response with
+  the metrics its runtime actually emits, before any provider deployment.
+- **Repair:** boundary and authority now emit one payload-free, provider-bound
+  CloudWatch Embedded Metric Format record for internal
+  `UNKNOWN_DO_NOT_ACT` outcomes. The record binds the AWS request, region,
+  numeric function version, exact source/config/tree/artifact identities, and
+  stack/service dimensions without proposal, principal, receipt, or request
+  content. Stack-scoped boundary and authority semantic-failure alarms trip on
+  that metric; the capability-free authority status probe is excluded.
+- **Regression and preventive controls:** unit tests freeze both EMF schemas
+  and reject sensitive fields, template tests freeze the two alarm contracts
+  and stack dimensions, the security verifier hash-binds every changed
+  runtime/template/test surface, and deployment drift detection now includes
+  both alarm resources.
+- **Verification:** focused runtime, template, and deployment-attestation
+  tests plus the generated-template equality and release-security gate must
+  pass together. The exact provider path must later prove EMF ingestion,
+  alarm state transition, and recovery on the immutable deployed commit.
+- **Residual risk:** CloudWatch delivery latency, metric extraction, alarm
+  evaluation, notification routing, and operator response are not locally
+  provable. The alarms intentionally expose no application input and carry no
+  automatic mutation action.
+- **Claim impact:** source may claim stack-scoped semantic-failure monitoring
+  is encoded and drift-bound. It must not claim a live alarm, notification,
+  availability guarantee, or operational response until provider receipts are
+  accepted.
+
 ## Required live sequence
 
 1. Before deployment, generate three distinct Ed25519 key pairs outside the
