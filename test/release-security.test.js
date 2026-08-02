@@ -45,7 +45,7 @@ test("current source security and abuse boundaries match reviewed state", () => 
   assert.equal(receipt.securityHeaderCount, 9);
   assert.equal(receipt.negativeProbeCount, 6);
   assert.equal(receipt.publicRouteCount, 10);
-  assert.equal(receipt.iamRoleCount, 7);
+  assert.equal(receipt.iamRoleCount, 9);
   assert.equal(receipt.lambdaPermissionCount, 3);
   assert.equal(receipt.boundedFunctionCount, 5);
   assert.equal(receipt.logGroupCount, 11);

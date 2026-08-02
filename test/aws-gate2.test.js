@@ -38,6 +38,12 @@ const DIGESTS = {
 const TEST_SIGNING_KEY = crypto.generateKeyPairSync("ec", {
   namedCurve: "P-256"
 });
+const TEST_ATTESTATION_PUBLIC_KEYS = Array.from({ length: 3 }, () =>
+  crypto
+    .generateKeyPairSync("ed25519")
+    .publicKey.export({ type: "spki", format: "der" })
+    .toString("base64")
+);
 
 function signingKeyBinding(keyPair = TEST_SIGNING_KEY) {
   const publicKeyDer = keyPair.publicKey.export({
@@ -72,9 +78,9 @@ function configureTestEnvironment() {
     AWS_LAMBDA_FUNCTION_VERSION: "7",
     AGENT_FUNCTION_VERSION: "3",
     SIGNER_FUNCTION_VERSION: "5",
-    AGENT_FUNCTION_ARN: "arn:aws:lambda:us-east-1:111:function:agent:proof",
+    AGENT_FUNCTION_ARN: "arn:aws:lambda:us-east-1:111:function:agent:11",
     SIGNER_FUNCTION_ARN:
-      "arn:aws:lambda:us-east-1:111:function:signer:proof",
+      "arn:aws:lambda:us-east-1:111:function:signer:12",
     SIGNING_KEY_ARN:
       "arn:aws:kms:us-east-1:111111111111:key/11111111-1111-4111-8111-111111111111",
     EXPECTED_ACCOUNT_ID: "111111111111",
@@ -708,7 +714,7 @@ function allowedActions(role) {
     .flatMap(({ Action }) => (Array.isArray(Action) ? Action : [Action]));
 }
 
-test("Gate Two template freezes immutable aliases and least-privilege roles", () => {
+test("Gate Two template invokes numeric versions and keeps monitored aliases", () => {
   const template = buildGate2Template();
   const { Parameters: parameters, Resources: resources } = template;
 
@@ -721,6 +727,14 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   assert.doesNotMatch(
     "attacker.example",
     new RegExp(parameters.AuthorityDatabaseHost.AllowedPattern)
+  );
+  assert.match(
+    "arn:aws:iam::111111111111:role/tideproof-evidence-source",
+    new RegExp(parameters.EvidenceOperatorPrincipalArn.AllowedPattern)
+  );
+  assert.doesNotMatch(
+    "arn:aws:iam::111111111111:root",
+    new RegExp(parameters.EvidenceOperatorPrincipalArn.AllowedPattern)
   );
 
   assert.equal(
@@ -862,33 +876,27 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   }
   assert.deepEqual(
     resources.BoundaryIntegration.Properties.IntegrationUri,
-    { "Fn::GetAtt": ["BoundaryAlias", "AliasArn"] }
+    { Ref: "BoundaryVersion" }
   );
   assert.deepEqual(
     resources.DemoIntegration.Properties.IntegrationUri,
-    { "Fn::GetAtt": ["DemoAlias", "AliasArn"] }
+    { Ref: "DemoVersion" }
   );
   assert.equal(
     resources.DemoIntegration.Properties.TimeoutInMillis,
     6_000
   );
-  assert.equal(
-    resources.BoundaryInvokePermission.Properties.FunctionName[
-      "Fn::GetAtt"
-    ][0],
-    "BoundaryAlias"
+  assert.deepEqual(
+    resources.BoundaryInvokePermission.Properties.FunctionName,
+    { Ref: "BoundaryVersion" }
   );
-  assert.equal(
-    resources.DemoRootInvokePermission.Properties.FunctionName[
-      "Fn::GetAtt"
-    ][0],
-    "DemoAlias"
+  assert.deepEqual(
+    resources.DemoRootInvokePermission.Properties.FunctionName,
+    { Ref: "DemoVersion" }
   );
-  assert.equal(
-    resources.DemoAssetInvokePermission.Properties.FunctionName[
-      "Fn::GetAtt"
-    ][0],
-    "DemoAlias"
+  assert.deepEqual(
+    resources.DemoAssetInvokePermission.Properties.FunctionName,
+    { Ref: "DemoVersion" }
   );
   const publicRoutes = Object.values(resources)
     .filter(
@@ -963,6 +971,57 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
     "cloudformation:DescribeStackResource",
     "lambda:InvokeFunction"
   ]);
+  const evidenceTrust =
+    resources.DeploymentEvidenceRole.Properties.AssumeRolePolicyDocument;
+  assert.deepEqual(evidenceTrust.Statement, [
+    {
+      Effect: "Allow",
+      Principal: { AWS: { Ref: "EvidenceOperatorPrincipalArn" } },
+      Action: "sts:AssumeRole",
+      Condition: {
+        StringEquals: {
+          "aws:PrincipalArn": { Ref: "EvidenceOperatorPrincipalArn" }
+        }
+      }
+    }
+  ]);
+  assert.deepEqual(
+    resources.DeploymentEvidenceRole.Properties.RoleName,
+    { "Fn::Sub": "${AWS::StackName}-evidence" }
+  );
+  assert.ok(
+    allowedActions(resources.DeploymentEvidenceRole).includes(
+      "lambda:GetFunctionConfiguration"
+    )
+  );
+  assert.ok(
+    allowedActions(resources.DeploymentEvidenceRole).includes(
+      "cloudformation:DescribeStackResources"
+    )
+  );
+  assert.ok(
+    !allowedActions(resources.DeploymentEvidenceRole).includes(
+      "lambda:InvokeFunction"
+    )
+  );
+  assert.deepEqual(
+    resources.DeploymentEvidenceAlternateRole.Properties.RoleName,
+    { "Fn::Sub": "${AWS::StackName}-evidence-alternate" }
+  );
+  assert.deepEqual(
+    allowedActions(resources.DeploymentEvidenceAlternateRole),
+    ["sts:AssumeRole"]
+  );
+  assert.deepEqual(
+    resources.DeploymentEvidenceAlternateRole.Properties.Policies[0]
+      .PolicyDocument.Statement.find(
+        ({ Sid }) => Sid === "AttemptOnlyDeploymentEvidenceRole"
+      ).Resource,
+    {
+      "Fn::Sub":
+        "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-evidence"
+    }
+  );
   const authorityStatements =
     resources.AuthorityRole.Properties.Policies[0].PolicyDocument
       .Statement;
@@ -1006,7 +1065,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       ({ Sid, Effect, Resource }) =>
         Sid === "InvokeOnlyAuthorityProof" &&
         Effect === "Allow" &&
-        Resource["Fn::GetAtt"][0] === "AuthorityAlias"
+        Resource.Ref === "AuthorityVersion"
     )
   );
   assert.ok(
@@ -1025,7 +1084,7 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
       ({ Sid, Effect, NotResource }) =>
         Sid === "DenyOtherLambdaTargets" &&
         Effect === "Deny" &&
-        NotResource["Fn::GetAtt"][0] === "AuthorityAlias"
+        NotResource.Ref === "AuthorityVersion"
     )
   );
 
@@ -1053,7 +1112,15 @@ test("Gate Two template freezes immutable aliases and least-privilege roles", ()
   );
   assert.ok(template.Outputs.PublicDemoUrl);
   assert.ok(template.Outputs.DemoAliasArn);
+  assert.deepEqual(template.Outputs.DemoVersionArn.Value, {
+    Ref: "DemoVersion"
+  });
+  assert.deepEqual(template.Outputs.AuthorityVersionArn.Value, {
+    Ref: "AuthorityVersion"
+  });
   assert.ok(template.Outputs.AuthorityRaceCallerRoleArn);
+  assert.ok(template.Outputs.DeploymentEvidenceRoleArn);
+  assert.ok(template.Outputs.DeploymentEvidenceAlternateRoleArn);
 });
 
 test("Gate Two template binds retention, probes, and artifacts after the cost guard", () => {
@@ -1386,6 +1453,29 @@ test("effective config digest changes with every deployment control", () => {
       probe: "v5",
       signer: "v6"
     },
+    attestation: {
+      alternateRolePolicyDigest: "8".repeat(64),
+      evidenceRolePolicyDigest: "9".repeat(64),
+      functionConfigurationDigests: {
+        agent: "a".repeat(64),
+        authority: "b".repeat(64),
+        boundary: "c".repeat(64),
+        demo: "d".repeat(64),
+        signer: "e".repeat(64)
+      },
+      functionRolePolicyDigests: {
+        agent: "f".repeat(64),
+        authority: "1".repeat(64),
+        boundary: "2".repeat(64),
+        demo: "3".repeat(64),
+        signer: "4".repeat(64)
+      },
+      receiptPublicKeys: {
+        alternateDenial: TEST_ATTESTATION_PUBLIC_KEYS[0],
+        post: TEST_ATTESTATION_PUBLIC_KEYS[1],
+        pre: TEST_ATTESTATION_PUBLIC_KEYS[2]
+      }
+    },
     authority: {
       databaseHost: "synthetic.cockroachlabs.cloud",
       databasePort: "26257",
@@ -1406,6 +1496,10 @@ test("effective config digest changes with every deployment control", () => {
     },
     bedrockModelId: "amazon.nova-micro-v1:0",
     budgetUsd: 15,
+    evidenceOperator: {
+      principalArn:
+        "arn:aws:iam::111111111111:role/tideproof-evidence-source"
+    },
     logRetentionDays: 7,
     notificationEmailDigest: "6".repeat(64),
     packageLockDigest: "7".repeat(64),
@@ -1438,12 +1532,20 @@ test("effective config digest changes with every deployment control", () => {
   changedAuthority.authority.databaseSecretVersionId = "b".repeat(32);
   const changedEndpoint = structuredClone(configuration);
   changedEndpoint.authority.databasePort = "26258";
+  const changedEvidenceOperator = structuredClone(configuration);
+  changedEvidenceOperator.evidenceOperator.principalArn =
+    "arn:aws:iam::111111111111:role/other-evidence-source";
+  const changedAttestation = structuredClone(configuration);
+  changedAttestation.attestation.functionRolePolicyDigests.agent =
+    "0".repeat(64);
   const incompleteAuthority = structuredClone(configuration);
   delete incompleteAuthority.authority.databaseSecretArn;
   assert.match(first, /^[0-9a-f]{64}$/);
   assert.notEqual(first, deploymentConfigDigest(changed));
   assert.notEqual(first, deploymentConfigDigest(changedAuthority));
   assert.notEqual(first, deploymentConfigDigest(changedEndpoint));
+  assert.notEqual(first, deploymentConfigDigest(changedEvidenceOperator));
+  assert.notEqual(first, deploymentConfigDigest(changedAttestation));
   assert.throws(
     () => deploymentConfigDigest(incompleteAuthority),
     /DEPLOYMENT_CONFIG_SHAPE_REJECTED/

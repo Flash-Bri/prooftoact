@@ -158,7 +158,16 @@ static accessibility control, installed package identities, dependency
 inventory, and bundle notice inputs to the exact public checkout. The final
 release must rerun that control with the zero-vulnerability and exact-head
 build gates, then bind the uploaded object versions and deployed Lambda
-`CodeSha256` values.
+`CodeSha256` values. Gate Two artifact builds execute the committed builder in
+a detached exact-commit worktree, read project inputs from regular tracked Git
+blobs, reject host-filesystem path escape, and record both builder and project
+blob identities. The generated deployment invokes numeric Lambda versions;
+monitored aliases are not invocation authority. Credentialed acceptance still
+requires three configuration-bound signed evidence receipts, two revision-
+fenced provider observations per phase, exact censuses of the five primary
+runtime functions plus their shared roles and the two evidence roles,
+and the alternate-principal denial described in
+[`docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md`](docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md).
 
 The machine-readable
 [`docs/media/RIGHTS_MANIFEST.json`](docs/media/RIGHTS_MANIFEST.json) binds the

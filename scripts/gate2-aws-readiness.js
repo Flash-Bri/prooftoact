@@ -4,6 +4,11 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { assertNoAwsEndpointOverrides } from "../src/cloud/aws-evidence-identity.js";
+import { templateReceipt } from "../src/cloud/aws-gate2-template.js";
+import {
+  validateBuildToolchain,
+  validateDependencySnapshot
+} from "./lib/dependency-snapshot.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -85,6 +90,15 @@ function exactKeys(value, keys) {
 
 function sha256(value, encoding = "hex") {
   return crypto.createHash("sha256").update(value).digest(encoding);
+}
+
+function gitBlobId(value) {
+  const bytes = Buffer.isBuffer(value) ? value : Buffer.from(value);
+  return crypto
+    .createHash("sha1")
+    .update(Buffer.from(`blob ${bytes.length}\0`, "utf8"))
+    .update(bytes)
+    .digest("hex");
 }
 
 function crc32(buffer) {
@@ -282,7 +296,13 @@ function validateTemplateReceipt(
   code
 ) {
   requireCondition(
-    receipt?.path === expectedPath &&
+    exactKeys(receipt, [
+      "bytes",
+      "canonicalDigest",
+      "path",
+      "templateDigest"
+    ]) &&
+      receipt.path === expectedPath &&
       HEX_64.test(receipt.templateDigest) &&
       HEX_64.test(receipt.canonicalDigest) &&
       Number.isSafeInteger(receipt.bytes) &&
@@ -290,9 +310,19 @@ function validateTemplateReceipt(
     code
   );
   const file = resolvedFile(projectRoot, expectedPath, code);
+  const templateBytes = fs.readFileSync(file.resolved);
+  let computed;
+  try {
+    computed = templateReceipt(JSON.parse(templateBytes.toString("utf8")));
+  } catch {
+    throw new Error(code);
+  }
   requireCondition(
     file.stat.size === receipt.bytes &&
-      sha256File(file.resolved) === receipt.templateDigest,
+      sha256File(file.resolved) === receipt.templateDigest &&
+      computed.bytes === receipt.bytes &&
+      computed.templateDigest === receipt.templateDigest &&
+      computed.canonicalDigest === receipt.canonicalDigest,
     code
   );
   return {
@@ -395,20 +425,86 @@ export function validateBuildReceipt(
   }
 ) {
   requireCondition(
-    receipt?.schemaVersion === "tideproof.gate2-build.v3" &&
+    exactKeys(receipt, [
+      "archiveFormat",
+      "artifacts",
+      "bootstrapTemplate",
+      "buildControlInputs",
+      "dependencySnapshot",
+      "gate2Template",
+      "mode",
+      "packageJsonDigest",
+      "packageLockDigest",
+      "projectSourceMode",
+      "schemaVersion",
+      "sourceCommit",
+      "thirdPartyNotices",
+      "toolchain",
+      "treeDigest",
+      "workingTreeClean",
+      "workingTreeCleanBeforeGeneration"
+    ]) &&
+      receipt.schemaVersion === "tideproof.gate2-build.v5" &&
       receipt.mode === "CLEAN_ARTIFACT_BUILD" &&
+      receipt.projectSourceMode ===
+        "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS" &&
       receipt.sourceCommit === sourceCommit &&
       receipt.treeDigest === treeDigest &&
       receipt.workingTreeClean === true &&
       receipt.workingTreeCleanBeforeGeneration === true &&
       receipt.archiveFormat === "ZIP_STORED_TWO_FILE_V2" &&
+      HEX_64.test(receipt.packageJsonDigest) &&
       HEX_64.test(receipt.packageLockDigest),
     "AWS_READINESS_BUILD_RECEIPT"
   );
+  const expectedBuildControlPaths = [
+    "scripts/build-gate2-exact.js",
+    "scripts/build-gate2-template.js",
+    "scripts/lib/bundled-third-party-notices.js",
+    "scripts/lib/dependency-snapshot.js",
+    "scripts/lib/deterministic-zip.js",
+    "scripts/lib/exact-git-source.js",
+    "scripts/verify-bundled-third-party-notices.js",
+    "src/cloud/aws-gate2-template.js"
+  ];
+  const buildControlInputs = Array.isArray(receipt.buildControlInputs)
+    ? receipt.buildControlInputs
+    : [];
+  requireCondition(
+    JSON.stringify(buildControlInputs.map((input) => input?.path)) ===
+      JSON.stringify(expectedBuildControlPaths),
+    "AWS_READINESS_BUILD_CONTROL_SET"
+  );
+  const acceptedBuildControlInputs = [];
+  for (const input of buildControlInputs) {
+    requireCondition(
+      exactKeys(input, ["gitBlobId", "path", "sha256"]) &&
+        /^[0-9a-f]{40}$/.test(input.gitBlobId) &&
+        HEX_64.test(input.sha256),
+      "AWS_READINESS_BUILD_CONTROL_INPUT"
+    );
+    const inputFile = resolvedFile(
+      projectRoot,
+      input.path,
+      "AWS_READINESS_BUILD_CONTROL_FILE"
+    );
+    const inputBytes = fs.readFileSync(inputFile.resolved);
+    requireCondition(
+      sha256(inputBytes) === input.sha256 &&
+        gitBlobId(inputBytes) === input.gitBlobId,
+      "AWS_READINESS_BUILD_CONTROL_DIGEST"
+    );
+    acceptedBuildControlInputs.push({ ...input });
+  }
   const packageLock = resolvedFile(
     projectRoot,
     "package-lock.json",
     "AWS_READINESS_PACKAGE_LOCK"
+  );
+  const packageJson = resolvedFile(
+    projectRoot,
+    "package.json",
+    "AWS_READINESS_PACKAGE_JSON"
   );
   const thirdPartyNotices = validateThirdPartyNotices(
     projectRoot,
@@ -416,10 +512,18 @@ export function validateBuildReceipt(
     receipt.packageLockDigest
   );
   requireCondition(
-    sha256File(packageLock.resolved) ===
-      receipt.packageLockDigest,
+    sha256File(packageJson.resolved) === receipt.packageJsonDigest &&
+      sha256File(packageLock.resolved) === receipt.packageLockDigest,
     "AWS_READINESS_PACKAGE_LOCK"
   );
+  const dependencySnapshot = validateDependencySnapshot(
+    receipt.dependencySnapshot,
+    {
+      packageJsonDigest: receipt.packageJsonDigest,
+      packageLockDigest: receipt.packageLockDigest
+    }
+  );
+  const toolchain = validateBuildToolchain(receipt.toolchain);
 
   const artifacts = Array.isArray(receipt.artifacts)
     ? receipt.artifacts
@@ -441,13 +545,37 @@ export function validateBuildReceipt(
     );
     const expectedSourcePath =
       `infra/aws/lambda/${name}.${name === "demo" ? "js" : "cjs"}`;
+    const exactGitInputs = Array.isArray(artifact?.exactGitInputs)
+      ? artifact.exactGitInputs
+      : [];
     requireCondition(
-      artifact?.sourcePath === expectedSourcePath &&
+      exactKeys(artifact, [
+        "artifactBytes",
+        "artifactCodeSha256",
+        "artifactDigest",
+        "artifactFile",
+        "artifactPath",
+        "bundledPackages",
+        "exactGitInputs",
+        "name",
+        "sourceDigest",
+        "sourcePath",
+        "suggestedS3Key"
+      ]) &&
+        artifact.sourcePath === expectedSourcePath &&
         HEX_64.test(artifact.sourceDigest) &&
         HEX_64.test(artifact.artifactDigest) &&
         typeof artifact.artifactCodeSha256 === "string" &&
         Number.isSafeInteger(artifact.artifactBytes) &&
         artifact.artifactBytes > 0 &&
+        exactGitInputs.length > 0 &&
+        exactGitInputs.length <= 512 &&
+        JSON.stringify(exactGitInputs.map((input) => input?.path)) ===
+          JSON.stringify(
+            exactGitInputs.map((input) => input?.path).sort()
+          ) &&
+        new Set(exactGitInputs.map((input) => input?.path)).size ===
+          exactGitInputs.length &&
         Array.isArray(artifact.bundledPackages) &&
         new Set(artifact.bundledPackages).size ===
           artifact.bundledPackages.length &&
@@ -461,6 +589,36 @@ export function validateBuildReceipt(
         JSON.stringify(artifact.bundledPackages) ===
           JSON.stringify([...artifact.bundledPackages].sort()),
       "AWS_READINESS_ARTIFACT_RECEIPT"
+    );
+    const acceptedGitInputs = [];
+    for (const input of exactGitInputs) {
+      requireCondition(
+        exactKeys(input, ["gitBlobId", "path", "sha256"]) &&
+          /^[0-9a-f]{40}$/.test(input.gitBlobId) &&
+          HEX_64.test(input.sha256) &&
+          typeof input.path === "string" &&
+          !input.path.split("/").includes("node_modules"),
+        "AWS_READINESS_EXACT_GIT_INPUT"
+      );
+      const inputFile = resolvedFile(
+        projectRoot,
+        input.path,
+        "AWS_READINESS_EXACT_GIT_INPUT_FILE"
+      );
+      const inputBytes = fs.readFileSync(inputFile.resolved);
+      requireCondition(
+        sha256(inputBytes) === input.sha256 &&
+          gitBlobId(inputBytes) === input.gitBlobId,
+        "AWS_READINESS_EXACT_GIT_INPUT_DIGEST"
+      );
+      acceptedGitInputs.push({ ...input });
+    }
+    const sourceInput = exactGitInputs.find(
+      (input) => input.path === expectedSourcePath
+    );
+    requireCondition(
+      sourceInput?.sha256 === artifact.sourceDigest,
+      "AWS_READINESS_EXACT_GIT_SOURCE"
     );
     artifact.bundledPackages.forEach((packageName) =>
       bundledPackageUnion.add(packageName)
@@ -510,6 +668,7 @@ export function validateBuildReceipt(
       artifactBytes: artifact.artifactBytes,
       artifactPath: expectedArtifactPath,
       bundledPackages: artifact.bundledPackages,
+      exactGitInputs: acceptedGitInputs,
       suggestedS3Key: artifact.suggestedS3Key
     };
   }
@@ -522,7 +681,12 @@ export function validateBuildReceipt(
   return {
     schemaVersion: receipt.schemaVersion,
     mode: receipt.mode,
+    projectSourceMode: receipt.projectSourceMode,
+    buildControlInputs: acceptedBuildControlInputs,
+    dependencySnapshot,
+    packageJsonDigest: receipt.packageJsonDigest,
     packageLockDigest: receipt.packageLockDigest,
+    toolchain,
     thirdPartyNotices: thirdPartyNotices.accepted,
     bootstrapTemplate: validateTemplateReceipt(
       projectRoot,
@@ -1847,6 +2011,7 @@ export const __test = Object.freeze({
   EXPECTED_REGION,
   OFFICIAL_REMOTE,
   childEnvironment,
+  gitBlobId,
   isOfficialRemote,
   validateStoredTwoFileZip
 });

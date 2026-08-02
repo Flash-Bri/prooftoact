@@ -55,14 +55,14 @@ boundary:
   and port in the URL, and calls only `tp_api.g2_spend_authority_race_v1` and
   `tp_api.g1_resolve_request_v1` as `tp_gate2_authorizer_user`. After both
   contenders return, the verifier makes one separate read-only proof request
-  through the same immutable alias; that path calls only
+  through the same exact numeric Authority version; that path calls only
   `tp_api.g1_observe_authority_race_v1`.
 - The authority role is allowed only its exact log group and
   `secretsmanager:GetSecretValue` on that one ARN. It explicitly denies other
   secret reads and enumeration, secret mutation, Bedrock, KMS signing, Lambda
   invocation, IAM mutation, and role assumption.
 - A separate short-lived human-assumed race-caller role can invoke only the
-  immutable Authority alias. The function has reserved concurrency two so the
+  exact numeric Authority version. The function has reserved concurrency two so the
   two proof contenders can genuinely overlap; no public API route reaches it.
 - Authority transactions explicitly request `SERIALIZABLE`, retry only
   pre-commit `40001` restarts, and reconcile any COMMIT-dispatched or
@@ -84,6 +84,19 @@ boundary:
   non-GET, and signed-out advisory denials. It emits a sanitized receipt but
   cannot prove availability, route throttling, IAM policy shape, or advisory
   traversal by itself.
+- A bounded deployment-evidence collector trusts one exact IAM user or role.
+  Its source validator binds signed pre/post provider snapshots to the exact
+  raw build receipt, configuration, stack, template, commit, tree, numeric
+  Lambda versions, code hashes, layers and other security-relevant
+  configuration for the five primary runtime functions, their shared role
+  policy censuses, both evidence roles, concurrency, revisions,
+  monitored alias targets, stable role IDs, and fresh drift status. Each
+  snapshot requires two identical complete observations. A dedicated
+  alternate role whose only positive permission targets the collector must
+  receive `AccessDenied`. These controls are unrun and do not exclude
+  administrators or the independently protected receipt-key custodian.
+  Conditional probe-function configurations remain outside this stage-three
+  census and require separate stage-four provider evidence.
 
 The strongest current claim is that this software, the bundled public-demo
 artifact path, the isolated CockroachDB authority candidate, and generated
@@ -174,7 +187,10 @@ tree is under development. It emits no Lambda artifact and labels its receipt
 unbound.
 
 `npm run build:gate2` refuses to create artifacts unless Git is clean and
-rechecks cleanliness after regenerating the tracked templates. On a clean
+rechecks cleanliness after regenerating the tracked templates. Every project
+input is then read as a regular tracked blob from the exact `HEAD` commit;
+replacement refs, legacy grafts, alternate object databases, shallow history,
+path escape, untracked inputs, and unsupported loaders fail closed. On that
 commit it bundles each runtime role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
@@ -188,16 +204,18 @@ imports. The receipt records:
 - bundled-package sets and the notice-file digest, size, source fallbacks, and
   normalized license-text counts;
 - source SHA-256;
+- every bundled project input's path, Git blob ID, and SHA-256;
 - ZIP SHA-256 in hexadecimal and base64;
 - immutable S3 key recommendation;
 - template formatted and canonical digests.
 
 Each Lambda Version uses CloudFormation `CodeSha256`, so a version cannot be
 published when the deployed code hash differs from the reviewed artifact.
-The build rechecks Git cleanliness after template generation but does not lock
-the repository against a concurrent edit during bundling. Run accepted builds
-in an isolated one-writer checkout and preserve the emitted source and
-artifact digests.
+All runtime roles, API integrations, permissions, probes, and authority-race
+calls target numeric Lambda versions. The `proof` aliases are monitored
+pointers for inspection and metadata only, not invocation authority. Run
+accepted builds in an isolated one-writer checkout and preserve the emitted
+source, blob, and artifact digests.
 
 The reviewed JSON is pretty printed for auditability and is larger than
 CloudFormation's 51,200-byte inline `TemplateBody` limit. Deploy it through a
@@ -345,7 +363,8 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
    digests.
 8. Hash the full effective nonsecret deployment configuration, including the
    secret ARN, exact VersionId, expected database host and port, and synthetic
-   fixture identifiers but excluding all secret values.
+   fixture identifiers plus the one exact IAM user or role allowed to assume
+   the deployment-evidence role, but excluding all secret values.
 
 The sanitized historical receipt in
 `evidence/gate2-historical-upload-receipt-0ef4dba-2026-07-30.json` anchors the
@@ -355,8 +374,10 @@ evidence only and must not be used to deploy the repaired candidate.
 9. Upload the reviewed template to the private versioned bucket and deploy the
    main stack from its exact `TemplateURL` with probes left at their default
    `false`.
-10. Verify every Lambda version's reported `CodeSha256`, alias target, role,
-   reserved concurrency, and access-log destination.
+10. Verify every Lambda version's reported `CodeSha256`, numeric version ARN,
+   monitored alias target, execution role and inline policy, environment,
+   timeout, reserved concurrency, revisions, access-log destination, and
+   CloudFormation resource drift.
 11. Temporarily update `EnableProbeFunctions` to `true`. Prove the exact allowed
    capability and required denials for every role. Probe concurrency is one;
    the probe canary and functions exist only during this phase. Label all
@@ -364,10 +385,37 @@ evidence only and must not be used to deploy the repaired candidate.
    evidence key outside the receipt schema.
 12. Update probes back to `false`; verify all probe functions, probe log
     groups, and the canary secret are removed. Recompute the final
-    configuration digest and reverify aliases and roles.
+    configuration digest and reverify aliases and roles. Create one private
+    exact deployment expectation from the reviewed build/upload receipts and
+    stack outputs. The configuration must bind three distinct Ed25519 public
+    keys; the matching private key files must remain outside the repository,
+    regular, and mode `0600`. As the generated bounded deployment-evidence
+    collector, run:
+
+    ```sh
+    npm run gate2:aws-attest -- \
+      --phase pre \
+      --expectation "$EXPECTATION_PATH" \
+      --configuration "$CONFIGURATION_PATH" \
+      --build-receipt "$BUILD_RECEIPT_PATH" \
+      --receipt-key "$PRE_RECEIPT_KEY_PATH"
+    ```
+
+    Preserve the signed private `PRE_ATTESTATION_PASS` receipt. Assume the
+    generated alternate role and run:
+
+    ```sh
+    npm run gate2:aws-alternate-denial -- \
+      --expectation "$EXPECTATION_PATH" \
+      --receipt-key "$ALTERNATE_DENIAL_KEY_PATH"
+    ```
+
+    Require a signed provider `AccessDenied` receipt. Either command failing
+    is a stop. This proves neither administrator exclusion nor application
+    correctness.
 13. Assume only `AuthorityRaceCallerRole`. From the exact clean deployment
-    checkout, run `npm run gate2:authority-race` with the immutable Authority
-    alias ARN, configured active-run UUID, configured race UUID, exact source
+    checkout, run `npm run gate2:authority-race` with the numeric Authority
+    version ARN, configured active-run UUID, configured race UUID, exact source
     commit, and final
     configuration digest. The evidence runner rejects endpoint, profile,
     proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and
@@ -391,7 +439,7 @@ evidence only and must not be used to deploy the repaired candidate.
     observation; a reconstructed observation is rejected. Preserve the
     private invocations and database receipts;
     publish only the reviewed sanitized
-    `tideproof.aws-authority-race-receipt.v4`. Any wrong-run, sequential,
+    `tideproof.aws-authority-race-receipt.v5`. Any wrong-run, sequential,
     ambiguous, replayed, expanded, stale, extra, or unresolved result is not
     evidence.
 14. From a signed-out browser, request only the ten enumerated public `GET`
@@ -417,6 +465,25 @@ evidence only and must not be used to deploy the repaired candidate.
     configuration, token, and latency bindings.
 17. Re-run Gate One state hashes to prove Bedrock changed no authority,
     outbox, fence, or protected synthetic-effect state.
+18. Re-assume only the deployment-evidence collector and run:
+
+    ```sh
+    npm run gate2:aws-attest -- \
+      --phase post \
+      --expectation "$EXPECTATION_PATH" \
+      --configuration "$CONFIGURATION_PATH" \
+      --build-receipt "$BUILD_RECEIPT_PATH" \
+      --receipt-key "$POST_RECEIPT_KEY_PATH" \
+      --pre-receipt "$PRE_RECEIPT_PATH" \
+      --alternate-denial "$ALTERNATE_DENIAL_PATH"
+    ```
+
+    Require signed `PASS`, identical pre/post stack and function deployment
+    digests, all five numeric versions and revisions unchanged, all monitored
+    alias targets unchanged, stable function/evidence/alternate role IDs,
+    exact zero-extra policy censuses, and fresh stack/resource drift status
+    `IN_SYNC`. A stable attestation does not prove administrator exclusion, canary
+    correctness, CockroachDB concurrency, or public-release readiness.
 
 Ambiguous, malformed, unsigned, or unavailable application state returns
 `UNKNOWN_DO_NOT_ACT`. Cost limits are operator stop gates and AWS Budget

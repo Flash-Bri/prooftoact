@@ -10,19 +10,26 @@ import {
   verifyBundledThirdPartyNotices
 } from "./lib/bundled-third-party-notices.js";
 import { writeDeterministicZip } from "./lib/deterministic-zip.js";
-import { rawTextPlugin } from "./lib/raw-text-plugin.js";
+import {
+  validateBuildToolchain,
+  validateDependencySnapshot
+} from "./lib/dependency-snapshot.js";
 import { collectBundledPackageNames } from "./verify-bundled-third-party-notices.js";
 import {
   buildAwsBootstrapTemplate,
   buildGate2Template,
   templateReceipt
 } from "../src/cloud/aws-gate2-template.js";
+import {
+  assertExactGitSourceContext,
+  exactGitSourcePlugin,
+  gitEnvironment,
+  readExactGitBlob
+} from "./lib/exact-git-source.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const lambdaRoot = path.join(root, "infra/aws/lambda");
-const distRoot = path.join(root, "dist/aws");
-const templateRoot = path.join(root, "infra/aws");
 const artifactNames = [
   "agent",
   "authority",
@@ -31,13 +38,19 @@ const artifactNames = [
   "probe",
   "signer"
 ];
-const templatesOnly = process.argv.includes("--templates-only");
-const unexpectedArguments = process.argv
-  .slice(2)
-  .filter((value) => value !== "--templates-only");
-if (unexpectedArguments.length > 0) {
+const argumentsList = process.argv.slice(2);
+const templatesOnly =
+  argumentsList.length === 1 && argumentsList[0] === "--templates-only";
+const isolatedBuild =
+  argumentsList.length === 2 && argumentsList[0] === "--isolated-output";
+if (!templatesOnly && !isolatedBuild) {
   throw new Error("UNKNOWN_BUILD_ARGUMENT");
 }
+const outputRoot = isolatedBuild
+  ? path.resolve(argumentsList[1])
+  : root;
+const distRoot = path.join(outputRoot, "dist/aws");
+const templateRoot = path.join(outputRoot, "infra/aws");
 
 function sha256File(filePath) {
   return crypto
@@ -56,7 +69,8 @@ function sha256FileBase64(filePath) {
 function gitValue(args) {
   const result = spawnSync("git", args, {
     cwd: root,
-    encoding: "utf8"
+    encoding: "utf8",
+    env: gitEnvironment()
   });
   if (result.status !== 0) {
     throw new Error(`git ${args.join(" ")} failed`);
@@ -67,7 +81,8 @@ function gitValue(args) {
 function gitStatus() {
   const result = spawnSync("git", ["status", "--short"], {
     cwd: root,
-    encoding: "utf8"
+    encoding: "utf8",
+    env: gitEnvironment()
   });
   if (result.status !== 0) {
     throw new Error("git status --short failed");
@@ -85,7 +100,17 @@ async function buildArtifact(
     lambdaRoot,
     `${name}.${name === "demo" ? "js" : "cjs"}`
   );
-  const sourceDigest = sha256File(sourcePath);
+  const sourceRecord = readExactGitBlob({
+    rootDir: root,
+    sourceCommit,
+    filePath: sourcePath
+  });
+  const sourceDigest = sourceRecord.sha256;
+  const exactSource = exactGitSourcePlugin({
+    rootDir: root,
+    sourceCommit,
+    dependencyRoot: fs.realpathSync(path.join(root, "node_modules"))
+  });
   const temporaryDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "tideproof-gate2-")
   );
@@ -107,7 +132,7 @@ async function buildArtifact(
       logLevel: "silent",
       metafile: true,
       outfile: stagedPath,
-      plugins: [rawTextPlugin()]
+      plugins: [exactSource.plugin]
     });
   } catch (error) {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
@@ -152,14 +177,50 @@ async function buildArtifact(
     artifactCodeSha256: sha256FileBase64(artifactPath),
     artifactBytes: fs.statSync(artifactPath).size,
     bundledPackages,
+    exactGitInputs: exactSource.inputRecords(),
     suggestedS3Key: `gate2/${sourceCommit}/${name}-${artifactDigest}.zip`
   };
 }
 
 const sourceCommit = gitValue(["rev-parse", "HEAD"]);
 const treeDigest = gitValue(["rev-parse", "HEAD^{tree}"]);
+assertExactGitSourceContext({ rootDir: root, sourceCommit });
+const packageJsonRecord = readExactGitBlob({
+  rootDir: root,
+  sourceCommit,
+  filePath: path.join(root, "package.json")
+});
+const packageLockRecord = readExactGitBlob({
+  rootDir: root,
+  sourceCommit,
+  filePath: path.join(root, "package-lock.json")
+});
+let dependencySnapshot = null;
+let toolchain = null;
+if (isolatedBuild) {
+  if (
+    process.env.TIDEPROOF_EXACT_BUILD_SOURCE_COMMIT !== sourceCommit ||
+    process.env.TIDEPROOF_EXACT_BUILD_TREE_DIGEST !== treeDigest
+  ) {
+    throw new Error("GATE2_ISOLATED_BUILD_BINDING");
+  }
+  try {
+    dependencySnapshot = validateDependencySnapshot(
+      JSON.parse(process.env.TIDEPROOF_EXACT_BUILD_DEPENDENCY_SNAPSHOT ?? ""),
+      {
+        packageJsonDigest: packageJsonRecord.sha256,
+        packageLockDigest: packageLockRecord.sha256
+      }
+    );
+    toolchain = validateBuildToolchain(
+      JSON.parse(process.env.TIDEPROOF_EXACT_BUILD_TOOLCHAIN ?? "")
+    );
+  } catch {
+    throw new Error("GATE2_ISOLATED_DEPENDENCY_BINDING");
+  }
+}
 const workingTreeCleanBeforeGeneration = gitStatus().length === 0;
-if (!templatesOnly && !workingTreeCleanBeforeGeneration) {
+if (isolatedBuild && !workingTreeCleanBeforeGeneration) {
   throw new Error(
     "GATE2_ARTIFACT_BUILD_REQUIRES_CLEAN_GIT_TREE"
   );
@@ -169,19 +230,40 @@ const bootstrap = templateReceipt(buildAwsBootstrapTemplate());
 const gate2 = templateReceipt(buildGate2Template());
 const bootstrapPath = path.join(templateRoot, "bootstrap-template.json");
 const gate2Path = path.join(templateRoot, "gate2-template.json");
+const bootstrapBytes = `${JSON.stringify(bootstrap.template, null, 2)}\n`;
+const gate2Bytes = `${JSON.stringify(gate2.template, null, 2)}\n`;
+if (isolatedBuild) {
+  const committedBootstrap = readExactGitBlob({
+    rootDir: root,
+    sourceCommit,
+    filePath: path.join(root, "infra/aws/bootstrap-template.json")
+  });
+  const committedGate2 = readExactGitBlob({
+    rootDir: root,
+    sourceCommit,
+    filePath: path.join(root, "infra/aws/gate2-template.json")
+  });
+  if (
+    !committedBootstrap.bytes.equals(Buffer.from(bootstrapBytes)) ||
+    !committedGate2.bytes.equals(Buffer.from(gate2Bytes))
+  ) {
+    throw new Error("GATE2_GENERATED_TEMPLATE_DRIFT_REQUIRES_COMMIT");
+  }
+}
+fs.mkdirSync(templateRoot, { recursive: true });
 fs.writeFileSync(
   bootstrapPath,
-  `${JSON.stringify(bootstrap.template, null, 2)}\n`,
+  bootstrapBytes,
   "utf8"
 );
 fs.writeFileSync(
   gate2Path,
-  `${JSON.stringify(gate2.template, null, 2)}\n`,
+  gate2Bytes,
   "utf8"
 );
 
 const workingTreeClean = gitStatus().length === 0;
-if (!templatesOnly && !workingTreeClean) {
+if (isolatedBuild && !workingTreeClean) {
   throw new Error(
     "GATE2_GENERATED_TEMPLATE_DRIFT_REQUIRES_COMMIT"
   );
@@ -195,9 +277,11 @@ if (!templatesOnly) {
     rootDir: root,
     packageNames: bundled.packageNames
   });
-  const noticeBytes = fs.readFileSync(
-    path.join(root, thirdPartyNotices.noticePath)
-  );
+  const noticeBytes = readExactGitBlob({
+    rootDir: root,
+    sourceCommit,
+    filePath: path.join(root, thirdPartyNotices.noticePath)
+  }).bytes;
   fs.mkdirSync(distRoot, { recursive: true });
   for (const name of artifactNames) {
     artifacts.push(
@@ -212,30 +296,59 @@ if (!templatesOnly) {
 }
 
 const receipt = {
-  schemaVersion: "tideproof.gate2-build.v3",
+  schemaVersion: "tideproof.gate2-build.v5",
   mode: templatesOnly ? "TEMPLATES_ONLY_UNBOUND" : "CLEAN_ARTIFACT_BUILD",
+  projectSourceMode: templatesOnly
+    ? "WORKTREE_UNBOUND"
+    : "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
   sourceCommit,
   treeDigest,
   workingTreeClean,
   workingTreeCleanBeforeGeneration,
   archiveFormat: "ZIP_STORED_TWO_FILE_V2",
-  packageLockDigest: sha256File(path.join(root, "package-lock.json")),
+  dependencySnapshot,
+  toolchain,
+  buildControlInputs: isolatedBuild
+    ? [
+        "scripts/build-gate2-exact.js",
+        "scripts/build-gate2-template.js",
+        "scripts/lib/bundled-third-party-notices.js",
+        "scripts/lib/dependency-snapshot.js",
+        "scripts/lib/deterministic-zip.js",
+        "scripts/lib/exact-git-source.js",
+        "scripts/verify-bundled-third-party-notices.js",
+        "src/cloud/aws-gate2-template.js"
+      ].map((filePath) => {
+        const record = readExactGitBlob({
+          rootDir: root,
+          sourceCommit,
+          filePath: path.join(root, filePath)
+        });
+        return {
+          gitBlobId: record.gitBlobId,
+          path: record.path,
+          sha256: record.sha256
+        };
+      })
+    : [],
+  packageJsonDigest: packageJsonRecord.sha256,
+  packageLockDigest: packageLockRecord.sha256,
   thirdPartyNotices,
   bootstrapTemplate: {
-    path: path.relative(root, bootstrapPath),
+    path: "infra/aws/bootstrap-template.json",
     templateDigest: bootstrap.templateDigest,
     canonicalDigest: bootstrap.canonicalDigest,
     bytes: bootstrap.bytes
   },
   gate2Template: {
-    path: path.relative(root, gate2Path),
+    path: "infra/aws/gate2-template.json",
     templateDigest: gate2.templateDigest,
     canonicalDigest: gate2.canonicalDigest,
     bytes: gate2.bytes
   },
   artifacts: artifacts.map(({ artifactPath, ...artifact }) => ({
     ...artifact,
-    artifactPath: path.relative(root, artifactPath)
+    artifactPath: `dist/aws/${path.basename(artifactPath)}`
   }))
 };
 

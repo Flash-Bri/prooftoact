@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-01",
+  "reviewedOn": "2026-08-02",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -69,6 +69,12 @@
       "sha256": "5b6f80f63510f36ba9b2afd7b44337d2e25d888b8518a9efd0cebdea3c08f46a"
     },
     {
+      "id": "aws-alternate-principal-denial-runner",
+      "path": "scripts/gate2-evidence-operator-denial.js",
+      "role": "AWS_EVIDENCE_TRUST_NEGATIVE_CONTROL",
+      "sha256": "b879633060ce634c39243d3d1d311e417cb5be46beaa5eb83021bee4fcd03734"
+    },
+    {
       "id": "aws-authority-race",
       "path": "scripts/gate2-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
@@ -78,13 +84,31 @@
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "1e239e153ea2faa72925a1ca2e9b5303ee89dc07443e800aaacfdc43d9a83303"
+      "sha256": "838682ea7df685debca6d59efcb4b5d9cb22d3b726406b0f4ace0da4454a0bbc"
     },
     {
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "3ef96b2942997098b5b366d50811770b9f4c19de5c77908dd97f42a4dd3adf8a"
+      "sha256": "f572397e6a44b441cc378a62ebadff43912958717befda1eae5773ca3b4dee26"
+    },
+    {
+      "id": "aws-deployment-attestation",
+      "path": "src/cloud/aws-deployment-attestation.js",
+      "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
+      "sha256": "ba279e906dcc58684ecaed44418ad6c31dd078339616c6cad4a133a654b3a8fb"
+    },
+    {
+      "id": "aws-deployment-attestation-runner",
+      "path": "scripts/gate2-aws-attestation.js",
+      "role": "AWS_DEPLOYMENT_ATTESTATION_RUNNER",
+      "sha256": "5803f16db3e961baa4b4de594d7e2d67bd09afc820bd85dbe2c37cb2ce1306f9"
+    },
+    {
+      "id": "aws-deployment-attestation-tests",
+      "path": "test/aws-deployment-attestation.test.js",
+      "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
+      "sha256": "ffd50c2888eef658300f6532a7cf75c18f7bc7d832b9046cab5f95ef95c37122"
     },
     {
       "id": "aws-evidence-identity",
@@ -102,25 +126,25 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "b344724e1c7b550b82d1518c20452ed65ab62de2b6cd1a15e21aa756ed41b9a3"
+      "sha256": "0f65823609321dee0c98acb321e684aa271f36f30c634aee25787eb6f51f4fc3"
     },
     {
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "b229f9bfc12c94a32d12635c005c07fadde071da1bc290ce942d9051a1bd3159"
+      "sha256": "00add003c125494df7dae24c04aca1a04ac91018263c5aa291e0e4b8c7a74c28"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "2e502231a67dc74c20bffd1ecc4f4a3f23a92c2a9c83c93b29be5e785f0862c6"
+      "sha256": "a3e4dbfc7f6e0d86ec6a675e79aef999ca30ba10baf557485dcead44411aa5d5"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "6fad4a992beb395f2c527a67f5807fd7f1d06dbac66e68240606fff2ecf4ff0d"
+      "sha256": "fc4d36c3a3e5f79ba84ce31d92c7f4ac4105462166efec4ffe14c68e63ce15e7"
     },
     {
       "id": "boundary-runtime",
@@ -177,6 +201,18 @@
       "sha256": "de16f3e51f1adf9c01ba557d0073376be9715cef781ed3cbd839435e3993ef36"
     },
     {
+      "id": "dependency-snapshot",
+      "path": "scripts/lib/dependency-snapshot.js",
+      "role": "IMMUTABLE_DEPENDENCY_AND_TOOLCHAIN_BINDING",
+      "sha256": "2e7cdbc75f3ddecd8cd89bcef70def738ff4a74f4277a3604af4e450fc68a9f2"
+    },
+    {
+      "id": "dependency-snapshot-tests",
+      "path": "test/dependency-snapshot.test.js",
+      "role": "DEPENDENCY_SNAPSHOT_TAMPER_VERIFICATION",
+      "sha256": "6186d5c8312d92ec332a9ff8b20875b794343062d05a66d5e5a294f83ef6e70f"
+    },
+    {
       "id": "demo-entry",
       "path": "infra/aws/lambda/demo.js",
       "role": "AWS_PUBLIC_ENTRY",
@@ -205,6 +241,36 @@
       "path": "test/admissible-vector-retrieval.test.js",
       "role": "DVI_PREPARATION_RECONCILIATION_VERIFICATION",
       "sha256": "b90834e5cec111cd1867009b99f6b1c18072f85980e43134cb7071e4a4d24bb5"
+    },
+    {
+      "id": "exact-git-source",
+      "path": "scripts/lib/exact-git-source.js",
+      "role": "IMMUTABLE_GIT_BUILD_INPUT",
+      "sha256": "3deb7dbb2ac0aa1eb13a71774dc43356fb8688460d6e78ee931688758501ab9e"
+    },
+    {
+      "id": "exact-git-source-tests",
+      "path": "test/exact-git-source.test.js",
+      "role": "IMMUTABLE_GIT_BUILD_VERIFICATION",
+      "sha256": "fe495978513222a1362525ecdff6c4264525ddf6923aa03a0767334325212daa"
+    },
+    {
+      "id": "gate2-build-runner",
+      "path": "scripts/build-gate2-template.js",
+      "role": "EXACT_GIT_ARTIFACT_BUILDER",
+      "sha256": "d768f69674542e2b9880525d70311d0b38b9871acdd24896d90491f83485118b"
+    },
+    {
+      "id": "gate2-exact-build-bootstrap",
+      "path": "scripts/build-gate2-exact.js",
+      "role": "ISOLATED_EXACT_GIT_BUILD_BOOTSTRAP",
+      "sha256": "7c2bf230f5d806aca43e6b28baea4a42da7246b88ba26eb6e852cca314f02c8d"
+    },
+    {
+      "id": "immutable-deployment-attestation-ledger",
+      "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
+      "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
+      "sha256": "b9480e9d56628548bac6a72456bca041c05a54cf35505d528c02ac62e05ff6ea"
     },
     {
       "id": "local-server",
@@ -306,7 +372,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "c13b0017de2f23baeee83b15c34eef8445d01b5bc0eacdada0b9b19e6f6762ff"
+      "sha256": "00ef9337d8784c70d2f7bb7661fea1051803d0336acdcabdc6b6a1838df6664f"
     },
     {
       "id": "security-policy",

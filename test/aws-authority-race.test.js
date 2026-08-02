@@ -23,7 +23,7 @@ import {
 const EXPECTED = Object.freeze({
   configDigest: "b".repeat(64),
   functionArn:
-    "arn:aws:lambda:us-east-1:111111111111:function:tideproof-authority:proof",
+    "arn:aws:lambda:us-east-1:111111111111:function:tideproof-authority:7",
   raceId: "55555555-5555-4555-8555-555555555555",
   runId: "66666666-6666-4666-8666-666666666666",
   sourceCommit: "a".repeat(40)
@@ -249,7 +249,7 @@ function proofResponse(options = {}) {
   };
 }
 
-test("authority race CLI accepts only an exact aliased proof target", () => {
+test("authority race CLI accepts only an exact numeric proof target", () => {
   assert.deepEqual(
     parseAuthorityRaceArguments([
       "--function-arn",
@@ -269,7 +269,7 @@ test("authority race CLI accepts only an exact aliased proof target", () => {
     [],
     [
       "--function-arn",
-      EXPECTED.functionArn.replace(":proof", ""),
+      EXPECTED.functionArn.replace(":7", ":proof"),
       "--race-id",
       EXPECTED.raceId,
       "--run-id",
@@ -479,7 +479,7 @@ test("authority race requires one overlapping winner and one durable denial", as
   assert.equal("functionArn" in receipt, false);
 });
 
-test("authority race rejects non-overlap, alias drift, and outcome drift", () => {
+test("authority race rejects non-overlap, numeric-version drift, and outcome drift", () => {
   assert.throws(
     () =>
       validateAuthorityRaceInvocations(

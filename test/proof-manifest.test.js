@@ -84,7 +84,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 74);
+  assert.equal(receipt.artifactCount, 84);
   assert.equal(receipt.releaseControlCount, 16);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });

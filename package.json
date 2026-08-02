@@ -10,7 +10,7 @@
   "scripts": {
     "accessibility:browser": "node scripts/verify-browser-accessibility.js",
     "accessibility:verify": "node scripts/verify-accessibility.js",
-    "build:gate2": "node scripts/build-gate2-template.js",
+    "build:gate2": "node scripts/build-gate2-exact.js",
     "claims:verify": "node scripts/verify-release-claims.js",
     "cost:verify": "node scripts/verify-release-cost.js",
     "dependencies:verify": "node scripts/verify-dependency-inventory.js",
@@ -18,6 +18,8 @@
     "generate:gate2": "node scripts/build-gate2-template.js --templates-only",
     "gate2:authority-race": "node scripts/gate2-authority-race.js",
     "gate2:aws-preflight": "node scripts/gate2-aws-preflight.js",
+    "gate2:aws-attest": "node scripts/gate2-aws-attestation.js",
+    "gate2:aws-alternate-denial": "node scripts/gate2-evidence-operator-denial.js",
     "gate2:aws-readiness": "node scripts/gate2-aws-readiness.js",
     "gate2:aws-readiness:local": "node scripts/gate2-aws-readiness.js --local-only",
     "gate2:config-digest": "node scripts/gate2-config-digest.js",

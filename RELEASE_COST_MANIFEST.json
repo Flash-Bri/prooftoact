@@ -67,7 +67,7 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "2e502231a67dc74c20bffd1ecc4f4a3f23a92c2a9c83c93b29be5e785f0862c6"
+      "sha256": "a3e4dbfc7f6e0d86ec6a675e79aef999ca30ba10baf557485dcead44411aa5d5"
     },
     {
       "id": "aws-preflight-library",
@@ -85,7 +85,7 @@
       "id": "aws-readiness-runner",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
-      "sha256": "b344724e1c7b550b82d1518c20452ed65ab62de2b6cd1a15e21aa756ed41b9a3"
+      "sha256": "0f65823609321dee0c98acb321e684aa271f36f30c634aee25787eb6f51f4fc3"
     },
     {
       "id": "cost-boundary-ledger",

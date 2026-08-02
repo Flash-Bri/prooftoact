@@ -97,9 +97,10 @@ the intended software and IAM shape locally, not live AWS hosting or a live
 CockroachDB-to-AWS handoff. The signed-out route set is read-only and
 enumerated; it never connects to the advisory integration. The boundary
 independently validates the model proposal and signer envelope, verifies the
-P-256 signature locally, and rejects direct or authority-bearing output. The
-authority proof path is separately invokable only through its exact immutable
-alias; the advisory Boundary does not call it. Its local candidate accepts
+P-256 signature locally, and rejects direct or authority-bearing output.
+The authority proof path is separately invokable only through its exact numeric
+version; its monitored alias is not invocation authority, and the advisory
+Boundary does not call it. Its local candidate accepts
 only two named contenders for one configured synthetic race, derives every
 operation-bearing field without model input, reads only one exact
 Tideproof-owned Secrets Manager ARN, and calls only the CockroachDB

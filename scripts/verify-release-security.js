@@ -61,6 +61,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/authority-store.js",
     role: "PRIMARY_AUTHORITY_STORE"
   }),
+  "aws-alternate-principal-denial-runner": Object.freeze({
+    path: "scripts/gate2-evidence-operator-denial.js",
+    role: "AWS_EVIDENCE_TRUST_NEGATIVE_CONTROL"
+  }),
   "aws-authority-race": Object.freeze({
     path: "scripts/gate2-authority-race.js",
     role: "AWS_AUTHORITY_EVIDENCE_RUNNER"
@@ -72,6 +76,18 @@ const EXPECTED_SURFACES = Object.freeze({
   "aws-boundary-ledger": Object.freeze({
     path: "docs/AWS_GATE2.md",
     role: "AWS_SECURITY_BOUNDARY"
+  }),
+  "aws-deployment-attestation": Object.freeze({
+    path: "src/cloud/aws-deployment-attestation.js",
+    role: "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR"
+  }),
+  "aws-deployment-attestation-runner": Object.freeze({
+    path: "scripts/gate2-aws-attestation.js",
+    role: "AWS_DEPLOYMENT_ATTESTATION_RUNNER"
+  }),
+  "aws-deployment-attestation-tests": Object.freeze({
+    path: "test/aws-deployment-attestation.test.js",
+    role: "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION"
   }),
   "aws-evidence-identity": Object.freeze({
     path: "src/cloud/aws-evidence-identity.js",
@@ -133,6 +149,14 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/database-security-posture.test.js",
     role: "DATABASE_POSTURE_VERIFICATION"
   }),
+  "dependency-snapshot": Object.freeze({
+    path: "scripts/lib/dependency-snapshot.js",
+    role: "IMMUTABLE_DEPENDENCY_AND_TOOLCHAIN_BINDING"
+  }),
+  "dependency-snapshot-tests": Object.freeze({
+    path: "test/dependency-snapshot.test.js",
+    role: "DEPENDENCY_SNAPSHOT_TAMPER_VERIFICATION"
+  }),
   "demo-entry": Object.freeze({
     path: "infra/aws/lambda/demo.js",
     role: "AWS_PUBLIC_ENTRY"
@@ -152,6 +176,26 @@ const EXPECTED_SURFACES = Object.freeze({
   "dvi-reconciliation-tests": Object.freeze({
     path: "test/admissible-vector-retrieval.test.js",
     role: "DVI_PREPARATION_RECONCILIATION_VERIFICATION"
+  }),
+  "exact-git-source": Object.freeze({
+    path: "scripts/lib/exact-git-source.js",
+    role: "IMMUTABLE_GIT_BUILD_INPUT"
+  }),
+  "exact-git-source-tests": Object.freeze({
+    path: "test/exact-git-source.test.js",
+    role: "IMMUTABLE_GIT_BUILD_VERIFICATION"
+  }),
+  "gate2-build-runner": Object.freeze({
+    path: "scripts/build-gate2-template.js",
+    role: "EXACT_GIT_ARTIFACT_BUILDER"
+  }),
+  "gate2-exact-build-bootstrap": Object.freeze({
+    path: "scripts/build-gate2-exact.js",
+    role: "ISOLATED_EXACT_GIT_BUILD_BOOTSTRAP"
+  }),
+  "immutable-deployment-attestation-ledger": Object.freeze({
+    path: "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
+    role: "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY"
   }),
   "local-server": Object.freeze({
     path: "src/server.js",
@@ -273,12 +317,15 @@ const RELEASE_SECURITY_CHECK_KEYS = Object.freeze([
   "asymmetricSigningKeyBounded",
   "canonicalManifest",
   "criticalRoleDenialsPresent",
+  "deploymentAttestationContractBounded",
+  "evidenceOperatorTrustBounded",
   "exactPublicRouteSet",
+  "exactGitArtifactInputsBounded",
   "exactSurfaceHashes",
   "generatedTemplateMatchesSource",
-  "immutableVersionedLambdaTargets",
   "leastPrivilegeRoleActionsBounded",
   "logsBoundedAndPrivacyMinimized",
+  "numericLambdaInvocationTargetsBounded",
   "publicCorsAndLambdaUrlsAbsent",
   "publicHeadersAndNegativeProbesBounded",
   "sourceSecurityMarkersPresent",
@@ -358,6 +405,22 @@ const EXPECTED_ROLE_ALLOW_ACTIONS = Object.freeze({
     "logs:CreateLogStream",
     "logs:PutLogEvents"
   ]),
+  DeploymentEvidenceRole: Object.freeze([
+    "cloudformation:DescribeStackDriftDetectionStatus",
+    "cloudformation:DescribeStackResourceDrifts",
+    "cloudformation:DescribeStackResources",
+    "cloudformation:DescribeStacks",
+    "cloudformation:DetectStackDrift",
+    "cloudformation:GetTemplate",
+    "iam:GetRole",
+    "iam:GetRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListRolePolicies",
+    "lambda:GetAlias",
+    "lambda:GetFunctionConcurrency",
+    "lambda:GetFunctionConfiguration"
+  ]),
+  DeploymentEvidenceAlternateRole: Object.freeze(["sts:AssumeRole"]),
   SignerRole: Object.freeze([
     "kms:GetPublicKey",
     "kms:Sign",
@@ -407,6 +470,20 @@ const REQUIRED_DENY_ACTIONS = Object.freeze({
     "sts:AssumeRole"
   ]),
   DemoRole: Object.freeze([
+    "bedrock:InvokeModel",
+    "iam:*",
+    "kms:Sign",
+    "lambda:InvokeFunction",
+    "secretsmanager:GetSecretValue",
+    "sts:AssumeRole"
+  ]),
+  DeploymentEvidenceRole: Object.freeze([
+    "bedrock:InvokeModel",
+    "kms:Sign",
+    "lambda:InvokeFunction",
+    "secretsmanager:GetSecretValue"
+  ]),
+  DeploymentEvidenceAlternateRole: Object.freeze([
     "bedrock:InvokeModel",
     "iam:*",
     "kms:Sign",
@@ -576,6 +653,13 @@ const SOURCE_MARKERS = Object.freeze({
     "g1_vector_candidates_embedding_idx",
     "CHECK (octet_length(assertion) BETWEEN 1 AND 4096)"
   ]),
+  "aws-alternate-principal-denial-runner": Object.freeze([
+    "AWS_EVIDENCE_EXPECTED_ALTERNATE_PRINCIPAL_ARN",
+    "AWS_ATTEST_DENIAL_UNEXPECTEDLY_ALLOWED",
+    "expectedPrincipalArn: alternatePrincipalArn",
+    "tideproof.gate2.aws-alternate-principal-denial.v2",
+    "errorCode: \"AccessDenied\""
+  ]),
   "aws-authority-race": Object.freeze([
     "GIT_NO_REPLACE_OBJECTS: \"1\"",
     "objects/info/alternates",
@@ -596,13 +680,56 @@ const SOURCE_MARKERS = Object.freeze({
     "stateObservedAt >= observationBinding.leaseExpiresAt",
     "committedProposalDigest",
     "committedSelectedEvidenceDigest",
-    "expectedAuthorizationBindingSha256"
+    "expectedAuthorizationBindingSha256",
+    ":[1-9][0-9]*$/.test("
   ]),
   "aws-boundary-ledger": Object.freeze([
     "The command is read-only and fail closed.",
     "The evidence runner rejects endpoint, profile, proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and tree-digest contamination",
-    "`tideproof.aws-authority-race-receipt.v4`",
+    "`tideproof.aws-authority-race-receipt.v5`",
+    "Every project input is then read as a regular tracked blob from the exact `HEAD` commit",
+    "The `proof` aliases are monitored pointers for inspection and metadata only, not invocation authority.",
+    "npm run gate2:aws-attest",
     "Any wrong-run, sequential, ambiguous, replayed, expanded, stale, extra, or unresolved result is not evidence."
+  ]),
+  "aws-deployment-attestation": Object.freeze([
+    "tideproof.gate2.aws-deployment-expectation.v2",
+    "tideproof.gate2.aws-deployment-attestation.v2",
+    "signDeploymentAttestationReceipt(",
+    "validateDeploymentEvidenceBasis({",
+    "validateEvidenceOperatorTrust(",
+    "primaryRuntimeRolePolicyCensus: true",
+    "primaryRuntimeConfigurationsBound: true",
+    "validateStackResourceBindings(",
+    "revisionFencedSnapshots: true",
+    "numericVersionArn",
+    "stackAndResourceDriftInSync: true",
+    "alternatePrincipalDenied: true",
+    "not administrator exclusion"
+  ]),
+  "aws-deployment-attestation-runner": Object.freeze([
+    "detect-stack-drift",
+    "describe-stack-resource-drifts",
+    "describe-stack-resources",
+    "get-function-configuration",
+    "get-function-concurrency",
+    "get-role-policy",
+    "list-attached-role-policies",
+    "list-role-policies",
+    "AWS_ATTEST_COLLECT_REVISION_FENCE",
+    "validateBuildReceipt(buildRecord.value",
+    "validateExactBuildReproduction(buildRecord, reproducedBuild)",
+    "stackResourceBindings(",
+    "validateDeploymentAttestationPair({"
+  ]),
+  "aws-deployment-attestation-tests": Object.freeze([
+    "deployment expectation and basis bind exact build and configuration evidence",
+    "attestation runners accept only exact private-evidence modes",
+    "one signed snapshot binds the five primary runtime functions and roles",
+    "same-account-shadow-function",
+    "AWS_ATTEST_EXACT_BUILD_MISMATCH",
+    "pre/post pair rejects forged evidence, role replacement, and revision drift",
+    "snapshot revision fence must bind two identical provider observations"
   ]),
   "boundary-runtime": Object.freeze([
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN",
@@ -659,9 +786,21 @@ const SOURCE_MARKERS = Object.freeze({
     "LOCAL_ONLY_PASS",
     "awsPreflight: preflight ? \"PASS\" : \"NOT_RUN\"",
     "AWS was not queried or mutated",
-    "upload and deployment remain separate reviewed actions"
+    "upload and deployment remain separate reviewed actions",
+    "tideproof.gate2-build.v5",
+    "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
+    "AWS_READINESS_BUILD_CONTROL_SET",
+    "validateDependencySnapshot(",
+    "templateReceipt(JSON.parse",
+    "gitBlobId(inputBytes)",
+    "AWS_READINESS_EXACT_GIT_INPUT_DIGEST"
   ]),
   "aws-security-tests": Object.freeze([
+    "Gate Two template invokes numeric versions and keeps monitored aliases",
+    "EvidenceOperatorPrincipalArn",
+    "DeploymentEvidenceRole",
+    "DeploymentEvidenceAlternateRole",
+    "cloudformation:DescribeStackResources",
     "SECURITY DEFINER bodies resolve every application relation by schema",
     "(?:\\bWITH|,)",
     "cteNames.has(match[1].toLowerCase())",
@@ -671,6 +810,12 @@ const SOURCE_MARKERS = Object.freeze({
     "\"Type\": \"AWS::KMS::Key\"",
     "\"ReservedConcurrentExecutions\": 2",
     "\"DisableExecuteApiEndpoint\": false",
+    "\"EvidenceOperatorPrincipalArn\": {",
+    "\"DeploymentEvidenceRole\": {",
+    "\"DeploymentEvidenceAlternateRole\": {",
+    "\"ManagedPolicyArns\": []",
+    "\"Ref\": \"BoundaryVersion\"",
+    "\"AgentVersionArn\": {",
     "\"EXPECTED_ADVISORY_CALLER_ROLE_ARN\": {",
     "\"AuthorizationType\": \"AWS_IAM\"",
     "\"Type\": \"AWS::Lambda::Permission\""
@@ -679,6 +824,13 @@ const SOURCE_MARKERS = Object.freeze({
     "properties.ReservedConcurrentExecutions = concurrency;",
     "Type: \"AWS::KMS::Key\"",
     "DisableExecuteApiEndpoint: false",
+    "EvidenceOperatorPrincipalArn: {",
+    "resources.DeploymentEvidenceRole = roleResource({",
+    "resources.DeploymentEvidenceAlternateRole = roleResource({",
+    "ManagedPolicyArns: []",
+    "IntegrationUri: ref(\"BoundaryVersion\")",
+    "FunctionName: ref(\"DemoVersion\")",
+    "AGENT_FUNCTION_ARN: ref(\"AgentVersion\")",
     "EXPECTED_ADVISORY_CALLER_ROLE_ARN: getAtt(",
     "AuthorizationType: \"AWS_IAM\"",
     "ThrottlingBurstLimit: 1",
@@ -765,6 +917,70 @@ const SOURCE_MARKERS = Object.freeze({
     "pools.authorizerConnections, 2",
     "broken_released",
     "reconciliation_started"
+  ]),
+  "exact-git-source": Object.freeze([
+    "GIT_NO_REPLACE_OBJECTS: \"1\"",
+    "rev-parse\", \"--is-shallow-repository",
+    "objects/info/alternates",
+    "ls-tree\", \"-z\", sourceCommit",
+    "cat-file\", \"blob\", match[1]",
+    "tideproof-exact-git-source",
+    "EXACT_GIT_SOURCE_LOADER",
+    "assertCleanExactGitCheckout({"
+  ]),
+  "exact-git-source-tests": Object.freeze([
+    "Gate Two bundling reads project inputs from immutable Git blobs",
+    "committed bytes",
+    "dirty bytes",
+    "EXACT_GIT_SOURCE_TREE",
+    "EXACT_GIT_SOURCE_PATH",
+    "exact Git bundling rejects every non-dependency path escape",
+    "exact build Git processes reject ambient repository redirection",
+    "exact build selects one canonical npm CLI and sanitized install environment"
+  ]),
+  "dependency-snapshot": Object.freeze([
+    "tideproof.dependency-snapshot.v1",
+    "NPM_CI_IGNORE_SCRIPTS_CLEAN_CACHE",
+    "DEPENDENCY_SNAPSHOT_SYMLINK",
+    "treeDigest",
+    "npmCliSha256",
+    "npmPackageTreeDigest"
+  ]),
+  "dependency-snapshot-tests": Object.freeze([
+    "dependency snapshot detects a tampered installed dependency byte",
+    "dependency snapshot rejects installed-tree symlinks",
+    "build toolchain receipt requires executable and npm CLI digests",
+    "build toolchain binds the complete npm package tree"
+  ]),
+  "gate2-build-runner": Object.freeze([
+    "assertExactGitSourceContext({ rootDir: root, sourceCommit })",
+    "exactGitSourcePlugin({",
+    "exactGitInputs: exactSource.inputRecords()",
+    "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
+    "tideproof.gate2-build.v5",
+    "TIDEPROOF_EXACT_BUILD_DEPENDENCY_SNAPSHOT",
+    "TIDEPROOF_EXACT_BUILD_TOOLCHAIN",
+    "GATE2_GENERATED_TEMPLATE_DRIFT_REQUIRES_COMMIT"
+  ]),
+  "gate2-exact-build-bootstrap": Object.freeze([
+    "worktree",
+    "--detach",
+    "ci",
+    "--ignore-scripts",
+    "createDependencySnapshot({",
+    "TIDEPROOF_EXACT_BUILD_SOURCE_COMMIT",
+    "TIDEPROOF_EXACT_BUILD_TREE_DIGEST",
+    "EXACT_BUILD_POST_DIRTY_TREE",
+    "GIT_NO_REPLACE_OBJECTS: \"1\""
+  ]),
+  "immutable-deployment-attestation-ledger": Object.freeze([
+    "SOURCE_CLOSED_PROVIDER_VALIDATION_PENDING",
+    "Root cause:",
+    "Why it was missed:",
+    "Earliest detection point:",
+    "Preventive controls:",
+    "Residual risk:",
+    "It must not say that live AWS deployment identity"
   ]),
   "dvi-proposal-authorization": Object.freeze([
     "FROM tp_api.g1_authorize_dvi_proposal_v1(",
@@ -950,6 +1166,9 @@ const SOURCE_MARKERS = Object.freeze({
   "release-security-ledger": Object.freeze([
     "CURRENT SOURCE SECURITY PASS — LIVE AND PRIVATE REVIEW PENDING",
     "not a vulnerability-free claim",
+    "numeric Lambda invocation targets",
+    "detached exact-commit build, exact-Git builder and bundle inputs",
+    "administrator exclusion",
     "The template currently uses one API/stage/method-scoped `GET/*` Lambda permission",
     "Any unresolved security, privacy, cost, eligibility, or claim finding keeps release and submission blocked."
   ]),
@@ -1048,7 +1267,7 @@ export function validateReleaseSecurityReceipt(receipt) {
       receipt.securityHeaderCount === 9 &&
       receipt.negativeProbeCount === 6 &&
       receipt.publicRouteCount === 10 &&
-      receipt.iamRoleCount === 7 &&
+      receipt.iamRoleCount === 9 &&
       receipt.lambdaPermissionCount === 3 &&
       receipt.boundedFunctionCount === 5 &&
       receipt.logGroupCount === 11 &&
@@ -1103,9 +1322,9 @@ function actionList(value) {
 
 function roleStatements(role, code) {
   assert(
-    role?.Type === "AWS::IAM::Role" &&
+      role?.Type === "AWS::IAM::Role" &&
       role.Properties?.MaxSessionDuration === 3600 &&
-      role.Properties.ManagedPolicyArns === undefined &&
+      sameJson(role.Properties.ManagedPolicyArns, []) &&
       Array.isArray(role.Properties.Policies) &&
       role.Properties.Policies.length === 1 &&
       Array.isArray(
@@ -1273,21 +1492,126 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
     ),
     "RELEASE_SECURITY_ADVISORY_CALLER_BINDING"
   );
-  for (const name of [
-    "AgentAlias",
-    "AuthorityAlias",
-    "BoundaryAlias",
-    "DemoAlias",
-    "SignerAlias"
-  ]) {
+  const functionTitles = [
+    "Agent",
+    "Authority",
+    "Boundary",
+    "Demo",
+    "Signer"
+  ];
+  for (const title of functionTitles) {
+    const name = `${title}Alias`;
     assert(
       resources[name]?.Type === "AWS::Lambda::Alias" &&
         resources[name].Properties.Name === "proof" &&
-        resources[name].Properties.FunctionVersion?.["Fn::GetAtt"]?.[1] ===
-          "Version",
-      `RELEASE_SECURITY_${name}_IMMUTABLE`
+        sameJson(resources[name].Properties.FunctionName, {
+          Ref: `${title}Function`
+        }) &&
+        sameJson(resources[name].Properties.FunctionVersion, {
+          "Fn::GetAtt": [`${title}Version`, "Version"]
+        }),
+      `RELEASE_SECURITY_${name}_MONITORED`
     );
   }
+  assert(
+    sameJson(resources.BoundaryIntegration?.Properties?.IntegrationUri, {
+      Ref: "BoundaryVersion"
+    }) &&
+      sameJson(resources.DemoIntegration?.Properties?.IntegrationUri, {
+        Ref: "DemoVersion"
+      }) &&
+      sameJson(
+        resources.BoundaryFunction.Properties.Environment?.Variables
+          ?.AGENT_FUNCTION_ARN,
+        { Ref: "AgentVersion" }
+      ) &&
+      sameJson(
+        resources.BoundaryFunction.Properties.Environment?.Variables
+          ?.SIGNER_FUNCTION_ARN,
+        { Ref: "SignerVersion" }
+      ),
+    "RELEASE_SECURITY_NUMERIC_LAMBDA_TARGETS"
+  );
+  const probeTargets = {
+    PROBE_AGENT_FUNCTION_ARN: "AgentVersion",
+    PROBE_AUTHORITY_FUNCTION_ARN: "AuthorityVersion",
+    PROBE_BOUNDARY_FUNCTION_ARN: "BoundaryVersion",
+    PROBE_SIGNER_FUNCTION_ARN: "SignerVersion"
+  };
+  for (const title of functionTitles) {
+    const environment =
+      resources[`${title}ProbeFunction`]?.Properties?.Environment?.Variables;
+    assert(
+      Object.entries(probeTargets).every(([name, target]) =>
+        sameJson(environment?.[name], { Ref: target })
+      ),
+      `RELEASE_SECURITY_${title}ProbeFunction_NUMERIC_TARGETS`
+    );
+  }
+  for (const title of functionTitles) {
+    assert(
+      sameJson(template.Outputs?.[`${title}VersionArn`]?.Value, {
+        Ref: `${title}Version`
+      }),
+      `RELEASE_SECURITY_${title}Version_OUTPUT`
+    );
+  }
+  const evidenceTrust =
+    resources.DeploymentEvidenceRole?.Properties
+      ?.AssumeRolePolicyDocument;
+  const alternateTrust =
+    resources.DeploymentEvidenceAlternateRole?.Properties
+      ?.AssumeRolePolicyDocument;
+  assert(
+    template.Parameters?.EvidenceOperatorPrincipalArn?.AllowedPattern ===
+      "^arn:aws[a-zA-Z-]*:iam::[0-9]{12}:(?:role|user)/[A-Za-z0-9+=,.@_-]{1,64}$" &&
+      sameJson(evidenceTrust, {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: { Ref: "EvidenceOperatorPrincipalArn" } },
+            Action: "sts:AssumeRole",
+            Condition: {
+              StringEquals: {
+                "aws:PrincipalArn": {
+                  Ref: "EvidenceOperatorPrincipalArn"
+                }
+              }
+            }
+          }
+        ]
+      }) &&
+      sameJson(template.Outputs?.DeploymentEvidenceRoleArn?.Value, {
+        "Fn::GetAtt": ["DeploymentEvidenceRole", "Arn"]
+      }) &&
+      sameJson(alternateTrust, {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: {
+              AWS: {
+                "Fn::Sub":
+                  "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+              }
+            },
+            Action: "sts:AssumeRole"
+          }
+        ]
+      }) &&
+      sameJson(
+        template.Outputs?.DeploymentEvidenceAlternateRoleArn?.Value,
+        {
+          "Fn::GetAtt": ["DeploymentEvidenceAlternateRole", "Arn"]
+        }
+      ) &&
+      sameJson(
+        resources.DeploymentEvidenceAlternateRole?.Properties?.RoleName,
+        { "Fn::Sub": "${AWS::StackName}-evidence-alternate" }
+      ),
+    "RELEASE_SECURITY_EVIDENCE_OPERATOR_TRUST"
+  );
 
   for (const [roleName, expectedActions] of Object.entries(
     EXPECTED_ROLE_ALLOW_ACTIONS
@@ -1300,12 +1624,26 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
       sameJson(allowActions(statements), sorted(expectedActions)),
       `RELEASE_SECURITY_${roleName}_ALLOW`
     );
-    for (const statement of directStatements(statements).filter(
+    const allowStatements = directStatements(statements).filter(
       (candidate) => candidate.Effect === "Allow"
-    )) {
+    );
+    for (const statement of allowStatements) {
+      const reviewedGlobalDriftRead =
+        roleName === "DeploymentEvidenceRole" &&
+        statement.Sid === "ReadOwnDriftDetection" &&
+        sameJson(actionList(statement.Action), [
+          "cloudformation:DescribeStackDriftDetectionStatus"
+        ]);
       assert(
-        statement.Resource !== "*",
+        statement.Resource !== "*" || reviewedGlobalDriftRead,
         `RELEASE_SECURITY_${roleName}_WILDCARD_ALLOW`
+      );
+    }
+    if (roleName === "DeploymentEvidenceRole") {
+      assert(
+        allowStatements.filter((statement) => statement.Resource === "*")
+          .length === 1,
+        "RELEASE_SECURITY_DeploymentEvidenceRole_WILDCARD_ALLOW"
       );
     }
     const denied = denyActions(statements);
@@ -1315,25 +1653,71 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
     );
     assertConditionalProbeLogs(statements, roleName);
   }
+  const boundaryStatements = roleStatements(
+    resources.BoundaryRole,
+    "RELEASE_SECURITY_BoundaryRole_ROLE"
+  );
+  const boundaryInvoke = boundaryStatements.find(
+    (statement) => statement.Sid === "InvokeOnlyBoundedChildren"
+  );
+  const boundaryDenyOther = boundaryStatements.find(
+    (statement) => statement.Sid === "DenyOtherLambdaTargets"
+  );
+  const raceStatements = roleStatements(
+    resources.AuthorityRaceCallerRole,
+    "RELEASE_SECURITY_AuthorityRaceCallerRole_ROLE"
+  );
+  const raceInvoke = raceStatements.find(
+    (statement) => statement.Sid === "InvokeOnlyAuthorityProof"
+  );
+  const raceDenyOther = raceStatements.find(
+    (statement) => statement.Sid === "DenyOtherLambdaTargets"
+  );
+  assert(
+    sameJson(boundaryInvoke?.Resource, [
+      { Ref: "AgentVersion" },
+      { Ref: "SignerVersion" }
+    ]) &&
+      sameJson(boundaryDenyOther?.NotResource, [
+        { Ref: "AgentVersion" },
+        { Ref: "SignerVersion" }
+      ]) &&
+      sameJson(raceInvoke?.Resource, { Ref: "AuthorityVersion" }) &&
+      sameJson(raceDenyOther?.NotResource, {
+        Ref: "AuthorityVersion"
+      }),
+    "RELEASE_SECURITY_NUMERIC_ROLE_TARGETS"
+  );
 
   const permissions = {
-    BoundaryInvokePermission:
-      "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/POST/advisory",
-    DemoAssetInvokePermission:
-      "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/*",
-    DemoRootInvokePermission:
-      "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/"
+    BoundaryInvokePermission: {
+      sourceArn:
+        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/POST/advisory",
+      version: "BoundaryVersion"
+    },
+    DemoAssetInvokePermission: {
+      sourceArn:
+        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/*",
+      version: "DemoVersion"
+    },
+    DemoRootInvokePermission: {
+      sourceArn:
+        "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/$default/GET/",
+      version: "DemoVersion"
+    }
   };
-  for (const [name, sourceArn] of Object.entries(permissions)) {
+  for (const [name, expected] of Object.entries(permissions)) {
     const permission = resources[name];
     assert(
       permission?.Type === "AWS::Lambda::Permission" &&
         permission.Properties.Action === "lambda:InvokeFunction" &&
         permission.Properties.Principal === "apigateway.amazonaws.com" &&
         permission.Properties.SourceAccount?.Ref === "AWS::AccountId" &&
-        permission.Properties.SourceArn?.["Fn::Sub"] === sourceArn &&
-        permission.Properties.FunctionName?.["Fn::GetAtt"]?.[1] ===
-          "AliasArn",
+        permission.Properties.SourceArn?.["Fn::Sub"] ===
+          expected.sourceArn &&
+        sameJson(permission.Properties.FunctionName, {
+          Ref: expected.version
+        }),
       `RELEASE_SECURITY_${name}`
     );
   }
@@ -1554,16 +1938,19 @@ export function verifyReleaseSecurity({ rootDir = DEFAULT_ROOT } = {}) {
       advisoryRouteIamAuthenticated: true,
       publicCorsAndLambdaUrlsAbsent: true,
       throttlesAndConcurrencyBounded: true,
-      immutableVersionedLambdaTargets: true,
+      numericLambdaInvocationTargetsBounded: true,
       leastPrivilegeRoleActionsBounded: true,
       criticalRoleDenialsPresent: true,
+      evidenceOperatorTrustBounded: true,
+      deploymentAttestationContractBounded: true,
+      exactGitArtifactInputsBounded: true,
       apiGatewayInvokePermissionsBounded: true,
       asymmetricSigningKeyBounded: true,
       logsBoundedAndPrivacyMinimized: true,
       publicHeadersAndNegativeProbesBounded: true
     },
     claimBoundary:
-      "This receipt proves only that the current hash-bound security surfaces match the reviewed source state and that the generated Gate Two template preserves the enumerated route, authentication, browser-header, negative-probe, throttle, concurrency, immutable-version, IAM-action, Lambda-permission, KMS, log-retention, database-bootstrap, and Managed MCP source contracts checked here. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit."
+      "This receipt proves only that the current hash-bound security surfaces match the reviewed source state and that the generated Gate Two template preserves the enumerated route, authentication, browser-header, negative-probe, throttle, concurrency, exact-Git-input, numeric-version, monitored-alias, evidence-operator-trust, deployment-attestation, IAM-action, Lambda-permission, KMS, log-retention, database-bootstrap, and Managed MCP source contracts checked here. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, administrator-exclusion finding, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit."
   };
   return validateReleaseSecurityReceipt(receipt);
 }
