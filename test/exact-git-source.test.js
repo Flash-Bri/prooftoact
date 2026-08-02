@@ -20,6 +20,27 @@ import {
 } from "../scripts/lib/exact-git-source.js";
 import { __test as exactBuildTest } from "../scripts/build-gate2-exact.js";
 
+function installedNpmCliForTest() {
+  const bundledCandidate = path.resolve(
+    path.dirname(fs.realpathSync(process.execPath)),
+    "../lib/node_modules/npm/bin/npm-cli.js"
+  );
+  const candidates = [bundledCandidate, process.env.npm_execpath];
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "string" &&
+      path.isAbsolute(candidate) &&
+      fs.existsSync(candidate)
+    ) {
+      return exactBuildTest.exactNpmCli({
+        npm_execpath: candidate,
+        npm_node_execpath: process.execPath
+      });
+    }
+  }
+  throw new Error("EXACT_GIT_TEST_NPM_CLI");
+}
+
 function git(rootDir, ...args) {
   return execFileSync("git", args, {
     cwd: rootDir,
@@ -402,10 +423,20 @@ test("npm scripts use the invoking Node instead of node_modules bin", () => {
     fs.writeFileSync(shim, "#!/bin/sh\necho SHADOWED_NODE_SHIM\n", {
       mode: 0o755
     });
-    const stdout = execFileSync("npm", ["run", "--silent", "probe"], {
-      cwd: rootDir,
-      encoding: "utf8"
-    });
+    const npmCli = installedNpmCliForTest();
+    const stdout = execFileSync(
+      process.execPath,
+      [npmCli, "run", "--silent", "probe"],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          npm_execpath: npmCli,
+          npm_node_execpath: process.execPath
+        }
+      }
+    );
     assert.equal(stdout, "RECEIPT_NODE\n");
   } finally {
     fs.rmSync(rootDir, { force: true, recursive: true });

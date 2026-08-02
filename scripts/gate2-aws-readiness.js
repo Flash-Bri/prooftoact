@@ -14,7 +14,8 @@ import {
   assertSafeProjectPath,
   gitEnvironment,
   gitInvariantArguments,
-  trustedGitExecutable
+  trustedGitExecutable,
+  trustedTemporaryRoot
 } from "./lib/exact-git-source.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
 
@@ -1800,6 +1801,7 @@ function childEnvironment(
   environment.GIT_CONFIG_NOSYSTEM = "1";
   environment.GIT_TERMINAL_PROMPT = "0";
   environment.PATH = "/usr/bin:/bin";
+  environment.TMPDIR = trustedTemporaryRoot();
   environment.npm_config_always_auth = "false";
   environment.npm_config_globalconfig =
     "/etc/tideproof-npm-globalconfig";

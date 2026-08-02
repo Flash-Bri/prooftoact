@@ -1326,11 +1326,14 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
     LD_LIBRARY_PATH: "/tmp/injected-libraries",
     DYLD_INSERT_LIBRARIES: "/tmp/injected.dylib",
     npm_config_userconfig: "/tmp/npmrc",
+    TMPDIR: "/tmp/untrusted-runtime",
     OPENAI_API_KEY: "private-model-key",
     SAFE_VALUE: "retained"
   };
   const isolated = __test.childEnvironment(source);
   assert.equal(isolated.PATH, "/usr/bin:/bin");
+  assert.equal(isolated.TMPDIR, fs.realpathSync("/tmp"));
+  assert.notEqual(isolated.TMPDIR, source.TMPDIR);
   assert.equal(isolated.SAFE_VALUE, undefined);
   assert.equal(isolated.AWS_ACCESS_KEY_ID, undefined);
   assert.equal(isolated.AWS_SESSION_TOKEN, undefined);
