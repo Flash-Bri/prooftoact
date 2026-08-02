@@ -26,6 +26,14 @@ function definition(name) {
   return security.slice(start, end);
 }
 
+function tableDefinition(name) {
+  const start = store.indexOf(`CREATE TABLE IF NOT EXISTS ${name}`);
+  assert.notEqual(start, -1, `${name} definition missing`);
+  const end = store.indexOf("    `);", start);
+  assert.notEqual(end, -1, `${name} definition is unterminated`);
+  return store.slice(start, end);
+}
+
 test("real admissibility produces a short-lived immutable DVI candidate set", () => {
   assert.match(
     store,
@@ -35,6 +43,26 @@ test("real admissibility produces a short-lived immutable DVI candidate set", ()
     store,
     /CREATE TABLE IF NOT EXISTS tp_private\.g1_vector_candidates/
   );
+  assert.match(
+    store,
+    /CREATE TABLE IF NOT EXISTS tp_private\.g1_vector_exclusions/
+  );
+  const candidates = tableDefinition("tp_private.g1_vector_candidates");
+  assert.match(candidates, /evidence_digest STRING\(64\) NOT NULL/);
+  assert.match(candidates, /CHECK \(length\(evidence_digest\) = 64\)/);
+
+  const evidence = tableDefinition("tp_private.g1_evidence");
+  assert.match(evidence, /evidence_digest STRING\(64\) NULL/);
+
+  const exclusions = tableDefinition("tp_private.g1_vector_exclusions");
+  assert.match(exclusions, /evidence_digest STRING\(64\) NULL/);
+  assert.match(exclusions, /admissibility STRING NOT NULL/);
+  assert.match(exclusions, /observed_at TIMESTAMPTZ NOT NULL/);
+  assert.match(
+    exclusions,
+    /evidence_digest IS NULL[\s\S]*OR length\(evidence_digest\) = 64/
+  );
+  assert.match(exclusions, /CHECK \(admissibility <> 'admissible'\)/);
   assert.match(store, /cleaned_at TIMESTAMPTZ NULL/);
   assert.match(store, /g1_vector_retrieval_sets_expiry_idx/);
   assert.match(
@@ -74,9 +102,45 @@ test("real admissibility produces a short-lived immutable DVI candidate set", ()
     /FROM tp_private\.g1_list_admissibility_internal_v1[\s\S]*WHERE listed\.admissibility = 'admissible'/
   );
   assert.match(prepare, /v_candidate_count > 10000/);
+  assert.match(prepare, /v_exclusion_count > 10000/);
   assert.match(prepare, /p_ttl_ms < 1000 OR p_ttl_ms > 300000/);
   assert.match(prepare, /retrieval identifier already used/);
   assert.match(prepare, /session_user <> 'tp_authorizer_user'/);
+  assert.match(
+    prepare,
+    /INSERT INTO tp_private\.g1_vector_exclusions[\s\S]*listed\.admissibility <> 'admissible'/
+  );
+  assert.match(
+    prepare,
+    /listed\.evidence_digest,[\s\S]*listed\.admissibility,[\s\S]*v_admitted_at/
+  );
+
+  const observeSnapshot = definition(
+    "tp_api.g1_observe_vector_exclusion_v1"
+  );
+  assert.match(observeSnapshot, /session_user <> 'tp_authorizer_user'/);
+  assert.match(
+    observeSnapshot,
+    /FROM tp_private\.g1_vector_retrieval_sets AS retrieval[\s\S]*JOIN tp_private\.g1_vector_exclusions AS exclusion/
+  );
+  assert.match(
+    observeSnapshot,
+    /exclusion\.observed_at = retrieval\.admitted_at/
+  );
+  for (const binding of [
+    /retrieval\.tenant_id = p_tenant_id/,
+    /retrieval\.retrieval_id = p_retrieval_id/,
+    /retrieval\.incident_id = p_incident_id/,
+    /retrieval\.agency = p_agency/,
+    /retrieval\.policy_version = p_policy_version/,
+    /exclusion\.evidence_id = p_evidence_id/
+  ]) {
+    assert.match(observeSnapshot, binding);
+  }
+  assert.doesNotMatch(
+    observeSnapshot,
+    /g1_list_admissibility_internal_v1/
+  );
 });
 
 test("DVI ranking is restricted to exact snapshot prefix columns", () => {
@@ -98,6 +162,7 @@ test("DVI ranking is restricted to exact snapshot prefix columns", () => {
 
   const cleanup = definition("tp_api.g1_delete_vector_set_v1");
   assert.match(cleanup, /DELETE FROM tp_private\.g1_vector_candidates/);
+  assert.match(cleanup, /DELETE FROM tp_private\.g1_vector_exclusions/);
   assert.match(cleanup, /SET cleaned_at = COALESCE/);
   assert.doesNotMatch(
     cleanup,
@@ -111,12 +176,14 @@ test("DVI ranking is restricted to exact snapshot prefix columns", () => {
   );
   assert.match(purge, /LIMIT p_limit/);
   assert.match(purge, /SET cleaned_at = transaction_timestamp\(\)/);
+  assert.match(purge, /DELETE FROM tp_private\.g1_vector_exclusions/);
 });
 
 test("snapshot retrieval stays private and cannot authorize by itself", () => {
   for (const object of [
     "tp_private.g1_vector_retrieval_sets",
-    "tp_private.g1_vector_candidates"
+    "tp_private.g1_vector_candidates",
+    "tp_private.g1_vector_exclusions"
   ]) {
     assert.equal(security.includes(`"${object}"`), true);
   }

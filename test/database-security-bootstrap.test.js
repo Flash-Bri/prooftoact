@@ -73,6 +73,42 @@ test("primary bootstrap audits posture before credentials, ownership, or grants"
   assert.ok(bootstrap.indexOf("await createFunctions(client)") > schemaDefaultLock);
 });
 
+test("snapshot exclusions are exact, bounded, and removed with the snapshot", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const store = await readFile(authorityStoreUrl, "utf8");
+  const tableDefinition = (name) => {
+    const start = store.indexOf(`CREATE TABLE IF NOT EXISTS ${name}`);
+    assert.notEqual(start, -1, `${name} definition missing`);
+    const end = store.indexOf("    `);", start);
+    assert.notEqual(end, -1, `${name} definition unterminated`);
+    return store.slice(start, end);
+  };
+  const functionDefinition = (name) => {
+    const start = source.indexOf(`CREATE OR REPLACE FUNCTION tp_api.${name}`);
+    assert.notEqual(start, -1, `${name} definition missing`);
+    const end = source.indexOf("  `);", start);
+    assert.notEqual(end, -1, `${name} definition unterminated`);
+    return source.slice(start, end);
+  };
+  const candidates = tableDefinition("tp_private.g1_vector_candidates");
+  const exclusions = tableDefinition("tp_private.g1_vector_exclusions");
+  assert.match(candidates, /evidence_digest STRING\(64\) NOT NULL/u);
+  assert.match(exclusions, /evidence_digest STRING\(64\) NULL/u);
+  assert.match(source, /v_exclusion_count > 10000/u);
+  assert.match(
+    functionDefinition("g1_observe_vector_exclusion_v1"),
+    /retrieval\.tenant_id = p_tenant_id[\s\S]*retrieval\.retrieval_id = p_retrieval_id[\s\S]*retrieval\.incident_id = p_incident_id[\s\S]*retrieval\.agency = p_agency[\s\S]*retrieval\.policy_version = p_policy_version[\s\S]*exclusion\.evidence_id = p_evidence_id[\s\S]*exclusion\.observed_at = retrieval\.admitted_at/u
+  );
+  assert.match(
+    functionDefinition("g1_delete_vector_set_v1"),
+    /DELETE FROM tp_private\.g1_vector_candidates[\s\S]*DELETE FROM tp_private\.g1_vector_exclusions/u
+  );
+  assert.match(
+    functionDefinition("g1_purge_expired_vector_sets_v1"),
+    /DELETE FROM tp_private\.g1_vector_candidates[\s\S]*DELETE FROM tp_private\.g1_vector_exclusions/u
+  );
+});
+
 test("recovery bootstrap audits first and grants no private-schema access", async () => {
   const source = await readFile(recoveryUrl, "utf8");
   const bootstrap = source.slice(source.indexOf("export async function bootstrapRecoverySecurity"));
@@ -141,6 +177,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_list_admissibility_internal_v1", sharedAuthorizerGuard],
     ["g1_observe_admissibility_v2", sharedAuthorizerGuard],
     ["g1_prepare_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
+    ["g1_observe_vector_exclusion_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_resolve_vector_set_v1", /session_user = 'tp_authorizer_user'/u],
     ["g1_rank_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_delete_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],

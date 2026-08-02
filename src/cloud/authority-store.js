@@ -1326,6 +1326,29 @@ export class AuthorityStore {
     `);
 
     await bootstrapPool.query(`
+      CREATE TABLE IF NOT EXISTS tp_private.g1_vector_exclusions (
+        tenant_id UUID NOT NULL,
+        retrieval_id UUID NOT NULL,
+        evidence_id UUID NOT NULL,
+        evidence_digest STRING(64) NULL,
+        admissibility STRING NOT NULL,
+        observed_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (tenant_id, retrieval_id, evidence_id),
+        FOREIGN KEY (tenant_id, retrieval_id)
+          REFERENCES tp_private.g1_vector_retrieval_sets (
+            tenant_id,
+            retrieval_id
+          ),
+        CHECK (
+          evidence_digest IS NULL
+          OR length(evidence_digest) = 64
+        ),
+        CHECK (octet_length(admissibility) BETWEEN 1 AND 128),
+        CHECK (admissibility <> 'admissible')
+      )
+    `);
+
+    await bootstrapPool.query(`
       CREATE VECTOR INDEX IF NOT EXISTS
         g1_vector_candidates_embedding_idx
       ON tp_private.g1_vector_candidates
