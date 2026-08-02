@@ -178,15 +178,18 @@ and private human review remain required.
 - **Earliest detection point:** the unchanged exact-main local-readiness command
   immediately after the nested-runner repair merged and before any
   authenticated provider action.
-- **Repair:** readiness now supplies the canonical real path of the fixed
-  system temporary directory while continuing to reject a caller-provided
-  `TMPDIR`. The npm-bootstrap regression invokes the resolved exact npm CLI
-  with the current Node executable instead of searching `PATH`.
+- **Repair:** readiness now obtains the canonical fixed system temporary
+  directory through the shared root-owned, sticky-bit trust validator while
+  continuing to reject a caller-provided `TMPDIR`. The npm-bootstrap regression
+  resolves and validates the current Node installation's npm CLI independently
+  of an outer npm process, then invokes it with the current Node executable
+  instead of searching `PATH`.
 - **Regression and preventive controls:** the environment-isolation test proves
   hostile temporary-directory input is discarded, the focused readiness and
-  exact-Git suites exercise canonical fixture roots and exact executable
-  identity, and the merged official-main readiness command remains the
-  end-to-end integration control.
+  exact-Git suites pass when launched directly by Node, and those suites
+  exercise the shared temporary-root trust contract, canonical fixture roots,
+  and exact executable identity. The merged official-main readiness command
+  remains the end-to-end integration control.
 - **Verification:** focused tests, the full suite under the real sanitized
   readiness child, release security/proof/provenance/cost gates, exact build,
   artifact integrity, and hosted exact-head CI must all pass. The identical
