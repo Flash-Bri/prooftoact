@@ -66,7 +66,7 @@ const EXPECTED_ROLE_TAGS = Object.freeze([
   Object.freeze({ key: "Project", value: "Tideproof" })
 ]);
 const SNAPSHOT_CLAIM_BOUNDARY =
-  "This signed receipt validates one revision-fenced AWS deployment snapshot for the five primary runtime functions, their shared roles, the two evidence roles, and the exact HTTP API route/integration/stage and explicit active-deployment census against exact build, configuration, 35 drift-supported CloudFormation resources, two directly attested integrations, one directly attested explicit API deployment, and direct provider observations. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation after every declared route; any stack update requires teardown and a fresh create before evidence can pass. Probe resources are required absent. Unmanaged Lambda aliases, function URLs, and event-source mappings are required absent for the five primary functions. Other account resources remain outside this census. It is not a pre/post stability receipt, administrator exclusion, application canary, or release authorization.";
+  "This signed receipt validates one revision-fenced AWS deployment snapshot for the five primary runtime functions, their shared roles, the two evidence roles, and the exact HTTP API route/integration/stage and explicit active-deployment census against exact build, configuration, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested explicit API deployment, and direct provider observations. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation after every declared route; any stack update requires teardown and a fresh create before evidence can pass. Probe resources are required absent. Unmanaged Lambda aliases, function URLs, and event-source mappings are required absent for the five primary functions. Other account resources remain outside this census. It is not a pre/post stability receipt, administrator exclusion, application canary, or release authorization.";
 
 function requireCondition(condition, code) {
   if (!condition) {
@@ -1799,6 +1799,7 @@ export function validateDeploymentSnapshot(
       "parameterCount",
       "parametersDigest",
       "resourceBindings",
+      "semanticAlarmDrift",
       "stackId",
       "stackName",
       "stackStatus",
@@ -1818,6 +1819,9 @@ export function validateDeploymentSnapshot(
         expectation.basis.stackParameterCount &&
       snapshot.stack.parametersDigest ===
         expectation.basis.stackParametersDigest &&
+      exactKeys(snapshot.stack.semanticAlarmDrift, ["authority", "boundary"]) &&
+      snapshot.stack.semanticAlarmDrift.authority === "IN_SYNC" &&
+      snapshot.stack.semanticAlarmDrift.boundary === "IN_SYNC" &&
       exactKeys(snapshot.stack.bindings, [
         "configDigest",
         "probesEnabled",
@@ -1947,6 +1951,7 @@ export function validateDeploymentSnapshot(
       parameterCount: snapshot.stack.parameterCount,
       parametersDigest: snapshot.stack.parametersDigest,
       resourceBindings: snapshot.stack.resourceBindings,
+      semanticAlarmDrift: snapshot.stack.semanticAlarmDrift,
       templateCanonicalDigest: snapshot.stack.templateCanonicalDigest
     }),
     observationFenceDigest: sha256(snapshot.observationFence),
@@ -2160,7 +2165,7 @@ export function validateDeploymentAttestationPair({
     },
     finalReleaseReady: false,
     claimBoundary:
-      "This self-contained signed-evidence validator verifies and embeds two independently signed provider snapshots plus one independently signed end-to-end alternate-principal AccessDenied observation. It binds them to the exact build, all 53 CloudFormation parameter values, the five primary runtime functions, their shared roles, the two evidence roles, the exact HTTP API route/integration/stage and explicit active-deployment census, 35 drift-supported CloudFormation resources, two directly attested integrations, and one directly attested explicit API deployment. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation; any update requires teardown and a fresh create. The denial observation does not by itself attribute AccessDenied to one IAM, session-policy, or organization-policy cause. Probe resources are required absent; other account resources remain outside this census. A PASS is not administrator exclusion, vulnerability absence, live CockroachDB proof, application correctness, public-release approval, or submission authorization."
+      "This self-contained signed-evidence validator verifies and embeds two independently signed provider snapshots plus one independently signed end-to-end alternate-principal AccessDenied observation. It binds them to the exact build, all 53 CloudFormation parameter values, the five primary runtime functions, their shared roles, the two evidence roles, the exact HTTP API route/integration/stage and explicit active-deployment census, 37 drift-supported CloudFormation resources, two directly attested integrations, and one directly attested explicit API deployment. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation; any update requires teardown and a fresh create. The denial observation does not by itself attribute AccessDenied to one IAM, session-policy, or organization-policy cause. Probe resources are required absent; other account resources remain outside this census. A PASS is not administrator exclusion, vulnerability absence, live CockroachDB proof, application correctness, public-release approval, or submission authorization."
   });
 }
 

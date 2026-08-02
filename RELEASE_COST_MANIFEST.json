@@ -58,6 +58,12 @@
   ],
   "surfaces": [
     {
+      "id": "authority-semantic-metric-runtime",
+      "path": "infra/aws/lambda/authority.cjs",
+      "role": "SEMANTIC_METRIC_CARDINALITY",
+      "sha256": "7612f29e3160d67d99bead9790df5a229449b986e349069739cf03de6678ecb0"
+    },
+    {
       "id": "aws-bootstrap-template",
       "path": "infra/aws/bootstrap-template.json",
       "role": "BUDGET_PREREQUISITE",
@@ -86,6 +92,12 @@
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
       "sha256": "05f8e9c762b44f2f7f41a83826ea0065239ec9222809ae5fb646109a3abef915"
+    },
+    {
+      "id": "boundary-semantic-metric-runtime",
+      "path": "infra/aws/lambda/boundary.cjs",
+      "role": "SEMANTIC_METRIC_CARDINALITY",
+      "sha256": "7bb9806977491ef74a9ec19cb69e0aecfea9d5f5cacf26a3776cb1423e72cff5"
     },
     {
       "id": "cost-boundary-ledger",

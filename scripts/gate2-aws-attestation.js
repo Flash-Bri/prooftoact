@@ -1016,6 +1016,16 @@ async function collectState(
       driftStatus,
       httpApiId: apiGateway.api.apiId,
       ...parameterCensus,
+      semanticAlarmDrift: {
+        authority: driftFor(
+          attestedResourceDrifts,
+          "AuthoritySemanticFailureAlarm"
+        ),
+        boundary: driftFor(
+          attestedResourceDrifts,
+          "BoundarySemanticFailureAlarm"
+        )
+      },
       resourceBindings: stackResourceBindings(
         expectation,
         stackResources.StackResources ?? []

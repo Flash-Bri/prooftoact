@@ -78,6 +78,10 @@ const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
 ]);
 
 const EXPECTED_SURFACES = Object.freeze({
+  "authority-semantic-metric-runtime": Object.freeze({
+    path: "infra/aws/lambda/authority.cjs",
+    role: "SEMANTIC_METRIC_CARDINALITY"
+  }),
   "aws-bootstrap-template": Object.freeze({
     path: "infra/aws/bootstrap-template.json",
     role: "BUDGET_PREREQUISITE"
@@ -97,6 +101,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "aws-readiness-runner": Object.freeze({
     path: "scripts/gate2-aws-readiness.js",
     role: "EXACT_CHECKOUT_RELEASE_GATE"
+  }),
+  "boundary-semantic-metric-runtime": Object.freeze({
+    path: "infra/aws/lambda/boundary.cjs",
+    role: "SEMANTIC_METRIC_CARDINALITY"
   }),
   "cost-boundary-ledger": Object.freeze({
     path: "docs/COST_GATES.md",
@@ -209,6 +217,19 @@ function parseJson(bytes, code) {
 
 function assertMarkers(value, markers, code) {
   assert(markers.every((marker) => value.includes(marker)), code);
+}
+
+function assertSemanticMetricCardinality(value, service, code) {
+  assert(
+    typeof value === "string" &&
+      value.split("CloudWatchMetrics:").length - 1 === 1 &&
+      value.split('Namespace: "Tideproof/GateTwo"').length - 1 === 1 &&
+      value.split('Dimensions: [["Deployment", "Service"]]').length - 1 === 1 &&
+      value.split('Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]').length - 1 === 1 &&
+      value.split(`Service: "${service}"`).length - 1 === 1 &&
+      value.split("SemanticFailures: 1").length - 1 === 1,
+    code
+  );
 }
 
 export function validateManifest(manifest) {
@@ -516,6 +537,16 @@ function assertPreflightDefaults() {
 }
 
 function assertSourceContracts(sources) {
+  assertSemanticMetricCardinality(
+    sources.get("authority-semantic-metric-runtime"),
+    "authority",
+    "RELEASE_COST_AUTHORITY_METRIC_CARDINALITY"
+  );
+  assertSemanticMetricCardinality(
+    sources.get("boundary-semantic-metric-runtime"),
+    "boundary",
+    "RELEASE_COST_BOUNDARY_METRIC_CARDINALITY"
+  );
   assertMarkers(
     sources.get("aws-preflight-library"),
     [
@@ -700,6 +731,7 @@ if (startedDirectly) {
 }
 
 export const __test = Object.freeze({
+  assertSemanticMetricCardinality,
   EXPECTED_BUDGET_ALERTS,
   EXPECTED_FINAL_RELEASE_REQUIREMENTS,
   EXPECTED_FORBIDDEN_RESOURCE_TYPES,

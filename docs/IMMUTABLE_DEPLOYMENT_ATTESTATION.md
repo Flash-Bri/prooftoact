@@ -279,6 +279,29 @@ and private human review remain required.
   availability guarantee, or operational response until provider receipts are
   accepted.
 
+### Independent-review closure
+
+- **Root cause:** the first implementation counted the two alarm drift rows
+  but discarded their individual statuses, and the cost gate bound only alarm
+  resources rather than the runtime code that chooses EMF dimensions.
+- **Why it was missed:** positive census and template tests proved presence,
+  not mutation resistance of the signed status or metric cardinality.
+- **Earliest detection point:** mutate one alarm status to `NOT_CHECKED` and
+  one runtime dimension before accepting the release gates.
+- **Repair:** both alarm statuses are now required `IN_SYNC`, serialized in
+  each signed snapshot and stack digest, and reflected in the 37-resource
+  claim. The cost manifest hash-binds both runtimes and its verifier permits
+  exactly one stack/service EMF definition per runtime.
+- **Regression and preventive controls:** signed-snapshot mutation tests reject
+  alarm drift, while cost tests reject an added dimension and stale runtime
+  hashes.
+- **Verification:** the focused attestation/cost suite and the full 384-test
+  suite pass with current security, cost, proof, claim, and submission hashes.
+- **Residual risk:** live CloudFormation drift status and CloudWatch series
+  behavior remain provider-only evidence.
+- **Claim impact:** `drift-bound` and `two custom series` remain source-only
+  claims until exact-commit provider receipts pass.
+
 ## Required live sequence
 
 1. Before deployment, generate three distinct Ed25519 key pairs outside the

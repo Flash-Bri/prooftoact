@@ -69,7 +69,7 @@
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
       "role": "PUBLIC_CLAIM_INVENTORY",
-      "sha256": "681a2f332d4e8cb83730f9e7eecce1a1263c93e38a3ce0c185819b69e38db6b8"
+      "sha256": "65ab42d4aae6a7e899bf9e1c123ea9ecc4e4a006edb444d520466d441a363b50"
     },
     {
       "id": "release-submission-ledger",

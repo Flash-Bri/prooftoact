@@ -90,25 +90,25 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "a07341342f5ae3f99f68a2441de3bcfc4a723a37d32b2544b52af32385c3c3e4"
+      "sha256": "77989d6ddaa54851ea4d8e402d4aba161f6399ca4b92f6e7c76d2c536d942f2e"
     },
     {
       "id": "aws-deployment-attestation",
       "path": "src/cloud/aws-deployment-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
-      "sha256": "c10506c065059a2f0838644ba0d7d2dde8dce52cd314c5f3e018d9b1db79ae25"
+      "sha256": "6c9a2c0f9d1d2d9a12f0063695004250e1c15b325c27b7957f5b60351642e007"
     },
     {
       "id": "aws-deployment-attestation-runner",
       "path": "scripts/gate2-aws-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_RUNNER",
-      "sha256": "11afa1fa0c7a08c573ce8df526de4619ac1f1e6723fdfd66f6af025dfe7f6f04"
+      "sha256": "ec2940b2652a12820a9982b4ba7c0ea61f78054c0dd4b1245104cd4c05296280"
     },
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "cc4f7bf68136c8e1da0ac5882663dbb4a3bf524106bfae3afbdff189f81a0835"
+      "sha256": "b53b612dcef2d9baa79ab0a1e36ae6fdfd1cc4569b8c4ad0807725bc1d297ea0"
     },
     {
       "id": "aws-evidence-identity",
@@ -306,7 +306,7 @@
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
-      "sha256": "694128471b36d36d3b935e1250b478686cbb43313879986848b6bbd0a6b6ca86"
+      "sha256": "376db5da8b7d1f52b6b7ba4f3d2d72fd85aaeb8d291b9ddca0e6ab80c0a80842"
     },
     {
       "id": "local-server",

@@ -51,7 +51,7 @@ test("current source cost guards match the reviewed non-final boundary", () => {
   const receipt = verifyReleaseCost({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_COST_GUARDS_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 10);
+  assert.equal(receipt.surfaceCount, 12);
   assert.equal(receipt.budgetAlertCount, 4);
   assert.equal(receipt.forbiddenResourceTypeCount, 5);
   assert.equal(receipt.unapprovedPurchaseClassCount, 5);
@@ -61,6 +61,36 @@ test("current source cost guards match the reviewed non-final boundary", () => {
     Object.values(receipt.checks).every((value) => value === true),
     true
   );
+});
+
+test("cost guard rejects semantic metric cardinality expansion", () => {
+  for (const [file, service] of [
+    ["infra/aws/lambda/authority.cjs", "authority"],
+    ["infra/aws/lambda/boundary.cjs", "boundary"]
+  ]) {
+    const source = fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.equal(
+      __test.assertSemanticMetricCardinality(
+        source,
+        service,
+        "RELEASE_COST_TEST_METRIC_CARDINALITY"
+      ),
+      undefined
+    );
+    const expanded = source.replace(
+      'Dimensions: [["Deployment", "Service"]]',
+      'Dimensions: [["Deployment", "Service", "Request"]]'
+    );
+    assert.throws(
+      () =>
+        __test.assertSemanticMetricCardinality(
+          expanded,
+          service,
+          "RELEASE_COST_TEST_METRIC_CARDINALITY"
+        ),
+      /RELEASE_COST_TEST_METRIC_CARDINALITY/
+    );
+  }
 });
 
 test("cost manifest rejects final approval, arithmetic drift, or surface drift", () => {
