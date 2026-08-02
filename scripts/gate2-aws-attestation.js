@@ -41,6 +41,8 @@ const LOGICAL_TITLES = Object.freeze({
 const ATTESTED_DRIFT_LOGICAL_IDS = Object.freeze(
   [
     "DefaultStage",
+    "AuthoritySemanticFailureAlarm",
+    "BoundarySemanticFailureAlarm",
     "DeploymentEvidenceAlternateRole",
     "DeploymentEvidenceRole",
     "HttpApi",
@@ -1014,6 +1016,16 @@ async function collectState(
       driftStatus,
       httpApiId: apiGateway.api.apiId,
       ...parameterCensus,
+      semanticAlarmDrift: {
+        authority: driftFor(
+          attestedResourceDrifts,
+          "AuthoritySemanticFailureAlarm"
+        ),
+        boundary: driftFor(
+          attestedResourceDrifts,
+          "BoundarySemanticFailureAlarm"
+        )
+      },
       resourceBindings: stackResourceBindings(
         expectation,
         stackResources.StackResources ?? []

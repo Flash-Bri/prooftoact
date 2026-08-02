@@ -92,7 +92,7 @@ boundary:
   policy censuses, both evidence roles, concurrency, revisions,
   monitored alias targets, alias/function-URL/event-source/tag censuses,
   stable role IDs, the exact API/integration/route/stage and explicit
-  active-deployment census, the exact API access-log destination, 35
+  active-deployment census, the exact API access-log destination, 37
   drift-supported resources, two directly attested integration resources that
   CloudFormation drift does not support, and the directly attested explicit
   API deployment. The stage has auto-deploy disabled and must name the exact

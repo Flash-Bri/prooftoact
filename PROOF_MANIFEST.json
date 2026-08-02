@@ -73,31 +73,31 @@
     {
       "id": "aws-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
-      "sha256": "381d195a8c1e0fa7f953d5cf05463b2e8fcaddf0aba9ac6aa5369df5a542d1fe",
+      "sha256": "b2801a5c1cf4ba0b46c473c62668eedc9503c98fed351f943b975639f19f0c9f",
       "kind": "boundary-ledger"
     },
     {
       "id": "aws-deployment-attestation-runner",
       "path": "scripts/gate2-aws-attestation.js",
-      "sha256": "06b2de0dfb8da303673f0cf4c71c5e6efaceaf5b7cd4449aa0a57d4599c3da88",
+      "sha256": "ec2940b2652a12820a9982b4ba7c0ea61f78054c0dd4b1245104cd4c05296280",
       "kind": "verification-code"
     },
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
-      "sha256": "cc4f7bf68136c8e1da0ac5882663dbb4a3bf524106bfae3afbdff189f81a0835",
+      "sha256": "b53b612dcef2d9baa79ab0a1e36ae6fdfd1cc4569b8c4ad0807725bc1d297ea0",
       "kind": "verification-code"
     },
     {
       "id": "aws-deployment-attestation-validator",
       "path": "src/cloud/aws-deployment-attestation.js",
-      "sha256": "c10506c065059a2f0838644ba0d7d2dde8dce52cd314c5f3e018d9b1db79ae25",
+      "sha256": "6c9a2c0f9d1d2d9a12f0063695004250e1c15b325c27b7957f5b60351642e007",
       "kind": "verification-code"
     },
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "a07341342f5ae3f99f68a2441de3bcfc4a723a37d32b2544b52af32385c3c3e4",
+      "sha256": "77989d6ddaa54851ea4d8e402d4aba161f6399ca4b92f6e7c76d2c536d942f2e",
       "kind": "boundary-ledger"
     },
     {
@@ -127,7 +127,7 @@
     {
       "id": "aws-template-security-tests",
       "path": "test/aws-gate2-template-security.test.js",
-      "sha256": "19e149d600aa0d39ceaf302c143e3c5f0d114021a3473b3ea9035b17dcc132fb",
+      "sha256": "fee0683f9a052308bfe12b544306c392d7bee4a510bd2e2c065515e56e89e856",
       "kind": "verification-code"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "681a2f332d4e8cb83730f9e7eecce1a1263c93e38a3ce0c185819b69e38db6b8",
+      "sha256": "65ab42d4aae6a7e899bf9e1c123ea9ecc4e4a006edb444d520466d441a363b50",
       "kind": "boundary-ledger"
     },
     {
@@ -385,25 +385,25 @@
     {
       "id": "release-cost-ledger",
       "path": "docs/RELEASE_COST.md",
-      "sha256": "86236a88d0100b0503802c9485c07c73c5bb18bb3b6e98e40519ac6fd3342069",
+      "sha256": "060275ddcff314167d582984ae5a84981db0f99b509c179d24aab402d64577cf",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "8b4bbeae527d663744b04b15b3b5b2f6f16f566bf64b6114b3677b84bed01bf1",
+      "sha256": "08223380fdd454059dbae1e29806bc8e67421173c491ef4f19ce51fba41d5ee0",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-tests",
       "path": "test/release-cost.test.js",
-      "sha256": "3420aa1608450e23c6b2dc21d98acb57d737c9d053147156b4ae68810568e886",
+      "sha256": "1e2c0ea216756ad0396b07066921022dd9c73fcb34287b3500ed2eef73d40f0d",
       "kind": "verification-code"
     },
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "24d4a87c56713a51a5372fc52de061c83ec8825ab328a6428d0c71c23515d43c",
+      "sha256": "ea40f59444602b48ab1a922cc3f693d1812d3258f20322940c73b42e9f3f52c4",
       "kind": "verification-code"
     },
     {
@@ -499,7 +499,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "4748485bb7d9c371bc8a17f7ed999ff4a34e0e8fc842dc64bb796347a310f368",
+      "sha256": "208883f2a20ffbe3034017819a733d3e590403dc1a2a8fb9222174a5285017ce",
       "kind": "boundary-ledger"
     },
     {
@@ -511,7 +511,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "1a9cffce9d137dc2aa40898165da3c555070817f7656e294f154199592fb1b68",
+      "sha256": "c623dcbd31725c4de3441871e5700a7f06912fb74d85a8158c75167cc3d52e61",
       "kind": "verification-code"
     },
     {
@@ -523,7 +523,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "ac78779a110a20a7543b4dbab4916ed5475e8b09c4b2f3798f11029fe3674f72",
+      "sha256": "9e6fb7478247f9accb9bd8bbf3b79e0e5803266ec9c64aad14e2fe4e88386bb0",
       "kind": "boundary-ledger"
     },
     {
@@ -943,7 +943,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 35 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database Tideproof-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database Tideproof-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

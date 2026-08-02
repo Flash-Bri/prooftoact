@@ -111,9 +111,51 @@ function configureEnvironment() {
     PACKAGE_LOCK_DIGEST: "d".repeat(64),
     AUTHORITY_SOURCE_DIGEST: "e".repeat(64),
     AUTHORITY_ARTIFACT_DIGEST: "f".repeat(64),
-    AWS_LAMBDA_FUNCTION_VERSION: "7"
+    AWS_REGION: "us-east-1",
+    AWS_LAMBDA_FUNCTION_NAME: "tideproof-gate2-authority",
+    AWS_LAMBDA_FUNCTION_VERSION: "7",
+    SEMANTIC_METRIC_DEPLOYMENT: "tideproof-gate2"
   });
 }
+
+test("authority semantic failures emit provider-bound EMF without authority input", () => {
+  configureEnvironment();
+  const metric = authority.semanticFailureMetric(
+    "AUTHORITY_UNAVAILABLE",
+    { awsRequestId: "request-456" },
+    () => 1_785_700_000_001
+  );
+
+  assert.deepEqual(metric, {
+    _aws: {
+      Timestamp: 1_785_700_000_001,
+      CloudWatchMetrics: [
+        {
+          Namespace: "Tideproof/GateTwo",
+          Dimensions: [["Deployment", "Service"]],
+          Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
+        }
+      ]
+    },
+    Deployment: "tideproof-gate2",
+    Service: "authority",
+    SemanticFailures: 1,
+    schemaVersion: "tideproof.aws-semantic-failure.v1",
+    provider: "AWS_LAMBDA",
+    status: "UNKNOWN_DO_NOT_ACT",
+    code: "AUTHORITY_UNAVAILABLE",
+    awsRequestId: "request-456",
+    region: "us-east-1",
+    functionName: "tideproof-gate2-authority",
+    functionVersion: "7",
+    sourceCommit: "a".repeat(40),
+    configDigest: "b".repeat(64),
+    treeDigest: "c".repeat(40),
+    artifactDigest: "f".repeat(64)
+  });
+  assert.equal(JSON.stringify(metric).includes("proposalDigest"), false);
+  assert.equal(JSON.stringify(metric).includes("logicalActionDigest"), false);
+});
 
 function validEvent(contender = "alpha") {
   return {

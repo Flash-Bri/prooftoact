@@ -48,7 +48,7 @@
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
-      "sha256": "21d51a3ca181c3ed7b04fd8f7cd23ad1092159e3f256755fc4a9fd28af99a429"
+      "sha256": "7612f29e3160d67d99bead9790df5a229449b986e349069739cf03de6678ecb0"
     },
     {
       "id": "authority-runtime-identity-tests",
@@ -60,7 +60,7 @@
       "id": "authority-runtime-reconciliation-tests",
       "path": "test/aws-authority-lambda.test.js",
       "role": "AUTHORITY_RUNTIME_RECONCILIATION_VERIFICATION",
-      "sha256": "80d4dcc3edd6c8f23769ed49d748f6d3c293c0875992f51cbe2cfbaea5a6c45f"
+      "sha256": "584b6da3109524189097336858bd08e25486d6bc79c3da2a6e09c20c10893eb3"
     },
     {
       "id": "authority-store",
@@ -90,25 +90,25 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "a07341342f5ae3f99f68a2441de3bcfc4a723a37d32b2544b52af32385c3c3e4"
+      "sha256": "77989d6ddaa54851ea4d8e402d4aba161f6399ca4b92f6e7c76d2c536d942f2e"
     },
     {
       "id": "aws-deployment-attestation",
       "path": "src/cloud/aws-deployment-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
-      "sha256": "c10506c065059a2f0838644ba0d7d2dde8dce52cd314c5f3e018d9b1db79ae25"
+      "sha256": "6c9a2c0f9d1d2d9a12f0063695004250e1c15b325c27b7957f5b60351642e007"
     },
     {
       "id": "aws-deployment-attestation-runner",
       "path": "scripts/gate2-aws-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_RUNNER",
-      "sha256": "06b2de0dfb8da303673f0cf4c71c5e6efaceaf5b7cd4449aa0a57d4599c3da88"
+      "sha256": "ec2940b2652a12820a9982b4ba7c0ea61f78054c0dd4b1245104cd4c05296280"
     },
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "cc4f7bf68136c8e1da0ac5882663dbb4a3bf524106bfae3afbdff189f81a0835"
+      "sha256": "b53b612dcef2d9baa79ab0a1e36ae6fdfd1cc4569b8c4ad0807725bc1d297ea0"
     },
     {
       "id": "aws-evidence-identity",
@@ -162,31 +162,31 @@
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "b86ad1ab0c5621a2d47e735544144803130fbbc6de3b65f5e0e5e6489ad65a91"
+      "sha256": "ef93c0f726d696fcfc7813553adbb2aadf5df79dc8e7383a9a3ed5da1016d4cc"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "515faec16865b4ac3491b75bd49891e6e9df905e1def2cfe915561a65de50710"
+      "sha256": "f5177c49b7f94446a0a38a958a26405d9cd049900f7f5507ed6f42247fec8e2f"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "a5b5d098f46ae1fe70ad96e1a69c91084a9dd8896c33bd5439d5978a8270386f"
+      "sha256": "17f3f547cc9a9e1e375e890bbe918dcbf085ae33457a4fd41005996bf958d9ce"
     },
     {
       "id": "aws-template-security-tests",
       "path": "test/aws-gate2-template-security.test.js",
       "role": "AWS_TEMPLATE_LEAST_PRIVILEGE_VERIFICATION",
-      "sha256": "19e149d600aa0d39ceaf302c143e3c5f0d114021a3473b3ea9035b17dcc132fb"
+      "sha256": "fee0683f9a052308bfe12b544306c392d7bee4a510bd2e2c065515e56e89e856"
     },
     {
       "id": "boundary-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "AWS_COORDINATOR_RUNTIME",
-      "sha256": "4889430a6c370a26e63d941f950585657cc4c7027b9125fb0d9b1a0b6c082a49"
+      "sha256": "3307cf6e9b0c5346aac8642e59a9d0ecc1876f8362eda9d2f57eb567fdd5682a"
     },
     {
       "id": "canonical-json-contract",
@@ -306,7 +306,7 @@
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
-      "sha256": "381d195a8c1e0fa7f953d5cf05463b2e8fcaddf0aba9ac6aa5369df5a542d1fe"
+      "sha256": "b2801a5c1cf4ba0b46c473c62668eedc9503c98fed351f943b975639f19f0c9f"
     },
     {
       "id": "local-server",

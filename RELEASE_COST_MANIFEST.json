@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
-  "reviewedOn": "2026-08-01",
+  "reviewedOn": "2026-08-02",
   "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
   "limits": {
     "awsBudgetLimitUsd": 15,
@@ -58,6 +58,12 @@
   ],
   "surfaces": [
     {
+      "id": "authority-semantic-metric-runtime",
+      "path": "infra/aws/lambda/authority.cjs",
+      "role": "SEMANTIC_METRIC_CARDINALITY",
+      "sha256": "7612f29e3160d67d99bead9790df5a229449b986e349069739cf03de6678ecb0"
+    },
+    {
       "id": "aws-bootstrap-template",
       "path": "infra/aws/bootstrap-template.json",
       "role": "BUDGET_PREREQUISITE",
@@ -67,7 +73,7 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "515faec16865b4ac3491b75bd49891e6e9df905e1def2cfe915561a65de50710"
+      "sha256": "f5177c49b7f94446a0a38a958a26405d9cd049900f7f5507ed6f42247fec8e2f"
     },
     {
       "id": "aws-preflight-library",
@@ -88,6 +94,12 @@
       "sha256": "05f8e9c762b44f2f7f41a83826ea0065239ec9222809ae5fb646109a3abef915"
     },
     {
+      "id": "boundary-semantic-metric-runtime",
+      "path": "infra/aws/lambda/boundary.cjs",
+      "role": "SEMANTIC_METRIC_CARDINALITY",
+      "sha256": "3307cf6e9b0c5346aac8642e59a9d0ecc1876f8362eda9d2f57eb567fdd5682a"
+    },
+    {
       "id": "cost-boundary-ledger",
       "path": "docs/COST_GATES.md",
       "role": "COST_AND_RESOURCE_BOUNDARY",
@@ -97,7 +109,7 @@
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "86236a88d0100b0503802c9485c07c73c5bb18bb3b6e98e40519ac6fd3342069"
+      "sha256": "060275ddcff314167d582984ae5a84981db0f99b509c179d24aab402d64577cf"
     },
     {
       "id": "cost-guard-receipt",

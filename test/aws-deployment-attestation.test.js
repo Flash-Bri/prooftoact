@@ -878,6 +878,10 @@ function state(phase, observedAt) {
         value.expectation,
         stackResourcesFor(value.expectation)
       ),
+      semanticAlarmDrift: {
+        authority: "IN_SYNC",
+        boundary: "IN_SYNC"
+      },
       stackId: STACK_ID,
       stackName: STACK_NAME,
       stackStatus: "CREATE_COMPLETE",
@@ -1317,6 +1321,7 @@ test("one signed snapshot binds the five primary runtime functions and roles", (
     ["extra inline policy", (item) => { item.evidenceOperatorRole.inlinePolicies.push({ name: "Backdoor", document: rolePolicy("backdoor") }); }],
     ["permissions boundary", (item) => { item.alternatePrincipalRole.permissionsBoundary = { arn: "arn:aws:iam::111111111111:policy/Boundary", type: "Policy" }; }],
     ["resource drift", (item) => { item.functions.agent.resourceDrift.alias = "MODIFIED"; }],
+    ["semantic alarm drift", (item) => { item.stack.semanticAlarmDrift.authority = "MODIFIED"; }],
     ["shadow function", (item) => {
       item.stack.resourceBindings.AgentFunction.physicalResourceId =
         "shadow-agent";

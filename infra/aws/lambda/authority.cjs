@@ -1428,6 +1428,60 @@ function safeCode(error) {
   return "AUTHORITY_UNAVAILABLE";
 }
 
+function telemetryText(value, maximum, fallback = "UNBOUND") {
+  return typeof value === "string" && value.length > 0
+    ? value.slice(0, maximum)
+    : fallback;
+}
+
+function semanticFailureMetric(code, context, now = () => Date.now()) {
+  return {
+    _aws: {
+      Timestamp: now(),
+      CloudWatchMetrics: [
+        {
+          Namespace: "Tideproof/GateTwo",
+          Dimensions: [["Deployment", "Service"]],
+          Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
+        }
+      ]
+    },
+    Deployment: telemetryText(
+      process.env.SEMANTIC_METRIC_DEPLOYMENT,
+      255
+    ),
+    Service: "authority",
+    SemanticFailures: 1,
+    schemaVersion: "tideproof.aws-semantic-failure.v1",
+    provider: "AWS_LAMBDA",
+    status: "UNKNOWN_DO_NOT_ACT",
+    code: telemetryText(code, 120, "AUTHORITY_UNAVAILABLE"),
+    awsRequestId: telemetryText(context?.awsRequestId, 160, null),
+    region: telemetryText(process.env.AWS_REGION, 32),
+    functionName: telemetryText(
+      process.env.AWS_LAMBDA_FUNCTION_NAME,
+      64
+    ),
+    functionVersion: telemetryText(
+      process.env.AWS_LAMBDA_FUNCTION_VERSION,
+      12
+    ),
+    sourceCommit: telemetryText(process.env.SOURCE_COMMIT, 40),
+    configDigest: telemetryText(process.env.CONFIG_DIGEST, 64),
+    treeDigest: telemetryText(process.env.TREE_DIGEST, 40),
+    artifactDigest: telemetryText(
+      process.env.AUTHORITY_ARTIFACT_DIGEST,
+      64
+    )
+  };
+}
+
+function emitSemanticFailure(code, context) {
+  process.stdout.write(
+    `${JSON.stringify(semanticFailureMetric(code, context))}\n`
+  );
+}
+
 async function runAuthority({
   event,
   context,
@@ -1583,7 +1637,14 @@ async function runAuthority({
 }
 
 async function handler(event, context) {
-  return runAuthority({ event, context });
+  const result = await runAuthority({ event, context });
+  if (
+    result?.status === "UNKNOWN_DO_NOT_ACT" &&
+    result.code !== "STATUS_ONLY_NO_AUTHORIZATION"
+  ) {
+    emitSemanticFailure(result.code, context);
+  }
+  return result;
 }
 
 exports.handler = handler;
@@ -1613,6 +1674,7 @@ exports.__test = {
   runAuthority,
   safeCode,
   secretRequestFor,
+  semanticFailureMetric,
   sha256Hex,
   spendValues,
   spendAuthority,

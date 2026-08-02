@@ -498,6 +498,60 @@ function publicFailure(code, signedReceipt = null) {
   };
 }
 
+function telemetryText(value, maximum, fallback = "UNBOUND") {
+  return typeof value === "string" && value.length > 0
+    ? value.slice(0, maximum)
+    : fallback;
+}
+
+function semanticFailureMetric(code, context, now = () => Date.now()) {
+  return {
+    _aws: {
+      Timestamp: now(),
+      CloudWatchMetrics: [
+        {
+          Namespace: "Tideproof/GateTwo",
+          Dimensions: [["Deployment", "Service"]],
+          Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
+        }
+      ]
+    },
+    Deployment: telemetryText(
+      process.env.SEMANTIC_METRIC_DEPLOYMENT,
+      255
+    ),
+    Service: "boundary",
+    SemanticFailures: 1,
+    schemaVersion: "tideproof.aws-semantic-failure.v1",
+    provider: "AWS_LAMBDA",
+    status: "UNKNOWN_DO_NOT_ACT",
+    code: telemetryText(code, 120, "BOUNDARY_UNAVAILABLE"),
+    awsRequestId: telemetryText(context?.awsRequestId, 160, null),
+    region: telemetryText(process.env.AWS_REGION, 32),
+    functionName: telemetryText(
+      process.env.AWS_LAMBDA_FUNCTION_NAME,
+      64
+    ),
+    functionVersion: telemetryText(
+      process.env.AWS_LAMBDA_FUNCTION_VERSION,
+      12
+    ),
+    sourceCommit: telemetryText(process.env.SOURCE_COMMIT, 40),
+    configDigest: telemetryText(process.env.CONFIG_DIGEST, 64),
+    treeDigest: telemetryText(process.env.TREE_DIGEST, 40),
+    artifactDigest: telemetryText(
+      process.env.BOUNDARY_ARTIFACT_DIGEST,
+      64
+    )
+  };
+}
+
+function emitSemanticFailure(code, context) {
+  process.stdout.write(
+    `${JSON.stringify(semanticFailureMetric(code, context))}\n`
+  );
+}
+
 async function runAdvisory({
   request,
   invokeChild = invokeFunction,
@@ -641,7 +695,7 @@ async function runAdvisory({
   }
 }
 
-async function handler(event) {
+async function handler(event, context) {
   if (!isHttpEvent(event)) {
     throw new Error("DIRECT_EVENT_REJECTED");
   }
@@ -651,20 +705,23 @@ async function handler(event) {
     validateHttpCaller(event);
     parsedRequest = parsePublicRequest(event);
   } catch {
+    const code = event?.requestContext?.authorizer?.iam
+      ? "INVALID_REQUEST"
+      : "SIGNED_CALLER_REQUIRED";
+    emitSemanticFailure(code, context);
     return response(
       event?.requestContext?.authorizer?.iam
         ? 400
         : 403,
-      publicFailure(
-        event?.requestContext?.authorizer?.iam
-          ? "INVALID_REQUEST"
-          : "SIGNED_CALLER_REQUIRED"
-      )
+      publicFailure(code)
     );
   }
   const result = await runAdvisory({
     request: requestBinding(event, parsedRequest)
   });
+  if (result.body?.status === "UNKNOWN_DO_NOT_ACT") {
+    emitSemanticFailure(result.body.code, context);
+  }
   return response(result.statusCode, result.body);
 }
 
@@ -675,6 +732,7 @@ exports.__test = {
   parsePublicRequest,
   runAdvisory,
   requestBinding,
+  semanticFailureMetric,
   sha256Hex,
   sha256BytesHex,
   unsignedReceipt,

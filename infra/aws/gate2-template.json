@@ -1517,6 +1517,9 @@
             "AUTHORITY_ARTIFACT_DIGEST": {
               "Ref": "AuthorityArtifactDigest"
             },
+            "SEMANTIC_METRIC_DEPLOYMENT": {
+              "Ref": "AWS::StackName"
+            },
             "TREE_DIGEST": {
               "Ref": "TreeDigest"
             },
@@ -2128,7 +2131,7 @@
     "DeploymentEvidenceRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "Description": "Bounded deployment evidence collector; AWS requires one account-wide read to enumerate event-source mappings, while reviewed code queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
+        "Description": "Bounded deployment evidence collector; AWS requires account-wide read-only APIs for alarm drift and event-source enumeration, while reviewed code binds two alarms and queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
           "Statement": [
@@ -2297,6 +2300,14 @@
                   "Effect": "Allow",
                   "Action": [
                     "lambda:ListEventSourceMappings"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadSemanticAlarmDrift",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudwatch:DescribeAlarms"
                   ],
                   "Resource": "*"
                 },
@@ -2594,6 +2605,9 @@
             },
             "SIGNER_ARTIFACT_DIGEST": {
               "Ref": "SignerArtifactDigest"
+            },
+            "SEMANTIC_METRIC_DEPLOYMENT": {
+              "Ref": "AWS::StackName"
             },
             "TREE_DIGEST": {
               "Ref": "TreeDigest"
@@ -3715,6 +3729,66 @@
             "Value": {
               "Ref": "AuthorityFunction"
             }
+          }
+        ]
+      }
+    },
+    "BoundarySemanticFailureAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-boundary-semantic-failures"
+        },
+        "AlarmDescription": "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
+        "Namespace": "Tideproof/GateTwo",
+        "MetricName": "SemanticFailures",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "Deployment",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Name": "Service",
+            "Value": "boundary"
+          }
+        ]
+      }
+    },
+    "AuthoritySemanticFailureAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Sub": "${AWS::StackName}-authority-semantic-failures"
+        },
+        "AlarmDescription": "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
+        "Namespace": "Tideproof/GateTwo",
+        "MetricName": "SemanticFailures",
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "Dimensions": [
+          {
+            "Name": "Deployment",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Name": "Service",
+            "Value": "authority"
           }
         ]
       }

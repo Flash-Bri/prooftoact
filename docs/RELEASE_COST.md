@@ -39,7 +39,11 @@ artifact versions after 45 days.
 
 The reviewed Gate Two template uses only bounded Lambda memory, timeouts, and
 reserved concurrency, seven-day log retention, a throttled HTTP API, and one
-project-owned Secrets Manager credential. It contains no NAT Gateway,
+project-owned Secrets Manager credential. It also creates two no-action
+semantic-failure alarms and can publish at most two stack/service custom
+metric series when the boundary or authority fails closed. Their exact live
+regional price remains part of the final price recheck; the current `$3–$12`
+forecast retains contingency for them. It contains no NAT Gateway,
 always-on EC2 or ECS service, load balancer, or RDS instance. Adding any such
 resource, provisioned capacity, another paid domain, a renewal or auto-renew
 change, a paid DNS/hosting add-on, or other unnecessary persistent

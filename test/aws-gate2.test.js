@@ -122,7 +122,9 @@ function configureTestEnvironment() {
     PACKAGE_LOCK_DIGEST: "d".repeat(64),
     BEDROCK_MODEL_ID: "amazon.nova-micro-v1:0",
     AWS_REGION: "us-east-1",
+    AWS_LAMBDA_FUNCTION_NAME: "tideproof-gate2-boundary",
     AWS_LAMBDA_FUNCTION_VERSION: "7",
+    SEMANTIC_METRIC_DEPLOYMENT: "tideproof-gate2",
     AGENT_FUNCTION_VERSION: "3",
     SIGNER_FUNCTION_VERSION: "5",
     AGENT_FUNCTION_ARN: "arn:aws:lambda:us-east-1:111:function:agent:11",
@@ -137,6 +139,45 @@ function configureTestEnvironment() {
     ...DIGESTS
   });
 }
+
+test("boundary semantic failures emit provider-bound EMF without request data", () => {
+  configureTestEnvironment();
+  const metric = boundary.semanticFailureMetric(
+    "ADVISORY_UNAVAILABLE",
+    { awsRequestId: "request-123" },
+    () => 1_785_700_000_000
+  );
+
+  assert.deepEqual(metric, {
+    _aws: {
+      Timestamp: 1_785_700_000_000,
+      CloudWatchMetrics: [
+        {
+          Namespace: "Tideproof/GateTwo",
+          Dimensions: [["Deployment", "Service"]],
+          Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
+        }
+      ]
+    },
+    Deployment: "tideproof-gate2",
+    Service: "boundary",
+    SemanticFailures: 1,
+    schemaVersion: "tideproof.aws-semantic-failure.v1",
+    provider: "AWS_LAMBDA",
+    status: "UNKNOWN_DO_NOT_ACT",
+    code: "ADVISORY_UNAVAILABLE",
+    awsRequestId: "request-123",
+    region: "us-east-1",
+    functionName: "tideproof-gate2-boundary",
+    functionVersion: "7",
+    sourceCommit: HEX_40,
+    configDigest: HEX_64,
+    treeDigest: "c".repeat(40),
+    artifactDigest: DIGESTS.BOUNDARY_ARTIFACT_DIGEST
+  });
+  assert.equal(JSON.stringify(metric).includes("callerPrincipalHash"), false);
+  assert.equal(JSON.stringify(metric).includes("signedReceipt"), false);
+});
 
 function validRequestBinding() {
   return {
@@ -420,6 +461,55 @@ test("boundary rejects unsigned or shape-expanded public requests", () => {
     () => boundary.parsePublicRequest(injected),
     /REQUEST_SHAPE_REJECTED/
   );
+});
+
+test("boundary early fail-closed responses emit one semantic metric", async () => {
+  configureTestEnvironment();
+  const event = {
+    version: "2.0",
+    body: JSON.stringify({ scenarioId: "highwater-v1" }),
+    requestContext: {
+      accountId: process.env.EXPECTED_ACCOUNT_ID,
+      apiId: "wrong-api",
+      routeKey: "POST /advisory",
+      stage: "$default",
+      requestId: "api-request-early-failure",
+      timeEpoch: Date.now(),
+      http: { method: "POST", path: "/advisory" },
+      authorizer: {
+        iam: {
+          userArn:
+            "arn:aws:sts::111111111111:assumed-role/tideproof-advisory-caller/review-session"
+        }
+      }
+    }
+  };
+  const writes = [];
+  const originalWrite = process.stdout.write;
+  let result;
+  try {
+    process.stdout.write = (chunk) => {
+      writes.push(String(chunk));
+      return true;
+    };
+    result = await boundaryModule.handler(event, {
+      awsRequestId: "request-early-failure"
+    });
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(JSON.parse(result.body).code, "INVALID_REQUEST");
+  assert.equal(writes.length, 1);
+  const metric = JSON.parse(writes[0]);
+  assert.equal(metric.code, "INVALID_REQUEST");
+  assert.equal(metric.awsRequestId, "request-early-failure");
+  assert.equal(metric.SemanticFailures, 1);
+  assert.equal(JSON.stringify(metric).includes("api-request-early-failure"), false);
+  assert.deepEqual(metric._aws.CloudWatchMetrics[0].Dimensions, [
+    ["Deployment", "Service"]
+  ]);
 });
 
 test("boundary returns a signed advisory or fail-closed receipt without authority", async () => {
@@ -902,6 +992,7 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
       AUTHORITY_ARTIFACT_DIGEST: {
         Ref: "AuthorityArtifactDigest"
       },
+      SEMANTIC_METRIC_DEPLOYMENT: { Ref: "AWS::StackName" },
       TREE_DIGEST: { Ref: "TreeDigest" },
       PACKAGE_LOCK_DIGEST: { Ref: "PackageLockDigest" }
     }

@@ -363,6 +363,32 @@ function lambdaErrorAlarm(functionName, suffix) {
   };
 }
 
+function semanticFailureAlarm(service) {
+  return {
+    Type: "AWS::CloudWatch::Alarm",
+    Properties: {
+      AlarmName: sub(
+        `\${AWS::StackName}-${service}-semantic-failures`
+      ),
+      AlarmDescription:
+        "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
+      Namespace: "Tideproof/GateTwo",
+      MetricName: "SemanticFailures",
+      Statistic: "Sum",
+      Period: 60,
+      EvaluationPeriods: 1,
+      DatapointsToAlarm: 1,
+      Threshold: 1,
+      ComparisonOperator: "GreaterThanOrEqualToThreshold",
+      TreatMissingData: "notBreaching",
+      Dimensions: [
+        { Name: "Deployment", Value: ref("AWS::StackName") },
+        { Name: "Service", Value: service }
+      ]
+    }
+  };
+}
+
 function hexParameter(description, length = 64) {
   return {
     Type: "String",
@@ -998,6 +1024,7 @@ export function buildGate2Template() {
       CONFIG_DIGEST: ref("ConfigDigest"),
       AUTHORITY_SOURCE_DIGEST: ref("AuthoritySourceDigest"),
       AUTHORITY_ARTIFACT_DIGEST: ref("AuthorityArtifactDigest"),
+      SEMANTIC_METRIC_DEPLOYMENT: ref("AWS::StackName"),
       TREE_DIGEST: ref("TreeDigest"),
       PACKAGE_LOCK_DIGEST: ref("PackageLockDigest")
     }
@@ -1151,7 +1178,7 @@ export function buildGate2Template() {
 
   resources.DeploymentEvidenceRole = roleResource({
     description:
-      "Bounded deployment evidence collector; AWS requires one account-wide read to enumerate event-source mappings, while reviewed code queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
+      "Bounded deployment evidence collector; AWS requires account-wide read-only APIs for alarm drift and event-source enumeration, while reviewed code binds two alarms and queries five exact functions. It cannot invoke Lambda or mutate application, IAM, secret, model, or signing state.",
     assumeRolePolicy: assumeExactEvidencePrincipalPolicy(),
     statements: [
       {
@@ -1230,6 +1257,12 @@ export function buildGate2Template() {
         Sid: "ReadLambdaEventSourceCensus",
         Effect: "Allow",
         Action: ["lambda:ListEventSourceMappings"],
+        Resource: "*"
+      },
+      {
+        Sid: "ReadSemanticAlarmDrift",
+        Effect: "Allow",
+        Action: ["cloudwatch:DescribeAlarms"],
         Resource: "*"
       },
       {
@@ -1335,6 +1368,7 @@ export function buildGate2Template() {
       AGENT_ARTIFACT_DIGEST: ref("AgentArtifactDigest"),
       BOUNDARY_ARTIFACT_DIGEST: ref("BoundaryArtifactDigest"),
       SIGNER_ARTIFACT_DIGEST: ref("SignerArtifactDigest"),
+      SEMANTIC_METRIC_DEPLOYMENT: ref("AWS::StackName"),
       TREE_DIGEST: ref("TreeDigest"),
       PACKAGE_LOCK_DIGEST: ref("PackageLockDigest"),
       PROMPT_TEMPLATE_DIGEST: promptTemplateDigest,
@@ -1582,6 +1616,10 @@ export function buildGate2Template() {
     "AuthorityFunction",
     "authority"
   );
+  resources.BoundarySemanticFailureAlarm =
+    semanticFailureAlarm("boundary");
+  resources.AuthoritySemanticFailureAlarm =
+    semanticFailureAlarm("authority");
   return {
     AWSTemplateFormatVersion: "2010-09-09",
     Description:
