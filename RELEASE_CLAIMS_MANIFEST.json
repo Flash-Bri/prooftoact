@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-claims-manifest.v1",
   "status": "CURRENT_PUBLIC_CLAIMS_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-01",
+  "reviewedOn": "2026-08-02",
   "claimBoundary": "This inventory binds only the current public claim surfaces to reviewed pending-state copy. It does not prove claim truth, authorize deployment or publication, or replace the exact-release private human review.",
   "finalReleaseRequirements": [
     "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
@@ -42,7 +42,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "7782ddaebefb2494e1550e3d8ebdc1601cfcc2da91214b8b39266b04a7e0f295"
+      "sha256": "c3603723627f6143bd0cb3c655b0dab77450af30350c5b96125c516988259951"
     },
     {
       "id": "contest-matrix",
@@ -66,7 +66,7 @@
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "b27d160f901007fb97db065e7ec7fdaf9a6f8d25746af001eb00ec7f747123cf"
+      "sha256": "3ab210e6b6cd0a04ca5f28ca1fa863e71df95456a7e93fad08cf1ce2b349ba51"
     },
     {
       "id": "release-claims-ledger",

@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-governance-manifest.v1",
   "status": "CURRENT_REPOSITORY_GOVERNANCE_REVIEWED_FINAL_RECHECK_PENDING",
-  "reviewedOn": "2026-08-01",
+  "reviewedOn": "2026-08-02",
   "claimBoundary": "This manifest binds a sanitized historical GitHub governance observation and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.",
   "repository": {
     "fullName": "Flash-Bri/tideproof",
@@ -34,7 +34,7 @@
       "id": "public-readme",
       "path": "README.md",
       "role": "PUBLIC_PROJECT_SURFACE",
-      "sha256": "b27d160f901007fb97db065e7ec7fdaf9a6f8d25746af001eb00ec7f747123cf"
+      "sha256": "3ab210e6b6cd0a04ca5f28ca1fa863e71df95456a7e93fad08cf1ce2b349ba51"
     },
     {
       "id": "security-policy",

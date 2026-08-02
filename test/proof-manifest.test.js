@@ -1,17 +1,34 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { AUTHORITY_RACE_RECEIPT_SCHEMA } from "../src/cloud/aws-authority-race.js";
 import { verifyProofManifest } from "../scripts/verify-proof-manifest.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const DVI_AWS_SOURCE_BOUNDARY =
+  "The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff.";
 
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function oneIntegerMatch(source, pattern, label) {
+  const matches = [...source.matchAll(pattern)];
+  assert.equal(matches.length, 1, `${label} must appear exactly once`);
+  const value = Number(matches[0][1]);
+  assert(Number.isSafeInteger(value), `${label} must be an integer`);
+  return value;
 }
 
 function makeFixture() {
@@ -87,6 +104,106 @@ test("current proof manifest binds every claim and exact artifact", () => {
   assert.equal(receipt.artifactCount, 90);
   assert.equal(receipt.releaseControlCount, 16);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
+});
+
+test("release copy matches executable and generated source contracts", () => {
+  const read = (relativePath) =>
+    readFileSync(path.join(ROOT, relativePath), "utf8");
+  const readme = read("README.md");
+  const claims = read("CLAIMS.md");
+  const fullDrill = read("docs/FULL_DRILL_EVIDENCE.md");
+  const awsBoundary = read("docs/AWS_GATE2.md");
+  const notices = read("THIRD_PARTY_NOTICES.txt");
+  const inventory = read("docs/DEPENDENCY_INVENTORY.md");
+  const manifest = JSON.parse(read("PROOF_MANIFEST.json"));
+
+  const noticeCount = oneIntegerMatch(
+    notices,
+    /^Bundled package union: (\d+)$/gmu,
+    "notice package count"
+  );
+  const inventoryCount = oneIntegerMatch(
+    inventory,
+    /^- Complete locked package records: \*\*(\d+)\*\*$/gmu,
+    "inventory package count"
+  );
+  const readmeCount = oneIntegerMatch(
+    readme,
+    /binds the (\d+)-package union/gu,
+    "README package count"
+  );
+  assert.equal(readmeCount, noticeCount);
+
+  const dependencyControl = manifest.releaseControls.find(
+    ({ id }) => id === "dependency-inventory-control"
+  );
+  assert(dependencyControl, "dependency inventory proof control missing");
+  assert.equal(
+    oneIntegerMatch(
+      dependencyControl.boundary,
+      /complete (\d+)-package inventory/gu,
+      "proof inventory package count"
+    ),
+    inventoryCount
+  );
+
+  for (const [label, source] of [
+    ["CLAIMS.md", claims],
+    ["docs/FULL_DRILL_EVIDENCE.md", fullDrill],
+    ["docs/AWS_GATE2.md", awsBoundary],
+  ]) {
+    const schemas = [
+      ...new Set(
+        [...source.matchAll(/tideproof\.aws-authority-race-receipt\.v\d+/gu)].map(
+          ([schema]) => schema
+        )
+      ),
+    ];
+    assert.deepEqual(schemas, [AUTHORITY_RACE_RECEIPT_SCHEMA], label);
+  }
+
+  const fullDrillClaim = manifest.claims.find(
+    ({ id }) => id === "full-highwater-drills"
+  );
+  assert(fullDrillClaim, "full drill proof claim missing");
+  const claimRows = claims.split("\n");
+  const dviClaimRows = [
+    [
+      "DVI ranking claim",
+      claimRows.find((line) =>
+        line.startsWith(
+          "| CockroachDB Distributed Vector Indexing ranks a database-produced snapshot"
+        )
+      ),
+    ],
+    [
+      "full high-water drill claim",
+      claimRows.find((line) =>
+        line.startsWith("| One hundred full high-water drills bind")
+      ),
+    ],
+  ];
+  for (const [label, row] of dviClaimRows) {
+    assert(row, `${label} missing from CLAIMS.md`);
+  }
+
+  for (const [label, source] of [
+    ...dviClaimRows,
+    ["docs/FULL_DRILL_EVIDENCE.md", fullDrill],
+    ["PROOF_MANIFEST.json", fullDrillClaim.acceptanceBoundary],
+  ]) {
+    const normalized = source.replace(/\s+/gu, " ");
+    assert.equal(
+      normalized.split(DVI_AWS_SOURCE_BOUNDARY).length - 1,
+      1,
+      label
+    );
+    assert.doesNotMatch(
+      normalized,
+      /\bAWS(?: authority request| path)? does not yet consume\b/u,
+      label
+    );
+  }
 });
 
 test("current proof manifest recursively requires release-security PASS", () => {
