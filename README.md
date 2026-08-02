@@ -146,7 +146,7 @@ identifiers, optional state, and install-script flag. Run
 `npm run dependencies:verify` to reject drift, unreviewed license identifiers,
 non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
 The generated [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) separately
-binds the 42-package union whose source is actually present in the six Gate
+binds the 46-package union whose source is actually present in the six Gate
 Two bundles, including exact license-text hashes and five explicit fallbacks
 for published packages that omit a standalone license file. Run
 `npm run licenses:verify` to rebuild the esbuild input graph and reject package,

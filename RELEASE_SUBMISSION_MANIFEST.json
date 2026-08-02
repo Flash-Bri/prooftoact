@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-submission-manifest.v1",
   "status": "DRAFT_SAFELY_BLOCKED_FINAL_RELEASE_RECEIPTS_PENDING",
-  "reviewedOn": "2026-08-01",
+  "reviewedOn": "2026-08-02",
   "claimBoundary": "This manifest binds only the current source draft and its fail-closed release dependencies. It does not query Devpost or official competition pages, determine eligibility, verify entrant identity or authority, prove live services, or authorize deployment, publication, or submission.",
   "coordinates": {
     "competitionOverview": "https://cockroachdb-ai.devpost.com/",
@@ -57,7 +57,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_BOUNDARY",
-      "sha256": "7782ddaebefb2494e1550e3d8ebdc1601cfcc2da91214b8b39266b04a7e0f295"
+      "sha256": "c3603723627f6143bd0cb3c655b0dab77450af30350c5b96125c516988259951"
     },
     {
       "id": "contest-matrix",
@@ -69,7 +69,7 @@
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
       "role": "PUBLIC_CLAIM_INVENTORY",
-      "sha256": "fddf886c2ac7876bafce152fbab5558dd6aec6cbf76aed0b360f72d38e30e6fe"
+      "sha256": "681a2f332d4e8cb83730f9e7eecce1a1263c93e38a3ce0c185819b69e38db6b8"
     },
     {
       "id": "release-submission-ledger",

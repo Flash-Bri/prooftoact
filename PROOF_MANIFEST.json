@@ -157,7 +157,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "7782ddaebefb2494e1550e3d8ebdc1601cfcc2da91214b8b39266b04a7e0f295",
+      "sha256": "c3603723627f6143bd0cb3c655b0dab77450af30350c5b96125c516988259951",
       "kind": "boundary-ledger"
     },
     {
@@ -241,7 +241,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "5d068b866e0b61dc02b96be0a996f5a040da99465e6d0a23bcc1d5b8d030aeef",
+      "sha256": "9b379beb508c8d2781b4083f03bf0d264f201e6b2aafbd4bab302df516405179",
       "kind": "boundary-ledger"
     },
     {
@@ -337,7 +337,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "9a7b565ecf89b2599bce2a20e5fe65934b913f7ca6e6917ff397f5d126133ccd",
+      "sha256": "649493244e629f4379edb941ead0a85ae696f5a6c246cdd8641f68fdff1cc015",
       "kind": "verification-code"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "fddf886c2ac7876bafce152fbab5558dd6aec6cbf76aed0b360f72d38e30e6fe",
+      "sha256": "681a2f332d4e8cb83730f9e7eecce1a1263c93e38a3ce0c185819b69e38db6b8",
       "kind": "boundary-ledger"
     },
     {
@@ -415,7 +415,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "d99a3ddad7323c6326c53d75678394d317d02e143c100ae2c20ba83762fa4f06",
+      "sha256": "6f4914c8472f96acc1278984356cc40e336799b5ea6229f36a14d19fc79e0452",
       "kind": "boundary-ledger"
     },
     {
@@ -475,7 +475,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "5bf1542c7e3b91cda5cf10cf1c441df12bc69fb5e21a40b9c6c419e409e131bc",
+      "sha256": "578cbed547b9173760dd9b52e10b706bfeb73a7d5b2630277592b6f319b6882a",
       "kind": "boundary-ledger"
     },
     {
@@ -523,7 +523,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "274931a64e5ad6e9e045b04f8fc3f2ed86b8f1091c29fe3e4ffa0997da2f9947",
+      "sha256": "ac78779a110a20a7543b4dbab4916ed5475e8b09c4b2f3798f11029fe3674f72",
       "kind": "boundary-ledger"
     },
     {
@@ -615,7 +615,7 @@
       "artifacts": [
         "full-drill-evidence"
       ],
-      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. The DVI candidate emits a run-bound top-evidence digest, but the AWS authority path does not yet consume it. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
+      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
       "remainingRequirements": [
         "Implement the bounded live batch harness, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-source-bound winner recovery through Managed MCP, replay checks, cleanup, and zero invariant violations."
       ]
@@ -809,7 +809,7 @@
         "dependency-inventory-verifier",
         "dependency-lock"
       ],
-      "boundary": "The exact current package lock, complete 74-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. The MPL-2.0 axe-core record is development-only and is not part of the bundled package union. These controls do not prove the final deployed bundle or independent legal clearance.",
+      "boundary": "The exact current package lock, complete 76-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. The MPL-2.0 axe-core record is development-only and is not part of the bundled package union. These controls do not prove the final deployed bundle or independent legal clearance.",
       "remainingRequirements": [
         "Rerun all dependency, provenance, vulnerability, and artifact controls at the final release commit and reconcile the exact uploaded and deployed bundles."
       ]

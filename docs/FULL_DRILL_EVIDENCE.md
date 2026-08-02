@@ -74,20 +74,23 @@ may be referenced by digest, but they are not counted as full drills.
 ## Present release boundary
 
 The source tree now contains stronger replay, recovery, DVI-snapshot, AWS
-evidence, timeout, and resource-bound controls. The DVI proof candidate now
-binds its selected top-ranked evidence to one exact synthetic drill run, but
-the AWS authority request does not yet consume that binding. The
-provider-backed batch harness, bounded multi-race deployment shape, and live
-receipt do not yet exist. The exact cross-act recovery lookup now has a locally
-tested source control, but no provider-backed receipt. Public claims and final
-release readiness must therefore remain partial and blocked.
+evidence, timeout, and resource-bound controls. The DVI proof candidate binds
+its selected top-ranked evidence to one exact synthetic drill run. The source
+path now consumes database-authorized DVI proposal identities and the exact
+selected-evidence digest, but no provider-backed receipt yet proves the live
+DVI-to-AWS handoff. The provider-backed batch harness, bounded multi-race
+deployment shape, and live receipt do not yet exist. The exact cross-act
+recovery lookup now has a locally tested source control, but no provider-backed
+receipt. Public claims and final release readiness must therefore remain
+partial and blocked.
 
-The sanitized `tideproof.aws-authority-race-receipt.v4` now carries the exact
-configured active-run UUID, and its durable proof rejects a database
-observation for any other run. This closes one source-level prerequisite for
-joining the authority race to a per-drill identity. It does not yet bind the
-ranked evidence selection to that authority request, create the 100-run
-provider harness, or produce live evidence.
+The sanitized `tideproof.aws-authority-race-receipt.v5` source contract carries
+the exact configured active-run UUID and validates each contender's configured
+proposal identity and selected-evidence digest against the committed database
+response. Its durable proof rejects a database observation for any other run.
+This closes source-level prerequisites for joining the authority race to a
+per-drill DVI identity. It does not prove the live authorizer, exact retrieval
+prefixes, provider concurrency, the 100-run harness, or any live evidence.
 
 ## Exact cross-act recovery lookup
 
