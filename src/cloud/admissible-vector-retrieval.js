@@ -554,7 +554,6 @@ export async function proveAdmissibleVectorSnapshot({
   const specSha256 = sha256(canonicalJson(canonicalSpec));
   let authorizer;
   let auditor;
-  let prepareAttempted = false;
   let prepared = false;
   let preparedCandidateCount = null;
   let preparedTiming = null;
@@ -574,7 +573,6 @@ export async function proveAdmissibleVectorSnapshot({
       "ADMISSIBLE_VECTOR_DATABASE_IDENTITY_MISMATCH"
     );
 
-    prepareAttempted = true;
     const preparationInput = {
       tenantId: accepted.tenantId,
       retrievalId: accepted.retrievalId,
@@ -617,7 +615,6 @@ export async function proveAdmissibleVectorSnapshot({
       preparedResult.rowCount === 1,
       "ADMISSIBLE_VECTOR_PREPARE_INVALID"
     );
-    prepared = true;
     preparedCandidateCount = integerFromRow(
       preparedResult.rows[0]?.candidate_count,
       "candidate_count",
@@ -632,6 +629,7 @@ export async function proveAdmissibleVectorSnapshot({
       accepted.retrievalId,
       accepted.ttlMs
     );
+    prepared = true;
 
     const candidateResult = await auditor.query(
       `
@@ -669,31 +667,56 @@ export async function proveAdmissibleVectorSnapshot({
     );
 
     const exclusionReasons = {};
+    const exclusionObservations = [];
     for (const exclusion of accepted.exclusionCases) {
       const observed = await authorizer.query(
         `
           SELECT *
-          FROM tp_api.g1_observe_admissibility_v2(
-            $1::UUID, $2::UUID, $3::UUID, $4
+          FROM tp_api.g1_observe_vector_exclusion_v1(
+            $1::UUID, $2::UUID, $3::UUID, $4::UUID, $5, $6
           )
         `,
         [
           accepted.tenantId,
+          accepted.retrievalId,
           exclusion.evidenceId,
           accepted.incidentId,
-          accepted.agency
+          accepted.agency,
+          POLICY_VERSION
         ]
       );
+      const snapshotAdmittedAt = new Date(
+        timestampFromRow(
+          observed.rows[0]?.snapshot_admitted_at,
+          "snapshot_admitted_at"
+        )
+      ).toISOString();
       assert(
         observed.rowCount === 1 &&
           observed.rows[0]?.admissibility === exclusion.reason &&
           typeof observed.rows[0]?.evidence_digest === "string" &&
-          SHA256.test(observed.rows[0].evidence_digest),
+          SHA256.test(observed.rows[0].evidence_digest) &&
+          snapshotAdmittedAt === preparedTiming.admittedAt,
         "ADMISSIBLE_VECTOR_PROOF_EXCLUSION_REASON"
       );
       exclusionReasons[exclusion.reason] =
         (exclusionReasons[exclusion.reason] ?? 0) + 1;
+      exclusionObservations.push({
+        evidenceId: exclusion.evidenceId,
+        evidenceDigest: observed.rows[0].evidence_digest,
+        reason: exclusion.reason,
+        snapshotAdmittedAt
+      });
     }
+    const requiredExclusionObservationsSha256 = sha256(canonicalJson(
+      exclusionObservations.sort((left, right) =>
+        left.evidenceId < right.evidenceId
+          ? -1
+          : left.evidenceId > right.evidenceId
+            ? 1
+            : 0
+      )
+    ));
 
     const planResult = await auditor.query(
       `
@@ -907,6 +930,8 @@ export async function proveAdmissibleVectorSnapshot({
         candidateSetSha256,
         exclusionCaseCount: accepted.exclusionCases.length,
         exclusionReasons,
+        requiredExclusionObservationsSha256,
+        requiredExclusionsBoundToSnapshot: true,
         nearestExcludedCloserThanRanked: true
       },
       snapshot: {
@@ -929,12 +954,12 @@ export async function proveAdmissibleVectorSnapshot({
       },
       cleanup: null,
       claimBoundary:
-        "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, its synthetic drill identity, a non-reversible binding from the top-ranked admissible evidence to the exact source, spec, snapshot, and ranked sequence, the required adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove that AWS consumed the binding, authorization, the 100-drill batch, production suitability, or final release readiness."
+        "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, its synthetic drill identity, a non-reversible binding from the top-ranked admissible evidence to the exact source, spec, snapshot, and ranked sequence, the persisted snapshot-bound adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove that AWS consumed the binding, authorization, the 100-drill batch, production suitability, or final release readiness."
     };
   } catch (error) {
     primaryError = error;
   } finally {
-    if (prepareAttempted) {
+    if (prepared) {
       try {
         const cleaned = await authorizer.query(
           `
@@ -976,6 +1001,12 @@ export async function proveAdmissibleVectorSnapshot({
                   WHERE candidate.tenant_id = retrieval.tenant_id
                     AND candidate.retrieval_id = retrieval.retrieval_id
                 ) AS remaining_candidates
+                ,(
+                  SELECT count(*)::INT8
+                  FROM tp_private.g1_vector_exclusions AS exclusion
+                  WHERE exclusion.tenant_id = retrieval.tenant_id
+                    AND exclusion.retrieval_id = retrieval.retrieval_id
+                ) AS remaining_exclusions
               FROM tp_private.g1_vector_retrieval_sets AS retrieval
               WHERE retrieval.tenant_id = $1::UUID
                 AND retrieval.retrieval_id = $2::UUID
@@ -999,6 +1030,11 @@ export async function proveAdmissibleVectorSnapshot({
                 retired.rows[0]?.remaining_candidates,
                 "remaining_candidates",
                 PROOF_CANDIDATE_COUNT
+              ) === 0 &&
+              integerFromRow(
+                retired.rows[0]?.remaining_exclusions,
+                "remaining_exclusions",
+                10_000
               ) === 0,
             "ADMISSIBLE_VECTOR_PROOF_RETIREMENT_INVALID"
           );
@@ -1009,6 +1045,7 @@ export async function proveAdmissibleVectorSnapshot({
             deletedCandidateCount,
             retiredSetCount,
             remainingCandidateCount: 0,
+            remainingExclusionCount: 0,
             snapshotRetired: true,
             cleanedAt
           };
@@ -1124,14 +1161,12 @@ export class AdmissibleVectorRetriever {
         if (preparedResult?.rowCount !== 1) {
           throw error;
         }
-        prepared = true;
         preparationObservation = "read_reconciled";
         client = await this.#pool.connect();
       }
       if (preparedResult.rowCount !== 1) {
         throw new Error("ADMISSIBLE_VECTOR_PREPARE_INVALID");
       }
-      prepared = true;
       const preparedRow = preparedResult.rows[0];
       const candidateCount = integerFromRow(
         preparedRow.candidate_count,
@@ -1144,6 +1179,7 @@ export class AdmissibleVectorRetriever {
         retrieval,
         acceptedTtl
       );
+      prepared = true;
       const ranked = await client.query(
         `
           SELECT *

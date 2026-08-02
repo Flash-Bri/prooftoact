@@ -12,7 +12,7 @@
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
       "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
-      "sha256": "5d1e325bb5fb62d94f2b402ac60f39e24d5a0a12bc52c5d91a210d42074a8eab"
+      "sha256": "3d2f77d9d943db995cd53b705123a6c1d4f04b26a575d3e61a8a80a8c0436620"
     },
     {
       "id": "admissible-vector-runner",
@@ -66,7 +66,7 @@
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "5b6f80f63510f36ba9b2afd7b44337d2e25d888b8518a9efd0cebdea3c08f46a"
+      "sha256": "934496d65b0733c224d40c087bf3b0220d01381dc756ce8460e4c5cf4bb56a97"
     },
     {
       "id": "aws-alternate-principal-denial-runner",
@@ -222,7 +222,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "9d80aec4892aade70118f8f230e2cb067c95b37d93b8731ffeff3010ba74570c"
+      "sha256": "80033fcd249bc116a8e19cb066544316b4f9682bb05e8dafd15def79c7194c4a"
     },
     {
       "id": "database-security-posture",
@@ -276,7 +276,7 @@
       "id": "dvi-reconciliation-tests",
       "path": "test/admissible-vector-retrieval.test.js",
       "role": "DVI_PREPARATION_RECONCILIATION_VERIFICATION",
-      "sha256": "b90834e5cec111cd1867009b99f6b1c18072f85980e43134cb7071e4a4d24bb5"
+      "sha256": "2ad0996f8e031c28f4b6691209c2904956924a26e5907c280a364e574e04e0e4"
     },
     {
       "id": "exact-git-source",
@@ -324,7 +324,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "c25a9c2ec59565471c6e5a84720c064d7ef51afed948ca887a6c31a2a9a4ff68"
+      "sha256": "a18fb1f56e42368d6f07373f112e33352b8d6ac0f720cd9d1e0f79a1add0cf95"
     },
     {
       "id": "primary-security-runner",

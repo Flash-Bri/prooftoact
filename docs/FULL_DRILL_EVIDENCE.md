@@ -143,8 +143,8 @@ The spec binds:
   row.
 
 The authorizer session creates the snapshot only through
-`tp_api.g1_prepare_vector_set_v1`, observes every exclusion through
-`tp_api.g1_observe_admissibility_v2`, ranks only through
+`tp_api.g1_prepare_vector_set_v1`, observes every required exclusion from the
+persisted snapshot through `tp_api.g1_observe_vector_exclusion_v1`, ranks only through
 `tp_api.g1_rank_vector_set_v1`, and retires only through
 `tp_api.g1_delete_vector_set_v1`. The auditor session reads the private
 candidate IDs, validates the expected set digest, captures
@@ -153,7 +153,10 @@ candidate IDs, validates the expected set digest, captures
 spans. The auditor then executes that exact ranked query and requires its
 ordered results to match the authorizer function byte-for-byte. It also proves
 the designated inadmissible row is semantically closer than the first returned
-candidate and verifies zero candidate rows remain after retirement.
+candidate and verifies zero candidate or private exclusion rows remain after
+retirement. The sanitized receipt retains only a non-reversible digest of the
+seven required snapshot-bound observations, bounding private row retention to
+the live snapshot and its expiry purge.
 
 The emitted `tideproof.gate1.admissible-vector-proof.v2` receipt contains the
 synthetic drill-run UUID plus a non-reversible authority-evidence binding over
@@ -164,11 +167,50 @@ snapshot and cleanup timestamps; counts; reason labels; and an order-sensitive
 ranked-result digest. It does not emit credentials, usernames, endpoints, raw
 plans, tenant, incident, retrieval, or evidence IDs, or query vectors.
 
-Both database sessions must report the same CockroachDB cluster, any prepare
-attempt still attempts retirement, and a cleanup failure is preserved
+Both database sessions must report the same CockroachDB cluster. Retirement is
+attempted only after an exact direct or read-reconciled prepare receipt has
+validated the snapshot identity; an uncommitted or unresolved prepare never
+deletes by the caller-supplied retrieval ID. A cleanup failure is preserved
 alongside the primary failure. Pool shutdown must also succeed before the
 `PASS` receipt is emitted. A `PASS` remains subject to independent acceptance
 review and does not prove that AWS consumed the binding or satisfy the
 100-drill, authorization, production-safety, or final-release gates by itself.
 
 No provider-backed receipt from this lane exists yet.
+
+## Snapshot-bound exclusion finding
+
+- Root cause: the proof prepared an immutable admissible candidate snapshot,
+  but re-evaluated each expected inadmissible row through the current-policy
+  observer in later transactions. A reason could therefore drift after
+  snapshot admission without being attributable to the snapshot that was
+  ranked.
+- Why it was missed: the original tests changed the returned reason, but their
+  mock represented both preparation and observation with one fixed clock.
+  They did not make a later current-policy observation disagree with the
+  snapshot admission instant.
+- Earliest detection: require every exclusion observation to carry the exact
+  retrieval ID and `admitted_at`, then reject an otherwise-correct reason from
+  any other instant before ranking or selection publication.
+- Repair: `g1_prepare_vector_set_v1` now persists every bounded inadmissible
+  evidence identity, available digest, and reason beside the retrieval ID at
+  the database-owned snapshot time. The authorizer reads those records only
+  through `g1_observe_vector_exclusion_v1`, whose exact retrieval, incident, agency,
+  policy, evidence, and admission-time joins do not re-run current policy.
+  Snapshot retirement or expiry purge removes both vector candidates and the
+  private exclusion rows; only the sanitized receipt's non-reversible digest
+  of the seven required observations survives cleanup.
+- Regression and preventive control: source tests require the private table,
+  ownership and least-privilege function grant, exact bounded cleanup behavior,
+  and an exact session-user guard. The integrated proof rejects current-policy
+  fallback, a changed reason, or a changed snapshot time and publishes only a
+  non-reversible digest of the seven private observations.
+- Verification: local source and integrated proof tests exercise the direct
+  path and ACK-loss preparation reconciliation. Provider-backed CockroachDB
+  v26.2 execution remains pending.
+- Residual risk: the persisted source contract does not prove a live DVI plan,
+  the actual provider authorizer, AWS consumption, the 100-drill batch, or
+  cluster-wide inherited-capability exclusion.
+- Claim impact: source can claim persisted snapshot-bound exclusion reasons;
+  live and release claims remain blocked until the fresh provider receipt and
+  independent acceptance review pass.

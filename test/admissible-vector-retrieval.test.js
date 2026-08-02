@@ -270,6 +270,10 @@ test("integrated retrieval fails closed on zero, multiple, or drifted preparatio
       /ADMISSIBLE_VECTOR_(?:PREPARE_COMMIT_UNKNOWN|PREPARE_BINDING_INVALID)/u
     );
     assert.equal(pool.releases[0], commitError);
+    assert.equal(
+      pool.calls.some(({ text }) => text.includes("g1_delete_vector_set_v1")),
+      false
+    );
   }
 });
 
@@ -428,6 +432,8 @@ function proofPools({
   planUsesVectorIndex = true,
   nearestExcludedDistance = 0.001,
   changedExclusionReason = null,
+  missingExclusionDigest = false,
+  changedExclusionSnapshotTime = null,
   candidateIds = PROOF_CANDIDATE_IDS,
   prepareError = null,
   prepareCommitError = null,
@@ -498,17 +504,26 @@ function proofPools({
           rows
         };
       }
-      if (text.includes("g1_observe_admissibility_v2")) {
+      if (text.includes("g1_observe_vector_exclusion_v1")) {
+        const exactBinding =
+          values[0] === spec.tenantId &&
+          values[1] === spec.retrievalId &&
+          values[3] === spec.incidentId &&
+          values[4] === spec.agency &&
+          values[5] === "g1-admissibility-v2";
         const exclusion = PROOF_EXCLUSIONS.find(
-          ({ evidenceId }) => evidenceId === values[1]
+          ({ evidenceId }) => evidenceId === values[2]
         );
+        if (!exactBinding || !exclusion) return { rowCount: 0, rows: [] };
         return {
           rowCount: 1,
           rows: [{
             admissibility:
               changedExclusionReason ?? exclusion?.reason ?? "admissible",
-            evidence_digest: "e".repeat(64),
-            database_now: new Date("2026-08-01T12:00:01.000Z")
+            evidence_digest: missingExclusionDigest ? null : "e".repeat(64),
+            snapshot_admitted_at:
+              changedExclusionSnapshotTime ??
+              new Date("2026-08-01T12:00:00.000Z")
           }]
         };
       }
@@ -631,7 +646,8 @@ function proofPools({
           rows: [{
             candidate_count: String(__test.PROOF_CANDIDATE_COUNT),
             cleaned_at: "2026-08-01T12:00:02.000Z",
-            remaining_candidates: "0"
+            remaining_candidates: "0",
+            remaining_exclusions: "0"
           }]
         };
       }
@@ -697,6 +713,11 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
     Object.keys(receipt.fixture.exclusionReasons).sort(),
     [...__test.REQUIRED_EXCLUSION_REASONS]
   );
+  assert.match(
+    receipt.fixture.requiredExclusionObservationsSha256,
+    /^[0-9a-f]{64}$/u
+  );
+  assert.equal(receipt.fixture.requiredExclusionsBoundToSnapshot, true);
   assert.equal(receipt.ranking.indexName, __test.VECTOR_INDEX_NAME);
   assert.equal(receipt.ranking.vectorSearchUsed, true);
   assert.equal(receipt.ranking.exactPrefixSpansUsed, true);
@@ -704,6 +725,7 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
   assert.match(receipt.ranking.rankedSequenceSha256, /^[0-9a-f]{64}$/u);
   assert.equal(receipt.ranking.auditorRankMatchesAuthorizer, true);
   assert.equal(receipt.cleanup.deletedCandidateCount, 10_000);
+  assert.equal(receipt.cleanup.remainingExclusionCount, 0);
   assert.equal(receipt.cleanup.snapshotRetired, true);
   assert.equal(receipt.cleanup.cleanedAt, "2026-08-01T12:00:02.000Z");
   const publicReceipt = JSON.stringify(receipt);
@@ -713,6 +735,27 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
   assert.equal(publicReceipt.includes(PROOF_CANDIDATE_IDS[0]), false);
   assert.equal(pools.authorizerReleasedWith, undefined);
   assert.equal(pools.auditorReleasedWith, undefined);
+  assert.equal(
+    pools.authorizerCalls.some(({ text }) =>
+      text.includes("g1_observe_admissibility_v2")
+    ),
+    false
+  );
+  const exclusionCalls = pools.authorizerCalls.filter(({ text }) =>
+    text.includes("g1_observe_vector_exclusion_v1")
+  );
+  assert.equal(exclusionCalls.length, 7);
+  assert.deepEqual(
+    exclusionCalls.map(({ values }) => values),
+    PROOF_EXCLUSIONS.map(({ evidenceId }) => [
+      proofSpec().tenantId,
+      proofSpec().retrievalId,
+      evidenceId,
+      proofSpec().incidentId,
+      proofSpec().agency,
+      "g1-admissibility-v2"
+    ])
+  );
 });
 
 test("integrated DVI proof reconciles exact preparation after ACK loss", async () => {
@@ -759,6 +802,12 @@ test("integrated DVI proof fails closed on zero, multiple, or drifted preparatio
       /ADMISSIBLE_VECTOR_(?:PREPARE_COMMIT_UNKNOWN|PREPARE_BINDING_INVALID)/u
     );
     assert.equal(pools.authorizerReleases[0], commitError);
+    assert.equal(
+      pools.authorizerCalls.some(({ text }) =>
+        text.includes("g1_delete_vector_set_v1")
+      ),
+      false
+    );
   }
 });
 
@@ -824,12 +873,22 @@ test("integrated DVI proof rejects a non-vector plan and still retires the snaps
 
 test("integrated DVI proof rejects changed exclusions and a non-closer adversary", async () => {
   await assert.rejects(
+    runProof(proofPools({ missingExclusionDigest: true })),
+    /ADMISSIBLE_VECTOR_PROOF_EXCLUSION_REASON/
+  );
+  await assert.rejects(
     runProof(proofPools({ changedExclusionReason: "admissible" })),
     /ADMISSIBLE_VECTOR_PROOF_EXCLUSION_REASON/
   );
   await assert.rejects(
     runProof(proofPools({ nearestExcludedDistance: 0.5 })),
     /ADMISSIBLE_VECTOR_PROOF_NEAREST_EXCLUSION_NOT_CLOSER/
+  );
+  await assert.rejects(
+    runProof(proofPools({
+      changedExclusionSnapshotTime: new Date("2026-08-01T11:59:59.000Z")
+    })),
+    /ADMISSIBLE_VECTOR_PROOF_EXCLUSION_REASON/
   );
 });
 
@@ -865,7 +924,7 @@ test("integrated DVI proof binds both sessions to one CockroachDB cluster", asyn
   );
 });
 
-test("integrated DVI proof attempts retirement after an uncertain prepare", async () => {
+test("integrated DVI proof never retires after a pre-COMMIT prepare failure", async () => {
   const prepareError = new Error("prepare response uncertain");
   const pools = proofPools({ prepareError });
   await assert.rejects(runProof(pools), /prepare response uncertain/u);
@@ -873,21 +932,22 @@ test("integrated DVI proof attempts retirement after an uncertain prepare", asyn
     pools.authorizerCalls.some(({ text }) =>
       text.includes("g1_delete_vector_set_v1")
     ),
-    true
+    false
   );
   assert.equal(pools.authorizerReleasedWith, prepareError);
 });
 
-test("integrated DVI proof preserves uncertain prepare and cleanup failures", async () => {
-  const prepareError = new Error("prepare response uncertain");
+test("integrated DVI proof preserves operation and cleanup failures", async () => {
+  const prepareError = new Error("synthetic plan failure");
   const cleanupError = new Error("cleanup response uncertain");
-  const pools = proofPools({ prepareError, cleanupError });
+  const pools = proofPools({ planUsesVectorIndex: false, cleanupError });
   await assert.rejects(runProof(pools), (error) => {
     assert.equal(
       error.message,
       "ADMISSIBLE_VECTOR_OPERATION_AND_CLEANUP_FAILED"
     );
-    assert.deepEqual(error.errors, [prepareError, cleanupError]);
+    assert.match(error.errors[0].message, /ADMISSIBLE_VECTOR_PLAN_INDEX_MISSING/);
+    assert.equal(error.errors[1], cleanupError);
     return true;
   });
 });

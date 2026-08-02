@@ -55,6 +55,7 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
       "g1_observe_admissibility_v1(UUID, UUID, UUID, STRING)",
       "g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
       "g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
+      "g1_observe_vector_exclusion_v1(UUID, UUID, UUID, UUID, STRING, STRING)",
       "g1_resolve_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
       "g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
       "g1_commit_dvi_selection_v1(UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, INT8, STRING)",
@@ -923,6 +924,7 @@ async function createFunctions(client) {
     AS $$
     DECLARE
       v_candidate_count INT8;
+      v_exclusion_count INT8;
       v_admitted_at TIMESTAMPTZ;
       v_expires_at TIMESTAMPTZ;
     BEGIN
@@ -952,10 +954,19 @@ async function createFunctions(client) {
         FROM tp_private.g1_vector_candidates AS candidate
         WHERE candidate.tenant_id = p_tenant_id
           AND candidate.retrieval_id = p_retrieval_id
+      ) OR EXISTS (
+        SELECT 1
+        FROM tp_private.g1_vector_exclusions AS exclusion
+        WHERE exclusion.tenant_id = p_tenant_id
+          AND exclusion.retrieval_id = p_retrieval_id
       ) THEN
         RAISE EXCEPTION 'retrieval identifier already used'
           USING ERRCODE = '23505';
       END IF;
+
+      v_admitted_at := transaction_timestamp();
+      v_expires_at :=
+        v_admitted_at + p_ttl_ms * INTERVAL '1 millisecond';
 
       SELECT count(*)::INT8
       INTO v_candidate_count
@@ -967,6 +978,18 @@ async function createFunctions(client) {
       WHERE listed.admissibility = 'admissible';
       IF v_candidate_count > 10000 THEN
         RAISE EXCEPTION 'admissible candidate set exceeds policy cap'
+          USING ERRCODE = '54000';
+      END IF;
+      SELECT count(*)::INT8
+      INTO v_exclusion_count
+      FROM tp_private.g1_list_admissibility_internal_v1(
+        p_tenant_id,
+        p_incident_id,
+        p_agency
+      ) AS listed
+      WHERE listed.admissibility <> 'admissible';
+      IF v_exclusion_count > 10000 THEN
+        RAISE EXCEPTION 'inadmissible evidence set exceeds policy cap'
           USING ERRCODE = '54000';
       END IF;
       IF EXISTS (
@@ -982,10 +1005,6 @@ async function createFunctions(client) {
         RAISE EXCEPTION 'admissible assertion exceeds policy cap'
           USING ERRCODE = '54000';
       END IF;
-
-      v_admitted_at := transaction_timestamp();
-      v_expires_at :=
-        v_admitted_at + p_ttl_ms * INTERVAL '1 millisecond';
 
       INSERT INTO tp_private.g1_vector_retrieval_sets (
         tenant_id,
@@ -1006,6 +1025,28 @@ async function createFunctions(client) {
         v_expires_at,
         v_candidate_count
       );
+
+      INSERT INTO tp_private.g1_vector_exclusions (
+        tenant_id,
+        retrieval_id,
+        evidence_id,
+        evidence_digest,
+        admissibility,
+        observed_at
+      )
+      SELECT
+        p_tenant_id,
+        p_retrieval_id,
+        listed.evidence_id,
+        listed.evidence_digest,
+        listed.admissibility,
+        v_admitted_at
+      FROM tp_private.g1_list_admissibility_internal_v1(
+        p_tenant_id,
+        p_incident_id,
+        p_agency
+      ) AS listed
+      WHERE listed.admissibility <> 'admissible';
 
       INSERT INTO tp_private.g1_vector_candidates (
         tenant_id,
@@ -1034,6 +1075,48 @@ async function createFunctions(client) {
         v_candidate_count,
         v_admitted_at,
         v_expires_at;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_observe_vector_exclusion_v1(
+      p_tenant_id UUID,
+      p_retrieval_id UUID,
+      p_evidence_id UUID,
+      p_incident_id UUID,
+      p_agency STRING,
+      p_policy_version STRING
+    )
+    RETURNS TABLE(
+      admissibility STRING,
+      evidence_digest STRING,
+      snapshot_admitted_at TIMESTAMPTZ
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    BEGIN
+      IF session_user <> 'tp_authorizer_user' THEN
+        RAISE EXCEPTION 'Gate One authorizer database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      RETURN QUERY
+      SELECT
+        exclusion.admissibility,
+        exclusion.evidence_digest,
+        retrieval.admitted_at
+      FROM tp_private.g1_vector_retrieval_sets AS retrieval
+      JOIN tp_private.g1_vector_exclusions AS exclusion
+        ON exclusion.tenant_id = retrieval.tenant_id
+       AND exclusion.retrieval_id = retrieval.retrieval_id
+      WHERE retrieval.tenant_id = p_tenant_id
+        AND retrieval.retrieval_id = p_retrieval_id
+        AND retrieval.incident_id = p_incident_id
+        AND retrieval.agency = p_agency
+        AND retrieval.policy_version = p_policy_version
+        AND exclusion.evidence_id = p_evidence_id
+        AND exclusion.observed_at = retrieval.admitted_at;
     END
     $$
   `);
@@ -1172,6 +1255,9 @@ async function createFunctions(client) {
       DELETE FROM tp_private.g1_vector_candidates AS candidate
       WHERE candidate.tenant_id = p_tenant_id
         AND candidate.retrieval_id = p_retrieval_id;
+      DELETE FROM tp_private.g1_vector_exclusions AS exclusion
+      WHERE exclusion.tenant_id = p_tenant_id
+        AND exclusion.retrieval_id = p_retrieval_id;
       UPDATE tp_private.g1_vector_retrieval_sets AS retrieval
       SET cleaned_at = COALESCE(
         retrieval.cleaned_at,
@@ -1224,6 +1310,10 @@ async function createFunctions(client) {
           AND candidate.retrieval_id = v_retrieval_id;
         GET DIAGNOSTICS v_row_count = ROW_COUNT;
         v_deleted_candidates := v_deleted_candidates + v_row_count;
+
+        DELETE FROM tp_private.g1_vector_exclusions AS exclusion
+        WHERE exclusion.tenant_id = p_tenant_id
+          AND exclusion.retrieval_id = v_retrieval_id;
 
         UPDATE tp_private.g1_vector_retrieval_sets AS retrieval
         SET cleaned_at = transaction_timestamp()
@@ -3921,6 +4011,7 @@ async function transferOwnership(client) {
     "tp_private.g1_verification_keys",
     "tp_private.g1_vector_retrieval_sets",
     "tp_private.g1_vector_candidates",
+    "tp_private.g1_vector_exclusions",
     "tp_private.g1_resources",
     "tp_private.g1_retry_probes",
     "tp_ledger.g1_evidence_verification_receipts",
@@ -3952,6 +4043,7 @@ async function transferOwnership(client) {
     "tp_api.g1_observe_admissibility_v1(UUID, UUID, UUID, STRING)",
     "tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING)",
     "tp_api.g1_prepare_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
+    "tp_api.g1_observe_vector_exclusion_v1(UUID, UUID, UUID, UUID, STRING, STRING)",
     "tp_api.g1_resolve_vector_set_v1(UUID, UUID, UUID, STRING, STRING, INT8)",
     "tp_api.g1_rank_vector_set_v1(UUID, UUID, UUID, STRING, STRING, STRING, INT8)",
     "tp_api.g1_commit_dvi_selection_v1(UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, INT8, STRING)",
@@ -4036,6 +4128,9 @@ async function applyGrants(client, bootstrapOwner) {
       tp_api.g1_prepare_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, INT8
       ),
+      tp_api.g1_observe_vector_exclusion_v1(
+        UUID, UUID, UUID, UUID, STRING, STRING
+      ),
       tp_api.g1_resolve_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, INT8
       ),
@@ -4067,6 +4162,9 @@ async function applyGrants(client, bootstrapOwner) {
       tp_api.g1_observe_admissibility_v2(UUID, UUID, UUID, STRING),
       tp_api.g1_prepare_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, INT8
+      ),
+      tp_api.g1_observe_vector_exclusion_v1(
+        UUID, UUID, UUID, UUID, STRING, STRING
       ),
       tp_api.g1_resolve_vector_set_v1(
         UUID, UUID, UUID, STRING, STRING, INT8
