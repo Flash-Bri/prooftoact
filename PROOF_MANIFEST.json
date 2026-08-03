@@ -193,7 +193,7 @@
     {
       "id": "clean-room-ledger",
       "path": "CLEAN_ROOM.md",
-      "sha256": "fe686c08200d270a64109a8276610acb7227c33743ebab9bdb357d2a45ca3b35",
+      "sha256": "19ea289623cd139b012085ed16cdd777d1fd85dcbd13b189e0156623aec50937",
       "kind": "boundary-ledger"
     },
     {
