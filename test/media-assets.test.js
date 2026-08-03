@@ -10,7 +10,7 @@ const RIGHTS_PATH = new URL("../docs/media/RIGHTS.md", import.meta.url);
 const WEB_PATH = new URL("../web/index.html", import.meta.url);
 
 const SVG_SHA256 =
-  "5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c";
+  "0a35e196d896e932bbadf2afbf5e915c21073c423d9d8ac8a23023ad0887c871";
 const PNG_SHA256 =
   "6228172f7a5a462940a05543ee455e0de21aa53c805e9466076b9e33fed1f168";
 
@@ -29,7 +29,7 @@ test("standalone architecture SVG is accessible and self-contained", () => {
   assert.match(source, /aria-labelledby="title description"/);
   assert.match(
     source,
-    /<title id="title">Tideproof evidence, proposal, authority, and recovery boundaries<\/title>/
+    /<title id="title">ProofToAct evidence, proposal, authority, and recovery boundaries<\/title>/
   );
   assert.match(
     source,
@@ -61,7 +61,7 @@ test("public surfaces and rights ledger bind the reviewed architecture assets", 
 
   assert.match(
     readme,
-    /!\[Tideproof trust boundaries:[^\]]+\]\(docs\/media\/architecture\.svg\)/
+    /!\[ProofToAct trust boundaries:[^\]]+\]\(docs\/media\/architecture\.svg\)/
   );
   assert.match(
     readme,
@@ -75,6 +75,6 @@ test("public surfaces and rights ledger bind the reviewed architecture assets", 
   assert.match(rights, new RegExp(PNG_SHA256));
   assert.match(
     rights,
-    /`C08 \/ V09`[\s\S]*Nunan, 2026-07-31 — `CLEARED_CURRENT`/
+    /`C08 \/ V09`[\s\S]*Nunan, 2026-08-03 — `CLEARED_CURRENT`/
   );
 });

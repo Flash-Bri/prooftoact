@@ -57,9 +57,11 @@ products.
   stack has not been deployed; the repaired candidate remains local until its
   clean commit, immutable artifact versions, and live capability evidence pass
   review.
-- The source repository is published at
-  `https://github.com/Flash-Bri/tideproof`; no contest submission has been
-  published.
+- The source repository was first published under the former coordinate
+  `https://github.com/Flash-Bri/tideproof` and was renamed in place to
+  `https://github.com/Flash-Bri/prooftoact` on 2026-08-03, preserving stable
+  repository ID `1317716765`; no contest submission has been published.
+  Historical receipts retain the former coordinate byte-for-byte.
 
 The initial local commit used the working names “Highwater” and “BlackBox.”
 Public prior-art research performed immediately afterward found unrelated or

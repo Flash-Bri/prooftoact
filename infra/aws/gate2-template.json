@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Tideproof Gate Two: signed-out read-only judge path, immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
+  "Description": "ProofToAct Gate Two: signed-out read-only judge path, immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
   "Parameters": {
     "ArtifactBucket": {
       "Type": "String",
@@ -36,7 +36,7 @@
     },
     "AuthorityDatabaseSecretArn": {
       "Type": "String",
-      "Description": "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_gate2_authorizer_user connection string.",
+      "Description": "Exact ProofToAct-owned Secrets Manager ARN containing only the least-privilege tp_gate2_authorizer_user connection string.",
       "AllowedPattern": "^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$"
     },
     "AuthorityDatabaseSecretVersionId": {
@@ -124,7 +124,7 @@
         "true",
         "false"
       ],
-      "Description": "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
+      "Description": "Set true only on an initial disposable probe stack. Final prooftoact-gate2 stack must be freshly created with false and never updated."
     },
     "EvidenceOperatorPrincipalArn": {
       "Type": "String",
@@ -341,7 +341,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Purpose",
@@ -375,7 +375,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Purpose",
@@ -393,7 +393,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -411,7 +411,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -429,7 +429,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -447,7 +447,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -465,7 +465,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -483,7 +483,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -501,7 +501,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -520,7 +520,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -539,7 +539,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -558,7 +558,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -577,7 +577,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -607,7 +607,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -727,7 +727,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -756,7 +756,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -919,7 +919,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -948,7 +948,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -1074,7 +1074,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -1103,7 +1103,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -1210,7 +1210,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -1299,7 +1299,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -1319,7 +1319,7 @@
           "Ref": "SignerArtifactCodeSha256"
         },
         "Description": {
-          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+          "Fn::Sub": "ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"
         }
       }
     },
@@ -1401,7 +1401,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -1421,7 +1421,7 @@
           "Ref": "AgentArtifactCodeSha256"
         },
         "Description": {
-          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+          "Fn::Sub": "ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"
         }
       }
     },
@@ -1548,7 +1548,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -1568,7 +1568,7 @@
           "Ref": "AuthorityArtifactCodeSha256"
         },
         "Description": {
-          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+          "Fn::Sub": "ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"
         }
       }
     },
@@ -1591,7 +1591,7 @@
     "DemoFunction": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
-        "Description": "Serves the signed-out deterministic Tideproof judge path from bundled read-only assets.",
+        "Description": "Serves the signed-out deterministic ProofToAct judge path from bundled read-only assets.",
         "Runtime": "nodejs22.x",
         "Architectures": [
           "arm64"
@@ -1650,7 +1650,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -1670,7 +1670,7 @@
           "Ref": "DemoArtifactCodeSha256"
         },
         "Description": {
-          "Fn::Sub": "Tideproof public demo ${SourceCommit} ${ConfigDigest}"
+          "Fn::Sub": "ProofToAct public demo ${SourceCommit} ${ConfigDigest}"
         }
       }
     },
@@ -1710,7 +1710,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -1852,7 +1852,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -1868,14 +1868,14 @@
           "Fn::Sub": "${AWS::StackName}-api"
         },
         "ApiKeySelectionExpression": "$request.header.x-api-key",
-        "Description": "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
+        "Description": "Signed-out read-only ProofToAct demo plus an isolated IAM-authenticated advisory endpoint.",
         "ProtocolType": "HTTP",
         "DisableExecuteApiEndpoint": false,
         "DisableSchemaValidation": false,
         "IpAddressType": "ipv4",
         "RouteSelectionExpression": "$request.method $request.path",
         "Tags": {
-          "Project": "Tideproof",
+          "Project": "ProofToAct",
           "Gate": "Two"
         }
       }
@@ -1902,7 +1902,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -1989,7 +1989,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -2020,7 +2020,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -2119,7 +2119,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -2157,7 +2157,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -2407,7 +2407,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -2441,7 +2441,7 @@
         "MaxSessionDuration": 3600,
         "Policies": [
           {
-            "PolicyName": "TideproofExactCapabilities",
+            "PolicyName": "ProofToActExactCapabilities",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -2512,7 +2512,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -2639,7 +2639,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -2659,7 +2659,7 @@
           "Ref": "BoundaryArtifactCodeSha256"
         },
         "Description": {
-          "Fn::Sub": "Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"
+          "Fn::Sub": "ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"
         }
       }
     },
@@ -2764,7 +2764,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -2875,7 +2875,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -2986,7 +2986,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -3097,7 +3097,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -3208,7 +3208,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Tideproof"
+            "Value": "ProofToAct"
           },
           {
             "Key": "Gate",
@@ -3515,7 +3515,7 @@
           "Ref": "HttpApi"
         },
         "Description": {
-          "Fn::Sub": "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+          "Fn::Sub": "ProofToAct exact API deployment ${SourceCommit} ${ConfigDigest}"
         }
       }
     },
@@ -3550,7 +3550,7 @@
           }
         },
         "Tags": {
-          "Project": "Tideproof",
+          "Project": "ProofToAct",
           "Gate": "Two"
         }
       }
@@ -3609,7 +3609,7 @@
         "AlarmName": {
           "Fn::Sub": "${AWS::StackName}-agent-errors"
         },
-        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "AlarmDescription": "A ProofToAct synthetic Gate Two Lambda recorded an error.",
         "Namespace": "AWS/Lambda",
         "MetricName": "Errors",
         "Statistic": "Sum",
@@ -3635,7 +3635,7 @@
         "AlarmName": {
           "Fn::Sub": "${AWS::StackName}-boundary-errors"
         },
-        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "AlarmDescription": "A ProofToAct synthetic Gate Two Lambda recorded an error.",
         "Namespace": "AWS/Lambda",
         "MetricName": "Errors",
         "Statistic": "Sum",
@@ -3661,7 +3661,7 @@
         "AlarmName": {
           "Fn::Sub": "${AWS::StackName}-demo-errors"
         },
-        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "AlarmDescription": "A ProofToAct synthetic Gate Two Lambda recorded an error.",
         "Namespace": "AWS/Lambda",
         "MetricName": "Errors",
         "Statistic": "Sum",
@@ -3687,7 +3687,7 @@
         "AlarmName": {
           "Fn::Sub": "${AWS::StackName}-signer-errors"
         },
-        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "AlarmDescription": "A ProofToAct synthetic Gate Two Lambda recorded an error.",
         "Namespace": "AWS/Lambda",
         "MetricName": "Errors",
         "Statistic": "Sum",
@@ -3713,7 +3713,7 @@
         "AlarmName": {
           "Fn::Sub": "${AWS::StackName}-authority-errors"
         },
-        "AlarmDescription": "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "AlarmDescription": "A ProofToAct synthetic Gate Two Lambda recorded an error.",
         "Namespace": "AWS/Lambda",
         "MetricName": "Errors",
         "Statistic": "Sum",
@@ -3739,8 +3739,8 @@
         "AlarmName": {
           "Fn::Sub": "${AWS::StackName}-boundary-semantic-failures"
         },
-        "AlarmDescription": "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
-        "Namespace": "Tideproof/GateTwo",
+        "AlarmDescription": "A ProofToAct Lambda returned a fail-closed semantic outcome without a platform error.",
+        "Namespace": "ProofToAct/GateTwo",
         "MetricName": "SemanticFailures",
         "Statistic": "Sum",
         "Period": 60,
@@ -3769,8 +3769,8 @@
         "AlarmName": {
           "Fn::Sub": "${AWS::StackName}-authority-semantic-failures"
         },
-        "AlarmDescription": "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
-        "Namespace": "Tideproof/GateTwo",
+        "AlarmDescription": "A ProofToAct Lambda returned a fail-closed semantic outcome without a platform error.",
+        "Namespace": "ProofToAct/GateTwo",
         "MetricName": "SemanticFailures",
         "Statistic": "Sum",
         "Period": 60,

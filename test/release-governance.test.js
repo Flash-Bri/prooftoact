@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   __test,
   validateManifest,
+  validatePostRenameSnapshot,
   validateSnapshot,
   verifyReleaseGovernance
 } from "../scripts/verify-release-governance.js";
@@ -56,17 +57,61 @@ function fixtureSnapshot(overrides = {}) {
   };
 }
 
+function fixturePostRenameSnapshot(overrides = {}) {
+  return {
+    schema: __test.POST_RENAME_SNAPSHOT_SCHEMA,
+    status: __test.POST_RENAME_SNAPSHOT_STATUS,
+    observedAt: "2026-08-03T15:23:23Z",
+    source: structuredClone(__test.EXPECTED_POST_RENAME_SOURCE),
+    repository: structuredClone(__test.EXPECTED_POST_RENAME_REPOSITORY),
+    renameContinuity: structuredClone(__test.EXPECTED_RENAME_CONTINUITY),
+    branchProtection: structuredClone(__test.EXPECTED_BRANCH_PROTECTION),
+    security: structuredClone(__test.EXPECTED_SECURITY),
+    continuousIntegration: structuredClone(
+      __test.EXPECTED_POST_RENAME_CONTINUOUS_INTEGRATION
+    ),
+    pullRequest: structuredClone(__test.EXPECTED_RENAME_PULL_REQUEST),
+    claimBoundary: __test.EXPECTED_POST_RENAME_SNAPSHOT_BOUNDARY,
+    finalReleaseRequirements: [
+      ...__test.EXPECTED_FINAL_RELEASE_REQUIREMENTS
+    ],
+    finalReleaseReady: false,
+    ...overrides
+  };
+}
+
 test("current repository governance snapshot matches its non-final boundary", () => {
   const receipt = verifyReleaseGovernance({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_REPOSITORY_GOVERNANCE_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 5);
+  assert.equal(receipt.surfaceCount, 8);
   assert.equal(receipt.requiredCheckCount, 1);
   assert.equal(receipt.requiredApprovingReviewCount, 0);
   assert.equal(receipt.finalReleaseRequirements.length, 3);
   assert.equal(
     Object.values(receipt.checks).every((value) => value === true),
     true
+  );
+});
+
+test("post-rename snapshot binds stable identity, new coordinate, and hosted CI", () => {
+  assert.equal(
+    validatePostRenameSnapshot(fixturePostRenameSnapshot()).repository.id,
+    1317716765
+  );
+
+  const changedIdentity = fixturePostRenameSnapshot();
+  changedIdentity.repository.id += 1;
+  assert.throws(
+    () => validatePostRenameSnapshot(changedIdentity),
+    /POST_RENAME_GOVERNANCE_SNAPSHOT_BOUNDARY/
+  );
+
+  const changedRun = fixturePostRenameSnapshot();
+  changedRun.continuousIntegration.headSha = "0".repeat(40);
+  assert.throws(
+    () => validatePostRenameSnapshot(changedRun),
+    /POST_RENAME_GOVERNANCE_SNAPSHOT_BOUNDARY/
   );
 });
 

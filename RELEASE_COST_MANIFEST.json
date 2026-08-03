@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
   "limits": {
     "awsBudgetLimitUsd": 15,
@@ -61,7 +61,7 @@
       "id": "authority-semantic-metric-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "SEMANTIC_METRIC_CARDINALITY",
-      "sha256": "8fec3b5a82b55bd175482d55ce0ec925f0070c5db7c8f1e190ab853f49722978"
+      "sha256": "3bacd801ff9e9c4abd9900cd4cf65303f618b587917091ae86e2c595af8e1938"
     },
     {
       "id": "aws-bootstrap-template",
@@ -73,43 +73,43 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "f5177c49b7f94446a0a38a958a26405d9cd049900f7f5507ed6f42247fec8e2f"
+      "sha256": "2eec05a757bd531f15c773baf0a1a20611881d61b7006c5becfddba449a5c311"
     },
     {
       "id": "aws-preflight-library",
       "path": "src/cloud/aws-gate2-preflight.js",
       "role": "FAIL_CLOSED_COST_POLICY",
-      "sha256": "79052b93d041189de28fde24ac6e52f5d2929d851a5f87295a87b728dcd426ac"
+      "sha256": "835e9a3b402f7eafef465425997ec45ca8b610e0b6202d065f47694e4f361e2a"
     },
     {
       "id": "aws-preflight-runner",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "49f992eb850aae506a6f2f99b9250d35f8c05d73ac84978cacea0d2753038ff6"
+      "sha256": "62a619a61c8c86c686cf52b9eeeed0767c3d0f16746411de3b547ebe7d70a7c4"
     },
     {
       "id": "aws-readiness-runner",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
-      "sha256": "7c4b52d4f30d7afdb30beddf14e118cd0766a567ed3157c5fc82bda9bc56813c"
+      "sha256": "f85510c627e6ba4059794d0cabc3dd0f11f7eb890563c0ccc49f8ed3845361f1"
     },
     {
       "id": "boundary-semantic-metric-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "SEMANTIC_METRIC_CARDINALITY",
-      "sha256": "3307cf6e9b0c5346aac8642e59a9d0ecc1876f8362eda9d2f57eb567fdd5682a"
+      "sha256": "881d9c30521b38a3bc1ab42e0d88b5df25923d518684166cb6835e12e3a12fde"
     },
     {
       "id": "cost-boundary-ledger",
       "path": "docs/COST_GATES.md",
       "role": "COST_AND_RESOURCE_BOUNDARY",
-      "sha256": "67e3f80e78b57fc037788812c70e034992950f8571cd196b85674b1526dd20a9"
+      "sha256": "982bbdc1c297d6e7c19f1c940fb07afd4db5cc380575bf7697bfddb76a486e92"
     },
     {
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "060275ddcff314167d582984ae5a84981db0f99b509c179d24aab402d64577cf"
+      "sha256": "8b0c4826c0300e4018a12ef24de67f32b72ece08acebba3259387be2660956d0"
     },
     {
       "id": "cost-guard-receipt",

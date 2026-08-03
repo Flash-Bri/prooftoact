@@ -2,7 +2,7 @@
 
 **Status: DRAFT — NOT READY TO SUBMIT**
 
-This is the canonical copy and release-gate packet for Tideproof's CockroachDB
+This is the canonical copy and release-gate packet for ProofToAct's CockroachDB
 × AWS “Build with Agentic Memory” entry. It is deliberately fail-closed:
 bracketed stop tokens must not be copied into Devpost, and no live AWS, demo,
 video, or visual-rights claim may be published until its named evidence exists.
@@ -14,7 +14,7 @@ The official competition overview, rules, and resources were rechecked on
 - https://cockroachdb-ai.devpost.com/rules
 - https://cockroachdb-ai.devpost.com/resources
 
-The official submission period ends on 2026-08-18 at 5:00 PM ET. Tideproof's
+The official submission period ends on 2026-08-18 at 5:00 PM ET. ProofToAct's
 internal deadline is 2026-08-16 at 5:00 PM ET, preserving a 48-hour correction
 window. The free, unrestricted judge build must remain available through the
 end of judging on 2026-09-15 at 5:00 PM ET.
@@ -23,19 +23,20 @@ end of judging on 2026-09-15 at 5:00 PM ET.
 
 | Field | Release value |
 | --- | --- |
-| Project name | `Tideproof` |
+| Project name | `ProofToAct` |
 | Subtitle | `Admissibility memory for high-stakes agents` |
-| Public source | https://github.com/Flash-Bri/tideproof |
+| Public source | https://github.com/Flash-Bri/prooftoact |
 | License | MIT |
 | Source commit | `[[FINAL_RELEASE_COMMIT_REQUIRED]]` |
 | Functional demo | `[[PUBLIC_SIGNED_OUT_DEMO_URL_REQUIRED]]` |
 | Public video | `[[PUBLIC_YOUTUBE_OR_VIMEO_URL_REQUIRED]]` |
 | Entrant / authorized representative | `[[OWNER_CONFIRMATION_REQUIRED]]` |
 
-The project name is provisional. A pre-existing, closely adjacent public
-`TideProof` repository is recorded in `docs/PRIOR_ART.md`; final branding,
-video recording, and submission remain blocked until the entrant records a
-rename/clearance decision and the coordinates above are updated if required.
+Brian approved `ProofToAct` as the replacement hackathon name on 2026-08-03.
+The bounded screening and the pre-existing adjacent public `TideProof`
+repository are recorded in `docs/PRIOR_ART.md`; the decision is not legal or
+trademark clearance. Final submission still requires a close-to-release name
+recheck and exact agreement across the repository, demo, video, and Devpost.
 
 Do not substitute a localhost URL, private preview, repository page, AWS
 console URL, or credentialed environment for the functional demo.
@@ -93,7 +94,7 @@ demo, repository, claims, rights, and release receipts are all green.
 
 ## Official requirement mapping
 
-| Official requirement | Tideproof response | Current state |
+| Official requirement | ProofToAct response | Current state |
 | --- | --- | --- |
 | New project built during the submission period | Clean-room repository, dated provenance, pre-existing-work disclosure, and exact-checkout history control | Verified; final freeze rerun pending |
 | Agentic application with CockroachDB as persistent memory, deployed on AWS | CockroachDB stores evidence, vector memory, authority state, receipts, and recovery state; AWS hosts the bounded agent path | CockroachDB verified; live AWS pending |
@@ -133,13 +134,13 @@ state, not a publish authorization.
 
 ## One-sentence pitch
 
-Tideproof is admissibility memory for high-stakes agents: CockroachDB preserves
+ProofToAct is admissibility memory for high-stakes agents: CockroachDB preserves
 evidence and spent authority so an agent can retrieve what is relevant without
 mistaking what it remembers for what it is still allowed to believe or do.
 
 ## Short description
 
-Most agent memory systems optimize recall. Tideproof governs admissibility.
+Most agent memory systems optimize recall. ProofToAct governs admissibility.
 Its synthetic Highwater Drill preserves attributable evidence, filters stale,
 revoked, out-of-scope, and conflicting memory before semantic ranking, commits
 exactly one winner for a scarce synthetic resource, and lets a replacement
@@ -164,7 +165,7 @@ contradicted by another trusted source, or tied to authority that another
 agent already spent. That turns memory from a retrieval problem into a
 distributed-systems and safety problem.
 
-Tideproof explores a narrower question: what should an agent still be allowed
+ProofToAct explores a narrower question: what should an agent still be allowed
 to believe and act upon after evidence, time, concurrency, failure, and agent
 identity have changed?
 
@@ -224,7 +225,7 @@ yet a live-cloud or live-database claim.
 ### Challenges
 
 The hardest failure was ambiguity around transaction commit: after a
-connection loss, retrying blindly can spend authority twice. Tideproof
+connection loss, retrying blindly can spend authority twice. ProofToAct
 classifies the result as empty, complete, or unknown and refuses to invent
 certainty. The proof exercises connection loss before commit, after commit is
 dispatched, and after acknowledgement.
@@ -270,7 +271,7 @@ capabilities it refuses to return.
 
 Potential work must be framed as future work, not current capability:
 provider-attested identities, durable publisher-key rotation, broader failure
-injection, and independently reviewed production hardening. Tideproof will
+injection, and independently reviewed production hardening. ProofToAct will
 remain a synthetic research demonstration unless those separate claims are
 actually proved.
 
@@ -278,7 +279,7 @@ actually proved.
 
 ### Distributed Vector Indexing
 
-Tideproof stores embeddings beside structured evidence in CockroachDB. The
+ProofToAct stores embeddings beside structured evidence in CockroachDB. The
 agent does not run nearest-neighbor search over everything it remembers.
 The candidate uses one database policy function to evaluate provenance,
 revocation, valid time, incident scope, and unresolved conflict, commits only
@@ -293,7 +294,7 @@ neighbor guarantee.
 
 ### CockroachDB Cloud Managed MCP Server
 
-When an agent is replaced, a deterministic Tideproof broker performs one
+When an agent is replaced, a deterministic ProofToAct broker performs one
 machine-authenticated Managed MCP `select_query` against an isolated recovery
 cluster. The exact cluster, database, tool, protocol version, and query
 template are pinned. A primary-cluster pre-read audit must commit before MCP;
@@ -343,8 +344,8 @@ Generate this section from the accepted live receipt and include:
 Requires Node.js 22 or newer:
 
 ```sh
-git clone https://github.com/Flash-Bri/tideproof.git
-cd tideproof
+git clone https://github.com/Flash-Bri/prooftoact.git
+cd prooftoact
 npm ci
 npm test
 npm run demo
@@ -356,7 +357,7 @@ are not part of judge setup.
 
 ## Optional CockroachDB feedback draft
 
-CockroachDB's strongest fit for Tideproof was keeping semantic and
+CockroachDB's strongest fit for ProofToAct was keeping semantic and
 transactional memory in one consistency domain: the same system could filter
 admissibility, rank vectors, spend authority serializably, fence stale
 callers, and preserve durable receipts.

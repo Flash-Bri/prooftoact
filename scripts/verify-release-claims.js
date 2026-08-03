@@ -99,7 +99,7 @@ const REQUIRED_MARKERS = Object.freeze({
     "GATE TWO — local AWS candidate; live AWS evidence pending",
     "It is not a live AWS claim.",
     "Main stack not deployed",
-    "Tideproof makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim."
+    "ProofToAct makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim."
   ]),
   "claims-ledger": Object.freeze([
     "Every public claim must remain **unverified** until the listed artifact exists and its acceptance condition passes.",
@@ -123,7 +123,7 @@ const REQUIRED_MARKERS = Object.freeze({
     "GATE TWO HOST — AWS Lambda + API Gateway; advisory evidence pending",
     "This signed-out AWS route serves only the deterministic replay.",
     "The separate proposal path remains IAM-authenticated and unproved live until its receipts pass review.",
-    "Tideproof makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim."
+    "ProofToAct makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim."
   ]),
   "readme-surface": Object.freeze([
     "**Public clean-room source. Not yet a contest submission or live AWS claim.**",
@@ -131,7 +131,7 @@ const REQUIRED_MARKERS = Object.freeze({
     "It does **not** yet contain or claim:",
     "a deployed public AWS judge URL;",
     "monitored aliases are not invocation authority",
-    "Tideproof is a synthetic demonstration, not operational emergency software."
+    "ProofToAct is a synthetic demonstration, not operational emergency software."
   ]),
   "release-claims-ledger": Object.freeze([
     "**Status: CURRENT PUBLIC CLAIM SURFACES PASS — FINAL LIVE GATES AND PRIVATE REVIEW PENDING**",
@@ -170,8 +170,8 @@ const ALLOWED_ABSOLUTE_URLS = new Set([
   "https://cockroachdb-ai.devpost.com/",
   "https://cockroachdb-ai.devpost.com/resources",
   "https://cockroachdb-ai.devpost.com/rules",
-  "https://github.com/Flash-Bri/tideproof",
-  "https://github.com/Flash-Bri/tideproof.git"
+  "https://github.com/Flash-Bri/prooftoact",
+  "https://github.com/Flash-Bri/prooftoact.git"
 ]);
 
 function assert(condition, code) {

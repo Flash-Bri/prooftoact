@@ -23,7 +23,7 @@ import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const OFFICIAL_REMOTE =
-  "https://github.com/Flash-Bri/tideproof.git";
+  "https://github.com/Flash-Bri/prooftoact.git";
 const EXPECTED_BRANCH = "main";
 const EXPECTED_REGION = "us-east-1";
 const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
@@ -1269,12 +1269,12 @@ export function validateReleaseProvenance(
       governance.manifestPath === "RELEASE_GOVERNANCE_MANIFEST.json" &&
       HEX_64.test(governance.manifestSha256) &&
       governance.snapshotPath ===
-        "evidence/github-release-governance-2026-08-01.json" &&
+        "evidence/github-release-governance-rename-2026-08-03.json" &&
       HEX_64.test(governance.snapshotSha256) &&
       Number.isFinite(Date.parse(governance.observedAt)) &&
       HEX_40.test(governance.sourceCommit) &&
       HEX_40.test(governance.sourceTree) &&
-      governance.surfaceCount === 5 &&
+      governance.surfaceCount === 8 &&
       governance.requiredCheckCount === 1 &&
       governance.requiredApprovingReviewCount === 0 &&
       Array.isArray(governance.finalReleaseRequirements) &&
@@ -1406,7 +1406,7 @@ export function validateReleaseProvenance(
       /^\d{4}-\d{2}-\d{2}$/.test(submission.reviewedOn) &&
       submission.manifestPath === "RELEASE_SUBMISSION_MANIFEST.json" &&
       HEX_64.test(submission.manifestSha256) &&
-      submission.surfaceCount === 7 &&
+      submission.surfaceCount === 10 &&
       submission.checklistItemCount === 14 &&
       submission.uncheckedChecklistItemCount === 14 &&
       submission.stopTokenOccurrenceCount === 13 &&
@@ -1609,7 +1609,12 @@ export function validatePreflightReceipt(
         "tlsOnlyPolicy",
         "versioningEnabled"
       ]) &&
-      exactKeys(controls?.mainGateTwoStack, ["name", "state"]) &&
+      exactKeys(controls?.mainGateTwoStack, [
+        "legacyName",
+        "legacyState",
+        "name",
+        "state"
+      ]) &&
       exactKeys(bedrock, [
         "catalogStatus",
         "modelId",
@@ -1618,7 +1623,7 @@ export function validatePreflightReceipt(
         "textOutput"
       ]) &&
       receipt?.schemaVersion ===
-      "tideproof.gate2.aws-preflight.v4" &&
+      "tideproof.gate2.aws-preflight.v5" &&
       receipt.status === "PASS" &&
       receipt.sourceCommit === sourceCommit &&
       receipt.treeDigest === treeDigest &&
@@ -1655,6 +1660,8 @@ export function validatePreflightReceipt(
         controls.bootstrapStack.status
       ) &&
       controls?.mainGateTwoStack?.state === "ABSENT" &&
+      controls?.mainGateTwoStack?.legacyName === "tideproof-gate2" &&
+      controls?.mainGateTwoStack?.legacyState === "ABSENT" &&
       controls?.bedrock?.catalogStatus === "ACTIVE" &&
       controls?.artifactBucket?.versioningEnabled === true &&
       controls?.artifactBucket?.aes256AtRest === true &&
@@ -1715,7 +1722,7 @@ export function validatePreflightReceipt(
       ) < 25 &&
       projectExposure.registrarReceiptVerified === false &&
       projectExposure.autoRenewReportedEnabled === false &&
-      controls.mainGateTwoStack.name === "tideproof-gate2" &&
+      controls.mainGateTwoStack.name === "prooftoact-gate2" &&
       bedrock.modelId === "amazon.nova-micro-v1:0" &&
       bedrock.textInput === true &&
       bedrock.textOutput === true &&

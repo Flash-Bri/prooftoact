@@ -4,7 +4,7 @@ Initial orientation: 2026-07-29. Expanded primary-source review: 2026-07-31.
 This is a bounded engineering and claims review, not an exhaustive literature,
 patent, common-law, or trademark search and not legal advice.
 
-## Release-blocking naming finding
+## Former-name collision and approved rename
 
 The public GitHub repository
 [`bigg-kay/TideProof`](https://github.com/bigg-kay/TideProof) predates this
@@ -20,13 +20,32 @@ public and created on 2026-03-20. The same API reported the current public
 support the limited predating statement; they do not establish first use in
 commerce, ownership, registrability, or legal priority.
 
-That repository is not proof of trademark ownership or infringement. It is,
-however, enough to block final branding, video recording, and submission until
-the entrant makes and records a rename/clearance decision. Registering
-`tideproof.net`, finding no exact npm package, or finding a parked `.com` does
-not clear the name. Any candidate name still requires exact and confusingly
-similar searches through the USPTO, WIPO, EUIPO, relevant business registries,
-package/app stores, domains, and common-law usage.
+That repository is not proof of trademark ownership or infringement. It was,
+however, enough to block use of the former working name for final branding,
+video recording, and submission. Registering `tideproof.net`, finding no exact
+npm package, or finding a parked `.com` did not clear that former name.
+
+## ProofToAct decision — 2026-08-03
+
+Brian approved **ProofToAct** as the hackathon project's replacement name, with
+the public line **“ProofToAct: Admissibility Memory for High-Stakes Agents.”**
+The intended public source coordinate is
+`https://github.com/Flash-Bri/prooftoact`.
+
+The pre-decision engineering screen found no exact collision for `ProofToAct`
+in GitHub, npm, crates.io, PyPI, the USPTO exact quoted search, or `.com` and
+`.ai` RDAP records. Those checks do not prove registrar availability,
+registrability, ownership, priority, or freedom to operate. WIPO, TMview,
+broader phonetic and spacing searches, common-law use, app stores, corporate
+names, and social handles were not exhaustively cleared. This is a bounded
+hackathon naming decision, not legal advice or trademark clearance.
+
+The former working name remains only where historical evidence, Git history,
+provider identifiers, database names, wire schemas, cryptographic domain
+separators, or third-party references must remain byte-exact. The dated
+migration boundary is recorded in `docs/RENAME_MIGRATION.md`. The separate
+`tideproof.net` cost record is not naming evidence for this project and is not
+changed by this decision.
 
 Two earlier working-name findings remain relevant:
 
@@ -37,7 +56,7 @@ Two earlier working-name findings remain relevant:
   reproduced. The closest reviewed project,
   [`Agent-Blackbox`](https://github.com/TaewoooPark/Agent-Blackbox), documents
   event replay, handoff, and context memory, but its reviewed README did not
-  establish an MCP interface. Tideproof must not repeat the unsupported MCP
+  establish an MCP interface. ProofToAct must not repeat the unsupported MCP
   comparison.
 
 ## Primary neighboring work
@@ -85,10 +104,10 @@ The individual mechanisms are established prior art:
   [`SERIALIZABLE` isolation](https://www.cockroachlabs.com/docs/v26.2/demo-serializable),
   and [CockroachDB Cloud Managed MCP](https://www.cockroachlabs.com/docs/cockroachcloud/connect-to-the-cockroachdb-cloud-mcp-server):
   ANN retrieval with exact prefix filters, serializable transaction behavior,
-  and provider MCP access are platform primitives, not Tideproof inventions.
+  and provider MCP access are platform primitives, not ProofToAct inventions.
 - The [Model Context Protocol](https://modelcontextprotocol.io/introduction) is
   an open standard for connecting AI applications to data, tools, and
-  workflows. MCP alone does not confer Tideproof's authority semantics.
+  workflows. MCP alone does not confer ProofToAct's authority semantics.
 
 ## Closest-work comparison
 
@@ -101,7 +120,7 @@ precedent for scarce authority, fencing, exact duplicate replay, changed-input
 rejection, and reconciliation. CockroachDB DVI, serializable transactions, and
 Managed MCP are provider primitives.
 
-Tideproof's defensible contest differentiation is the demonstrated
+ProofToAct's defensible contest differentiation is the demonstrated
 composition and judge-visible invariant, not any individual mechanism:
 
 > Remembered is not the same as admissible, and admissible is not the same as
@@ -113,7 +132,7 @@ and successor context recovery without operational capability transfer.
 
 ## Safe public originality boundary
 
-Tideproof does **not** claim to invent RAG, provenance, temporal memory,
+ProofToAct does **not** claim to invent RAG, provenance, temporal memory,
 conflict handling, leases, fencing, idempotency, replay protection, durable
 checkpoints, MCP, Distributed Vector Indexing, serializable transactions, or
 exactly-once effects. Avoid “first,” “unique,” “novel,” and “only” unless the
@@ -127,9 +146,9 @@ directly ranks the output of the full admissibility predicate.
 
 ## Final review requirements
 
-Before final branding or submission:
+Before final submission:
 
-1. record the entrant's name/rename decision and the search evidence used;
+1. preserve the recorded entrant rename decision and search evidence;
 2. rerun exact and confusingly similar name searches close to release;
 3. preserve this bibliography and closest-work comparison with the final
    claim review;

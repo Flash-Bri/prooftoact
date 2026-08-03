@@ -135,10 +135,10 @@ test("submission draft requires every stop token and unchecked hard gate", () =>
 
 test("absolute URL policy rejects a premature public destination", () => {
   const sources = new Map([
-    ["fixture", "https://github.com/Flash-Bri/tideproof"]
+    ["fixture", "https://github.com/Flash-Bri/prooftoact"]
   ]);
   assert.deepEqual(validateAllowedUrls(sources), [
-    "https://github.com/Flash-Bri/tideproof"
+    "https://github.com/Flash-Bri/prooftoact"
   ]);
   sources.set("fixture", "https://tideproof.net");
   assert.throws(

@@ -250,7 +250,7 @@ function roleResource({
       MaxSessionDuration: 3600,
       Policies: [
         {
-          PolicyName: "TideproofExactCapabilities",
+          PolicyName: "ProofToActExactCapabilities",
           PolicyDocument: {
             Version: "2012-10-17",
             Statement: statements
@@ -258,7 +258,7 @@ function roleResource({
         }
       ],
       Tags: [
-        { Key: "Project", Value: "Tideproof" },
+        { Key: "Project", Value: "ProofToAct" },
         { Key: "Gate", Value: "Two" }
       ]
     }
@@ -289,7 +289,7 @@ function lambdaFunction({
     },
     Code: code,
     Tags: [
-      { Key: "Project", Value: "Tideproof" },
+      { Key: "Project", Value: "ProofToAct" },
       { Key: "Gate", Value: "Two" }
     ]
   };
@@ -307,7 +307,7 @@ function logGroup() {
     Properties: {
       RetentionInDays: 7,
       Tags: [
-        { Key: "Project", Value: "Tideproof" },
+        { Key: "Project", Value: "ProofToAct" },
         { Key: "Gate", Value: "Two" }
       ]
     }
@@ -346,7 +346,7 @@ function lambdaErrorAlarm(functionName, suffix) {
     Properties: {
       AlarmName: sub(`\${AWS::StackName}-${suffix}-errors`),
       AlarmDescription:
-        "A Tideproof synthetic Gate Two Lambda recorded an error.",
+        "A ProofToAct synthetic Gate Two Lambda recorded an error.",
       Namespace: "AWS/Lambda",
       MetricName: "Errors",
       Statistic: "Sum",
@@ -371,8 +371,8 @@ function semanticFailureAlarm(service) {
         `\${AWS::StackName}-${service}-semantic-failures`
       ),
       AlarmDescription:
-        "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
-      Namespace: "Tideproof/GateTwo",
+        "A ProofToAct Lambda returned a fail-closed semantic outcome without a platform error.",
+      Namespace: "ProofToAct/GateTwo",
       MetricName: "SemanticFailures",
       Statistic: "Sum",
       Period: 60,
@@ -634,7 +634,7 @@ export function buildGate2Template() {
     AuthorityDatabaseSecretArn: {
       Type: "String",
       Description:
-        "Exact Tideproof-owned Secrets Manager ARN containing only the least-privilege tp_gate2_authorizer_user connection string.",
+        "Exact ProofToAct-owned Secrets Manager ARN containing only the least-privilege tp_gate2_authorizer_user connection string.",
       AllowedPattern:
         "^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$"
     },
@@ -706,7 +706,7 @@ export function buildGate2Template() {
       Default: "false",
       AllowedValues: ["true", "false"],
       Description:
-        "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
+        "Set true only on an initial disposable probe stack. Final prooftoact-gate2 stack must be freshly created with false and never updated."
     },
     EvidenceOperatorPrincipalArn: {
       Type: "String",
@@ -758,7 +758,7 @@ export function buildGate2Template() {
           ]
         },
         Tags: [
-          { Key: "Project", Value: "Tideproof" },
+          { Key: "Project", Value: "ProofToAct" },
           { Key: "Purpose", Value: "SyntheticGateTwoEvidence" }
         ]
       }
@@ -783,7 +783,7 @@ export function buildGate2Template() {
           ExcludePunctuation: true
         },
         Tags: [
-          { Key: "Project", Value: "Tideproof" },
+          { Key: "Project", Value: "ProofToAct" },
           { Key: "Purpose", Value: "CapabilityDenialCanary" }
         ]
       }
@@ -954,7 +954,7 @@ export function buildGate2Template() {
   });
   resources.SignerVersion = version(
     "SignerFunction",
-    sub("Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"),
+    sub("ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"),
     "signer"
   );
   resources.SignerAlias = alias("SignerFunction", "SignerVersion");
@@ -979,7 +979,7 @@ export function buildGate2Template() {
   });
   resources.AgentVersion = version(
     "AgentFunction",
-    sub("Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"),
+    sub("ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"),
     "agent"
   );
   resources.AgentAlias = alias("AgentFunction", "AgentVersion");
@@ -1031,7 +1031,7 @@ export function buildGate2Template() {
   });
   resources.AuthorityVersion = version(
     "AuthorityFunction",
-    sub("Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"),
+    sub("ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"),
     "authority"
   );
   resources.AuthorityAlias = alias(
@@ -1041,7 +1041,7 @@ export function buildGate2Template() {
 
   resources.DemoFunction = lambdaFunction({
     description:
-      "Serves the signed-out deterministic Tideproof judge path from bundled read-only assets.",
+      "Serves the signed-out deterministic ProofToAct judge path from bundled read-only assets.",
     role: "DemoRole",
     code: artifactCode("demo"),
     logGroup: "DemoLogGroup",
@@ -1059,7 +1059,7 @@ export function buildGate2Template() {
   });
   resources.DemoVersion = version(
     "DemoFunction",
-    sub("Tideproof public demo ${SourceCommit} ${ConfigDigest}"),
+    sub("ProofToAct public demo ${SourceCommit} ${ConfigDigest}"),
     "demo"
   );
   resources.DemoAlias = alias("DemoFunction", "DemoVersion");
@@ -1111,13 +1111,13 @@ export function buildGate2Template() {
       Name: sub("${AWS::StackName}-api"),
       ApiKeySelectionExpression: "$request.header.x-api-key",
       Description:
-        "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
+        "Signed-out read-only ProofToAct demo plus an isolated IAM-authenticated advisory endpoint.",
       ProtocolType: "HTTP",
       DisableExecuteApiEndpoint: false,
       DisableSchemaValidation: false,
       IpAddressType: "ipv4",
       RouteSelectionExpression: "$request.method $request.path",
-      Tags: { Project: "Tideproof", Gate: "Two" }
+      Tags: { Project: "ProofToAct", Gate: "Two" }
     }
   };
 
@@ -1377,7 +1377,7 @@ export function buildGate2Template() {
   });
   resources.BoundaryVersion = version(
     "BoundaryFunction",
-    sub("Tideproof Gate Two ${SourceCommit} ${ConfigDigest}"),
+    sub("ProofToAct Gate Two ${SourceCommit} ${ConfigDigest}"),
     "boundary"
   );
   resources.BoundaryAlias = alias(
@@ -1521,7 +1521,7 @@ export function buildGate2Template() {
     Properties: {
       ApiId: ref("HttpApi"),
       Description: sub(
-        "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+        "ProofToAct exact API deployment ${SourceCommit} ${ConfigDigest}"
       )
     }
   };
@@ -1556,7 +1556,7 @@ export function buildGate2Template() {
           ThrottlingRateLimit: 0.1
         }
       },
-      Tags: { Project: "Tideproof", Gate: "Two" }
+      Tags: { Project: "ProofToAct", Gate: "Two" }
     }
   };
   resources.BoundaryInvokePermission = {
@@ -1623,7 +1623,7 @@ export function buildGate2Template() {
   return {
     AWSTemplateFormatVersion: "2010-09-09",
     Description:
-      "Tideproof Gate Two: signed-out read-only judge path, immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
+      "ProofToAct Gate Two: signed-out read-only judge path, immutable Bedrock proposal path, IAM separation, and KMS-signed synthetic receipts.",
     Parameters: parameters,
     Rules: {
       UsEast1Only: {

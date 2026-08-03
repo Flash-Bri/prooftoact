@@ -7,7 +7,7 @@
   role="img"
   aria-labelledby="title description"
 >
-  <title id="title">Tideproof evidence, proposal, authority, and recovery boundaries</title>
+  <title id="title">ProofToAct evidence, proposal, authority, and recovery boundaries</title>
   <desc id="description">
     Untrusted evidence passes through CockroachDB provenance, validity, scope,
     and conflict checks before vector ranking. An agent can propose but cannot
@@ -15,7 +15,7 @@
     Managed MCP returns context only and never authority.
   </desc>
   <metadata>
-    Tideproof clean-room architecture diagram. Synthetic scope. See
+    ProofToAct clean-room architecture diagram. Synthetic scope. See
     docs/ARCHITECTURE.md and docs/media/RIGHTS.md.
   </metadata>
   <defs>

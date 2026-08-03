@@ -21,7 +21,7 @@ versions, and deployed Lambda `CodeSha256` values before submission.
 
 ## Bound source
 
-- Package lock SHA-256: `b0fa37a180101a5144848b4b1b73e5a98ef6c5d0d55b9195d7ecae0b1310a4df`
+- Package lock SHA-256: `923be53e7c071361591b13ef4ed22abe6e2d5464184c8a51d7561c6440913e85`
 - Direct runtime declarations: **10**
 - Direct development declarations: **2**
 - Complete locked package records: **76**

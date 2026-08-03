@@ -342,7 +342,7 @@ export function renderBundledThirdPartyNotices({
   );
   const fallbackCount = sources.filter(({ kind }) => kind !== "package-file").length;
   const lines = [
-    "TIDEPROOF BUNDLED THIRD-PARTY NOTICES",
+    "PROOFTOACT BUNDLED THIRD-PARTY NOTICES",
     "",
     "This file is generated deterministically from the exact integrity-locked npm",
     "packages whose source is present in the six Gate Two Lambda bundles and the",

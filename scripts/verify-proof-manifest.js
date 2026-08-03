@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { verifyBrandMigration } from "./verify-brand-migration.js";
 import { verifyReleaseSecurity } from "./verify-release-security.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -267,6 +268,13 @@ export function verifyProofManifest({
       verifySecurity({ rootDir: resolvedRoot });
     } catch {
       throw new Error("proof manifest nested release-security verification failed");
+    }
+  }
+  if (artifactById.has("brand-migration-manifest")) {
+    try {
+      verifyBrandMigration({ rootDir: resolvedRoot });
+    } catch {
+      throw new Error("proof manifest nested brand-migration verification failed");
     }
   }
 

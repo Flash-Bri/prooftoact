@@ -44,7 +44,7 @@ function sendJson(response, statusCode, body) {
   response.end(JSON.stringify(body));
 }
 
-export function createTideproofServer() {
+export function createProofToActServer() {
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
 
@@ -91,8 +91,8 @@ const startedDirectly =
 
 if (startedDirectly) {
   const port = Number.parseInt(process.env.PORT ?? "4173", 10);
-  const server = createTideproofServer();
+  const server = createProofToActServer();
   server.listen(port, "127.0.0.1", () => {
-    process.stdout.write(`Tideproof local proof: http://127.0.0.1:${port}\n`);
+    process.stdout.write(`ProofToAct local proof: http://127.0.0.1:${port}\n`);
   });
 }

@@ -17,7 +17,7 @@ function axNode(role, name, properties = []) {
 function passingSnapshot() {
   return {
     document: {
-      title: "Tideproof — Admissibility Memory",
+      title: "ProofToAct — Admissibility Memory",
       language: "en",
       readyState: "complete",
       status:
@@ -187,7 +187,7 @@ test("accessibility tree summary exposes names, roles, and disabled state", () =
     }
   ];
   const summary = __test.summarizeAxTree([
-    axNode("RootWebArea", "Tideproof — Admissibility Memory"),
+    axNode("RootWebArea", "ProofToAct — Admissibility Memory"),
     axNode("main", ""),
     axNode("heading", "Memory should preserve evidence—not inherit authority."),
     axNode("navigation", "Choose a demonstration act"),

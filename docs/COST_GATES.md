@@ -1,6 +1,6 @@
 # Cost and resource gates
 
-The active Tideproof goal authorizes only the bounded resources described
+The active ProofToAct goal authorizes only the bounded resources described
 here. Any higher cap, fixed-charge service, purchase, or unrelated resource
 requires new approval.
 
@@ -15,7 +15,7 @@ and short-retention CloudWatch logs.
 - Low case with applicable free allowances: **$0–$3**
 - Expected metered spend through 2026-09-15: **$3–$12**
 - Approved AWS project ceiling: **$15**
-- Approved total Tideproof ceiling: **$25**
+- Approved total ProofToAct ceiling: **$25**
 - Recorded non-AWS spend: **$11.86** for the owner-authorized
   `tideproof.net` registration
 - Remaining total-project envelope before AWS or any other new spend:
@@ -56,7 +56,7 @@ Stop new cloud work and investigate if:
 - daily cost exceeds $5;
 - conservative account-wide AWS spend approaches the current effective
   **$13.14** project envelope;
-- total Tideproof spend approaches $25;
+- total ProofToAct spend approaches $25;
 - unexplained spend exceeds $3;
 - a free allowance is exhausted unexpectedly;
 - a loop, public abuse, or log-volume anomaly appears;

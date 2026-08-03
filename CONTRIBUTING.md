@@ -1,6 +1,6 @@
-# Contributing to Tideproof
+# Contributing to ProofToAct
 
-Tideproof is a clean-room, synthetic competition project. Contributions must
+ProofToAct is a clean-room, synthetic competition project. Contributions must
 preserve the provenance, security, cost, and claim boundaries documented in
 [`CLEAN_ROOM.md`](CLEAN_ROOM.md), [`CLAIMS.md`](CLAIMS.md), and
 [`docs/COST_GATES.md`](docs/COST_GATES.md).

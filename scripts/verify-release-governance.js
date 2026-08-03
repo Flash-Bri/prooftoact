@@ -10,13 +10,17 @@ const MANIFEST_STATUS =
   "CURRENT_REPOSITORY_GOVERNANCE_REVIEWED_FINAL_RECHECK_PENDING";
 const SNAPSHOT_SCHEMA = "tideproof.github-release-governance-snapshot.v1";
 const SNAPSHOT_STATUS = "OBSERVED_NONFINAL_GITHUB_GOVERNANCE";
+const POST_RENAME_SNAPSHOT_SCHEMA =
+  "prooftoact.github-release-governance-snapshot.v1";
+const POST_RENAME_SNAPSHOT_STATUS =
+  "OBSERVED_POST_RENAME_NONFINAL_GITHUB_GOVERNANCE";
 const RECEIPT_SCHEMA = "tideproof.release-governance-verification.v1";
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
 
 const EXPECTED_REPOSITORY = Object.freeze({
-  fullName: "Flash-Bri/tideproof",
-  htmlUrl: "https://github.com/Flash-Bri/tideproof",
+  fullName: "Flash-Bri/prooftoact",
+  htmlUrl: "https://github.com/Flash-Bri/prooftoact",
   visibility: "public",
   defaultBranch: "main",
   requiredWorkflow: "CI",
@@ -44,6 +48,54 @@ const EXPECTED_SOURCE = Object.freeze({
   commit: "68f112f97e7439ac2ab1ecdde4c6379453c825c6",
   tree: "eee1f22f99fb7b5edd4113e622f177510388dea8",
   branch: "main"
+});
+
+const EXPECTED_POST_RENAME_REPOSITORY = Object.freeze({
+  id: 1317716765,
+  nodeId: "R_kgDOTorDHQ",
+  fullName: "Flash-Bri/prooftoact",
+  htmlUrl: "https://github.com/Flash-Bri/prooftoact",
+  visibility: "public",
+  defaultBranch: "main",
+  licenseSpdxId: "MIT",
+  description:
+    "ProofToAct — admissibility memory for high-stakes agents: similarity proposes, CockroachDB commits.",
+  topics: Object.freeze([
+    "agentic-memory",
+    "aws",
+    "cockroachdb",
+    "distributed-systems",
+    "hackathon"
+  ])
+});
+
+const EXPECTED_POST_RENAME_SOURCE = Object.freeze({
+  commit: "df4da95358324ab95b8556650f4c639c7cee21f5",
+  tree: "d6683f1d1cea18f7ddb36ea8053d01a54b568643",
+  branch: "rename/prooftoact"
+});
+
+const EXPECTED_RENAME_CONTINUITY = Object.freeze({
+  preRenameFullName: "Flash-Bri/tideproof",
+  preRenameId: 1317716765,
+  preRenameNodeId: "R_kgDOTorDHQ",
+  postRenameFullName: "Flash-Bri/prooftoact",
+  postRenameId: 1317716765,
+  postRenameNodeId: "R_kgDOTorDHQ",
+  formerWebUrl: "https://github.com/Flash-Bri/tideproof",
+  formerWebStatus: 301,
+  formerWebLocation: "https://github.com/Flash-Bri/prooftoact"
+});
+
+const EXPECTED_RENAME_PULL_REQUEST = Object.freeze({
+  number: 52,
+  url: "https://github.com/Flash-Bri/prooftoact/pull/52",
+  state: "open",
+  isDraft: true,
+  baseRef: "main",
+  baseSha: "0d048a4e0e893d947c9a70c7189bfb164a9d1f59",
+  headRef: "rename/prooftoact",
+  headSha: EXPECTED_POST_RENAME_SOURCE.commit
 });
 
 const EXPECTED_BRANCH_PROTECTION = Object.freeze({
@@ -83,6 +135,17 @@ const EXPECTED_CONTINUOUS_INTEGRATION = Object.freeze({
   conclusion: "success"
 });
 
+const EXPECTED_POST_RENAME_CONTINUOUS_INTEGRATION = Object.freeze({
+  workflow: "CI",
+  requiredCheck: "verify",
+  runId: 30827066820,
+  runUrl:
+    "https://github.com/Flash-Bri/prooftoact/actions/runs/30827066820",
+  headSha: EXPECTED_POST_RENAME_SOURCE.commit,
+  status: "completed",
+  conclusion: "success"
+});
+
 const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
   "Requery repository visibility, security settings, and complete branch protection at the exact final release commit.",
   "Verify the required CI run succeeds at the exact final release commit and that the protected check identity still matches the intended GitHub Actions workflow.",
@@ -90,12 +153,23 @@ const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
 ]);
 
 const EXPECTED_MANIFEST_BOUNDARY =
-  "This manifest binds a sanitized historical GitHub governance observation and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.";
+  "This manifest binds sanitized historical and post-rename GitHub governance observations, the approved repository rename boundary, and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.";
 
 const EXPECTED_SNAPSHOT_BOUNDARY =
   "This sanitized snapshot records read-only GitHub API observations at one time for one commit. It does not prove that settings remain unchanged, require a human approval, establish vulnerability absence, authorize deployment or submission, or replace final signed-out repository and governance review.";
 
+const EXPECTED_POST_RENAME_SNAPSHOT_BOUNDARY =
+  "This sanitized snapshot records bounded read-only GitHub API and public HTTP observations immediately before and after the approved in-place repository rename. The stable repository identity remained constant across those observations, but this snapshot does not prove that settings remain unchanged, require a human approval, establish vulnerability absence, authorize deployment or submission, or replace final exact-main CI and signed-out repository review.";
+
 const EXPECTED_SURFACES = Object.freeze({
+  "brand-migration-ledger": Object.freeze({
+    path: "docs/RENAME_MIGRATION.md",
+    role: "REPOSITORY_RENAME_BOUNDARY"
+  }),
+  "brand-migration-manifest": Object.freeze({
+    path: "RENAME_MIGRATION_MANIFEST.json",
+    role: "REPOSITORY_RENAME_CONTROL"
+  }),
   "ci-workflow": Object.freeze({
     path: ".github/workflows/ci.yml",
     role: "REQUIRED_CHECK_SOURCE"
@@ -106,7 +180,11 @@ const EXPECTED_SURFACES = Object.freeze({
   }),
   "governance-snapshot": Object.freeze({
     path: "evidence/github-release-governance-2026-08-01.json",
-    role: "SANITIZED_READ_ONLY_OBSERVATION"
+    role: "SANITIZED_HISTORICAL_READ_ONLY_OBSERVATION"
+  }),
+  "post-rename-governance-snapshot": Object.freeze({
+    path: "evidence/github-release-governance-rename-2026-08-03.json",
+    role: "SANITIZED_POST_RENAME_READ_ONLY_OBSERVATION"
   }),
   "public-readme": Object.freeze({
     path: "README.md",
@@ -329,6 +407,98 @@ export function validateSnapshot(snapshot) {
   return snapshot;
 }
 
+export function validatePostRenameSnapshot(snapshot) {
+  exactKeys(
+    snapshot,
+    [
+      "branchProtection",
+      "claimBoundary",
+      "continuousIntegration",
+      "finalReleaseReady",
+      "finalReleaseRequirements",
+      "observedAt",
+      "pullRequest",
+      "renameContinuity",
+      "repository",
+      "schema",
+      "security",
+      "source",
+      "status"
+    ],
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_KEYS"
+  );
+  exactKeys(
+    snapshot.source,
+    Object.keys(EXPECTED_POST_RENAME_SOURCE),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_SOURCE_KEYS"
+  );
+  exactKeys(
+    snapshot.repository,
+    Object.keys(EXPECTED_POST_RENAME_REPOSITORY),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_REPOSITORY_KEYS"
+  );
+  exactKeys(
+    snapshot.renameContinuity,
+    Object.keys(EXPECTED_RENAME_CONTINUITY),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_CONTINUITY_KEYS"
+  );
+  exactKeys(
+    snapshot.branchProtection,
+    Object.keys(EXPECTED_BRANCH_PROTECTION),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_PROTECTION_KEYS"
+  );
+  exactKeys(
+    snapshot.security,
+    Object.keys(EXPECTED_SECURITY),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_SECURITY_KEYS"
+  );
+  exactKeys(
+    snapshot.continuousIntegration,
+    Object.keys(EXPECTED_POST_RENAME_CONTINUOUS_INTEGRATION),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_CI_KEYS"
+  );
+  exactKeys(
+    snapshot.pullRequest,
+    Object.keys(EXPECTED_RENAME_PULL_REQUEST),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_PULL_REQUEST_KEYS"
+  );
+  assert(
+    snapshot.schema === POST_RENAME_SNAPSHOT_SCHEMA &&
+      snapshot.status === POST_RENAME_SNAPSHOT_STATUS &&
+      snapshot.observedAt === "2026-08-03T15:23:23Z" &&
+      Number.isFinite(Date.parse(snapshot.observedAt)) &&
+      snapshot.claimBoundary === EXPECTED_POST_RENAME_SNAPSHOT_BOUNDARY &&
+      snapshot.finalReleaseReady === false &&
+      sameJson(snapshot.source, EXPECTED_POST_RENAME_SOURCE) &&
+      HEX_40.test(snapshot.source.commit) &&
+      HEX_40.test(snapshot.source.tree) &&
+      sameJson(snapshot.repository, EXPECTED_POST_RENAME_REPOSITORY) &&
+      sameJson(snapshot.renameContinuity, EXPECTED_RENAME_CONTINUITY) &&
+      snapshot.renameContinuity.preRenameId ===
+        snapshot.renameContinuity.postRenameId &&
+      snapshot.renameContinuity.preRenameNodeId ===
+        snapshot.renameContinuity.postRenameNodeId &&
+      snapshot.renameContinuity.postRenameId === snapshot.repository.id &&
+      snapshot.renameContinuity.postRenameNodeId ===
+        snapshot.repository.nodeId &&
+      sameJson(snapshot.branchProtection, EXPECTED_BRANCH_PROTECTION) &&
+      sameJson(snapshot.security, EXPECTED_SECURITY) &&
+      sameJson(
+        snapshot.continuousIntegration,
+        EXPECTED_POST_RENAME_CONTINUOUS_INTEGRATION
+      ) &&
+      sameJson(snapshot.pullRequest, EXPECTED_RENAME_PULL_REQUEST) &&
+      snapshot.pullRequest.headSha === snapshot.source.commit &&
+      snapshot.continuousIntegration.headSha === snapshot.source.commit &&
+      sameJson(
+        snapshot.finalReleaseRequirements,
+        EXPECTED_FINAL_RELEASE_REQUIREMENTS
+      ),
+    "POST_RENAME_GOVERNANCE_SNAPSHOT_BOUNDARY"
+  );
+  return snapshot;
+}
+
 export function verifyReleaseGovernance({ rootDir = DEFAULT_ROOT } = {}) {
   const manifestBytes = readRegularFile(
     rootDir,
@@ -359,6 +529,12 @@ export function verifyReleaseGovernance({ rootDir = DEFAULT_ROOT } = {}) {
       "RELEASE_GOVERNANCE_SNAPSHOT_JSON"
     )
   );
+  const postRenameSnapshot = validatePostRenameSnapshot(
+    parseCanonicalJson(
+      surfaceBytes.get("post-rename-governance-snapshot"),
+      "POST_RENAME_GOVERNANCE_SNAPSHOT_JSON"
+    )
+  );
   const workflow = surfaceBytes.get("ci-workflow").toString("utf8");
   const ledger = surfaceBytes.get("governance-ledger").toString("utf8");
   const readme = surfaceBytes.get("public-readme").toString("utf8");
@@ -380,8 +556,10 @@ export function verifyReleaseGovernance({ rootDir = DEFAULT_ROOT } = {}) {
   assertMarkers(
     ledger,
     [
+      "OBSERVED_POST_RENAME_NONFINAL_GITHUB_GOVERNANCE",
       "OBSERVED_NONFINAL_GITHUB_GOVERNANCE",
       "required approving-review count was zero",
+      "repository ID `1317716765`",
       "does not query GitHub",
       "exact final commit"
     ],
@@ -415,21 +593,30 @@ export function verifyReleaseGovernance({ rootDir = DEFAULT_ROOT } = {}) {
     reviewedOn: manifest.reviewedOn,
     manifestPath: MANIFEST_PATH,
     manifestSha256: sha256(manifestBytes),
-    snapshotPath: EXPECTED_SURFACES["governance-snapshot"].path,
-    snapshotSha256: sha256(surfaceBytes.get("governance-snapshot")),
-    observedAt: snapshot.observedAt,
-    sourceCommit: snapshot.source.commit,
-    sourceTree: snapshot.source.tree,
+    snapshotPath:
+      EXPECTED_SURFACES["post-rename-governance-snapshot"].path,
+    snapshotSha256: sha256(
+      surfaceBytes.get("post-rename-governance-snapshot")
+    ),
+    observedAt: postRenameSnapshot.observedAt,
+    sourceCommit: postRenameSnapshot.source.commit,
+    sourceTree: postRenameSnapshot.source.tree,
     surfaceCount: manifest.surfaces.length,
-    requiredCheckCount: snapshot.branchProtection.requiredChecks.length,
+    requiredCheckCount:
+      postRenameSnapshot.branchProtection.requiredChecks.length,
     requiredApprovingReviewCount:
-      snapshot.branchProtection.requiredApprovingReviewCount,
+      postRenameSnapshot.branchProtection.requiredApprovingReviewCount,
     finalReleaseRequirements: [...manifest.finalReleaseRequirements],
     checks: {
       canonicalManifest: true,
       canonicalSnapshot: true,
       exactSurfaceHashes: true,
-      publicRepositoryCoordinatesExact: true,
+      publicRepositoryCoordinatesExact:
+        snapshot.repository.fullName === "Flash-Bri/tideproof" &&
+        postRenameSnapshot.repository.id === 1317716765 &&
+        postRenameSnapshot.repository.nodeId === "R_kgDOTorDHQ" &&
+        postRenameSnapshot.repository.fullName ===
+          EXPECTED_REPOSITORY.fullName,
       branchProtectionSnapshotExact: true,
       securitySnapshotExact: true,
       requiredCiSnapshotExact: true,
@@ -452,6 +639,12 @@ export const __test = Object.freeze({
   EXPECTED_CONTINUOUS_INTEGRATION,
   EXPECTED_FINAL_RELEASE_REQUIREMENTS,
   EXPECTED_MANIFEST_BOUNDARY,
+  EXPECTED_POST_RENAME_CONTINUOUS_INTEGRATION,
+  EXPECTED_POST_RENAME_REPOSITORY,
+  EXPECTED_POST_RENAME_SNAPSHOT_BOUNDARY,
+  EXPECTED_POST_RENAME_SOURCE,
+  EXPECTED_RENAME_CONTINUITY,
+  EXPECTED_RENAME_PULL_REQUEST,
   EXPECTED_REPOSITORY,
   EXPECTED_SECURITY,
   EXPECTED_SNAPSHOT_BOUNDARY,
@@ -460,6 +653,8 @@ export const __test = Object.freeze({
   EXPECTED_SURFACES,
   MANIFEST_SCHEMA,
   MANIFEST_STATUS,
+  POST_RENAME_SNAPSHOT_SCHEMA,
+  POST_RENAME_SNAPSHOT_STATUS,
   SNAPSHOT_SCHEMA,
   SNAPSHOT_STATUS
 });

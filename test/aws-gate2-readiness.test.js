@@ -432,8 +432,8 @@ function releaseClaimsReceipt() {
       "https://cockroachdb-ai.devpost.com/",
       "https://cockroachdb-ai.devpost.com/resources",
       "https://cockroachdb-ai.devpost.com/rules",
-      "https://github.com/Flash-Bri/tideproof",
-      "https://github.com/Flash-Bri/tideproof.git"
+      "https://github.com/Flash-Bri/prooftoact",
+      "https://github.com/Flash-Bri/prooftoact.git"
     ],
     finalReleaseRequirements: [
       "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
@@ -494,12 +494,13 @@ function releaseGovernanceReceipt() {
     reviewedOn: "2026-08-01",
     manifestPath: "RELEASE_GOVERNANCE_MANIFEST.json",
     manifestSha256: "5".repeat(64),
-    snapshotPath: "evidence/github-release-governance-2026-08-01.json",
+    snapshotPath:
+      "evidence/github-release-governance-rename-2026-08-03.json",
     snapshotSha256: "6".repeat(64),
     observedAt: "2026-08-01T01:45:38Z",
     sourceCommit: "7".repeat(40),
     sourceTree: "8".repeat(40),
-    surfaceCount: 5,
+    surfaceCount: 8,
     requiredCheckCount: 1,
     requiredApprovingReviewCount: 0,
     finalReleaseRequirements: [
@@ -575,7 +576,7 @@ function releaseSubmissionReceipt() {
     reviewedOn: "2026-07-31",
     manifestPath: "RELEASE_SUBMISSION_MANIFEST.json",
     manifestSha256: "6".repeat(64),
-    surfaceCount: 7,
+    surfaceCount: 10,
     checklistItemCount: 14,
     uncheckedChecklistItemCount: 14,
     stopTokenOccurrenceCount: 13,
@@ -722,7 +723,7 @@ function releaseProvenanceReceipt() {
 
 function preflightReceipt() {
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v4",
+    schemaVersion: "tideproof.gate2.aws-preflight.v5",
     status: "PASS",
     observedAt: "2026-07-31T05:30:00.000Z",
     sourceCommit: SOURCE_COMMIT,
@@ -790,8 +791,10 @@ function preflightReceipt() {
         autoRenewReportedEnabled: false
       },
       mainGateTwoStack: {
-        name: "tideproof-gate2",
-        state: "ABSENT"
+        name: "prooftoact-gate2",
+        state: "ABSENT",
+        legacyName: "tideproof-gate2",
+        legacyState: "ABSENT"
       },
       bedrock: {
         modelId: "amazon.nova-micro-v1:0",
@@ -1286,19 +1289,19 @@ test("AWS readiness accepts only full or explicit local mode", () => {
 test("AWS readiness accepts only public official remote forms", () => {
   assert.equal(
     __test.isOfficialRemote(
-      "https://github.com/Flash-Bri/tideproof.git"
+      "https://github.com/Flash-Bri/prooftoact.git"
     ),
     true
   );
   assert.equal(
     __test.isOfficialRemote(
-      "https://github.com/Flash-Bri/tideproof"
+      "https://github.com/Flash-Bri/prooftoact"
     ),
     true
   );
   assert.equal(
     __test.isOfficialRemote(
-      "git@github.com:Flash-Bri/tideproof.git"
+      "git@github.com:Flash-Bri/prooftoact.git"
     ),
     false
   );

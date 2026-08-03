@@ -2,7 +2,7 @@
 
 **Status: DRAFT SAFELY BLOCKED — FINAL RECEIPTS AND OWNER AUTHORITY PENDING**
 
-This control binds Tideproof's current Devpost draft packet, contest matrix,
+This control binds ProofToAct's current Devpost draft packet, contest matrix,
 release plan, claims boundary, rights ledger, and release-claims inventory to
 exact reviewed bytes. It verifies that the public-source draft remains
 explicitly incomplete and that every hard publish-gate checkbox remains open.

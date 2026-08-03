@@ -143,7 +143,7 @@ async function buildArtifact(
     dependencyRoot: fs.realpathSync(path.join(root, "node_modules"))
   });
   const temporaryDirectory = fs.mkdtempSync(
-    path.join(trustedTemporaryRoot(), "tideproof-gate2-")
+    path.join(trustedTemporaryRoot(), "prooftoact-gate2-")
   );
   const stagedPath = path.join(temporaryDirectory, "index.js");
   const provisionalPath = path.join(

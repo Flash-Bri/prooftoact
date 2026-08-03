@@ -2,7 +2,7 @@
 
 Status: **CURRENT COST GUARDS PASS — LIVE SPEND AND FINAL REVIEW PENDING**
 
-This control binds Tideproof's current source, budget prerequisites, recorded
+This control binds ProofToAct's current source, budget prerequisites, recorded
 non-AWS spend, and deployment stop conditions. A
 `CURRENT_COST_GUARDS_PASS` receipt is a current-source result only. It does
 not assert current AWS spend, authorize an upload or deployment, validate a
@@ -13,9 +13,9 @@ registrar receipt, or approve publication or submission.
 - Approved AWS budget notification boundary: **$15.00 USD monthly**.
 - Recorded non-AWS spend: **$11.86 USD** for the owner-authorized
   `tideproof.net` registration.
-- Approved total Tideproof exposure: **$25.00 USD**.
+- Approved total ProofToAct exposure: **$25.00 USD**.
 - Effective AWS spend ceiling: **$13.14 USD**, reduced dollar for dollar by
-  any later non-AWS Tideproof expense.
+  any later non-AWS ProofToAct expense.
 - Expected metered contest-period spend: **$3–$12 USD** through
   2026-09-15.
 - Stop new cloud work if daily cost exceeds **$5 USD** or unexplained spend

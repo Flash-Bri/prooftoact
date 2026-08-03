@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-submission-manifest.v1",
   "status": "DRAFT_SAFELY_BLOCKED_FINAL_RELEASE_RECEIPTS_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "This manifest binds only the current source draft and its fail-closed release dependencies. It does not query Devpost or official competition pages, determine eligibility, verify entrant identity or authority, prove live services, or authorize deployment, publication, or submission.",
   "coordinates": {
     "competitionOverview": "https://cockroachdb-ai.devpost.com/",
@@ -12,8 +12,8 @@
     "license": "MIT",
     "officialDeadline": "2026-08-18 at 5:00 PM ET",
     "officialPageCheckDate": "2026-07-30",
-    "projectName": "Tideproof",
-    "publicSource": "https://github.com/Flash-Bri/tideproof",
+    "projectName": "ProofToAct",
+    "publicSource": "https://github.com/Flash-Bri/prooftoact",
     "subtitle": "Admissibility memory for high-stakes agents"
   },
   "finalReleaseRequirements": [
@@ -54,10 +54,22 @@
   ],
   "surfaces": [
     {
+      "id": "brand-migration-ledger",
+      "path": "docs/RENAME_MIGRATION.md",
+      "role": "APPROVED_RENAME_BOUNDARY",
+      "sha256": "bc0b8055a793f55ebd1e09c5ec8b14bcf15a1ff63d0ae35f6135738459d2443c"
+    },
+    {
+      "id": "brand-migration-manifest",
+      "path": "RENAME_MIGRATION_MANIFEST.json",
+      "role": "APPROVED_RENAME_CONTROL",
+      "sha256": "ed3944f31989473e9b34185838c57999992da339545fe6571773e55f782e01ac"
+    },
+    {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_BOUNDARY",
-      "sha256": "158738530654541c65ccef58127d4665538a0e4b5555ca27c40e4f76697a05d4"
+      "sha256": "5c80c2c3d2e9da6151794eecf0f2bda17f2c30bd4d91246350a5756d389bb9d7"
     },
     {
       "id": "contest-matrix",
@@ -66,34 +78,40 @@
       "sha256": "3aaf84ea8544489d31677c57c1690ee83d0d6db1882a1f17084883e51ffeb3e9"
     },
     {
+      "id": "prior-art-ledger",
+      "path": "docs/PRIOR_ART.md",
+      "role": "NAMING_AND_ORIGINALITY_BOUNDARY",
+      "sha256": "c15c59fa80d24a11e5b64c3024fc475384e3297b29a98eba653e583196becf88"
+    },
+    {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
       "role": "PUBLIC_CLAIM_INVENTORY",
-      "sha256": "5ee908ff3d0ff238a0a65c5a9e14e0f8f11320de03a6a4ff5dc17c67d0ed80c9"
+      "sha256": "8bf8c8de736c7151f25243e2cdf26e9b9d3e462e09635a69710b9a8bc224bbcd"
     },
     {
       "id": "release-submission-ledger",
       "path": "docs/RELEASE_SUBMISSION.md",
       "role": "SUBMISSION_CONTROL_LEDGER",
-      "sha256": "aa4207838410686f949638044de0ddf7f5a3d8d7b06244b1362355928b10dc13"
+      "sha256": "3400dc7d0abbb418a16cde0b870ade29f81b0af80315d65beaf51d86fc4781ff"
     },
     {
       "id": "rights-ledger",
       "path": "docs/media/RIGHTS.md",
       "role": "MEDIA_RIGHTS_BOUNDARY",
-      "sha256": "720bab8ec891819c1b3f43772cb885e836ad7bfa999efd5cbf63ab7886e0e9be"
+      "sha256": "1403d4ac328501d82d8252c3ff416431cfe0ec2b37958a11eb2c301201741812"
     },
     {
       "id": "submission-packet",
       "path": "docs/SUBMISSION_PACKET.md",
       "role": "DEVPOST_DRAFT",
-      "sha256": "74c5678718fcb788025d0636020b0d50bc21effdd373c134236d5ffd17236eac"
+      "sha256": "d0cf2916c18f224ea60f5b1003bc2c73694b67296e96efa8968dace9b753be15"
     },
     {
       "id": "winning-plan",
       "path": "docs/WINNING_PLAN.md",
       "role": "RELEASE_PLAN",
-      "sha256": "119d2ae62316fcc658238fac29c15103f7efab79aa1f2142e106aff489e69c2f"
+      "sha256": "f78c83576cf41d8628f3e456b8d49b45954ee0db38e09a88d78a1d7617d999d2"
     }
   ],
   "finalReleaseReady": false

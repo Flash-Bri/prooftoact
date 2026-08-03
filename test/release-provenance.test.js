@@ -192,8 +192,8 @@ function claimsReceipt() {
       "https://cockroachdb-ai.devpost.com/",
       "https://cockroachdb-ai.devpost.com/resources",
       "https://cockroachdb-ai.devpost.com/rules",
-      "https://github.com/Flash-Bri/tideproof",
-      "https://github.com/Flash-Bri/tideproof.git"
+      "https://github.com/Flash-Bri/prooftoact",
+      "https://github.com/Flash-Bri/prooftoact.git"
     ],
     finalReleaseRequirements: [
       "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
@@ -254,12 +254,13 @@ function governanceReceipt() {
     reviewedOn: "2026-08-01",
     manifestPath: "RELEASE_GOVERNANCE_MANIFEST.json",
     manifestSha256: "5".repeat(64),
-    snapshotPath: "evidence/github-release-governance-2026-08-01.json",
+    snapshotPath:
+      "evidence/github-release-governance-rename-2026-08-03.json",
     snapshotSha256: "6".repeat(64),
     observedAt: "2026-08-01T01:45:38Z",
     sourceCommit: "7".repeat(40),
     sourceTree: "8".repeat(40),
-    surfaceCount: 5,
+    surfaceCount: 8,
     requiredCheckCount: 1,
     requiredApprovingReviewCount: 0,
     finalReleaseRequirements: [
@@ -318,7 +319,7 @@ function submissionReceipt() {
     reviewedOn: "2026-07-31",
     manifestPath: "RELEASE_SUBMISSION_MANIFEST.json",
     manifestSha256: "6".repeat(64),
-    surfaceCount: 7,
+    surfaceCount: 10,
     checklistItemCount: 14,
     uncheckedChecklistItemCount: 14,
     stopTokenOccurrenceCount: 13,

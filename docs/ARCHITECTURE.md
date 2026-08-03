@@ -2,7 +2,7 @@
 
 ## Product claim
 
-Tideproof demonstrates that an agent can retrieve useful memory without
+ProofToAct demonstrates that an agent can retrieve useful memory without
 treating retrieval as authority. Its admissibility-memory protocol separates
 four steps:
 
@@ -20,7 +20,7 @@ The model may propose; deterministic policy and the database decide.
 Synthetic event stream
         |
         v
-TideproofMemory
+ProofToActMemory
   - provenance and time gates
   - scope gate
   - conflict gate
@@ -103,7 +103,7 @@ version; its monitored alias is not invocation authority, and the advisory
 Boundary does not call it. Its local candidate accepts
 only two named contenders for one configured synthetic race, derives every
 operation-bearing field without model input, reads only one exact
-Tideproof-owned Secrets Manager ARN, and calls only the CockroachDB
+ProofToAct-owned Secrets Manager ARN, and calls only the CockroachDB
 authorizer's typed `SECURITY DEFINER` functions. None of those cloud or
 database boundaries are proven live until the accepted race receipt includes
 the later durable-state observation and its private database evidence.

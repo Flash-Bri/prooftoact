@@ -770,8 +770,8 @@ const SOURCE_MARKERS = Object.freeze({
     "The `proof` aliases are monitored pointers for inspection and metadata only, not invocation authority.",
     "npm run gate2:aws-attest",
     "Attestation accepts only a never-updated `CREATE_COMPLETE` stack",
-    "disposable `tideproof-gate2-probe` stack",
-    "fresh `tideproof-gate2` main stack",
+    "disposable `prooftoact-gate2-probe` stack",
+    "fresh `prooftoact-gate2` main stack",
     "must never be updated",
     "Any wrong-run, cross-DVI,",
     "sequential, ambiguous, replayed, expanded, stale, extra, or unresolved",
@@ -907,7 +907,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "commit-reconciliation-ledger": Object.freeze([
     "SOURCE_RUNTIME_BOUND_PROVIDER_VALIDATION_PENDING",
-    "Tideproof treats a lost database acknowledgement as an unknown observation",
+    "ProofToAct treats a lost database acknowledgement as an unknown observation",
     "Unknown results carry `null`; client time is rejected",
     "Denied receipts and expired or superseded positive receipts are durable history",
     "no live exactly-once or provider-concurrency claim is added",
@@ -978,7 +978,7 @@ const SOURCE_MARKERS = Object.freeze({
     "\"EXPECTED_ADVISORY_CALLER_ROLE_ARN\": {",
     "\"AuthorizationType\": \"AWS_IAM\"",
     "\"Type\": \"AWS::Lambda::Permission\"",
-    "\"Namespace\": \"Tideproof/GateTwo\"",
+    "\"Namespace\": \"ProofToAct/GateTwo\"",
     "\"MetricName\": \"SemanticFailures\""
   ]),
   "aws-template-source": Object.freeze([
@@ -1718,7 +1718,7 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
       sameJson(apiDeployment.Properties?.ApiId, { Ref: "HttpApi" }) &&
       sameJson(apiDeployment.Properties?.Description, {
         "Fn::Sub":
-          "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+          "ProofToAct exact API deployment ${SourceCommit} ${ConfigDigest}"
       }) &&
       sameJson(
         apiDeployment.DependsOn,
@@ -1798,7 +1798,7 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
       Object.values(resources).filter(
         (resource) =>
           resource.Type === "AWS::CloudWatch::Alarm" &&
-          resource.Properties?.Namespace === "Tideproof/GateTwo"
+          resource.Properties?.Namespace === "ProofToAct/GateTwo"
       ).length === 2,
     "RELEASE_SECURITY_SEMANTIC_FAILURE_ALARM_SET"
   );
@@ -1810,7 +1810,7 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
       alarm?.Type === "AWS::CloudWatch::Alarm" &&
         alarm.Properties.AlarmName?.["Fn::Sub"] ===
           `\${AWS::StackName}-${service}-semantic-failures` &&
-        alarm.Properties.Namespace === "Tideproof/GateTwo" &&
+        alarm.Properties.Namespace === "ProofToAct/GateTwo" &&
         alarm.Properties.MetricName === "SemanticFailures" &&
         alarm.Properties.Statistic === "Sum" &&
         alarm.Properties.Period === 60 &&

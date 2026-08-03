@@ -510,7 +510,7 @@ function semanticFailureMetric(code, context, now = () => Date.now()) {
       Timestamp: now(),
       CloudWatchMetrics: [
         {
-          Namespace: "Tideproof/GateTwo",
+          Namespace: "ProofToAct/GateTwo",
           Dimensions: [["Deployment", "Service"]],
           Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
         }

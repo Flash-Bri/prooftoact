@@ -37,6 +37,9 @@ jobs:
       - name: Verify proof manifest
         run: npm run proof:verify
 
+      - name: Verify ProofToAct brand migration
+        run: npm run brand:verify
+
       - name: Verify current claim surfaces
         run: npm run claims:verify
 

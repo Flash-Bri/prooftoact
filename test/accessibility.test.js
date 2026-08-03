@@ -215,8 +215,8 @@ test("accessibility gate requires inert loading controls and image alternatives"
     mutate(
       image,
       "web/index.html",
-      'alt="Tideproof trust boundaries:',
-      'alt="" data-note="Tideproof trust boundaries:'
+      'alt="ProofToAct trust boundaries:',
+      'alt="" data-note="ProofToAct trust boundaries:'
     );
     assert.throws(
       () => verifyFixture(image),

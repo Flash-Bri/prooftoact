@@ -121,7 +121,7 @@ test("public demo serves only the bounded signed-out proof surface", async () =>
   assert.match(page.body, /A TrustAgentic\.ai project/);
   assert.match(
     page.body,
-    /https:\/\/github\.com\/Flash-Bri\/tideproof/
+    /https:\/\/github\.com\/Flash-Bri\/prooftoact/
   );
   assert.doesNotMatch(page.body, /rel="icon"|favicon/i);
   const architecture = await handler(event("/architecture.svg"));

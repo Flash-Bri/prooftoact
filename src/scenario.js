@@ -1,6 +1,6 @@
 import {
   MemoryUnavailableError,
-  TideproofMemory
+  ProofToActMemory
 } from "./protocol.js";
 
 const INCIDENT_ID = "incident-highwater-001";
@@ -22,7 +22,7 @@ function evidence(overrides) {
 }
 
 export function runScenario() {
-  const memory = new TideproofMemory({ clock: () => FIXED_NOW });
+  const memory = new ProofToActMemory({ clock: () => FIXED_NOW });
   const timeline = [];
 
   const admitted = memory.ingestEvidence(
@@ -259,7 +259,7 @@ export function runScenario() {
   });
 
   return {
-    title: "Tideproof — Admissibility Memory for High-Stakes Agents",
+    title: "ProofToAct — Admissibility Memory for High-Stakes Agents",
     disclosure: "Synthetic scenario; not operational emergency software.",
     fixedTime: FIXED_NOW,
     incidentId: INCIDENT_ID,
@@ -312,7 +312,7 @@ export function runScenario() {
         limitation:
           "Bedrock, KMS, IAM, API Gateway, and CloudFormation are unverified live.",
         boundarySummary:
-          "CockroachDB transactions, Distributed Vector Indexing, and Managed MCP are recorded Gate One evidence in synthetic scope. The AWS path is a locally verified candidate awaiting live Gate Two receipts. Tideproof makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim.",
+          "CockroachDB transactions, Distributed Vector Indexing, and Managed MCP are recorded Gate One evidence in synthetic scope. The AWS path is a locally verified candidate awaiting live Gate Two receipts. ProofToAct makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim.",
         hostReceipt: null
       }
     }

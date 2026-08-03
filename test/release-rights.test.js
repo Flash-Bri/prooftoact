@@ -15,11 +15,14 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURE_FILES = Object.freeze([
   "CLAIMS.md",
   "README.md",
+  "RENAME_MIGRATION_MANIFEST.json",
+  "docs/RENAME_MIGRATION.md",
   "docs/VISUAL_RELEASE_SYSTEM.md",
   "docs/media/RIGHTS.md",
   "docs/media/RIGHTS_MANIFEST.json",
   "docs/media/architecture.png",
   "docs/media/architecture.svg",
+  "evidence/architecture-asset-rename-2026-08-03.md",
   "evidence/gate1-ambiguity-2026-07-30.md",
   "evidence/gate1-authority-2026-07-30.md",
   "evidence/gate1-recovery-broker-2026-07-30.md",
@@ -252,17 +255,17 @@ test("rights inventory rejects data media and unsafe navigation schemes", () => 
       /RELEASE_RIGHTS_BROWSER_ASSETS/
     ],
     [
-      "https://github.com/Flash-Bri/tideproof",
+      "https://github.com/Flash-Bri/prooftoact",
       "//trustagentic.ai",
       /RELEASE_RIGHTS_BROWSER_NAVIGATION/
     ],
     [
-      "https://github.com/Flash-Bri/tideproof",
+      "https://github.com/Flash-Bri/prooftoact",
       "javascript:alert(1)",
       /RELEASE_RIGHTS_BROWSER_NAVIGATION/
     ],
     [
-      "https://github.com/Flash-Bri/tideproof",
+      "https://github.com/Flash-Bri/prooftoact",
       "&#104;ttps://trustagentic.ai",
       /RELEASE_RIGHTS_BROWSER_NAVIGATION/
     ]

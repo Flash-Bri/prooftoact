@@ -18,7 +18,7 @@
       "id": "admissible-vector-runner",
       "path": "scripts/gate1-admissible-vector.js",
       "role": "ADMISSIBLE_VECTOR_EVIDENCE_RUNNER",
-      "sha256": "5bc27a62f30dfe8ca9173192fee34f3475d4d3fa55ccdfa934c15320c30ebfa4"
+      "sha256": "47da76a44ccc6e2946157eced0c5a28d524c55307df9b1dff9b5b69d3f350894"
     },
     {
       "id": "authority-identity-contract",
@@ -48,7 +48,7 @@
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
-      "sha256": "8fec3b5a82b55bd175482d55ce0ec925f0070c5db7c8f1e190ab853f49722978"
+      "sha256": "3bacd801ff9e9c4abd9900cd4cf65303f618b587917091ae86e2c595af8e1938"
     },
     {
       "id": "authority-runtime-identity-tests",
@@ -60,7 +60,7 @@
       "id": "authority-runtime-reconciliation-tests",
       "path": "test/aws-authority-lambda.test.js",
       "role": "AUTHORITY_RUNTIME_RECONCILIATION_VERIFICATION",
-      "sha256": "d948470b48494284d6253657590fd81dfc46d08d104410e1f8774ea0dce1be18"
+      "sha256": "b4fe70cb51affbe6499e3cf9aca098933bed9d22c26f77c08ac4d334aae85fde"
     },
     {
       "id": "authority-store",
@@ -78,7 +78,7 @@
       "id": "aws-authority-race",
       "path": "scripts/gate2-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
-      "sha256": "756a5068d48755bdaf20f17c966676ba2da2b62d2cd0a2f9fc76911f9617ff6d"
+      "sha256": "eae1b369eaddc2363b9176bd3e7968faa06f70d1d77002308640ef9553b37e13"
     },
     {
       "id": "aws-authority-race-validator",
@@ -90,13 +90,13 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "ac08dcd8ed3b56838180da56ad7b087d95d8ba5073909ef6c874716fc3cd99a1"
+      "sha256": "ff81c363671e38db9ddc2905b5e39ecd1d838ca1bbd505855d15a9107d380505"
     },
     {
       "id": "aws-deployment-attestation",
       "path": "src/cloud/aws-deployment-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
-      "sha256": "6c9a2c0f9d1d2d9a12f0063695004250e1c15b325c27b7957f5b60351642e007"
+      "sha256": "62ad076f13aa772df48bd5f438a4bc701539a77146d6e2969d27665184c3a09a"
     },
     {
       "id": "aws-deployment-attestation-runner",
@@ -108,7 +108,7 @@
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "b53b612dcef2d9baa79ab0a1e36ae6fdfd1cc4569b8c4ad0807725bc1d297ea0"
+      "sha256": "c27db879f2fdd22e83fa3a9709772a2750c350c6f7a64ca0e2d5a81ef4f30d44"
     },
     {
       "id": "aws-evidence-identity",
@@ -150,43 +150,43 @@
       "id": "aws-preflight",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "49f992eb850aae506a6f2f99b9250d35f8c05d73ac84978cacea0d2753038ff6"
+      "sha256": "62a619a61c8c86c686cf52b9eeeed0767c3d0f16746411de3b547ebe7d70a7c4"
     },
     {
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "7c4b52d4f30d7afdb30beddf14e118cd0766a567ed3157c5fc82bda9bc56813c"
+      "sha256": "f85510c627e6ba4059794d0cabc3dd0f11f7eb890563c0ccc49f8ed3845361f1"
     },
     {
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "7124b043fee550f1459054ecc1f383b978ae9e82ae583d86733a6f86b11498ef"
+      "sha256": "45951c031d4c5324fc6d45b8da74309b337de434242d92f3f542e7582ef2e755"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "f5177c49b7f94446a0a38a958a26405d9cd049900f7f5507ed6f42247fec8e2f"
+      "sha256": "2eec05a757bd531f15c773baf0a1a20611881d61b7006c5becfddba449a5c311"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "17f3f547cc9a9e1e375e890bbe918dcbf085ae33457a4fd41005996bf958d9ce"
+      "sha256": "d9dff3c34d0ae4aac3db8d45183559143a96c5477e4f50fbff95c359fcbdee51"
     },
     {
       "id": "aws-template-security-tests",
       "path": "test/aws-gate2-template-security.test.js",
       "role": "AWS_TEMPLATE_LEAST_PRIVILEGE_VERIFICATION",
-      "sha256": "fee0683f9a052308bfe12b544306c392d7bee4a510bd2e2c065515e56e89e856"
+      "sha256": "0dbe1edcd7659fad77569234088594bcf72969711cb67354c787d7007f63ec6a"
     },
     {
       "id": "boundary-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "AWS_COORDINATOR_RUNTIME",
-      "sha256": "3307cf6e9b0c5346aac8642e59a9d0ecc1876f8362eda9d2f57eb567fdd5682a"
+      "sha256": "881d9c30521b38a3bc1ab42e0d88b5df25923d518684166cb6835e12e3a12fde"
     },
     {
       "id": "canonical-json-contract",
@@ -204,7 +204,7 @@
       "id": "commit-reconciliation-ledger",
       "path": "docs/COMMIT_RECONCILIATION.md",
       "role": "DATABASE_COMMIT_RECONCILIATION_BOUNDARY",
-      "sha256": "01885c2920068142f8ae222da2fe643fe1c4394bbec899c6ae2e629d60eb64f7"
+      "sha256": "cfb97a225038452b112c82427f07ceb3d1eaa721f0361e20d3990066d51b0bbb"
     },
     {
       "id": "commit-reconciliation-tests",
@@ -288,13 +288,13 @@
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
       "role": "IMMUTABLE_GIT_BUILD_VERIFICATION",
-      "sha256": "0f58cda47ac2756e1f45d6e45e996ed9e9a55a8e81859c7f3cb5467e7e1ad90d"
+      "sha256": "b3079a5dede48a8d7a630c6f2b3633f6ece66fb4c4dcc3e3e003d492a9ab0951"
     },
     {
       "id": "gate2-build-runner",
       "path": "scripts/build-gate2-template.js",
       "role": "EXACT_GIT_ARTIFACT_BUILDER",
-      "sha256": "15af85c14a3d6048ea43cafa626f54b11539a19eb01e2601657f5233b9a70188"
+      "sha256": "c93c98a1ec1032473ca0491e1f2858acc1ea81e22e3329e0c22c0258e1973bb1"
     },
     {
       "id": "gate2-exact-build-bootstrap",
@@ -312,7 +312,7 @@
       "id": "local-server",
       "path": "src/server.js",
       "role": "LOOPBACK_DEVELOPMENT_SERVER",
-      "sha256": "9cda2d50db1e5c564ffd45e77cef6b2fa5eab8d7a5a12554791b4ae7ccde0b4a"
+      "sha256": "687ab8db3fd0fb4a6d45395c631a4f77189b971f6ecf249196004a59b15e6908"
     },
     {
       "id": "managed-mcp-client",
@@ -342,25 +342,25 @@
       "id": "protocol-runtime",
       "path": "src/protocol.js",
       "role": "LOCAL_PROTOCOL_SPECIFICATION",
-      "sha256": "8f4a68405b3dc8817152a951b3cbfad0f274cfaa362e390d710a286a23807c2f"
+      "sha256": "642d88839df5692b8d0b2427ae2240490d6c4f7f7dd28295458798ea6219bb7e"
     },
     {
       "id": "proposal-runtime",
       "path": "infra/aws/lambda/agent.cjs",
       "role": "AWS_PROPOSAL_RUNTIME",
-      "sha256": "53a847be7c14a5ce9b8fb5005df995bad772c850ed20b6f3fd02d0e5358b0aac"
+      "sha256": "66c8dc0d3c82885e5136570217ee8cd44bf36e8380746256b8aab7bf723f252f"
     },
     {
       "id": "public-demo-runtime",
       "path": "src/cloud/public-demo.js",
       "role": "AWS_PUBLIC_RUNTIME",
-      "sha256": "ad80c8225a543e93af5b59195f730609cb4e79112035b1cbbc78908e0b202273"
+      "sha256": "62d3af48176b92cb6e02731887ed6e628d809a7785955ddd90e0512bb1ef4d8b"
     },
     {
       "id": "public-demo-verifier",
       "path": "src/cloud/public-demo-verifier.js",
       "role": "LIVE_PUBLIC_VERIFIER",
-      "sha256": "47e97fe67aea67d155233ae1956c7e43fd22db5fc8c907b229685c68e55f4b9e"
+      "sha256": "86dba21af916d68af4d86fd621d573c0f695d68c8e13a2fae3ce5480a44ff069"
     },
     {
       "id": "recovery-security-bootstrap",
@@ -426,13 +426,13 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "3bd57e2d68f40bfb41962b59d1d68495280d320b589f95e3c245f7a1fea41cf4"
+      "sha256": "f3e77730031fcf1ea7cbb844132bfda9eff43cb9b4b477049421988d6f5c472f"
     },
     {
       "id": "security-policy",
       "path": "SECURITY.md",
       "role": "VULNERABILITY_POLICY",
-      "sha256": "e024a73c8000001ef4fba9318814a423e7cf8f59e8fd74ebfe03e296d10db13b"
+      "sha256": "af5b80f836c2ce2f317987248acbff4b9bed58ea7faa30b91bd1f05c3bc9ba1d"
     },
     {
       "id": "signed-ingest",

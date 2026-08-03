@@ -2,7 +2,7 @@
 
 ## Scope
 
-Tideproof is a synthetic competition demonstration. It is not production
+ProofToAct is a synthetic competition demonstration. It is not production
 security software, emergency-response software, or a service suitable for real
 people, incidents, resources, or credentials. The verified and unverified
 boundaries for public claims are maintained in [`CLAIMS.md`](CLAIMS.md).
@@ -68,6 +68,6 @@ the exact final release commit before publication or submission.
 ## Safe research boundary
 
 Testing must stay within locally owned fixtures or explicitly authorized
-Tideproof resources. Do not probe Cockroach Labs, AWS, TrustAgentic,
+ProofToAct resources. Do not probe Cockroach Labs, AWS, TrustAgentic,
 Conversate, Northstar, another entrant, or any third-party system without
 separate written authorization.

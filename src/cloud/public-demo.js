@@ -183,7 +183,7 @@ function awsHostedScenario(runScenario, binding) {
     limitation:
       "Bedrock, KMS, the IAM advisory path, and the CockroachDB-to-AWS handoff require separate accepted live receipts.",
     boundarySummary:
-      "This page is hosted by a content-only AWS Lambda whose application role can write bounded logs and has no proposal or authority capabilities. The separate proposal path remains IAM-authenticated and unproved live until its receipts pass review. Tideproof makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim.",
+      "This page is hosted by a content-only AWS Lambda whose application role can write bounded logs and has no proposal or authority capabilities. The separate proposal path remains IAM-authenticated and unproved live until its receipts pass review. ProofToAct makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim.",
     hostReceipt
   };
   return Object.freeze(scenario);

@@ -1,0 +1,95 @@
+{
+  "schema": "prooftoact.rename-migration.v1",
+  "status": "REPOSITORY_RENAME_COMPLETE_FINAL_RELEASE_PENDING",
+  "decisionDate": "2026-08-03",
+  "approvedName": "ProofToAct",
+  "subtitle": "Admissibility Memory for High-Stakes Agents",
+  "formerWorkingName": "Tideproof",
+  "repository": "https://github.com/Flash-Bri/prooftoact",
+  "packageName": "prooftoact-admissibility-memory",
+  "futureAwsMainStack": "prooftoact-gate2",
+  "legacyAwsBootstrapStack": "tideproof-gate2-artifacts",
+  "legacyAwsMainStackBlocked": "tideproof-gate2",
+  "evidenceBaseline": [
+    {
+      "path": "evidence/accessibility-browser-review-2026-07-31.md",
+      "sha256": "ae5a322ed307d4a6c34640d1c685bf3460fd8a3d03e4a5caddabc3207a7c0677"
+    },
+    {
+      "path": "evidence/accessibility-static-review-2026-07-31.md",
+      "sha256": "f00edccd11c1cd0d1a7abf0a2b28ae75dbe96ebc1626bfcc5515a72d2f27a28b"
+    },
+    {
+      "path": "evidence/architecture-asset-release-2026-07-31.md",
+      "sha256": "44fba1df65a6a5d0ad4b57ab4478f1bc210c119bc19e870d6bce43580b4839ef"
+    },
+    {
+      "path": "evidence/domain-cost-owner-record-2026-07-30.md",
+      "sha256": "752cdbbb2488c51e6d47ed80c748b653d731f1b7eea7d0cf2d34dc4e701ce566"
+    },
+    {
+      "path": "evidence/gate1-ambiguity-2026-07-30.md",
+      "sha256": "6ce3446ce19c82ecb52b178c4d00d080fa9281a11bfecefdd5fb8050a3ae0a1b"
+    },
+    {
+      "path": "evidence/gate1-authority-2026-07-30.md",
+      "sha256": "418a53cf3ef62d4abd19a65f2f2abb2b2355652b90ec7e72438fd69b6aa8f29d"
+    },
+    {
+      "path": "evidence/gate1-managed-mcp-2026-07-29.md",
+      "sha256": "0608b7ededc94c4b79197f7fe6f1b033fcb2ec20915ec67d244847467e3d4d38"
+    },
+    {
+      "path": "evidence/gate1-recovery-broker-2026-07-30.md",
+      "sha256": "819f510dc62d289b2cbdab268abfe7440ff0a50cca18e457efe776b5a17be51c"
+    },
+    {
+      "path": "evidence/gate1-recovery-mcp-2026-07-29.md",
+      "sha256": "fcad5ddb51ad66347425cff93497cb321e7a3697178a683b0a032eee9273268e"
+    },
+    {
+      "path": "evidence/gate1-vector-2026-07-29.md",
+      "sha256": "83271ec1b62a800b533a92d7c3cd2c191b104de2c47cec7c5aecd4404f8ddc45"
+    },
+    {
+      "path": "evidence/gate2-authority-local-validation-79476df-2026-07-31.md",
+      "sha256": "2f6fa495ec54e36bb858477c264f8100358bbc772f43c49a93c37daf7e83ad8b"
+    },
+    {
+      "path": "evidence/gate2-console-stop-receipt-2026-07-30.md",
+      "sha256": "7a891b1810d8343e19c3cff40591302b2c483b8fdacf7b68edf68596ad18258d"
+    },
+    {
+      "path": "evidence/gate2-cost-guard-2026-07-30.json",
+      "sha256": "b9e0e8487329d86b9c8fd614ce65fc0dd859ab6035701acff3d079a1be693b14"
+    },
+    {
+      "path": "evidence/gate2-historical-upload-receipt-0ef4dba-2026-07-30.json",
+      "sha256": "25fc1edfd633dfcab417ea1d94ce8a5b87c31a36050e0fbf4311fd2d6081f276"
+    },
+    {
+      "path": "evidence/gate2-predeployment-local-validation-9aa7f2e-2026-07-30.md",
+      "sha256": "cfa7d93b458e4aebd254dfddf7e88a0c98f0dc2ecb2f65e6e9da5c1505278ac3"
+    },
+    {
+      "path": "evidence/gate2-release-build-4acafa9-2026-07-30.md",
+      "sha256": "8c4aaca79057413aac27a296dd3f0c46793b9fdb19917ade8974d8bab735ec1b"
+    },
+    {
+      "path": "evidence/github-release-governance-2026-08-01.json",
+      "sha256": "527eeea8909f1006fa4337e7517ded81907e46548fa395eacad9ec38284a65a8"
+    },
+    {
+      "path": "evidence/local-judge-path-e2b247a-2026-07-30.md",
+      "sha256": "b3ed9414195b224482228e1ea22a4fcf513766551c5d082f976376e69b7f026e"
+    },
+    {
+      "path": "evidence/proof-manifest-baseline-2026-07-31.md",
+      "sha256": "35d743fe89a3f1fc13499bd9df509e9f922fe3a659231db840a842d01af2a489"
+    },
+    {
+      "path": "evidence/public-source-release-081b580-2026-07-30.md",
+      "sha256": "2b1d58371034fc394ff5ca203391529a15c039f91f7dab691ec2b7b07c8f238a"
+    }
+  ]
+}

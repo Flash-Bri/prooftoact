@@ -1,8 +1,8 @@
-# Tideproof
+# ProofToAct
 
 **Public clean-room source. Not yet a contest submission or live AWS claim.**
 
-Tideproof is an admissibility-memory demonstration for high-stakes agents.
+ProofToAct is an admissibility-memory demonstration for high-stakes agents.
 Its “Highwater Drill” is a synthetic multi-agency response exercise: shared
 memory preserves attributable evidence, filters what is no longer admissible,
 exposes conflicts, gives exactly one local contender a scarce resource, lets a
@@ -11,14 +11,19 @@ exact duplicate, and rejects reuse with changed authority inputs.
 
 The thesis is deliberately narrower than “AI remembers better”:
 
-> Most memory systems optimize what an agent should remember. Tideproof governs
+> Most memory systems optimize what an agent should remember. ProofToAct governs
 > what an agent is still allowed to believe and act upon.
 
-![Tideproof trust boundaries: evidence is admitted before vector ranking, agents propose without authority, CockroachDB commits one fenced receipt, and Managed MCP returns context only.](docs/media/architecture.svg)
+![ProofToAct trust boundaries: evidence is admitted before vector ranking, agents propose without authority, CockroachDB commits one fenced receipt, and Managed MCP returns context only.](docs/media/architecture.svg)
 
 The diagram is synthetic and claim-bounded. Its accessible text counterpart
 and the fuller Gate One and Gate Two topology are in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+ProofToAct is the approved replacement name. Historical receipts and
+compatibility-bound legacy identifiers deliberately remain byte-exact; the
+full rename and isolation boundary is recorded in
+[`docs/RENAME_MIGRATION.md`](docs/RENAME_MIGRATION.md).
 
 ## What exists now
 
@@ -197,7 +202,7 @@ tree, skip path, presenter state, reduced-motion response, and mobile reflow in
 an isolated local Chromium profile. That browser gate injects the exact locked
 `axe-core` 4.12.1 development dependency and fails on any selected WCAG 2.0,
 2.1, or 2.2 A/AA violation or unresolved result at desktop or mobile size. The
-tool is MPL-2.0, runs only in verification, and is not copied into Tideproof's
+tool is MPL-2.0, runs only in verification, and is not copied into ProofToAct's
 browser, Lambda, or Gate Two ZIP payloads. `LOCAL_BROWSER_PASS` is not a WCAG
 conformance claim or deployed-release scan; the same maintained scan against
 the exact public deployment plus keyboard, zoom, reduced-motion, and
@@ -212,7 +217,7 @@ final marketing art has not been produced or approved.
 
 ## Safety and provenance
 
-Tideproof is a synthetic demonstration, not operational emergency software.
+ProofToAct is a synthetic demonstration, not operational emergency software.
 No Conversate source, proprietary Northstar engine, private customer data, or
 OpenClaw OAuth credential may enter this project. See `CLEAN_ROOM.md`.
 Report security concerns privately through GitHub's security-advisory flow;
