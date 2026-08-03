@@ -70,7 +70,7 @@ The suite includes:
 
 ## Live capability and audit schema gate
 
-Command form:
+Historical July 30 command form (not executable against the current source):
 
 ```sh
 DATABASE_URL="<primary admin URL from Keychain>" \
@@ -83,6 +83,10 @@ npm run gate1:security
 ```
 
 Exit status: 0.
+
+The current source requires additional split-principal passwords, trust-root
+inputs, and exact source bindings enumerated in `docs/FULL_DRILL_EVIDENCE.md`.
+Do not reconstruct a current invocation from this historical receipt.
 
 Relevant verified outcomes:
 
@@ -123,7 +127,9 @@ by the runtime audit role.
 ## Live deterministic broker gate
 
 The July 30 receipt predates the source-principal split and is retained as
-historical evidence, not final release proof. The current command form is:
+historical evidence, not final release proof. The historical invocation excerpt
+below is intentionally incomplete for the current source; the authoritative
+current input contract is `docs/FULL_DRILL_EVIDENCE.md`.
 
 ```sh
 PRIMARY_RECOVERY_SOURCE_DATABASE_URL="<tp_recovery_source_user URL from Keychain>" \
@@ -139,7 +145,9 @@ npm run gate1:recovery-broker
 ```
 
 The primary administrator URL is forbidden. Final provider proof must include
-the source and audit credentials' SQLSTATE `42501` trust-root write denials.
+the source and audit credentials' SQLSTATE `42501` results for all six
+privilege-pure trust-root write probes and all 18 managed base-table read
+probes.
 
 Exit status: 0.
 

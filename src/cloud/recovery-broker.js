@@ -14,20 +14,15 @@ import {
   renderRecoveryQuery,
   validateRecoveryRow
 } from "./recovery-store.js";
+import {
+  PRIMARY_MANAGED_BASE_TABLES,
+  RECOVERY_TRUST_ROOT_WRITE_PROBES
+} from "./recovery-security-contract.js";
 
 const FIXED_DATABASE = "tideproof_recovery";
 const FIXED_TOOL = "select_query";
 const RECOVERY_PUBLISHER_TRUST_ROOT_ID =
   "gate1-recovery-publisher-v1";
-const RECOVERY_PROTECTED_BASE_TABLES = Object.freeze([
-  "tp_private.g1_evidence",
-  "tp_ledger.g1_evidence_verification_receipts",
-  "tp_ledger.g1_dvi_proposal_receipts",
-  "tp_ledger.g1_authority_receipts",
-  "tp_ledger.g1_outbox_intents",
-  "tp_ledger.g1_recovery_audit_events_v3",
-  "tp_ledger.g1_recovery_publisher_trust_roots"
-]);
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -108,31 +103,9 @@ export async function assertRecoveryPublisherTrustRootWriteDenied({
     )}-trust-root-denial`
   });
   let transactionOpen = false;
-  const writeProbes = Object.freeze([
-    `
-      UPDATE tp_ledger.g1_recovery_publisher_trust_roots
-      SET trust_root_commitment = trust_root_commitment
-      WHERE trust_root_id = 'gate1-recovery-publisher-v1'
-    `,
-    `
-      DELETE FROM tp_ledger.g1_recovery_publisher_trust_roots
-      WHERE trust_root_id = 'tideproof-denial-probe-never'
-    `,
-    `
-      INSERT INTO tp_ledger.g1_recovery_publisher_trust_roots (
-        trust_root_id,
-        trust_root_commitment,
-        publisher_key_set_digest
-      ) VALUES (
-        'gate1-recovery-publisher-v1',
-        '${"0".repeat(64)}',
-        '${"0".repeat(64)}'
-      ) ON CONFLICT (trust_root_id) DO NOTHING
-    `
-  ]);
   try {
     await client.connect();
-    for (const writeProbe of writeProbes) {
+    for (const writeProbe of RECOVERY_TRUST_ROOT_WRITE_PROBES) {
       await client.query("BEGIN");
       transactionOpen = true;
       try {
@@ -173,7 +146,7 @@ export async function assertRecoveryRunnerBaseTableReadsDenied({
   });
   try {
     await client.connect();
-    for (const tableName of RECOVERY_PROTECTED_BASE_TABLES) {
+    for (const tableName of PRIMARY_MANAGED_BASE_TABLES) {
       try {
         await client.query(`SELECT 1 FROM ${tableName} LIMIT 1`);
       } catch (error) {
@@ -187,7 +160,7 @@ export async function assertRecoveryRunnerBaseTableReadsDenied({
     return Object.freeze({
       denied: true,
       sqlstate: "42501",
-      tableCount: RECOVERY_PROTECTED_BASE_TABLES.length
+      tableCount: PRIMARY_MANAGED_BASE_TABLES.length
     });
   } finally {
     await client.end().catch(() => {});

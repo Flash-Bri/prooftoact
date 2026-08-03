@@ -161,8 +161,9 @@ the exact, database-time-current authority-receipt resolver; the separate
 `tp_recovery_audit_user` receives only the exact audit-event and trust-root
 resolvers plus the append-only audit surface. Neither receives base-table
 access. Before either runner reads source state or the trust root, it executes
-a rollback-bounded no-op update probe and requires SQLSTATE `42501` from both
-primary credentials. The broker re-reads its two audit events only by their
+six rollback-bounded privilege-pure write probes and 18 managed-table read
+probes, requiring SQLSTATE `42501` from both primary credentials for each. The
+broker re-reads its two audit events only by their
 committed event IDs and digests. No recovery runner accepts
 `PRIMARY_DATABASE_URL`.
 
@@ -271,8 +272,8 @@ the winner operation and request digest onto tenant, incident, evidence, or
 resource values from another run, and do not reconstruct missing fields from a
 latest-row query. Before any resolver, signing, publication, recovery
 bootstrap, or MCP call, both primary credentials must independently return
-SQLSTATE `42501` for all three trust-root write probes and all seven protected
-base-table read probes. The source resolver then joins the authority receipt
+SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 18
+managed base-table read probes. The source resolver then joins the authority receipt
 to its outbox intent across request, proposal, logical-action, authorization,
 run, incident, resource, fence, effect, and payload identities. Any mismatch or
 non-singleton result fails closed.

@@ -254,14 +254,21 @@ test("every primary recovery runner credential must be denied trust-root writes"
   assert.deepEqual(denied, { denied: true, sqlstate: "42501" });
   assert.deepEqual(
     queries.filter((query) => query === "BEGIN"),
-    ["BEGIN", "BEGIN", "BEGIN"]
+    ["BEGIN", "BEGIN", "BEGIN", "BEGIN", "BEGIN", "BEGIN"]
   );
   assert.deepEqual(
     queries.filter((query) => query === "ROLLBACK"),
-    ["ROLLBACK", "ROLLBACK", "ROLLBACK"]
+    ["ROLLBACK", "ROLLBACK", "ROLLBACK", "ROLLBACK", "ROLLBACK", "ROLLBACK"]
   );
-  assert.ok(queries.some((query) => query.startsWith("UPDATE ")));
-  assert.ok(queries.some((query) => query.startsWith("DELETE FROM ")));
+  const updates = queries.filter((query) => query.startsWith("UPDATE "));
+  assert.equal(updates.length, 4);
+  for (const query of updates) {
+    assert.doesNotMatch(query, /\bWHERE\b/u);
+    assert.doesNotMatch(query, /=\s*(?:trust_root_id|trust_root_commitment|publisher_key_set_digest|committed_at)\b/u);
+  }
+  const deletes = queries.filter((query) => query.startsWith("DELETE FROM "));
+  assert.equal(deletes.length, 1);
+  assert.doesNotMatch(deletes[0], /\bWHERE\b/u);
   assert.ok(queries.some((query) => query.startsWith("INSERT INTO ")));
 
   await assert.rejects(
@@ -271,6 +278,33 @@ test("every primary recovery runner credential must be denied trust-root writes"
         async connect() {},
         async end() {},
         async query() {
+          return { rowCount: 1, rows: [] };
+        }
+      })
+    }),
+    /RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT/
+  );
+
+  await assert.rejects(
+    assertRecoveryPublisherTrustRootWriteDenied({
+      credentialLabel: "unit-write-only-without-select",
+      clientFactory: () => ({
+        async connect() {},
+        async end() {},
+        async query(text) {
+          if (text === "BEGIN" || text === "ROLLBACK") {
+            return { rowCount: 0, rows: [] };
+          }
+          if (/^\s*INSERT INTO/u.test(text)) {
+            const error = new Error("insert denied");
+            error.code = "42501";
+            throw error;
+          }
+          if (/\bWHERE\b/u.test(text) || /=\s*(?:trust_root_id|trust_root_commitment|publisher_key_set_digest|committed_at)\b/u.test(text)) {
+            const error = new Error("select denied");
+            error.code = "42501";
+            throw error;
+          }
           return { rowCount: 1, rows: [] };
         }
       })
@@ -297,9 +331,9 @@ test("every primary recovery runner credential must be denied protected base-tab
   assert.deepEqual(denied, {
     denied: true,
     sqlstate: "42501",
-    tableCount: 7
+    tableCount: 18
   });
-  assert.equal(queries.length, 7);
+  assert.equal(queries.length, 18);
   for (const query of queries) {
     assert.match(query, /^SELECT 1 FROM (?:tp_private|tp_ledger)\./u);
     assert.match(query, / LIMIT 1$/u);

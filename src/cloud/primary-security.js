@@ -8,6 +8,7 @@ import {
   quoteIdentifier,
   validateDatabaseSecurityPosture
 } from "./database-security-posture.js";
+import { PRIMARY_MANAGED_BASE_TABLES } from "./recovery-security-contract.js";
 
 const ROLE_BINDINGS = [
   ["tp_ingest_role", "tp_ingest_user"],
@@ -4304,26 +4305,7 @@ async function createFunctions(client) {
 }
 
 async function transferOwnership(client) {
-  for (const object of [
-    "tp_private.g1_evidence",
-    "tp_private.g1_verification_keys",
-    "tp_private.g1_vector_retrieval_sets",
-    "tp_private.g1_vector_candidates",
-    "tp_private.g1_vector_exclusions",
-    "tp_private.g1_resources",
-    "tp_private.g1_retry_probes",
-    "tp_ledger.g1_evidence_verification_receipts",
-    "tp_ledger.g1_logical_authority_epochs",
-    "tp_ledger.g1_dvi_selection_receipts",
-    "tp_ledger.g1_dvi_proposal_receipts",
-    "tp_ledger.g1_authority_receipts",
-    "tp_ledger.g1_outbox_intents",
-    "tp_ledger.g1_protected_effects",
-    "tp_ledger.g1_recovery_audit_receipts",
-    "tp_ledger.g1_recovery_audit_receipts_v2",
-    "tp_ledger.g1_recovery_audit_events_v3",
-    "tp_ledger.g1_recovery_publisher_trust_roots"
-  ]) {
+  for (const object of PRIMARY_MANAGED_BASE_TABLES) {
     await client.query(`ALTER TABLE ${object} OWNER TO tp_owner`);
   }
   for (const view of [

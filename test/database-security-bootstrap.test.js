@@ -320,6 +320,22 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
   }
 });
 
+test("recovery storage enforces one row per exact broker lookup identity", async () => {
+  const source = await readFile(recoveryStoreUrl, "utf8");
+  assert.match(
+    source,
+    /CREATE UNIQUE INDEX IF NOT EXISTS g1_recovery_bundle_v2_broker_lookup_uidx[\s\S]*tenant_id,[\s\S]*recovery_session_id,[\s\S]*subject_binding_hash,[\s\S]*source_digest/u
+  );
+  const reconciliation = source.match(
+    /SELECT \*[\s\S]*?FROM mcp_private\.recovery_bundles_v2([\s\S]*?)ORDER BY recorded_at/u
+  )?.[1];
+  assert.ok(reconciliation);
+  assert.match(
+    reconciliation,
+    /tenant_id = \$1::UUID[\s\S]*recovery_session_id = \$2::UUID[\s\S]*subject_binding_hash = \$5[\s\S]*source_digest = \$6/u
+  );
+});
+
 test("recovery operator contract enumerates every exact private input", async () => {
   const source = await readFile(fullDrillEvidenceUrl, "utf8");
   for (const input of [
@@ -350,7 +366,7 @@ test("recovery operator contract enumerates every exact private input", async ()
   }
   assert.match(source, /winner\.operationId/u);
   assert.match(source, /winner\.requestDigest/u);
-  assert.match(source, /all seven protected[\s\S]*base-table read probes/u);
+  assert.match(source, /all 18[\s\S]*managed base-table read probes/u);
   assert.match(source, /administrator URL/u);
 });
 

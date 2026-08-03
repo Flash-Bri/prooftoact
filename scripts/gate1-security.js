@@ -14,6 +14,7 @@ import {
 import { SignedEvidenceIngest } from "../src/cloud/signed-ingest.js";
 import { authorizeSyntheticProposal } from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
+import { RECOVERY_TRUST_ROOT_WRITE_PROBES } from "../src/cloud/recovery-security-contract.js";
 
 const USERS = [
   "tp_ingest_user",
@@ -121,6 +122,18 @@ async function expectSqlState(client, query, values, sqlstate) {
 
 async function expectPrivilegeDenied(client, query, values = []) {
   return expectSqlState(client, query, values, "42501");
+}
+
+async function expectTrustRootWritesDenied(client) {
+  const results = [];
+  for (const query of RECOVERY_TRUST_ROOT_WRITE_PROBES) {
+    results.push(await expectPrivilegeDenied(client, query));
+  }
+  return {
+    denied: true,
+    sqlstate: "42501",
+    probeCount: results.length
+  };
 }
 
 async function main() {
@@ -766,14 +779,7 @@ async function main() {
         client,
         "SELECT * FROM tp_ledger.g1_authority_receipts LIMIT 1"
       );
-      const directTrustRootWrite = await expectPrivilegeDenied(
-        client,
-        `
-          UPDATE tp_ledger.g1_recovery_publisher_trust_roots
-          SET trust_root_commitment = trust_root_commitment
-          WHERE trust_root_id = 'gate1-recovery-publisher-v1'
-        `
-      );
+      const directTrustRootWrite = await expectTrustRootWritesDenied(client);
       const auditResolverDenied = await expectPrivilegeDenied(
         client,
         `
@@ -834,14 +840,7 @@ async function main() {
         client,
         "SELECT * FROM tp_ledger.g1_authority_receipts LIMIT 1"
       );
-      const directTrustRootWrite = await expectPrivilegeDenied(
-        client,
-        `
-          UPDATE tp_ledger.g1_recovery_publisher_trust_roots
-          SET trust_root_commitment = trust_root_commitment
-          WHERE trust_root_id = 'gate1-recovery-publisher-v1'
-        `
-      );
+      const directTrustRootWrite = await expectTrustRootWritesDenied(client);
       const sourceResolverDenied = await expectPrivilegeDenied(
         client,
         `

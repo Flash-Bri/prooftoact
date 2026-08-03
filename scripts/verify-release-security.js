@@ -270,6 +270,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/recovery-broker.js",
     role: "RECOVERY_BROKER_RUNTIME"
   }),
+  "recovery-security-contract": Object.freeze({
+    path: "src/cloud/recovery-security-contract.js",
+    role: "PRIMARY_MANAGED_TABLE_AND_RECOVERY_DENIAL_CONTRACT"
+  }),
   "recovery-broker-runner": Object.freeze({
     path: "scripts/gate1-recovery-broker.js",
     role: "RECOVERY_BROKER_EVIDENCE_RUNNER"
@@ -1351,6 +1355,13 @@ const SOURCE_MARKERS = Object.freeze({
     "databaseClientMustBeDiscarded(error)",
     "read_reconciled",
     "commitDefinitivelyAborted"
+  ]),
+  "recovery-security-contract": Object.freeze([
+    "PRIMARY_MANAGED_BASE_TABLES",
+    "RECOVERY_TRUST_ROOT_WRITE_PROBES",
+    "SET trust_root_commitment =",
+    "SET publisher_key_set_digest =",
+    "DELETE FROM tp_ledger.g1_recovery_publisher_trust_roots"
   ]),
   "recovery-broker-runner": Object.freeze([
     "RECOVERY_SOURCE_OPERATION_ID",

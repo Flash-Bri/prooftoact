@@ -880,6 +880,15 @@ export class RecoveryStore {
       )
     `);
     await bootstrapPool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS g1_recovery_bundle_v2_broker_lookup_uidx
+      ON mcp_private.recovery_bundles_v2 (
+        tenant_id,
+        recovery_session_id,
+        subject_binding_hash,
+        source_digest
+      )
+    `);
+    await bootstrapPool.query(`
       CREATE OR REPLACE VIEW mcp_public.recovery_bundle_v2 AS
       SELECT
         tenant_id,
@@ -931,6 +940,12 @@ export class RecoveryStore {
             AND snapshot_version = $3::INT8
           )
           OR bundle_digest = $4
+          OR (
+            tenant_id = $1::UUID
+            AND recovery_session_id = $2::UUID
+            AND subject_binding_hash = $5
+            AND source_digest = $6
+          )
           ORDER BY recorded_at
           LIMIT 2
         `,
@@ -938,7 +953,9 @@ export class RecoveryStore {
           bundle.tenantId,
           bundle.recoverySessionId,
           bundle.snapshotVersion,
-          bundle.bundleDigest
+          bundle.bundleDigest,
+          bundle.subjectBindingHash,
+          bundle.sourceDigest
         ]
       );
       if (existing.rowCount > 1) {
