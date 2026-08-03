@@ -2581,6 +2581,58 @@ export class AuthorityStore {
         `,
         [authorization.logicalAction.tenantId, authorization.proposalDigest]
       );
+      const replayDecision = async (proposal) => {
+        const priorSpend = await client.query(
+          `
+            SELECT count(*)::INT8 AS count
+            FROM tp_ledger.g1_authority_receipts AS receipt
+            WHERE receipt.tenant_id = $1::UUID
+              AND receipt.logical_action_digest = $2
+              AND receipt.outcome = 'resource_reserved'
+          `,
+          [authorization.logicalAction.tenantId, authorization.logicalActionDigest]
+        );
+        const priorSpendCount = Number(priorSpend.rows[0]?.count ?? -1);
+        if (
+          priorSpend.rowCount !== 1 ||
+          !Number.isSafeInteger(priorSpendCount) ||
+          priorSpendCount < 0
+        ) {
+          throw new InvariantViolationError(
+            "logical authority spend census was not singular"
+          );
+        }
+        if (priorSpendCount > 0) {
+          return {
+            outcome: "proposal_authorization_denied",
+            reason: "logical_authority_already_spent",
+            proposal,
+            authorityCurrent: false,
+            requiresFreshAuthorization: true
+          };
+        }
+        const databaseNow = new Date(proposal.database_now).getTime();
+        if (!Number.isFinite(databaseNow)) {
+          throw new InvariantViolationError(
+            "proposal replay database time was invalid"
+          );
+        }
+        if (new Date(proposal.expires_at).getTime() <= databaseNow) {
+          return {
+            outcome: "proposal_authorization_denied",
+            reason: "explicit_new_authorization_required",
+            proposal,
+            authorityCurrent: false,
+            requiresFreshAuthorization: true
+          };
+        }
+        return {
+          outcome: "proposal_authorization_replay",
+          proposal,
+          authorityCurrent: true,
+          requiresFreshAuthorization: false
+        };
+      };
       const existing = await findExisting();
       if (existing.rowCount === 1) {
         if (!proposalReceiptMatches(existing.rows[0], authorization)) {
@@ -2588,24 +2640,7 @@ export class AuthorityStore {
             "proposal digest matched a different durable authorization"
           );
         }
-        const databaseNow = new Date(
-          existing.rows[0].database_now
-        ).getTime();
-        if (new Date(existing.rows[0].expires_at).getTime() <= databaseNow) {
-          return {
-            outcome: "proposal_authorization_denied",
-            reason: "explicit_new_authorization_required",
-            proposal: existing.rows[0],
-            authorityCurrent: false,
-            requiresFreshAuthorization: true
-          };
-        }
-        return {
-          outcome: "proposal_authorization_replay",
-          proposal: existing.rows[0],
-          authorityCurrent: true,
-          requiresFreshAuthorization: false
-        };
+        return replayDecision(existing.rows[0]);
       }
       if (existing.rowCount !== 0) {
         throw new InvariantViolationError(
@@ -2722,10 +2757,7 @@ export class AuthorityStore {
             "proposal digest raced with a different durable authorization"
           );
         }
-        return {
-          outcome: "proposal_authorization_replay",
-          proposal: racedExisting.rows[0]
-        };
+        return replayDecision(racedExisting.rows[0]);
       }
       if (racedExisting.rowCount !== 0) {
         throw new InvariantViolationError(
@@ -2920,7 +2952,9 @@ export class AuthorityStore {
       }
       return {
         outcome: "proposal_authorized",
-        proposal: inserted.rows[0]
+        proposal: inserted.rows[0],
+        authorityCurrent: true,
+        requiresFreshAuthorization: false
       };
     });
   }

@@ -172,3 +172,43 @@ test("runtime rejects a database row with a forged logical binding", async () =>
     /DVI_PROPOSAL_DATABASE_BINDING_MISMATCH/u
   );
 });
+
+test("runtime never releases a replay the database marks non-current", async () => {
+  const client = {
+    async query() {
+      return {
+        rowCount: 1,
+        rows: [authorizedRow({
+          decision_outcome: "proposal_authorization_replay",
+          decision_authority_current: false
+        })]
+      };
+    }
+  };
+  await assert.rejects(
+    authorizeDviProposalWithClient(client, input()),
+    /DVI_PROPOSAL_DATABASE_BINDING_MISMATCH/u
+  );
+});
+
+test("spent replay denial returns no reusable DVI authorization", async () => {
+  const client = {
+    async query() {
+      return {
+        rowCount: 1,
+        rows: [{
+          decision_outcome: "proposal_authorization_denied",
+          decision_reason: "logical_authority_already_spent",
+          decision_authority_current: false,
+          decision_database_now: new Date("2026-08-01T18:00:02.000Z")
+        }]
+      };
+    }
+  };
+  const result = await authorizeDviProposalWithClient(client, input());
+  assert.equal(result.outcome, "proposal_authorization_denied");
+  assert.equal(result.reason, "logical_authority_already_spent");
+  assert.equal(result.authorizationCurrent, false);
+  assert.equal("dviAuthorization" in result, false);
+  assert.equal("identity" in result, false);
+});

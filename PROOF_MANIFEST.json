@@ -499,7 +499,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "f66f1900790f8d6e3ed598950c9f17fcec3f88dea0cc72ff4baeeb8583f629cf",
+      "sha256": "25a4b241ced2375e1b5fce89bd76a9ae802af13715bb7f9a8cec00410afcdceb",
       "kind": "boundary-ledger"
     },
     {

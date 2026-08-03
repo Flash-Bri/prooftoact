@@ -1844,16 +1844,48 @@ async function createFunctions(client) {
           RAISE EXCEPTION 'proposal digest matched different durable state'
             USING ERRCODE = '22000';
         END IF;
-        v_authority_current :=
-          v_existing.expires_at > v_database_now
-          AND NOT EXISTS (
-            SELECT 1
-            FROM tp_ledger.g1_authority_receipts AS receipt
-            WHERE receipt.tenant_id = p_tenant_id
-              AND receipt.logical_action_digest =
-                v_existing.logical_action_digest
-              AND receipt.outcome = 'resource_reserved'
-          );
+        SELECT count(*)::INT8
+        INTO v_prior_spend_count
+        FROM tp_ledger.g1_authority_receipts AS receipt
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.logical_action_digest =
+            v_existing.logical_action_digest
+          AND receipt.outcome = 'resource_reserved';
+        IF v_prior_spend_count > 0 THEN
+          RETURN QUERY SELECT
+            'proposal_authorization_denied'::STRING,
+            'logical_authority_already_spent'::STRING,
+            v_existing.proposal_digest,
+            v_existing.logical_action_digest,
+            NULL::INT8, NULL::STRING, NULL::STRING,
+            v_existing.authority_evidence_binding_sha256,
+            v_existing.run_id, v_existing.incident_id,
+            v_existing.policy_version, v_existing.selected_rank,
+            v_existing.selected_evidence_id,
+            v_existing.selected_evidence_digest,
+            v_existing.admitted_at, v_existing.expires_at,
+            v_existing.payload_digest, NULL::TIMESTAMPTZ,
+            false, v_database_now;
+          RETURN;
+        END IF;
+        IF v_existing.expires_at <= v_database_now THEN
+          RETURN QUERY SELECT
+            'proposal_authorization_denied'::STRING,
+            'explicit_new_authorization_required'::STRING,
+            v_existing.proposal_digest,
+            v_existing.logical_action_digest,
+            NULL::INT8, NULL::STRING, NULL::STRING,
+            v_existing.authority_evidence_binding_sha256,
+            v_existing.run_id, v_existing.incident_id,
+            v_existing.policy_version, v_existing.selected_rank,
+            v_existing.selected_evidence_id,
+            v_existing.selected_evidence_digest,
+            v_existing.admitted_at, v_existing.expires_at,
+            v_existing.payload_digest, NULL::TIMESTAMPTZ,
+            false, v_database_now;
+          RETURN;
+        END IF;
+        v_authority_current := true;
         RETURN QUERY SELECT
           'proposal_authorization_replay'::STRING,
           NULL::STRING,
@@ -1905,6 +1937,47 @@ async function createFunctions(client) {
       WHERE proposal.tenant_id = p_tenant_id
         AND proposal.proposal_digest = v_proposal_digest;
       IF FOUND THEN
+        SELECT count(*)::INT8
+        INTO v_prior_spend_count
+        FROM tp_ledger.g1_authority_receipts AS receipt
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.logical_action_digest =
+            v_existing.logical_action_digest
+          AND receipt.outcome = 'resource_reserved';
+        IF v_prior_spend_count > 0 THEN
+          RETURN QUERY SELECT
+            'proposal_authorization_denied'::STRING,
+            'logical_authority_already_spent'::STRING,
+            v_existing.proposal_digest,
+            v_existing.logical_action_digest,
+            NULL::INT8, NULL::STRING, NULL::STRING,
+            v_existing.authority_evidence_binding_sha256,
+            v_existing.run_id, v_existing.incident_id,
+            v_existing.policy_version, v_existing.selected_rank,
+            v_existing.selected_evidence_id,
+            v_existing.selected_evidence_digest,
+            v_existing.admitted_at, v_existing.expires_at,
+            v_existing.payload_digest, NULL::TIMESTAMPTZ,
+            false, v_database_now;
+          RETURN;
+        END IF;
+        IF v_existing.expires_at <= v_database_now THEN
+          RETURN QUERY SELECT
+            'proposal_authorization_denied'::STRING,
+            'explicit_new_authorization_required'::STRING,
+            v_existing.proposal_digest,
+            v_existing.logical_action_digest,
+            NULL::INT8, NULL::STRING, NULL::STRING,
+            v_existing.authority_evidence_binding_sha256,
+            v_existing.run_id, v_existing.incident_id,
+            v_existing.policy_version, v_existing.selected_rank,
+            v_existing.selected_evidence_id,
+            v_existing.selected_evidence_digest,
+            v_existing.admitted_at, v_existing.expires_at,
+            v_existing.payload_digest, NULL::TIMESTAMPTZ,
+            false, v_database_now;
+          RETURN;
+        END IF;
         RETURN QUERY SELECT
           'proposal_authorization_replay'::STRING,
           NULL::STRING,
@@ -1924,7 +1997,7 @@ async function createFunctions(client) {
           v_existing.expires_at,
           v_existing.payload_digest,
           v_existing.authorized_at,
-          v_existing.expires_at > v_database_now,
+          true,
           v_database_now;
         RETURN;
       END IF;

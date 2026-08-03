@@ -30,7 +30,7 @@
       "id": "authority-identity-ledger",
       "path": "docs/AUTHORITY_IDENTITY.md",
       "role": "AUTHORITY_IDENTITY_BOUNDARY",
-      "sha256": "8e0e87f70702d85cc612975a76030838f9ed583f2db492fc9a233353b0291ae4"
+      "sha256": "d9ee6334ff7d35cc83369b7b555cd146efbf8d432d7c32ab84120a237ee6989e"
     },
     {
       "id": "authority-identity-tests",
@@ -66,7 +66,7 @@
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "934496d65b0733c224d40c087bf3b0220d01381dc756ce8460e4c5cf4bb56a97"
+      "sha256": "8bcd28ddcf7540c32ab98714057519cb3bb9b62acef53071de1d71bf7349186f"
     },
     {
       "id": "aws-alternate-principal-denial-runner",
@@ -258,13 +258,13 @@
       "id": "dvi-proposal-authorization",
       "path": "src/cloud/dvi-proposal-authorization.js",
       "role": "DATABASE_OWNED_PROPOSAL_AUTHORIZATION",
-      "sha256": "c939176251f965ea8989d191a8bd1c0a3324d14b652cea58290d6ee4cdbfd204"
+      "sha256": "012ae84fc2beb47cfa8ea48b2ed2357de37177f7dbfca479c16f6eb944e1c219"
     },
     {
       "id": "dvi-proposal-authorization-tests",
       "path": "test/dvi-proposal-authorization.test.js",
       "role": "PROPOSAL_AUTHORIZATION_VERIFICATION",
-      "sha256": "6d3dc30fa6404eedc600255e29d120038e553c545eb327e0e6cf709f19c11d88"
+      "sha256": "966672308a8e63b93c5ea28b81103cde73c3d074e18a0e3cec35b23ca395a37c"
     },
     {
       "id": "dvi-selection-contract",
@@ -324,7 +324,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "a18fb1f56e42368d6f07373f112e33352b8d6ac0f720cd9d1e0f79a1add0cf95"
+      "sha256": "0556107fca9df237a753559bb5bd715d4dc6f4638dfc7b34e37948a09a32011d"
     },
     {
       "id": "primary-security-runner",
@@ -438,7 +438,7 @@
       "id": "synthetic-authority-proposal",
       "path": "scripts/lib/synthetic-authority-proposal.js",
       "role": "SYNTHETIC_AUTHORITY_PROPOSAL_FIXTURE",
-      "sha256": "e4c0714d10f5377aa3660f2d62edc516c64317859b830734087890a915d8b7c7"
+      "sha256": "ce9b3931483279c350e16fd3ca4bffb758a20b2efe0520c57b65bf403688bdee"
     }
   ],
   "finalReleaseReady": false

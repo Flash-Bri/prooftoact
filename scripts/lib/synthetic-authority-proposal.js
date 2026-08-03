@@ -105,15 +105,24 @@ export async function authorizeSyntheticProposal(
         requestedSelectedEvidenceDigest ?? selectedEvidenceDigest,
       logicalAction
     });
-  if (
-    !allowDenied &&
-    !["proposal_authorized", "proposal_authorization_replay"].includes(
-      result.outcome
-    )
-  ) {
+  const acceptedOutcome = [
+    "proposal_authorized",
+    "proposal_authorization_replay"
+  ].includes(result.outcome);
+  const authorityCurrent =
+    result.authorizationCurrent ?? result.authorityCurrent ?? null;
+  const authorizationAccepted = acceptedOutcome && authorityCurrent === true;
+  if (!allowDenied && !authorizationAccepted) {
     throw new Error(
       `SYNTHETIC_PROPOSAL_AUTHORIZATION_FAILED:${result.reason ?? "unknown"}`
     );
+  }
+  if (!authorizationAccepted) {
+    const authorization = { ...result };
+    for (const field of ["dviAuthorization", "proposal", "identity"]) {
+      delete authorization[field];
+    }
+    return { authorization };
   }
   return {
     dviAuthorization: result.dviAuthorization ?? dviAuthorization,
