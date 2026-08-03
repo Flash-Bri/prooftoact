@@ -1507,8 +1507,26 @@ test("primary security separates Gate One and Gate Two database authority", () =
     source,
     /v_expected_payload_digest := encode[\s\S]*v_expected_logical_action_digest := encode[\s\S]*v_expected_request_digest := encode/
   );
-  assert.match(source, /v_existing_request_payload <> p_request_payload/);
+  assert.match(
+    source,
+    /v_existing_request_payload <> p_request_payload/
+  );
   assert.match(source, /v_existing_proposal_digest/);
+  const gateTwoSpendStart = source.indexOf(
+    "CREATE OR REPLACE FUNCTION tp_api.g2_spend_authority_race_v1"
+  );
+  assert.ok(gateTwoSpendStart >= 0);
+  const gateTwoSpend = source.slice(
+    gateTwoSpendStart,
+    source.indexOf(
+      "DROP FUNCTION IF EXISTS tp_api.g1_resolve_request_v1",
+      gateTwoSpendStart
+    )
+  );
+  assert.match(
+    gateTwoSpend,
+    /decision_durable_receipt BOOL,[\s\S]*decision_authority_evidence_binding_sha256 STRING,[\s\S]*proposal\.authority_evidence_binding_sha256,[\s\S]*proposal\.tenant_id = receipt\.tenant_id[\s\S]*proposal\.proposal_digest = receipt\.proposal_digest[\s\S]*proposal\.proposal_digest = decision\.decision_proposal_digest/
+  );
 });
 
 test("SECURITY DEFINER bodies resolve every application relation by schema", () => {

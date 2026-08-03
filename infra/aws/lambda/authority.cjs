@@ -3,7 +3,7 @@
 const crypto = require("node:crypto");
 
 const REQUEST_SCHEMA = "tideproof.aws-authority-request.v2";
-const RESPONSE_SCHEMA = "tideproof.aws-authority-boundary.v2";
+const RESPONSE_SCHEMA = "tideproof.aws-authority-boundary.v3";
 const PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
 const POLICY_VERSION = "gate1-policy-v2";
@@ -529,6 +529,8 @@ function normalizeSpendRow(row, request) {
     row?.decision_committed_evidence_id;
   const committedSelectedEvidenceDigest =
     row?.decision_committed_evidence_digest;
+  const committedAuthorityEvidenceBindingSha256 =
+    row?.decision_authority_evidence_binding_sha256;
   const durableReceipt = row?.decision_durable_receipt;
   const reason = row?.decision_reason ?? null;
   const fencingToken =
@@ -626,6 +628,10 @@ function normalizeSpendRow(row, request) {
     );
   const committedEvidenceDigestValid =
     /^[0-9a-f]{64}$/.test(committedSelectedEvidenceDigest ?? "");
+  const committedDviBindingValid =
+    /^[0-9a-f]{64}$/.test(
+      committedAuthorityEvidenceBindingSha256 ?? ""
+    );
   const selectedDigestMismatch =
     row.decision_outcome === "authorization_denied" &&
     reason === "selected_evidence_digest_mismatch";
@@ -633,6 +639,7 @@ function normalizeSpendRow(row, request) {
     row.decision_outcome === "authorization_denied" &&
     reason === "evidence_missing";
   if (
+    !committedDviBindingValid ||
     !committedEvidenceIdValid ||
     (replayKind !== "logical_authority_replay" &&
       committedSelectedEvidenceId !== request.evidenceId) ||
@@ -705,6 +712,7 @@ function normalizeSpendRow(row, request) {
     committedOperationId: row.decision_operation_id,
     committedRequestDigest: row.decision_request_digest,
     committedProposalDigest: row.decision_proposal_digest,
+    committedAuthorityEvidenceBindingSha256,
     committedSelectedEvidenceId,
     committedSelectedEvidenceDigest,
     ...identity
@@ -828,7 +836,11 @@ function normalizeReceiptProposal(row, request) {
   ) {
     throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
   }
-  return { expiresAt };
+  return {
+    authorityEvidenceBindingSha256:
+      row.receipt_proposal_authority_evidence_binding_sha256,
+    expiresAt
+  };
 }
 
 function normalizeResolvedRow(row, request) {
@@ -1030,6 +1042,8 @@ function normalizeResolvedRow(row, request) {
     committedOperationId: row.operation_id,
     committedRequestDigest: row.request_digest,
     committedProposalDigest: row.proposal_digest,
+    committedAuthorityEvidenceBindingSha256:
+      receiptProposal.authorityEvidenceBindingSha256,
     committedSelectedEvidenceId: row.evidence_id,
     committedSelectedEvidenceDigest: row.evidence_digest,
     ...identity
@@ -1608,6 +1622,8 @@ async function runAuthority({
         result.decision.authorizationBindingSha256,
       committedProposalDigest:
         result.decision.committedProposalDigest,
+      committedAuthorityEvidenceBindingSha256:
+        result.decision.committedAuthorityEvidenceBindingSha256,
       committedSelectedEvidenceId:
         result.decision.committedSelectedEvidenceId,
       committedSelectedEvidenceDigest:

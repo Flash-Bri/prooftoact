@@ -84,13 +84,50 @@ recovery lookup now has a locally tested source control, but no provider-backed
 receipt. Public claims and final release readiness must therefore remain
 partial and blocked.
 
-The sanitized `tideproof.aws-authority-race-receipt.v5` source contract carries
+The sanitized `tideproof.aws-authority-race-receipt.v6` source contract carries
 the exact configured active-run UUID and validates each contender's configured
 proposal identity and selected-evidence digest against the committed database
-response. Its durable proof rejects a database observation for any other run.
-This closes source-level prerequisites for joining the authority race to a
-per-drill DVI identity. It does not prove the live authorizer, exact retrieval
-prefixes, provider concurrency, the 100-run harness, or any live evidence.
+response. Both durable contender results must now carry the same selected
+evidence identity and the same non-reversible
+`authorityEvidenceBindingSha256`; the sanitized receipt publishes that shared
+DVI binding plus a digest of the selected evidence identity. Its durable proof
+rejects a database observation for any other run. This closes source-level
+prerequisites for joining the authority race to one per-drill DVI snapshot. It
+does not prove the live authorizer, exact retrieval prefixes, provider
+concurrency, the 100-run harness, or any live evidence.
+
+### Race receipt omitted the shared DVI snapshot identity
+
+- Root cause: each Lambda response validated its own database-authorized DVI
+  proposal, but the race aggregator retained only the configured run and
+  deployment digest. Two otherwise-valid contenders could therefore describe
+  different selected evidence or different DVI snapshots.
+- Why it was missed: focused tests varied proposal identities and authority
+  outcomes, but used matching synthetic evidence without asserting a shared
+  snapshot binding in the sanitized receipt. The first repair then injected
+  the new binding into Lambda mock rows without proving that the actual Gate
+  Two SQL wrapper returned the same column.
+- Earliest detection: give the second contender a valid but different selected
+  evidence ID, evidence digest, or authority-evidence binding and require the
+  race to fail before durable proof acceptance.
+- Repair: the Gate Two SQL wrapper joins each durable receipt to its exact
+  committed proposal and returns that proposal's authority-evidence binding;
+  direct and ACK-loss-reconciled Lambda decisions return the committed
+  binding. The race validator requires one shared binding and one shared
+  selected evidence identity, then publishes only the shared non-reversible
+  binding and a selected-evidence binding digest.
+- Regression/preventive control: per-field cross-contender negatives cover all
+  three bindings. A provider-surface test binds the SQL return column and the
+  tenant/proposal/committed-decision join to the Lambda response contract, and
+  release-security markers bind the response, validator, receipt schema, and
+  evidence contract.
+- Verification: focused Lambda and race tests exercise direct and reconciled
+  decisions plus cross-contender drift. Provider execution remains pending.
+- Residual risk: a source-equal binding is not live DVI-to-AWS evidence until
+  the exact provider receipt matches the accepted DVI proof and batch.
+- Claim impact: Tideproof may claim source-level shared DVI identity across the
+  two race contenders; no live handoff, concurrency, or exactly-once claim is
+  added.
 
 ## Exact cross-act recovery lookup
 

@@ -6,6 +6,7 @@ import {
   AUTHORITY_PROOF_RESPONSE_SCHEMA,
   AUTHORITY_RACE_RECEIPT_SCHEMA,
   AUTHORITY_REQUEST_SCHEMA,
+  AUTHORITY_RESPONSE_SCHEMA,
   authorityProofEvent,
   authorityRaceEvent,
   parseAuthorityRaceArguments,
@@ -92,7 +93,7 @@ function response(contender, options = {}) {
     logicalAuthorityKeySha256
   });
   const body = {
-    schemaVersion: "tideproof.aws-authority-boundary.v2",
+    schemaVersion: AUTHORITY_RESPONSE_SCHEMA,
     status: "COMMITTED",
     raceId: EXPECTED.raceId,
     contender,
@@ -104,6 +105,7 @@ function response(contender, options = {}) {
       contender === "alpha" ? "1".repeat(64) : "2".repeat(64),
     proposalDigest,
     committedProposalDigest: proposalDigest,
+    committedAuthorityEvidenceBindingSha256: "6".repeat(64),
     logicalActionDigest,
     selectedEvidenceDigest: "0".repeat(64),
     committedSelectedEvidenceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -459,6 +461,13 @@ test("authority race requires one overlapping winner and one durable denial", as
   assert.equal(receipt.distinctDatabaseSessions, true);
   assert.equal(receipt.distinctLogicalActions, true);
   assert.equal(receipt.distinctProposals, true);
+  assert.deepEqual(receipt.dvi, {
+    authorityEvidenceBindingSha256: "6".repeat(64),
+    selectedEvidenceBindingSha256: sha256({
+      evidenceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      evidenceDigest: "0".repeat(64)
+    })
+  });
   assert.equal(receipt.durableStateVerified, true);
   assert.equal(receipt.winner.contender, "alpha");
   assert.equal(receipt.denial.contender, "bravo");
@@ -539,6 +548,29 @@ test("authority race rejects non-overlap, numeric-version drift, and outcome dri
       ),
     /AUTHORITY_RACE_RESULT_REJECTED/
   );
+  for (const body of [
+    { committedAuthorityEvidenceBindingSha256: "7".repeat(64) },
+    {
+      committedSelectedEvidenceId:
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    },
+    {
+      selectedEvidenceDigest: "7".repeat(64),
+      committedSelectedEvidenceDigest: "7".repeat(64)
+    }
+  ]) {
+    assert.throws(
+      () =>
+        validateAuthorityRaceInvocations(
+          {
+            alpha: response("alpha"),
+            bravo: response("bravo", { body })
+          },
+          EXPECTED
+        ),
+      /AUTHORITY_RACE_RESULT_REJECTED/
+    );
+  }
 });
 
 test("authority race requires positive transaction duration, a fresh first fence, and a later canonical lease", () => {
