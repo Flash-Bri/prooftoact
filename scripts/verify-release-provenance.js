@@ -660,12 +660,12 @@ export async function runReleaseProvenance({
       governance.manifestPath === "RELEASE_GOVERNANCE_MANIFEST.json" &&
       HEX_64.test(governance.manifestSha256) &&
       governance.snapshotPath ===
-        "evidence/github-release-governance-2026-08-01.json" &&
+        "evidence/github-release-governance-rename-2026-08-03.json" &&
       HEX_64.test(governance.snapshotSha256) &&
       Number.isFinite(Date.parse(governance.observedAt)) &&
       HEX_40.test(governance.sourceCommit) &&
       HEX_40.test(governance.sourceTree) &&
-      governance.surfaceCount === 5 &&
+      governance.surfaceCount === 8 &&
       governance.requiredCheckCount === 1 &&
       governance.requiredApprovingReviewCount === 0 &&
       Array.isArray(governance.finalReleaseRequirements) &&
@@ -783,7 +783,7 @@ export async function runReleaseProvenance({
       /^\d{4}-\d{2}-\d{2}$/.test(submission.reviewedOn) &&
       submission.manifestPath === "RELEASE_SUBMISSION_MANIFEST.json" &&
       HEX_64.test(submission.manifestSha256) &&
-      submission.surfaceCount === 7 &&
+      submission.surfaceCount === 10 &&
       submission.checklistItemCount === 14 &&
       submission.uncheckedChecklistItemCount === 14 &&
       submission.stopTokenOccurrenceCount === 13 &&

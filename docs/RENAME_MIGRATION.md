@@ -3,7 +3,15 @@
 Decision date: 2026-08-03.
 Approved public name: **ProofToAct**.
 Approved line: **ProofToAct: Admissibility Memory for High-Stakes Agents**.
-Intended repository: `https://github.com/Flash-Bri/prooftoact`
+Repository: `https://github.com/Flash-Bri/prooftoact`
+
+The same public GitHub repository was renamed in place on 2026-08-03. Its
+stable repository ID remains `1317716765` (`R_kgDOTorDHQ`), pull request #52
+remained attached, and the former URL redirects to this repository. A
+sanitized post-rename observation is recorded in
+`evidence/github-release-governance-rename-2026-08-03.json`. This completes
+the repository-name migration only; every final release and submission gate
+remains separately fail-closed.
 
 ## Decision boundary
 

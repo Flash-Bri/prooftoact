@@ -2,7 +2,7 @@
   "schema": "tideproof.release-governance-manifest.v1",
   "status": "CURRENT_REPOSITORY_GOVERNANCE_REVIEWED_FINAL_RECHECK_PENDING",
   "reviewedOn": "2026-08-03",
-  "claimBoundary": "This manifest binds a sanitized historical GitHub governance observation, the approved repository rename boundary, and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.",
+  "claimBoundary": "This manifest binds sanitized historical and post-rename GitHub governance observations, the approved repository rename boundary, and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.",
   "repository": {
     "fullName": "Flash-Bri/prooftoact",
     "htmlUrl": "https://github.com/Flash-Bri/prooftoact",
@@ -16,13 +16,13 @@
       "id": "brand-migration-ledger",
       "path": "docs/RENAME_MIGRATION.md",
       "role": "REPOSITORY_RENAME_BOUNDARY",
-      "sha256": "3c86d0eb8a8b44faf9e352a661a67b1ce12b231de1b2df65fb2442fd7f9a6fe9"
+      "sha256": "bc0b8055a793f55ebd1e09c5ec8b14bcf15a1ff63d0ae35f6135738459d2443c"
     },
     {
       "id": "brand-migration-manifest",
       "path": "RENAME_MIGRATION_MANIFEST.json",
       "role": "REPOSITORY_RENAME_CONTROL",
-      "sha256": "8f243281119445d296643ec83eadb3e45b09154f043fe31df329489c4de1ac35"
+      "sha256": "ed3944f31989473e9b34185838c57999992da339545fe6571773e55f782e01ac"
     },
     {
       "id": "ci-workflow",
@@ -34,13 +34,19 @@
       "id": "governance-ledger",
       "path": "docs/RELEASE_GOVERNANCE.md",
       "role": "NONFINAL_CONTROL_BOUNDARY",
-      "sha256": "a83f3a49f12c08d4537a12bea46568312fa1988bd3384439ce3307be9c1ec7a4"
+      "sha256": "4f46a642283357c4c208777dd3af382cc9f2146b4deab83c6305d1abe441341a"
     },
     {
       "id": "governance-snapshot",
       "path": "evidence/github-release-governance-2026-08-01.json",
-      "role": "SANITIZED_READ_ONLY_OBSERVATION",
+      "role": "SANITIZED_HISTORICAL_READ_ONLY_OBSERVATION",
       "sha256": "527eeea8909f1006fa4337e7517ded81907e46548fa395eacad9ec38284a65a8"
+    },
+    {
+      "id": "post-rename-governance-snapshot",
+      "path": "evidence/github-release-governance-rename-2026-08-03.json",
+      "role": "SANITIZED_POST_RENAME_READ_ONLY_OBSERVATION",
+      "sha256": "9546143ce14cbd909294c20154225c69f73fed00308bb10ffd55d2d01b0e7e8a"
     },
     {
       "id": "public-readme",

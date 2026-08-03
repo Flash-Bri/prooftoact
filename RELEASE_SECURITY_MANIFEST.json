@@ -156,7 +156,7 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "5a148abd448fb66757da6deb323da7e1e9503215753bd268cfcd51ca7316417f"
+      "sha256": "f85510c627e6ba4059794d0cabc3dd0f11f7eb890563c0ccc49f8ed3845361f1"
     },
     {
       "id": "aws-security-tests",

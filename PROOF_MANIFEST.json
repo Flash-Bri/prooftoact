@@ -139,13 +139,13 @@
     {
       "id": "brand-migration-ledger",
       "path": "docs/RENAME_MIGRATION.md",
-      "sha256": "3c86d0eb8a8b44faf9e352a661a67b1ce12b231de1b2df65fb2442fd7f9a6fe9",
+      "sha256": "bc0b8055a793f55ebd1e09c5ec8b14bcf15a1ff63d0ae35f6135738459d2443c",
       "kind": "boundary-ledger"
     },
     {
       "id": "brand-migration-manifest",
       "path": "RENAME_MIGRATION_MANIFEST.json",
-      "sha256": "8f243281119445d296643ec83eadb3e45b09154f043fe31df329489c4de1ac35",
+      "sha256": "ed3944f31989473e9b34185838c57999992da339545fe6571773e55f782e01ac",
       "kind": "boundary-ledger"
     },
     {
@@ -157,7 +157,7 @@
     {
       "id": "brand-migration-verifier",
       "path": "scripts/verify-brand-migration.js",
-      "sha256": "7fbf4418a4afc10e1be67fcab1684b7078820cce90df8d9b3d7eb472dc57117e",
+      "sha256": "493e06438780769ebc2eecd6b38a08ab586c00ccb6422702c0b5f65f90e231c2",
       "kind": "verification-code"
     },
     {
@@ -343,13 +343,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "d19e1954af874bfbb04cc7b4752062acd7ca96997d25459a3e088b4225a84177",
+      "sha256": "4ad9010a13e4f53188e8af646b1447dbf7c9bc34562634b540c23c491846f398",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "5a148abd448fb66757da6deb323da7e1e9503215753bd268cfcd51ca7316417f",
+      "sha256": "f85510c627e6ba4059794d0cabc3dd0f11f7eb890563c0ccc49f8ed3845361f1",
       "kind": "verification-code"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "9ae9c554c5a81e7ab8fdf8b3972bdcede1e9b0663e4507e8bc62ae1f49cdbc63",
+      "sha256": "5e21f2d66f27ff25ac5706c6656f7e5d82aaf0614a32fc460351992b3451f78f",
       "kind": "verification-code"
     },
     {
@@ -421,7 +421,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "248626417691d69bbc67f154fc0218872993c1b5258543b99a870196c100eecb",
+      "sha256": "f5bbb4ec0fc60489e892a1ee2d5c89b988f82dd5f3a96554eb9fa32cab4bf1cd",
       "kind": "boundary-ledger"
     },
     {
@@ -439,14 +439,20 @@
     {
       "id": "release-governance-ledger",
       "path": "docs/RELEASE_GOVERNANCE.md",
-      "sha256": "a83f3a49f12c08d4537a12bea46568312fa1988bd3384439ce3307be9c1ec7a4",
+      "sha256": "4f46a642283357c4c208777dd3af382cc9f2146b4deab83c6305d1abe441341a",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "e3d0f44d1f9943075a95d8587575b1af83b8dabfc8abf7937cb9b7411c817f93",
+      "sha256": "773328eb496eb31ccfd98d6388f780f45e503b428084170c69ccc603c23d3a67",
       "kind": "boundary-ledger"
+    },
+    {
+      "id": "release-governance-post-rename-snapshot",
+      "path": "evidence/github-release-governance-rename-2026-08-03.json",
+      "sha256": "9546143ce14cbd909294c20154225c69f73fed00308bb10ffd55d2d01b0e7e8a",
+      "kind": "release-receipt"
     },
     {
       "id": "release-governance-snapshot",
@@ -457,13 +463,13 @@
     {
       "id": "release-governance-tests",
       "path": "test/release-governance.test.js",
-      "sha256": "6438e03c5dd7760f020fd6b6882618830e0efc926008a55ee2f4edabf5f7f576",
+      "sha256": "4aaf546167d07fc8ea8070b101c4094d4f7970f08cedd8433e9f9904a5a55b4c",
       "kind": "verification-code"
     },
     {
       "id": "release-governance-verifier",
       "path": "scripts/verify-release-governance.js",
-      "sha256": "a4d25ddf606d482c57832912a4294b76f47ac9dd60cd7929d53ac9d779ac3371",
+      "sha256": "c7115441fbc71bdd75a8de745363b78a263d22041013a2b71c48e2aa008e4d4a",
       "kind": "verification-code"
     },
     {
@@ -493,19 +499,19 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "e894ab79515257b38b0fe4f1c71bc696841976b5321219b7e02e28cb2fadd403",
+      "sha256": "a45cf5e87a6d7a249ed177c38cc4a5d42fe969d6b9d6cea65393aa5b52aee0c0",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "0d477be58e06be1d089ef1038ab37019b1457d10d1fbdb7d4e5c7abb2868bfdb",
+      "sha256": "96b0b2f7dcfd4bbd0c856144e701eb014066a5c4fa9d2ddf6023ccb5c80d2319",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "f382ca92aee139e701c543f30fe79a7bf0342c95b8fd9f1c5ec68069f616037d",
+      "sha256": "2bd7097a98e36034ed0e4cab70fcc2d5b7fa334b11b7073525ac5a0a96229569",
       "kind": "boundary-ledger"
     },
     {
@@ -529,7 +535,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "81aabc8cbe2389d56cb52b7a825e227fec903cb9c87c9103b75885ebe9f4b27c",
+      "sha256": "adff5181b126d2a8d2a63118f522d26016a0e82307f5611d34cf47d2eef33efc",
       "kind": "boundary-ledger"
     },
     {
@@ -553,7 +559,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "eb4d830856b358e79b86d9c5e20db463987915ebe9a71745d0136a889eb4cf23",
+      "sha256": "b2e36a4ae4f825c231717d1820ce6bcfecee36e592ee69cb6a695b9fa6f5a255",
       "kind": "boundary-ledger"
     },
     {
@@ -565,7 +571,7 @@
     {
       "id": "release-submission-verifier",
       "path": "scripts/verify-release-submission.js",
-      "sha256": "82e67b1d6a15085f4da545a8745e9eb13016cc5c7d74f516ea4f39f017633260",
+      "sha256": "2eb6ecbd0cbde9043cf7d67aa4bb744d93b7f9b7be71385247dfd0bf29f4ef61",
       "kind": "verification-code"
     },
     {
@@ -774,11 +780,12 @@
         "brand-migration-ledger",
         "brand-migration-manifest",
         "brand-migration-tests",
-        "brand-migration-verifier"
+        "brand-migration-verifier",
+        "release-governance-post-rename-snapshot"
       ],
-      "boundary": "The exact current-source control binds Brian's approved ProofToAct name, subtitle, intended repository and package coordinates, preserved historical evidence hashes, future-versus-legacy AWS names, public current-name surfaces, old-coordinate exceptions, and the isolated domain boundary. Its pass does not prove that the external repository rename has occurred, clear a trademark, authorize provider mutation, or make stale ignored bundles deployable.",
+      "boundary": "The exact current-source control binds Brian's approved ProofToAct name, subtitle, repository and package coordinates, preserved historical evidence hashes, future-versus-legacy AWS names, public current-name surfaces, old-coordinate exceptions, and the isolated domain boundary. The post-rename snapshot binds the same repository's stable identity, transferred protections, redirect, pull request, and successful hosted CI at the observed commit. Its pass does not clear a trademark, authorize provider mutation, make stale ignored bundles deployable, or approve final release or submission.",
       "remainingRequirements": [
-        "Rename the same GitHub repository, bind the stable repository identity and current protections in a fresh sanitized observation, rerun hosted CI at the renamed coordinate, regenerate the six exact bundles, and complete final signed-out name and link review."
+        "Rerun hosted CI and governance review at the exact final official-main commit, regenerate the six exact bundles, and complete final signed-out name and link review."
       ]
     },
     {
@@ -888,12 +895,13 @@
         "release-ci-workflow",
         "release-governance-ledger",
         "release-governance-manifest",
+        "release-governance-post-rename-snapshot",
         "release-governance-snapshot",
         "release-governance-tests",
         "release-governance-verifier",
         "security-policy"
       ],
-      "boundary": "The exact current-source verifier hash-binds five governance surfaces and validates a sanitized read-only GitHub API observation of the public repository, required pull-request path, strict verify check, administrator enforcement, conversation resolution, force-push and deletion blocks, vulnerability alerts, secret scanning, push protection, deliberate single-writer Dependabot boundary, and the successful hosted CI run at the observed commit. It returns CURRENT_REPOSITORY_GOVERNANCE_PASS with finalReleaseReady false. It does not query GitHub, claim a human approval requirement, prove settings remain unchanged, establish vulnerability absence, or authorize deployment, publication, or submission.",
+      "boundary": "The exact current-source verifier hash-binds eight governance surfaces and validates immutable historical plus post-rename observations of the public repository, stable identity, current coordinate, redirect, required pull-request path, strict verify check, administrator enforcement, conversation resolution, force-push and deletion blocks, vulnerability alerts, secret scanning, push protection, deliberate single-writer Dependabot boundary, and successful hosted pull-request CI at the observed commit. It returns CURRENT_REPOSITORY_GOVERNANCE_PASS with finalReleaseReady false. It does not query GitHub, claim a human approval requirement, prove settings remain unchanged, establish vulnerability absence, or authorize deployment, publication, or submission.",
       "remainingRequirements": [
         "Requery complete repository governance at the exact final release commit, bind the successful required CI run, and complete signed-out repository, metadata, and public-link review."
       ]
@@ -927,6 +935,7 @@
         "release-cost-verifier",
         "release-governance-ledger",
         "release-governance-manifest",
+        "release-governance-post-rename-snapshot",
         "release-governance-snapshot",
         "release-governance-tests",
         "release-governance-verifier",

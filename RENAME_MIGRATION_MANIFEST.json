@@ -1,6 +1,6 @@
 {
   "schema": "prooftoact.rename-migration.v1",
-  "status": "SOURCE_MIGRATION_IN_PROGRESS",
+  "status": "REPOSITORY_RENAME_COMPLETE_FINAL_RELEASE_PENDING",
   "decisionDate": "2026-08-03",
   "approvedName": "ProofToAct",
   "subtitle": "Admissibility Memory for High-Stakes Agents",

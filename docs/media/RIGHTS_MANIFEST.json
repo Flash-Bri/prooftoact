@@ -85,12 +85,12 @@
     {
       "id": "brand-migration-ledger",
       "path": "docs/RENAME_MIGRATION.md",
-      "sha256": "3c86d0eb8a8b44faf9e352a661a67b1ce12b231de1b2df65fb2442fd7f9a6fe9"
+      "sha256": "bc0b8055a793f55ebd1e09c5ec8b14bcf15a1ff63d0ae35f6135738459d2443c"
     },
     {
       "id": "brand-migration-manifest",
       "path": "RENAME_MIGRATION_MANIFEST.json",
-      "sha256": "8f243281119445d296643ec83eadb3e45b09154f043fe31df329489c4de1ac35"
+      "sha256": "ed3944f31989473e9b34185838c57999992da339545fe6571773e55f782e01ac"
     },
     {
       "id": "media-rights-ledger",

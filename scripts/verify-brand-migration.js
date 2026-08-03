@@ -13,7 +13,7 @@ const FORMER_REPOSITORY_URL = "https://github.com/Flash-Bri/tideproof";
 
 const EXPECTED_MANIFEST = Object.freeze({
   schema: "prooftoact.rename-migration.v1",
-  status: "SOURCE_MIGRATION_IN_PROGRESS",
+  status: "REPOSITORY_RENAME_COMPLETE_FINAL_RELEASE_PENDING",
   decisionDate: "2026-08-03",
   approvedName: "ProofToAct",
   subtitle: "Admissibility Memory for High-Stakes Agents",
@@ -77,9 +77,10 @@ const EXPECTED_HISTORICAL_NAME_COUNTS = Object.freeze({
 const EXPECTED_FORMER_REPOSITORY_COUNTS = Object.freeze({
   "CLEAN_ROOM.md": 1,
   "evidence/github-release-governance-2026-08-01.json": 2,
+  "evidence/github-release-governance-rename-2026-08-03.json": 1,
   "evidence/public-source-release-081b580-2026-07-30.md": 2,
   "scripts/verify-brand-migration.js": 1,
-  "scripts/verify-release-governance.js": 2
+  "scripts/verify-release-governance.js": 3
 });
 
 const EXPECTED_DOMAIN_REFERENCE_COUNTS = Object.freeze({

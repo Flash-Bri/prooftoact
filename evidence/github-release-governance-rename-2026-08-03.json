@@ -1,0 +1,91 @@
+{
+  "schema": "prooftoact.github-release-governance-snapshot.v1",
+  "status": "OBSERVED_POST_RENAME_NONFINAL_GITHUB_GOVERNANCE",
+  "observedAt": "2026-08-03T15:23:23Z",
+  "source": {
+    "commit": "df4da95358324ab95b8556650f4c639c7cee21f5",
+    "tree": "d6683f1d1cea18f7ddb36ea8053d01a54b568643",
+    "branch": "rename/prooftoact"
+  },
+  "repository": {
+    "id": 1317716765,
+    "nodeId": "R_kgDOTorDHQ",
+    "fullName": "Flash-Bri/prooftoact",
+    "htmlUrl": "https://github.com/Flash-Bri/prooftoact",
+    "visibility": "public",
+    "defaultBranch": "main",
+    "licenseSpdxId": "MIT",
+    "description": "ProofToAct — admissibility memory for high-stakes agents: similarity proposes, CockroachDB commits.",
+    "topics": [
+      "agentic-memory",
+      "aws",
+      "cockroachdb",
+      "distributed-systems",
+      "hackathon"
+    ]
+  },
+  "renameContinuity": {
+    "preRenameFullName": "Flash-Bri/tideproof",
+    "preRenameId": 1317716765,
+    "preRenameNodeId": "R_kgDOTorDHQ",
+    "postRenameFullName": "Flash-Bri/prooftoact",
+    "postRenameId": 1317716765,
+    "postRenameNodeId": "R_kgDOTorDHQ",
+    "formerWebUrl": "https://github.com/Flash-Bri/tideproof",
+    "formerWebStatus": 301,
+    "formerWebLocation": "https://github.com/Flash-Bri/prooftoact"
+  },
+  "branchProtection": {
+    "pullRequestRequired": true,
+    "requiredApprovingReviewCount": 0,
+    "dismissStaleReviews": false,
+    "requireCodeOwnerReviews": false,
+    "requireLastPushApproval": false,
+    "strictStatusChecks": true,
+    "requiredChecks": [
+      {
+        "context": "verify",
+        "appId": 15368
+      }
+    ],
+    "administratorsEnforced": true,
+    "conversationResolutionRequired": true,
+    "forcePushAllowed": false,
+    "deletionAllowed": false,
+    "signaturesRequired": false,
+    "linearHistoryRequired": false
+  },
+  "security": {
+    "vulnerabilityAlerts": "enabled",
+    "secretScanning": "enabled",
+    "secretScanningPushProtection": "enabled",
+    "dependabotSecurityUpdates": "disabled",
+    "dependabotSecurityUpdatesBoundary": "Deliberately disabled at this checkpoint to preserve the single-writer release lane; vulnerability alerts remain enabled and dependency review remains an explicit release gate."
+  },
+  "continuousIntegration": {
+    "workflow": "CI",
+    "requiredCheck": "verify",
+    "runId": 30827066820,
+    "runUrl": "https://github.com/Flash-Bri/prooftoact/actions/runs/30827066820",
+    "headSha": "df4da95358324ab95b8556650f4c639c7cee21f5",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "pullRequest": {
+    "number": 52,
+    "url": "https://github.com/Flash-Bri/prooftoact/pull/52",
+    "state": "open",
+    "isDraft": true,
+    "baseRef": "main",
+    "baseSha": "0d048a4e0e893d947c9a70c7189bfb164a9d1f59",
+    "headRef": "rename/prooftoact",
+    "headSha": "df4da95358324ab95b8556650f4c639c7cee21f5"
+  },
+  "claimBoundary": "This sanitized snapshot records bounded read-only GitHub API and public HTTP observations immediately before and after the approved in-place repository rename. The stable repository identity remained constant across those observations, but this snapshot does not prove that settings remain unchanged, require a human approval, establish vulnerability absence, authorize deployment or submission, or replace final exact-main CI and signed-out repository review.",
+  "finalReleaseRequirements": [
+    "Requery repository visibility, security settings, and complete branch protection at the exact final release commit.",
+    "Verify the required CI run succeeds at the exact final release commit and that the protected check identity still matches the intended GitHub Actions workflow.",
+    "Complete signed-out repository, release metadata, and public-link review before publication and submission."
+  ],
+  "finalReleaseReady": false
+}

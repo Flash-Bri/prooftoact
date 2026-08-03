@@ -341,7 +341,8 @@ function assertSupportingSurfaces(sources) {
   }
   assert(
     migrationManifest?.schema === "prooftoact.rename-migration.v1" &&
-      migrationManifest.status === "SOURCE_MIGRATION_IN_PROGRESS" &&
+      migrationManifest.status ===
+        "REPOSITORY_RENAME_COMPLETE_FINAL_RELEASE_PENDING" &&
       migrationManifest.approvedName === EXPECTED_COORDINATES.projectName &&
       migrationManifest.repository === EXPECTED_COORDINATES.publicSource &&
       Array.isArray(migrationManifest.evidenceBaseline) &&
