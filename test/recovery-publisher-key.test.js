@@ -10,7 +10,10 @@ import {
   loadCommittedRecoveryPublisherSigner
 } from "../scripts/lib/recovery-publisher-key.js";
 import {
+  assertRecoveryPublisherTrustRootWriteDenied,
+  resolveCommittedRecoveryAuditEvent,
   resolveCommittedRecoveryPublisherTrustRoot,
+  resolveCommittedRecoverySourceReceipt,
   trustedPublisherKeysDigest
 } from "../src/cloud/recovery-broker.js";
 
@@ -161,4 +164,132 @@ test("primary-ledger commitment rejects coordinated root commitment and key repl
     }),
     /RECOVERY_PUBLISHER_TRUST_ROOT_NOT_COMMITTED/
   );
+});
+
+test("recovery source principal resolves one current exact authority receipt", async () => {
+  const binding = {
+    tenantId: "11111111-1111-4111-8111-111111111111",
+    runId: "22222222-2222-4222-8222-222222222222",
+    incidentId: "33333333-3333-4333-8333-333333333333",
+    evidenceId: "44444444-4444-4444-8444-444444444444",
+    resourceId: "synthetic-rescue-unit-7",
+    operationId: "55555555-5555-4555-8555-555555555555",
+    requestDigest: "a".repeat(64)
+  };
+  const row = {
+    tenant_id: binding.tenantId,
+    run_id: binding.runId,
+    incident_id: binding.incidentId,
+    evidence_id: binding.evidenceId,
+    resource_id: binding.resourceId,
+    operation_id: binding.operationId,
+    request_digest: binding.requestDigest,
+    proposal_digest: "b".repeat(64),
+    logical_action_digest: "c".repeat(64),
+    authorization_epoch: "1",
+    logical_authority_key_sha256: "d".repeat(64),
+    authorization_binding_sha256: "e".repeat(64),
+    policy_version: "g1-admissibility-v2",
+    agent_id: "synthetic-agent",
+    agency: "rescue",
+    outcome: "resource_reserved",
+    reason: "admissible",
+    evidence_digest: "f".repeat(64),
+    has_durable_intent: true,
+    admissibility: "admissible",
+    recorded_at: new Date("2026-08-03T05:00:00.000Z"),
+    database_now: new Date("2026-08-03T05:01:00.000Z")
+  };
+  const clientFactory = () => ({
+    async connect() {},
+    async end() {},
+    async query(text, values) {
+      assert.match(text, /g1_resolve_recovery_source_receipt_v1/u);
+      assert.deepEqual(values, [
+        binding.tenantId,
+        binding.runId,
+        binding.incidentId,
+        binding.evidenceId,
+        binding.resourceId,
+        binding.operationId,
+        binding.requestDigest
+      ]);
+      return { rowCount: 1, rows: [row] };
+    }
+  });
+
+  const resolved = await resolveCommittedRecoverySourceReceipt({
+    binding,
+    clientFactory
+  });
+  assert.equal(resolved.operation_id, binding.operationId);
+  assert.equal(resolved.admittedCount, 1);
+  assert.equal(resolved.unresolvedCount, 0);
+});
+
+test("every primary recovery runner credential must be denied trust-root writes", async () => {
+  const queries = [];
+  const denied = await assertRecoveryPublisherTrustRootWriteDenied({
+    credentialLabel: "unit-source",
+    clientFactory: () => ({
+      async connect() {},
+      async end() {},
+      async query(text) {
+        queries.push(text.trim());
+        if (text.includes("UPDATE tp_ledger.g1_recovery_publisher_trust_roots")) {
+          const error = new Error("denied");
+          error.code = "42501";
+          throw error;
+        }
+        return { rowCount: 0, rows: [] };
+      }
+    })
+  });
+  assert.deepEqual(denied, { denied: true, sqlstate: "42501" });
+  assert.equal(queries[0], "BEGIN");
+  assert.match(queries[1], /SET trust_root_commitment = trust_root_commitment/u);
+  assert.equal(queries[2], "ROLLBACK");
+
+  await assert.rejects(
+    assertRecoveryPublisherTrustRootWriteDenied({
+      credentialLabel: "unit-writable",
+      clientFactory: () => ({
+        async connect() {},
+        async end() {},
+        async query() {
+          return { rowCount: 1, rows: [] };
+        }
+      })
+    }),
+    /RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT/
+  );
+});
+
+test("recovery audit evidence is re-read only by exact id and digest", async () => {
+  const tenantId = "11111111-1111-4111-8111-111111111111";
+  const eventId = "66666666-6666-4666-8666-666666666666";
+  const eventDigest = "9".repeat(64);
+  const resolved = await resolveCommittedRecoveryAuditEvent({
+    tenantId,
+    eventId,
+    eventDigest,
+    clientFactory: () => ({
+      async connect() {},
+      async end() {},
+      async query(text, values) {
+        assert.match(text, /g1_resolve_recovery_audit_event_v1/u);
+        assert.deepEqual(values, [eventId, tenantId, eventDigest]);
+        return {
+          rowCount: 1,
+          rows: [{
+            tenant_id: tenantId,
+            event_id: eventId,
+            event_digest: eventDigest,
+            phase: "pre_read"
+          }]
+        };
+      }
+    })
+  });
+  assert.equal(resolved.phase, "pre_read");
 });

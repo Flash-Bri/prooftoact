@@ -59,13 +59,20 @@ application database is `tideproof_recovery`.
 
 ## Sanitized bundle proof
 
-Command:
+The July 29 receipt used the then-owner primary connection and predates the
+runtime credential-isolation control. It is retained as historical evidence,
+not final release proof. The current runner command form is:
 
 ```sh
-PRIMARY_DATABASE_URL="<keychain>" \
+PRIMARY_RECOVERY_SOURCE_DATABASE_URL="<tp_recovery_source_user URL>" \
+PRIMARY_AUDIT_DATABASE_URL="<tp_recovery_audit_user URL>" \
 RECOVERY_DATABASE_URL="<keychain>" \
 npm run gate1:recovery
 ```
+
+Current-source execution must also supply the exact source binding, endpoint,
+cluster, publisher-key, and trust-root inputs required by the runner. The
+primary administrator URL is forbidden.
 
 Verified result:
 

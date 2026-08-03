@@ -168,13 +168,15 @@ test("recovery bootstrap audits first and grants no private-schema access", asyn
 test("every database SECURITY DEFINER body binds the exact session user", async () => {
   const sharedAuthorizerGuard =
     /session_user (?:IN|NOT IN) \(\s*'tp_authorizer_user',\s*'tp_gate2_authorizer_user'\s*\)/u;
+  const internalAdmissibilityGuard =
+    /session_user IN \(\s*'tp_authorizer_user',\s*'tp_gate2_authorizer_user',\s*'tp_recovery_source_user'\s*\)/u;
   const expectedPrimaryGuards = new Map([
     ["g1_append_verified_evidence_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_get_verification_key_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_append_verified_evidence_v2", /session_user <> 'tp_ingest_user'/u],
     ["g1_resolve_verified_evidence_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_observe_admissibility_v1", /session_user = 'tp_authorizer_user'/u],
-    ["g1_list_admissibility_internal_v1", sharedAuthorizerGuard],
+    ["g1_list_admissibility_internal_v1", internalAdmissibilityGuard],
     ["g1_observe_admissibility_v2", sharedAuthorizerGuard],
     ["g1_prepare_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_observe_vector_exclusion_v1", /session_user <> 'tp_authorizer_user'/u],
@@ -193,6 +195,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
+    ["g1_resolve_recovery_source_receipt_v1", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user = 'tp_dispatch_user'/u]
   ]);
@@ -241,7 +244,11 @@ test("recovery evidence selects one exact upstream authority receipt", async () 
     assert.match(source, /loadCommittedRecoveryPublisherSigner\(\)/u);
     assert.match(source, /signer\.trustedPublisherKeys/u);
     assert.match(source, /resolveCommittedRecoveryPublisherTrustRoot\(/u);
+    assert.match(source, /resolveCommittedRecoverySourceReceipt\(/u);
+    assert.match(source, /assertRecoveryPublisherTrustRootWriteDenied\(/u);
+    assert.match(source, /PRIMARY_RECOVERY_SOURCE_DATABASE_URL/u);
     assert.match(source, /PRIMARY_AUDIT_DATABASE_URL/u);
+    assert.doesNotMatch(source, /PRIMARY_DATABASE_URL/u);
     assert.match(source, /publisherTrustRootCommitment/u);
     assert.doesNotMatch(source, /createSyntheticRecoverySigner/u);
     const signerLoaded = source.indexOf("loadCommittedRecoveryPublisherSigner()");
@@ -271,6 +278,20 @@ test("recovery publisher trust root is immutable and runner-readable only", asyn
   assert.match(
     source,
     /g1_resolve_recovery_publisher_trust_root_v1\(STRING, STRING, STRING\)/u
+  );
+  assert.match(
+    source,
+    /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
+  );
+  assert.match(source, /\["tp_recovery_source_role", "tp_recovery_source_user"\]/u);
+});
+
+test("recovery broker verifies audit events only through the narrow resolver", async () => {
+  const source = await readFile(recoveryScriptUrls[1], "utf8");
+  assert.match(source, /resolveCommittedRecoveryAuditEvent/u);
+  assert.doesNotMatch(
+    source,
+    /FROM tp_ledger\.g1_recovery_audit_events_v3/u
   );
 });
 

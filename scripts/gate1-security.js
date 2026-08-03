@@ -20,6 +20,7 @@ const USERS = [
   "tp_authorizer_user",
   "tp_gate2_authorizer_user",
   "tp_dispatch_user",
+  "tp_recovery_source_user",
   "tp_recovery_audit_user",
   "tp_audit_user"
 ];
@@ -754,6 +755,74 @@ async function main() {
     }
   );
 
+  const recoverySource = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_recovery_source_user",
+      passwords.tp_recovery_source_user
+    ),
+    async (client) => {
+      const directRead = await expectPrivilegeDenied(
+        client,
+        "SELECT * FROM tp_ledger.g1_authority_receipts LIMIT 1"
+      );
+      const directTrustRootWrite = await expectPrivilegeDenied(
+        client,
+        `
+          UPDATE tp_ledger.g1_recovery_publisher_trust_roots
+          SET trust_root_commitment = trust_root_commitment
+          WHERE trust_root_id = 'gate1-recovery-publisher-v1'
+        `
+      );
+      const auditResolverDenied = await expectPrivilegeDenied(
+        client,
+        `
+          SELECT *
+          FROM tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+            'gate1-recovery-publisher-v1', $1, $2
+          )
+        `,
+        [
+          recoveryPublisherTrustRootCommitment,
+          recoveryPublisherKeySetDigest
+        ]
+      );
+      const resolved = await client.query(
+        `
+          SELECT *
+          FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+            $1::UUID, $2::UUID, $3::UUID, $4::UUID,
+            $5, $6::UUID, $7
+          )
+        `,
+        [
+          authorityFixture.tenantId,
+          authorityFixture.runId,
+          authorityFixture.incidentId,
+          authorityFixture.evidenceId,
+          authorityFixture.resourceId,
+          normalizedCapabilityRequest.operationId,
+          normalizedCapabilityRequest.requestDigest
+        ]
+      );
+      if (
+        resolved.rowCount !== 1 ||
+        resolved.rows[0]?.outcome !== "resource_reserved" ||
+        resolved.rows[0]?.admissibility !== "admissible" ||
+        resolved.rows[0]?.has_durable_intent !== true
+      ) {
+        throw new Error("recovery source receipt was not resolved exactly");
+      }
+      return {
+        directRead,
+        directTrustRootWrite,
+        auditResolverDenied,
+        operationId: resolved.rows[0].operation_id,
+        databaseNow: resolved.rows[0].database_now
+      };
+    }
+  );
+
   const recoveryAudit = await withClient(
     connectionStringForUser(
       adminConnectionString,
@@ -769,10 +838,28 @@ async function main() {
         client,
         `
           UPDATE tp_ledger.g1_recovery_publisher_trust_roots
-          SET trust_root_commitment = $1
+          SET trust_root_commitment = trust_root_commitment
           WHERE trust_root_id = 'gate1-recovery-publisher-v1'
+        `
+      );
+      const sourceResolverDenied = await expectPrivilegeDenied(
+        client,
+        `
+          SELECT *
+          FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+            $1::UUID, $2::UUID, $3::UUID, $4::UUID,
+            $5, $6::UUID, $7
+          )
         `,
-        ["f".repeat(64)]
+        [
+          authorityFixture.tenantId,
+          authorityFixture.runId,
+          authorityFixture.incidentId,
+          authorityFixture.evidenceId,
+          authorityFixture.resourceId,
+          normalizedCapabilityRequest.operationId,
+          normalizedCapabilityRequest.requestDigest
+        ]
       );
       const resolvedTrustRoot = await client.query(
         `
@@ -1108,6 +1195,7 @@ async function main() {
       return {
         directRead,
         directTrustRootWrite,
+        sourceResolverDenied,
         publisherTrustRootCommittedAt:
           resolvedTrustRoot.rows[0].committed_at,
         directWrite,
@@ -1156,6 +1244,7 @@ async function main() {
         sqlBindingNegatives,
         gateTwoAuthorizer,
         dispatch,
+        recoverySource,
         recoveryAudit,
         audit,
         capabilityAuthority: {

@@ -122,12 +122,13 @@ by the runtime audit role.
 
 ## Live deterministic broker gate
 
-Command form:
+The July 30 receipt predates the source-principal split and is retained as
+historical evidence, not final release proof. The current command form is:
 
 ```sh
-PRIMARY_DATABASE_URL="<primary admin URL from Keychain>" \
+PRIMARY_RECOVERY_SOURCE_DATABASE_URL="<tp_recovery_source_user URL from Keychain>" \
 RECOVERY_PUBLISHER_DATABASE_URL="<recovery publisher URL from Keychain>" \
-PRIMARY_AUDIT_DATABASE_URL="<primary audit URL from Keychain>" \
+PRIMARY_AUDIT_DATABASE_URL="<tp_recovery_audit_user URL from Keychain>" \
 MCP_API_KEY="<service-account key from Keychain>" \
 SOURCE_BUILD_IDENTITY="55892bf25a5286af30e30908ab5711e24f106629" \
 PRIMARY_CLUSTER_ID="4bd5f0c9-729a-468e-b47c-5c5ed9cd41f9" \
@@ -136,6 +137,9 @@ EXPECTED_PRIMARY_HOSTNAME="<expected primary hostname>" \
 EXPECTED_RECOVERY_HOSTNAME="<expected recovery hostname>" \
 npm run gate1:recovery-broker
 ```
+
+The primary administrator URL is forbidden. Final provider proof must include
+the source and audit credentials' SQLSTATE `42501` trust-root write denials.
 
 Exit status: 0.
 

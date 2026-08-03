@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
-import { connectionStringForDatabase } from "../src/cloud/authority-store.js";
 import { runtimeDatabaseConfig } from "../src/cloud/database-runtime.js";
 import {
+  assertRecoveryPublisherTrustRootWriteDenied,
   assertSeparatedDatabaseEndpoints,
   principalBindingHash,
   resolveCommittedRecoveryPublisherTrustRoot,
+  resolveCommittedRecoverySourceReceipt,
   trustedPublisherKeysDigest
 } from "../src/cloud/recovery-broker.js";
 import {
@@ -50,117 +51,6 @@ function exactSourceBinding() {
   };
 }
 
-async function exactSyntheticReceipt(connectionString, binding) {
-  const client = new Client(runtimeDatabaseConfig({
-    connectionString: connectionStringForDatabase(connectionString, "tideproof"),
-    max: 1,
-    applicationName: "tideproof-recovery-source"
-  }));
-  try {
-    await client.connect();
-    await client.query(
-      "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY"
-    );
-    const result = await client.query(`
-      SELECT
-        receipt.tenant_id,
-        receipt.run_id,
-        receipt.incident_id,
-        receipt.evidence_id,
-        receipt.operation_id,
-        receipt.recorded_at,
-        receipt.request_digest,
-        receipt.proposal_digest,
-        receipt.logical_action_digest,
-        receipt.authorization_epoch,
-        receipt.logical_authority_key_sha256,
-        receipt.authorization_binding_sha256,
-        receipt.policy_version,
-        receipt.agent_id,
-        receipt.agency,
-        receipt.outcome,
-        receipt.reason,
-        receipt.evidence_digest,
-        receipt.resource_id,
-        outbox.intent_id IS NOT NULL AS has_durable_intent,
-        verification.outcome AS verification_outcome,
-        verification.public_key_digest,
-        evidence.evidence_digest AS current_evidence_digest
-      FROM tp_ledger.g1_authority_receipts AS receipt
-      JOIN tp_private.g1_evidence AS evidence
-        ON evidence.tenant_id = receipt.tenant_id
-       AND evidence.evidence_id = receipt.evidence_id
-      JOIN tp_ledger.g1_evidence_verification_receipts AS verification
-        ON verification.tenant_id = evidence.tenant_id
-       AND verification.evidence_id = evidence.evidence_id
-      LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
-        ON outbox.tenant_id = receipt.tenant_id
-       AND outbox.operation_id = receipt.operation_id
-      WHERE receipt.tenant_id = $1::UUID
-        AND receipt.run_id = $2::UUID
-        AND receipt.incident_id = $3::UUID
-        AND receipt.evidence_id = $4::UUID
-        AND receipt.resource_id = $5
-        AND receipt.operation_id = $6::UUID
-        AND receipt.request_digest = $7
-        AND receipt.outcome = 'resource_reserved'
-        AND receipt.recorded_at >
-          transaction_timestamp() - INTERVAL '45 minutes'
-    `, [
-      binding.tenantId,
-      binding.runId,
-      binding.incidentId,
-      binding.evidenceId,
-      binding.resourceId,
-      binding.operationId,
-      binding.requestDigest
-    ]);
-    if (result.rowCount !== 1) {
-      throw new Error("no fresh committed synthetic authority receipt exists");
-    }
-    const receipt = result.rows[0];
-    const observed = await client.query(
-      `
-        SELECT *
-        FROM tp_api.g1_observe_admissibility_v2(
-          $1::UUID, $2::UUID, $3::UUID, $4
-        )
-      `,
-      [
-        receipt.tenant_id,
-        receipt.evidence_id,
-        receipt.incident_id,
-        receipt.agency
-      ]
-    );
-    await client.query("COMMIT");
-    const admissible = observed.rows.filter(
-      (row) => row.admissibility === "admissible"
-    );
-    const conflicted = observed.rows.filter(
-      (row) => row.admissibility === "conflicted"
-    );
-    assert(
-      receipt.verification_outcome === "verified" &&
-        receipt.public_key_digest &&
-        receipt.evidence_digest === receipt.current_evidence_digest,
-      "source receipt is not bound to currently verified evidence"
-    );
-    assert(admissible.length === 1, "source evidence is not admissible");
-    assert(conflicted.length === 0, "source evidence has an unresolved conflict");
-    return {
-      ...receipt,
-      admittedCount: admissible.length,
-      unresolvedCount: conflicted.length
-    };
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw error;
-  } finally {
-    await client.end().catch(() => {});
-  }
-}
-
 async function expectPublisherBaseReadDenied(connectionString) {
   const client = new Client(runtimeDatabaseConfig({
     connectionString,
@@ -186,7 +76,9 @@ async function expectPublisherBaseReadDenied(connectionString) {
 }
 
 async function main() {
-  const primaryUrl = requiredEnvironment("PRIMARY_DATABASE_URL");
+  const primarySourceUrl = requiredEnvironment(
+    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL"
+  );
   const primaryAuditUrl = requiredEnvironment("PRIMARY_AUDIT_DATABASE_URL");
   const recoveryUrl = requiredEnvironment("RECOVERY_DATABASE_URL");
   const publisherPassword = requiredEnvironment(
@@ -195,17 +87,27 @@ async function main() {
   const primaryClusterId = requiredEnvironment("PRIMARY_CLUSTER_ID");
   const recoveryClusterId = requiredEnvironment("RECOVERY_CLUSTER_ID");
   const endpointSeparation = assertSeparatedDatabaseEndpoints({
-    primaryConnectionString: primaryUrl,
+    primaryConnectionString: primarySourceUrl,
     recoveryConnectionString: recoveryUrl,
     expectedPrimaryHostname: requiredEnvironment("EXPECTED_PRIMARY_HOSTNAME"),
     expectedRecoveryHostname: requiredEnvironment("EXPECTED_RECOVERY_HOSTNAME"),
     primaryClusterId,
     recoveryClusterId
   });
-  const receipt = await exactSyntheticReceipt(
-    primaryUrl,
-    exactSourceBinding()
-  );
+  const [sourceTrustRootWrite, auditTrustRootWrite] = await Promise.all([
+    assertRecoveryPublisherTrustRootWriteDenied({
+      connectionString: primarySourceUrl,
+      credentialLabel: "recovery-source"
+    }),
+    assertRecoveryPublisherTrustRootWriteDenied({
+      connectionString: primaryAuditUrl,
+      credentialLabel: "recovery-audit"
+    })
+  ]);
+  const receipt = await resolveCommittedRecoverySourceReceipt({
+    connectionString: primarySourceUrl,
+    binding: exactSourceBinding()
+  });
   const recoverySessionId =
     process.env.RECOVERY_SESSION_ID?.trim() || randomUUID();
   const sourceCommitMs = Date.parse(receipt.recorded_at);
@@ -364,6 +266,10 @@ async function main() {
           publisherKeySetDigest,
           publisherTrustRootCommittedAt:
             committedPublisherTrustRoot.committedAt,
+          runnerCredentialDenials: {
+            sourceTrustRootWrite,
+            auditTrustRootWrite
+          },
           signatureAlgorithm: bundle.signatureAlgorithm,
           sourceFacts: {
             admittedCount: receipt.admittedCount,

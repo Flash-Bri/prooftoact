@@ -1239,7 +1239,9 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_verified_evidence_v1",
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
+    "tp_api.g1_resolve_recovery_source_receipt_v1",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1",
+    "tp_recovery_source_user",
     "g1_recovery_publisher_trust_roots",
     "ON CONFLICT (trust_root_id) DO NOTHING",
     "tp_api.g1_authorize_dvi_proposal_v1",
@@ -1266,6 +1268,8 @@ const SOURCE_MARKERS = Object.freeze({
     "sqlBindingNegatives",
     "TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST",
     "directTrustRootWrite",
+    "recoverySource",
+    "sourceResolverDenied",
     "g1_resolve_recovery_publisher_trust_root_v1",
     "payloadSubstitutionOutcome",
     "proposalAliasOutcome",
@@ -1341,6 +1345,9 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_PRINCIPAL_BINDING_MISMATCH",
     "RECOVERY_MCP_RESULT_CARDINALITY_INVALID",
     "g1_resolve_recovery_audit_event_v1",
+    "resolveCommittedRecoverySourceReceipt",
+    "resolveCommittedRecoveryAuditEvent",
+    "assertRecoveryPublisherTrustRootWriteDenied",
     "databaseClientMustBeDiscarded(error)",
     "read_reconciled",
     "commitDefinitivelyAborted"
@@ -1351,6 +1358,10 @@ const SOURCE_MARKERS = Object.freeze({
     "loadCommittedRecoveryPublisherSigner()",
     "signer.trustedPublisherKeys",
     "resolveCommittedRecoveryPublisherTrustRoot({",
+    "resolveCommittedRecoverySourceReceipt({",
+    "resolveCommittedRecoveryAuditEvent",
+    "assertRecoveryPublisherTrustRootWriteDenied({",
+    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
     "PRIMARY_AUDIT_DATABASE_URL",
     "publisherTrustRootCommitment",
     "operationalCapabilitiesReturned: false"
@@ -1361,6 +1372,9 @@ const SOURCE_MARKERS = Object.freeze({
     "loadCommittedRecoveryPublisherSigner()",
     "signer.trustedPublisherKeys",
     "resolveCommittedRecoveryPublisherTrustRoot({",
+    "resolveCommittedRecoverySourceReceipt({",
+    "assertRecoveryPublisherTrustRootWriteDenied({",
+    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
     "PRIMARY_AUDIT_DATABASE_URL",
     "publisherTrustRootCommitment",
     "publisher unexpectedly read the base recovery table"
@@ -1447,10 +1461,12 @@ const SOURCE_MARKERS = Object.freeze({
 
 const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
   "recovery-broker-runner": Object.freeze([
-    "createSyntheticRecoverySigner"
+    "createSyntheticRecoverySigner",
+    "PRIMARY_DATABASE_URL"
   ]),
   "recovery-evidence-runner": Object.freeze([
-    "createSyntheticRecoverySigner"
+    "createSyntheticRecoverySigner",
+    "PRIMARY_DATABASE_URL"
   ]),
   "primary-security-bootstrap": Object.freeze([
     "v_authorization_epoch := v_epoch.current_epoch + 1"

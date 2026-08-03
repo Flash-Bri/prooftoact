@@ -155,14 +155,22 @@ official release.
 The recovery evidence runners no longer generate a publisher key and then
 trust that same key in-process. During primary-cluster security bootstrap, the
 database owner immutably inserts the expected trust-root commitment and
-publisher-key-set digest. The runtime `tp_recovery_audit_user` receives only
-the exact resolver function, not table write access. Before either runner
-signs, publishes, bootstraps recovery state, or reaches Managed MCP, it must
-match its canonical root and P-256 signing key against that database-owned
-row. A coordinated replacement of the root, adjacent hash, and signing key
-therefore fails unless the separately privileged primary bootstrap commitment
-already matches. Receipts expose only digests and the database commit time;
-they never expose the private key.
+publisher-key-set digest. The runtime `tp_recovery_source_user` receives only
+the exact, database-time-current authority-receipt resolver; the separate
+`tp_recovery_audit_user` receives only the exact audit-event and trust-root
+resolvers plus the append-only audit surface. Neither receives base-table
+access. Before either runner reads source state or the trust root, it executes
+a rollback-bounded no-op update probe and requires SQLSTATE `42501` from both
+primary credentials. The broker re-reads its two audit events only by their
+committed event IDs and digests. No recovery runner accepts
+`PRIMARY_DATABASE_URL`.
+
+Before either runner signs, publishes, bootstraps recovery state, or reaches
+Managed MCP, it must match its canonical root and P-256 signing key against
+that database-owned row. A coordinated replacement of the root, adjacent
+hash, and signing key therefore fails unless the separately privileged primary
+bootstrap commitment already matches. Receipts expose only digests and the
+database commit time; they never expose the private key.
 
 - Root cause: the earlier proof runner created an ephemeral signer, published
   its bundle, and injected the same signer's public key into the broker. That
@@ -187,6 +195,31 @@ they never expose the private key.
   evidence must prove the committed row predates publication, the runtime
   principal lacks table writes, and custody remained separate. No live
   recovery-authenticity or administrator-exclusion claim is added.
+
+An independent review then found that both runner processes still carried the
+primary administrator URL for exact source and audit reads. That credential
+could rewrite the new row, so the row-level grant test did not establish an
+independent runtime trust root.
+
+- Root cause: the trust-root repair narrowed the new resolver but preserved the
+  older runner connection used for direct joins and final audit-table reads.
+- Why it was missed: tests proved `tp_recovery_audit_user` lacked table writes
+  but did not inventory every credential present in the two runner processes.
+- Earliest detection point: statically forbid `PRIMARY_DATABASE_URL` in both
+  runners and require a live write-denial probe for every primary credential
+  before any source, trust-root, signing, publication, or MCP action.
+- Repair and preventive control: a dedicated NOLOGIN capability role and
+  login-bound `tp_recovery_source_user` expose one exact source resolver. The
+  audit user exposes exact audit/trust resolvers. Shared helpers validate one
+  row, database time, IDs, digests, outcome, admissibility, and durable intent;
+  both scripts prove trust-root write denial before proceeding.
+- Verification: focused controls cover source/audit cross-denial, base-table
+  denial, trust-root write denial, exact source resolution, exact audit
+  resolution, and the absence of the administrator variable in both runners.
+- Residual risk and claim impact: provider-backed CockroachDB v26.2 grants,
+  resolver execution, and denial receipts remain required. A database
+  administrator can still alter grants or the committed row; no administrator
+  exclusion or live recovery-authenticity claim is added.
 
 ## Integrated DVI acceptance harness
 
