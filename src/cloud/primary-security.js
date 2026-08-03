@@ -4125,6 +4125,20 @@ async function createFunctions(client) {
       JOIN tp_ledger.g1_outbox_intents AS outbox
         ON outbox.tenant_id = receipt.tenant_id
        AND outbox.operation_id = receipt.operation_id
+       AND outbox.request_digest = receipt.request_digest
+       AND outbox.proposal_digest = receipt.proposal_digest
+       AND outbox.logical_action_digest = receipt.logical_action_digest
+       AND outbox.authorization_epoch = receipt.authorization_epoch
+       AND outbox.logical_authority_key_sha256 =
+         receipt.logical_authority_key_sha256
+       AND outbox.authorization_binding_sha256 =
+         receipt.authorization_binding_sha256
+       AND outbox.run_id = receipt.run_id
+       AND outbox.incident_id = receipt.incident_id
+       AND outbox.resource_id = receipt.resource_id
+       AND outbox.fencing_token = receipt.fencing_token
+       AND outbox.effect_key = receipt.effect_key
+       AND outbox.payload_digest = receipt.payload_digest
       JOIN tp_private.g1_list_admissibility_internal_v1(
         receipt.tenant_id,
         receipt.incident_id,

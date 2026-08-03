@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -222,7 +222,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "91b85b9c885df392c9f931cd431907039572652bdf3072629f2a057bf2b4dca9"
+      "sha256": "efb26270b07bc225dcc5bfddd874a8a519d1bb46534fa7f6bdb0e044a50b6818"
     },
     {
       "id": "database-security-posture",
@@ -324,7 +324,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "45e759ee9ccdc68450019f361bf4b93166feab432a52363b4c56a74872d0d36a"
+      "sha256": "d102841721abeb3deacb1c1d3e474caf39c68fa26e0cff6ac6678f309195f6a5"
     },
     {
       "id": "primary-security-runner",
@@ -378,19 +378,19 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "d1dd8376e73e7acf1b5df3b9b2e1d169401e7f3be23f162a141db228cb7b21c8"
+      "sha256": "afecb9956df5c1db853d1427cfbe42a59ed92fe6ec46b84b9792bcbcf4be19b3"
     },
     {
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "36f154eef7654b45febf002ed33df7ee012f5b6bad6d34d63703216237c7a11e"
+      "sha256": "456bdc086316afa6ce5fbc9d26a3ea682bed2988b7307e1e5847390ec6840e2d"
     },
     {
       "id": "recovery-evidence-runner",
       "path": "scripts/gate1-recovery.js",
       "role": "RECOVERY_EVIDENCE_RUNNER",
-      "sha256": "28cebe9b44d9408bcad610b73a00e56af00a0fc2f969ec650ea8a25c3f305ce1"
+      "sha256": "2dad89185542cf6cfb2fb3a47832699118f777779f03784599ffac32b48f6650"
     },
     {
       "id": "recovery-publisher-key",
@@ -402,7 +402,7 @@
       "id": "recovery-publisher-key-tests",
       "path": "test/recovery-publisher-key.test.js",
       "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
-      "sha256": "1f7243628b31ad18d9ffdd3cf1a2e40b5045760e90b64efcbc3273698a36e87f"
+      "sha256": "58853b4dea1e9ee25ce7639f61971c142dcc0541c36bdbbeaf7ba7cbc29cd532"
     },
     {
       "id": "recovery-publication-reconciliation-tests",
@@ -420,7 +420,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "cdcbd63fdebc2a501b30b16b9b57601d1f1ba3986816f1478009a36cbfd7d64e"
+      "sha256": "62bd60f5534f3be127a984c0beca2d614945bf6bf774042fcbebd32589c56723"
     },
     {
       "id": "security-policy",

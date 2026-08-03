@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -241,7 +241,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "e8403a52f154b8e39585ec094f0f1572a72fa6b9379c9e718163ca739ae3544f",
+      "sha256": "a60b01c1b36efce04a19a93237b3ba7ee99d40993b3db1282e4db09cc9bdb09f",
       "kind": "boundary-ledger"
     },
     {
@@ -445,7 +445,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "8cdeb4a069841e4af6d39bd776abe92375ace0adebb9bbefafb8b5c1a684161f",
+      "sha256": "493c45452662242d7de35ce5f23dc4f90ad30a40b17a17791f3531b83c815b24",
       "kind": "boundary-ledger"
     },
     {
@@ -493,13 +493,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "cdcbd63fdebc2a501b30b16b9b57601d1f1ba3986816f1478009a36cbfd7d64e",
+      "sha256": "62bd60f5534f3be127a984c0beca2d614945bf6bf774042fcbebd32589c56723",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "560ae1a6275ef10da3852014463f9390e96d88fc73a9d880496c310eba192b20",
+      "sha256": "4f314379efaec3173f08cf46dcb90f12c2cdf3d82712785688416d9325f108ae",
       "kind": "boundary-ledger"
     },
     {

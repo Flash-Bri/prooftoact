@@ -3,6 +3,7 @@ import { Client } from "pg";
 import { runtimeDatabaseConfig } from "../src/cloud/database-runtime.js";
 import {
   assertRecoveryPublisherTrustRootWriteDenied,
+  assertRecoveryRunnerBaseTableReadsDenied,
   assertSeparatedDatabaseEndpoints,
   principalBindingHash,
   resolveCommittedRecoveryPublisherTrustRoot,
@@ -95,12 +96,25 @@ async function main() {
     primaryClusterId,
     recoveryClusterId
   });
-  const [sourceTrustRootWrite, auditTrustRootWrite] = await Promise.all([
+  const [
+    sourceTrustRootWrite,
+    auditTrustRootWrite,
+    sourceBaseTableReads,
+    auditBaseTableReads
+  ] = await Promise.all([
     assertRecoveryPublisherTrustRootWriteDenied({
       connectionString: primarySourceUrl,
       credentialLabel: "recovery-source"
     }),
     assertRecoveryPublisherTrustRootWriteDenied({
+      connectionString: primaryAuditUrl,
+      credentialLabel: "recovery-audit"
+    }),
+    assertRecoveryRunnerBaseTableReadsDenied({
+      connectionString: primarySourceUrl,
+      credentialLabel: "recovery-source"
+    }),
+    assertRecoveryRunnerBaseTableReadsDenied({
       connectionString: primaryAuditUrl,
       credentialLabel: "recovery-audit"
     })
@@ -269,7 +283,9 @@ async function main() {
             committedPublisherTrustRoot.committedAt,
           runnerCredentialDenials: {
             sourceTrustRootWrite,
-            auditTrustRootWrite
+            auditTrustRootWrite,
+            sourceBaseTableReads,
+            auditBaseTableReads
           },
           signatureAlgorithm: bundle.signatureAlgorithm,
           sourceFacts: {

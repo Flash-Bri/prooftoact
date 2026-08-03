@@ -11,6 +11,7 @@ import {
 } from "../scripts/lib/recovery-publisher-key.js";
 import {
   assertRecoveryPublisherTrustRootWriteDenied,
+  assertRecoveryRunnerBaseTableReadsDenied,
   assertSeparatedDatabaseEndpoints,
   resolveCommittedRecoveryAuditEvent,
   resolveCommittedRecoveryPublisherTrustRoot,
@@ -275,6 +276,47 @@ test("every primary recovery runner credential must be denied trust-root writes"
       })
     }),
     /RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT/
+  );
+});
+
+test("every primary recovery runner credential must be denied protected base-table reads", async () => {
+  const queries = [];
+  const denied = await assertRecoveryRunnerBaseTableReadsDenied({
+    credentialLabel: "unit-source",
+    clientFactory: () => ({
+      async connect() {},
+      async end() {},
+      async query(text) {
+        queries.push(text.trim());
+        const error = new Error("denied");
+        error.code = "42501";
+        throw error;
+      }
+    })
+  });
+  assert.deepEqual(denied, {
+    denied: true,
+    sqlstate: "42501",
+    tableCount: 7
+  });
+  assert.equal(queries.length, 7);
+  for (const query of queries) {
+    assert.match(query, /^SELECT 1 FROM (?:tp_private|tp_ledger)\./u);
+    assert.match(query, / LIMIT 1$/u);
+  }
+
+  await assert.rejects(
+    assertRecoveryRunnerBaseTableReadsDenied({
+      credentialLabel: "unit-readable",
+      clientFactory: () => ({
+        async connect() {},
+        async end() {},
+        async query() {
+          return { rowCount: 0, rows: [] };
+        }
+      })
+    }),
+    /RECOVERY_RUNNER_CAN_READ_PROTECTED_BASE_TABLE/
   );
 });
 

@@ -222,6 +222,61 @@ independent runtime trust root.
   administrator can still alter grants or the committed row; no administrator
   exclusion or live recovery-authenticity claim is added.
 
+### Recovery operator input contract
+
+The operator must prepare the publisher root before primary security bootstrap.
+Generate one P-256 key pair in the approved private custody boundary. Encode the
+public key as canonical DER SPKI base64 and the private key as canonical DER
+PKCS8 base64. The canonical public root is the byte-exact JSON object
+`{"schemaVersion":"tideproof.recovery-publisher-trust-root.v1","publisherKeyId":"<key-id>","publicKeySpkiBase64":"<canonical-base64>"}`.
+`TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT` is SHA-256 over the UTF-8
+bytes of `tideproof-recovery-publisher-trust-root-commitment-v1\n` followed by
+that exact JSON. `TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST` is the
+`trustedPublisherKeysDigest` of the one-entry key map. Supply those two digests
+to `npm run gate1:security`; keep the JSON and
+`RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64` outside the database and supply
+them only to the two recovery runners. Never record the private key, database
+passwords, or MCP key in a shell transcript or evidence artifact.
+
+Both runners require these exact private inputs:
+
+| Input | Required source |
+| --- | --- |
+| `PRIMARY_RECOVERY_SOURCE_DATABASE_URL` | URL whose login is exactly `tp_recovery_source_user`; same reviewed primary host, port, and `tideproof` database as the audit URL |
+| `PRIMARY_AUDIT_DATABASE_URL` | URL whose login is exactly `tp_recovery_audit_user`; never an owner or administrator URL |
+| `RECOVERY_SOURCE_TENANT_ID` | Tenant UUID from the same private provider race configuration bound by the accepted race receipt |
+| `RECOVERY_SOURCE_RUN_ID` | Exact accepted race receipt `runId` |
+| `RECOVERY_SOURCE_INCIDENT_ID` | Incident UUID from that same bound race configuration |
+| `RECOVERY_SOURCE_EVIDENCE_ID` | Exact selected evidence UUID from that same bound DVI proposal |
+| `RECOVERY_SOURCE_RESOURCE_ID` | Exact resource ID from that same bound race configuration |
+| `RECOVERY_SOURCE_OPERATION_ID` | Accepted race receipt `winner.operationId` |
+| `RECOVERY_SOURCE_REQUEST_DIGEST` | Accepted race receipt `winner.requestDigest` |
+| `PRIMARY_CLUSTER_ID`, `RECOVERY_CLUSTER_ID` | Exact provider cluster UUIDs from the frozen deployment inventory |
+| `EXPECTED_PRIMARY_HOSTNAME`, `EXPECTED_RECOVERY_HOSTNAME` | Exact provider hostnames from that inventory; wildcards, aliases, proxies, and localhost are invalid |
+| `TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT` | The canonical public-root JSON prepared before bootstrap |
+| `TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT` | The same commitment inserted during primary security bootstrap |
+| `RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64` | The separately held matching P-256 private key |
+
+`npm run gate1:recovery` additionally requires the recovery administrator URL
+as `RECOVERY_DATABASE_URL` and `RECOVERY_PUBLISHER_PASSWORD` because that
+component creates and narrows the disposable recovery database. Optional
+`RECOVERY_SESSION_ID` and `SNAPSHOT_VERSION` values, when supplied, must be
+recorded as private operator inputs; otherwise the runner derives them.
+`npm run gate1:recovery-broker` instead requires the already narrowed
+`RECOVERY_PUBLISHER_DATABASE_URL`, `MCP_API_KEY`, and the exact immutable
+`SOURCE_BUILD_IDENTITY`.
+
+The seven `RECOVERY_SOURCE_*` values are one indivisible binding. Do not copy
+the winner operation and request digest onto tenant, incident, evidence, or
+resource values from another run, and do not reconstruct missing fields from a
+latest-row query. Before any resolver, signing, publication, recovery
+bootstrap, or MCP call, both primary credentials must independently return
+SQLSTATE `42501` for all three trust-root write probes and all seven protected
+base-table read probes. The source resolver then joins the authority receipt
+to its outbox intent across request, proposal, logical-action, authorization,
+run, incident, resource, fence, effect, and payload identities. Any mismatch or
+non-singleton result fails closed.
+
 ## Integrated DVI acceptance harness
 
 `npm run gate1:admissible-vector:proof` is the owner-run acceptance lane for

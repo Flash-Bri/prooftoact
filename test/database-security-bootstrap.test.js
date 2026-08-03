@@ -23,6 +23,10 @@ const gate1AuthorityUrl = new URL(
   "../scripts/gate1-authority.js",
   import.meta.url
 );
+const fullDrillEvidenceUrl = new URL(
+  "../docs/FULL_DRILL_EVIDENCE.md",
+  import.meta.url
+);
 
 test("primary bootstrap audits posture before credentials, ownership, or grants", async () => {
   const source = await readFile(primaryUrl, "utf8");
@@ -246,6 +250,7 @@ test("recovery evidence selects one exact upstream authority receipt", async () 
     assert.match(source, /resolveCommittedRecoveryPublisherTrustRoot\(/u);
     assert.match(source, /resolveCommittedRecoverySourceReceipt\(/u);
     assert.match(source, /assertRecoveryPublisherTrustRootWriteDenied\(/u);
+    assert.match(source, /assertRecoveryRunnerBaseTableReadsDenied\(/u);
     assert.match(source, /PRIMARY_RECOVERY_SOURCE_DATABASE_URL/u);
     assert.match(source, /PRIMARY_AUDIT_DATABASE_URL/u);
     assert.doesNotMatch(source, /PRIMARY_DATABASE_URL/u);
@@ -285,6 +290,68 @@ test("recovery publisher trust root is immutable and runner-readable only", asyn
     /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
   );
   assert.match(source, /\["tp_recovery_source_role", "tp_recovery_source_user"\]/u);
+});
+
+test("recovery source resolver binds the full receipt and outbox identity", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const resolver = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(resolver);
+  for (const field of [
+    "request_digest",
+    "proposal_digest",
+    "logical_action_digest",
+    "authorization_epoch",
+    "logical_authority_key_sha256",
+    "authorization_binding_sha256",
+    "run_id",
+    "incident_id",
+    "resource_id",
+    "fencing_token",
+    "effect_key",
+    "payload_digest"
+  ]) {
+    assert.match(
+      resolver,
+      new RegExp(`outbox\\.${field}\\s*=\\s*receipt\\.${field}`, "u"),
+      field
+    );
+  }
+});
+
+test("recovery operator contract enumerates every exact private input", async () => {
+  const source = await readFile(fullDrillEvidenceUrl, "utf8");
+  for (const input of [
+    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "RECOVERY_SOURCE_TENANT_ID",
+    "RECOVERY_SOURCE_RUN_ID",
+    "RECOVERY_SOURCE_INCIDENT_ID",
+    "RECOVERY_SOURCE_EVIDENCE_ID",
+    "RECOVERY_SOURCE_RESOURCE_ID",
+    "RECOVERY_SOURCE_OPERATION_ID",
+    "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "PRIMARY_CLUSTER_ID",
+    "RECOVERY_CLUSTER_ID",
+    "EXPECTED_PRIMARY_HOSTNAME",
+    "EXPECTED_RECOVERY_HOSTNAME",
+    "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT",
+    "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT",
+    "TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST",
+    "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64",
+    "RECOVERY_DATABASE_URL",
+    "RECOVERY_PUBLISHER_PASSWORD",
+    "RECOVERY_PUBLISHER_DATABASE_URL",
+    "MCP_API_KEY",
+    "SOURCE_BUILD_IDENTITY"
+  ]) {
+    assert.equal(source.includes(input), true, input);
+  }
+  assert.match(source, /winner\.operationId/u);
+  assert.match(source, /winner\.requestDigest/u);
+  assert.match(source, /all seven protected[\s\S]*base-table read probes/u);
+  assert.match(source, /administrator URL/u);
 });
 
 test("recovery broker verifies audit events only through the narrow resolver", async () => {

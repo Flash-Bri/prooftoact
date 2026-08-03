@@ -19,6 +19,15 @@ const FIXED_DATABASE = "tideproof_recovery";
 const FIXED_TOOL = "select_query";
 const RECOVERY_PUBLISHER_TRUST_ROOT_ID =
   "gate1-recovery-publisher-v1";
+const RECOVERY_PROTECTED_BASE_TABLES = Object.freeze([
+  "tp_private.g1_evidence",
+  "tp_ledger.g1_evidence_verification_receipts",
+  "tp_ledger.g1_dvi_proposal_receipts",
+  "tp_ledger.g1_authority_receipts",
+  "tp_ledger.g1_outbox_intents",
+  "tp_ledger.g1_recovery_audit_events_v3",
+  "tp_ledger.g1_recovery_publisher_trust_roots"
+]);
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -145,6 +154,42 @@ export async function assertRecoveryPublisherTrustRootWriteDenied({
     if (transactionOpen) {
       await client.query("ROLLBACK").catch(() => {});
     }
+    await client.end().catch(() => {});
+  }
+}
+
+export async function assertRecoveryRunnerBaseTableReadsDenied({
+  connectionString,
+  clientFactory = null,
+  credentialLabel = "recovery-runtime"
+} = {}) {
+  const client = primaryRuntimeClient({
+    connectionString,
+    clientFactory,
+    applicationName: `tideproof-${requireText(
+      credentialLabel,
+      "credentialLabel"
+    )}-base-table-denial`
+  });
+  try {
+    await client.connect();
+    for (const tableName of RECOVERY_PROTECTED_BASE_TABLES) {
+      try {
+        await client.query(`SELECT 1 FROM ${tableName} LIMIT 1`);
+      } catch (error) {
+        if (error?.code === "42501") {
+          continue;
+        }
+        throw error;
+      }
+      throw new Error("RECOVERY_RUNNER_CAN_READ_PROTECTED_BASE_TABLE");
+    }
+    return Object.freeze({
+      denied: true,
+      sqlstate: "42501",
+      tableCount: RECOVERY_PROTECTED_BASE_TABLES.length
+    });
+  } finally {
     await client.end().catch(() => {});
   }
 }

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   assertRecoveryPublisherTrustRootWriteDenied,
+  assertRecoveryRunnerBaseTableReadsDenied,
   assertSeparatedDatabaseEndpoints,
   DeterministicRecoveryBroker,
   principalBindingHash,
@@ -109,12 +110,25 @@ async function main() {
     primaryClusterId,
     recoveryClusterId
   });
-  const [sourceTrustRootWrite, auditTrustRootWrite] = await Promise.all([
+  const [
+    sourceTrustRootWrite,
+    auditTrustRootWrite,
+    sourceBaseTableReads,
+    auditBaseTableReads
+  ] = await Promise.all([
     assertRecoveryPublisherTrustRootWriteDenied({
       connectionString: primarySourceUrl,
       credentialLabel: "recovery-source"
     }),
     assertRecoveryPublisherTrustRootWriteDenied({
+      connectionString: primaryAuditUrl,
+      credentialLabel: "recovery-audit"
+    }),
+    assertRecoveryRunnerBaseTableReadsDenied({
+      connectionString: primarySourceUrl,
+      credentialLabel: "recovery-source"
+    }),
+    assertRecoveryRunnerBaseTableReadsDenied({
       connectionString: primaryAuditUrl,
       credentialLabel: "recovery-audit"
     })
@@ -404,7 +418,9 @@ async function main() {
           committedPublisherTrustRoot.committedAt,
         runnerCredentialDenials: {
           sourceTrustRootWrite,
-          auditTrustRootWrite
+          auditTrustRootWrite,
+          sourceBaseTableReads,
+          auditBaseTableReads
         },
         recoveryStatus: recovered.status,
         unauthorizedStatus: unauthorized.status,
