@@ -241,7 +241,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "19c09b25670cfa0c0a32adb235d59a70c1b1ddd6c017928edf5f7ff1f6cef710",
+      "sha256": "9a01ed5ee176b19a7642112f8bbe6b1b3d5b486371aae18f99a305a22e2f0811",
       "kind": "boundary-ledger"
     },
     {
@@ -499,7 +499,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "39dd704824b1249fbe061d068674fbe3a6249f5aa66abf065ac369a582daa7bb",
+      "sha256": "03ea506d512750e8d11dd6202206959aa89d85b87d9e30667f71d44f2650389c",
       "kind": "boundary-ledger"
     },
     {

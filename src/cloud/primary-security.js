@@ -3160,6 +3160,7 @@ async function createFunctions(client) {
       decision_authority_current BOOL,
       decision_database_now TIMESTAMPTZ,
       decision_durable_receipt BOOL,
+      decision_authority_evidence_binding_sha256 STRING,
       decision_committed_evidence_id UUID,
       decision_committed_evidence_digest STRING
     )
@@ -3202,12 +3203,17 @@ async function createFunctions(client) {
       SELECT
         decision.*,
         receipt.operation_id IS NOT NULL,
+        proposal.authority_evidence_binding_sha256,
         receipt.evidence_id,
         receipt.evidence_digest
       FROM decision
       LEFT JOIN tp_ledger.g1_authority_receipts AS receipt
         ON receipt.tenant_id = p_tenant_id
-       AND receipt.operation_id = decision.decision_operation_id;
+       AND receipt.operation_id = decision.decision_operation_id
+      LEFT JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+        ON proposal.tenant_id = receipt.tenant_id
+       AND proposal.proposal_digest = receipt.proposal_digest
+       AND proposal.proposal_digest = decision.decision_proposal_digest;
     END
     $$
   `);

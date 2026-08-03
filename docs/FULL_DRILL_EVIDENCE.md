@@ -104,17 +104,23 @@ concurrency, the 100-run harness, or any live evidence.
   different selected evidence or different DVI snapshots.
 - Why it was missed: focused tests varied proposal identities and authority
   outcomes, but used matching synthetic evidence without asserting a shared
-  snapshot binding in the sanitized receipt.
+  snapshot binding in the sanitized receipt. The first repair then injected
+  the new binding into Lambda mock rows without proving that the actual Gate
+  Two SQL wrapper returned the same column.
 - Earliest detection: give the second contender a valid but different selected
   evidence ID, evidence digest, or authority-evidence binding and require the
   race to fail before durable proof acceptance.
-- Repair: direct and ACK-loss-reconciled Lambda decisions return the committed
-  authority-evidence binding; the race validator requires one shared binding
-  and one shared selected evidence identity, then publishes only the shared
-  non-reversible binding and a selected-evidence binding digest.
+- Repair: the Gate Two SQL wrapper joins each durable receipt to its exact
+  committed proposal and returns that proposal's authority-evidence binding;
+  direct and ACK-loss-reconciled Lambda decisions return the committed
+  binding. The race validator requires one shared binding and one shared
+  selected evidence identity, then publishes only the shared non-reversible
+  binding and a selected-evidence binding digest.
 - Regression/preventive control: per-field cross-contender negatives cover all
-  three bindings, and release-security markers bind the response, validator,
-  receipt schema, and evidence contract.
+  three bindings. A provider-surface test binds the SQL return column and the
+  tenant/proposal/committed-decision join to the Lambda response contract, and
+  release-security markers bind the response, validator, receipt schema, and
+  evidence contract.
 - Verification: focused Lambda and race tests exercise direct and reconciled
   decisions plus cross-contender drift. Provider execution remains pending.
 - Residual risk: a source-equal binding is not live DVI-to-AWS evidence until

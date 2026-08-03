@@ -162,7 +162,7 @@
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "ef93c0f726d696fcfc7813553adbb2aadf5df79dc8e7383a9a3ed5da1016d4cc"
+      "sha256": "2f9602f983170028f1068b06460c8043780586d26cffb47f79454922ced7a3f9"
     },
     {
       "id": "aws-template-generated",
@@ -324,7 +324,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "0556107fca9df237a753559bb5bd715d4dc6f4638dfc7b34e37948a09a32011d"
+      "sha256": "0db3258a0342f38ebb5b86e623de38f4b959c3b20530494f4c808ce726634227"
     },
     {
       "id": "primary-security-runner",
