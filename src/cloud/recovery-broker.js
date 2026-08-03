@@ -99,27 +99,48 @@ export async function assertRecoveryPublisherTrustRootWriteDenied({
     )}-trust-root-denial`
   });
   let transactionOpen = false;
+  const writeProbes = Object.freeze([
+    `
+      UPDATE tp_ledger.g1_recovery_publisher_trust_roots
+      SET trust_root_commitment = trust_root_commitment
+      WHERE trust_root_id = 'gate1-recovery-publisher-v1'
+    `,
+    `
+      DELETE FROM tp_ledger.g1_recovery_publisher_trust_roots
+      WHERE trust_root_id = 'tideproof-denial-probe-never'
+    `,
+    `
+      INSERT INTO tp_ledger.g1_recovery_publisher_trust_roots (
+        trust_root_id,
+        trust_root_commitment,
+        publisher_key_set_digest
+      ) VALUES (
+        'gate1-recovery-publisher-v1',
+        '${"0".repeat(64)}',
+        '${"0".repeat(64)}'
+      ) ON CONFLICT (trust_root_id) DO NOTHING
+    `
+  ]);
   try {
     await client.connect();
-    await client.query("BEGIN");
-    transactionOpen = true;
-    try {
-      await client.query(`
-        UPDATE tp_ledger.g1_recovery_publisher_trust_roots
-        SET trust_root_commitment = trust_root_commitment
-        WHERE trust_root_id = 'gate1-recovery-publisher-v1'
-      `);
-    } catch (error) {
+    for (const writeProbe of writeProbes) {
+      await client.query("BEGIN");
+      transactionOpen = true;
+      try {
+        await client.query(writeProbe);
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        transactionOpen = false;
+        if (error?.code === "42501") {
+          continue;
+        }
+        throw error;
+      }
       await client.query("ROLLBACK").catch(() => {});
       transactionOpen = false;
-      if (error?.code === "42501") {
-        return Object.freeze({ denied: true, sqlstate: error.code });
-      }
-      throw error;
+      throw new Error("RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT");
     }
-    await client.query("ROLLBACK");
-    transactionOpen = false;
-    throw new Error("RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT");
+    return Object.freeze({ denied: true, sqlstate: "42501" });
   } finally {
     if (transactionOpen) {
       await client.query("ROLLBACK").catch(() => {});
@@ -368,6 +389,7 @@ export function principalBindingHash(authenticatedPrincipal) {
 
 export function assertSeparatedDatabaseEndpoints({
   primaryConnectionString,
+  primaryAuditConnectionString,
   recoveryConnectionString,
   expectedPrimaryHostname,
   expectedRecoveryHostname,
@@ -375,6 +397,7 @@ export function assertSeparatedDatabaseEndpoints({
   recoveryClusterId
 }) {
   const primary = new URL(primaryConnectionString);
+  const primaryAudit = new URL(primaryAuditConnectionString);
   const recovery = new URL(recoveryConnectionString);
   const expectedPrimary = requireText(
     expectedPrimaryHostname,
@@ -394,9 +417,18 @@ export function assertSeparatedDatabaseEndpoints({
   );
   if (
     primary.hostname.toLowerCase() !== expectedPrimary ||
+    primaryAudit.hostname.toLowerCase() !== expectedPrimary ||
     recovery.hostname.toLowerCase() !== expectedRecovery
   ) {
     throw new Error("RECOVERY_DATABASE_HOST_MISMATCH");
+  }
+  if (
+    primaryAudit.protocol !== primary.protocol ||
+    primaryAudit.hostname.toLowerCase() !== primary.hostname.toLowerCase() ||
+    primaryAudit.port !== primary.port ||
+    primaryAudit.pathname !== primary.pathname
+  ) {
+    throw new Error("RECOVERY_PRIMARY_CREDENTIAL_ENDPOINT_MISMATCH");
   }
   if (
     primary.hostname.toLowerCase() === recovery.hostname.toLowerCase() ||
@@ -406,6 +438,7 @@ export function assertSeparatedDatabaseEndpoints({
   }
   return {
     primaryHostname: primary.hostname.toLowerCase(),
+    primaryAuditHostname: primaryAudit.hostname.toLowerCase(),
     recoveryHostname: recovery.hostname.toLowerCase(),
     primaryClusterId: boundPrimaryClusterId,
     recoveryClusterId: boundRecoveryClusterId

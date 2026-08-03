@@ -222,7 +222,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "f86509c3cb576406ffced92b223c5802d6d43698e2888b180e19459ed67ade00"
+      "sha256": "91b85b9c885df392c9f931cd431907039572652bdf3072629f2a057bf2b4dca9"
     },
     {
       "id": "database-security-posture",
@@ -324,7 +324,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "29132868b10f98f1c29c6f07422c981fdfa1ca13ea43ed564fc28628f7e86bc3"
+      "sha256": "45e759ee9ccdc68450019f361bf4b93166feab432a52363b4c56a74872d0d36a"
     },
     {
       "id": "primary-security-runner",
@@ -378,19 +378,19 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "3a99f0fa815b9d3016b5564996b33417cd217e331c739695a42896dd2e7ee2f7"
+      "sha256": "d1dd8376e73e7acf1b5df3b9b2e1d169401e7f3be23f162a141db228cb7b21c8"
     },
     {
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "9378629e1447059372af720c9c7f7d7d7be879c40d47812a35e4e37cd9473162"
+      "sha256": "36f154eef7654b45febf002ed33df7ee012f5b6bad6d34d63703216237c7a11e"
     },
     {
       "id": "recovery-evidence-runner",
       "path": "scripts/gate1-recovery.js",
       "role": "RECOVERY_EVIDENCE_RUNNER",
-      "sha256": "dcdb2c62c0bcbd2985fafc2857215e555f2945fe62f06d6cb0d99dbb91399bb0"
+      "sha256": "28cebe9b44d9408bcad610b73a00e56af00a0fc2f969ec650ea8a25c3f305ce1"
     },
     {
       "id": "recovery-publisher-key",
@@ -402,7 +402,7 @@
       "id": "recovery-publisher-key-tests",
       "path": "test/recovery-publisher-key.test.js",
       "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
-      "sha256": "f429c6a4847dd15010c96221b8fb3d690c95740aa4fb9a5dad718e1618f996a7"
+      "sha256": "1f7243628b31ad18d9ffdd3cf1a2e40b5045760e90b64efcbc3273698a36e87f"
     },
     {
       "id": "recovery-publication-reconciliation-tests",

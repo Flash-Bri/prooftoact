@@ -154,8 +154,9 @@ official release.
 
 The recovery evidence runners no longer generate a publisher key and then
 trust that same key in-process. During primary-cluster security bootstrap, the
-database owner immutably inserts the expected trust-root commitment and
-publisher-key-set digest. The runtime `tp_recovery_source_user` receives only
+database owner inserts the expected trust-root commitment and publisher-key-set
+digest once in the bootstrap flow (`ON CONFLICT DO NOTHING`, with mismatch
+rejected). The runtime `tp_recovery_source_user` receives only
 the exact, database-time-current authority-receipt resolver; the separate
 `tp_recovery_audit_user` receives only the exact audit-event and trust-root
 resolvers plus the append-only audit surface. Neither receives base-table

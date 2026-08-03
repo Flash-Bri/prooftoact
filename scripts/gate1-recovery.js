@@ -88,6 +88,7 @@ async function main() {
   const recoveryClusterId = requiredEnvironment("RECOVERY_CLUSTER_ID");
   const endpointSeparation = assertSeparatedDatabaseEndpoints({
     primaryConnectionString: primarySourceUrl,
+    primaryAuditConnectionString: primaryAuditUrl,
     recoveryConnectionString: recoveryUrl,
     expectedPrimaryHostname: requiredEnvironment("EXPECTED_PRIMARY_HOSTNAME"),
     expectedRecoveryHostname: requiredEnvironment("EXPECTED_RECOVERY_HOSTNAME"),

@@ -102,6 +102,7 @@ async function main() {
 
   const endpointSeparation = assertSeparatedDatabaseEndpoints({
     primaryConnectionString: primarySourceUrl,
+    primaryAuditConnectionString: primaryAuditUrl,
     recoveryConnectionString: recoveryPublisherUrl,
     expectedPrimaryHostname: requiredEnvironment("EXPECTED_PRIMARY_HOSTNAME"),
     expectedRecoveryHostname: requiredEnvironment("EXPECTED_RECOVERY_HOSTNAME"),

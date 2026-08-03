@@ -249,6 +249,7 @@ test("recovery evidence selects one exact upstream authority receipt", async () 
     assert.match(source, /PRIMARY_RECOVERY_SOURCE_DATABASE_URL/u);
     assert.match(source, /PRIMARY_AUDIT_DATABASE_URL/u);
     assert.doesNotMatch(source, /PRIMARY_DATABASE_URL/u);
+    assert.match(source, /primaryAuditConnectionString: primaryAuditUrl/u);
     assert.match(source, /publisherTrustRootCommitment/u);
     assert.doesNotMatch(source, /createSyntheticRecoverySigner/u);
     const signerLoaded = source.indexOf("loadCommittedRecoveryPublisherSigner()");
@@ -287,11 +288,22 @@ test("recovery publisher trust root is immutable and runner-readable only", asyn
 });
 
 test("recovery broker verifies audit events only through the narrow resolver", async () => {
-  const source = await readFile(recoveryScriptUrls[1], "utf8");
+  const [source, primarySource] = await Promise.all([
+    readFile(recoveryScriptUrls[1], "utf8"),
+    readFile(primaryUrl, "utf8")
+  ]);
   assert.match(source, /resolveCommittedRecoveryAuditEvent/u);
   assert.doesNotMatch(
     source,
     /FROM tp_ledger\.g1_recovery_audit_events_v3/u
+  );
+  assert.match(
+    primarySource,
+    /g1_resolve_recovery_audit_event_v1[\s\S]*RETURNS TABLE\([\s\S]*event_id UUID,[\s\S]*tenant_id UUID,[\s\S]*interaction_id UUID,[\s\S]*recovery_session_id UUID,[\s\S]*caller_subject_hash STRING,[\s\S]*phase STRING,[\s\S]*tool_name STRING,[\s\S]*recovery_cluster_id UUID,[\s\S]*broker_config_digest STRING,[\s\S]*query_template_digest STRING,[\s\S]*bound_input_digest STRING,[\s\S]*result_digest STRING,[\s\S]*source_watermark TIMESTAMPTZ,[\s\S]*error_code STRING,[\s\S]*event_digest STRING,[\s\S]*outcome STRING,[\s\S]*started_at TIMESTAMPTZ,[\s\S]*completed_at TIMESTAMPTZ,[\s\S]*recorded_at TIMESTAMPTZ,[\s\S]*database_now TIMESTAMPTZ/u
+  );
+  assert.match(
+    primarySource,
+    /event\.event_id,[\s\S]*event\.tenant_id,[\s\S]*event\.interaction_id,[\s\S]*event\.recovery_session_id,[\s\S]*event\.caller_subject_hash,[\s\S]*event\.phase,[\s\S]*event\.tool_name,[\s\S]*event\.recovery_cluster_id,[\s\S]*event\.broker_config_digest,[\s\S]*event\.query_template_digest,[\s\S]*event\.bound_input_digest,[\s\S]*event\.result_digest,[\s\S]*event\.source_watermark,[\s\S]*event\.error_code,[\s\S]*event\.event_digest,[\s\S]*event\.outcome,[\s\S]*event\.started_at,[\s\S]*event\.completed_at,[\s\S]*event\.recorded_at,[\s\S]*transaction_timestamp\(\)/u
   );
 });
 

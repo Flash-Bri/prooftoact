@@ -4003,8 +4003,24 @@ async function createFunctions(client) {
     )
     RETURNS TABLE(
       event_id UUID,
+      tenant_id UUID,
+      interaction_id UUID,
+      recovery_session_id UUID,
+      caller_subject_hash STRING,
+      phase STRING,
+      tool_name STRING,
+      recovery_cluster_id UUID,
+      broker_config_digest STRING,
+      query_template_digest STRING,
+      bound_input_digest STRING,
+      result_digest STRING,
+      source_watermark TIMESTAMPTZ,
+      error_code STRING,
       event_digest STRING,
       outcome STRING,
+      started_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      recorded_at TIMESTAMPTZ,
       database_now TIMESTAMPTZ
     )
     LANGUAGE SQL
@@ -4012,8 +4028,24 @@ async function createFunctions(client) {
     AS $$
       SELECT
         event.event_id,
+        event.tenant_id,
+        event.interaction_id,
+        event.recovery_session_id,
+        event.caller_subject_hash,
+        event.phase,
+        event.tool_name,
+        event.recovery_cluster_id,
+        event.broker_config_digest,
+        event.query_template_digest,
+        event.bound_input_digest,
+        event.result_digest,
+        event.source_watermark,
+        event.error_code,
         event.event_digest,
         event.outcome,
+        event.started_at,
+        event.completed_at,
+        event.recorded_at,
         transaction_timestamp()
       FROM tp_ledger.g1_recovery_audit_events_v3 AS event
       WHERE session_user = 'tp_recovery_audit_user'

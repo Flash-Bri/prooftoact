@@ -11,6 +11,7 @@ import {
 } from "../scripts/lib/recovery-publisher-key.js";
 import {
   assertRecoveryPublisherTrustRootWriteDenied,
+  assertSeparatedDatabaseEndpoints,
   resolveCommittedRecoveryAuditEvent,
   resolveCommittedRecoveryPublisherTrustRoot,
   resolveCommittedRecoverySourceReceipt,
@@ -236,7 +237,11 @@ test("every primary recovery runner credential must be denied trust-root writes"
       async end() {},
       async query(text) {
         queries.push(text.trim());
-        if (text.includes("UPDATE tp_ledger.g1_recovery_publisher_trust_roots")) {
+        if (
+          /(?:UPDATE|DELETE FROM|INSERT INTO) tp_ledger\.g1_recovery_publisher_trust_roots/u.test(
+            text
+          )
+        ) {
           const error = new Error("denied");
           error.code = "42501";
           throw error;
@@ -246,9 +251,17 @@ test("every primary recovery runner credential must be denied trust-root writes"
     })
   });
   assert.deepEqual(denied, { denied: true, sqlstate: "42501" });
-  assert.equal(queries[0], "BEGIN");
-  assert.match(queries[1], /SET trust_root_commitment = trust_root_commitment/u);
-  assert.equal(queries[2], "ROLLBACK");
+  assert.deepEqual(
+    queries.filter((query) => query === "BEGIN"),
+    ["BEGIN", "BEGIN", "BEGIN"]
+  );
+  assert.deepEqual(
+    queries.filter((query) => query === "ROLLBACK"),
+    ["ROLLBACK", "ROLLBACK", "ROLLBACK"]
+  );
+  assert.ok(queries.some((query) => query.startsWith("UPDATE ")));
+  assert.ok(queries.some((query) => query.startsWith("DELETE FROM ")));
+  assert.ok(queries.some((query) => query.startsWith("INSERT INTO ")));
 
   await assert.rejects(
     assertRecoveryPublisherTrustRootWriteDenied({
@@ -263,6 +276,38 @@ test("every primary recovery runner credential must be denied trust-root writes"
     }),
     /RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT/
   );
+});
+
+test("primary source and audit credentials must bind one exact endpoint", () => {
+  const binding = {
+    primaryConnectionString:
+      "postgresql://source@primary.example:26257/tideproof?sslmode=verify-full",
+    primaryAuditConnectionString:
+      "postgresql://audit@primary.example:26257/tideproof?sslmode=verify-full",
+    recoveryConnectionString:
+      "postgresql://publisher@recovery.example:26257/defaultdb?sslmode=verify-full",
+    expectedPrimaryHostname: "primary.example",
+    expectedRecoveryHostname: "recovery.example",
+    primaryClusterId: "11111111-1111-4111-8111-111111111111",
+    recoveryClusterId: "22222222-2222-4222-8222-222222222222"
+  };
+  assert.equal(
+    assertSeparatedDatabaseEndpoints(binding).primaryAuditHostname,
+    "primary.example"
+  );
+  for (const changedAuditUrl of [
+    "postgresql://audit@other.example:26257/tideproof?sslmode=verify-full",
+    "postgresql://audit@primary.example:26258/tideproof?sslmode=verify-full",
+    "postgresql://audit@primary.example:26257/other?sslmode=verify-full"
+  ]) {
+    assert.throws(
+      () => assertSeparatedDatabaseEndpoints({
+        ...binding,
+        primaryAuditConnectionString: changedAuditUrl
+      }),
+      /RECOVERY_(?:DATABASE_HOST|PRIMARY_CREDENTIAL_ENDPOINT)_MISMATCH/
+    );
+  }
 });
 
 test("recovery audit evidence is re-read only by exact id and digest", async () => {
