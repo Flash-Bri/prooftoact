@@ -9,12 +9,18 @@ import { fileURLToPath } from "node:url";
 import {
   __test,
   runReleaseProvenance,
+  validateReleaseCostForProvenance,
   validateReleaseSecurityForProvenance,
   validateIndexFlags,
   validateInstalledTree,
   validateTrackedTree,
   verifyRepositoryHistory
 } from "../scripts/verify-release-provenance.js";
+import {
+  RELEASE_COST_SURFACE_COUNT,
+  __test as costVerifierContract,
+  verifyReleaseCost
+} from "../scripts/verify-release-cost.js";
 import {
   RELEASE_SECURITY_SURFACE_COUNT,
   verifyReleaseSecurity
@@ -215,19 +221,27 @@ function costReceipt() {
     reviewedOn: "2026-07-31",
     manifestPath: "RELEASE_COST_MANIFEST.json",
     manifestSha256: "8".repeat(64),
-    surfaceCount: 10,
+    surfaceCount: RELEASE_COST_SURFACE_COUNT,
     budgetAlertCount: 4,
     forbiddenResourceTypeCount: 5,
     unapprovedPurchaseClassCount: 5,
     boundedFunctionCount: 10,
     logGroupCount: 11,
     finalReleaseRequirements: [
-      "Machine-verifiable preflight PASS.",
-      "Exact-release price and forecast review.",
-      "Private registrar evidence review.",
-      "Final spend and teardown receipt."
+      ...costVerifierContract.EXPECTED_FINAL_RELEASE_REQUIREMENTS
     ],
-    checks: { fixtureCostGuardsPass: true },
+    checks: {
+      canonicalManifest: true,
+      exactSurfaceHashes: true,
+      budgetAndAlertsBounded: true,
+      recordedSpendArithmeticExact: true,
+      liveSpendClaimAbsent: true,
+      deploymentStopPreserved: true,
+      preflightCostCeilingsFailClosed: true,
+      fixedChargeResourcesAbsent: true,
+      runtimeAndLogBoundsExact: true,
+      unapprovedPurchasesRemainBlocked: true
+    },
     claimBoundary: "Fixture current-source cost guards only."
   };
 }
@@ -624,6 +638,19 @@ test("provenance consumes the shared current security receipt contract", () => {
     assert.throws(
       () => validateReleaseSecurityForProvenance(stale),
       /RELEASE_PROVENANCE_SECURITY/
+    );
+  }
+});
+
+test("provenance consumes the shared current cost receipt contract", () => {
+  const receipt = verifyReleaseCost({ rootDir: ROOT });
+  assert.equal(validateReleaseCostForProvenance(receipt), receipt);
+  for (const offset of [-1, 1]) {
+    const stale = structuredClone(receipt);
+    stale.surfaceCount = RELEASE_COST_SURFACE_COUNT + offset;
+    assert.throws(
+      () => validateReleaseCostForProvenance(stale),
+      /RELEASE_PROVENANCE_COST/
     );
   }
 });

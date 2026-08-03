@@ -17,6 +17,7 @@ import {
   trustedGitExecutable,
   trustedTemporaryRoot
 } from "./lib/exact-git-source.js";
+import { validateReleaseCostReceipt } from "./verify-release-cost.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -853,7 +854,6 @@ export function validateReleaseProvenance(
   const claimStates = claims?.claimStates;
   const claimsChecks = claims?.checks;
   const cost = receipt?.cost;
-  const costChecks = cost?.checks;
   const governance = receipt?.governance;
   const governanceChecks = governance?.checks;
   const privacy = receipt?.privacy;
@@ -872,6 +872,13 @@ export function validateReleaseProvenance(
   const inventory = dependencies?.inventory;
   const notices = dependencies?.bundledThirdPartyNotices;
   const checks = receipt?.checks;
+  let costContractValid = false;
+  try {
+    validateReleaseCostReceipt(cost);
+    costContractValid = true;
+  } catch {
+    costContractValid = false;
+  }
   let securityContractValid = false;
   try {
     validateReleaseSecurityReceipt(security);
@@ -961,35 +968,7 @@ export function validateReleaseProvenance(
         "submissionStopTokensPreserved",
         "syntheticScopeExplicit"
       ]) &&
-      exactKeys(cost, [
-        "boundedFunctionCount",
-        "budgetAlertCount",
-        "checks",
-        "claimBoundary",
-        "finalReleaseReady",
-        "finalReleaseRequirements",
-        "forbiddenResourceTypeCount",
-        "logGroupCount",
-        "manifestPath",
-        "manifestSha256",
-        "reviewedOn",
-        "schemaVersion",
-        "status",
-        "surfaceCount",
-        "unapprovedPurchaseClassCount"
-      ]) &&
-      exactKeys(costChecks, [
-        "budgetAndAlertsBounded",
-        "canonicalManifest",
-        "deploymentStopPreserved",
-        "exactSurfaceHashes",
-        "fixedChargeResourcesAbsent",
-        "liveSpendClaimAbsent",
-        "preflightCostCeilingsFailClosed",
-        "recordedSpendArithmeticExact",
-        "runtimeAndLogBoundsExact",
-        "unapprovedPurchasesRemainBlocked"
-      ]) &&
+      costContractValid &&
       exactKeys(governance, [
         "checks",
         "claimBoundary",
@@ -1282,23 +1261,6 @@ export function validateReleaseProvenance(
       Object.values(claimsChecks).every((value) => value === true) &&
       typeof claims.claimBoundary === "string" &&
       claims.claimBoundary.length > 0 &&
-      cost.schemaVersion === "tideproof.release-cost-verification.v1" &&
-      cost.status === "CURRENT_COST_GUARDS_PASS" &&
-      cost.finalReleaseReady === false &&
-      /^\d{4}-\d{2}-\d{2}$/.test(cost.reviewedOn) &&
-      cost.manifestPath === "RELEASE_COST_MANIFEST.json" &&
-      HEX_64.test(cost.manifestSha256) &&
-      cost.surfaceCount === 10 &&
-      cost.budgetAlertCount === 4 &&
-      cost.forbiddenResourceTypeCount === 5 &&
-      cost.unapprovedPurchaseClassCount === 5 &&
-      cost.boundedFunctionCount === 10 &&
-      cost.logGroupCount === 11 &&
-      Array.isArray(cost.finalReleaseRequirements) &&
-      cost.finalReleaseRequirements.length === 4 &&
-      Object.values(costChecks).every((value) => value === true) &&
-      typeof cost.claimBoundary === "string" &&
-      cost.claimBoundary.length > 0 &&
       governance.schemaVersion ===
         "tideproof.release-governance-verification.v1" &&
       governance.status === "CURRENT_REPOSITORY_GOVERNANCE_PASS" &&

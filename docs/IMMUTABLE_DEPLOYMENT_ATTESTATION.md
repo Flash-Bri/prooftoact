@@ -331,6 +331,36 @@ and private human review remain required.
   handled boundary semantic emission are encoded. It must not claim live drift
   success, metric ingestion, alarm transition, or operator response.
 
+### Main-only cost-provenance closure
+
+- **Root cause:** the cost verifier correctly expanded its hash-bound surface
+  census from ten to twelve, while release provenance and AWS readiness each
+  retained an independent literal count of ten.
+- **Why it was missed:** focused cost tests asserted the new census, but their
+  provenance/readiness fixtures repeated the old literal. The exact official
+  provenance path is intentionally main-only, so the stale cross-gate contract
+  surfaced only on the post-merge main run.
+- **Earliest detection point:** pass the current cost receipt through every
+  downstream consumer contract before merge, and mutate its authoritative
+  surface count one step in each direction.
+- **Repair:** the cost verifier now exports one strict receipt validator and a
+  surface count derived from its authoritative surface map. It self-validates
+  emitted receipts; provenance and readiness consume that same validator.
+- **Regression and preventive controls:** focused tests accept the current
+  twelve-surface receipt, reject both adjacent stale counts at the cost,
+  provenance, and readiness boundaries, and no longer maintain downstream
+  cost-surface literals.
+- **Verification:** the red controls reproduced `RELEASE_PROVENANCE_COST` and
+  `AWS_READINESS_RELEASE_PROVENANCE`; the shared-contract implementation then
+  passed the focused cost, provenance, and readiness suite. Exact-main CI is
+  still required after merge.
+- **Residual risk:** other release receipts retain separately reviewed shape
+  assertions, and provider cost behavior remains unproven until the authorized
+  live sequence produces accepted evidence.
+- **Claim impact:** this repair restores consistency between source cost and
+  exact-release gates. It adds no live-spend, deployment, monitoring, or
+  provider claim.
+
 ## Required live sequence
 
 1. Before deployment, generate three distinct Ed25519 key pairs outside the
