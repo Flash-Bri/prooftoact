@@ -16,6 +16,10 @@ import {
   validateReleaseProvenance
 } from "../scripts/gate2-aws-readiness.js";
 import {
+  RELEASE_COST_SURFACE_COUNT,
+  __test as costVerifierContract
+} from "../scripts/verify-release-cost.js";
+import {
   RELEASE_SECURITY_SURFACE_COUNT,
   __test as securityVerifierContract
 } from "../scripts/verify-release-security.js";
@@ -457,17 +461,14 @@ function releaseCostReceipt() {
     reviewedOn: "2026-07-31",
     manifestPath: "RELEASE_COST_MANIFEST.json",
     manifestSha256: "8".repeat(64),
-    surfaceCount: 10,
+    surfaceCount: RELEASE_COST_SURFACE_COUNT,
     budgetAlertCount: 4,
     forbiddenResourceTypeCount: 5,
     unapprovedPurchaseClassCount: 5,
     boundedFunctionCount: 10,
     logGroupCount: 11,
     finalReleaseRequirements: [
-      "Machine-verifiable preflight PASS.",
-      "Exact-release price and forecast review.",
-      "Private registrar evidence review.",
-      "Final spend and teardown receipt."
+      ...costVerifierContract.EXPECTED_FINAL_RELEASE_REQUIREMENTS
     ],
     checks: {
       canonicalManifest: true,
@@ -1109,6 +1110,17 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
     /AWS_READINESS_RELEASE_PROVENANCE/
   );
   for (const offset of [-1, 1]) {
+    const staleCostContract = releaseProvenanceReceipt();
+    staleCostContract.cost.surfaceCount =
+      RELEASE_COST_SURFACE_COUNT + offset;
+    assert.throws(
+      () =>
+        validateReleaseProvenance(staleCostContract, {
+          sourceCommit: SOURCE_COMMIT,
+          treeDigest: TREE_DIGEST
+        }),
+      /AWS_READINESS_RELEASE_PROVENANCE/
+    );
     const staleSecurityContract = releaseProvenanceReceipt();
     staleSecurityContract.security.surfaceCount =
       RELEASE_SECURITY_SURFACE_COUNT + offset;

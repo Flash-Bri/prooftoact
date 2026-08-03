@@ -9,7 +9,10 @@ import { verifyCurrentBundledThirdPartyNotices } from "./verify-bundled-third-pa
 import { verifyAccessibility } from "./verify-accessibility.js";
 import { exactNpmCli } from "./build-gate2-exact.js";
 import { verifyReleaseClaims } from "./verify-release-claims.js";
-import { verifyReleaseCost } from "./verify-release-cost.js";
+import {
+  validateReleaseCostReceipt,
+  verifyReleaseCost
+} from "./verify-release-cost.js";
 import { verifyReleaseGovernance } from "./verify-release-governance.js";
 import { verifyReleasePrivacy } from "./verify-release-privacy.js";
 import { verifyReleaseRights } from "./verify-release-rights.js";
@@ -38,6 +41,14 @@ export function validateReleaseSecurityForProvenance(receipt) {
     return validateReleaseSecurityReceipt(receipt);
   } catch {
     throw new Error("RELEASE_PROVENANCE_SECURITY");
+  }
+}
+
+export function validateReleaseCostForProvenance(receipt) {
+  try {
+    return validateReleaseCostReceipt(receipt);
+  } catch {
+    throw new Error("RELEASE_PROVENANCE_COST");
   }
 }
 
@@ -636,27 +647,8 @@ export async function runReleaseProvenance({
       claims.claimBoundary.length > 0,
     "RELEASE_PROVENANCE_CLAIMS"
   );
-  const cost = verifyCost({ rootDir: projectRoot });
-  assert(
-    cost?.schemaVersion === "tideproof.release-cost-verification.v1" &&
-      cost.status === "CURRENT_COST_GUARDS_PASS" &&
-      cost.finalReleaseReady === false &&
-      /^\d{4}-\d{2}-\d{2}$/.test(cost.reviewedOn) &&
-      cost.manifestPath === "RELEASE_COST_MANIFEST.json" &&
-      HEX_64.test(cost.manifestSha256) &&
-      cost.surfaceCount === 10 &&
-      cost.budgetAlertCount === 4 &&
-      cost.forbiddenResourceTypeCount === 5 &&
-      cost.unapprovedPurchaseClassCount === 5 &&
-      cost.boundedFunctionCount === 10 &&
-      cost.logGroupCount === 11 &&
-      Array.isArray(cost.finalReleaseRequirements) &&
-      cost.finalReleaseRequirements.length === 4 &&
-      cost.checks &&
-      Object.values(cost.checks).every((value) => value === true) &&
-      typeof cost.claimBoundary === "string" &&
-      cost.claimBoundary.length > 0,
-    "RELEASE_PROVENANCE_COST"
+  const cost = validateReleaseCostForProvenance(
+    verifyCost({ rootDir: projectRoot })
   );
   const governance = verifyGovernance({ rootDir: projectRoot });
   assert(

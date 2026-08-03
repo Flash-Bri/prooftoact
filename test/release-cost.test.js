@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import {
   __test,
+  RELEASE_COST_SURFACE_COUNT,
   assertBootstrapContract,
   assertBudgetReceipt,
   assertGate2TemplateContract,
+  validateReleaseCostReceipt,
   validateManifest,
   verifyReleaseCost
 } from "../scripts/verify-release-cost.js";
@@ -61,6 +63,19 @@ test("current source cost guards match the reviewed non-final boundary", () => {
     Object.values(receipt.checks).every((value) => value === true),
     true
   );
+});
+
+test("cost receipt contract is shared and rejects stale surface counts", () => {
+  const receipt = verifyReleaseCost({ rootDir: ROOT });
+  assert.equal(validateReleaseCostReceipt(receipt), receipt);
+  for (const offset of [-1, 1]) {
+    const stale = structuredClone(receipt);
+    stale.surfaceCount = RELEASE_COST_SURFACE_COUNT + offset;
+    assert.throws(
+      () => validateReleaseCostReceipt(stale),
+      /RELEASE_COST_RECEIPT_CONTRACT/
+    );
+  }
 });
 
 test("cost guard rejects semantic metric cardinality expansion", () => {

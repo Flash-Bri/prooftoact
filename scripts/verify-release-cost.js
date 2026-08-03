@@ -141,6 +141,40 @@ const EXPECTED_FUNCTION_CAPS = Object.freeze({
   SignerProbeFunction: Object.freeze({ concurrency: 1, timeout: 25 })
 });
 
+export const RELEASE_COST_SURFACE_COUNT =
+  Object.keys(EXPECTED_SURFACES).length;
+
+const RELEASE_COST_RECEIPT_KEYS = Object.freeze([
+  "budgetAlertCount",
+  "boundedFunctionCount",
+  "checks",
+  "claimBoundary",
+  "finalReleaseReady",
+  "finalReleaseRequirements",
+  "forbiddenResourceTypeCount",
+  "logGroupCount",
+  "manifestPath",
+  "manifestSha256",
+  "reviewedOn",
+  "schemaVersion",
+  "status",
+  "surfaceCount",
+  "unapprovedPurchaseClassCount"
+]);
+
+const RELEASE_COST_CHECK_KEYS = Object.freeze([
+  "budgetAndAlertsBounded",
+  "canonicalManifest",
+  "deploymentStopPreserved",
+  "exactSurfaceHashes",
+  "fixedChargeResourcesAbsent",
+  "liveSpendClaimAbsent",
+  "preflightCostCeilingsFailClosed",
+  "recordedSpendArithmeticExact",
+  "runtimeAndLogBoundsExact",
+  "unapprovedPurchasesRemainBlocked"
+]);
+
 function assert(condition, code) {
   if (!condition) {
     throw new Error(code);
@@ -157,6 +191,46 @@ function sorted(values) {
 
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function validateReleaseCostReceipt(receipt) {
+  exactKeys(
+    receipt,
+    RELEASE_COST_RECEIPT_KEYS,
+    "RELEASE_COST_RECEIPT_CONTRACT"
+  );
+  exactKeys(
+    receipt.checks,
+    RELEASE_COST_CHECK_KEYS,
+    "RELEASE_COST_RECEIPT_CONTRACT"
+  );
+  assert(
+    receipt.schemaVersion === RECEIPT_SCHEMA &&
+      receipt.status === "CURRENT_COST_GUARDS_PASS" &&
+      receipt.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(receipt.reviewedOn) &&
+      receipt.manifestPath === MANIFEST_PATH &&
+      HEX_64.test(receipt.manifestSha256) &&
+      receipt.surfaceCount === RELEASE_COST_SURFACE_COUNT &&
+      receipt.budgetAlertCount === EXPECTED_BUDGET_ALERTS.length &&
+      receipt.forbiddenResourceTypeCount ===
+        EXPECTED_FORBIDDEN_RESOURCE_TYPES.length &&
+      receipt.unapprovedPurchaseClassCount ===
+        EXPECTED_UNAPPROVED_PURCHASE_CLASSES.length &&
+      receipt.boundedFunctionCount ===
+        Object.keys(EXPECTED_FUNCTION_CAPS).length &&
+      receipt.logGroupCount ===
+        Object.keys(EXPECTED_FUNCTION_CAPS).length + 1 &&
+      sameJson(
+        receipt.finalReleaseRequirements,
+        EXPECTED_FINAL_RELEASE_REQUIREMENTS
+      ) &&
+      Object.values(receipt.checks).every((value) => value === true) &&
+      typeof receipt.claimBoundary === "string" &&
+      receipt.claimBoundary.length > 0,
+    "RELEASE_COST_RECEIPT_CONTRACT"
+  );
+  return receipt;
 }
 
 function exactKeys(value, keys, code) {
@@ -677,7 +751,7 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
   assertPreflightDefaults();
   assertSourceContracts(sources);
 
-  return {
+  return validateReleaseCostReceipt({
     schemaVersion: RECEIPT_SCHEMA,
     status: "CURRENT_COST_GUARDS_PASS",
     finalReleaseReady: false,
@@ -706,7 +780,7 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
     },
     claimBoundary:
       "This receipt verifies current source cost guards, recorded owner inputs, budget prerequisites, bounded deployment resources, and explicit stop conditions. It does not assert current AWS spend, independently verify registrar evidence, authorize cloud or DNS mutation, prove final cost, or approve publication or submission."
-  };
+  });
 }
 
 function main() {

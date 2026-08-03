@@ -156,7 +156,7 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "05f8e9c762b44f2f7f41a83826ea0065239ec9222809ae5fb646109a3abef915"
+      "sha256": "7c4b52d4f30d7afdb30beddf14e118cd0766a567ed3157c5fc82bda9bc56813c"
     },
     {
       "id": "aws-security-tests",
@@ -306,7 +306,7 @@
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
-      "sha256": "b2801a5c1cf4ba0b46c473c62668eedc9503c98fed351f943b975639f19f0c9f"
+      "sha256": "6af707711ceecaf6a8583966b4ca1ef405138133bdcea7eeb3502f901c4f2638"
     },
     {
       "id": "local-server",
