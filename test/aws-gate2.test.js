@@ -1525,7 +1525,7 @@ test("primary security separates Gate One and Gate Two database authority", () =
   );
   assert.match(
     gateTwoSpend,
-    /decision_durable_receipt BOOL,[\s\S]*decision_authority_evidence_binding_sha256 STRING,[\s\S]*proposal\.authority_evidence_binding_sha256,[\s\S]*proposal\.proposal_digest = receipt\.proposal_digest[\s\S]*proposal\.proposal_digest = decision\.decision_proposal_digest/
+    /decision_durable_receipt BOOL,[\s\S]*decision_authority_evidence_binding_sha256 STRING,[\s\S]*proposal\.authority_evidence_binding_sha256,[\s\S]*proposal\.tenant_id = receipt\.tenant_id[\s\S]*proposal\.proposal_digest = receipt\.proposal_digest[\s\S]*proposal\.proposal_digest = decision\.decision_proposal_digest/
   );
 });
 

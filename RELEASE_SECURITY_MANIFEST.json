@@ -162,7 +162,7 @@
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "2f9602f983170028f1068b06460c8043780586d26cffb47f79454922ced7a3f9"
+      "sha256": "7124b043fee550f1459054ecc1f383b978ae9e82ae583d86733a6f86b11498ef"
     },
     {
       "id": "aws-template-generated",
