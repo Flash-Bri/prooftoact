@@ -48,7 +48,7 @@
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
-      "sha256": "7612f29e3160d67d99bead9790df5a229449b986e349069739cf03de6678ecb0"
+      "sha256": "8fec3b5a82b55bd175482d55ce0ec925f0070c5db7c8f1e190ab853f49722978"
     },
     {
       "id": "authority-runtime-identity-tests",
@@ -60,7 +60,7 @@
       "id": "authority-runtime-reconciliation-tests",
       "path": "test/aws-authority-lambda.test.js",
       "role": "AUTHORITY_RUNTIME_RECONCILIATION_VERIFICATION",
-      "sha256": "584b6da3109524189097336858bd08e25486d6bc79c3da2a6e09c20c10893eb3"
+      "sha256": "d948470b48494284d6253657590fd81dfc46d08d104410e1f8774ea0dce1be18"
     },
     {
       "id": "authority-store",
@@ -84,13 +84,13 @@
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "838682ea7df685debca6d59efcb4b5d9cb22d3b726406b0f4ace0da4454a0bbc"
+      "sha256": "a3ec55a057fb6d38f2c7ace6b485a712af793366022988165bcdef856d7df80d"
     },
     {
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "77989d6ddaa54851ea4d8e402d4aba161f6399ca4b92f6e7c76d2c536d942f2e"
+      "sha256": "ac08dcd8ed3b56838180da56ad7b087d95d8ba5073909ef6c874716fc3cd99a1"
     },
     {
       "id": "aws-deployment-attestation",

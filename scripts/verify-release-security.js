@@ -743,14 +743,17 @@ const SOURCE_MARKERS = Object.freeze({
     "state.activeRunId !== expected.runId",
     "stateObservedAt >= observationBinding.leaseExpiresAt",
     "committedProposalDigest",
+    "committedAuthorityEvidenceBindingSha256",
     "committedSelectedEvidenceDigest",
+    "authorityEvidenceBindingSha256",
+    "selectedEvidenceBindingSha256",
     "expectedAuthorizationBindingSha256",
     ":[1-9][0-9]*$/.test("
   ]),
   "aws-boundary-ledger": Object.freeze([
     "The command is read-only and fail closed.",
     "The evidence runner rejects endpoint, profile, proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and tree-digest contamination",
-    "`tideproof.aws-authority-race-receipt.v5`",
+    "`tideproof.aws-authority-race-receipt.v6`",
     "Every project input is then read as a regular tracked blob from the exact `HEAD` commit",
     "The `proof` aliases are monitored pointers for inspection and metadata only, not invocation authority.",
     "npm run gate2:aws-attest",
@@ -758,7 +761,9 @@ const SOURCE_MARKERS = Object.freeze({
     "disposable `tideproof-gate2-probe` stack",
     "fresh `tideproof-gate2` main stack",
     "must never be updated",
-    "Any wrong-run, sequential, ambiguous, replayed, expanded, stale, extra, or unresolved result is not evidence."
+    "Any wrong-run, cross-DVI,",
+    "sequential, ambiguous, replayed, expanded, stale, extra, or unresolved",
+    "result is not evidence."
   ]),
   "aws-deployment-attestation": Object.freeze([
     "tideproof.gate2.aws-deployment-expectation.v4",

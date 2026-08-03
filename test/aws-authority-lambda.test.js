@@ -199,6 +199,9 @@ function spendRow(request, outcome = "resource_reserved") {
       identity.logicalAuthorityKeySha256,
     decision_authorization_binding_sha256:
       identity.authorizationBindingSha256,
+    decision_authority_evidence_binding_sha256:
+      PROPOSAL_FIXTURES.get(request.proposalDigest)
+        ?.authorityEvidenceBindingSha256,
     decision_authority_current: winner,
     decision_database_now: "2026-08-01T12:00:01.000Z",
     decision_durable_receipt: true,
@@ -227,6 +230,11 @@ function nonDurableSpendRow(request, reason) {
       identity?.logicalAuthorityKeySha256 ?? null,
     decision_authorization_binding_sha256:
       identity?.authorizationBindingSha256 ?? null,
+    decision_authority_evidence_binding_sha256:
+      bound
+        ? PROPOSAL_FIXTURES.get(request.proposalDigest)
+            ?.authorityEvidenceBindingSha256
+        : null,
     decision_authority_current: false,
     decision_database_now: "2026-08-01T12:00:01.000Z",
     decision_durable_receipt: false,
@@ -768,6 +776,17 @@ test("authority rejects inconsistent database decision shapes", () => {
   );
   assert.throws(
     () =>
+      authority.normalizeSpendRow(
+        {
+          ...winning,
+          decision_authority_evidence_binding_sha256: null
+        },
+        request
+      ),
+    /AUTHORITY_DATABASE_RESPONSE_REJECTED/
+  );
+  assert.throws(
+    () =>
       authority.normalizeResolvedRow(
         {
           operation_id: request.operationId,
@@ -807,6 +826,10 @@ test("logical-authority replay verifies and preserves the stored receipt identit
   };
   const normalized = authority.normalizeSpendRow(row, request);
   assert.equal(normalized.replayKind, "logical_authority_replay");
+  assert.equal(
+    normalized.committedAuthorityEvidenceBindingSha256,
+    ALPHA_PROPOSAL.authorityEvidenceBindingSha256
+  );
   assert.equal(
     normalized.authorizationBindingSha256,
     storedIdentity.authorizationBindingSha256
@@ -1191,6 +1214,10 @@ test("authority reconciles a full transport replacement by one stable logical ac
   assert.equal(
     result.committedProposalDigest,
     storedRequest.proposalDigest
+  );
+  assert.equal(
+    result.committedAuthorityEvidenceBindingSha256,
+    PROPOSAL_FIXTURES.get(storedRequest.proposalDigest).authorityEvidenceBindingSha256,
   );
   assert.equal(
     result.committedSelectedEvidenceId,

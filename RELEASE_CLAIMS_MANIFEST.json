@@ -18,7 +18,7 @@
       "id": "aws-boundary",
       "path": "docs/AWS_GATE2.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "77989d6ddaa54851ea4d8e402d4aba161f6399ca4b92f6e7c76d2c536d942f2e"
+      "sha256": "ac08dcd8ed3b56838180da56ad7b087d95d8ba5073909ef6c874716fc3cd99a1"
     },
     {
       "id": "aws-demo-entry",
@@ -42,7 +42,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "c3603723627f6143bd0cb3c655b0dab77450af30350c5b96125c516988259951"
+      "sha256": "158738530654541c65ccef58127d4665538a0e4b5555ca27c40e4f76697a05d4"
     },
     {
       "id": "contest-matrix",

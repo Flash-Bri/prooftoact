@@ -3,13 +3,13 @@ import crypto from "node:crypto";
 export const AUTHORITY_REQUEST_SCHEMA =
   "tideproof.aws-authority-request.v2";
 export const AUTHORITY_RESPONSE_SCHEMA =
-  "tideproof.aws-authority-boundary.v2";
+  "tideproof.aws-authority-boundary.v3";
 export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
 export const AUTHORITY_RACE_RECEIPT_SCHEMA =
-  "tideproof.aws-authority-race-receipt.v5";
+  "tideproof.aws-authority-race-receipt.v6";
 const AUTHORITY_RACE_OBSERVATION_SCHEMA =
-  "tideproof.aws-authority-race-observation.v3";
+  "tideproof.aws-authority-race-observation.v4";
 
 const CONTENDERS = Object.freeze(["alpha", "bravo"]);
 const INITIAL_FENCING_TOKEN = "1";
@@ -192,6 +192,7 @@ function validateCommittedResponse(
     "authorityTransferred",
     "authorizationBindingSha256",
     "authorizationEpoch",
+    "committedAuthorityEvidenceBindingSha256",
     "committedOperationId",
     "committedProposalDigest",
     "committedRequestDigest",
@@ -243,6 +244,9 @@ function validateCommittedResponse(
     value.authorizationEpoch < 1 ||
     !SHA256_PATTERN.test(value.logicalAuthorityKeySha256) ||
     !SHA256_PATTERN.test(value.authorizationBindingSha256) ||
+    !SHA256_PATTERN.test(
+      value.committedAuthorityEvidenceBindingSha256
+    ) ||
     !SHA256_PATTERN.test(value.proposalDigest) ||
     value.committedProposalDigest !== value.proposalDigest ||
     !SHA256_PATTERN.test(value.logicalActionDigest) ||
@@ -470,7 +474,24 @@ export function validateAuthorityRaceInvocations(
       values.map(
         ({ authorizationBindingSha256 }) => authorizationBindingSha256
       )
-    ).size !== 2
+    ).size !== 2 ||
+    new Set(
+      values.map(
+        ({ committedAuthorityEvidenceBindingSha256 }) =>
+          committedAuthorityEvidenceBindingSha256
+      )
+    ).size !== 1 ||
+    new Set(
+      values.map(
+        ({ committedSelectedEvidenceId }) => committedSelectedEvidenceId
+      )
+    ).size !== 1 ||
+    new Set(
+      values.map(
+        ({ committedSelectedEvidenceDigest }) =>
+          committedSelectedEvidenceDigest
+      )
+    ).size !== 1
   ) {
     throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
   }
@@ -496,6 +517,14 @@ export function validateAuthorityRaceInvocations(
     authorityArtifactDigest: winner.authorityArtifactDigest,
     raceId: expected.raceId,
     runId: expected.runId,
+    dvi: {
+      authorityEvidenceBindingSha256:
+        winner.committedAuthorityEvidenceBindingSha256,
+      selectedEvidenceBindingSha256: sha256Hex(canonicalJson({
+        evidenceId: winner.committedSelectedEvidenceId,
+        evidenceDigest: winner.committedSelectedEvidenceDigest
+      }))
+    },
     functionArnDigest: sha256Hex(expected.functionArn),
     functionVersion: winner.functionVersion,
     contenders: 2,
@@ -572,6 +601,7 @@ export function validateAuthorityRaceProof(
       "distinctDatabaseSessions",
       "distinctLogicalActions",
       "distinctProposals",
+      "dvi",
       "durableStateVerified",
       "functionArnDigest",
       "functionVersion",
@@ -594,6 +624,16 @@ export function validateAuthorityRaceProof(
     observation.configDigest !== expected.configDigest ||
     observation.raceId !== expected.raceId ||
     observation.runId !== expected.runId ||
+    !exactKeys(observation.dvi, [
+      "authorityEvidenceBindingSha256",
+      "selectedEvidenceBindingSha256"
+    ]) ||
+    !SHA256_PATTERN.test(
+      observation.dvi.authorityEvidenceBindingSha256
+    ) ||
+    !SHA256_PATTERN.test(
+      observation.dvi.selectedEvidenceBindingSha256
+    ) ||
     observation.functionArnDigest !== sha256Hex(expected.functionArn)
     || observation.distinctLogicalActions !== true
     || observation.distinctProposals !== true

@@ -471,10 +471,12 @@ evidence only and must not be used to deploy the repaired candidate.
     expires. The proof must consume the exact unmodified in-process race
     observation; a reconstructed observation is rejected. Preserve the
     private invocations and database receipts;
-    publish only the reviewed sanitized
-    `tideproof.aws-authority-race-receipt.v5`. Any wrong-run, sequential,
-    ambiguous, replayed, expanded, stale, extra, or unresolved result is not
-    evidence.
+    require both durable contender results to carry one shared selected
+    evidence identity and one shared non-reversible DVI authority-evidence
+    binding; publish only the reviewed sanitized
+    `tideproof.aws-authority-race-receipt.v6`. Any wrong-run, cross-DVI,
+    sequential, ambiguous, replayed, expanded, stale, extra, or unresolved
+    result is not evidence.
 14. From a signed-out browser, request only the ten enumerated public `GET`
     routes. From the exact clean deployment checkout, run:
 
