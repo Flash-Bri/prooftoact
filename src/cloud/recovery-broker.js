@@ -17,6 +17,8 @@ import {
 
 const FIXED_DATABASE = "tideproof_recovery";
 const FIXED_TOOL = "select_query";
+const RECOVERY_PUBLISHER_TRUST_ROOT_ID =
+  "gate1-recovery-publisher-v1";
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -60,6 +62,76 @@ function requireSha256(value, name) {
     throw new TypeError(`${name} must be a SHA-256 digest`);
   }
   return text;
+}
+
+export async function resolveCommittedRecoveryPublisherTrustRoot({
+  connectionString,
+  trustRootCommitment,
+  publisherKeySetDigest,
+  clientFactory = null
+} = {}) {
+  const expectedCommitment = requireSha256(
+    trustRootCommitment,
+    "trustRootCommitment"
+  );
+  const expectedKeySetDigest = requireSha256(
+    publisherKeySetDigest,
+    "publisherKeySetDigest"
+  );
+  if (typeof clientFactory !== "function" && !connectionString) {
+    throw new Error("connectionString is required");
+  }
+  const client = typeof clientFactory === "function"
+    ? clientFactory("tideproof-recovery-publisher-trust-root")
+    : new Client(runtimeDatabaseConfig({
+        connectionString: connectionStringForDatabase(
+          connectionString,
+          "tideproof"
+        ),
+        max: 1,
+        applicationName: "tideproof-recovery-publisher-trust-root"
+      }));
+  try {
+    await client.connect();
+    const result = await client.query(
+      `
+        SELECT *
+        FROM tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+          $1, $2, $3
+        )
+      `,
+      [
+        RECOVERY_PUBLISHER_TRUST_ROOT_ID,
+        expectedCommitment,
+        expectedKeySetDigest
+      ]
+    );
+    if (result.rowCount !== 1) {
+      throw new Error("RECOVERY_PUBLISHER_TRUST_ROOT_NOT_COMMITTED");
+    }
+    const row = result.rows[0];
+    const committedAt = new Date(row.committed_at);
+    const databaseNow = new Date(row.database_now);
+    if (
+      row.trust_root_id !== RECOVERY_PUBLISHER_TRUST_ROOT_ID ||
+      row.trust_root_commitment !== expectedCommitment ||
+      row.publisher_key_set_digest !== expectedKeySetDigest ||
+      !Number.isFinite(committedAt.getTime()) ||
+      !Number.isFinite(databaseNow.getTime()) ||
+      committedAt.getTime() > databaseNow.getTime()
+    ) {
+      throw new Error("RECOVERY_PUBLISHER_TRUST_ROOT_INVALID");
+    }
+    return Object.freeze({
+      trustRootId: row.trust_root_id,
+      trustRootCommitment: row.trust_root_commitment,
+      publisherKeySetDigest: row.publisher_key_set_digest,
+      committedAt: committedAt.toISOString(),
+      databaseNow: databaseNow.toISOString()
+    });
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 function errorCodeFor(error) {

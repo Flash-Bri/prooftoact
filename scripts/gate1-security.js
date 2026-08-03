@@ -132,9 +132,17 @@ async function main() {
       )
     ])
   );
+  const recoveryPublisherTrustRootCommitment = requireEnvironment(
+    "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT"
+  );
+  const recoveryPublisherKeySetDigest = requireEnvironment(
+    "TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST"
+  );
   const bootstrap = await bootstrapPrimarySecurity({
     adminConnectionString,
-    passwords
+    passwords,
+    recoveryPublisherTrustRootCommitment,
+    recoveryPublisherKeySetDigest
   });
 
   const tenantId = randomUUID();
@@ -757,6 +765,30 @@ async function main() {
         client,
         "SELECT * FROM tp_ledger.g1_authority_receipts LIMIT 1"
       );
+      const directTrustRootWrite = await expectPrivilegeDenied(
+        client,
+        `
+          UPDATE tp_ledger.g1_recovery_publisher_trust_roots
+          SET trust_root_commitment = $1
+          WHERE trust_root_id = 'gate1-recovery-publisher-v1'
+        `,
+        ["f".repeat(64)]
+      );
+      const resolvedTrustRoot = await client.query(
+        `
+          SELECT *
+          FROM tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+            'gate1-recovery-publisher-v1', $1, $2
+          )
+        `,
+        [
+          recoveryPublisherTrustRootCommitment,
+          recoveryPublisherKeySetDigest
+        ]
+      );
+      if (resolvedTrustRoot.rowCount !== 1) {
+        throw new Error("committed recovery publisher trust root not resolved");
+      }
       const directWrite = await expectPrivilegeDenied(
         client,
         `
@@ -1075,6 +1107,9 @@ async function main() {
       }
       return {
         directRead,
+        directTrustRootWrite,
+        publisherTrustRootCommittedAt:
+          resolvedTrustRoot.rows[0].committed_at,
         directWrite,
         directWriteV2,
         directWriteV3,

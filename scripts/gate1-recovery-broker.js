@@ -9,6 +9,7 @@ import {
   RecoveryAuditSink,
   recoveryAuditEventDigest,
   recoveryBrokerConfigDigest,
+  resolveCommittedRecoveryPublisherTrustRoot,
   trustedPublisherKeysDigest
 } from "../src/cloud/recovery-broker.js";
 import { CockroachManagedMcpRecoveryClient } from "../src/cloud/managed-mcp-client.js";
@@ -17,7 +18,7 @@ import {
   recoveryQueryTemplateDigest,
   recoverySourceBindingDigestFor
 } from "../src/cloud/recovery-store.js";
-import { createSyntheticRecoverySigner } from "./lib/synthetic-recovery-signer.js";
+import { loadCommittedRecoveryPublisherSigner } from "./lib/recovery-publisher-key.js";
 
 const SYNTHETIC_PRINCIPAL = "principal://tideproof-demo-successor";
 const UNAUTHORIZED_PRINCIPAL = "principal://tideproof-demo-unbound";
@@ -261,7 +262,16 @@ async function main() {
     authorizationBindingSha256: receipt.authorization_binding_sha256,
     outcome: receipt.outcome
   });
-  const signer = createSyntheticRecoverySigner();
+  const signer = loadCommittedRecoveryPublisherSigner();
+  const publisherKeySetDigest = trustedPublisherKeysDigest(
+    signer.trustedPublisherKeys
+  );
+  const committedPublisherTrustRoot =
+    await resolveCommittedRecoveryPublisherTrustRoot({
+      connectionString: primaryAuditUrl,
+      trustRootCommitment: signer.trustRootCommitment,
+      publisherKeySetDigest
+    });
   const sourceCommitMs = new Date(receipt.recorded_at).getTime();
   assert(
     Number.isFinite(sourceCommitMs),
@@ -334,9 +344,7 @@ async function main() {
     buildIdentity: sourceBuildIdentity,
     recoveryClusterId,
     expectedSourceClusterId: primaryClusterId,
-    trustedPublisherKeys: {
-      [signer.publisherKeyId]: signer.publicKeySpkiBase64
-    },
+    trustedPublisherKeys: signer.trustedPublisherKeys,
     mcpClient: meteredMcpClient,
     sessionResolver: {
       async resolve({ authenticatedPrincipal }) {
@@ -405,12 +413,7 @@ async function main() {
     recoveryClusterId,
     expectedSourceClusterId: primaryClusterId,
     buildIdentity: sourceBuildIdentity,
-    trustedPublisherKeys: {
-      [signer.publisherKeyId]: signer.publicKeySpkiBase64
-    }
-  });
-  const publisherKeySetDigest = trustedPublisherKeysDigest({
-    [signer.publisherKeyId]: signer.publicKeySpkiBase64
+    trustedPublisherKeys: signer.trustedPublisherKeys
   });
   const expectedBoundInputDigest = sha256(
     canonicalJson({
@@ -509,6 +512,9 @@ async function main() {
         brokerConfigDigest: expectedBrokerDigest,
         sourceBuildIdentity,
         publisherKeySetDigest,
+        publisherTrustRootCommitment: signer.trustRootCommitment,
+        publisherTrustRootCommittedAt:
+          committedPublisherTrustRoot.committedAt,
         recoveryStatus: recovered.status,
         unauthorizedStatus: unauthorized.status,
         sourceDigest: recovered.sourceDigest,

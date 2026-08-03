@@ -278,6 +278,14 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate1-recovery.js",
     role: "RECOVERY_EVIDENCE_RUNNER"
   }),
+  "recovery-publisher-key": Object.freeze({
+    path: "scripts/lib/recovery-publisher-key.js",
+    role: "RECOVERY_PUBLISHER_TRUST_ROOT_BOUNDARY"
+  }),
+  "recovery-publisher-key-tests": Object.freeze({
+    path: "test/recovery-publisher-key.test.js",
+    role: "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION"
+  }),
   "recovery-publication-reconciliation-tests": Object.freeze({
     path: "test/recovery-security.test.js",
     role: "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION"
@@ -1231,6 +1239,9 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_verified_evidence_v1",
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
+    "tp_api.g1_resolve_recovery_publisher_trust_root_v1",
+    "g1_recovery_publisher_trust_roots",
+    "ON CONFLICT (trust_root_id) DO NOTHING",
     "tp_api.g1_authorize_dvi_proposal_v1",
     "dvi_selection_request_mismatch",
     "IF v_epoch.current_epoch = 1 THEN",
@@ -1253,6 +1264,9 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "primary-security-runner": Object.freeze([
     "sqlBindingNegatives",
+    "TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST",
+    "directTrustRootWrite",
+    "g1_resolve_recovery_publisher_trust_root_v1",
     "payloadSubstitutionOutcome",
     "proposalAliasOutcome",
     "DVI selection mismatch mutated authority state",
@@ -1334,12 +1348,38 @@ const SOURCE_MARKERS = Object.freeze({
   "recovery-broker-runner": Object.freeze([
     "RECOVERY_SOURCE_OPERATION_ID",
     "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "loadCommittedRecoveryPublisherSigner()",
+    "signer.trustedPublisherKeys",
+    "resolveCommittedRecoveryPublisherTrustRoot({",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "publisherTrustRootCommitment",
     "operationalCapabilitiesReturned: false"
   ]),
   "recovery-evidence-runner": Object.freeze([
     "RECOVERY_SOURCE_OPERATION_ID",
     "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "loadCommittedRecoveryPublisherSigner()",
+    "signer.trustedPublisherKeys",
+    "resolveCommittedRecoveryPublisherTrustRoot({",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "publisherTrustRootCommitment",
     "publisher unexpectedly read the base recovery table"
+  ]),
+  "recovery-publisher-key": Object.freeze([
+    "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT",
+    "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT",
+    "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64",
+    "RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT_MISMATCH",
+    "RECOVERY_PUBLISHER_SIGNING_KEY_MISMATCH",
+    "trustedPublisherKeys"
+  ]),
+  "recovery-publisher-key-tests": Object.freeze([
+    "recovery publisher requires an independently committed matching trust root",
+    "recovery publisher rejects a changed root after commitment",
+    "recovery publisher rejects a signing key outside the committed root",
+    "recovery publisher environment loader keeps commitment and key separate",
+    "recovery publisher rejects noncanonical PKCS8 base64 padding",
+    "primary-ledger commitment rejects coordinated root commitment and key replacement"
   ]),
   "recovery-publication-reconciliation-tests": Object.freeze([
     "recovery publisher resolves an exact receipt after COMMIT ACK loss",
@@ -1406,6 +1446,12 @@ const SOURCE_MARKERS = Object.freeze({
 });
 
 const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
+  "recovery-broker-runner": Object.freeze([
+    "createSyntheticRecoverySigner"
+  ]),
+  "recovery-evidence-runner": Object.freeze([
+    "createSyntheticRecoverySigner"
+  ]),
   "primary-security-bootstrap": Object.freeze([
     "v_authorization_epoch := v_epoch.current_epoch + 1"
   ])

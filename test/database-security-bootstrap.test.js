@@ -193,6 +193,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
+    ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user = 'tp_dispatch_user'/u]
   ]);
   for (const [url, expectedGuards] of [
@@ -237,7 +238,40 @@ test("recovery evidence selects one exact upstream authority receipt", async () 
     }
     assert.doesNotMatch(source, /ORDER BY receipt\.recorded_at DESC/u);
     assert.doesNotMatch(source, /latestSyntheticReceipt/u);
+    assert.match(source, /loadCommittedRecoveryPublisherSigner\(\)/u);
+    assert.match(source, /signer\.trustedPublisherKeys/u);
+    assert.match(source, /resolveCommittedRecoveryPublisherTrustRoot\(/u);
+    assert.match(source, /PRIMARY_AUDIT_DATABASE_URL/u);
+    assert.match(source, /publisherTrustRootCommitment/u);
+    assert.doesNotMatch(source, /createSyntheticRecoverySigner/u);
+    const signerLoaded = source.indexOf("loadCommittedRecoveryPublisherSigner()");
+    const trustResolved = source.indexOf(
+      "await resolveCommittedRecoveryPublisherTrustRoot({"
+    );
+    const bundleSigned = source.indexOf("signer.sign({");
+    assert.ok(trustResolved > signerLoaded, `${url.pathname}: trust resolution`);
+    assert.ok(bundleSigned > trustResolved, `${url.pathname}: sign ordering`);
   }
+});
+
+test("recovery publisher trust root is immutable and runner-readable only", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  assert.match(
+    source,
+    /CREATE TABLE IF NOT EXISTS tp_ledger\.g1_recovery_publisher_trust_roots[\s\S]*PRIMARY KEY \(trust_root_id\)/u
+  );
+  assert.match(
+    source,
+    /INSERT INTO tp_ledger\.g1_recovery_publisher_trust_roots[\s\S]*ON CONFLICT \(trust_root_id\) DO NOTHING/u
+  );
+  assert.doesNotMatch(
+    source,
+    /GRANT (?:INSERT|UPDATE|DELETE)[\s\S]*g1_recovery_publisher_trust_roots[\s\S]*tp_recovery_audit_role/u
+  );
+  assert.match(
+    source,
+    /g1_resolve_recovery_publisher_trust_root_v1\(STRING, STRING, STRING\)/u
+  );
 });
 
 test("logical-action spend is serialized and unique across authorization epochs", async () => {

@@ -4,7 +4,9 @@ import { connectionStringForDatabase } from "../src/cloud/authority-store.js";
 import { runtimeDatabaseConfig } from "../src/cloud/database-runtime.js";
 import {
   assertSeparatedDatabaseEndpoints,
-  principalBindingHash
+  principalBindingHash,
+  resolveCommittedRecoveryPublisherTrustRoot,
+  trustedPublisherKeysDigest
 } from "../src/cloud/recovery-broker.js";
 import {
   bootstrapRecoverySecurity,
@@ -18,7 +20,7 @@ import {
   RecoveryStore,
   renderRecoveryQuery
 } from "../src/cloud/recovery-store.js";
-import { createSyntheticRecoverySigner } from "./lib/synthetic-recovery-signer.js";
+import { loadCommittedRecoveryPublisherSigner } from "./lib/recovery-publisher-key.js";
 
 const SYNTHETIC_PRINCIPAL = "principal://tideproof-demo-successor";
 
@@ -185,6 +187,7 @@ async function expectPublisherBaseReadDenied(connectionString) {
 
 async function main() {
   const primaryUrl = requiredEnvironment("PRIMARY_DATABASE_URL");
+  const primaryAuditUrl = requiredEnvironment("PRIMARY_AUDIT_DATABASE_URL");
   const recoveryUrl = requiredEnvironment("RECOVERY_DATABASE_URL");
   const publisherPassword = requiredEnvironment(
     "RECOVERY_PUBLISHER_PASSWORD"
@@ -225,7 +228,16 @@ async function main() {
     authorizationBindingSha256: receipt.authorization_binding_sha256,
     outcome: receipt.outcome
   });
-  const signer = createSyntheticRecoverySigner();
+  const signer = loadCommittedRecoveryPublisherSigner();
+  const publisherKeySetDigest = trustedPublisherKeysDigest(
+    signer.trustedPublisherKeys
+  );
+  const committedPublisherTrustRoot =
+    await resolveCommittedRecoveryPublisherTrustRoot({
+      connectionString: primaryAuditUrl,
+      trustRootCommitment: signer.trustRootCommitment,
+      publisherKeySetDigest
+    });
 
   await createRecoveryDatabase(recoveryUrl);
   const security = await bootstrapRecoverySecurity({
@@ -289,9 +301,7 @@ async function main() {
       subjectBindingHash,
       sourceDigest,
       expectedSourceClusterId: primaryClusterId,
-      trustedPublisherKeys: {
-        [signer.publisherKeyId]: signer.publicKeySpkiBase64
-      }
+      trustedPublisherKeys: signer.trustedPublisherKeys
     });
     const publisherBaseRead = await expectPublisherBaseReadDenied(
       publisherConnectionString
@@ -350,6 +360,10 @@ async function main() {
           recoveryStatus: recovered.status,
           sourceDigest: recovered.sourceDigest,
           bundleDigest: recovered.bundleDigest,
+          publisherTrustRootCommitment: signer.trustRootCommitment,
+          publisherKeySetDigest,
+          publisherTrustRootCommittedAt:
+            committedPublisherTrustRoot.committedAt,
           signatureAlgorithm: bundle.signatureAlgorithm,
           sourceFacts: {
             admittedCount: receipt.admittedCount,

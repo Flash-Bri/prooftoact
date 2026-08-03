@@ -222,7 +222,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "80033fcd249bc116a8e19cb066544316b4f9682bb05e8dafd15def79c7194c4a"
+      "sha256": "84e561c75bf0d471ef9327a36ed2f52b6aaeda2086463ca26a9f8326335b1a6a"
     },
     {
       "id": "database-security-posture",
@@ -324,13 +324,13 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "0db3258a0342f38ebb5b86e623de38f4b959c3b20530494f4c808ce726634227"
+      "sha256": "3bcc54d421324c00de0929cd169d5be5a122d607362c28cf96efcbcfe5c2e888"
     },
     {
       "id": "primary-security-runner",
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
-      "sha256": "84d1fea8368cee5abc16b9746d413173d01b29c917a9df8f384d0d7b9d2718e9"
+      "sha256": "cca4a39f8cf8f8b561ed193e1435a628ff25ae86018a4db5ceb89e535ce26926"
     },
     {
       "id": "probe-runtime",
@@ -378,19 +378,31 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "db14cd6bd6c84d81daf114dfe7b6d0da1895e73205695cdc832d7482c9d574d6"
+      "sha256": "07db818edab191248bfe5759d949a43643c85b778cdb447e1fc311d02b407d72"
     },
     {
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "73044a9544614e45a59f5c71c7ac27ac067741170adf4b84cb29b8e48ce8ecee"
+      "sha256": "ce8be935c409d3ee45852a37a9934a703af906168c6b86ae58f5bbd39ae2f927"
     },
     {
       "id": "recovery-evidence-runner",
       "path": "scripts/gate1-recovery.js",
       "role": "RECOVERY_EVIDENCE_RUNNER",
-      "sha256": "5289c93080830b4e6e0c1132519374cad8efc7328f8a3e1f42043fc3952b9fd1"
+      "sha256": "abdf837419598f4ba354769744f10adab0361f979fa7685871fda0a66779c83e"
+    },
+    {
+      "id": "recovery-publisher-key",
+      "path": "scripts/lib/recovery-publisher-key.js",
+      "role": "RECOVERY_PUBLISHER_TRUST_ROOT_BOUNDARY",
+      "sha256": "da4c74636d48bf9994a2d2c5b6f24fc22b0d7d5333d44b60def66cc9ab61f606"
+    },
+    {
+      "id": "recovery-publisher-key-tests",
+      "path": "test/recovery-publisher-key.test.js",
+      "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
+      "sha256": "f2df9511a418ddf3827810d22bb3edfaa6483eb89dc845e1d63eeaa7327e9582"
     },
     {
       "id": "recovery-publication-reconciliation-tests",
@@ -408,7 +420,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "00ef9337d8784c70d2f7bb7661fea1051803d0336acdcabdc6b6a1838df6664f"
+      "sha256": "85281d17b63a418f20c168815f3d34c338d6019cc051fa23365956b3be429c03"
     },
     {
       "id": "security-policy",

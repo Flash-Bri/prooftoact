@@ -81,7 +81,8 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_recovery_audit_role: Object.freeze({
     functions: Object.freeze([
       "g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
-      "g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)"
+      "g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
+      "g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)"
     ])
   }),
   tp_audit_role: Object.freeze({
@@ -231,7 +232,48 @@ async function prepareOwnerPrivileges(client) {
   );
 }
 
-async function createAuditObjects(client) {
+async function createAuditObjects(client, recoveryPublisherTrustRoot) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS tp_ledger.g1_recovery_publisher_trust_roots (
+      trust_root_id STRING NOT NULL,
+      trust_root_commitment STRING(64) NOT NULL,
+      publisher_key_set_digest STRING(64) NOT NULL,
+      committed_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
+      PRIMARY KEY (trust_root_id),
+      CHECK (trust_root_id = 'gate1-recovery-publisher-v1'),
+      CHECK (length(trust_root_commitment) = 64),
+      CHECK (length(publisher_key_set_digest) = 64)
+    )
+  `);
+  await client.query(
+    `
+      INSERT INTO tp_ledger.g1_recovery_publisher_trust_roots (
+        trust_root_id,
+        trust_root_commitment,
+        publisher_key_set_digest
+      ) VALUES ('gate1-recovery-publisher-v1', $1, $2)
+      ON CONFLICT (trust_root_id) DO NOTHING
+    `,
+    [
+      recoveryPublisherTrustRoot.trustRootCommitment,
+      recoveryPublisherTrustRoot.publisherKeySetDigest
+    ]
+  );
+  const committedTrustRoot = await client.query(`
+    SELECT trust_root_commitment, publisher_key_set_digest
+    FROM tp_ledger.g1_recovery_publisher_trust_roots
+    WHERE trust_root_id = 'gate1-recovery-publisher-v1'
+  `);
+  if (
+    committedTrustRoot.rowCount !== 1 ||
+    committedTrustRoot.rows[0].trust_root_commitment !==
+      recoveryPublisherTrustRoot.trustRootCommitment ||
+    committedTrustRoot.rows[0].publisher_key_set_digest !==
+      recoveryPublisherTrustRoot.publisherKeySetDigest
+  ) {
+    throw new Error("RECOVERY_PUBLISHER_TRUST_ROOT_ALREADY_COMMITTED");
+  }
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS tp_ledger.g1_recovery_audit_receipts (
       audit_id UUID NOT NULL,
@@ -3975,6 +4017,36 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+      p_trust_root_id STRING,
+      p_trust_root_commitment STRING,
+      p_publisher_key_set_digest STRING
+    )
+    RETURNS TABLE(
+      trust_root_id STRING,
+      trust_root_commitment STRING,
+      publisher_key_set_digest STRING,
+      committed_at TIMESTAMPTZ,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        root.trust_root_id,
+        root.trust_root_commitment,
+        root.publisher_key_set_digest,
+        root.committed_at,
+        transaction_timestamp()
+      FROM tp_ledger.g1_recovery_publisher_trust_roots AS root
+      WHERE session_user = 'tp_recovery_audit_user'
+        AND root.trust_root_id = p_trust_root_id
+        AND root.trust_root_commitment = p_trust_root_commitment
+        AND root.publisher_key_set_digest = p_publisher_key_set_digest
+    $$
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_record_protected_effect_v1(
       p_tenant_id UUID,
       p_effect_key UUID,
@@ -4102,7 +4174,8 @@ async function transferOwnership(client) {
     "tp_ledger.g1_protected_effects",
     "tp_ledger.g1_recovery_audit_receipts",
     "tp_ledger.g1_recovery_audit_receipts_v2",
-    "tp_ledger.g1_recovery_audit_events_v3"
+    "tp_ledger.g1_recovery_audit_events_v3",
+    "tp_ledger.g1_recovery_publisher_trust_roots"
   ]) {
     await client.query(`ALTER TABLE ${object} OWNER TO tp_owner`);
   }
@@ -4138,6 +4211,7 @@ async function transferOwnership(client) {
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
     "tp_api.g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
+    "tp_api.g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)",
     "tp_api.g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
   ];
   for (const functionSignature of functions) {
@@ -4305,6 +4379,9 @@ async function applyGrants(client, bootstrapOwner) {
       ),
       tp_api.g1_resolve_recovery_audit_event_v1(
         UUID, UUID, STRING
+      ),
+      tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+        STRING, STRING, STRING
       )
     TO tp_recovery_audit_role
   `);
@@ -4345,9 +4422,20 @@ export function connectionStringForUser(
 
 export async function bootstrapPrimarySecurity({
   adminConnectionString,
-  passwords
+  passwords,
+  recoveryPublisherTrustRootCommitment,
+  recoveryPublisherKeySetDigest
 }) {
   const acceptedPasswords = validatedPasswords(passwords);
+  const recoveryPublisherTrustRoot = {
+    trustRootCommitment: recoveryPublisherTrustRootCommitment,
+    publisherKeySetDigest: recoveryPublisherKeySetDigest
+  };
+  for (const [name, value] of Object.entries(recoveryPublisherTrustRoot)) {
+    if (typeof value !== "string" || !/^[a-f0-9]{64}$/u.test(value)) {
+      throw new Error(`${name} must be a SHA-256 digest`);
+    }
+  }
   const client = new Client(bootstrapDatabaseConfig({
     connectionString: connectionStringForDatabase(
       adminConnectionString,
@@ -4412,7 +4500,7 @@ export async function bootstrapPrimarySecurity({
     await scrubManagedMemberships(client);
     await enforcePrincipalCredentials(client, acceptedPasswords);
     await prepareOwnerPrivileges(client);
-    await createAuditObjects(client);
+    await createAuditObjects(client, recoveryPublisherTrustRoot);
     await createFunctions(client);
     await transferOwnership(client);
     await applyGrants(client, bootstrapOwner);

@@ -150,6 +150,44 @@ call, a live database row, the exact 100-run batch, AWS behavior, or final
 release readiness until a fresh provider-backed receipt binds it to the exact
 official release.
 
+## Precommitted recovery-publisher trust root
+
+The recovery evidence runners no longer generate a publisher key and then
+trust that same key in-process. During primary-cluster security bootstrap, the
+database owner immutably inserts the expected trust-root commitment and
+publisher-key-set digest. The runtime `tp_recovery_audit_user` receives only
+the exact resolver function, not table write access. Before either runner
+signs, publishes, bootstraps recovery state, or reaches Managed MCP, it must
+match its canonical root and P-256 signing key against that database-owned
+row. A coordinated replacement of the root, adjacent hash, and signing key
+therefore fails unless the separately privileged primary bootstrap commitment
+already matches. Receipts expose only digests and the database commit time;
+they never expose the private key.
+
+- Root cause: the earlier proof runner created an ephemeral signer, published
+  its bundle, and injected the same signer's public key into the broker. That
+  proved signature self-consistency but not publisher authenticity.
+- Why it was missed: row validation and broker audit digests correctly bound
+  the caller-supplied key set, while tests reused the publisher's key map and
+  never replaced signer and trust map together.
+- Earliest detection: replace both publisher signer and broker key with one
+  attacker-controlled pair; a valid signature must still fail unless the key
+  matches the independently recorded commitment.
+- Repair and preventive control: the bootstrap owner inserts once with
+  `ON CONFLICT DO NOTHING` and fails on any mismatch. The evidence runners
+  load the key separately, verify its cryptographic match, resolve the exact
+  database-owned commitment through a session-user-guarded function, and pass
+  only that key map to the broker. Static controls forbid the synthetic signer.
+- Verification: focused tests cover coordinated root/hash/key replacement,
+  commitment drift, replacement signing keys, noncanonical base64, missing
+  inputs, immutable SQL, least-privilege resolver access, and runner ordering.
+- Residual risk and claim impact: source excludes the evidence-runner principal
+  from rewriting the commitment; it does not exclude a CockroachDB
+  administrator or prove human independence and private-key custody. Provider
+  evidence must prove the committed row predates publication, the runtime
+  principal lacks table writes, and custody remained separate. No live
+  recovery-authenticity or administrator-exclusion claim is added.
+
 ## Integrated DVI acceptance harness
 
 `npm run gate1:admissible-vector:proof` is the owner-run acceptance lane for
