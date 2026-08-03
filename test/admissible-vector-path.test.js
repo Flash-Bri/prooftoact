@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { authorizeSyntheticProposal } from
+  "../scripts/lib/synthetic-authority-proposal.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const store = fs.readFileSync(
@@ -15,6 +17,10 @@ const security = fs.readFileSync(
 );
 const retrieval = fs.readFileSync(
   path.join(root, "src/cloud/admissible-vector-retrieval.js"),
+  "utf8"
+);
+const syntheticProposal = fs.readFileSync(
+  path.join(root, "scripts/lib/synthetic-authority-proposal.js"),
   "utf8"
 );
 
@@ -33,6 +39,46 @@ function tableDefinition(name) {
   assert.notEqual(end, -1, `${name} definition is unterminated`);
   return store.slice(start, end);
 }
+
+test("synthetic denied diagnostics omit reusable authorization material", async () => {
+  const durableProposal = {
+    proposal_digest: "b".repeat(64),
+    authority_key: "synthetic-authority-key"
+  };
+  const denied = await authorizeSyntheticProposal(
+    {
+      recordDviSelectionReceiptForTest: async () => undefined
+    },
+    {
+      tenantId: "00000000-0000-4000-8000-000000000001",
+      runId: "00000000-0000-4000-8000-000000000002",
+      incidentId: "00000000-0000-4000-8000-000000000003",
+      resourceId: "synthetic-resource",
+      evidenceId: "00000000-0000-4000-8000-000000000004",
+      agency: "rescue",
+      payload: { action: "dispatch_rescue_unit" }
+    },
+    {
+      allowDenied: true,
+      evidenceDigest: "a".repeat(64),
+      retrievalId: "00000000-0000-4000-8000-000000000005",
+      proposalAuthorizer: async () => ({
+        outcome: "proposal_authorization_denied",
+        reason: "logical_authority_already_spent",
+        authorityCurrent: false,
+        dviAuthorization: { reusable: true },
+        proposal: durableProposal,
+        identity: durableProposal
+      })
+    }
+  );
+
+  assert.equal(denied.authorization.outcome, "proposal_authorization_denied");
+  for (const field of ["dviAuthorization", "proposal", "identity"]) {
+    assert.equal(Object.hasOwn(denied, field), false);
+    assert.equal(Object.hasOwn(denied.authorization, field), false);
+  }
+});
 
 test("real admissibility produces a short-lived immutable DVI candidate set", () => {
   assert.match(
@@ -272,6 +318,26 @@ test("DVI selection becomes a durable source-bound authorization input", () => {
   assert.match(
     authorize,
     /logical_authority_already_spent[\s\S]*v_epoch\.current_epoch = 1[\s\S]*explicit_new_authorization_required[\s\S]*v_authorization_epoch := 1/
+  );
+  assert.equal(
+    (authorize.match(/v_prior_spend_count > 0/g) ?? []).length,
+    3,
+    "every initial, raced, and new authorization path must deny prior spend"
+  );
+  assert.equal(
+    (authorize.match(/v_existing\.expires_at <= v_database_now/g) ?? []).length,
+    2,
+    "both replay paths must deny expired durable history"
+  );
+  assert.equal(
+    (store.match(/return replayDecision\(/g) ?? []).length,
+    2,
+    "local initial and raced replay paths must share one currentness decision"
+  );
+  assert.match(
+    syntheticProposal,
+    /acceptedOutcome && authorityCurrent === true/,
+    "synthetic callers must reject every non-current authorization replay"
   );
   assert.doesNotMatch(
     authorize,

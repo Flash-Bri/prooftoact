@@ -182,3 +182,30 @@ contender in the resource race.
   drill require zero protected effects at equality and after expiry. Live SQL
   execution on the target CockroachDB version remains pending, so currentness is
   still a source-only claim.
+
+### Non-current DVI authorization replay
+
+- Root cause: the initial and post-epoch-lock replay branches did not share one
+  currentness decision. The raced SQL branch checked only proposal expiry, the
+  local replay branch omitted the positive-spend census, and the runtime client
+  accepted a replay even when the database marked it non-current.
+- Missed because: prior controls proved spend uniqueness and fresh proposal
+  denial, but did not replay the already-durable proposal after its logical act
+  had committed or force authorization to wait behind the shared epoch lock.
+  The synthetic diagnostic helper also had only a static default-rejection
+  check, so its `allowDenied` path could return caller-constructed authority
+  material after a denial.
+- Earliest detection: commit `resource_reserved` for an unexpired proposal,
+  then replay that proposal both directly and after an authorize-versus-spend
+  epoch-lock interleaving.
+- Repair/control: every initial, raced, and new authorization path now performs
+  the positive-spend census; both replay branches deny expired history; local
+  branches share one currentness decision; and runtime plus synthetic callers
+  refuse to release authorization identity unless database currentness is
+  exactly true. `allowDenied` now suppresses only the diagnostic exception and
+  strips DVI authorization, proposal, and identity material, with a behavioral
+  regression for that exact return shape.
+- Verification/residual/claim: focused controls bind all replay branches and
+  prove that spent denial returns no reusable DVI authorization. Provider-backed
+  CockroachDB v26.2 replay and epoch-lock interleavings remain required before
+  any live current-authority claim or credentialed component canary.

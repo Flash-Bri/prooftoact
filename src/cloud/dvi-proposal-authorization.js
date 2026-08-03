@@ -269,9 +269,7 @@ export async function authorizeDviProposalWithClient(client, input) {
       row.decision_logical_authority_key_sha256 &&
       binding.authorizationBindingSha256 ===
         row.decision_authorization_binding_sha256 &&
-      typeof row.decision_authority_current === "boolean" &&
-      (row.decision_outcome !== "proposal_authorized" ||
-        row.decision_authority_current === true),
+      row.decision_authority_current === true,
     "DVI_PROPOSAL_DATABASE_BINDING_MISMATCH"
   );
   return Object.freeze({
