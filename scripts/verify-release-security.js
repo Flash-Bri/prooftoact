@@ -1271,6 +1271,7 @@ const SOURCE_MARKERS = Object.freeze({
   "primary-security-runner": Object.freeze([
     "sqlBindingNegatives",
     "TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST",
+    "assertRecoveryPublisherTrustRootWriteDeniedWithClient",
     "directTrustRootWrite",
     "recoverySource",
     "sourceResolverDenied",
@@ -1352,6 +1353,7 @@ const SOURCE_MARKERS = Object.freeze({
     "resolveCommittedRecoverySourceReceipt",
     "resolveCommittedRecoveryAuditEvent",
     "assertRecoveryPublisherTrustRootWriteDenied",
+    "RECOVERY_TRUST_ROOT_WRITE_PROBE_ROLLBACK_FAILED",
     "databaseClientMustBeDiscarded(error)",
     "read_reconciled",
     "commitDefinitivelyAborted"

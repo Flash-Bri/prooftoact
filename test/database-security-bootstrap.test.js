@@ -23,6 +23,10 @@ const gate1AuthorityUrl = new URL(
   "../scripts/gate1-authority.js",
   import.meta.url
 );
+const gate1SecurityUrl = new URL(
+  "../scripts/gate1-security.js",
+  import.meta.url
+);
 const fullDrillEvidenceUrl = new URL(
   "../docs/FULL_DRILL_EVIDENCE.md",
   import.meta.url
@@ -290,6 +294,22 @@ test("recovery publisher trust root is immutable and runner-readable only", asyn
     /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
   );
   assert.match(source, /\["tp_recovery_source_role", "tp_recovery_source_user"\]/u);
+});
+
+test("Gate One trust-root write probes use the shared rollback-bounded verifier", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.match(
+    source,
+    /assertRecoveryPublisherTrustRootWriteDeniedWithClient/u
+  );
+  assert.match(
+    source,
+    /await assertRecoveryPublisherTrustRootWriteDeniedWithClient\(client\)/u
+  );
+  assert.doesNotMatch(
+    source,
+    /async function expectTrustRootWritesDenied\(client\)/u
+  );
 });
 
 test("recovery source resolver binds the full receipt and outbox identity", async () => {

@@ -222,7 +222,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "31762744b1eb7922ef6a7f38178ae4c4847477100bf1f40c9dc475d2f3bec320"
+      "sha256": "edfa21dc23ea11664346092d509239f306ed5b7eff91a172c5cc5e75724aeee3"
     },
     {
       "id": "database-security-posture",
@@ -330,7 +330,7 @@
       "id": "primary-security-runner",
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
-      "sha256": "0d3ddbf294771f2a563626bf914bd48ae38a8f2ce13e2b30752b8f7274e7beea"
+      "sha256": "479af4d90b846b3c088939b8b482bda96d959cea893702e3fd18c63e8a2be3ef"
     },
     {
       "id": "probe-runtime",
@@ -378,7 +378,7 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "f34c118e2242d7a69d56780dcc6056013db9520af36de2a622d54451c88529e4"
+      "sha256": "ff9ed0542b118d356c2ea6b5254b013f950084b1cb675856686e6fc4be612ab4"
     },
     {
       "id": "recovery-security-contract",
@@ -408,7 +408,7 @@
       "id": "recovery-publisher-key-tests",
       "path": "test/recovery-publisher-key.test.js",
       "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
-      "sha256": "30dcddfefedcb7d1b60aa3163645600e42d31510b4c418e2be79628d8c23aa5e"
+      "sha256": "4c1ebbffcf1f45bf1fe2e15057511374e8a685125cf93f141544ebfdbfafdaaf"
     },
     {
       "id": "recovery-publication-reconciliation-tests",

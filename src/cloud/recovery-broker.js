@@ -89,6 +89,44 @@ function primaryRuntimeClient({
   }));
 }
 
+export async function assertRecoveryPublisherTrustRootWriteDeniedWithClient(
+  client
+) {
+  if (!client || typeof client.query !== "function") {
+    throw new TypeError("client.query is required");
+  }
+  for (const writeProbe of RECOVERY_TRUST_ROOT_WRITE_PROBES) {
+    await client.query("BEGIN");
+    let probeReturned = false;
+    let probeError;
+    try {
+      await client.query(writeProbe);
+      probeReturned = true;
+    } catch (error) {
+      probeError = error;
+    }
+    try {
+      await client.query("ROLLBACK");
+    } catch (cause) {
+      throw new Error(
+        "RECOVERY_TRUST_ROOT_WRITE_PROBE_ROLLBACK_FAILED",
+        { cause }
+      );
+    }
+    if (probeReturned) {
+      throw new Error("RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT");
+    }
+    if (probeError?.code !== "42501") {
+      throw probeError;
+    }
+  }
+  return Object.freeze({
+    denied: true,
+    sqlstate: "42501",
+    probeCount: RECOVERY_TRUST_ROOT_WRITE_PROBES.length
+  });
+}
+
 export async function assertRecoveryPublisherTrustRootWriteDenied({
   connectionString,
   clientFactory = null,
@@ -102,31 +140,15 @@ export async function assertRecoveryPublisherTrustRootWriteDenied({
       "credentialLabel"
     )}-trust-root-denial`
   });
-  let transactionOpen = false;
   try {
     await client.connect();
-    for (const writeProbe of RECOVERY_TRUST_ROOT_WRITE_PROBES) {
-      await client.query("BEGIN");
-      transactionOpen = true;
-      try {
-        await client.query(writeProbe);
-      } catch (error) {
-        await client.query("ROLLBACK").catch(() => {});
-        transactionOpen = false;
-        if (error?.code === "42501") {
-          continue;
-        }
-        throw error;
-      }
-      await client.query("ROLLBACK").catch(() => {});
-      transactionOpen = false;
-      throw new Error("RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT");
-    }
-    return Object.freeze({ denied: true, sqlstate: "42501" });
+    const result =
+      await assertRecoveryPublisherTrustRootWriteDeniedWithClient(client);
+    return Object.freeze({
+      denied: result.denied,
+      sqlstate: result.sqlstate
+    });
   } finally {
-    if (transactionOpen) {
-      await client.query("ROLLBACK").catch(() => {});
-    }
     await client.end().catch(() => {});
   }
 }

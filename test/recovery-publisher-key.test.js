@@ -271,19 +271,25 @@ test("every primary recovery runner credential must be denied trust-root writes"
   assert.doesNotMatch(deletes[0], /\bWHERE\b/u);
   assert.ok(queries.some((query) => query.startsWith("INSERT INTO ")));
 
+  const writableQueries = [];
   await assert.rejects(
     assertRecoveryPublisherTrustRootWriteDenied({
       credentialLabel: "unit-writable",
       clientFactory: () => ({
         async connect() {},
         async end() {},
-        async query() {
+        async query(text) {
+          writableQueries.push(text.trim());
           return { rowCount: 1, rows: [] };
         }
       })
     }),
     /RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT/
   );
+  assert.equal(writableQueries[0], "BEGIN");
+  assert.match(writableQueries[1], /^UPDATE tp_ledger\./u);
+  assert.equal(writableQueries[2], "ROLLBACK");
+  assert.equal(writableQueries.includes("COMMIT"), false);
 
   await assert.rejects(
     assertRecoveryPublisherTrustRootWriteDenied({
