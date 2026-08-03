@@ -8,12 +8,14 @@ import {
   quoteIdentifier,
   validateDatabaseSecurityPosture
 } from "./database-security-posture.js";
+import { PRIMARY_MANAGED_BASE_TABLES } from "./recovery-security-contract.js";
 
 const ROLE_BINDINGS = [
   ["tp_ingest_role", "tp_ingest_user"],
   ["tp_authorizer_role", "tp_authorizer_user"],
   ["tp_gate2_authorizer_role", "tp_gate2_authorizer_user"],
   ["tp_dispatch_role", "tp_dispatch_user"],
+  ["tp_recovery_source_role", "tp_recovery_source_user"],
   ["tp_recovery_audit_role", "tp_recovery_audit_user"],
   ["tp_audit_role", "tp_audit_user"]
 ];
@@ -78,10 +80,16 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
       "g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
     ])
   }),
+  tp_recovery_source_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)"
+    ])
+  }),
   tp_recovery_audit_role: Object.freeze({
     functions: Object.freeze([
       "g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
-      "g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)"
+      "g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
+      "g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)"
     ])
   }),
   tp_audit_role: Object.freeze({
@@ -231,7 +239,48 @@ async function prepareOwnerPrivileges(client) {
   );
 }
 
-async function createAuditObjects(client) {
+async function createAuditObjects(client, recoveryPublisherTrustRoot) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS tp_ledger.g1_recovery_publisher_trust_roots (
+      trust_root_id STRING NOT NULL,
+      trust_root_commitment STRING(64) NOT NULL,
+      publisher_key_set_digest STRING(64) NOT NULL,
+      committed_at TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
+      PRIMARY KEY (trust_root_id),
+      CHECK (trust_root_id = 'gate1-recovery-publisher-v1'),
+      CHECK (length(trust_root_commitment) = 64),
+      CHECK (length(publisher_key_set_digest) = 64)
+    )
+  `);
+  await client.query(
+    `
+      INSERT INTO tp_ledger.g1_recovery_publisher_trust_roots (
+        trust_root_id,
+        trust_root_commitment,
+        publisher_key_set_digest
+      ) VALUES ('gate1-recovery-publisher-v1', $1, $2)
+      ON CONFLICT (trust_root_id) DO NOTHING
+    `,
+    [
+      recoveryPublisherTrustRoot.trustRootCommitment,
+      recoveryPublisherTrustRoot.publisherKeySetDigest
+    ]
+  );
+  const committedTrustRoot = await client.query(`
+    SELECT trust_root_commitment, publisher_key_set_digest
+    FROM tp_ledger.g1_recovery_publisher_trust_roots
+    WHERE trust_root_id = 'gate1-recovery-publisher-v1'
+  `);
+  if (
+    committedTrustRoot.rowCount !== 1 ||
+    committedTrustRoot.rows[0].trust_root_commitment !==
+      recoveryPublisherTrustRoot.trustRootCommitment ||
+    committedTrustRoot.rows[0].publisher_key_set_digest !==
+      recoveryPublisherTrustRoot.publisherKeySetDigest
+  ) {
+    throw new Error("RECOVERY_PUBLISHER_TRUST_ROOT_ALREADY_COMMITTED");
+  }
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS tp_ledger.g1_recovery_audit_receipts (
       audit_id UUID NOT NULL,
@@ -867,7 +916,8 @@ async function createFunctions(client) {
         AND evidence.incident_id = p_incident_id
         AND session_user IN (
           'tp_authorizer_user',
-          'tp_gate2_authorizer_user'
+          'tp_gate2_authorizer_user',
+          'tp_recovery_source_user'
         )
     $$
   `);
@@ -3954,8 +4004,24 @@ async function createFunctions(client) {
     )
     RETURNS TABLE(
       event_id UUID,
+      tenant_id UUID,
+      interaction_id UUID,
+      recovery_session_id UUID,
+      caller_subject_hash STRING,
+      phase STRING,
+      tool_name STRING,
+      recovery_cluster_id UUID,
+      broker_config_digest STRING,
+      query_template_digest STRING,
+      bound_input_digest STRING,
+      result_digest STRING,
+      source_watermark TIMESTAMPTZ,
+      error_code STRING,
       event_digest STRING,
       outcome STRING,
+      started_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      recorded_at TIMESTAMPTZ,
       database_now TIMESTAMPTZ
     )
     LANGUAGE SQL
@@ -3963,14 +4029,168 @@ async function createFunctions(client) {
     AS $$
       SELECT
         event.event_id,
+        event.tenant_id,
+        event.interaction_id,
+        event.recovery_session_id,
+        event.caller_subject_hash,
+        event.phase,
+        event.tool_name,
+        event.recovery_cluster_id,
+        event.broker_config_digest,
+        event.query_template_digest,
+        event.bound_input_digest,
+        event.result_digest,
+        event.source_watermark,
+        event.error_code,
         event.event_digest,
         event.outcome,
+        event.started_at,
+        event.completed_at,
+        event.recorded_at,
         transaction_timestamp()
       FROM tp_ledger.g1_recovery_audit_events_v3 AS event
       WHERE session_user = 'tp_recovery_audit_user'
         AND event.tenant_id = p_tenant_id
         AND event.event_id = p_event_id
         AND event.event_digest = p_event_digest
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1(
+      p_tenant_id UUID,
+      p_run_id UUID,
+      p_incident_id UUID,
+      p_evidence_id UUID,
+      p_resource_id STRING,
+      p_operation_id UUID,
+      p_request_digest STRING
+    )
+    RETURNS TABLE(
+      tenant_id UUID,
+      run_id UUID,
+      incident_id UUID,
+      evidence_id UUID,
+      operation_id UUID,
+      recorded_at TIMESTAMPTZ,
+      request_digest STRING,
+      proposal_digest STRING,
+      logical_action_digest STRING,
+      authorization_epoch INT8,
+      logical_authority_key_sha256 STRING,
+      authorization_binding_sha256 STRING,
+      policy_version STRING,
+      agent_id STRING,
+      agency STRING,
+      outcome STRING,
+      reason STRING,
+      evidence_digest STRING,
+      resource_id STRING,
+      has_durable_intent BOOL,
+      admissibility STRING,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        receipt.tenant_id,
+        receipt.run_id,
+        receipt.incident_id,
+        receipt.evidence_id,
+        receipt.operation_id,
+        receipt.recorded_at,
+        receipt.request_digest,
+        receipt.proposal_digest,
+        receipt.logical_action_digest,
+        receipt.authorization_epoch,
+        receipt.logical_authority_key_sha256,
+        receipt.authorization_binding_sha256,
+        receipt.policy_version,
+        receipt.agent_id,
+        receipt.agency,
+        receipt.outcome,
+        receipt.reason,
+        receipt.evidence_digest,
+        receipt.resource_id,
+        true,
+        observed.admissibility,
+        transaction_timestamp()
+      FROM tp_ledger.g1_authority_receipts AS receipt
+      JOIN tp_private.g1_evidence AS evidence
+        ON evidence.tenant_id = receipt.tenant_id
+       AND evidence.evidence_id = receipt.evidence_id
+      JOIN tp_ledger.g1_evidence_verification_receipts AS verification
+        ON verification.tenant_id = evidence.tenant_id
+       AND verification.evidence_id = evidence.evidence_id
+      JOIN tp_ledger.g1_outbox_intents AS outbox
+        ON outbox.tenant_id = receipt.tenant_id
+       AND outbox.operation_id = receipt.operation_id
+       AND outbox.request_digest = receipt.request_digest
+       AND outbox.proposal_digest = receipt.proposal_digest
+       AND outbox.logical_action_digest = receipt.logical_action_digest
+       AND outbox.authorization_epoch = receipt.authorization_epoch
+       AND outbox.logical_authority_key_sha256 =
+         receipt.logical_authority_key_sha256
+       AND outbox.authorization_binding_sha256 =
+         receipt.authorization_binding_sha256
+       AND outbox.run_id = receipt.run_id
+       AND outbox.incident_id = receipt.incident_id
+       AND outbox.resource_id = receipt.resource_id
+       AND outbox.fencing_token = receipt.fencing_token
+       AND outbox.effect_key = receipt.effect_key
+       AND outbox.payload_digest = receipt.payload_digest
+      JOIN tp_private.g1_list_admissibility_internal_v1(
+        receipt.tenant_id,
+        receipt.incident_id,
+        receipt.agency
+      ) AS observed
+        ON observed.evidence_id = receipt.evidence_id
+      WHERE session_user = 'tp_recovery_source_user'
+        AND receipt.tenant_id = p_tenant_id
+        AND receipt.run_id = p_run_id
+        AND receipt.incident_id = p_incident_id
+        AND receipt.evidence_id = p_evidence_id
+        AND receipt.resource_id = p_resource_id
+        AND receipt.operation_id = p_operation_id
+        AND receipt.request_digest = p_request_digest
+        AND receipt.outcome = 'resource_reserved'
+        AND receipt.recorded_at >
+          transaction_timestamp() - INTERVAL '50 minutes'
+        AND verification.outcome = 'verified'
+        AND verification.public_key_digest IS NOT NULL
+        AND receipt.evidence_digest = evidence.evidence_digest
+        AND observed.admissibility = 'admissible'
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+      p_trust_root_id STRING,
+      p_trust_root_commitment STRING,
+      p_publisher_key_set_digest STRING
+    )
+    RETURNS TABLE(
+      trust_root_id STRING,
+      trust_root_commitment STRING,
+      publisher_key_set_digest STRING,
+      committed_at TIMESTAMPTZ,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE SQL
+    SECURITY DEFINER
+    AS $$
+      SELECT
+        root.trust_root_id,
+        root.trust_root_commitment,
+        root.publisher_key_set_digest,
+        root.committed_at,
+        transaction_timestamp()
+      FROM tp_ledger.g1_recovery_publisher_trust_roots AS root
+      WHERE session_user = 'tp_recovery_audit_user'
+        AND root.trust_root_id = p_trust_root_id
+        AND root.trust_root_commitment = p_trust_root_commitment
+        AND root.publisher_key_set_digest = p_publisher_key_set_digest
     $$
   `);
 
@@ -4085,25 +4305,7 @@ async function createFunctions(client) {
 }
 
 async function transferOwnership(client) {
-  for (const object of [
-    "tp_private.g1_evidence",
-    "tp_private.g1_verification_keys",
-    "tp_private.g1_vector_retrieval_sets",
-    "tp_private.g1_vector_candidates",
-    "tp_private.g1_vector_exclusions",
-    "tp_private.g1_resources",
-    "tp_private.g1_retry_probes",
-    "tp_ledger.g1_evidence_verification_receipts",
-    "tp_ledger.g1_logical_authority_epochs",
-    "tp_ledger.g1_dvi_selection_receipts",
-    "tp_ledger.g1_dvi_proposal_receipts",
-    "tp_ledger.g1_authority_receipts",
-    "tp_ledger.g1_outbox_intents",
-    "tp_ledger.g1_protected_effects",
-    "tp_ledger.g1_recovery_audit_receipts",
-    "tp_ledger.g1_recovery_audit_receipts_v2",
-    "tp_ledger.g1_recovery_audit_events_v3"
-  ]) {
+  for (const object of PRIMARY_MANAGED_BASE_TABLES) {
     await client.query(`ALTER TABLE ${object} OWNER TO tp_owner`);
   }
   for (const view of [
@@ -4138,6 +4340,8 @@ async function transferOwnership(client) {
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
     "tp_api.g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
+    "tp_api.g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
+    "tp_api.g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)",
     "tp_api.g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
   ];
   for (const functionSignature of functions) {
@@ -4179,6 +4383,14 @@ async function applyGrants(client, bootstrapOwner) {
       )
     FROM tp_ingest_role
   `);
+  await client.query(`
+    GRANT EXECUTE ON FUNCTION
+      tp_api.g1_resolve_recovery_source_receipt_v1(
+        UUID, UUID, UUID, UUID, STRING, UUID, STRING
+      )
+    TO tp_recovery_source_role
+  `);
+
   await client.query(`
     GRANT EXECUTE ON FUNCTION
       tp_api.g1_get_verification_key_v1(UUID, STRING),
@@ -4305,6 +4517,9 @@ async function applyGrants(client, bootstrapOwner) {
       ),
       tp_api.g1_resolve_recovery_audit_event_v1(
         UUID, UUID, STRING
+      ),
+      tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+        STRING, STRING, STRING
       )
     TO tp_recovery_audit_role
   `);
@@ -4345,9 +4560,20 @@ export function connectionStringForUser(
 
 export async function bootstrapPrimarySecurity({
   adminConnectionString,
-  passwords
+  passwords,
+  recoveryPublisherTrustRootCommitment,
+  recoveryPublisherKeySetDigest
 }) {
   const acceptedPasswords = validatedPasswords(passwords);
+  const recoveryPublisherTrustRoot = {
+    trustRootCommitment: recoveryPublisherTrustRootCommitment,
+    publisherKeySetDigest: recoveryPublisherKeySetDigest
+  };
+  for (const [name, value] of Object.entries(recoveryPublisherTrustRoot)) {
+    if (typeof value !== "string" || !/^[a-f0-9]{64}$/u.test(value)) {
+      throw new Error(`${name} must be a SHA-256 digest`);
+    }
+  }
   const client = new Client(bootstrapDatabaseConfig({
     connectionString: connectionStringForDatabase(
       adminConnectionString,
@@ -4412,7 +4638,7 @@ export async function bootstrapPrimarySecurity({
     await scrubManagedMemberships(client);
     await enforcePrincipalCredentials(client, acceptedPasswords);
     await prepareOwnerPrivileges(client);
-    await createAuditObjects(client);
+    await createAuditObjects(client, recoveryPublisherTrustRoot);
     await createFunctions(client);
     await transferOwnership(client);
     await applyGrants(client, bootstrapOwner);

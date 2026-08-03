@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -222,7 +222,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "80033fcd249bc116a8e19cb066544316b4f9682bb05e8dafd15def79c7194c4a"
+      "sha256": "edfa21dc23ea11664346092d509239f306ed5b7eff91a172c5cc5e75724aeee3"
     },
     {
       "id": "database-security-posture",
@@ -324,13 +324,13 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "0db3258a0342f38ebb5b86e623de38f4b959c3b20530494f4c808ce726634227"
+      "sha256": "5faa2b3cce3d5eaa0cb8ab09286ccacf8fc20785ef7339e8653a1d61ba80be07"
     },
     {
       "id": "primary-security-runner",
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
-      "sha256": "84d1fea8368cee5abc16b9746d413173d01b29c917a9df8f384d0d7b9d2718e9"
+      "sha256": "479af4d90b846b3c088939b8b482bda96d959cea893702e3fd18c63e8a2be3ef"
     },
     {
       "id": "probe-runtime",
@@ -378,19 +378,37 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "db14cd6bd6c84d81daf114dfe7b6d0da1895e73205695cdc832d7482c9d574d6"
+      "sha256": "ff9ed0542b118d356c2ea6b5254b013f950084b1cb675856686e6fc4be612ab4"
+    },
+    {
+      "id": "recovery-security-contract",
+      "path": "src/cloud/recovery-security-contract.js",
+      "role": "PRIMARY_MANAGED_TABLE_AND_RECOVERY_DENIAL_CONTRACT",
+      "sha256": "08c0e172f8948063118c8f51cca5343c84a1234472fc73d8c395519874976c9f"
     },
     {
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "73044a9544614e45a59f5c71c7ac27ac067741170adf4b84cb29b8e48ce8ecee"
+      "sha256": "456bdc086316afa6ce5fbc9d26a3ea682bed2988b7307e1e5847390ec6840e2d"
     },
     {
       "id": "recovery-evidence-runner",
       "path": "scripts/gate1-recovery.js",
       "role": "RECOVERY_EVIDENCE_RUNNER",
-      "sha256": "5289c93080830b4e6e0c1132519374cad8efc7328f8a3e1f42043fc3952b9fd1"
+      "sha256": "2dad89185542cf6cfb2fb3a47832699118f777779f03784599ffac32b48f6650"
+    },
+    {
+      "id": "recovery-publisher-key",
+      "path": "scripts/lib/recovery-publisher-key.js",
+      "role": "RECOVERY_PUBLISHER_TRUST_ROOT_BOUNDARY",
+      "sha256": "da4c74636d48bf9994a2d2c5b6f24fc22b0d7d5333d44b60def66cc9ab61f606"
+    },
+    {
+      "id": "recovery-publisher-key-tests",
+      "path": "test/recovery-publisher-key.test.js",
+      "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
+      "sha256": "4c1ebbffcf1f45bf1fe2e15057511374e8a685125cf93f141544ebfdbfafdaaf"
     },
     {
       "id": "recovery-publication-reconciliation-tests",
@@ -402,13 +420,13 @@
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "840a13f7e5bd2d33a540d4751abaaa0f2bd116ec59a2641ce63889ccd4f3c928"
+      "sha256": "0fef19bff2715e015aefbc56de618ca0494aa492c4cebe3f453f2ad499e3ca17"
     },
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "00ef9337d8784c70d2f7bb7661fea1051803d0336acdcabdc6b6a1838df6664f"
+      "sha256": "3bd57e2d68f40bfb41962b59d1d68495280d320b589f95e3c245f7a1fea41cf4"
     },
     {
       "id": "security-policy",

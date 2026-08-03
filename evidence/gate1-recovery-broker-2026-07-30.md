@@ -70,7 +70,7 @@ The suite includes:
 
 ## Live capability and audit schema gate
 
-Command form:
+Historical July 30 command form (not executable against the current source):
 
 ```sh
 DATABASE_URL="<primary admin URL from Keychain>" \
@@ -83,6 +83,10 @@ npm run gate1:security
 ```
 
 Exit status: 0.
+
+The current source requires additional split-principal passwords, trust-root
+inputs, and exact source bindings enumerated in `docs/FULL_DRILL_EVIDENCE.md`.
+Do not reconstruct a current invocation from this historical receipt.
 
 Relevant verified outcomes:
 
@@ -122,12 +126,15 @@ by the runtime audit role.
 
 ## Live deterministic broker gate
 
-Command form:
+The July 30 receipt predates the source-principal split and is retained as
+historical evidence, not final release proof. The historical invocation excerpt
+below is intentionally incomplete for the current source; the authoritative
+current input contract is `docs/FULL_DRILL_EVIDENCE.md`.
 
 ```sh
-PRIMARY_DATABASE_URL="<primary admin URL from Keychain>" \
+PRIMARY_RECOVERY_SOURCE_DATABASE_URL="<tp_recovery_source_user URL from Keychain>" \
 RECOVERY_PUBLISHER_DATABASE_URL="<recovery publisher URL from Keychain>" \
-PRIMARY_AUDIT_DATABASE_URL="<primary audit URL from Keychain>" \
+PRIMARY_AUDIT_DATABASE_URL="<tp_recovery_audit_user URL from Keychain>" \
 MCP_API_KEY="<service-account key from Keychain>" \
 SOURCE_BUILD_IDENTITY="55892bf25a5286af30e30908ab5711e24f106629" \
 PRIMARY_CLUSTER_ID="4bd5f0c9-729a-468e-b47c-5c5ed9cd41f9" \
@@ -136,6 +143,11 @@ EXPECTED_PRIMARY_HOSTNAME="<expected primary hostname>" \
 EXPECTED_RECOVERY_HOSTNAME="<expected recovery hostname>" \
 npm run gate1:recovery-broker
 ```
+
+The primary administrator URL is forbidden. Final provider proof must include
+the source and audit credentials' SQLSTATE `42501` results for all six
+privilege-pure trust-root write probes and all 18 managed base-table read
+probes.
 
 Exit status: 0.
 

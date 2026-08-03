@@ -15,6 +15,10 @@ const security = fs.readFileSync(
   path.join(root, "src/cloud/primary-security.js"),
   "utf8"
 );
+const securityContract = fs.readFileSync(
+  path.join(root, "src/cloud/recovery-security-contract.js"),
+  "utf8"
+);
 const retrieval = fs.readFileSync(
   path.join(root, "src/cloud/admissible-vector-retrieval.js"),
   "utf8"
@@ -231,7 +235,7 @@ test("snapshot retrieval stays private and cannot authorize by itself", () => {
     "tp_private.g1_vector_candidates",
     "tp_private.g1_vector_exclusions"
   ]) {
-    assert.equal(security.includes(`"${object}"`), true);
+    assert.equal(securityContract.includes(`"${object}"`), true);
   }
   assert.match(security, /ALTER TABLE \$\{object\} OWNER TO tp_owner/);
   assert.match(

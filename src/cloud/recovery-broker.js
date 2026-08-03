@@ -14,9 +14,15 @@ import {
   renderRecoveryQuery,
   validateRecoveryRow
 } from "./recovery-store.js";
+import {
+  PRIMARY_MANAGED_BASE_TABLES,
+  RECOVERY_TRUST_ROOT_WRITE_PROBES
+} from "./recovery-security-contract.js";
 
 const FIXED_DATABASE = "tideproof_recovery";
 const FIXED_TOOL = "select_query";
+const RECOVERY_PUBLISHER_TRUST_ROOT_ID =
+  "gate1-recovery-publisher-v1";
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -60,6 +66,319 @@ function requireSha256(value, name) {
     throw new TypeError(`${name} must be a SHA-256 digest`);
   }
   return text;
+}
+
+function primaryRuntimeClient({
+  connectionString,
+  clientFactory,
+  applicationName
+}) {
+  if (typeof clientFactory === "function") {
+    return clientFactory(applicationName);
+  }
+  if (!connectionString) {
+    throw new Error("connectionString is required");
+  }
+  return new Client(runtimeDatabaseConfig({
+    connectionString: connectionStringForDatabase(
+      connectionString,
+      "tideproof"
+    ),
+    max: 1,
+    applicationName
+  }));
+}
+
+export async function assertRecoveryPublisherTrustRootWriteDeniedWithClient(
+  client
+) {
+  if (!client || typeof client.query !== "function") {
+    throw new TypeError("client.query is required");
+  }
+  for (const writeProbe of RECOVERY_TRUST_ROOT_WRITE_PROBES) {
+    await client.query("BEGIN");
+    let probeReturned = false;
+    let probeError;
+    try {
+      await client.query(writeProbe);
+      probeReturned = true;
+    } catch (error) {
+      probeError = error;
+    }
+    try {
+      await client.query("ROLLBACK");
+    } catch (cause) {
+      throw new Error(
+        "RECOVERY_TRUST_ROOT_WRITE_PROBE_ROLLBACK_FAILED",
+        { cause }
+      );
+    }
+    if (probeReturned) {
+      throw new Error("RECOVERY_RUNNER_CAN_REWRITE_PUBLISHER_TRUST_ROOT");
+    }
+    if (probeError?.code !== "42501") {
+      throw probeError;
+    }
+  }
+  return Object.freeze({
+    denied: true,
+    sqlstate: "42501",
+    probeCount: RECOVERY_TRUST_ROOT_WRITE_PROBES.length
+  });
+}
+
+export async function assertRecoveryPublisherTrustRootWriteDenied({
+  connectionString,
+  clientFactory = null,
+  credentialLabel = "recovery-runtime"
+} = {}) {
+  const client = primaryRuntimeClient({
+    connectionString,
+    clientFactory,
+    applicationName: `tideproof-${requireText(
+      credentialLabel,
+      "credentialLabel"
+    )}-trust-root-denial`
+  });
+  try {
+    await client.connect();
+    const result =
+      await assertRecoveryPublisherTrustRootWriteDeniedWithClient(client);
+    return Object.freeze({
+      denied: result.denied,
+      sqlstate: result.sqlstate
+    });
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+export async function assertRecoveryRunnerBaseTableReadsDenied({
+  connectionString,
+  clientFactory = null,
+  credentialLabel = "recovery-runtime"
+} = {}) {
+  const client = primaryRuntimeClient({
+    connectionString,
+    clientFactory,
+    applicationName: `tideproof-${requireText(
+      credentialLabel,
+      "credentialLabel"
+    )}-base-table-denial`
+  });
+  try {
+    await client.connect();
+    for (const tableName of PRIMARY_MANAGED_BASE_TABLES) {
+      try {
+        await client.query(`SELECT 1 FROM ${tableName} LIMIT 1`);
+      } catch (error) {
+        if (error?.code === "42501") {
+          continue;
+        }
+        throw error;
+      }
+      throw new Error("RECOVERY_RUNNER_CAN_READ_PROTECTED_BASE_TABLE");
+    }
+    return Object.freeze({
+      denied: true,
+      sqlstate: "42501",
+      tableCount: PRIMARY_MANAGED_BASE_TABLES.length
+    });
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+export async function resolveCommittedRecoverySourceReceipt({
+  connectionString,
+  binding,
+  clientFactory = null
+} = {}) {
+  const expected = Object.freeze({
+    tenantId: requireUuid(binding?.tenantId, "binding.tenantId"),
+    runId: requireUuid(binding?.runId, "binding.runId"),
+    incidentId: requireUuid(binding?.incidentId, "binding.incidentId"),
+    evidenceId: requireUuid(binding?.evidenceId, "binding.evidenceId"),
+    resourceId: requireText(binding?.resourceId, "binding.resourceId"),
+    operationId: requireUuid(binding?.operationId, "binding.operationId"),
+    requestDigest: requireSha256(
+      binding?.requestDigest,
+      "binding.requestDigest"
+    )
+  });
+  const client = primaryRuntimeClient({
+    connectionString,
+    clientFactory,
+    applicationName: "tideproof-recovery-source-resolver"
+  });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `
+        SELECT *
+        FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+          $1::UUID, $2::UUID, $3::UUID, $4::UUID,
+          $5, $6::UUID, $7
+        )
+      `,
+      [
+        expected.tenantId,
+        expected.runId,
+        expected.incidentId,
+        expected.evidenceId,
+        expected.resourceId,
+        expected.operationId,
+        expected.requestDigest
+      ]
+    );
+    if (result.rowCount !== 1) {
+      throw new Error("RECOVERY_SOURCE_RECEIPT_NOT_CURRENT");
+    }
+    const row = result.rows[0];
+    const recordedAt = new Date(row.recorded_at);
+    const databaseNow = new Date(row.database_now);
+    if (
+      row.tenant_id !== expected.tenantId ||
+      row.run_id !== expected.runId ||
+      row.incident_id !== expected.incidentId ||
+      row.evidence_id !== expected.evidenceId ||
+      row.resource_id !== expected.resourceId ||
+      row.operation_id !== expected.operationId ||
+      row.request_digest !== expected.requestDigest ||
+      row.outcome !== "resource_reserved" ||
+      row.admissibility !== "admissible" ||
+      row.has_durable_intent !== true ||
+      !Number.isFinite(recordedAt.getTime()) ||
+      !Number.isFinite(databaseNow.getTime()) ||
+      recordedAt.getTime() > databaseNow.getTime() ||
+      databaseNow.getTime() - recordedAt.getTime() > 50 * 60 * 1_000
+    ) {
+      throw new Error("RECOVERY_SOURCE_RECEIPT_INVALID");
+    }
+    for (const [name, value] of [
+      ["proposal_digest", row.proposal_digest],
+      ["logical_action_digest", row.logical_action_digest],
+      ["logical_authority_key_sha256", row.logical_authority_key_sha256],
+      ["authorization_binding_sha256", row.authorization_binding_sha256],
+      ["evidence_digest", row.evidence_digest]
+    ]) {
+      requireSha256(value, name);
+    }
+    return Object.freeze({
+      ...row,
+      recorded_at: recordedAt.toISOString(),
+      database_now: databaseNow.toISOString(),
+      admittedCount: 1,
+      unresolvedCount: 0
+    });
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+export async function resolveCommittedRecoveryAuditEvent({
+  connectionString,
+  tenantId,
+  eventId,
+  eventDigest,
+  clientFactory = null
+} = {}) {
+  const expectedTenantId = requireUuid(tenantId, "tenantId");
+  const expectedEventId = requireUuid(eventId, "eventId");
+  const expectedEventDigest = requireSha256(eventDigest, "eventDigest");
+  const client = primaryRuntimeClient({
+    connectionString,
+    clientFactory,
+    applicationName: "tideproof-recovery-audit-resolver"
+  });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `
+        SELECT *
+        FROM tp_api.g1_resolve_recovery_audit_event_v1(
+          $1::UUID, $2::UUID, $3
+        )
+      `,
+      [expectedEventId, expectedTenantId, expectedEventDigest]
+    );
+    if (result.rowCount !== 1) {
+      throw new Error("RECOVERY_AUDIT_EVENT_NOT_COMMITTED");
+    }
+    const row = result.rows[0];
+    if (
+      row.event_id !== expectedEventId ||
+      row.tenant_id !== expectedTenantId ||
+      row.event_digest !== expectedEventDigest
+    ) {
+      throw new Error("RECOVERY_AUDIT_EVENT_INVALID");
+    }
+    return Object.freeze({ ...row });
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+export async function resolveCommittedRecoveryPublisherTrustRoot({
+  connectionString,
+  trustRootCommitment,
+  publisherKeySetDigest,
+  clientFactory = null
+} = {}) {
+  const expectedCommitment = requireSha256(
+    trustRootCommitment,
+    "trustRootCommitment"
+  );
+  const expectedKeySetDigest = requireSha256(
+    publisherKeySetDigest,
+    "publisherKeySetDigest"
+  );
+  const client = primaryRuntimeClient({
+    connectionString,
+    clientFactory,
+    applicationName: "tideproof-recovery-publisher-trust-root"
+  });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `
+        SELECT *
+        FROM tp_api.g1_resolve_recovery_publisher_trust_root_v1(
+          $1, $2, $3
+        )
+      `,
+      [
+        RECOVERY_PUBLISHER_TRUST_ROOT_ID,
+        expectedCommitment,
+        expectedKeySetDigest
+      ]
+    );
+    if (result.rowCount !== 1) {
+      throw new Error("RECOVERY_PUBLISHER_TRUST_ROOT_NOT_COMMITTED");
+    }
+    const row = result.rows[0];
+    const committedAt = new Date(row.committed_at);
+    const databaseNow = new Date(row.database_now);
+    if (
+      row.trust_root_id !== RECOVERY_PUBLISHER_TRUST_ROOT_ID ||
+      row.trust_root_commitment !== expectedCommitment ||
+      row.publisher_key_set_digest !== expectedKeySetDigest ||
+      !Number.isFinite(committedAt.getTime()) ||
+      !Number.isFinite(databaseNow.getTime()) ||
+      committedAt.getTime() > databaseNow.getTime()
+    ) {
+      throw new Error("RECOVERY_PUBLISHER_TRUST_ROOT_INVALID");
+    }
+    return Object.freeze({
+      trustRootId: row.trust_root_id,
+      trustRootCommitment: row.trust_root_commitment,
+      publisherKeySetDigest: row.publisher_key_set_digest,
+      committedAt: committedAt.toISOString(),
+      databaseNow: databaseNow.toISOString()
+    });
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 function errorCodeFor(error) {
@@ -110,6 +429,7 @@ export function principalBindingHash(authenticatedPrincipal) {
 
 export function assertSeparatedDatabaseEndpoints({
   primaryConnectionString,
+  primaryAuditConnectionString,
   recoveryConnectionString,
   expectedPrimaryHostname,
   expectedRecoveryHostname,
@@ -117,6 +437,7 @@ export function assertSeparatedDatabaseEndpoints({
   recoveryClusterId
 }) {
   const primary = new URL(primaryConnectionString);
+  const primaryAudit = new URL(primaryAuditConnectionString);
   const recovery = new URL(recoveryConnectionString);
   const expectedPrimary = requireText(
     expectedPrimaryHostname,
@@ -136,9 +457,18 @@ export function assertSeparatedDatabaseEndpoints({
   );
   if (
     primary.hostname.toLowerCase() !== expectedPrimary ||
+    primaryAudit.hostname.toLowerCase() !== expectedPrimary ||
     recovery.hostname.toLowerCase() !== expectedRecovery
   ) {
     throw new Error("RECOVERY_DATABASE_HOST_MISMATCH");
+  }
+  if (
+    primaryAudit.protocol !== primary.protocol ||
+    primaryAudit.hostname.toLowerCase() !== primary.hostname.toLowerCase() ||
+    primaryAudit.port !== primary.port ||
+    primaryAudit.pathname !== primary.pathname
+  ) {
+    throw new Error("RECOVERY_PRIMARY_CREDENTIAL_ENDPOINT_MISMATCH");
   }
   if (
     primary.hostname.toLowerCase() === recovery.hostname.toLowerCase() ||
@@ -148,6 +478,7 @@ export function assertSeparatedDatabaseEndpoints({
   }
   return {
     primaryHostname: primary.hostname.toLowerCase(),
+    primaryAuditHostname: primaryAudit.hostname.toLowerCase(),
     recoveryHostname: recovery.hostname.toLowerCase(),
     primaryClusterId: boundPrimaryClusterId,
     recoveryClusterId: boundRecoveryClusterId
@@ -538,7 +869,7 @@ export class DeterministicRecoveryBroker {
         preReadEventId
       };
       try {
-        await this.#auditSink.append({
+        const preReadAudit = await this.#auditSink.append({
           ...auditContext,
           eventId: preReadEventId,
           phase: "pre_read",
@@ -549,6 +880,7 @@ export class DeterministicRecoveryBroker {
           outcome: "read_authorized",
           errorCode: null
         });
+        auditContext.preReadEventDigest = preReadAudit.eventDigest;
       } catch {
         return {
           status: "UNKNOWN_DO_NOT_ACT",
@@ -592,7 +924,7 @@ export class DeterministicRecoveryBroker {
       const resultDigest = observedResultDigest;
       const completedAt = new Date();
       const terminalEventId = randomUUID();
-      await this.#auditSink.append({
+      const terminalAudit = await this.#auditSink.append({
         ...auditContext,
         eventId: terminalEventId,
         phase: "terminal",
@@ -606,8 +938,10 @@ export class DeterministicRecoveryBroker {
       return {
         status: "RECOVERED_CONTEXT_ONLY",
         auditId: terminalEventId,
+        auditDigest: terminalAudit.eventDigest,
         auditInteractionId: interactionId,
         preReadAuditId: preReadEventId,
+        preReadAuditDigest: auditContext.preReadEventDigest,
         recoverySessionId,
         tenantId,
         sourceDigest: validated.sourceDigest,

@@ -23,6 +23,14 @@ const gate1AuthorityUrl = new URL(
   "../scripts/gate1-authority.js",
   import.meta.url
 );
+const gate1SecurityUrl = new URL(
+  "../scripts/gate1-security.js",
+  import.meta.url
+);
+const fullDrillEvidenceUrl = new URL(
+  "../docs/FULL_DRILL_EVIDENCE.md",
+  import.meta.url
+);
 
 test("primary bootstrap audits posture before credentials, ownership, or grants", async () => {
   const source = await readFile(primaryUrl, "utf8");
@@ -168,13 +176,15 @@ test("recovery bootstrap audits first and grants no private-schema access", asyn
 test("every database SECURITY DEFINER body binds the exact session user", async () => {
   const sharedAuthorizerGuard =
     /session_user (?:IN|NOT IN) \(\s*'tp_authorizer_user',\s*'tp_gate2_authorizer_user'\s*\)/u;
+  const internalAdmissibilityGuard =
+    /session_user IN \(\s*'tp_authorizer_user',\s*'tp_gate2_authorizer_user',\s*'tp_recovery_source_user'\s*\)/u;
   const expectedPrimaryGuards = new Map([
     ["g1_append_verified_evidence_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_get_verification_key_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_append_verified_evidence_v2", /session_user <> 'tp_ingest_user'/u],
     ["g1_resolve_verified_evidence_v1", /session_user = 'tp_ingest_user'/u],
     ["g1_observe_admissibility_v1", /session_user = 'tp_authorizer_user'/u],
-    ["g1_list_admissibility_internal_v1", sharedAuthorizerGuard],
+    ["g1_list_admissibility_internal_v1", internalAdmissibilityGuard],
     ["g1_observe_admissibility_v2", sharedAuthorizerGuard],
     ["g1_prepare_vector_set_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_observe_vector_exclusion_v1", /session_user <> 'tp_authorizer_user'/u],
@@ -193,6 +203,8 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
+    ["g1_resolve_recovery_source_receipt_v1", /session_user = 'tp_recovery_source_user'/u],
+    ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user = 'tp_dispatch_user'/u]
   ]);
   for (const [url, expectedGuards] of [
@@ -237,7 +249,165 @@ test("recovery evidence selects one exact upstream authority receipt", async () 
     }
     assert.doesNotMatch(source, /ORDER BY receipt\.recorded_at DESC/u);
     assert.doesNotMatch(source, /latestSyntheticReceipt/u);
+    assert.match(source, /loadCommittedRecoveryPublisherSigner\(\)/u);
+    assert.match(source, /signer\.trustedPublisherKeys/u);
+    assert.match(source, /resolveCommittedRecoveryPublisherTrustRoot\(/u);
+    assert.match(source, /resolveCommittedRecoverySourceReceipt\(/u);
+    assert.match(source, /assertRecoveryPublisherTrustRootWriteDenied\(/u);
+    assert.match(source, /assertRecoveryRunnerBaseTableReadsDenied\(/u);
+    assert.match(source, /PRIMARY_RECOVERY_SOURCE_DATABASE_URL/u);
+    assert.match(source, /PRIMARY_AUDIT_DATABASE_URL/u);
+    assert.doesNotMatch(source, /PRIMARY_DATABASE_URL/u);
+    assert.match(source, /primaryAuditConnectionString: primaryAuditUrl/u);
+    assert.match(source, /publisherTrustRootCommitment/u);
+    assert.doesNotMatch(source, /createSyntheticRecoverySigner/u);
+    const signerLoaded = source.indexOf("loadCommittedRecoveryPublisherSigner()");
+    const trustResolved = source.indexOf(
+      "await resolveCommittedRecoveryPublisherTrustRoot({"
+    );
+    const bundleSigned = source.indexOf("signer.sign({");
+    assert.ok(trustResolved > signerLoaded, `${url.pathname}: trust resolution`);
+    assert.ok(bundleSigned > trustResolved, `${url.pathname}: sign ordering`);
   }
+});
+
+test("recovery publisher trust root is immutable and runner-readable only", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  assert.match(
+    source,
+    /CREATE TABLE IF NOT EXISTS tp_ledger\.g1_recovery_publisher_trust_roots[\s\S]*PRIMARY KEY \(trust_root_id\)/u
+  );
+  assert.match(
+    source,
+    /INSERT INTO tp_ledger\.g1_recovery_publisher_trust_roots[\s\S]*ON CONFLICT \(trust_root_id\) DO NOTHING/u
+  );
+  assert.doesNotMatch(
+    source,
+    /GRANT (?:INSERT|UPDATE|DELETE)[\s\S]*g1_recovery_publisher_trust_roots[\s\S]*tp_recovery_audit_role/u
+  );
+  assert.match(
+    source,
+    /g1_resolve_recovery_publisher_trust_root_v1\(STRING, STRING, STRING\)/u
+  );
+  assert.match(
+    source,
+    /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
+  );
+  assert.match(source, /\["tp_recovery_source_role", "tp_recovery_source_user"\]/u);
+});
+
+test("Gate One trust-root write probes use the shared rollback-bounded verifier", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.match(
+    source,
+    /assertRecoveryPublisherTrustRootWriteDeniedWithClient/u
+  );
+  assert.match(
+    source,
+    /await assertRecoveryPublisherTrustRootWriteDeniedWithClient\(client\)/u
+  );
+  assert.doesNotMatch(
+    source,
+    /async function expectTrustRootWritesDenied\(client\)/u
+  );
+});
+
+test("recovery source resolver binds the full receipt and outbox identity", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const resolver = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(resolver);
+  for (const field of [
+    "request_digest",
+    "proposal_digest",
+    "logical_action_digest",
+    "authorization_epoch",
+    "logical_authority_key_sha256",
+    "authorization_binding_sha256",
+    "run_id",
+    "incident_id",
+    "resource_id",
+    "fencing_token",
+    "effect_key",
+    "payload_digest"
+  ]) {
+    assert.match(
+      resolver,
+      new RegExp(`outbox\\.${field}\\s*=\\s*receipt\\.${field}`, "u"),
+      field
+    );
+  }
+});
+
+test("recovery storage enforces one row per exact broker lookup identity", async () => {
+  const source = await readFile(recoveryStoreUrl, "utf8");
+  assert.match(
+    source,
+    /CREATE UNIQUE INDEX IF NOT EXISTS g1_recovery_bundle_v2_broker_lookup_uidx[\s\S]*tenant_id,[\s\S]*recovery_session_id,[\s\S]*subject_binding_hash,[\s\S]*source_digest/u
+  );
+  const reconciliation = source.match(
+    /SELECT \*[\s\S]*?FROM mcp_private\.recovery_bundles_v2([\s\S]*?)ORDER BY recorded_at/u
+  )?.[1];
+  assert.ok(reconciliation);
+  assert.match(
+    reconciliation,
+    /tenant_id = \$1::UUID[\s\S]*recovery_session_id = \$2::UUID[\s\S]*subject_binding_hash = \$5[\s\S]*source_digest = \$6/u
+  );
+});
+
+test("recovery operator contract enumerates every exact private input", async () => {
+  const source = await readFile(fullDrillEvidenceUrl, "utf8");
+  for (const input of [
+    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "RECOVERY_SOURCE_TENANT_ID",
+    "RECOVERY_SOURCE_RUN_ID",
+    "RECOVERY_SOURCE_INCIDENT_ID",
+    "RECOVERY_SOURCE_EVIDENCE_ID",
+    "RECOVERY_SOURCE_RESOURCE_ID",
+    "RECOVERY_SOURCE_OPERATION_ID",
+    "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "PRIMARY_CLUSTER_ID",
+    "RECOVERY_CLUSTER_ID",
+    "EXPECTED_PRIMARY_HOSTNAME",
+    "EXPECTED_RECOVERY_HOSTNAME",
+    "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT",
+    "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT",
+    "TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST",
+    "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64",
+    "RECOVERY_DATABASE_URL",
+    "RECOVERY_PUBLISHER_PASSWORD",
+    "RECOVERY_PUBLISHER_DATABASE_URL",
+    "MCP_API_KEY",
+    "SOURCE_BUILD_IDENTITY"
+  ]) {
+    assert.equal(source.includes(input), true, input);
+  }
+  assert.match(source, /winner\.operationId/u);
+  assert.match(source, /winner\.requestDigest/u);
+  assert.match(source, /all 18[\s\S]*managed base-table read probes/u);
+  assert.match(source, /administrator URL/u);
+});
+
+test("recovery broker verifies audit events only through the narrow resolver", async () => {
+  const [source, primarySource] = await Promise.all([
+    readFile(recoveryScriptUrls[1], "utf8"),
+    readFile(primaryUrl, "utf8")
+  ]);
+  assert.match(source, /resolveCommittedRecoveryAuditEvent/u);
+  assert.doesNotMatch(
+    source,
+    /FROM tp_ledger\.g1_recovery_audit_events_v3/u
+  );
+  assert.match(
+    primarySource,
+    /g1_resolve_recovery_audit_event_v1[\s\S]*RETURNS TABLE\([\s\S]*event_id UUID,[\s\S]*tenant_id UUID,[\s\S]*interaction_id UUID,[\s\S]*recovery_session_id UUID,[\s\S]*caller_subject_hash STRING,[\s\S]*phase STRING,[\s\S]*tool_name STRING,[\s\S]*recovery_cluster_id UUID,[\s\S]*broker_config_digest STRING,[\s\S]*query_template_digest STRING,[\s\S]*bound_input_digest STRING,[\s\S]*result_digest STRING,[\s\S]*source_watermark TIMESTAMPTZ,[\s\S]*error_code STRING,[\s\S]*event_digest STRING,[\s\S]*outcome STRING,[\s\S]*started_at TIMESTAMPTZ,[\s\S]*completed_at TIMESTAMPTZ,[\s\S]*recorded_at TIMESTAMPTZ,[\s\S]*database_now TIMESTAMPTZ/u
+  );
+  assert.match(
+    primarySource,
+    /event\.event_id,[\s\S]*event\.tenant_id,[\s\S]*event\.interaction_id,[\s\S]*event\.recovery_session_id,[\s\S]*event\.caller_subject_hash,[\s\S]*event\.phase,[\s\S]*event\.tool_name,[\s\S]*event\.recovery_cluster_id,[\s\S]*event\.broker_config_digest,[\s\S]*event\.query_template_digest,[\s\S]*event\.bound_input_digest,[\s\S]*event\.result_digest,[\s\S]*event\.source_watermark,[\s\S]*event\.error_code,[\s\S]*event\.event_digest,[\s\S]*event\.outcome,[\s\S]*event\.started_at,[\s\S]*event\.completed_at,[\s\S]*event\.recorded_at,[\s\S]*transaction_timestamp\(\)/u
+  );
 });
 
 test("logical-action spend is serialized and unique across authorization epochs", async () => {

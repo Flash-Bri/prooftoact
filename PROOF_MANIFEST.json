@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -241,7 +241,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "9a01ed5ee176b19a7642112f8bbe6b1b3d5b486371aae18f99a305a22e2f0811",
+      "sha256": "6afe09236e7bd7751c1a38d4a2ec2c2333c781c21f9380066b7511e978b5595e",
       "kind": "boundary-ledger"
     },
     {
@@ -259,7 +259,7 @@
     {
       "id": "gate1-recovery-evidence",
       "path": "evidence/gate1-recovery-broker-2026-07-30.md",
-      "sha256": "b5d273445b5911969bea6b8277b673356712a8f74d707fad7ba3042b05e44924",
+      "sha256": "819f510dc62d289b2cbdab268abfe7440ff0a50cca18e457efe776b5a17be51c",
       "kind": "accepted-evidence"
     },
     {
@@ -445,7 +445,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "8cdeb4a069841e4af6d39bd776abe92375ace0adebb9bbefafb8b5c1a684161f",
+      "sha256": "493c45452662242d7de35ce5f23dc4f90ad30a40b17a17791f3531b83c815b24",
       "kind": "boundary-ledger"
     },
     {
@@ -493,13 +493,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "00ef9337d8784c70d2f7bb7661fea1051803d0336acdcabdc6b6a1838df6664f",
+      "sha256": "3bd57e2d68f40bfb41962b59d1d68495280d320b589f95e3c245f7a1fea41cf4",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "914ae0b7bae182425adc1879f47c908479c79ed64f3d9588bac99b379350ba3d",
+      "sha256": "37fa64c9800eb774ef9c4c6469ac481e46f3c3ce51c8c004d2d98d60cfff496a",
       "kind": "boundary-ledger"
     },
     {
@@ -511,7 +511,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "3c77ffa895db3c485a6d1648902f8fd07a8045d1a890d36c6ff8c693349c4e6f",
+      "sha256": "a22882fc6e8d6e9984c83bd105e647c103ef8853c4485d1aee0394b718386a2f",
       "kind": "verification-code"
     },
     {
