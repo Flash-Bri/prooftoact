@@ -146,8 +146,8 @@ test("semantic failure alarms bind provider-emitted boundary and authority metri
           "Fn::Sub": `\${AWS::StackName}-${service}-semantic-failures`
         },
         AlarmDescription:
-          "A Tideproof Lambda returned a fail-closed semantic outcome without a platform error.",
-        Namespace: "Tideproof/GateTwo",
+          "A ProofToAct Lambda returned a fail-closed semantic outcome without a platform error.",
+        Namespace: "ProofToAct/GateTwo",
         MetricName: "SemanticFailures",
         Statistic: "Sum",
         Period: 60,
@@ -188,7 +188,7 @@ test("HTTP API stage binds one route-ordered explicit deployment", () => {
   assert.deepEqual(deployment.Properties.ApiId, { Ref: "HttpApi" });
   assert.deepEqual(deployment.Properties.Description, {
     "Fn::Sub":
-      "Tideproof exact API deployment ${SourceCommit} ${ConfigDigest}"
+      "ProofToAct exact API deployment ${SourceCommit} ${ConfigDigest}"
   });
   assert.equal(template.Resources.DefaultStage.Properties.AutoDeploy, false);
   assert.deepEqual(template.Resources.DefaultStage.Properties.DeploymentId, {

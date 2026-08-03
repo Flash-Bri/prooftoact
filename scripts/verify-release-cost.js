@@ -297,7 +297,7 @@ function assertSemanticMetricCardinality(value, service, code) {
   assert(
     typeof value === "string" &&
       value.split("CloudWatchMetrics:").length - 1 === 1 &&
-      value.split('Namespace: "Tideproof/GateTwo"').length - 1 === 1 &&
+      value.split('Namespace: "ProofToAct/GateTwo"').length - 1 === 1 &&
       value.split('Dimensions: [["Deployment", "Service"]]').length - 1 === 1 &&
       value.split('Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]').length - 1 === 1 &&
       value.split(`Service: "${service}"`).length - 1 === 1 &&
@@ -515,7 +515,7 @@ export function assertGate2TemplateContract(template) {
   const semanticAlarms = Object.values(resources).filter(
     (resource) =>
       resource?.Type === "AWS::CloudWatch::Alarm" &&
-      resource.Properties?.Namespace === "Tideproof/GateTwo"
+      resource.Properties?.Namespace === "ProofToAct/GateTwo"
   );
   assert(
     semanticAlarms.length === 2 &&
@@ -596,7 +596,8 @@ function assertPreflightDefaults() {
       region: "us-east-1",
       modelId: "amazon.nova-micro-v1:0",
       bootstrapStackName: "tideproof-gate2-artifacts",
-      mainStackName: "tideproof-gate2",
+      mainStackName: "prooftoact-gate2",
+      legacyMainStackName: "tideproof-gate2",
       budgetCeilingUsd: 15,
       totalProjectExposureCeilingUsd: 25,
       recordedNonAwsSpendUsd: 11.86,
@@ -701,7 +702,7 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
     sources.get("cost-boundary-ledger"),
     [
       "Approved AWS project ceiling: **$15**",
-      "Approved total Tideproof ceiling: **$25**",
+      "Approved total ProofToAct ceiling: **$25**",
       "**$13.14**",
       "daily cost exceeds $5",
       "unexplained spend exceeds $3",

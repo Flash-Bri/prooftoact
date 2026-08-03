@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 import axeCore from "axe-core";
 
-import { createTideproofServer } from "../src/server.js";
+import { createProofToActServer } from "../src/server.js";
 import { runScenario } from "../src/scenario.js";
 import { verifyAccessibility } from "./verify-accessibility.js";
 
@@ -386,7 +386,7 @@ function summarizeAxTree(nodes) {
 
 function validateBrowserSnapshot(snapshot) {
   invariant(
-    snapshot?.document?.title === "Tideproof — Admissibility Memory" &&
+    snapshot?.document?.title === "ProofToAct — Admissibility Memory" &&
       snapshot.document.language === "en" &&
       snapshot.document.readyState === "complete",
     "BROWSER_ACCESSIBILITY_DOCUMENT"
@@ -494,7 +494,7 @@ function validateBrowserSnapshot(snapshot) {
 }
 
 async function startServer() {
-  const server = createTideproofServer();
+  const server = createProofToActServer();
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);

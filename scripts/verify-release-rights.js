@@ -39,7 +39,7 @@ const MEDIA_EXTENSIONS = new Set([
 ]);
 const DENIED_RELEASE_PREFIXES = Object.freeze([
   "docs/media/demo-",
-  "docs/media/tideproof-",
+  "docs/media/prooftoact-",
   "evidence/release/screenshots/",
   "source-private/",
   "web/brand/",
@@ -82,9 +82,13 @@ const EXPECTED_DISTRIBUTED = Object.freeze({
   }
 });
 const EXPECTED_CONTROLS = Object.freeze({
+  "architecture-rename-receipt":
+    "evidence/architecture-asset-rename-2026-08-03.md",
   "aws-demo-entry": "infra/aws/lambda/demo.js",
   "aws-demo-runtime": "src/cloud/public-demo.js",
   "aws-demo-verifier": "scripts/gate2-public-demo-verify.js",
+  "brand-migration-ledger": "docs/RENAME_MIGRATION.md",
+  "brand-migration-manifest": "RENAME_MIGRATION_MANIFEST.json",
   "media-rights-ledger": "docs/media/RIGHTS.md",
   "public-demo-response-verifier": "src/cloud/public-demo-verifier.js",
   "readme-surface": "README.md",
@@ -115,7 +119,7 @@ const EXPECTED_SURFACE_BINDINGS = Object.freeze({
     "/evidence/gate1-authority",
     "/evidence/gate1-recovery",
     "#judge-path",
-    "https://github.com/Flash-Bri/tideproof"
+    "https://github.com/Flash-Bri/prooftoact"
   ],
   readmePath: "README.md",
   readmeImagePaths: ["docs/media/architecture.svg"],

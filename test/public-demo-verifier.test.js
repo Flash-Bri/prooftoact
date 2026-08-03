@@ -38,17 +38,17 @@ function assets() {
   return {
     "/": [
       "<!doctype html>",
-      "<title>Tideproof</title>",
+      "<title>ProofToAct</title>",
       "Synthetic scenario · Not operational emergency software",
       "A TrustAgentic.ai project",
-      "https://github.com/Flash-Bri/tideproof",
+      "https://github.com/Flash-Bri/prooftoact",
       '<span id="gate-two-proof-state">pending</span>'
     ].join("\n"),
     "/app.js": "export const tideproof = true;\n",
     "/styles.css": ":root { color-scheme: dark; }\n",
     "/architecture.svg": [
       '<svg xmlns="http://www.w3.org/2000/svg" role="img">',
-      "<title>Tideproof trust boundaries</title>",
+      "<title>ProofToAct trust boundaries</title>",
       "</svg>",
       ""
     ].join("\n"),

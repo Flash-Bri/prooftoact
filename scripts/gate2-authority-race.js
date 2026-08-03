@@ -79,7 +79,7 @@ export function assertExactCleanCheckout(sourceCommit) {
     skipWorktree ||
     !/^[0-9a-f]{40}$/.test(treeDigest) ||
     checkoutValue(["rev-parse", "--is-shallow-repository"]) !== "false" ||
-    !/^https:\/\/github\.com\/Flash-Bri\/tideproof(?:\.git)?$/.test(
+    !/^https:\/\/github\.com\/Flash-Bri\/prooftoact(?:\.git)?$/.test(
       checkoutValue(["remote", "get-url", "origin"])
     )
   ) {
@@ -97,7 +97,7 @@ export function validateAuthorityRaceExpectedPrincipal(
     typeof expectedPrincipalArn !== "string" ||
     !new RegExp(
       `^arn:aws:iam::${expectedAccountId}:role/` +
-        "tideproof-gate2-AuthorityRaceCallerRole-[A-Za-z0-9]+$"
+        "prooftoact-gate2-AuthorityRaceCallerRole-[A-Za-z0-9]+$"
     ).test(expectedPrincipalArn)
   ) {
     throw new Error("AUTHORITY_RACE_EXPECTED_ROLE_REJECTED");
@@ -113,18 +113,18 @@ export function authorityPrincipalFromStackResource(
   const physicalRoleName = detail?.PhysicalResourceId;
   const stackIdPattern = new RegExp(
     `^arn:aws:cloudformation:us-east-1:${expectedAccountId}:` +
-      "stack/tideproof-gate2/[0-9a-f-]{36}$"
+      "stack/prooftoact-gate2/[0-9a-f-]{36}$"
   );
   if (
     !/^\d{12}$/.test(expectedAccountId ?? "") ||
-    detail?.StackName !== "tideproof-gate2" ||
+    detail?.StackName !== "prooftoact-gate2" ||
     detail?.LogicalResourceId !== "AuthorityRaceCallerRole" ||
     detail?.ResourceType !== "AWS::IAM::Role" ||
     !["CREATE_COMPLETE", "UPDATE_COMPLETE"].includes(
       detail?.ResourceStatus
     ) ||
     !stackIdPattern.test(detail?.StackId ?? "") ||
-    !/^tideproof-gate2-AuthorityRaceCallerRole-[A-Za-z0-9]+$/.test(
+    !/^prooftoact-gate2-AuthorityRaceCallerRole-[A-Za-z0-9]+$/.test(
       physicalRoleName ?? ""
     )
   ) {
@@ -192,7 +192,7 @@ async function evidenceClients(credentials) {
     async authorityRoleResource() {
       return cloudFormation.send(
         new DescribeStackResourceCommand({
-          StackName: "tideproof-gate2",
+          StackName: "prooftoact-gate2",
           LogicalResourceId: "AuthorityRaceCallerRole"
         })
       );

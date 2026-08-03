@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-rights.v1",
   "status": "CURRENT_SURFACES_REVIEWED_FINAL_RELEASE_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "This inventory binds only the current repository, README, and browser surfaces to the reviewed ledger. It grants no rights, clears no future asset, and does not replace the exact-release private review.",
   "finalReleaseRequirements": [
     "Exact-release private rights review receipt.",
@@ -22,7 +22,7 @@
       "id": "architecture-svg",
       "ledgerRowId": "C08 / V09",
       "path": "docs/media/architecture.svg",
-      "sha256": "5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c",
+      "sha256": "0a35e196d896e932bbadf2afbf5e915c21073c423d9d8ac8a23023ad0887c871",
       "rightsState": "CLEARED_CURRENT",
       "roles": [
         "browser-media",
@@ -44,7 +44,7 @@
       "id": "browser-document",
       "ledgerRowId": "C04",
       "path": "web/index.html",
-      "sha256": "81b621e6073daa3f465fefe73389719da4c399f1b7a88d5b261cc8fe7a1b07a8",
+      "sha256": "cd64c1c28d8ba0df44d49827102d91335c653056c6dbb2b8585d10130c389b21",
       "rightsState": "CLEARED_CURRENT",
       "roles": [
         "browser-source"
@@ -63,6 +63,11 @@
   ],
   "controlFiles": [
     {
+      "id": "architecture-rename-receipt",
+      "path": "evidence/architecture-asset-rename-2026-08-03.md",
+      "sha256": "6323defdda51f32dc690b994b9d5ac6d5c2929acf0946a55663971b183119913"
+    },
+    {
       "id": "aws-demo-entry",
       "path": "infra/aws/lambda/demo.js",
       "sha256": "eb64e2417358101ca02e95ee847c231ed0c12c30e04ce23407c88362ca8c6536"
@@ -70,7 +75,7 @@
     {
       "id": "aws-demo-runtime",
       "path": "src/cloud/public-demo.js",
-      "sha256": "ad80c8225a543e93af5b59195f730609cb4e79112035b1cbbc78908e0b202273"
+      "sha256": "62d3af48176b92cb6e02731887ed6e628d809a7785955ddd90e0512bb1ef4d8b"
     },
     {
       "id": "aws-demo-verifier",
@@ -78,29 +83,39 @@
       "sha256": "527ed16a0e003f8bb8947ed43e9d6c4246b9653ee02cd65bd0dd297c7f6fdab4"
     },
     {
+      "id": "brand-migration-ledger",
+      "path": "docs/RENAME_MIGRATION.md",
+      "sha256": "3c86d0eb8a8b44faf9e352a661a67b1ce12b231de1b2df65fb2442fd7f9a6fe9"
+    },
+    {
+      "id": "brand-migration-manifest",
+      "path": "RENAME_MIGRATION_MANIFEST.json",
+      "sha256": "8f243281119445d296643ec83eadb3e45b09154f043fe31df329489c4de1ac35"
+    },
+    {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "720bab8ec891819c1b3f43772cb885e836ad7bfa999efd5cbf63ab7886e0e9be"
+      "sha256": "1403d4ac328501d82d8252c3ff416431cfe0ec2b37958a11eb2c301201741812"
     },
     {
       "id": "public-demo-response-verifier",
       "path": "src/cloud/public-demo-verifier.js",
-      "sha256": "47e97fe67aea67d155233ae1956c7e43fd22db5fc8c907b229685c68e55f4b9e"
+      "sha256": "86dba21af916d68af4d86fd621d573c0f695d68c8e13a2fae3ce5480a44ff069"
     },
     {
       "id": "readme-surface",
       "path": "README.md",
-      "sha256": "3ab210e6b6cd0a04ca5f28ca1fa863e71df95456a7e93fad08cf1ce2b349ba51"
+      "sha256": "e4e75e37d9e13df8dd26745a49520263daffae0f2def256bfabbd5b4ceb03eec"
     },
     {
       "id": "server-surface",
       "path": "src/server.js",
-      "sha256": "9cda2d50db1e5c564ffd45e77cef6b2fa5eab8d7a5a12554791b4ae7ccde0b4a"
+      "sha256": "687ab8db3fd0fb4a6d45395c631a4f77189b971f6ecf249196004a59b15e6908"
     },
     {
       "id": "visual-release-system",
       "path": "docs/VISUAL_RELEASE_SYSTEM.md",
-      "sha256": "69f5d9fd5f1e890a27b52c9697a095c05ee21a2a11ab9922baae46ec952b5e9b"
+      "sha256": "0c780dea999a4f6b7d6611f314b9fd9deb29b43a40c8eb7ee8ede62665ddc78d"
     }
   ],
   "surfaceBindings": {
@@ -119,7 +134,7 @@
       "/evidence/gate1-authority",
       "/evidence/gate1-recovery",
       "#judge-path",
-      "https://github.com/Flash-Bri/tideproof"
+      "https://github.com/Flash-Bri/prooftoact"
     ],
     "readmePath": "README.md",
     "readmeImagePaths": [

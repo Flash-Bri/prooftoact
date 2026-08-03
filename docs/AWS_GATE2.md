@@ -50,7 +50,7 @@ boundary:
 - Authority Lambda is isolated from the advisory Boundary and model. Its
   local candidate accepts only `alpha` or `bravo` for one configured synthetic
   race, derives operation IDs, intent nonces, effect keys, payloads, and
-  digests internally, reads one exact Tideproof-owned Secrets Manager ARN at
+  digests internally, reads one exact ProofToAct-owned Secrets Manager ARN at
   one exact `AWSCURRENT` VersionId, verifies the exact CockroachDB Cloud host
   and port in the URL, and calls only `tp_api.g2_spend_authority_race_v1` and
   `tp_api.g1_resolve_request_v1` as `tp_gate2_authorizer_user`. After both
@@ -187,7 +187,7 @@ path.
   independent clean-build and versioned-upload receipts.
 - The Boundary Lambda has a 25-second timeout behind a 29-second HTTP API
   integration. At external-service tail latency, the caller may receive a
-  transport timeout instead of Tideproof's structured signed failure body.
+  transport timeout instead of ProofToAct's structured signed failure body.
   A timeout or missing receipt is still `UNKNOWN_DO_NOT_ACT`; the project does
   not claim that every fail-closed path produces a signed receipt.
 - The caller-principal SHA-256 is pseudonymous, not anonymous. Keep the raw
@@ -268,7 +268,7 @@ Run it only from a fresh official checkout in the authenticated AWS lane,
 before any candidate upload or main-stack mutation. It is read-only with
 respect to AWS. The gate:
 
-- requires the exact public Tideproof origin, `main`, a clean tree, and
+- requires the exact public ProofToAct origin, `main`, a clean tree, and
   `HEAD == origin/main`, fetching `origin/main` again before and after the
   checks so a moving release target fails closed;
 - performs a lockfile install with dependency lifecycle scripts disabled,
@@ -334,7 +334,9 @@ name, and alert addresses from its output, and accepts only:
 - an encrypted, versioned, bucket-owner-enforced private artifact bucket with
   all public-access blocks and exactly the reviewed TLS-only deny policy,
   with no additional delegated bucket-policy statements; and
-- no active `tideproof-gate2` main stack.
+- no active `prooftoact-gate2` main stack and no active former-working-name
+  `tideproof-gate2` main stack. The dual absence check prevents a rename from
+  creating two independent authority deployments.
 
 A `PASS` receipt is necessary but deliberately insufficient. The catalog call
 does not prove model invocation access or current Nova pricing, Cost Explorer
@@ -363,16 +365,18 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
    CloudFormation lint, and generated-template equality.
 2. Commit the accepted local candidate.
 3. Build from that clean commit.
-4. Create or update the prerequisite bootstrap stack. Verify its account-wide
-   $15 budget and $1/$5/$10 actual plus $15 forecast notifications are present
-   before its private, encrypted, versioned artifact bucket is accepted.
+4. Reuse the prerequisite bootstrap stack under its preserved legacy physical
+   name. Do not update it merely to change descriptions or tags. Verify its
+   account-wide $15 budget and $1/$5/$10 actual plus $15 forecast notifications
+   are present before its private, encrypted, versioned artifact bucket is
+   accepted.
 5. Run `npm run gate2:aws-readiness` and require the combined
    `tideproof.gate2.aws-readiness.v1` `PASS`; independently revalidate current
    Nova Micro pricing. If CloudShell, billing data, the official upstream, or
    any required read is unavailable, stop without uploading.
 6. Prepare one fresh synthetic Gate Two tenant/run/incident/evidence/resource
    tuple through the reviewed CockroachDB owner lane. Create one
-   Tideproof-owned Secrets Manager secret whose JSON has exactly the
+   ProofToAct-owned Secrets Manager secret whose JSON has exactly the
    `connectionString` key, whose URL names only `tp_gate2_authorizer_user` and the
    `tideproof` database, whose host and port exactly match the reviewed
    parameters, and whose TLS mode is `verify-full`. Record the exact
@@ -392,7 +396,7 @@ private receipt for the superseded `0ef4dba` upload without publishing AWS
 account, bucket, notification, or object-version identifiers. It is historical
 evidence only and must not be used to deploy the repaired candidate.
 9. Upload the reviewed template to the private versioned bucket and create the
-   disposable `tideproof-gate2-probe` stack from its exact `TemplateURL` with
+   disposable `prooftoact-gate2-probe` stack from its exact `TemplateURL` with
    `EnableProbeFunctions=true` in the initial create. Never update this stack.
    Prove the exact allowed capability and required denials for every role.
    Probe concurrency is one; the probe canary and functions exist only in this
@@ -408,7 +412,7 @@ evidence only and must not be used to deploy the repaired candidate.
     canceled or reused. Do not reuse the probe receipts, configuration digest,
     or any physical ID for the final stack.
 11. Recompute the final configuration digest with probes disabled, then create
-    a fresh `tideproof-gate2` main stack from the exact `TemplateURL` with
+    a fresh `prooftoact-gate2` main stack from the exact `TemplateURL` with
     `EnableProbeFunctions=false` in the initial create. This attested stack
     must never be updated—not for parameters, tags, metadata, artifacts, or
     configuration. Any correction or change requires complete teardown and a

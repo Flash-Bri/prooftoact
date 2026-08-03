@@ -13,13 +13,13 @@
     {
       "id": "accessibility-browser-tests",
       "path": "test/browser-accessibility.test.js",
-      "sha256": "229e9c2328952a18b4f828f127da7356ad493e8e557ca27b50225b6e62200bbd",
+      "sha256": "b24b6615045f97293826df9445f88df8694a9930e7359e27696101c2f1942cb2",
       "kind": "verification-code"
     },
     {
       "id": "accessibility-browser-verifier",
       "path": "scripts/verify-browser-accessibility.js",
-      "sha256": "9061fee407d57bf2aa6a178fb1ef3120aa0e21eacba9461fb0b8c4f424445e7c",
+      "sha256": "c01ab28f6b10cf89ce8718e2013c73b8ddbee55a35c75c3a62cf374341eaa7ea",
       "kind": "verification-code"
     },
     {
@@ -37,7 +37,7 @@
     {
       "id": "accessibility-review-tests",
       "path": "test/accessibility.test.js",
-      "sha256": "a9c9f16764f627aba759b265c6c8daaff12746519d3ad269b117aa085cd322e4",
+      "sha256": "a89d2dd1c05c4aa7d79cabedb92f6a15ba1d2e479df5965c4b8f4c834af95372",
       "kind": "verification-code"
     },
     {
@@ -59,9 +59,15 @@
       "kind": "release-receipt"
     },
     {
+      "id": "architecture-rename-receipt",
+      "path": "evidence/architecture-asset-rename-2026-08-03.md",
+      "sha256": "6323defdda51f32dc690b994b9d5ac6d5c2929acf0946a55663971b183119913",
+      "kind": "release-receipt"
+    },
+    {
       "id": "architecture-svg",
       "path": "docs/media/architecture.svg",
-      "sha256": "5e897dbfd926486203362cf517c967e44d799edbf7f56d1d01b16307ec02724c",
+      "sha256": "0a35e196d896e932bbadf2afbf5e915c21073c423d9d8ac8a23023ad0887c871",
       "kind": "released-asset"
     },
     {
@@ -85,19 +91,19 @@
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
-      "sha256": "b53b612dcef2d9baa79ab0a1e36ae6fdfd1cc4569b8c4ad0807725bc1d297ea0",
+      "sha256": "c27db879f2fdd22e83fa3a9709772a2750c350c6f7a64ca0e2d5a81ef4f30d44",
       "kind": "verification-code"
     },
     {
       "id": "aws-deployment-attestation-validator",
       "path": "src/cloud/aws-deployment-attestation.js",
-      "sha256": "6c9a2c0f9d1d2d9a12f0063695004250e1c15b325c27b7957f5b60351642e007",
+      "sha256": "62ad076f13aa772df48bd5f438a4bc701539a77146d6e2969d27665184c3a09a",
       "kind": "verification-code"
     },
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "ac08dcd8ed3b56838180da56ad7b087d95d8ba5073909ef6c874716fc3cd99a1",
+      "sha256": "ff81c363671e38db9ddc2905b5e39ecd1d838ca1bbd505855d15a9107d380505",
       "kind": "boundary-ledger"
     },
     {
@@ -127,19 +133,43 @@
     {
       "id": "aws-template-security-tests",
       "path": "test/aws-gate2-template-security.test.js",
-      "sha256": "fee0683f9a052308bfe12b544306c392d7bee4a510bd2e2c065515e56e89e856",
+      "sha256": "0dbe1edcd7659fad77569234088594bcf72969711cb67354c787d7007f63ec6a",
+      "kind": "verification-code"
+    },
+    {
+      "id": "brand-migration-ledger",
+      "path": "docs/RENAME_MIGRATION.md",
+      "sha256": "3c86d0eb8a8b44faf9e352a661a67b1ce12b231de1b2df65fb2442fd7f9a6fe9",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "brand-migration-manifest",
+      "path": "RENAME_MIGRATION_MANIFEST.json",
+      "sha256": "8f243281119445d296643ec83eadb3e45b09154f043fe31df329489c4de1ac35",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "brand-migration-tests",
+      "path": "test/brand-migration.test.js",
+      "sha256": "cce14b2db36e9b1fb3b3ceb0016cb4bf38c2c992c55ca62dc502dfeb3e602440",
+      "kind": "verification-code"
+    },
+    {
+      "id": "brand-migration-verifier",
+      "path": "scripts/verify-brand-migration.js",
+      "sha256": "7fbf4418a4afc10e1be67fcab1684b7078820cce90df8d9b3d7eb472dc57117e",
       "kind": "verification-code"
     },
     {
       "id": "bundle-license-notice",
       "path": "THIRD_PARTY_NOTICES.txt",
-      "sha256": "04f52bf593e4c3a8e76a4cb84707981e54bf19e9f389ad7b1c4e6f8939a67364",
+      "sha256": "4d022b8f1abe15c1f2accb8fc1e5433fe4a864812fce65f9433f9bdb8d63388a",
       "kind": "boundary-ledger"
     },
     {
       "id": "bundle-license-notice-library",
       "path": "scripts/lib/bundled-third-party-notices.js",
-      "sha256": "ea892accff4c5b5c93c152cf26182109759590e759b553aa9633492b7788eb0d",
+      "sha256": "8cddc14a26eb5acb606204543cd9054b8f2bc4b7a71ee2eccfaeb55ed6a6f787",
       "kind": "verification-code"
     },
     {
@@ -157,13 +187,13 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "158738530654541c65ccef58127d4665538a0e4b5555ca27c40e4f76697a05d4",
+      "sha256": "5c80c2c3d2e9da6151794eecf0f2bda17f2c30bd4d91246350a5756d389bb9d7",
       "kind": "boundary-ledger"
     },
     {
       "id": "clean-room-ledger",
       "path": "CLEAN_ROOM.md",
-      "sha256": "2ba1cd16ec814faa485dd2b8d36c34dd880e57f3565fed1eb29436578461203f",
+      "sha256": "fe686c08200d270a64109a8276610acb7227c33743ebab9bdb357d2a45ca3b35",
       "kind": "boundary-ledger"
     },
     {
@@ -175,7 +205,7 @@
     {
       "id": "dependency-inventory",
       "path": "docs/DEPENDENCY_INVENTORY.md",
-      "sha256": "ba3e8ce378f0ab8305141a175c29724b0c82d825d9866d9d0a7f87cbde789afa",
+      "sha256": "5d5102b2e3ef5e8893caa8e4ad53359d258c6893d1a0462817b818cd18482f6d",
       "kind": "boundary-ledger"
     },
     {
@@ -193,7 +223,7 @@
     {
       "id": "dependency-lock",
       "path": "package-lock.json",
-      "sha256": "b0fa37a180101a5144848b4b1b73e5a98ef6c5d0d55b9195d7ecae0b1310a4df",
+      "sha256": "923be53e7c071361591b13ef4ed22abe6e2d5464184c8a51d7561c6440913e85",
       "kind": "boundary-ledger"
     },
     {
@@ -235,13 +265,13 @@
     {
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
-      "sha256": "0f58cda47ac2756e1f45d6e45e996ed9e9a55a8e81859c7f3cb5467e7e1ad90d",
+      "sha256": "b3079a5dede48a8d7a630c6f2b3633f6ece66fb4c4dcc3e3e003d492a9ab0951",
       "kind": "verification-code"
     },
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "6afe09236e7bd7751c1a38d4a2ec2c2333c781c21f9380066b7511e978b5595e",
+      "sha256": "8c55be1bcb042cb836e69a3cee83afb715bb4df93f425f00499a5d369d1053ed",
       "kind": "boundary-ledger"
     },
     {
@@ -271,7 +301,7 @@
     {
       "id": "gate2-artifact-builder",
       "path": "scripts/build-gate2-template.js",
-      "sha256": "15af85c14a3d6048ea43cafa626f54b11539a19eb01e2601657f5233b9a70188",
+      "sha256": "c93c98a1ec1032473ca0491e1f2858acc1ea81e22e3329e0c22c0258e1973bb1",
       "kind": "verification-code"
     },
     {
@@ -283,7 +313,7 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "bfd9eb8fed4579ec5b3e9392147d9784d4f6dbfeb35f57dbbc6801e808a4f4b7",
+      "sha256": "f08c34043ac2be005527853845cb56142b3b2a34dd704ddc873e549d4408bd97",
       "kind": "verification-code"
     },
     {
@@ -313,13 +343,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "4f23639bc41d4813dddf76bf778582de5552217377c4c8a3e2bcd31bd0cd96d1",
+      "sha256": "d19e1954af874bfbb04cc7b4752062acd7ca96997d25459a3e088b4225a84177",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "7c4b52d4f30d7afdb30beddf14e118cd0766a567ed3157c5fc82bda9bc56813c",
+      "sha256": "5a148abd448fb66757da6deb323da7e1e9503215753bd268cfcd51ca7316417f",
       "kind": "verification-code"
     },
     {
@@ -331,19 +361,19 @@
     {
       "id": "media-rights-ledger",
       "path": "docs/media/RIGHTS.md",
-      "sha256": "720bab8ec891819c1b3f43772cb885e836ad7bfa999efd5cbf63ab7886e0e9be",
+      "sha256": "1403d4ac328501d82d8252c3ff416431cfe0ec2b37958a11eb2c301201741812",
       "kind": "boundary-ledger"
     },
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "649493244e629f4379edb941ead0a85ae696f5a6c246cdd8641f68fdff1cc015",
+      "sha256": "9ae9c554c5a81e7ab8fdf8b3972bdcede1e9b0663e4507e8bc62ae1f49cdbc63",
       "kind": "verification-code"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
-      "sha256": "f7ff9466384f05f0fd1847d08d893477bdc790cde3fcde8038205d20566774d1",
+      "sha256": "913571bf34d5d63dad8707f39e938df599feb9b482cd98c824c5db80b59b1aa7",
       "kind": "verification-code"
     },
     {
@@ -355,7 +385,7 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "12ca90ad4e144d0d7b4c747d6a6560aa9dcdd94bca724e3c671d13092f6e787d",
+      "sha256": "4111d3acd3ba11fc4b2c6a721708d6a62588705b2cbf78002d17030378518413",
       "kind": "verification-code"
     },
     {
@@ -367,31 +397,31 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "5ee908ff3d0ff238a0a65c5a9e14e0f8f11320de03a6a4ff5dc17c67d0ed80c9",
+      "sha256": "8bf8c8de736c7151f25243e2cdf26e9b9d3e462e09635a69710b9a8bc224bbcd",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-claims-tests",
       "path": "test/release-claims.test.js",
-      "sha256": "e52cbf553089b4e7ff67c145382d14d724c3dba7db1740d0898517552ac02390",
+      "sha256": "414f8ec7932cad998691b8fe88833fe141960775445cf6bb8dc151faf8b2f1ab",
       "kind": "verification-code"
     },
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "729e55bebcb859e2570dc06f8bdcdb7b9f3c405b4523eedd4d89c7588a7e26b5",
+      "sha256": "db5a24c107a0643fdae53e898022ccf834485480b0308d32bc410b57003e6115",
       "kind": "verification-code"
     },
     {
       "id": "release-cost-ledger",
       "path": "docs/RELEASE_COST.md",
-      "sha256": "060275ddcff314167d582984ae5a84981db0f99b509c179d24aab402d64577cf",
+      "sha256": "8b0c4826c0300e4018a12ef24de67f32b72ece08acebba3259387be2660956d0",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "268616a153643490a2a9e3f190b124c82764690ca7b15c4ffd656acf53d58573",
+      "sha256": "248626417691d69bbc67f154fc0218872993c1b5258543b99a870196c100eecb",
       "kind": "boundary-ledger"
     },
     {
@@ -403,19 +433,19 @@
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "ac4b2004a4bc8423192b2c9c28b0d0621af11c3fde1600e83aa4396da2c5783d",
+      "sha256": "23e037d4b8f1de1f9292c9f581c60e7035ff176657373172ffa44dd592add776",
       "kind": "verification-code"
     },
     {
       "id": "release-governance-ledger",
       "path": "docs/RELEASE_GOVERNANCE.md",
-      "sha256": "2f89ade0f4e5498a4a3d510dcecf73a93cdb5abbc6145d3db890974db22dbdeb",
+      "sha256": "a83f3a49f12c08d4537a12bea46568312fa1988bd3384439ce3307be9c1ec7a4",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "6f4914c8472f96acc1278984356cc40e336799b5ea6229f36a14d19fc79e0452",
+      "sha256": "e3d0f44d1f9943075a95d8587575b1af83b8dabfc8abf7937cb9b7411c817f93",
       "kind": "boundary-ledger"
     },
     {
@@ -427,19 +457,19 @@
     {
       "id": "release-governance-tests",
       "path": "test/release-governance.test.js",
-      "sha256": "6280c2564cfa71ef9b00fd1cbe85cee0bc9bd4e7347d4a5bdaae1bb89dc22e3d",
+      "sha256": "6438e03c5dd7760f020fd6b6882618830e0efc926008a55ee2f4edabf5f7f576",
       "kind": "verification-code"
     },
     {
       "id": "release-governance-verifier",
       "path": "scripts/verify-release-governance.js",
-      "sha256": "54cd36d83f7727bd287e103c3ef1cb272c7ac0b42a057210dfd140c1550ecace",
+      "sha256": "a4d25ddf606d482c57832912a4294b76f47ac9dd60cd7929d53ac9d779ac3371",
       "kind": "verification-code"
     },
     {
       "id": "release-privacy-ledger",
       "path": "docs/RELEASE_PRIVACY.md",
-      "sha256": "ca693d6547ecb67a5f7731ea32d80acc7100d3945ed3280db76d29aef5f0ff12",
+      "sha256": "2fda0cf0ce7b373d7bcdd1c4f837337b15e8dbfe8bfe8910213731eddd9eef95",
       "kind": "boundary-ledger"
     },
     {
@@ -463,43 +493,43 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "2b258e7ce0d9fc87f2089ccc7501b3dc4b26d50220b914b30fb2f027d58d7d10",
+      "sha256": "e894ab79515257b38b0fe4f1c71bc696841976b5321219b7e02e28cb2fadd403",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "ddc3516ad86a8ba20745bbc8d168f85c2af6d3730df7fb1cb74b085b4ac98f9c",
+      "sha256": "0d477be58e06be1d089ef1038ab37019b1457d10d1fbdb7d4e5c7abb2868bfdb",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "578cbed547b9173760dd9b52e10b706bfeb73a7d5b2630277592b6f319b6882a",
+      "sha256": "f382ca92aee139e701c543f30fe79a7bf0342c95b8fd9f1c5ec68069f616037d",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-rights-tests",
       "path": "test/release-rights.test.js",
-      "sha256": "e1565d2b958f69b5dde39f631a82bc088cd94bebc61935f2f3dfdb3389322ad1",
+      "sha256": "ce0e26b6bb8758ec747fad25d98346fd45be053b3e89bad6c9d545099e57f832",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-verifier",
       "path": "scripts/verify-release-rights.js",
-      "sha256": "cc9396897e855ac1e55eaa6c4aef477efe532771a2f5b77b276b7b7a0055d641",
+      "sha256": "a8d04c563581a98e68df5d4190bd27f54dd407d2290749ac4afb40a1ef9cb6dc",
       "kind": "verification-code"
     },
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "3bd57e2d68f40bfb41962b59d1d68495280d320b589f95e3c245f7a1fea41cf4",
+      "sha256": "f3e77730031fcf1ea7cbb844132bfda9eff43cb9b4b477049421988d6f5c472f",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "37fa64c9800eb774ef9c4c6469ac481e46f3c3ce51c8c004d2d98d60cfff496a",
+      "sha256": "81aabc8cbe2389d56cb52b7a825e227fec903cb9c87c9103b75885ebe9f4b27c",
       "kind": "boundary-ledger"
     },
     {
@@ -511,37 +541,37 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "a22882fc6e8d6e9984c83bd105e647c103ef8853c4485d1aee0394b718386a2f",
+      "sha256": "553297c2e2a7cb5bf36cfb83e15c48df3a3a258800bab118427524ca73f67716",
       "kind": "verification-code"
     },
     {
       "id": "release-submission-ledger",
       "path": "docs/RELEASE_SUBMISSION.md",
-      "sha256": "aa4207838410686f949638044de0ddf7f5a3d8d7b06244b1362355928b10dc13",
+      "sha256": "3400dc7d0abbb418a16cde0b870ade29f81b0af80315d65beaf51d86fc4781ff",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "3aa49eecbe0c72645326ab16323bda17b9057151a44f8eed144afa32c63049b0",
+      "sha256": "eb4d830856b358e79b86d9c5e20db463987915ebe9a71745d0136a889eb4cf23",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-submission-tests",
       "path": "test/release-submission.test.js",
-      "sha256": "1fa029901035543ae866f787ee63be8b7080601414a0bd902f4c44c7b16c50ae",
+      "sha256": "22b87e898c47f81ae0bed8f85ce326afaa23fd951ea58c0579c09a5c52d68dcd",
       "kind": "verification-code"
     },
     {
       "id": "release-submission-verifier",
       "path": "scripts/verify-release-submission.js",
-      "sha256": "458e57714883d5fd6dc58f06679831e32d395d5906131068890deb5a47684a10",
+      "sha256": "82e67b1d6a15085f4da545a8745e9eb13016cc5c7d74f516ea4f39f017633260",
       "kind": "verification-code"
     },
     {
       "id": "security-policy",
       "path": "SECURITY.md",
-      "sha256": "e024a73c8000001ef4fba9318814a423e7cf8f59e8fd74ebfe03e296d10db13b",
+      "sha256": "af5b80f836c2ce2f317987248acbff4b9bed58ea7faa30b91bd1f05c3bc9ba1d",
       "kind": "boundary-ledger"
     }
   ],
@@ -644,7 +674,7 @@
     },
     {
       "id": "outage-fail-closed",
-      "claim": "Tideproof fails closed when its memory or recovery path is unavailable.",
+      "claim": "ProofToAct fails closed when its memory or recovery path is unavailable.",
       "currentStatus": "Local broker behavior verified; deployed outage proof pending",
       "proofState": "PARTIAL",
       "artifacts": [
@@ -729,11 +759,27 @@
       "artifacts": [
         "architecture-png",
         "architecture-release-receipt",
+        "architecture-rename-receipt",
         "architecture-svg",
         "media-rights-ledger"
       ],
-      "boundary": "Only the exact V09 architecture SVG and PNG are rights-cleared for the listed public channels; no other production visual is cleared by this control.",
+      "boundary": "Only the exact V09 ProofToAct architecture SVG and PNG are rights-cleared for the listed public channels. The immutable working-name receipt and dated rename receipt jointly bind the unchanged rendered pixels and amended accessible text; no other production visual is cleared by this control.",
       "remainingRequirements": []
+    },
+    {
+      "id": "brand-migration-control",
+      "proofState": "PARTIAL",
+      "artifacts": [
+        "architecture-rename-receipt",
+        "brand-migration-ledger",
+        "brand-migration-manifest",
+        "brand-migration-tests",
+        "brand-migration-verifier"
+      ],
+      "boundary": "The exact current-source control binds Brian's approved ProofToAct name, subtitle, intended repository and package coordinates, preserved historical evidence hashes, future-versus-legacy AWS names, public current-name surfaces, old-coordinate exceptions, and the isolated domain boundary. Its pass does not prove that the external repository rename has occurred, clear a trademark, authorize provider mutation, or make stale ignored bundles deployable.",
+      "remainingRequirements": [
+        "Rename the same GitHub repository, bind the stable repository identity and current protections in a fresh sanitized observation, rerun hosted CI at the renamed coordinate, regenerate the six exact bundles, and complete final signed-out name and link review."
+      ]
     },
     {
       "id": "bundle-license-notice-control",
@@ -943,7 +989,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database Tideproof-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

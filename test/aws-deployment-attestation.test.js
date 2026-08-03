@@ -29,7 +29,7 @@ import {
 
 const ACCOUNT_ID = "111111111111";
 const REGION = "us-east-1";
-const STACK_NAME = "tideproof-gate2";
+const STACK_NAME = "prooftoact-gate2";
 const STACK_ID =
   `arn:aws:cloudformation:${REGION}:${ACCOUNT_ID}:stack/` +
   `${STACK_NAME}/11111111-1111-4111-8111-111111111111`;
@@ -58,18 +58,18 @@ const CONFIGURATION_SHA256 = "f".repeat(64);
 const PROVIDER_DEPENDENCY_TREE_DIGEST = "9".repeat(64);
 const PROVIDER_RUNTIME_SHA256 = "8".repeat(64);
 const OPERATOR_ROLE_ARN =
-  `arn:aws:iam::${ACCOUNT_ID}:role/tideproof-gate2-evidence`;
+  `arn:aws:iam::${ACCOUNT_ID}:role/prooftoact-gate2-evidence`;
 const ALTERNATE_ROLE_ARN = `${OPERATOR_ROLE_ARN}-alternate`;
 const TRUSTED_PRINCIPAL_ARN =
   `arn:aws:iam::${ACCOUNT_ID}:role/tideproof-evidence-source`;
 const OPERATOR_CALLER_ARN =
   `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
-  "tideproof-gate2-evidence/deployment-proof";
+  "prooftoact-gate2-evidence/deployment-proof";
 const OPERATOR_CALLER_USER_ID =
   "AROATIDEPROOFEVIDENCE:deployment-proof";
 const ALTERNATE_CALLER_ARN =
   `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
-  "tideproof-gate2-evidence-alternate/negative-control";
+  "prooftoact-gate2-evidence-alternate/negative-control";
 const ALTERNATE_CALLER_USER_ID =
   "AROATIDEPROOFALTERNATE:negative-control";
 
@@ -235,7 +235,7 @@ function roleSnapshot({ arn, id, policy, trustPolicy, resourceDrift = "IN_SYNC" 
     arn,
     attachedManagedPolicies: [],
     inlinePolicies: [
-      { name: "TideproofExactCapabilities", document: policy }
+      { name: "ProofToActExactCapabilities", document: policy }
     ],
     maxSessionDuration: 3600,
     permissionsBoundary: null,
@@ -243,7 +243,7 @@ function roleSnapshot({ arn, id, policy, trustPolicy, resourceDrift = "IN_SYNC" 
     roleId: id,
     tags: [
       { key: "Gate", value: "Two" },
-      { key: "Project", value: "Tideproof" }
+      { key: "Project", value: "ProofToAct" }
     ],
     trustPolicy
   };
@@ -355,7 +355,7 @@ function functionFixture(name, index, configDigest) {
       configuration,
       functionArn,
       functionName,
-      functionTags: { Gate: "Two", Project: "Tideproof" },
+      functionTags: { Gate: "Two", Project: "ProofToAct" },
       functionUrlConfigs: [],
       lastUpdateStatus: "Successful",
       numericRevisionId: `20000000-0000-4000-8000-00000000000${index}`,
@@ -448,7 +448,7 @@ function configurationFixture(functions, configDigestPlaceholder = "0".repeat(64
       databaseHost: "synthetic.cockroachlabs.cloud",
       databasePort: "26257",
       databaseSecretArn:
-        `arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:tideproof/authorizer-AbCd12`,
+        `arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:prooftoact/authorizer-AbCd12`,
       databaseSecretVersionId: "a".repeat(32),
       tenantId: "11111111-1111-4111-8111-111111111111",
       runId: "22222222-2222-4222-8222-222222222222",
@@ -694,7 +694,7 @@ function apiGatewayFixture(expectation) {
       deploymentStatus: "DEPLOYED",
       deploymentStatusMessage: "",
       description:
-        `Tideproof exact API deployment ${expectation.sourceCommit} ${expectation.configDigest}`
+        `ProofToAct exact API deployment ${expectation.sourceCommit} ${expectation.configDigest}`
     },
     api: {
       apiGatewayManaged: false,
@@ -703,7 +703,7 @@ function apiGatewayFixture(expectation) {
       apiId: HTTP_API_ID,
       corsConfiguration: {},
       description:
-        "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint.",
+        "Signed-out read-only ProofToAct demo plus an isolated IAM-authenticated advisory endpoint.",
       disableExecuteApiEndpoint: false,
       disableSchemaValidation: false,
       importInfo: [],
@@ -712,7 +712,7 @@ function apiGatewayFixture(expectation) {
       protocolType: "HTTP",
       resourceDrift: "IN_SYNC",
       routeSelectionExpression: "$request.method $request.path",
-      tags: { Gate: "Two", Project: "Tideproof" },
+      tags: { Gate: "Two", Project: "ProofToAct" },
       version: "",
       warnings: []
     },
@@ -828,7 +828,7 @@ function apiGatewayFixture(expectation) {
       },
       stageName: "$default",
       stageVariables: {},
-      tags: { Gate: "Two", Project: "Tideproof" }
+      tags: { Gate: "Two", Project: "ProofToAct" }
     }
   };
 }
@@ -1489,7 +1489,7 @@ test("an old API deployment cannot be relabeled across a stack update", () => {
   );
   assert.equal(
     changed.apiGateway.activeDeployment.description,
-    `Tideproof exact API deployment ${SOURCE_COMMIT} ${value.expectation.configDigest}`
+    `ProofToAct exact API deployment ${SOURCE_COMMIT} ${value.expectation.configDigest}`
   );
   assert.throws(
     () =>

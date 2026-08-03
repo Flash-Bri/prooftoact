@@ -1,11 +1,11 @@
 {
   "schema": "tideproof.release-governance-manifest.v1",
   "status": "CURRENT_REPOSITORY_GOVERNANCE_REVIEWED_FINAL_RECHECK_PENDING",
-  "reviewedOn": "2026-08-02",
-  "claimBoundary": "This manifest binds a sanitized historical GitHub governance observation and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.",
+  "reviewedOn": "2026-08-03",
+  "claimBoundary": "This manifest binds a sanitized historical GitHub governance observation, the approved repository rename boundary, and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.",
   "repository": {
-    "fullName": "Flash-Bri/tideproof",
-    "htmlUrl": "https://github.com/Flash-Bri/tideproof",
+    "fullName": "Flash-Bri/prooftoact",
+    "htmlUrl": "https://github.com/Flash-Bri/prooftoact",
     "visibility": "public",
     "defaultBranch": "main",
     "requiredWorkflow": "CI",
@@ -13,16 +13,28 @@
   },
   "surfaces": [
     {
+      "id": "brand-migration-ledger",
+      "path": "docs/RENAME_MIGRATION.md",
+      "role": "REPOSITORY_RENAME_BOUNDARY",
+      "sha256": "3c86d0eb8a8b44faf9e352a661a67b1ce12b231de1b2df65fb2442fd7f9a6fe9"
+    },
+    {
+      "id": "brand-migration-manifest",
+      "path": "RENAME_MIGRATION_MANIFEST.json",
+      "role": "REPOSITORY_RENAME_CONTROL",
+      "sha256": "8f243281119445d296643ec83eadb3e45b09154f043fe31df329489c4de1ac35"
+    },
+    {
       "id": "ci-workflow",
       "path": ".github/workflows/ci.yml",
       "role": "REQUIRED_CHECK_SOURCE",
-      "sha256": "12ca90ad4e144d0d7b4c747d6a6560aa9dcdd94bca724e3c671d13092f6e787d"
+      "sha256": "4111d3acd3ba11fc4b2c6a721708d6a62588705b2cbf78002d17030378518413"
     },
     {
       "id": "governance-ledger",
       "path": "docs/RELEASE_GOVERNANCE.md",
       "role": "NONFINAL_CONTROL_BOUNDARY",
-      "sha256": "2f89ade0f4e5498a4a3d510dcecf73a93cdb5abbc6145d3db890974db22dbdeb"
+      "sha256": "a83f3a49f12c08d4537a12bea46568312fa1988bd3384439ce3307be9c1ec7a4"
     },
     {
       "id": "governance-snapshot",
@@ -34,13 +46,13 @@
       "id": "public-readme",
       "path": "README.md",
       "role": "PUBLIC_PROJECT_SURFACE",
-      "sha256": "3ab210e6b6cd0a04ca5f28ca1fa863e71df95456a7e93fad08cf1ce2b349ba51"
+      "sha256": "e4e75e37d9e13df8dd26745a49520263daffae0f2def256bfabbd5b4ceb03eec"
     },
     {
       "id": "security-policy",
       "path": "SECURITY.md",
       "role": "PUBLIC_SECURITY_BOUNDARY",
-      "sha256": "e024a73c8000001ef4fba9318814a423e7cf8f59e8fd74ebfe03e296d10db13b"
+      "sha256": "af5b80f836c2ce2f317987248acbff4b9bed58ea7faa30b91bd1f05c3bc9ba1d"
     }
   ],
   "finalReleaseRequirements": [

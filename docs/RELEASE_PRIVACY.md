@@ -2,7 +2,7 @@
 
 **Status: CURRENT PUBLIC HISTORY AUTOMATED PASS — FINAL PRIVATE REVIEW PENDING**
 
-Tideproof treats repository privacy as a fail-closed release control. The
+ProofToAct treats repository privacy as a fail-closed release control. The
 automated verifier scans every current tracked file and every size-bounded Git
 blob reachable from the checked-out commit. It rejects credential-like tracked
 paths and checks a bounded set of high-confidence signatures for private keys,

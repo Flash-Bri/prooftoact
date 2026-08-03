@@ -10,7 +10,7 @@ import {
 } from "../src/cloud/admissible-vector-retrieval.js";
 import { isolatedEvidenceProcessEnvironment } from "../src/cloud/aws-evidence-identity.js";
 
-const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/tideproof.git";
+const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/prooftoact.git";
 
 function requiredEnvironment(name) {
   const value = process.env[name];

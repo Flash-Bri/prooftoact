@@ -88,7 +88,7 @@ const BRAVO_PROPOSAL = proposalFixture({
 function configureEnvironment() {
   Object.assign(process.env, {
     AUTHORITY_DATABASE_SECRET_ARN:
-      "arn:aws:secretsmanager:us-east-1:111111111111:secret:tideproof/authorizer-AbCd12",
+      "arn:aws:secretsmanager:us-east-1:111111111111:secret:prooftoact/authorizer-AbCd12",
     AUTHORITY_DATABASE_SECRET_VERSION_ID: SECRET_VERSION_ID,
     AUTHORITY_DATABASE_HOST: "synthetic.cockroachlabs.cloud",
     AUTHORITY_DATABASE_PORT: "26257",
@@ -112,9 +112,9 @@ function configureEnvironment() {
     AUTHORITY_SOURCE_DIGEST: "e".repeat(64),
     AUTHORITY_ARTIFACT_DIGEST: "f".repeat(64),
     AWS_REGION: "us-east-1",
-    AWS_LAMBDA_FUNCTION_NAME: "tideproof-gate2-authority",
+    AWS_LAMBDA_FUNCTION_NAME: "prooftoact-gate2-authority",
     AWS_LAMBDA_FUNCTION_VERSION: "7",
-    SEMANTIC_METRIC_DEPLOYMENT: "tideproof-gate2"
+    SEMANTIC_METRIC_DEPLOYMENT: "prooftoact-gate2"
   });
 }
 
@@ -131,13 +131,13 @@ test("authority semantic failures emit provider-bound EMF without authority inpu
       Timestamp: 1_785_700_000_001,
       CloudWatchMetrics: [
         {
-          Namespace: "Tideproof/GateTwo",
+          Namespace: "ProofToAct/GateTwo",
           Dimensions: [["Deployment", "Service"]],
           Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
         }
       ]
     },
-    Deployment: "tideproof-gate2",
+    Deployment: "prooftoact-gate2",
     Service: "authority",
     SemanticFailures: 1,
     schemaVersion: "tideproof.aws-semantic-failure.v1",
@@ -146,7 +146,7 @@ test("authority semantic failures emit provider-bound EMF without authority inpu
     code: "AUTHORITY_UNAVAILABLE",
     awsRequestId: "request-456",
     region: "us-east-1",
-    functionName: "tideproof-gate2-authority",
+    functionName: "prooftoact-gate2-authority",
     functionVersion: "7",
     sourceCommit: "a".repeat(40),
     configDigest: "b".repeat(64),

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createTideproofServer } from "../src/server.js";
+import { createProofToActServer } from "../src/server.js";
 
 test("serves the local health and scenario surfaces", async (context) => {
-  const server = createTideproofServer();
+  const server = createProofToActServer();
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
@@ -50,7 +50,7 @@ test("serves the local health and scenario surfaces", async (context) => {
   assert.match(page, /A TrustAgentic\.ai project/);
   assert.match(
     page,
-    /https:\/\/github\.com\/Flash-Bri\/tideproof/
+    /https:\/\/github\.com\/Flash-Bri\/prooftoact/
   );
   assert.match(page, /data-act="0"/);
   assert.match(page, /id="previous-step"/);
@@ -102,6 +102,6 @@ test("serves the local health and scenario surfaces", async (context) => {
   );
   assert.match(
     await architectureResponse.text(),
-    /Tideproof evidence, proposal, authority, and recovery boundaries/
+    /ProofToAct evidence, proposal, authority, and recovery boundaries/
   );
 });

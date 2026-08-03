@@ -109,7 +109,7 @@ export class InMemoryVectorIndex {
   }
 }
 
-export class TideproofMemory {
+export class ProofToActMemory {
   #available = true;
   #checkpoints = [];
   #clock;

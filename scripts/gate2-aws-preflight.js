@@ -119,7 +119,8 @@ function collectSnapshot(now = new Date()) {
     region,
     modelId,
     bootstrapStackName,
-    mainStackName
+    mainStackName,
+    legacyMainStackName
   } = AWS_GATE2_PREFLIGHT_DEFAULTS;
   const sourceCommit = commandText(
     "git",
@@ -283,6 +284,7 @@ function collectSnapshot(now = new Date()) {
       policy: readBucketPolicy(region, bucketName)
     },
     mainStackName,
+    legacyMainStackName,
     stackSummaries:
       awsJson(
         region,

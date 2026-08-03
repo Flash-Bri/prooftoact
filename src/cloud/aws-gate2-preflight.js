@@ -2,6 +2,8 @@ import { validateAwsEvidenceCaller } from "./aws-evidence-identity.js";
 
 const EXPECTED_REGION = "us-east-1";
 const EXPECTED_MODEL_ID = "amazon.nova-micro-v1:0";
+const EXPECTED_MAIN_STACK_NAME = "prooftoact-gate2";
+const LEGACY_MAIN_STACK_NAME = "tideproof-gate2";
 const EXPECTED_BUDGET_USD = 15;
 const TOTAL_PROJECT_EXPOSURE_CEILING_USD = 25;
 const RECORDED_NON_AWS_SPEND_USD = 11.86;
@@ -539,12 +541,27 @@ export function validateAwsGate2Preflight(
     snapshot?.notificationSubscribers
   );
 
-  const mainStacks = asArray(snapshot?.stackSummaries).filter(
-    (stack) =>
-      stack?.StackName === snapshot?.mainStackName &&
-      stack?.StackStatus !== "DELETE_COMPLETE"
+  requireCondition(
+    snapshot?.mainStackName === EXPECTED_MAIN_STACK_NAME,
+    "MAIN_STACK_NAME"
   );
-  requireCondition(mainStacks.length === 0, "MAIN_STACK_ALREADY_PRESENT");
+  requireCondition(
+    snapshot?.legacyMainStackName === LEGACY_MAIN_STACK_NAME,
+    "LEGACY_MAIN_STACK_NAME"
+  );
+  const activeStackNames = new Set(
+    asArray(snapshot?.stackSummaries)
+      .filter((stack) => stack?.StackStatus !== "DELETE_COMPLETE")
+      .map((stack) => stack?.StackName)
+  );
+  requireCondition(
+    !activeStackNames.has(snapshot.mainStackName),
+    "MAIN_STACK_ALREADY_PRESENT"
+  );
+  requireCondition(
+    !activeStackNames.has(snapshot.legacyMainStackName),
+    "LEGACY_MAIN_STACK_ALREADY_PRESENT"
+  );
 
   const artifactBucket = validateArtifactBucket(
     snapshot?.artifactBucket,
@@ -579,7 +596,7 @@ export function validateAwsGate2Preflight(
   );
 
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v4",
+    schemaVersion: "tideproof.gate2.aws-preflight.v5",
     status: "PASS",
     observedAt: snapshot.observedAt,
     sourceCommit: snapshot.sourceCommit,
@@ -628,14 +645,16 @@ export function validateAwsGate2Preflight(
       artifactBucket,
       mainGateTwoStack: {
         name: snapshot.mainStackName,
-        state: "ABSENT"
+        state: "ABSENT",
+        legacyName: snapshot.legacyMainStackName,
+        legacyState: "ABSENT"
       },
       bedrock
     },
     privacy:
       "AWS account, caller ARN, expected principal ARN, bucket name, and subscriber addresses were validated but omitted; only caller-binding digests are public.",
     claimBoundary:
-      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
+      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It rejects both the ProofToAct main stack name and the former working-name main stack before a fresh create. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
   };
 }
 
@@ -643,7 +662,8 @@ export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({
   region: EXPECTED_REGION,
   modelId: EXPECTED_MODEL_ID,
   bootstrapStackName: "tideproof-gate2-artifacts",
-  mainStackName: "tideproof-gate2",
+  mainStackName: EXPECTED_MAIN_STACK_NAME,
+  legacyMainStackName: LEGACY_MAIN_STACK_NAME,
   budgetCeilingUsd: EXPECTED_BUDGET_USD,
   totalProjectExposureCeilingUsd:
     TOTAL_PROJECT_EXPOSURE_CEILING_USD,

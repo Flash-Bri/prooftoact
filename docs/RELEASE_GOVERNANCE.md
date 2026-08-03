@@ -18,6 +18,15 @@ At `2026-08-01T01:45:38Z`, the GitHub API reported the following for public repo
 
 The snapshot contains no credentials, request identifiers, account identifiers, email addresses, billing data, or private repository data.
 
+This checkpoint intentionally retains the former repository coordinate. Brian
+approved the ProofToAct rename on 2026-08-03; the current repository coordinate
+is `Flash-Bri/prooftoact`. A new sanitized post-rename observation must bind
+that coordinate to the same stable repository identity, current protection,
+security settings, and hosted CI. The historical snapshot remains immutable.
+The approved name, target coordinate, preserved identifiers, and no-touch
+boundaries are machine-bound by `RENAME_MIGRATION_MANIFEST.json` and
+`docs/RENAME_MIGRATION.md` while that transition is in progress.
+
 ## Fail-closed interpretation
 
 `npm run governance:verify` verifies canonical snapshot and manifest structure, exact reviewed settings, exact surface hashes, the required local CI job identity, the repository's public source coordinates, and the explicit non-final boundary. A pass means only `CURRENT_REPOSITORY_GOVERNANCE_PASS`.

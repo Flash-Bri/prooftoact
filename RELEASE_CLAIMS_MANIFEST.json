@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-claims-manifest.v1",
   "status": "CURRENT_PUBLIC_CLAIMS_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-02",
+  "reviewedOn": "2026-08-03",
   "claimBoundary": "This inventory binds only the current public claim surfaces to reviewed pending-state copy. It does not prove claim truth, authorize deployment or publication, or replace the exact-release private human review.",
   "finalReleaseRequirements": [
     "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
@@ -12,13 +12,13 @@
       "id": "architecture-boundary",
       "path": "docs/ARCHITECTURE.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "d8a8a7201888012d42a98fdc9df8e0e5871cef9bc1238644a1b60d187cf73af6"
+      "sha256": "0ad0fc511b478aa236ff3f7c6bc0a9e9d564902153ef160870c972ca7b946032"
     },
     {
       "id": "aws-boundary",
       "path": "docs/AWS_GATE2.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "ac08dcd8ed3b56838180da56ad7b087d95d8ba5073909ef6c874716fc3cd99a1"
+      "sha256": "ff81c363671e38db9ddc2905b5e39ecd1d838ca1bbd505855d15a9107d380505"
     },
     {
       "id": "aws-demo-entry",
@@ -36,13 +36,13 @@
       "id": "browser-document",
       "path": "web/index.html",
       "role": "PUBLIC_BROWSER",
-      "sha256": "81b621e6073daa3f465fefe73389719da4c399f1b7a88d5b261cc8fe7a1b07a8"
+      "sha256": "cd64c1c28d8ba0df44d49827102d91335c653056c6dbb2b8585d10130c389b21"
     },
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "158738530654541c65ccef58127d4665538a0e4b5555ca27c40e4f76697a05d4"
+      "sha256": "5c80c2c3d2e9da6151794eecf0f2bda17f2c30bd4d91246350a5756d389bb9d7"
     },
     {
       "id": "contest-matrix",
@@ -60,13 +60,13 @@
       "id": "public-demo-runtime",
       "path": "src/cloud/public-demo.js",
       "role": "AWS_PUBLIC_RUNTIME",
-      "sha256": "ad80c8225a543e93af5b59195f730609cb4e79112035b1cbbc78908e0b202273"
+      "sha256": "62d3af48176b92cb6e02731887ed6e628d809a7785955ddd90e0512bb1ef4d8b"
     },
     {
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "3ab210e6b6cd0a04ca5f28ca1fa863e71df95456a7e93fad08cf1ce2b349ba51"
+      "sha256": "e4e75e37d9e13df8dd26745a49520263daffae0f2def256bfabbd5b4ceb03eec"
     },
     {
       "id": "release-claims-ledger",
@@ -78,13 +78,13 @@
       "id": "scenario-source",
       "path": "src/scenario.js",
       "role": "SCENARIO_SOURCE",
-      "sha256": "d9b85729b16c334ce5720b2a9c51a550c37c3b6f8b03e6c147e0c7888838dc7f"
+      "sha256": "3321258d3e9f119f19b2444ab2968351008135452af277557d6ab5f00ccfaea3"
     },
     {
       "id": "submission-packet",
       "path": "docs/SUBMISSION_PACKET.md",
       "role": "SUBMISSION_DRAFT",
-      "sha256": "74c5678718fcb788025d0636020b0d50bc21effdd373c134236d5ffd17236eac"
+      "sha256": "d0cf2916c18f224ea60f5b1003bc2c73694b67296e96efa8968dace9b753be15"
     }
   ],
   "finalReleaseReady": false

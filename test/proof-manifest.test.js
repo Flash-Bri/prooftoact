@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import {
+  copyFileSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -90,6 +93,26 @@ function makeFixture() {
   return { rootDir, manifest, manifestPath };
 }
 
+function makeRepositoryFixture() {
+  const rootDir = mkdtempSync(path.join(tmpdir(), "prooftoact-proof-repo-"));
+  const trackedFiles = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    { cwd: ROOT }
+  )
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean);
+  for (const relativePath of trackedFiles) {
+    const destination = path.join(rootDir, relativePath);
+    mkdirSync(path.dirname(destination), { recursive: true });
+    copyFileSync(path.join(ROOT, relativePath), destination);
+  }
+  execFileSync("git", ["init", "-q"], { cwd: rootDir });
+  execFileSync("git", ["add", "--", "."], { cwd: rootDir });
+  return rootDir;
+}
+
 test("current proof manifest binds every claim and exact artifact", () => {
   const receipt = verifyProofManifest({ rootDir: ROOT });
 
@@ -101,9 +124,34 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 90);
-  assert.equal(receipt.releaseControlCount, 16);
+  assert.equal(receipt.artifactCount, 95);
+  assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
+});
+
+test("proof manifest propagates nested brand-migration failure", () => {
+  const rootDir = makeRepositoryFixture();
+  try {
+    const migrationPath = path.join(rootDir, "RENAME_MIGRATION_MANIFEST.json");
+    const migration = JSON.parse(readFileSync(migrationPath, "utf8"));
+    migration.futureAwsMainStack = "wrong-stack";
+    const migrationBytes = `${JSON.stringify(migration, null, 2)}\n`;
+    writeFileSync(migrationPath, migrationBytes);
+
+    const proofPath = path.join(rootDir, "PROOF_MANIFEST.json");
+    const proof = JSON.parse(readFileSync(proofPath, "utf8"));
+    proof.artifacts.find(
+      (artifact) => artifact.id === "brand-migration-manifest"
+    ).sha256 = sha256(migrationBytes);
+    writeFileSync(proofPath, `${JSON.stringify(proof, null, 2)}\n`);
+
+    assert.throws(
+      () => verifyProofManifest({ rootDir }),
+      /proof manifest nested brand-migration verification failed/
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
 });
 
 test("release copy matches executable and generated source contracts", () => {

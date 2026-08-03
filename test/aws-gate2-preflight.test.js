@@ -159,7 +159,8 @@ function validSnapshot() {
         ]
       }
     },
-    mainStackName: "tideproof-gate2",
+    mainStackName: "prooftoact-gate2",
+    legacyMainStackName: "tideproof-gate2",
     stackSummaries: [
       {
         StackName: "deleted-unrelated-stack",
@@ -202,7 +203,7 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   assert.equal(receipt.status, "PASS");
   assert.equal(
     receipt.schemaVersion,
-    "tideproof.gate2.aws-preflight.v4"
+    "tideproof.gate2.aws-preflight.v5"
   );
   assert.equal(
     receipt.controls.budget.conservativeObservedActualUsd,
@@ -572,6 +573,18 @@ test("AWS Gate Two preflight rejects an existing main stack", () => {
   assert.throws(
     () => validateAwsGate2Preflight(snapshot),
     /MAIN_STACK_ALREADY_PRESENT/
+  );
+});
+
+test("AWS Gate Two preflight rejects a legacy working-name main stack", () => {
+  const snapshot = validSnapshot();
+  snapshot.stackSummaries.push({
+    StackName: snapshot.legacyMainStackName,
+    StackStatus: "CREATE_COMPLETE"
+  });
+  assert.throws(
+    () => validateAwsGate2Preflight(snapshot),
+    /LEGACY_MAIN_STACK_ALREADY_PRESENT/
   );
 });
 

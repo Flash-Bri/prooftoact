@@ -55,7 +55,7 @@ test("current Devpost draft remains safely and explicitly blocked", () => {
   const receipt = verifyReleaseSubmission({ rootDir: ROOT });
   assert.equal(receipt.status, "DRAFT_SAFELY_BLOCKED");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 7);
+  assert.equal(receipt.surfaceCount, 10);
   assert.equal(receipt.checklistItemCount, 14);
   assert.equal(receipt.uncheckedChecklistItemCount, 14);
   assert.equal(receipt.stopTokenOccurrenceCount, 13);
@@ -113,7 +113,7 @@ test("submission packet rejects missing or unknown stop tokens", () => {
 
 test("submission packet rejects release-coordinate drift", () => {
   const changed = packetSource().replace(
-    "| Public source | https://github.com/Flash-Bri/tideproof |",
+    "| Public source | https://github.com/Flash-Bri/prooftoact |",
     "| Public source | https://example.invalid/tideproof |"
   );
   assert.throws(

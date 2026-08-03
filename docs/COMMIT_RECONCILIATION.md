@@ -2,7 +2,7 @@
 
 Status: `SOURCE_RUNTIME_BOUND_PROVIDER_VALIDATION_PENDING`
 
-Tideproof treats a lost database acknowledgement as an unknown observation,
+ProofToAct treats a lost database acknowledgement as an unknown observation,
 not permission to repeat a logical act. The source-level authority, signed
 ingest, DVI preparation, recovery publication, and recovery-audit paths now
 return one nested `tideproof.database-commit-result.v1` envelope after either a
@@ -64,7 +64,7 @@ that was already present.
 Denied receipts and expired or superseded positive receipts are durable
 history, not reusable authority. They set
 `authority.requiresFreshAuthorization` to `true`. The database-owned epoch
-cannot be supplied, incremented, or reset by a client. Tideproof still has no
+cannot be supplied, incremented, or reset by a client. ProofToAct still has no
 later-epoch transition: an independently authenticated explicit
 new-authorization receipt must be designed, reviewed, and proven before any
 epoch after one can exist.
@@ -140,7 +140,7 @@ epoch after one can exist.
 - Verification: focused authority and shared-schema tests pass.
 - Residual risk: the authenticated later-epoch authorization transition is
   intentionally absent.
-- Claim impact: Tideproof claims a fail-closed stop, not automatic renewal.
+- Claim impact: ProofToAct claims a fail-closed stop, not automatic renewal.
 
 ### PostgreSQL timestamp decoder mismatch
 

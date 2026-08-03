@@ -333,7 +333,7 @@ test("authority race accepts only the generated dedicated caller-role shape", ()
   const accountId = "111111111111";
   const dedicated =
     `arn:aws:iam::${accountId}:role/` +
-    "tideproof-gate2-AuthorityRaceCallerRole-A1B2C3D4";
+    "prooftoact-gate2-AuthorityRaceCallerRole-A1B2C3D4";
   assert.equal(
     validateAuthorityRaceExpectedPrincipal(accountId, dedicated),
     dedicated
@@ -342,7 +342,7 @@ test("authority race accepts only the generated dedicated caller-role shape", ()
     `arn:aws:iam::${accountId}:role/Admin`,
     `arn:aws:iam::${accountId}:role/AuthorityRaceCallerRole`,
     `arn:aws:iam::222222222222:role/` +
-      "tideproof-gate2-AuthorityRaceCallerRole-A1B2C3D4"
+      "prooftoact-gate2-AuthorityRaceCallerRole-A1B2C3D4"
   ]) {
     assert.throws(
       () => validateAuthorityRaceExpectedPrincipal(accountId, untrusted),
@@ -354,13 +354,13 @@ test("authority race accepts only the generated dedicated caller-role shape", ()
 test("authority race derives its expected role from the exact stack resource", () => {
   const accountId = "111111111111";
   const physicalRoleName =
-    "tideproof-gate2-AuthorityRaceCallerRole-A1B2C3D4";
+    "prooftoact-gate2-AuthorityRaceCallerRole-A1B2C3D4";
   const response = {
     StackResourceDetail: {
-      StackName: "tideproof-gate2",
+      StackName: "prooftoact-gate2",
       StackId:
         `arn:aws:cloudformation:us-east-1:${accountId}:stack/` +
-        "tideproof-gate2/11111111-1111-4111-8111-111111111111",
+        "prooftoact-gate2/11111111-1111-4111-8111-111111111111",
       LogicalResourceId: "AuthorityRaceCallerRole",
       PhysicalResourceId: physicalRoleName,
       ResourceType: "AWS::IAM::Role",

@@ -37,10 +37,10 @@ test("Gate Two probe evidence uses a disposable create-only stack", () => {
 
   assert.equal(
     description,
-    "Set true only on an initial disposable probe stack. Final tideproof-gate2 stack must be freshly created with false and never updated."
+    "Set true only on an initial disposable probe stack. Final prooftoact-gate2 stack must be freshly created with false and never updated."
   );
   const orderedMarkers = [
-    "disposable `tideproof-gate2-probe` stack",
+    "disposable `prooftoact-gate2-probe` stack",
     "`EnableProbeFunctions=true`",
     "Delete the disposable probe stack",
     "`DELETE_COMPLETE`",
@@ -48,7 +48,7 @@ test("Gate Two probe evidence uses a disposable create-only stack", () => {
     "`PendingDeletion`",
     "must not be canceled or reused",
     "Recompute the final configuration digest",
-    "fresh `tideproof-gate2` main stack",
+    "fresh `prooftoact-gate2` main stack",
     "`EnableProbeFunctions=false`",
     "must never be updated"
   ];
@@ -122,9 +122,9 @@ function configureTestEnvironment() {
     PACKAGE_LOCK_DIGEST: "d".repeat(64),
     BEDROCK_MODEL_ID: "amazon.nova-micro-v1:0",
     AWS_REGION: "us-east-1",
-    AWS_LAMBDA_FUNCTION_NAME: "tideproof-gate2-boundary",
+    AWS_LAMBDA_FUNCTION_NAME: "prooftoact-gate2-boundary",
     AWS_LAMBDA_FUNCTION_VERSION: "7",
-    SEMANTIC_METRIC_DEPLOYMENT: "tideproof-gate2",
+    SEMANTIC_METRIC_DEPLOYMENT: "prooftoact-gate2",
     AGENT_FUNCTION_VERSION: "3",
     SIGNER_FUNCTION_VERSION: "5",
     AGENT_FUNCTION_ARN: "arn:aws:lambda:us-east-1:111:function:agent:11",
@@ -153,13 +153,13 @@ test("boundary semantic failures emit provider-bound EMF without request data", 
       Timestamp: 1_785_700_000_000,
       CloudWatchMetrics: [
         {
-          Namespace: "Tideproof/GateTwo",
+          Namespace: "ProofToAct/GateTwo",
           Dimensions: [["Deployment", "Service"]],
           Metrics: [{ Name: "SemanticFailures", Unit: "Count" }]
         }
       ]
     },
-    Deployment: "tideproof-gate2",
+    Deployment: "prooftoact-gate2",
     Service: "boundary",
     SemanticFailures: 1,
     schemaVersion: "tideproof.aws-semantic-failure.v1",
@@ -168,7 +168,7 @@ test("boundary semantic failures emit provider-bound EMF without request data", 
     code: "ADVISORY_UNAVAILABLE",
     awsRequestId: "request-123",
     region: "us-east-1",
-    functionName: "tideproof-gate2-boundary",
+    functionName: "prooftoact-gate2-boundary",
     functionVersion: "7",
     sourceCommit: HEX_40,
     configDigest: HEX_64,
@@ -1647,7 +1647,7 @@ test("effective config digest changes with every deployment control", () => {
       databaseHost: "synthetic.cockroachlabs.cloud",
       databasePort: "26257",
       databaseSecretArn:
-        "arn:aws:secretsmanager:us-east-1:111111111111:secret:tideproof/authorizer-AbCd12",
+        "arn:aws:secretsmanager:us-east-1:111111111111:secret:prooftoact/authorizer-AbCd12",
       databaseSecretVersionId: "a".repeat(32),
       tenantId: "11111111-1111-4111-8111-111111111111",
       runId: "22222222-2222-4222-8222-222222222222",
@@ -1684,7 +1684,7 @@ test("effective config digest changes with every deployment control", () => {
       signer: 1
     },
     sourceCommit: HEX_40,
-    stackName: "tideproof-gate2",
+    stackName: "prooftoact-gate2",
     templateDigest: templateReceipt(buildGate2Template()).templateDigest,
     throttle: {
       advisory: { burst: 1, rate: 0.1 },

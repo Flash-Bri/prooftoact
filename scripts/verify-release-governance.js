@@ -15,8 +15,8 @@ const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
 
 const EXPECTED_REPOSITORY = Object.freeze({
-  fullName: "Flash-Bri/tideproof",
-  htmlUrl: "https://github.com/Flash-Bri/tideproof",
+  fullName: "Flash-Bri/prooftoact",
+  htmlUrl: "https://github.com/Flash-Bri/prooftoact",
   visibility: "public",
   defaultBranch: "main",
   requiredWorkflow: "CI",
@@ -90,12 +90,20 @@ const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
 ]);
 
 const EXPECTED_MANIFEST_BOUNDARY =
-  "This manifest binds a sanitized historical GitHub governance observation and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.";
+  "This manifest binds a sanitized historical GitHub governance observation, the approved repository rename boundary, and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.";
 
 const EXPECTED_SNAPSHOT_BOUNDARY =
   "This sanitized snapshot records read-only GitHub API observations at one time for one commit. It does not prove that settings remain unchanged, require a human approval, establish vulnerability absence, authorize deployment or submission, or replace final signed-out repository and governance review.";
 
 const EXPECTED_SURFACES = Object.freeze({
+  "brand-migration-ledger": Object.freeze({
+    path: "docs/RENAME_MIGRATION.md",
+    role: "REPOSITORY_RENAME_BOUNDARY"
+  }),
+  "brand-migration-manifest": Object.freeze({
+    path: "RENAME_MIGRATION_MANIFEST.json",
+    role: "REPOSITORY_RENAME_CONTROL"
+  }),
   "ci-workflow": Object.freeze({
     path: ".github/workflows/ci.yml",
     role: "REQUIRED_CHECK_SOURCE"

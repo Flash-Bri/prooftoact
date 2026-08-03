@@ -60,7 +60,7 @@ test("current repository governance snapshot matches its non-final boundary", ()
   const receipt = verifyReleaseGovernance({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_REPOSITORY_GOVERNANCE_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 5);
+  assert.equal(receipt.surfaceCount, 7);
   assert.equal(receipt.requiredCheckCount, 1);
   assert.equal(receipt.requiredApprovingReviewCount, 0);
   assert.equal(receipt.finalReleaseRequirements.length, 3);

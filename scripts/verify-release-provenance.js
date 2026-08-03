@@ -23,7 +23,7 @@ import {
 import { verifyReleaseSubmission } from "./verify-release-submission.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/tideproof.git";
+const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/prooftoact.git";
 const EXPECTED_BRANCH = "main";
 const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
 const SCHEMA = "tideproof.release-provenance.v8";

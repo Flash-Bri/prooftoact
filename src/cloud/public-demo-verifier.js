@@ -413,7 +413,7 @@ function validateRootDisclosure(body) {
   const required = [
     "Synthetic scenario · Not operational emergency software",
     "A TrustAgentic.ai project",
-    "https://github.com/Flash-Bri/tideproof",
+    "https://github.com/Flash-Bri/prooftoact",
     "id=\"gate-two-proof-state\""
   ];
   if (!required.every((value) => html.includes(value))) {

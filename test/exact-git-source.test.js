@@ -55,7 +55,7 @@ test("Gate Two bundling reads project inputs from immutable Git blobs", async ()
   );
   try {
     git(rootDir, "init", "--quiet");
-    git(rootDir, "config", "user.name", "Tideproof Test");
+    git(rootDir, "config", "user.name", "ProofToAct Test");
     git(rootDir, "config", "user.email", "tideproof@invalid");
     fs.writeFileSync(
       path.join(rootDir, "entry.js"),
@@ -149,7 +149,7 @@ test("exact checkout validation rejects hidden index mutations", () => {
   );
   try {
     git(rootDir, "init", "--quiet");
-    git(rootDir, "config", "user.name", "Tideproof Test");
+    git(rootDir, "config", "user.name", "ProofToAct Test");
     git(rootDir, "config", "user.email", "tideproof@invalid");
     fs.writeFileSync(path.join(rootDir, "entry.js"), "export default 1;\n");
     git(rootDir, "add", "entry.js");
@@ -210,7 +210,7 @@ test("exact Git bundling rejects every non-dependency path escape", async () => 
   try {
     fs.mkdirSync(repositoryRoot);
     git(repositoryRoot, "init", "--quiet");
-    git(repositoryRoot, "config", "user.name", "Tideproof Test");
+    git(repositoryRoot, "config", "user.name", "ProofToAct Test");
     git(repositoryRoot, "config", "user.email", "tideproof@invalid");
     fs.writeFileSync(outsidePath, "export default 'outside bytes';\n");
     fs.writeFileSync(
@@ -321,7 +321,7 @@ test("exact build rejects committed checkout transforms", () => {
   );
   try {
     git(rootDir, "init", "--quiet");
-    git(rootDir, "config", "user.name", "Tideproof Test");
+    git(rootDir, "config", "user.name", "ProofToAct Test");
     git(rootDir, "config", "user.email", "tideproof@invalid");
     fs.writeFileSync(path.join(rootDir, ".gitattributes"), "*.js ident\n");
     fs.writeFileSync(path.join(rootDir, "entry.js"), "export default 1;\n");
@@ -359,7 +359,7 @@ test("exact build rejects case-variant checkout transforms", () => {
     );
     try {
       git(rootDir, "init", "--quiet");
-      git(rootDir, "config", "user.name", "Tideproof Test");
+      git(rootDir, "config", "user.name", "ProofToAct Test");
       git(rootDir, "config", "user.email", "tideproof@invalid");
       fs.writeFileSync(path.join(rootDir, filename), "hostile=true\n");
       fs.writeFileSync(path.join(rootDir, "entry.js"), "export default 1;\n");

@@ -20,8 +20,8 @@ const EXPECTED_COORDINATES = Object.freeze({
   license: "MIT",
   officialDeadline: "2026-08-18 at 5:00 PM ET",
   officialPageCheckDate: "2026-07-30",
-  projectName: "Tideproof",
-  publicSource: "https://github.com/Flash-Bri/tideproof",
+  projectName: "ProofToAct",
+  publicSource: "https://github.com/Flash-Bri/prooftoact",
   subtitle: "Admissibility memory for high-stakes agents"
 });
 
@@ -65,6 +65,14 @@ const EXPECTED_STOP_TOKENS = Object.freeze([
 ]);
 
 const EXPECTED_SURFACES = Object.freeze({
+  "brand-migration-ledger": Object.freeze({
+    path: "docs/RENAME_MIGRATION.md",
+    role: "APPROVED_RENAME_BOUNDARY"
+  }),
+  "brand-migration-manifest": Object.freeze({
+    path: "RENAME_MIGRATION_MANIFEST.json",
+    role: "APPROVED_RENAME_CONTROL"
+  }),
   "claims-ledger": Object.freeze({
     path: "CLAIMS.md",
     role: "CLAIMS_BOUNDARY"
@@ -72,6 +80,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "contest-matrix": Object.freeze({
     path: "docs/CONTEST_MATRIX.md",
     role: "CONTEST_REQUIREMENT_MATRIX"
+  }),
+  "prior-art-ledger": Object.freeze({
+    path: "docs/PRIOR_ART.md",
+    role: "NAMING_AND_ORIGINALITY_BOUNDARY"
   }),
   "release-claims-manifest": Object.freeze({
     path: "RELEASE_CLAIMS_MANIFEST.json",
@@ -308,6 +320,43 @@ export function parseSubmissionPacket(source) {
 }
 
 function assertSupportingSurfaces(sources) {
+  const migrationLedger = normalizeWhitespace(
+    sources.get("brand-migration-ledger")
+  );
+  assert(
+    migrationLedger.includes("Approved public name: **ProofToAct**") &&
+      migrationLedger.includes(
+        "Approved line: **ProofToAct: Admissibility Memory for High-Stakes Agents**"
+      ) &&
+      migrationLedger.includes("Preserve old receipts as historical evidence") &&
+      migrationLedger.includes("performs no AWS deployment"),
+    "RELEASE_SUBMISSION_RENAME_LEDGER_BOUNDARY"
+  );
+
+  let migrationManifest;
+  try {
+    migrationManifest = JSON.parse(sources.get("brand-migration-manifest"));
+  } catch {
+    throw new Error("RELEASE_SUBMISSION_RENAME_MANIFEST_JSON");
+  }
+  assert(
+    migrationManifest?.schema === "prooftoact.rename-migration.v1" &&
+      migrationManifest.status === "SOURCE_MIGRATION_IN_PROGRESS" &&
+      migrationManifest.approvedName === EXPECTED_COORDINATES.projectName &&
+      migrationManifest.repository === EXPECTED_COORDINATES.publicSource &&
+      Array.isArray(migrationManifest.evidenceBaseline) &&
+      migrationManifest.evidenceBaseline.length === 20,
+    "RELEASE_SUBMISSION_RENAME_MANIFEST_BOUNDARY"
+  );
+
+  const priorArt = normalizeWhitespace(sources.get("prior-art-ledger"));
+  assert(
+    priorArt.includes("ProofToAct decision — 2026-08-03") &&
+      priorArt.includes("bounded hackathon naming decision") &&
+      priorArt.includes("not legal advice or trademark clearance"),
+    "RELEASE_SUBMISSION_PRIOR_ART_BOUNDARY"
+  );
+
   const contest = normalizeWhitespace(sources.get("contest-matrix"));
   assert(
     contest.includes(`Deadline: ${EXPECTED_COORDINATES.officialDeadline}.`) &&

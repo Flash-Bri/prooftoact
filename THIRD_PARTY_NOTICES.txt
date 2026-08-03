@@ -1,4 +1,4 @@
-TIDEPROOF BUNDLED THIRD-PARTY NOTICES
+PROOFTOACT BUNDLED THIRD-PARTY NOTICES
 
 This file is generated deterministically from the exact integrity-locked npm
 packages whose source is present in the six Gate Two Lambda bundles and the
@@ -11,7 +11,7 @@ This is a provenance and distribution control, not legal advice. A final audit
 must still bind the exact release commit, installed tree, deployed ZIP hashes,
 vulnerability report, repository history, and any changed upstream metadata.
 
-Package lock SHA-256: b0fa37a180101a5144848b4b1b73e5a98ef6c5d0d55b9195d7ecae0b1310a4df
+Package lock SHA-256: 923be53e7c071361591b13ef4ed22abe6e2d5464184c8a51d7561c6440913e85
 Bundled package union: 46
 Distinct normalized license texts: 17
 Explicit published-package fallbacks: 5

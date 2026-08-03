@@ -192,8 +192,8 @@ function claimsReceipt() {
       "https://cockroachdb-ai.devpost.com/",
       "https://cockroachdb-ai.devpost.com/resources",
       "https://cockroachdb-ai.devpost.com/rules",
-      "https://github.com/Flash-Bri/tideproof",
-      "https://github.com/Flash-Bri/tideproof.git"
+      "https://github.com/Flash-Bri/prooftoact",
+      "https://github.com/Flash-Bri/prooftoact.git"
     ],
     finalReleaseRequirements: [
       "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",

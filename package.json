@@ -1,5 +1,5 @@
 {
-  "name": "tideproof-admissibility-memory",
+  "name": "prooftoact-admissibility-memory",
   "version": "0.1.0",
   "packageManager": "npm@10.9.8",
   "private": true,
@@ -11,6 +11,7 @@
   "scripts": {
     "accessibility:browser": "\"$npm_node_execpath\" scripts/verify-browser-accessibility.js",
     "accessibility:verify": "\"$npm_node_execpath\" scripts/verify-accessibility.js",
+    "brand:verify": "\"$npm_node_execpath\" scripts/verify-brand-migration.js",
     "build:gate2": "\"$npm_node_execpath\" scripts/build-gate2-exact.js",
     "claims:verify": "\"$npm_node_execpath\" scripts/verify-release-claims.js",
     "cost:verify": "\"$npm_node_execpath\" scripts/verify-release-cost.js",

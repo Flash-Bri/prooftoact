@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   EvidenceStatus,
   MemoryUnavailableError,
-  TideproofMemory
+  ProofToActMemory
 } from "../src/protocol.js";
 
 const NOW = "2026-08-01T12:00:00.000Z";
@@ -29,7 +29,7 @@ function record(overrides) {
 }
 
 test("filters provenance, validity, and scope before vector ranking", () => {
-  const memory = new TideproofMemory({ clock: () => NOW });
+  const memory = new ProofToActMemory({ clock: () => NOW });
 
   memory.ingestEvidence(
     record({
@@ -78,7 +78,7 @@ test("filters provenance, validity, and scope before vector ranking", () => {
 });
 
 test("preserves conflict and denies action authorization", () => {
-  const memory = new TideproofMemory({ clock: () => NOW });
+  const memory = new ProofToActMemory({ clock: () => NOW });
   const open = memory.ingestEvidence(
     record({
       id: "road-open",
@@ -131,7 +131,7 @@ test("preserves conflict and denies action authorization", () => {
 });
 
 test("allows exactly one local resource-race winner", async () => {
-  const memory = new TideproofMemory({ clock: () => NOW });
+  const memory = new ProofToActMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
 
   const attempts = await Promise.all(
@@ -179,7 +179,7 @@ function containsForbiddenCapabilityKey(value) {
 }
 
 test("successor recovers context without capabilities and replay is digest-bound", () => {
-  const memory = new TideproofMemory({ clock: () => NOW });
+  const memory = new ProofToActMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
   const original = memory.reserveResource({
     operationId: "operation-alpha",
@@ -246,7 +246,7 @@ test("successor recovers context without capabilities and replay is digest-bound
 });
 
 test("successor recovery is bound to the checkpoint's explicit receipt summary", () => {
-  const memory = new TideproofMemory({ clock: () => NOW });
+  const memory = new ProofToActMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
   for (const [operationId, resourceId] of [
     ["operation-old", "rescue-unit-old"],
@@ -291,7 +291,7 @@ test("successor recovery is bound to the checkpoint's explicit receipt summary",
 test("checkpoint receipt digests bind the full durable receipt", () => {
   const checkpoints = ["operation-alpha", "operation-bravo"].map(
     (operationId) => {
-      const memory = new TideproofMemory({ clock: () => NOW });
+      const memory = new ProofToActMemory({ clock: () => NOW });
       const accepted = memory.ingestEvidence(record({ id: "capacity" }));
       memory.reserveResource({
         operationId,
@@ -321,7 +321,7 @@ test("checkpoint receipt digests bind the full durable receipt", () => {
 });
 
 test("checkpointing fails closed for ambiguous receipts and unsafe evidence ids", () => {
-  const memory = new TideproofMemory({ clock: () => NOW });
+  const memory = new ProofToActMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
   for (const operationId of ["operation-one", "operation-two"]) {
     memory.reserveResource({
@@ -389,7 +389,7 @@ test("checkpointing fails closed for ambiguous receipts and unsafe evidence ids"
 });
 
 test("fails closed when memory is unavailable", () => {
-  const memory = new TideproofMemory({ clock: () => NOW });
+  const memory = new ProofToActMemory({ clock: () => NOW });
   const accepted = memory.ingestEvidence(record({ id: "capacity" }));
   memory.setAvailable(false);
 

@@ -125,7 +125,7 @@ concurrency, the 100-run harness, or any live evidence.
   decisions plus cross-contender drift. Provider execution remains pending.
 - Residual risk: a source-equal binding is not live DVI-to-AWS evidence until
   the exact provider receipt matches the accepted DVI proof and batch.
-- Claim impact: Tideproof may claim source-level shared DVI identity across the
+- Claim impact: ProofToAct may claim source-level shared DVI identity across the
   two race contenders; no live handoff, concurrency, or exactly-once claim is
   added.
 

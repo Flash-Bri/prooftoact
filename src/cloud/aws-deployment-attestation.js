@@ -59,11 +59,11 @@ const REVISION_ID =
 const ROLE_ID = /^[A-Z0-9]{16,128}$/;
 const EXPECTED_RESOURCE_TAGS = Object.freeze({
   Gate: "Two",
-  Project: "Tideproof"
+  Project: "ProofToAct"
 });
 const EXPECTED_ROLE_TAGS = Object.freeze([
   Object.freeze({ key: "Gate", value: "Two" }),
-  Object.freeze({ key: "Project", value: "Tideproof" })
+  Object.freeze({ key: "Project", value: "ProofToAct" })
 ]);
 const SNAPSHOT_CLAIM_BOUNDARY =
   "This signed receipt validates one revision-fenced AWS deployment snapshot for the five primary runtime functions, their shared roles, the two evidence roles, and the exact HTTP API route/integration/stage and explicit active-deployment census against exact build, configuration, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested explicit API deployment, and direct provider observations. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation after every declared route; any stack update requires teardown and a fresh create before evidence can pass. Probe resources are required absent. Unmanaged Lambda aliases, function URLs, and event-source mappings are required absent for the five primary functions. Other account resources remain outside this census. It is not a pre/post stability receipt, administrator exclusion, application canary, or release authorization.";
@@ -560,7 +560,7 @@ export function validateDeploymentExpectation(expectation) {
       expectation.schemaVersion === EXPECTATION_SCHEMA &&
       /^\d{12}$/.test(expectation.accountId) &&
       expectation.region === "us-east-1" &&
-      expectation.stackName === "tideproof-gate2" &&
+      expectation.stackName === "prooftoact-gate2" &&
       HEX_40.test(expectation.sourceCommit) &&
       HEX_40.test(expectation.treeDigest) &&
       HEX_64.test(expectation.configDigest) &&
@@ -849,7 +849,7 @@ function validateRoleSnapshot(
       Array.isArray(actual.inlinePolicies) &&
       actual.inlinePolicies.length === 1 &&
       exactKeys(actual.inlinePolicies[0], ["document", "name"]) &&
-      actual.inlinePolicies[0].name === "TideproofExactCapabilities" &&
+      actual.inlinePolicies[0].name === "ProofToActExactCapabilities" &&
       canonicalJson(actual.tags) === canonicalJson(EXPECTED_ROLE_TAGS) &&
       actual.resourceDrift === "IN_SYNC",
     code
@@ -1300,7 +1300,7 @@ function validateApiGatewaySnapshot(actual, expectation) {
       actual.api.disableExecuteApiEndpoint === false &&
       exactKeys(actual.api.corsConfiguration, []) &&
       actual.api.description ===
-        "Signed-out read-only Tideproof demo plus an isolated IAM-authenticated advisory endpoint." &&
+        "Signed-out read-only ProofToAct demo plus an isolated IAM-authenticated advisory endpoint." &&
       actual.api.disableSchemaValidation === false &&
       Array.isArray(actual.api.importInfo) &&
       actual.api.importInfo.length === 0 &&
@@ -1539,7 +1539,7 @@ function validateApiGatewaySnapshot(actual, expectation) {
       activeDeployment.deploymentStatus === "DEPLOYED" &&
       activeDeployment.deploymentStatusMessage === "" &&
       activeDeployment.description ===
-        `Tideproof exact API deployment ${expectation.sourceCommit} ${expectation.configDigest}` &&
+        `ProofToAct exact API deployment ${expectation.sourceCommit} ${expectation.configDigest}` &&
       !Number.isNaN(activeCreatedAt) &&
       canonicalJson(activeCensusDeployment) ===
         canonicalJson({
