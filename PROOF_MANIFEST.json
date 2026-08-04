@@ -343,13 +343,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "4ad9010a13e4f53188e8af646b1447dbf7c9bc34562634b540c23c491846f398",
+      "sha256": "3b0cd7b1e40e9a27bf34a26a22772890e8028e359b8bacb268e6cb1b5d965987",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "f85510c627e6ba4059794d0cabc3dd0f11f7eb890563c0ccc49f8ed3845361f1",
+      "sha256": "7f3f1e289c758303b0e685fea17b145cb89c6d46951108148346fba087bc9ec9",
       "kind": "verification-code"
     },
     {
@@ -433,13 +433,13 @@
     {
       "id": "release-claims-tests",
       "path": "test/release-claims.test.js",
-      "sha256": "1e28f902ae0869fc04ca51440d0a1ce8eed30143fff696b34a5b48c00f477a0d",
+      "sha256": "a9e81b0af91d06c8020a00819514765d9c7bda491de4ef77d86bd8ae25fadb9e",
       "kind": "verification-code"
     },
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "bbb5bf8850702051e12b67eb4610bca77baf8a292695f5627e0d901a70e078f6",
+      "sha256": "cdb52b8b7ffd55943d854af5e2852e602ba28bdcdcece47d6f36d268b4a21e40",
       "kind": "verification-code"
     },
     {
@@ -451,7 +451,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "f5bbb4ec0fc60489e892a1ee2d5c89b988f82dd5f3a96554eb9fa32cab4bf1cd",
+      "sha256": "a7f9c0281a5dbf28ec01c14b0c62b3e7eb32ce37aa1f9ff5a1ef94ac070dc1e2",
       "kind": "boundary-ledger"
     },
     {
@@ -529,13 +529,13 @@
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "a45cf5e87a6d7a249ed177c38cc4a5d42fe969d6b9d6cea65393aa5b52aee0c0",
+      "sha256": "8f9bd166aedda40c86960582a4c375918f96dcd23565fe0de55464c20451b9bd",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "96b0b2f7dcfd4bbd0c856144e701eb014066a5c4fa9d2ddf6023ccb5c80d2319",
+      "sha256": "fffbabed80f87d761074eaa3a6745cfa8afc990f63c960824623c18cf5479024",
       "kind": "verification-code"
     },
     {
@@ -565,7 +565,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "fc12023fe6887a4c395ab7687026a33c338dbf165dd6de2ae5fcb53392335d08",
+      "sha256": "4d3fab95ea99b002f6d6038c076e6130f67b46dcb61eb01829229def7e47ca9e",
       "kind": "boundary-ledger"
     },
     {

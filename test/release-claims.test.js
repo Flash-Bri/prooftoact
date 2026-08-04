@@ -3,10 +3,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  RELEASE_CLAIMS_STOP_TOKEN_COUNT,
+  RELEASE_CLAIMS_SURFACE_COUNT,
+  RELEASE_CLAIMS_UNCHECKED_GATE_COUNT,
   __test,
   assertRequiredMarkers,
   validateAllowedUrls,
   validateManifest,
+  validateReleaseClaimsReceipt,
   validateSubmissionDraft,
   verifyReleaseClaims
 } from "../scripts/verify-release-claims.js";
@@ -75,13 +79,35 @@ test("current release claim surfaces match the reviewed pending state", () => {
     PARTIAL: 7,
     PENDING: 0
   });
-  assert.equal(receipt.surfaceCount, 14);
-  assert.equal(receipt.stopTokenCount, 13);
-  assert.equal(receipt.uncheckedGateCount, 14);
+  assert.equal(receipt.surfaceCount, RELEASE_CLAIMS_SURFACE_COUNT);
+  assert.equal(receipt.stopTokenCount, RELEASE_CLAIMS_STOP_TOKEN_COUNT);
+  assert.equal(
+    receipt.uncheckedGateCount,
+    RELEASE_CLAIMS_UNCHECKED_GATE_COUNT
+  );
   assert.equal(
     Object.values(receipt.checks).every((value) => value === true),
     true
   );
+});
+
+test("claims receipt contract is source-derived and fails closed on drift", () => {
+  const receipt = verifyReleaseClaims({ rootDir: ROOT });
+  assert.equal(validateReleaseClaimsReceipt(receipt), receipt);
+  for (const field of [
+    "surfaceCount",
+    "stopTokenCount",
+    "uncheckedGateCount"
+  ]) {
+    for (const offset of [-1, 1]) {
+      const stale = structuredClone(receipt);
+      stale[field] += offset;
+      assert.throws(
+        () => validateReleaseClaimsReceipt(stale),
+        /RELEASE_CLAIMS_RECEIPT_CONTRACT/
+      );
+    }
+  }
 });
 
 test("claims inventory binds the full-drill evidence boundary", () => {
@@ -122,8 +148,8 @@ test("required proof boundaries fail closed when one marker disappears", () => {
 test("submission draft requires every stop token and unchecked hard gate", () => {
   const source = submissionFixture();
   assert.deepEqual(validateSubmissionDraft(source), {
-    stopTokenCount: 13,
-    uncheckedGateCount: 14
+    stopTokenCount: RELEASE_CLAIMS_STOP_TOKEN_COUNT,
+    uncheckedGateCount: RELEASE_CLAIMS_UNCHECKED_GATE_COUNT
   });
   assert.throws(
     () =>

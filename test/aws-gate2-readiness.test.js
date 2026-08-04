@@ -16,6 +16,11 @@ import {
   validateReleaseProvenance
 } from "../scripts/gate2-aws-readiness.js";
 import {
+  RELEASE_CLAIMS_STOP_TOKEN_COUNT,
+  RELEASE_CLAIMS_SURFACE_COUNT,
+  RELEASE_CLAIMS_UNCHECKED_GATE_COUNT
+} from "../scripts/verify-release-claims.js";
+import {
   RELEASE_COST_SURFACE_COUNT,
   __test as costVerifierContract
 } from "../scripts/verify-release-cost.js";
@@ -424,9 +429,9 @@ function releaseClaimsReceipt() {
     proofManifestSha256: "8".repeat(64),
     claimCount: 12,
     claimStates: { VERIFIED: 5, PARTIAL: 7, PENDING: 0 },
-    surfaceCount: 13,
-    stopTokenCount: 13,
-    uncheckedGateCount: 14,
+    surfaceCount: RELEASE_CLAIMS_SURFACE_COUNT,
+    stopTokenCount: RELEASE_CLAIMS_STOP_TOKEN_COUNT,
+    uncheckedGateCount: RELEASE_CLAIMS_UNCHECKED_GATE_COUNT,
     externalUrls: [
       "http://127.0.0.1:4173",
       "https://cockroachdb-ai.devpost.com/",
@@ -1113,6 +1118,22 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
     /AWS_READINESS_RELEASE_PROVENANCE/
   );
   for (const offset of [-1, 1]) {
+    for (const field of [
+      "surfaceCount",
+      "stopTokenCount",
+      "uncheckedGateCount"
+    ]) {
+      const staleClaimsContract = releaseProvenanceReceipt();
+      staleClaimsContract.claims[field] += offset;
+      assert.throws(
+        () =>
+          validateReleaseProvenance(staleClaimsContract, {
+            sourceCommit: SOURCE_COMMIT,
+            treeDigest: TREE_DIGEST
+          }),
+        /AWS_READINESS_RELEASE_PROVENANCE/
+      );
+    }
     const staleCostContract = releaseProvenanceReceipt();
     staleCostContract.cost.surfaceCount =
       RELEASE_COST_SURFACE_COUNT + offset;
