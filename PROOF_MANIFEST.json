@@ -271,7 +271,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "fd793cdcfa815f2229c90ef405174b45bd0b57111241ba567c7d62777b32ecf7",
+      "sha256": "d073976a60a4c944632d4ba7b320eaf7db371cf9db2c59329480a7f4346ea7c9",
       "kind": "boundary-ledger"
     },
     {
@@ -373,7 +373,7 @@
     {
       "id": "local-full-drill-tests",
       "path": "test/local-full-drill.test.js",
-      "sha256": "2a654f5f1164221b8df3cae9fe3f67054e5f4b7643cd8a023a6448b00fe79ee1",
+      "sha256": "35d01c95206cfeea4b604353ca7c49d0fced2d0a358319c34ca129a2f74cb114",
       "kind": "verification-code"
     },
     {

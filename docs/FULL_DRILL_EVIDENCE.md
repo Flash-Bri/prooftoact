@@ -18,13 +18,17 @@ provider-backed claim.
 
 ## Deterministic offline harness
 
-`npm run full-drill:local` executes the exact local scenario 100 times and
-emits one canonical `tideproof.highwater-drill-local-batch.v1` receipt. The
-checked-in receipt is
+Use `npm run --silent full-drill:local` for canonical file generation. The
+command executes the exact local scenario 100 times and emits one canonical
+`tideproof.highwater-drill-local-batch.v1` receipt to standard output; redirect
+that output when refreshing the checked-in receipt at
 [`evidence/local-full-drill-100-2026-08-04.json`](../evidence/local-full-drill-100-2026-08-04.json).
 `npm run full-drill:local:verify -- evidence/local-full-drill-100-2026-08-04.json`
-independently reruns all 100 scenarios and requires byte-for-byte agreement
-with the receipt.
+recomputes all 100 scenarios through the same `buildLocalFullDrillReceipt` and
+`runScenario` shared local implementation used by the generator, then requires
+byte-for-byte agreement with the receipt. This detects drift or tampering
+against the current shared implementation; it is not an independent oracle,
+and common-mode defects remain possible.
 
 The local acceptance control requires:
 
@@ -49,7 +53,12 @@ partial replay, wall-clock nondeterminism, local sequential execution being
 misrepresented as provider concurrency, and tested-source/deployed-artifact
 divergence. The AWS Demo entry and local harness are bound to the same
 `src/scenario.js` source path, but a source hash is not build or deployment
-evidence. The receipt remains a local regression control only.
+evidence. The source-hash control assumes a clean, quiescent, controlled worktree
+throughout generation and validation. It reads bound files sequentially and
+does not lock or snapshot the filesystem. It is not a hostile-host or concurrent-filesystem immutability proof:
+mutation between source reads,
+scenario execution, validation, or later receipt use remains a TOCTOU residual.
+The receipt remains a local regression control only.
 
 The accepted release artifact must be a fresh
 `tideproof.highwater-drill-live-batch.v1` receipt from the exact clean release

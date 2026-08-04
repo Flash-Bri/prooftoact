@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -55,7 +56,7 @@ test("the local full-drill harness emits exactly 100 deterministic bounded runs"
   assert.deepEqual(replayed, receipt);
 });
 
-test("the validator independently recomputes the exact current receipt", () => {
+test("the validator recomputes through the shared local implementation", () => {
   const sourceBindings = localFullDrillSourceBindings(ROOT);
   const receipt = buildLocalFullDrillReceipt({ sourceBindings });
   const verification = validateLocalFullDrillReceipt(receipt, {
@@ -236,4 +237,25 @@ test("source binding loader covers the harness, verifier, scenario, and deployme
   }
   assert.deepEqual(paths, [...paths].sort());
   assert(bindings.every(({ sha256 }) => /^[0-9a-f]{64}$/.test(sha256)));
+});
+
+test("the evidence contract preserves generator and validator trust boundaries", () => {
+  const evidenceContract = readFileSync(
+    path.join(ROOT, "docs/FULL_DRILL_EVIDENCE.md"),
+    "utf8"
+  );
+
+  assert.match(
+    evidenceContract,
+    /`npm run --silent full-drill:local` for canonical file generation/u
+  );
+  assert.match(evidenceContract, /shared local implementation/u);
+  assert.match(evidenceContract, /common-mode defects remain possible/u);
+  assert.match(evidenceContract, /clean, quiescent, controlled worktree/u);
+  assert.match(
+    evidenceContract,
+    /not a hostile-host or concurrent-filesystem immutability proof/u
+  );
+  assert.match(evidenceContract, /TOCTOU residual/u);
+  assert.doesNotMatch(evidenceContract, /independently reruns all 100/u);
 });
