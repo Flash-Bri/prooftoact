@@ -177,7 +177,7 @@ test("caller binding accepts only the exact expected account and principal", () 
     {
       Account: ACCOUNT_ID,
       Arn: `arn:aws:iam::${ACCOUNT_ID}:user/admin`,
-      UserId: "AIDATIDEPROOF"
+      UserId: "AIDATIDEPROOF001"
     },
     {
       Account: ACCOUNT_ID,
@@ -264,13 +264,13 @@ test("caller binding supports an exact IAM user for preflight", () => {
     {
       Account: ACCOUNT_ID,
       Arn: userArn,
-      UserId: "AIDATIDEPROOF"
+      UserId: "AIDATIDEPROOF001"
     },
     {
       expectedAccountId: ACCOUNT_ID,
       expectedPrincipalArn: userArn,
       expectedCallerArn: userArn,
-      expectedCallerUserId: "AIDATIDEPROOF",
+      expectedCallerUserId: "AIDATIDEPROOF001",
       bindingContext: {
         purpose: "test-preflight",
         sourceCommit: "b".repeat(40)

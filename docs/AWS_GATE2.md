@@ -398,6 +398,46 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 - Claim impact: ProofToAct may claim source-level fail-closed caller ordering.
   It adds no live AWS, identity, spend, deployment, or availability claim.
 
+### IAM-user expectations accepted non-AWS syntax
+
+- Root cause: the shared caller validator allowed any nonempty IAM-user ARN
+  suffix and any 8-to-256-character user ID.
+- Why it was missed: existing positive fixtures exercised only simple user
+  names, while negative controls concentrated on roles, accounts, and exact
+  post-STS identity mismatches.
+- Earliest detection: submit a user ARN containing a space or a user ID that
+  lacks the AWS IAM-user principal-ID prefix before the injected AWS reader.
+- Repair: constrain IAM-user paths and names to bounded AWS syntax and require
+  an `AIDA` uppercase-alphanumeric principal ID of 16 to 128 characters.
+- Regression/preventive control: malformed ARN and user-ID variants must fail
+  with an injected AWS-call count of zero.
+- Verification: focused source tests cover both malformed variants and the
+  existing exact IAM-user success case. Live AWS execution remains pending.
+- Residual risk: source validation cannot prove that operator expectations
+  came from an independent trusted channel or remain current.
+- Claim impact: the source may claim syntactic expectation rejection before
+  STS; it adds no live identity or authorization claim.
+
+### Call-order regression test was outside exact receipts
+
+- Root cause: the preflight source was hash-bound, but its new focused test was
+  covered only by the broad `test/*.test.js` runner.
+- Why it was missed: a passing aggregate count showed the test ran, but deleting
+  a whole test file would silently reduce the glob without invalidating either
+  the proof or security receipt.
+- Earliest detection: compare the new control path with the exact security and
+  proof inventories before accepting its receipt.
+- Repair: inventory the preflight and shared identity tests in the security
+  manifest and bind the preflight test directly in the proof manifest.
+- Regression/preventive control: any byte change or removal now invalidates an
+  exact manifest hash and the proof artifact-count control.
+- Verification: focused tests plus proof and security verifiers must pass from
+  the same clean commit.
+- Residual risk: test execution still depends on hosted and local runner
+  integrity; exact release provenance remains a main-only gate.
+- Claim impact: the receipt may claim the named regression controls were the
+  reviewed bytes, not that source or tests are exhaustive.
+
 ## Live acceptance sequence
 
 1. Re-run all local tests, syntax checks, dependency audit,

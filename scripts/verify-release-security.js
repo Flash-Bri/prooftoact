@@ -94,6 +94,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/aws-evidence-identity.js",
     role: "AWS_EVIDENCE_IDENTITY_BOUNDARY"
   }),
+  "aws-evidence-identity-tests": Object.freeze({
+    path: "test/aws-evidence-identity.test.js",
+    role: "AWS_EVIDENCE_IDENTITY_VERIFICATION"
+  }),
   "aws-provider-bundle-entry": Object.freeze({
     path: "scripts/lib/aws-provider-bundle-entry.js",
     role: "AWS_ATTESTATION_PROVIDER_BUNDLE_ENTRY"
@@ -117,6 +121,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "aws-preflight": Object.freeze({
     path: "scripts/gate2-aws-preflight.js",
     role: "READ_ONLY_AWS_PREFLIGHT"
+  }),
+  "aws-preflight-tests": Object.freeze({
+    path: "test/aws-gate2-preflight.test.js",
+    role: "READ_ONLY_AWS_PREFLIGHT_VERIFICATION"
   }),
   "aws-readiness": Object.freeze({
     path: "scripts/gate2-aws-readiness.js",
@@ -953,6 +961,10 @@ const SOURCE_MARKERS = Object.freeze({
     "expectedCallerUserId",
     "bindingDigest"
   ]),
+  "aws-evidence-identity-tests": Object.freeze([
+    "caller binding supports an exact IAM user for preflight",
+    "AIDATIDEPROOF001"
+  ]),
   "aws-preflight": Object.freeze([
     "awsPreflightIdentityExpectation(",
     "sts",
@@ -962,6 +974,11 @@ const SOURCE_MARKERS = Object.freeze({
     "describe-stacks",
     "get-cost-and-usage",
     "get-foundation-model"
+  ]),
+  "aws-preflight-tests": Object.freeze([
+    "AWS preflight rejects malformed IAM user expectations before STS",
+    "AWS preflight stops after STS when the caller misses its expectation",
+    "awsCallCount"
   ]),
   "aws-readiness": Object.freeze([
     "LOCAL_ONLY_PASS",

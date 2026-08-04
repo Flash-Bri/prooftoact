@@ -103,8 +103,14 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "6637b3a98b29333ab980e7ee8b99824ec6c21d4387c2b21b14a9506015d48abc",
+      "sha256": "235601649c08a0055c6dc2592c9399e53867a492492d29f8230a19bd609da18f",
       "kind": "boundary-ledger"
+    },
+    {
+      "id": "aws-preflight-tests",
+      "path": "test/aws-gate2-preflight.test.js",
+      "sha256": "67285d9e6ce23840df6d962ca2d8a39d58881233f5ea0e223a68fc3c5c66c166",
+      "kind": "verification-code"
     },
     {
       "id": "aws-provider-bundle-entry",
@@ -343,7 +349,7 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "3b0cd7b1e40e9a27bf34a26a22772890e8028e359b8bacb268e6cb1b5d965987",
+      "sha256": "d68f533ea39114bc59776b5b9f92f58eac87d6c112664cbbd1ae36c433609a27",
       "kind": "verification-code"
     },
     {
@@ -397,7 +403,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "363b44bd9bebd8be009516b7932306d674b7df4fe5fcad032f60c90801ce9c56",
+      "sha256": "501b2f440302eebb89ab850494e3af19a7d2829e7b37cfa0a6d32674a4ffd6a2",
       "kind": "verification-code"
     },
     {
@@ -427,7 +433,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "38998272ac8c045c2a85789e2d7e2a377ebd35ffaa774945fffb3e1314330f55",
+      "sha256": "babe06eaade1be503f2fa7847e8bd81657cdbdfff5f95cce2a841ae564a45aeb",
       "kind": "boundary-ledger"
     },
     {
@@ -565,7 +571,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "6afdfda8137ee71e280b2476684d7492334ce599357ce475311e5bd32097087f",
+      "sha256": "b76ee6d55a801ba526ff1ff7ddb6a925ed971a2df472b3bbaa222cc1c1e5a4fa",
       "kind": "boundary-ledger"
     },
     {
@@ -577,7 +583,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "ae2bf5adf3fbdf9fbe59f404129ae7f87bbe96308df3153ec31f40555ed1d08d",
+      "sha256": "4c6ad89850cbc65cebc6894a6ed3518bba67f79bbf92ede6e387ec902b2e19ff",
       "kind": "verification-code"
     },
     {
@@ -589,7 +595,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "b8afc9f7f5863f023e19ea7475a78698e580a261da098fb4e4c589d139c410d7",
+      "sha256": "67796903b090c18e8e96433a466abbafcbfe00205a5622cba34d6fb2c94f8642",
       "kind": "boundary-ledger"
     },
     {
@@ -1017,6 +1023,7 @@
         "aws-deployment-attestation-runner",
         "aws-deployment-attestation-tests",
         "aws-deployment-attestation-validator",
+        "aws-preflight-tests",
         "aws-provider-bundle-entry",
         "aws-provider-clients-tests",
         "aws-provider-runtime",

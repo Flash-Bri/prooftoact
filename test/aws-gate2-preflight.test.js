@@ -83,21 +83,58 @@ test("AWS preflight validates a self-consistent identity expectation before STS"
   );
 });
 
+function exactCheckoutCommandText(_command, args) {
+  const request = args.join(" ");
+  if (request === "rev-parse HEAD") {
+    return "a".repeat(40);
+  }
+  if (request === "rev-parse HEAD^{tree}") {
+    return "b".repeat(40);
+  }
+  if (request === "status --short") {
+    return "";
+  }
+  throw new Error("UNEXPECTED_TEST_COMMAND");
+}
+
+test("AWS preflight rejects malformed IAM user expectations before STS", () => {
+  const validUserArn =
+    `arn:aws:iam::${ACCOUNT_ID}:user/prooftoact-preflight`;
+  for (const overrides of [
+    {
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN:
+        `arn:aws:iam::${ACCOUNT_ID}:user/release operator`,
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN:
+        `arn:aws:iam::${ACCOUNT_ID}:user/release operator`,
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
+        "AIDAPROOFTOACT001"
+    },
+    {
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN: validUserArn,
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN: validUserArn,
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
+        "not an AWS principal id"
+    }
+  ]) {
+    let awsCallCount = 0;
+    assert.throws(
+      () =>
+        collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
+          environment: expectedPreflightEnvironment(overrides),
+          readCommandText: exactCheckoutCommandText,
+          readAwsJson() {
+            awsCallCount += 1;
+            throw new Error("AWS_CALL_MUST_NOT_OCCUR");
+          }
+        }),
+      /AWS_EVIDENCE_(?:EXPECTED_PRINCIPAL|CALLER_USER_ID)/
+    );
+    assert.equal(awsCallCount, 0);
+  }
+});
+
 test("AWS preflight stops after STS when the caller misses its expectation", () => {
   const awsCalls = [];
-  const readCommandText = (_command, args) => {
-    const request = args.join(" ");
-    if (request === "rev-parse HEAD") {
-      return "a".repeat(40);
-    }
-    if (request === "rev-parse HEAD^{tree}") {
-      return "b".repeat(40);
-    }
-    if (request === "status --short") {
-      return "";
-    }
-    throw new Error("UNEXPECTED_TEST_COMMAND");
-  };
   const readAwsJson = (_region, service, operation) => {
     awsCalls.push({ service, operation });
     assert.equal(service, "sts");
@@ -115,7 +152,7 @@ test("AWS preflight stops after STS when the caller misses its expectation", () 
     () =>
       collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
         environment: expectedPreflightEnvironment(),
-        readCommandText,
+        readCommandText: exactCheckoutCommandText,
         readAwsJson
       }),
     /AWS_EVIDENCE_CALLER_ACCOUNT/
@@ -158,11 +195,11 @@ function validSnapshot() {
       `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
     expectedCallerArn:
       `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
-    expectedCallerUserId: "AIDATIDEPROOF",
+    expectedCallerUserId: "AIDATIDEPROOF001",
     callerIdentity: {
       Account: ACCOUNT_ID,
       Arn: `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
-      UserId: "AIDATIDEPROOF"
+      UserId: "AIDATIDEPROOF001"
     },
     bootstrapStackName: BOOTSTRAP_STACK,
     bootstrapStack: {
