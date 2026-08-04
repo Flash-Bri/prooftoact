@@ -1349,7 +1349,8 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
       "arn:aws:iam::111111111111:user/tideproof-deployer",
     AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN:
       "arn:aws:iam::111111111111:user/tideproof-deployer",
-    AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID: "AIDATIDEPROOF",
+    AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
+      "AIDATIDEPROOF001",
     DATABASE_URL: "postgresql://private",
     GIT_OBJECT_DIRECTORY: "/tmp/objects",
     NODE_OPTIONS: "--require=/tmp/inject.js",

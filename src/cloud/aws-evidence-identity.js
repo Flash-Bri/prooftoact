@@ -2,6 +2,9 @@ import crypto from "node:crypto";
 
 const ACCOUNT_ID = /^\d{12}$/;
 const ENDPOINT_OVERRIDE = /^AWS_ENDPOINT_URL(?:_.+)?$/i;
+const IAM_USER_ID = /^AIDA[A-Z0-9]{12,124}$/;
+const IAM_USER_RESOURCE =
+  /^(?:[\x21-\x2E\x30-\x7E]+\/)*[A-Za-z0-9+=,.@_-]{1,64}$/;
 const SESSION_NAME = /^[A-Za-z0-9+=,.@_-]{2,64}$/;
 const UNSAFE_SDK_ENVIRONMENT = new Set([
   "ALL_PROXY",
@@ -215,11 +218,10 @@ function principalExpectation(expectedPrincipalArn) {
       }
     };
   }
-  const user =
-    /^arn:aws:iam::(\d{12}):user\/(.{1,512})$/.exec(
-      expectedPrincipalArn
-    );
-  if (user) {
+  const user = /^arn:aws:iam::(\d{12}):user\/(.{1,576})$/.exec(
+    expectedPrincipalArn
+  );
+  if (user && IAM_USER_RESOURCE.test(user[2])) {
     const [, accountId] = user;
     return {
       accountId,
@@ -297,6 +299,10 @@ export function validateAwsEvidenceCaller(
       "AWS_EVIDENCE_CALLER_ROLE_ID"
     );
   } else {
+    requireCondition(
+      IAM_USER_ID.test(identity.UserId),
+      "AWS_EVIDENCE_CALLER_USER_ID"
+    );
     principalId = identity.UserId;
   }
   requireCondition(
