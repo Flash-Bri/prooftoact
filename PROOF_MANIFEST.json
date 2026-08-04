@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-03",
+  "reviewedOn": "2026-08-04",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -187,7 +187,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "5c80c2c3d2e9da6151794eecf0f2bda17f2c30bd4d91246350a5756d389bb9d7",
+      "sha256": "6249b00931fc40754944afdf004f6bdd1f69958b576715282d9f65dacda4bbd1",
       "kind": "boundary-ledger"
     },
     {
@@ -271,7 +271,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "8c55be1bcb042cb836e69a3cee83afb715bb4df93f425f00499a5d369d1053ed",
+      "sha256": "fd793cdcfa815f2229c90ef405174b45bd0b57111241ba567c7d62777b32ecf7",
       "kind": "boundary-ledger"
     },
     {
@@ -353,6 +353,36 @@
       "kind": "verification-code"
     },
     {
+      "id": "local-full-drill-harness",
+      "path": "src/local-full-drill.js",
+      "sha256": "56e3d6dbe2d7493f0204d14f1d7093abdfc18d20e9cf209514720842c41b81f7",
+      "kind": "verification-code"
+    },
+    {
+      "id": "local-full-drill-receipt",
+      "path": "evidence/local-full-drill-100-2026-08-04.json",
+      "sha256": "fa0e19647819400d7131ebc4ae7acd9b7c6076f78d3fa1f4c6fc1074a90a6181",
+      "kind": "local-validation"
+    },
+    {
+      "id": "local-full-drill-runner",
+      "path": "scripts/run-local-full-drills.js",
+      "sha256": "432f5de81f73c620148c5121916acd3f05fcd0dd38ac4d1b3808cac62944dcdd",
+      "kind": "verification-code"
+    },
+    {
+      "id": "local-full-drill-tests",
+      "path": "test/local-full-drill.test.js",
+      "sha256": "2a654f5f1164221b8df3cae9fe3f67054e5f4b7643cd8a023a6448b00fe79ee1",
+      "kind": "verification-code"
+    },
+    {
+      "id": "local-full-drill-verifier",
+      "path": "scripts/verify-local-full-drill-receipt.js",
+      "sha256": "f77d2d55bf2d684dcfb27142ad4016d62ba91ce32c5b8c3aefb9922aecc6e60a",
+      "kind": "verification-code"
+    },
+    {
       "id": "local-judge-path-evidence",
       "path": "evidence/local-judge-path-e2b247a-2026-07-30.md",
       "sha256": "b3ed9414195b224482228e1ea22a4fcf513766551c5d082f976376e69b7f026e",
@@ -367,13 +397,13 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "5e21f2d66f27ff25ac5706c6656f7e5d82aaf0614a32fc460351992b3451f78f",
+      "sha256": "44080a679d7340ecd751875c44ba7e39faa7ce81b237dd4598927e63154fd63c",
       "kind": "verification-code"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
-      "sha256": "913571bf34d5d63dad8707f39e938df599feb9b482cd98c824c5db80b59b1aa7",
+      "sha256": "2028545f4d21654bd6eb067fba55ce338506c96a8604fc6288c9004f280d19ca",
       "kind": "verification-code"
     },
     {
@@ -397,7 +427,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "8bf8c8de736c7151f25243e2cdf26e9b9d3e462e09635a69710b9a8bc224bbcd",
+      "sha256": "adf0c9d6e1c984dacbb4bdf8e02ff27beb65eddd0fc0a98b7dfdfc6eabc87395",
       "kind": "boundary-ledger"
     },
     {
@@ -559,7 +589,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "b2e36a4ae4f825c231717d1820ce6bcfecee36e592ee69cb6a695b9fa6f5a255",
+      "sha256": "c690322c40bc8b20d1525bfe7c1f46fa26347b2a3a2e982d365ab32739d9d2a7",
       "kind": "boundary-ledger"
     },
     {
@@ -646,14 +676,19 @@
     {
       "id": "full-highwater-drills",
       "claim": "One hundred full high-water drills bind admissibility-ranked memory, one authority winner, exact recovery, and replay behavior end to end.",
-      "currentStatus": "Partial; exact DVI, authority, and recovery per-run binding controls are source-tested independently, but no accepted provider-backed 100-run batch exists",
+      "currentStatus": "Partial; a deterministic offline 100-run specification receipt passes its recomputing local validator, while exact DVI, authority, and recovery per-run binding controls remain independently source-tested and no accepted provider-backed 100-run batch exists",
       "proofState": "PARTIAL",
       "artifacts": [
-        "full-drill-evidence"
+        "full-drill-evidence",
+        "local-full-drill-harness",
+        "local-full-drill-receipt",
+        "local-full-drill-runner",
+        "local-full-drill-tests",
+        "local-full-drill-verifier"
       ],
-      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
+      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. The validator-passing local receipt recomputes 100 exact deterministic scenario runs with zero declared invariant violations, but exercises only the sequential in-memory specification. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
       "remainingRequirements": [
-        "Implement the bounded live batch harness, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-source-bound winner recovery through Managed MCP, replay checks, cleanup, and zero invariant violations."
+        "Implement the bounded provider-backed live batch harness, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-source-bound winner recovery through Managed MCP, replay checks, cleanup, and zero invariant violations."
       ]
     },
     {

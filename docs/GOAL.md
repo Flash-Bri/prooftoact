@@ -7,8 +7,9 @@ OpenClaw goal remains authoritative while it is present and active.
 
 - Verified: 2026-08-04
 - Live OpenClaw goal ID:
-  `019fcc45-a946-7802-920a-8b3dc290bfc8`
-- Prior live OpenClaw goal ID:
+  `4ddf5a4e-d8bf-4f58-9c10-8c551c7f13ea`
+- Prior live OpenClaw goal IDs:
+  `019fcc45-a946-7802-920a-8b3dc290bfc8`,
   `2a8afd3b-9538-49f3-ab2c-d9bdae46fad5`
 - Native Codex bridge goal ID:
   `8ded66e7-06b1-4ef1-9bda-07e9497b3a91`
@@ -21,7 +22,7 @@ OpenClaw goal remains authoritative while it is present and active.
   `38ee332470a36592e6bf6047bd550268884b20019b933e6710750e86250f4a87`
 - Equality check: the active OpenClaw objective and recovery anchor match byte
   for byte. The archived objectives differ only by the approved three-instance
-  product-name substitution from `Tideproof` to `ProofToAct`.
+  product-name substitution to `ProofToAct`.
 
 ## Exact objective
 

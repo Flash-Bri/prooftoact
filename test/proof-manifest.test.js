@@ -124,7 +124,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 96);
+  assert.equal(receipt.artifactCount, 101);
   assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
@@ -148,6 +148,34 @@ test("proof manifest propagates nested brand-migration failure", () => {
     assert.throws(
       () => verifyProofManifest({ rootDir }),
       /proof manifest nested brand-migration verification failed/
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest propagates nested local full-drill failure", () => {
+  const rootDir = makeRepositoryFixture();
+  try {
+    const receiptPath = path.join(
+      rootDir,
+      "evidence/local-full-drill-100-2026-08-04.json"
+    );
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+    receipt.execution.providerBacked = true;
+    const receiptBytes = `${JSON.stringify(receipt, null, 2)}\n`;
+    writeFileSync(receiptPath, receiptBytes);
+
+    const proofPath = path.join(rootDir, "PROOF_MANIFEST.json");
+    const proof = JSON.parse(readFileSync(proofPath, "utf8"));
+    proof.artifacts.find(
+      ({ id }) => id === "local-full-drill-receipt"
+    ).sha256 = sha256(receiptBytes);
+    writeFileSync(proofPath, `${JSON.stringify(proof, null, 2)}\n`);
+
+    assert.throws(
+      () => verifyProofManifest({ rootDir }),
+      /proof manifest nested local-full-drill verification failed/
     );
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
@@ -214,6 +242,14 @@ test("release copy matches executable and generated source contracts", () => {
     ({ id }) => id === "full-highwater-drills"
   );
   assert(fullDrillClaim, "full drill proof claim missing");
+  assert.deepEqual(fullDrillClaim.artifacts, [
+    "full-drill-evidence",
+    "local-full-drill-harness",
+    "local-full-drill-receipt",
+    "local-full-drill-runner",
+    "local-full-drill-tests",
+    "local-full-drill-verifier",
+  ]);
   const claimRows = claims.split("\n");
   const dviClaimRows = [
     [
