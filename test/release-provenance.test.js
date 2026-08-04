@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import {
   __test,
   runReleaseProvenance,
+  validateReleaseClaimsForProvenance,
   validateReleaseCostForProvenance,
   validateReleaseSecurityForProvenance,
   validateIndexFlags,
@@ -16,6 +17,12 @@ import {
   validateTrackedTree,
   verifyRepositoryHistory
 } from "../scripts/verify-release-provenance.js";
+import {
+  RELEASE_CLAIMS_STOP_TOKEN_COUNT,
+  RELEASE_CLAIMS_SURFACE_COUNT,
+  RELEASE_CLAIMS_UNCHECKED_GATE_COUNT,
+  verifyReleaseClaims
+} from "../scripts/verify-release-claims.js";
 import {
   RELEASE_COST_SURFACE_COUNT,
   __test as costVerifierContract,
@@ -184,9 +191,9 @@ function claimsReceipt() {
     proofManifestSha256: "8".repeat(64),
     claimCount: 12,
     claimStates: { VERIFIED: 5, PARTIAL: 7, PENDING: 0 },
-    surfaceCount: 13,
-    stopTokenCount: 13,
-    uncheckedGateCount: 14,
+    surfaceCount: RELEASE_CLAIMS_SURFACE_COUNT,
+    stopTokenCount: RELEASE_CLAIMS_STOP_TOKEN_COUNT,
+    uncheckedGateCount: RELEASE_CLAIMS_UNCHECKED_GATE_COUNT,
     externalUrls: [
       "http://127.0.0.1:4173",
       "https://cockroachdb-ai.devpost.com/",
@@ -640,6 +647,25 @@ test("provenance consumes the shared current security receipt contract", () => {
       () => validateReleaseSecurityForProvenance(stale),
       /RELEASE_PROVENANCE_SECURITY/
     );
+  }
+});
+
+test("provenance consumes the shared current claims receipt contract", () => {
+  const receipt = verifyReleaseClaims({ rootDir: ROOT });
+  assert.equal(validateReleaseClaimsForProvenance(receipt), receipt);
+  for (const field of [
+    "surfaceCount",
+    "stopTokenCount",
+    "uncheckedGateCount"
+  ]) {
+    for (const offset of [-1, 1]) {
+      const stale = structuredClone(receipt);
+      stale[field] += offset;
+      assert.throws(
+        () => validateReleaseClaimsForProvenance(stale),
+        /RELEASE_PROVENANCE_CLAIMS/
+      );
+    }
   }
 });
 

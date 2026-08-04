@@ -184,6 +184,45 @@ const ALLOWED_ABSOLUTE_URLS = new Set([
   "https://github.com/Flash-Bri/prooftoact.git"
 ]);
 
+export const RELEASE_CLAIMS_SURFACE_COUNT =
+  Object.keys(EXPECTED_SURFACES).length;
+export const RELEASE_CLAIMS_STOP_TOKEN_COUNT =
+  Object.values(EXPECTED_STOP_TOKENS).reduce(
+    (sum, count) => sum + count,
+    0
+  );
+export const RELEASE_CLAIMS_UNCHECKED_GATE_COUNT = 14;
+
+const RELEASE_CLAIMS_RECEIPT_KEYS = Object.freeze([
+  "checks",
+  "claimBoundary",
+  "claimCount",
+  "claimStates",
+  "externalUrls",
+  "finalReleaseReady",
+  "finalReleaseRequirements",
+  "manifestPath",
+  "manifestSha256",
+  "proofManifestSha256",
+  "reviewedOn",
+  "schemaVersion",
+  "status",
+  "stopTokenCount",
+  "surfaceCount",
+  "uncheckedGateCount"
+]);
+
+const RELEASE_CLAIMS_CHECK_KEYS = Object.freeze([
+  "canonicalManifest",
+  "claimsLedgerMatchesProofManifest",
+  "currentDraftStateExplicit",
+  "exactSurfaceHashes",
+  "localAndHostedAwsBoundariesExplicit",
+  "publicLinksConstrained",
+  "submissionStopTokensPreserved",
+  "syntheticScopeExplicit"
+]);
+
 function assert(condition, code) {
   if (!condition) {
     throw new Error(code);
@@ -210,6 +249,55 @@ function exactKeys(value, keys, code) {
       sameJson(sorted(Object.keys(value)), sorted(keys)),
     code
   );
+}
+
+export function validateReleaseClaimsReceipt(receipt) {
+  exactKeys(
+    receipt,
+    RELEASE_CLAIMS_RECEIPT_KEYS,
+    "RELEASE_CLAIMS_RECEIPT_CONTRACT"
+  );
+  exactKeys(
+    receipt.claimStates,
+    ["PARTIAL", "PENDING", "VERIFIED"],
+    "RELEASE_CLAIMS_RECEIPT_CONTRACT"
+  );
+  exactKeys(
+    receipt.checks,
+    RELEASE_CLAIMS_CHECK_KEYS,
+    "RELEASE_CLAIMS_RECEIPT_CONTRACT"
+  );
+  assert(
+    receipt.schemaVersion === RECEIPT_SCHEMA &&
+      receipt.status === "CURRENT_PUBLIC_CLAIMS_PASS" &&
+      receipt.finalReleaseReady === false &&
+      /^\d{4}-\d{2}-\d{2}$/.test(receipt.reviewedOn) &&
+      receipt.manifestPath === MANIFEST_PATH &&
+      HEX_64.test(receipt.manifestSha256) &&
+      HEX_64.test(receipt.proofManifestSha256) &&
+      receipt.claimCount === 12 &&
+      sameJson(receipt.claimStates, {
+        VERIFIED: 5,
+        PARTIAL: 7,
+        PENDING: 0
+      }) &&
+      receipt.surfaceCount === RELEASE_CLAIMS_SURFACE_COUNT &&
+      receipt.stopTokenCount === RELEASE_CLAIMS_STOP_TOKEN_COUNT &&
+      receipt.uncheckedGateCount === RELEASE_CLAIMS_UNCHECKED_GATE_COUNT &&
+      sameJson(
+        receipt.externalUrls,
+        sorted(ALLOWED_ABSOLUTE_URLS)
+      ) &&
+      sameJson(
+        receipt.finalReleaseRequirements,
+        EXPECTED_FINAL_RELEASE_REQUIREMENTS
+      ) &&
+      Object.values(receipt.checks).every((value) => value === true) &&
+      typeof receipt.claimBoundary === "string" &&
+      receipt.claimBoundary.length > 0,
+    "RELEASE_CLAIMS_RECEIPT_CONTRACT"
+  );
+  return receipt;
 }
 
 function safeRelativePath(value, code) {
@@ -430,7 +518,7 @@ export function verifyReleaseClaims({
     "RELEASE_CLAIMS_PROOF_MANIFEST"
   );
 
-  return {
+  return validateReleaseClaimsReceipt({
     schemaVersion: RECEIPT_SCHEMA,
     status: "CURRENT_PUBLIC_CLAIMS_PASS",
     finalReleaseReady: false,
@@ -457,7 +545,7 @@ export function verifyReleaseClaims({
     },
     claimBoundary:
       "This receipt proves only that the current hash-bound claim surfaces match the reviewed pending-state copy, the claims ledger still matches the proof manifest, required synthetic and local/live boundaries remain present, submission stop tokens remain unresolved, and absolute URLs stay within the reviewed set. It does not prove that a claim is true, authorize deployment or publication, establish production suitability, or replace the exact-release private human review."
-  };
+  });
 }
 
 async function main() {

@@ -8,7 +8,10 @@ import { verifyDependencyInventory } from "./verify-dependency-inventory.js";
 import { verifyCurrentBundledThirdPartyNotices } from "./verify-bundled-third-party-notices.js";
 import { verifyAccessibility } from "./verify-accessibility.js";
 import { exactNpmCli } from "./build-gate2-exact.js";
-import { verifyReleaseClaims } from "./verify-release-claims.js";
+import {
+  validateReleaseClaimsReceipt,
+  verifyReleaseClaims
+} from "./verify-release-claims.js";
 import {
   validateReleaseCostReceipt,
   verifyReleaseCost
@@ -49,6 +52,14 @@ export function validateReleaseCostForProvenance(receipt) {
     return validateReleaseCostReceipt(receipt);
   } catch {
     throw new Error("RELEASE_PROVENANCE_COST");
+  }
+}
+
+export function validateReleaseClaimsForProvenance(receipt) {
+  try {
+    return validateReleaseClaimsReceipt(receipt);
+  } catch {
+    throw new Error("RELEASE_PROVENANCE_CLAIMS");
   }
 }
 
@@ -620,32 +631,8 @@ export async function runReleaseProvenance({
   verifySubmission = verifyReleaseSubmission
 } = {}) {
   const source = verifyRepositoryHistory({ run, projectRoot });
-  const claims = verifyClaims({ rootDir: projectRoot });
-  assert(
-    claims?.schemaVersion ===
-      "tideproof.release-claims-verification.v1" &&
-      claims.status === "CURRENT_PUBLIC_CLAIMS_PASS" &&
-      claims.finalReleaseReady === false &&
-      /^\d{4}-\d{2}-\d{2}$/.test(claims.reviewedOn) &&
-      claims.manifestPath === "RELEASE_CLAIMS_MANIFEST.json" &&
-      HEX_64.test(claims.manifestSha256) &&
-      HEX_64.test(claims.proofManifestSha256) &&
-      claims.claimCount === 12 &&
-      claims.claimStates?.VERIFIED === 5 &&
-      claims.claimStates?.PARTIAL === 7 &&
-      claims.claimStates?.PENDING === 0 &&
-      claims.surfaceCount === 13 &&
-      claims.stopTokenCount === 13 &&
-      claims.uncheckedGateCount === 14 &&
-      Array.isArray(claims.externalUrls) &&
-      claims.externalUrls.length === 6 &&
-      Array.isArray(claims.finalReleaseRequirements) &&
-      claims.finalReleaseRequirements.length === 2 &&
-      claims.checks &&
-      Object.values(claims.checks).every((value) => value === true) &&
-      typeof claims.claimBoundary === "string" &&
-      claims.claimBoundary.length > 0,
-    "RELEASE_PROVENANCE_CLAIMS"
+  const claims = validateReleaseClaimsForProvenance(
+    verifyClaims({ rootDir: projectRoot })
   );
   const cost = validateReleaseCostForProvenance(
     verifyCost({ rootDir: projectRoot })

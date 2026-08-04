@@ -17,6 +17,7 @@ import {
   trustedGitExecutable,
   trustedTemporaryRoot
 } from "./lib/exact-git-source.js";
+import { validateReleaseClaimsReceipt } from "./verify-release-claims.js";
 import { validateReleaseCostReceipt } from "./verify-release-cost.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
 
@@ -851,8 +852,6 @@ export function validateReleaseProvenance(
   const history = receipt?.history;
   const trackedTree = receipt?.trackedTree;
   const claims = receipt?.claims;
-  const claimStates = claims?.claimStates;
-  const claimsChecks = claims?.checks;
   const cost = receipt?.cost;
   const governance = receipt?.governance;
   const governanceChecks = governance?.checks;
@@ -872,6 +871,13 @@ export function validateReleaseProvenance(
   const inventory = dependencies?.inventory;
   const notices = dependencies?.bundledThirdPartyNotices;
   const checks = receipt?.checks;
+  let claimsContractValid = false;
+  try {
+    validateReleaseClaimsReceipt(claims);
+    claimsContractValid = true;
+  } catch {
+    claimsContractValid = false;
+  }
   let costContractValid = false;
   try {
     validateReleaseCostReceipt(cost);
@@ -939,35 +945,7 @@ export function validateReleaseProvenance(
         "skipWorktreeEntryCount",
         "symlinkCount"
       ]) &&
-      exactKeys(claims, [
-        "checks",
-        "claimBoundary",
-        "claimCount",
-        "claimStates",
-        "externalUrls",
-        "finalReleaseReady",
-        "finalReleaseRequirements",
-        "manifestPath",
-        "manifestSha256",
-        "proofManifestSha256",
-        "reviewedOn",
-        "schemaVersion",
-        "status",
-        "stopTokenCount",
-        "surfaceCount",
-        "uncheckedGateCount"
-      ]) &&
-      exactKeys(claimStates, ["PARTIAL", "PENDING", "VERIFIED"]) &&
-      exactKeys(claimsChecks, [
-        "canonicalManifest",
-        "claimsLedgerMatchesProofManifest",
-        "currentDraftStateExplicit",
-        "exactSurfaceHashes",
-        "localAndHostedAwsBoundariesExplicit",
-        "publicLinksConstrained",
-        "submissionStopTokensPreserved",
-        "syntheticScopeExplicit"
-      ]) &&
+      claimsContractValid &&
       costContractValid &&
       exactKeys(governance, [
         "checks",
@@ -1234,33 +1212,6 @@ export function validateReleaseProvenance(
       trackedTree.indexEntryCount === trackedTree.fileCount &&
       trackedTree.skipWorktreeEntryCount === 0 &&
       trackedTree.assumeUnchangedEntryCount === 0 &&
-      claims.schemaVersion ===
-        "tideproof.release-claims-verification.v1" &&
-      claims.status === "CURRENT_PUBLIC_CLAIMS_PASS" &&
-      claims.finalReleaseReady === false &&
-      /^\d{4}-\d{2}-\d{2}$/.test(claims.reviewedOn) &&
-      claims.manifestPath === "RELEASE_CLAIMS_MANIFEST.json" &&
-      HEX_64.test(claims.manifestSha256) &&
-      HEX_64.test(claims.proofManifestSha256) &&
-      claims.claimCount === 12 &&
-      claimStates.VERIFIED === 5 &&
-      claimStates.PARTIAL === 7 &&
-      claimStates.PENDING === 0 &&
-      claims.surfaceCount === 13 &&
-      claims.stopTokenCount === 13 &&
-      claims.uncheckedGateCount === 14 &&
-      Array.isArray(claims.externalUrls) &&
-      claims.externalUrls.length === 6 &&
-      claims.externalUrls.every(
-        (url) => typeof url === "string" && /^https?:\/\//.test(url)
-      ) &&
-      JSON.stringify(claims.externalUrls) ===
-        JSON.stringify([...claims.externalUrls].sort()) &&
-      Array.isArray(claims.finalReleaseRequirements) &&
-      claims.finalReleaseRequirements.length === 2 &&
-      Object.values(claimsChecks).every((value) => value === true) &&
-      typeof claims.claimBoundary === "string" &&
-      claims.claimBoundary.length > 0 &&
       governance.schemaVersion ===
         "tideproof.release-governance-verification.v1" &&
       governance.status === "CURRENT_REPOSITORY_GOVERNANCE_PASS" &&
