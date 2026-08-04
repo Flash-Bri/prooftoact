@@ -5,18 +5,24 @@ OpenClaw goal remains authoritative while it is present and active.
 
 ## Continuity receipt
 
-- Verified: 2026-07-30
+- Verified: 2026-08-04
 - Live OpenClaw goal ID:
+  `4ddf5a4e-d8bf-4f58-9c10-8c551c7f13ea`
+- Prior live OpenClaw goal IDs:
+  `019fcc45-a946-7802-920a-8b3dc290bfc8`,
   `2a8afd3b-9538-49f3-ab2c-d9bdae46fad5`
 - Native Codex bridge goal ID:
   `8ded66e7-06b1-4ef1-9bda-07e9497b3a91`
 - Original provenance goal ID:
   `31ff702f-25a0-4833-be7a-a78be010f466`
-- Objective characters: 2,124
+- Objective characters: 2,127
 - Objective SHA-256, including one trailing LF:
+  `5eb5a914dd3d8e65e622a00f4ca5ec1c2e6d479e37d26fef60b71c2e5b74861f`
+- Pre-rename objective SHA-256, including one trailing LF:
   `38ee332470a36592e6bf6047bd550268884b20019b933e6710750e86250f4a87`
-- Equality check: the live OpenClaw objective, native bridge objective, and
-  archived original objective matched byte for byte.
+- Equality check: the active OpenClaw objective and recovery anchor match byte
+  for byte. The archived objectives differ only by the approved three-instance
+  product-name substitution to `ProofToAct`.
 
 ## Exact objective
 

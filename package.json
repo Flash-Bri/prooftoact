@@ -41,6 +41,8 @@
     "gate1:admissible-vector:proof": "\"$npm_node_execpath\" scripts/gate1-admissible-vector.js --proof",
     "gate1:authority": "\"$npm_node_execpath\" scripts/gate1-authority.js",
     "gate1:authority:full": "RACE_RUNS=100 CONTENDERS=50 \"$npm_node_execpath\" scripts/gate1-authority.js",
+    "full-drill:local": "\"$npm_node_execpath\" scripts/run-local-full-drills.js",
+    "full-drill:local:verify": "\"$npm_node_execpath\" scripts/verify-local-full-drill-receipt.js",
     "gate1:capability-race": "\"$npm_node_execpath\" scripts/gate1-capability-race.js",
     "gate1:lease": "\"$npm_node_execpath\" scripts/gate1-lease.js",
     "gate1:provenance": "\"$npm_node_execpath\" scripts/gate1-provenance.js",

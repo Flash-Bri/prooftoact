@@ -75,12 +75,23 @@ test("current release claim surfaces match the reviewed pending state", () => {
     PARTIAL: 7,
     PENDING: 0
   });
-  assert.equal(receipt.surfaceCount, 13);
+  assert.equal(receipt.surfaceCount, 14);
   assert.equal(receipt.stopTokenCount, 13);
   assert.equal(receipt.uncheckedGateCount, 14);
   assert.equal(
     Object.values(receipt.checks).every((value) => value === true),
     true
+  );
+});
+
+test("claims inventory binds the full-drill evidence boundary", () => {
+  assert.deepEqual(__test.EXPECTED_SURFACES["full-drill-evidence"], {
+    path: "docs/FULL_DRILL_EVIDENCE.md",
+    role: "EVIDENCE_BOUNDARY"
+  });
+  assert.equal(
+    __test.REQUIRED_MARKERS["full-drill-evidence"].length,
+    4
   );
 });
 

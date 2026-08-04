@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-03",
+  "reviewedOn": "2026-08-04",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -187,7 +187,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "5c80c2c3d2e9da6151794eecf0f2bda17f2c30bd4d91246350a5756d389bb9d7",
+      "sha256": "6249b00931fc40754944afdf004f6bdd1f69958b576715282d9f65dacda4bbd1",
       "kind": "boundary-ledger"
     },
     {
@@ -271,7 +271,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "8c55be1bcb042cb836e69a3cee83afb715bb4df93f425f00499a5d369d1053ed",
+      "sha256": "d073976a60a4c944632d4ba7b320eaf7db371cf9db2c59329480a7f4346ea7c9",
       "kind": "boundary-ledger"
     },
     {
@@ -353,6 +353,36 @@
       "kind": "verification-code"
     },
     {
+      "id": "local-full-drill-harness",
+      "path": "src/local-full-drill.js",
+      "sha256": "56e3d6dbe2d7493f0204d14f1d7093abdfc18d20e9cf209514720842c41b81f7",
+      "kind": "verification-code"
+    },
+    {
+      "id": "local-full-drill-receipt",
+      "path": "evidence/local-full-drill-100-2026-08-04.json",
+      "sha256": "fa0e19647819400d7131ebc4ae7acd9b7c6076f78d3fa1f4c6fc1074a90a6181",
+      "kind": "local-validation"
+    },
+    {
+      "id": "local-full-drill-runner",
+      "path": "scripts/run-local-full-drills.js",
+      "sha256": "432f5de81f73c620148c5121916acd3f05fcd0dd38ac4d1b3808cac62944dcdd",
+      "kind": "verification-code"
+    },
+    {
+      "id": "local-full-drill-tests",
+      "path": "test/local-full-drill.test.js",
+      "sha256": "35d01c95206cfeea4b604353ca7c49d0fced2d0a358319c34ca129a2f74cb114",
+      "kind": "verification-code"
+    },
+    {
+      "id": "local-full-drill-verifier",
+      "path": "scripts/verify-local-full-drill-receipt.js",
+      "sha256": "f77d2d55bf2d684dcfb27142ad4016d62ba91ce32c5b8c3aefb9922aecc6e60a",
+      "kind": "verification-code"
+    },
+    {
       "id": "local-judge-path-evidence",
       "path": "evidence/local-judge-path-e2b247a-2026-07-30.md",
       "sha256": "b3ed9414195b224482228e1ea22a4fcf513766551c5d082f976376e69b7f026e",
@@ -367,13 +397,13 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "5e21f2d66f27ff25ac5706c6656f7e5d82aaf0614a32fc460351992b3451f78f",
+      "sha256": "363b44bd9bebd8be009516b7932306d674b7df4fe5fcad032f60c90801ce9c56",
       "kind": "verification-code"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
-      "sha256": "913571bf34d5d63dad8707f39e938df599feb9b482cd98c824c5db80b59b1aa7",
+      "sha256": "2028545f4d21654bd6eb067fba55ce338506c96a8604fc6288c9004f280d19ca",
       "kind": "verification-code"
     },
     {
@@ -397,19 +427,19 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "8bf8c8de736c7151f25243e2cdf26e9b9d3e462e09635a69710b9a8bc224bbcd",
+      "sha256": "12b75dd657d05b56f10ded038131d7e6e2f72d26bf1abe1a5e400fd6e79a4b9d",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-claims-tests",
       "path": "test/release-claims.test.js",
-      "sha256": "414f8ec7932cad998691b8fe88833fe141960775445cf6bb8dc151faf8b2f1ab",
+      "sha256": "1e28f902ae0869fc04ca51440d0a1ce8eed30143fff696b34a5b48c00f477a0d",
       "kind": "verification-code"
     },
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "db5a24c107a0643fdae53e898022ccf834485480b0308d32bc410b57003e6115",
+      "sha256": "bbb5bf8850702051e12b67eb4610bca77baf8a292695f5627e0d901a70e078f6",
       "kind": "verification-code"
     },
     {
@@ -535,19 +565,19 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "adff5181b126d2a8d2a63118f522d26016a0e82307f5611d34cf47d2eef33efc",
+      "sha256": "fc12023fe6887a4c395ab7687026a33c338dbf165dd6de2ae5fcb53392335d08",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "5a981eae43dade58a72cccf000025fe20c3d2909fb8698e1f2bfd8a97b55f0f9",
+      "sha256": "f7f54ad79e7e9f46606d8bd6d05df318b652970b58f09708642471891d7cfc0d",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "553297c2e2a7cb5bf36cfb83e15c48df3a3a258800bab118427524ca73f67716",
+      "sha256": "3b55cf16480704dd6d6bb60a00859aff9137fa04f4afa09171a668a970447104",
       "kind": "verification-code"
     },
     {
@@ -559,7 +589,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "b2e36a4ae4f825c231717d1820ce6bcfecee36e592ee69cb6a695b9fa6f5a255",
+      "sha256": "13bd6c89bf655291b6f8222ee01db7244827ca6490f96eb4f72f68dba5fbd6d7",
       "kind": "boundary-ledger"
     },
     {
@@ -591,7 +621,7 @@
         "gate1-authority-evidence",
         "gate1-vector-evidence"
       ],
-      "acceptanceBoundary": "The historical CockroachDB Cloud plan proves real DVI mechanics and the authority receipt proves deterministic admissibility, but neither proves that the named index ranks the full gate output. The local candidate materializes a short-lived database-produced admissibility snapshot, binds the top-ranked evidence to one synthetic drill without disclosing fixture identifiers, and requires a current admissibility recheck before authorization. AWS does not yet consume that binding.",
+      "acceptanceBoundary": "The historical CockroachDB Cloud plan proves real DVI mechanics and the authority receipt proves deterministic admissibility, but neither proves that the named index ranks the full gate output. The local candidate materializes a short-lived database-produced admissibility snapshot, binds the top-ranked evidence to one synthetic drill without disclosing fixture identifiers, and requires a current admissibility recheck before authorization. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff.",
       "remainingRequirements": [
         "A fresh exact-implementation CockroachDB Cloud receipt with mixed admissible and inadmissible fixtures, adversarial exclusions, and EXPLAIN (VERBOSE) naming the snapshot vector index with exact tenant/retrieval prefix spans."
       ]
@@ -646,14 +676,19 @@
     {
       "id": "full-highwater-drills",
       "claim": "One hundred full high-water drills bind admissibility-ranked memory, one authority winner, exact recovery, and replay behavior end to end.",
-      "currentStatus": "Partial; exact DVI, authority, and recovery per-run binding controls are source-tested independently, but no accepted provider-backed 100-run batch exists",
+      "currentStatus": "Partial; a deterministic offline 100-run specification receipt passes its recomputing local validator, while exact DVI, authority, and recovery per-run binding controls remain independently source-tested and no accepted provider-backed 100-run batch exists",
       "proofState": "PARTIAL",
       "artifacts": [
-        "full-drill-evidence"
+        "full-drill-evidence",
+        "local-full-drill-harness",
+        "local-full-drill-receipt",
+        "local-full-drill-runner",
+        "local-full-drill-tests",
+        "local-full-drill-verifier"
       ],
-      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
+      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. The validator-passing local receipt recomputes 100 exact deterministic scenario runs with zero declared invariant violations, but exercises only the sequential in-memory specification. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
       "remainingRequirements": [
-        "Implement the bounded live batch harness, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-source-bound winner recovery through Managed MCP, replay checks, cleanup, and zero invariant violations."
+        "Implement the bounded provider-backed live batch harness, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-source-bound winner recovery through Managed MCP, replay checks, cleanup, and zero invariant violations."
       ]
     },
     {
@@ -821,7 +856,7 @@
         "release-claims-tests",
         "release-claims-verifier"
       ],
-      "boundary": "The current claims ledger is fully represented in this manifest, and the exact verifier hash-binds 13 reviewed README, browser, local/AWS scenario, architecture, AWS, contest, video, and Devpost surfaces; requires the synthetic and local-versus-live boundaries; preserves all 13 unresolved submission stop-token occurrences and 14 unchecked hard gates; and constrains absolute URLs to six reviewed local or public values. CURRENT_PUBLIC_CLAIMS_PASS does not prove claim truth, authorize deployment or publication, or replace the final private human review.",
+      "boundary": "The current claims ledger is fully represented in this manifest, and the exact verifier hash-binds 14 reviewed README, browser, local/AWS scenario, architecture, AWS, full-drill evidence, contest, video, and Devpost surfaces; requires the synthetic and local-versus-live boundaries; preserves all 13 unresolved submission stop-token occurrences and 14 unchecked hard gates; and constrains absolute URLs to six reviewed local or public values. CURRENT_PUBLIC_CLAIMS_PASS does not prove claim truth, authorize deployment or publication, or replace the final private human review.",
       "remainingRequirements": [
         "After every live gate is reconciled, freeze all claim surfaces against accepted receipts and the exact final release, then complete the private human review of every submitted field."
       ]
@@ -998,7 +1033,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

@@ -222,6 +222,22 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
     role: "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY"
   }),
+  "local-full-drill-harness": Object.freeze({
+    path: "src/local-full-drill.js",
+    role: "LOCAL_FULL_DRILL_EVIDENCE_CONTRACT"
+  }),
+  "local-full-drill-receipt-verifier": Object.freeze({
+    path: "scripts/verify-local-full-drill-receipt.js",
+    role: "LOCAL_FULL_DRILL_EVIDENCE_VERIFIER"
+  }),
+  "local-full-drill-runner": Object.freeze({
+    path: "scripts/run-local-full-drills.js",
+    role: "LOCAL_FULL_DRILL_EVIDENCE_RUNNER"
+  }),
+  "local-full-drill-tests": Object.freeze({
+    path: "test/local-full-drill.test.js",
+    role: "LOCAL_FULL_DRILL_EVIDENCE_VERIFICATION"
+  }),
   "local-server": Object.freeze({
     path: "src/server.js",
     role: "LOOPBACK_DEVELOPMENT_SERVER"
@@ -237,6 +253,14 @@ const EXPECTED_SURFACES = Object.freeze({
   "primary-security-runner": Object.freeze({
     path: "scripts/gate1-security.js",
     role: "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER"
+  }),
+  "proof-manifest-tests": Object.freeze({
+    path: "test/proof-manifest.test.js",
+    role: "PROOF_MANIFEST_EVIDENCE_VERIFICATION"
+  }),
+  "proof-manifest-verifier": Object.freeze({
+    path: "scripts/verify-proof-manifest.js",
+    role: "PROOF_MANIFEST_EVIDENCE_VERIFIER"
   }),
   "probe-runtime": Object.freeze({
     path: "infra/aws/lambda/probe.cjs",
@@ -1188,6 +1212,30 @@ const SOURCE_MARKERS = Object.freeze({
     "CloudWatch Embedded Metric Format",
     "alarm state transition"
   ]),
+  "local-full-drill-harness": Object.freeze([
+    "LOCAL_FULL_DRILL_CLAIM_BOUNDARY",
+    "LOCAL_FULL_DRILL_SOURCE_PATHS",
+    "MAX_RECEIPT_BYTES",
+    "providerBacked: false",
+    "liveClaimSatisfied: false",
+    "validateLocalFullDrillReceiptBytes"
+  ]),
+  "local-full-drill-receipt-verifier": Object.freeze([
+    "stat.isSymbolicLink()",
+    "stat.size > 1024 * 1024",
+    "validateLocalFullDrillReceiptBytes",
+    "localFullDrillSourceBindings(ROOT)"
+  ]),
+  "local-full-drill-runner": Object.freeze([
+    "buildLocalFullDrillReceipt",
+    "localFullDrillSourceBindings(ROOT)",
+    "LOCAL_FULL_DRILL_ARGUMENTS_REJECTED"
+  ]),
+  "local-full-drill-tests": Object.freeze([
+    "the validator recomputes through the shared local implementation",
+    "the validator rejects count, ordering, digest, source, and claim-boundary drift",
+    "the evidence contract preserves generator and validator trust boundaries"
+  ]),
   "dvi-proposal-authorization": Object.freeze([
     "FROM tp_api.g1_authorize_dvi_proposal_v1(",
     "normalizedDviAuthorizationFor({",
@@ -1282,6 +1330,16 @@ const SOURCE_MARKERS = Object.freeze({
     "requestDigestRejected?.sqlstate",
     "nullIntentNonceRejected?.sqlstate",
     "tp_authorizer_user"
+  ]),
+  "proof-manifest-tests": Object.freeze([
+    "proof manifest propagates nested local full-drill failure",
+    "PROOF_MANIFEST.json distributed-vector-index",
+    "AWS(?: authority request| path)? does not yet consume"
+  ]),
+  "proof-manifest-verifier": Object.freeze([
+    "local-full-drill-receipt",
+    "validateLocalFullDrillReceiptBytes",
+    "proof manifest nested local-full-drill verification failed"
   ]),
   "probe-runtime": Object.freeze([
     "PROBE_REQUEST_REJECTED",

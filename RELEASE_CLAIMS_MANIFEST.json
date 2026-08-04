@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-claims-manifest.v1",
   "status": "CURRENT_PUBLIC_CLAIMS_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-03",
+  "reviewedOn": "2026-08-04",
   "claimBoundary": "This inventory binds only the current public claim surfaces to reviewed pending-state copy. It does not prove claim truth, authorize deployment or publication, or replace the exact-release private human review.",
   "finalReleaseRequirements": [
     "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
@@ -42,7 +42,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "5c80c2c3d2e9da6151794eecf0f2bda17f2c30bd4d91246350a5756d389bb9d7"
+      "sha256": "6249b00931fc40754944afdf004f6bdd1f69958b576715282d9f65dacda4bbd1"
     },
     {
       "id": "contest-matrix",
@@ -55,6 +55,12 @@
       "path": "docs/DEMO_SCRIPT.md",
       "role": "VIDEO_DRAFT",
       "sha256": "75ef2bfd774943e0bf446239df3726df880d51fba39b14a8d4ad1111b2046dc6"
+    },
+    {
+      "id": "full-drill-evidence",
+      "path": "docs/FULL_DRILL_EVIDENCE.md",
+      "role": "EVIDENCE_BOUNDARY",
+      "sha256": "d073976a60a4c944632d4ba7b320eaf7db371cf9db2c59329480a7f4346ea7c9"
     },
     {
       "id": "public-demo-runtime",

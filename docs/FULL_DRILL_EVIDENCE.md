@@ -16,6 +16,50 @@ times to detect deterministic invariant regressions. Its receipt must identify
 itself as local and synthetic. It cannot satisfy, substitute for, or unlock the
 provider-backed claim.
 
+## Deterministic offline harness
+
+Use `npm run --silent full-drill:local` for canonical file generation. The
+command executes the exact local scenario 100 times and emits one canonical
+`tideproof.highwater-drill-local-batch.v1` receipt to standard output; redirect
+that output when refreshing the checked-in receipt at
+[`evidence/local-full-drill-100-2026-08-04.json`](../evidence/local-full-drill-100-2026-08-04.json).
+`npm run full-drill:local:verify -- evidence/local-full-drill-100-2026-08-04.json`
+recomputes all 100 scenarios through the same `buildLocalFullDrillReceipt` and
+`runScenario` shared local implementation used by the generator, then requires
+byte-for-byte agreement with the receipt. This detects drift or tampering
+against the current shared implementation; it is not an independent oracle,
+and common-mode defects remain possible.
+
+The local acceptance control requires:
+
+- exactly 100 ordered run numbers with 100 unique domain-separated run
+  digests and no skipped or extra run;
+- the exact 11-invariant and 13-step local scenario contract on every run,
+  zero false invariants, one fixed scenario time, and one deterministic
+  scenario digest across the batch;
+- an allowlisted source digest covering the scenario, protocol, canonical JSON
+  helper, harness, runner, validator, package files, public-demo runtime, and
+  candidate AWS Demo entry;
+- exact two-space JSON bytes with one trailing newline, strict object shapes,
+  finite unambiguous JSON values, and recomputation of every source, run, and
+  batch digest; and
+- explicit `false` values for provider backing, CockroachDB execution, AWS
+  Lambda concurrency proof, Managed MCP execution, and deployed-artifact
+  proof.
+
+This installs the cheapest durable controls for the main offline pre-mortem
+failures: canonicalization or schema drift, digest substitution, reordered or
+partial replay, wall-clock nondeterminism, local sequential execution being
+misrepresented as provider concurrency, and tested-source/deployed-artifact
+divergence. The AWS Demo entry and local harness are bound to the same
+`src/scenario.js` source path, but a source hash is not build or deployment
+evidence. The source-hash control assumes a clean, quiescent, controlled worktree
+throughout generation and validation. It reads bound files sequentially and
+does not lock or snapshot the filesystem. It is not a hostile-host or concurrent-filesystem immutability proof:
+mutation between source reads,
+scenario execution, validation, or later receipt use remains a TOCTOU residual.
+The receipt remains a local regression control only.
+
 The accepted release artifact must be a fresh
 `tideproof.highwater-drill-live-batch.v1` receipt from the exact clean release
 commit and exact deployed configuration. It must contain exactly 100 unique,
@@ -78,11 +122,12 @@ evidence, timeout, and resource-bound controls. The DVI proof candidate binds
 its selected top-ranked evidence to one exact synthetic drill run. The source
 path now consumes database-authorized DVI proposal identities and the exact
 selected-evidence digest, but no provider-backed receipt yet proves the live
-DVI-to-AWS handoff. The provider-backed batch harness, bounded multi-race
-deployment shape, and live receipt do not yet exist. The exact cross-act
-recovery lookup now has a locally tested source control, but no provider-backed
-receipt. Public claims and final release readiness must therefore remain
-partial and blocked.
+DVI-to-AWS handoff. The deterministic offline 100-run harness and its
+recomputing receipt validator now exist, but the provider-backed batch harness,
+bounded multi-race deployment shape, and live receipt do not. The exact
+cross-act recovery lookup now has a locally tested source control, but no
+provider-backed receipt. Public claims and final release readiness must
+therefore remain partial and blocked.
 
 The sanitized `tideproof.aws-authority-race-receipt.v6` source contract carries
 the exact configured active-run UUID and validates each contender's configured

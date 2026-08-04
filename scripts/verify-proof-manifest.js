@@ -4,6 +4,10 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyBrandMigration } from "./verify-brand-migration.js";
 import { verifyReleaseSecurity } from "./verify-release-security.js";
+import {
+  localFullDrillSourceBindings,
+  validateLocalFullDrillReceiptBytes,
+} from "../src/local-full-drill.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_NAME = "PROOF_MANIFEST.json";
@@ -275,6 +279,19 @@ export function verifyProofManifest({
       verifyBrandMigration({ rootDir: resolvedRoot });
     } catch {
       throw new Error("proof manifest nested brand-migration verification failed");
+    }
+  }
+  if (artifactById.has("local-full-drill-receipt")) {
+    try {
+      const artifact = artifactById.get("local-full-drill-receipt");
+      validateLocalFullDrillReceiptBytes(
+        readFileSync(
+          resolveArtifact(resolvedRoot, artifact.path, "local-full-drill-receipt")
+        ),
+        { sourceBindings: localFullDrillSourceBindings(resolvedRoot) }
+      );
+    } catch {
+      throw new Error("proof manifest nested local-full-drill verification failed");
     }
   }
 

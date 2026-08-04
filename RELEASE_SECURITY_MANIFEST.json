@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-03",
+  "reviewedOn": "2026-08-04",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -309,6 +309,30 @@
       "sha256": "6af707711ceecaf6a8583966b4ca1ef405138133bdcea7eeb3502f901c4f2638"
     },
     {
+      "id": "local-full-drill-harness",
+      "path": "src/local-full-drill.js",
+      "role": "LOCAL_FULL_DRILL_EVIDENCE_CONTRACT",
+      "sha256": "56e3d6dbe2d7493f0204d14f1d7093abdfc18d20e9cf209514720842c41b81f7"
+    },
+    {
+      "id": "local-full-drill-receipt-verifier",
+      "path": "scripts/verify-local-full-drill-receipt.js",
+      "role": "LOCAL_FULL_DRILL_EVIDENCE_VERIFIER",
+      "sha256": "f77d2d55bf2d684dcfb27142ad4016d62ba91ce32c5b8c3aefb9922aecc6e60a"
+    },
+    {
+      "id": "local-full-drill-runner",
+      "path": "scripts/run-local-full-drills.js",
+      "role": "LOCAL_FULL_DRILL_EVIDENCE_RUNNER",
+      "sha256": "432f5de81f73c620148c5121916acd3f05fcd0dd38ac4d1b3808cac62944dcdd"
+    },
+    {
+      "id": "local-full-drill-tests",
+      "path": "test/local-full-drill.test.js",
+      "role": "LOCAL_FULL_DRILL_EVIDENCE_VERIFICATION",
+      "sha256": "35d01c95206cfeea4b604353ca7c49d0fced2d0a358319c34ca129a2f74cb114"
+    },
+    {
       "id": "local-server",
       "path": "src/server.js",
       "role": "LOOPBACK_DEVELOPMENT_SERVER",
@@ -331,6 +355,18 @@
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
       "sha256": "479af4d90b846b3c088939b8b482bda96d959cea893702e3fd18c63e8a2be3ef"
+    },
+    {
+      "id": "proof-manifest-tests",
+      "path": "test/proof-manifest.test.js",
+      "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
+      "sha256": "363b44bd9bebd8be009516b7932306d674b7df4fe5fcad032f60c90801ce9c56"
+    },
+    {
+      "id": "proof-manifest-verifier",
+      "path": "scripts/verify-proof-manifest.js",
+      "role": "PROOF_MANIFEST_EVIDENCE_VERIFIER",
+      "sha256": "2028545f4d21654bd6eb067fba55ce338506c96a8604fc6288c9004f280d19ca"
     },
     {
       "id": "probe-runtime",
