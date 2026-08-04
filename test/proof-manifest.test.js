@@ -241,7 +241,11 @@ test("release copy matches executable and generated source contracts", () => {
   const fullDrillClaim = manifest.claims.find(
     ({ id }) => id === "full-highwater-drills"
   );
+  const dviClaim = manifest.claims.find(
+    ({ id }) => id === "distributed-vector-index"
+  );
   assert(fullDrillClaim, "full drill proof claim missing");
+  assert(dviClaim, "DVI proof claim missing");
   assert.deepEqual(fullDrillClaim.artifacts, [
     "full-drill-evidence",
     "local-full-drill-harness",
@@ -274,6 +278,7 @@ test("release copy matches executable and generated source contracts", () => {
   for (const [label, source] of [
     ...dviClaimRows,
     ["docs/FULL_DRILL_EVIDENCE.md", fullDrill],
+    ["PROOF_MANIFEST.json distributed-vector-index", dviClaim.acceptanceBoundary],
     ["PROOF_MANIFEST.json", fullDrillClaim.acceptanceBoundary],
   ]) {
     const normalized = source.replace(/\s+/gu, " ");

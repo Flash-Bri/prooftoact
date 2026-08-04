@@ -51,6 +51,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "docs/DEMO_SCRIPT.md",
     role: "VIDEO_DRAFT"
   }),
+  "full-drill-evidence": Object.freeze({
+    path: "docs/FULL_DRILL_EVIDENCE.md",
+    role: "EVIDENCE_BOUNDARY"
+  }),
   "public-demo-runtime": Object.freeze({
     path: "src/cloud/public-demo.js",
     role: "AWS_PUBLIC_RUNTIME"
@@ -118,6 +122,12 @@ const REQUIRED_MARKERS = Object.freeze({
     "GATE TWO HOST — AWS Lambda + API Gateway; advisory evidence pending",
     "That proves hosting only.",
     "The final video must not be recorded until the accepted advisory receipt supplies the exact final Gate Two wording and this scene map is relocked to the release commit."
+  ]),
+  "full-drill-evidence": Object.freeze([
+    "Status: **provider-backed batch pending**.",
+    "Its receipt must identify itself as local and synthetic. It cannot satisfy, substitute for, or unlock the provider-backed claim.",
+    "The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff.",
+    "No provider-backed receipt from this lane exists yet."
   ]),
   "public-demo-runtime": Object.freeze([
     "GATE TWO HOST — AWS Lambda + API Gateway; advisory evidence pending",

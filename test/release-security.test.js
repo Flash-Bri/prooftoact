@@ -88,6 +88,24 @@ test("security manifest binds every AWS provider runtime and template-security c
   }
 });
 
+test("security manifest binds local evidence generation and verification code", () => {
+  const surfaces = __test.EXPECTED_SURFACES;
+  for (const [id, path] of [
+    ["local-full-drill-harness", "src/local-full-drill.js"],
+    [
+      "local-full-drill-receipt-verifier",
+      "scripts/verify-local-full-drill-receipt.js"
+    ],
+    ["local-full-drill-runner", "scripts/run-local-full-drills.js"],
+    ["local-full-drill-tests", "test/local-full-drill.test.js"],
+    ["proof-manifest-tests", "test/proof-manifest.test.js"],
+    ["proof-manifest-verifier", "scripts/verify-proof-manifest.js"]
+  ]) {
+    assert.equal(surfaces[id]?.path, path);
+    assert.equal(__test.SOURCE_MARKERS[id]?.length > 0, true);
+  }
+});
+
 test("security manifest rejects final approval and changed surface contract", () => {
   assert.equal(validateManifest(fixtureManifest()).finalReleaseReady, false);
   assert.throws(

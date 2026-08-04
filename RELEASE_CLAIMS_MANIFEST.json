@@ -57,6 +57,12 @@
       "sha256": "75ef2bfd774943e0bf446239df3726df880d51fba39b14a8d4ad1111b2046dc6"
     },
     {
+      "id": "full-drill-evidence",
+      "path": "docs/FULL_DRILL_EVIDENCE.md",
+      "role": "EVIDENCE_BOUNDARY",
+      "sha256": "d073976a60a4c944632d4ba7b320eaf7db371cf9db2c59329480a7f4346ea7c9"
+    },
+    {
       "id": "public-demo-runtime",
       "path": "src/cloud/public-demo.js",
       "role": "AWS_PUBLIC_RUNTIME",
