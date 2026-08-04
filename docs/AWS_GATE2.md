@@ -315,6 +315,23 @@ clean checkout:
 npm run gate2:aws-preflight
 ```
 
+Before the command makes any AWS call, the authenticated operator lane must
+provide four independently reviewed, nonsecret expectations:
+
+- `AWS_EVIDENCE_EXPECTED_ACCOUNT_ID`;
+- `AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN`;
+- `AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN`; and
+- `AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID`.
+
+Do not discover or infer these values inside the preflight. The command first
+rejects a missing, malformed, or internally inconsistent expectation set. It
+then makes exactly one STS `GetCallerIdentity` request and validates that
+response against the precommitted set before any CloudFormation, Budgets,
+Cost Explorer, S3, or Bedrock read. A mismatch stops the run without gathering
+account-specific evidence. Credentials and these expectations belong only in
+the explicitly authenticated operator lane; they must not be written to
+`.env`, source, logs, receipts, or shell history.
+
 The command is read-only and fail closed. It binds the observation to the
 clean Git commit and tree, omits the AWS account, caller ARN, private bucket
 name, and alert addresses from its output, and accepts only:
@@ -357,6 +374,29 @@ default object, whose nonblended, nonamortized settings bind the
 `UnblendedCost` basis. Any custom cost-type value or partial object fails.
 The sanitized manual console observation and its mandatory stop are recorded
 in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
+
+### Caller identity was validated after account-specific reads
+
+- Root cause: the collector fetched STS identity first but deferred exact
+  caller validation to final receipt validation, after CloudFormation, budget,
+  cost, bucket, and model reads.
+- Why it was missed: snapshot fixtures proved that the final validator rejected
+  the wrong identity, but no control observed the provider-call sequence.
+- Earliest detection: return a mismatched STS caller from an injected provider
+  and require that the request log contain only `GetCallerIdentity`.
+- Repair: validate the four precommitted expectations before STS, then validate
+  the actual STS response immediately before any account-specific read.
+- Regression/preventive control: the preflight exposes injectable command and
+  provider readers only for deterministic tests; the focused test requires a
+  wrong-account caller to stop after the single STS request.
+- Verification: focused source tests exercise a self-consistent role session,
+  a cross-account expectation, and a wrong-account STS response. Live AWS
+  execution remains pending.
+- Residual risk: operator-supplied expectations and credentials still require
+  an independently controlled authenticated lane; this change does not prove
+  their provenance or any AWS service state.
+- Claim impact: ProofToAct may claim source-level fail-closed caller ordering.
+  It adds no live AWS, identity, spend, deployment, or availability claim.
 
 ## Live acceptance sequence
 

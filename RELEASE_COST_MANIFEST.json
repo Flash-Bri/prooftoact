@@ -85,7 +85,7 @@
       "id": "aws-preflight-runner",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "62a619a61c8c86c686cf52b9eeeed0767c3d0f16746411de3b547ebe7d70a7c4"
+      "sha256": "a8f001fb509bd045d5c2a80815a7160a8dc72479f898b7885b0fc9ae4b787dcf"
     },
     {
       "id": "aws-readiness-runner",

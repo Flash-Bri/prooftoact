@@ -10,7 +10,8 @@ import {
 import {
   assertAwsSdkEvidenceEnvironment,
   isolatedAwsCliEnvironment,
-  isolatedEvidenceProcessEnvironment
+  isolatedEvidenceProcessEnvironment,
+  validateAwsEvidenceCaller
 } from "../src/cloud/aws-evidence-identity.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -94,8 +95,8 @@ function exactSingleStack(response, expectedName) {
   return stacks[0];
 }
 
-function readBucketPolicy(region, bucketName) {
-  const response = awsJson(
+function readBucketPolicy(region, bucketName, readAwsJson = awsJson) {
+  const response = readAwsJson(
     region,
     "s3api",
     "get-bucket-policy",
@@ -113,43 +114,18 @@ export function assertAwsPreflightParentEnvironment(environment) {
   return true;
 }
 
-function collectSnapshot(now = new Date()) {
-  assertAwsPreflightParentEnvironment(process.env);
-  const {
-    region,
-    modelId,
-    bootstrapStackName,
-    mainStackName,
-    legacyMainStackName
-  } = AWS_GATE2_PREFLIGHT_DEFAULTS;
-  const sourceCommit = commandText(
-    "git",
-    ["rev-parse", "HEAD"],
-    "GIT_SOURCE_COMMIT"
-  );
-  const treeDigest = commandText(
-    "git",
-    ["rev-parse", "HEAD^{tree}"],
-    "GIT_TREE_DIGEST"
-  );
-  const workingTreeClean =
-    commandText(
-      "git",
-      ["status", "--short"],
-      "GIT_STATUS"
-    ).length === 0;
-  if (!workingTreeClean) {
-    throw new Error("WORKING_TREE_DIRTY");
-  }
-
+export function awsPreflightIdentityExpectation(
+  environment,
+  bindingContext
+) {
   const expectedAccountId =
-    process.env.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID;
+    environment?.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID;
   const expectedPrincipalArn =
-    process.env.AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN;
+    environment?.AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN;
   const expectedCallerArn =
-    process.env.AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN;
+    environment?.AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN;
   const expectedCallerUserId =
-    process.env.AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID;
+    environment?.AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID;
   if (!/^\d{12}$/.test(expectedAccountId ?? "")) {
     throw new Error("AWS_EXPECTED_ACCOUNT_REQUIRED");
   }
@@ -166,9 +142,89 @@ function collectSnapshot(now = new Date()) {
     throw new Error("AWS_EXPECTED_PREFLIGHT_IDENTITY_REQUIRED");
   }
 
-  const callerIdentity = awsJson(region, "sts", "get-caller-identity");
+  const expectation = {
+    expectedAccountId,
+    expectedPrincipalArn,
+    expectedCallerArn,
+    expectedCallerUserId
+  };
+  validateAwsEvidenceCaller(
+    {
+      Account: expectedAccountId,
+      Arn: expectedCallerArn,
+      UserId: expectedCallerUserId
+    },
+    {
+      ...expectation,
+      bindingContext
+    }
+  );
+  return expectation;
+}
+
+export function collectSnapshot(
+  now = new Date(),
+  {
+    environment = process.env,
+    readCommandText = commandText,
+    readAwsJson = awsJson
+  } = {}
+) {
+  assertAwsPreflightParentEnvironment(environment);
+  const {
+    region,
+    modelId,
+    bootstrapStackName,
+    mainStackName,
+    legacyMainStackName
+  } = AWS_GATE2_PREFLIGHT_DEFAULTS;
+  const sourceCommit = readCommandText(
+    "git",
+    ["rev-parse", "HEAD"],
+    "GIT_SOURCE_COMMIT"
+  );
+  const treeDigest = readCommandText(
+    "git",
+    ["rev-parse", "HEAD^{tree}"],
+    "GIT_TREE_DIGEST"
+  );
+  const workingTreeClean =
+    readCommandText(
+      "git",
+      ["status", "--short"],
+      "GIT_STATUS"
+    ).length === 0;
+  if (!workingTreeClean) {
+    throw new Error("WORKING_TREE_DIRTY");
+  }
+
+  const bindingContext = {
+    purpose: "gate2-read-only-preflight",
+    sourceCommit,
+    treeDigest
+  };
+  const expectation = awsPreflightIdentityExpectation(
+    environment,
+    bindingContext
+  );
+  const {
+    expectedAccountId,
+    expectedPrincipalArn,
+    expectedCallerArn,
+    expectedCallerUserId
+  } = expectation;
+
+  const callerIdentity = readAwsJson(
+    region,
+    "sts",
+    "get-caller-identity"
+  );
+  validateAwsEvidenceCaller(callerIdentity, {
+    ...expectation,
+    bindingContext
+  });
   const bootstrapStack = exactSingleStack(
-    awsJson(
+    readAwsJson(
       region,
       "cloudformation",
       "describe-stacks",
@@ -185,13 +241,13 @@ function collectSnapshot(now = new Date()) {
     "ArtifactBucketName"
   );
   const accountId = callerIdentity.Account;
-  const budget = awsJson(
+  const budget = readAwsJson(
     region,
     "budgets",
     "describe-budget",
     awsBudgetDescribeArguments(accountId, budgetName)
   ).Budget;
-  const notifications = awsJson(
+  const notifications = readAwsJson(
     region,
     "budgets",
     "describe-notifications-for-budget",
@@ -205,7 +261,7 @@ function collectSnapshot(now = new Date()) {
   const notificationSubscribers = notifications.map((notification) => ({
     notification,
     subscribers:
-      awsJson(
+      readAwsJson(
         region,
         "budgets",
         "describe-subscribers-for-notification",
@@ -221,7 +277,7 @@ function collectSnapshot(now = new Date()) {
   }));
 
   const period = awsCostExplorerPeriod(now);
-  const currentCostResponse = awsJson(
+  const currentCostResponse = readAwsJson(
     region,
     "ce",
     "get-cost-and-usage",
@@ -251,42 +307,42 @@ function collectSnapshot(now = new Date()) {
     budget,
     notificationSubscribers,
     artifactBucket: {
-      versioning: awsJson(
+      versioning: readAwsJson(
         region,
         "s3api",
         "get-bucket-versioning",
         ["--bucket", bucketName]
       ),
-      encryption: awsJson(
+      encryption: readAwsJson(
         region,
         "s3api",
         "get-bucket-encryption",
         ["--bucket", bucketName]
       ),
-      publicAccessBlock: awsJson(
+      publicAccessBlock: readAwsJson(
         region,
         "s3api",
         "get-public-access-block",
         ["--bucket", bucketName]
       ),
-      ownership: awsJson(
+      ownership: readAwsJson(
         region,
         "s3api",
         "get-bucket-ownership-controls",
         ["--bucket", bucketName]
       ),
-      policyStatus: awsJson(
+      policyStatus: readAwsJson(
         region,
         "s3api",
         "get-bucket-policy-status",
         ["--bucket", bucketName]
       ),
-      policy: readBucketPolicy(region, bucketName)
+      policy: readBucketPolicy(region, bucketName, readAwsJson)
     },
     mainStackName,
     legacyMainStackName,
     stackSummaries:
-      awsJson(
+      readAwsJson(
         region,
         "cloudformation",
         "list-stacks"
@@ -295,7 +351,7 @@ function collectSnapshot(now = new Date()) {
       ...period,
       response: currentCostResponse
     },
-    foundationModel: awsJson(
+    foundationModel: readAwsJson(
       region,
       "bedrock",
       "get-foundation-model",

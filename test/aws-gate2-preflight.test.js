@@ -6,7 +6,11 @@ import {
   awsCostExplorerPeriod,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
-import { assertAwsPreflightParentEnvironment } from "../scripts/gate2-aws-preflight.js";
+import {
+  assertAwsPreflightParentEnvironment,
+  awsPreflightIdentityExpectation,
+  collectSnapshot
+} from "../scripts/gate2-aws-preflight.js";
 
 const ACCOUNT_ID = "111111111111";
 const BUCKET_NAME = "private-tideproof-artifacts-111111111111";
@@ -25,6 +29,100 @@ test("direct AWS preflight rejects Node and endpoint injection before spawning",
       /AWS_EVIDENCE_(?:SDK_ENVIRONMENT|ENDPOINT_OVERRIDE)/
     );
   }
+});
+
+function expectedPreflightEnvironment(overrides = {}) {
+  return {
+    PATH: "/usr/bin",
+    AWS_ACCESS_KEY_ID: "ASIAEXAMPLE12345678",
+    AWS_SECRET_ACCESS_KEY: "secret-example-value",
+    AWS_SESSION_TOKEN: "session-example-value",
+    AWS_EVIDENCE_EXPECTED_ACCOUNT_ID: ACCOUNT_ID,
+    AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN:
+      `arn:aws:iam::${ACCOUNT_ID}:role/ProofToActPreflight`,
+    AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN:
+      `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+      "ProofToActPreflight/release-proof",
+    AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
+      "AROAPROOFTOACTROLE1:release-proof",
+    ...overrides
+  };
+}
+
+const PREFLIGHT_BINDING_CONTEXT = Object.freeze({
+  purpose: "gate2-read-only-preflight",
+  sourceCommit: "a".repeat(40),
+  treeDigest: "b".repeat(40)
+});
+
+test("AWS preflight validates a self-consistent identity expectation before STS", () => {
+  const expectation = awsPreflightIdentityExpectation(
+    expectedPreflightEnvironment(),
+    PREFLIGHT_BINDING_CONTEXT
+  );
+  assert.deepEqual(expectation, {
+    expectedAccountId: ACCOUNT_ID,
+    expectedPrincipalArn:
+      `arn:aws:iam::${ACCOUNT_ID}:role/ProofToActPreflight`,
+    expectedCallerArn:
+      `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+      "ProofToActPreflight/release-proof",
+    expectedCallerUserId: "AROAPROOFTOACTROLE1:release-proof"
+  });
+
+  assert.throws(
+    () =>
+      awsPreflightIdentityExpectation(
+        expectedPreflightEnvironment({
+          AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN:
+            "arn:aws:iam::222222222222:role/ProofToActPreflight"
+        }),
+        PREFLIGHT_BINDING_CONTEXT
+      ),
+    /AWS_EVIDENCE_PRINCIPAL_ACCOUNT/
+  );
+});
+
+test("AWS preflight stops after STS when the caller misses its expectation", () => {
+  const awsCalls = [];
+  const readCommandText = (_command, args) => {
+    const request = args.join(" ");
+    if (request === "rev-parse HEAD") {
+      return "a".repeat(40);
+    }
+    if (request === "rev-parse HEAD^{tree}") {
+      return "b".repeat(40);
+    }
+    if (request === "status --short") {
+      return "";
+    }
+    throw new Error("UNEXPECTED_TEST_COMMAND");
+  };
+  const readAwsJson = (_region, service, operation) => {
+    awsCalls.push({ service, operation });
+    assert.equal(service, "sts");
+    assert.equal(operation, "get-caller-identity");
+    return {
+      Account: "222222222222",
+      Arn:
+        "arn:aws:sts::222222222222:assumed-role/" +
+        "ProofToActPreflight/release-proof",
+      UserId: "AROAPROOFTOACTROLE1:release-proof"
+    };
+  };
+
+  assert.throws(
+    () =>
+      collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
+        environment: expectedPreflightEnvironment(),
+        readCommandText,
+        readAwsJson
+      }),
+    /AWS_EVIDENCE_CALLER_ACCOUNT/
+  );
+  assert.deepEqual(awsCalls, [
+    { service: "sts", operation: "get-caller-identity" }
+  ]);
 });
 
 function notification(

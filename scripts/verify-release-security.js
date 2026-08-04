@@ -954,8 +954,11 @@ const SOURCE_MARKERS = Object.freeze({
     "bindingDigest"
   ]),
   "aws-preflight": Object.freeze([
+    "awsPreflightIdentityExpectation(",
     "sts",
     "get-caller-identity",
+    "validateAwsEvidenceCaller(callerIdentity",
+    "readAwsJson(",
     "describe-stacks",
     "get-cost-and-usage",
     "get-foundation-model"
