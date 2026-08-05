@@ -372,13 +372,13 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "501b2f440302eebb89ab850494e3af19a7d2829e7b37cfa0a6d32674a4ffd6a2"
+      "sha256": "b4a2cdef6db71e92089d0a06c075ded8fcc2b6c3ff287aa205fd3611e9c77d07"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFIER",
-      "sha256": "2028545f4d21654bd6eb067fba55ce338506c96a8604fc6288c9004f280d19ca"
+      "sha256": "1dcf97f9865b653a875e9b21c8f0fda2e33ecad8279e2f166e7a94954a468154"
     },
     {
       "id": "probe-runtime",

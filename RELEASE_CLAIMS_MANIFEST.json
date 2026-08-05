@@ -78,7 +78,7 @@
       "id": "release-claims-ledger",
       "path": "docs/RELEASE_CLAIMS.md",
       "role": "CONTROL_LEDGER",
-      "sha256": "869953a1fc823c259d8c97d0ea550af08f5486345bf5e3dd737d81c5eebb0625"
+      "sha256": "f1e4a1f148580e1040c142fdf6b85553a9832a912a4f8ff5beacc965b0907af5"
     },
     {
       "id": "scenario-source",

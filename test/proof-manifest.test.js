@@ -72,6 +72,14 @@ function makeFixture() {
         id: "fixture-claim",
         claim: "Fixture claim.",
         currentStatus: "Fixture verified",
+        claimsLedgerRowSha256: sha256(
+          JSON.stringify([
+            "Fixture claim.",
+            "Fixture verified",
+            "fixture",
+            "fixture",
+          ])
+        ),
         proofState: "VERIFIED",
         artifacts: ["fixture-evidence"],
         acceptanceBoundary: "Fixture acceptance only.",
@@ -191,7 +199,8 @@ test("release copy matches executable and generated source contracts", () => {
   const awsBoundary = read("docs/AWS_GATE2.md");
   const notices = read("THIRD_PARTY_NOTICES.txt");
   const inventory = read("docs/DEPENDENCY_INVENTORY.md");
-  const manifest = JSON.parse(read("PROOF_MANIFEST.json"));
+  const proofManifestSource = read("PROOF_MANIFEST.json");
+  const manifest = JSON.parse(proofManifestSource);
 
   const noticeCount = oneIntegerMatch(
     notices,
@@ -227,6 +236,7 @@ test("release copy matches executable and generated source contracts", () => {
     ["CLAIMS.md", claims],
     ["docs/FULL_DRILL_EVIDENCE.md", fullDrill],
     ["docs/AWS_GATE2.md", awsBoundary],
+    ["PROOF_MANIFEST.json", proofManifestSource],
   ]) {
     const schemas = [
       ...new Set(
@@ -383,5 +393,178 @@ test("proof manifest rejects a claim omitted from the claims ledger mapping", ()
     );
   } finally {
     rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects required-artifact drift in the claims ledger mapping", () => {
+  const fixture = makeFixture();
+  try {
+    const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+    const changedClaims = readFileSync(claimsPath, "utf8").replace(
+      "| Fixture claim. | Fixture verified | fixture | fixture |",
+      "| Fixture claim. | Fixture verified | changed fixture | fixture |"
+    );
+    writeFileSync(claimsPath, changedClaims);
+    fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+    writeFileSync(
+      fixture.manifestPath,
+      `${JSON.stringify(fixture.manifest, null, 2)}\n`
+    );
+
+    assert.throws(
+      () => verifyProofManifest(fixture),
+      /claims\[0\]\.claimsLedgerRowSha256 does not match CLAIMS\.md/
+    );
+  } finally {
+    rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects acceptance-condition drift in the claims ledger mapping", () => {
+  const fixture = makeFixture();
+  try {
+    const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+    const changedClaims = readFileSync(claimsPath, "utf8").replace(
+      "| Fixture claim. | Fixture verified | fixture | fixture |",
+      "| Fixture claim. | Fixture verified | fixture | changed fixture |"
+    );
+    writeFileSync(claimsPath, changedClaims);
+    fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+    writeFileSync(
+      fixture.manifestPath,
+      `${JSON.stringify(fixture.manifest, null, 2)}\n`
+    );
+
+    assert.throws(
+      () => verifyProofManifest(fixture),
+      /claims\[0\]\.claimsLedgerRowSha256 does not match CLAIMS\.md/
+    );
+  } finally {
+    rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects a claims row without its terminal pipe", () => {
+  const fixture = makeFixture();
+  try {
+    const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+    const changedClaims = readFileSync(claimsPath, "utf8").replace(
+      "| Fixture claim. | Fixture verified | fixture | fixture |",
+      "| Fixture claim. | Fixture verified | fixture | fixture X"
+    );
+    writeFileSync(claimsPath, changedClaims);
+    fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+    writeFileSync(
+      fixture.manifestPath,
+      `${JSON.stringify(fixture.manifest, null, 2)}\n`
+    );
+
+    assert.throws(
+      () => verifyProofManifest(fixture),
+      /CLAIMS\.md row \d+ must end with a pipe/
+    );
+  } finally {
+    rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects duplicate claim rows", () => {
+  const fixture = makeFixture();
+  try {
+    const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+    const originalRow =
+      "| Fixture claim. | Fixture verified | fixture | fixture |";
+    const changedClaims = readFileSync(claimsPath, "utf8").replace(
+      originalRow,
+      `${originalRow}\n${originalRow}`
+    );
+    writeFileSync(claimsPath, changedClaims);
+    fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+    fixture.manifest.claims.push({
+      ...fixture.manifest.claims[0],
+      id: "fixture-claim-duplicate",
+    });
+    writeFileSync(
+      fixture.manifestPath,
+      `${JSON.stringify(fixture.manifest, null, 2)}\n`
+    );
+
+    assert.throws(
+      () => verifyProofManifest(fixture),
+      /CLAIMS\.md claim text must be unique/
+    );
+  } finally {
+    rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects duplicate canonical claim tables", () => {
+  const fixture = makeFixture();
+  try {
+    const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+    const canonicalTable = [
+      "| Claim | Current status | Required artifact | Acceptance condition |",
+      "| --- | --- | --- | --- |",
+      "| Fixture claim. | Fixture verified | fixture | fixture |",
+    ].join("\n");
+    const changedClaims = readFileSync(claimsPath, "utf8").replace(
+      canonicalTable,
+      `${canonicalTable}\n\n${canonicalTable}`
+    );
+    writeFileSync(claimsPath, changedClaims);
+    fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+    writeFileSync(
+      fixture.manifestPath,
+      `${JSON.stringify(fixture.manifest, null, 2)}\n`
+    );
+
+    assert.throws(
+      () => verifyProofManifest(fixture),
+      /CLAIMS\.md canonical claim-table header must appear exactly once/
+    );
+  } finally {
+    rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects empty required-artifact and acceptance-condition cells", () => {
+  const cases = [
+    {
+      label: "required artifact",
+      row: "| Fixture claim. | Fixture verified | | fixture |",
+      digestCells: ["Fixture claim.", "Fixture verified", "", "fixture"],
+    },
+    {
+      label: "acceptance condition",
+      row: "| Fixture claim. | Fixture verified | fixture | |",
+      digestCells: ["Fixture claim.", "Fixture verified", "fixture", ""],
+    },
+  ];
+
+  for (const testCase of cases) {
+    const fixture = makeFixture();
+    try {
+      const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+      const changedClaims = readFileSync(claimsPath, "utf8").replace(
+        "| Fixture claim. | Fixture verified | fixture | fixture |",
+        testCase.row
+      );
+      writeFileSync(claimsPath, changedClaims);
+      fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+      fixture.manifest.claims[0].claimsLedgerRowSha256 = sha256(
+        JSON.stringify(testCase.digestCells)
+      );
+      writeFileSync(
+        fixture.manifestPath,
+        `${JSON.stringify(fixture.manifest, null, 2)}\n`
+      );
+
+      assert.throws(
+        () => verifyProofManifest(fixture),
+        new RegExp(`CLAIMS\\.md row \\d+ ${testCase.label} must not be empty`)
+      );
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true });
+    }
   }
 });

@@ -403,13 +403,13 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "501b2f440302eebb89ab850494e3af19a7d2829e7b37cfa0a6d32674a4ffd6a2",
+      "sha256": "b4a2cdef6db71e92089d0a06c075ded8fcc2b6c3ff287aa205fd3611e9c77d07",
       "kind": "verification-code"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
-      "sha256": "2028545f4d21654bd6eb067fba55ce338506c96a8604fc6288c9004f280d19ca",
+      "sha256": "1dcf97f9865b653a875e9b21c8f0fda2e33ecad8279e2f166e7a94954a468154",
       "kind": "verification-code"
     },
     {
@@ -427,13 +427,13 @@
     {
       "id": "release-claims-ledger",
       "path": "docs/RELEASE_CLAIMS.md",
-      "sha256": "869953a1fc823c259d8c97d0ea550af08f5486345bf5e3dd737d81c5eebb0625",
+      "sha256": "f1e4a1f148580e1040c142fdf6b85553a9832a912a4f8ff5beacc965b0907af5",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "6e6288dba424889fb8504f0909f4cdc0846df9e22d7a99160a2a5b91ed74f242",
+      "sha256": "24e7a0404fee2116edc77d47836dcf99e2b2bfa8767f04fda17eade1b05480ad",
       "kind": "boundary-ledger"
     },
     {
@@ -571,7 +571,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "02ed153da17a96cd57ee0413c8801415701ae92ad2aca5f39fee8286db74dd67",
+      "sha256": "37e989a12a97a32ba192c11cfc345d6e62cd10993236a136161644a1fdefdd52",
       "kind": "boundary-ledger"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "c4e05bd57fd2809fca8d1eff25d2a8cf2a0c9d442fe087e4e14f9fa9122f97ea",
+      "sha256": "769119b8f9cfcaf7880958f009613762af6d75e2d4f139050f4db9b48947ffc3",
       "kind": "boundary-ledger"
     },
     {
@@ -622,6 +622,7 @@
       "id": "distributed-vector-index",
       "claim": "CockroachDB Distributed Vector Indexing ranks a database-produced snapshot of admissible memory candidates.",
       "currentStatus": "DVI mechanics and admissibility verified separately; integrated snapshot plus exact drill/top-evidence binding source-tested locally; fresh live plan and exclusion receipt pending",
+      "claimsLedgerRowSha256": "31246b20d8f9da0fa31645754f432f6e00e8ed34e7718ea3a0561ca0cbfbfc97",
       "proofState": "PARTIAL",
       "artifacts": [
         "gate1-authority-evidence",
@@ -636,6 +637,7 @@
       "id": "managed-mcp-recovery",
       "claim": "CockroachDB Managed MCP can inspect sanitized recovery state without transferring operational authority.",
       "currentStatus": "Gate One verified, synthetic scope",
+      "claimsLedgerRowSha256": "9482ea86057f9d1ae52022aa05d8285399ae0300d40e884f728c35f9856c0cff",
       "proofState": "VERIFIED",
       "artifacts": [
         "gate1-recovery-evidence"
@@ -647,6 +649,7 @@
       "id": "sql-admissibility-before-ranking",
       "claim": "SQL admissibility precedes semantic ranking and authority.",
       "currentStatus": "Authority ordering verified; run-bound admissible-snapshot ranking source-tested locally; fresh live integrated receipt pending",
+      "claimsLedgerRowSha256": "477fa31c93df529c70298e4285b5b86d732901923bbe63c7c77aa56b4609f738",
       "proofState": "PARTIAL",
       "artifacts": [
         "gate1-authority-evidence",
@@ -661,6 +664,7 @@
       "id": "serializable-authority-race",
       "claim": "Concurrent contenders produce one authority winner.",
       "currentStatus": "Gate One verified, 100 × 50 live races",
+      "claimsLedgerRowSha256": "427712904ba3b89ed08befed4177999db4692745ad4c1008a47bcd7ec70051fc",
       "proofState": "VERIFIED",
       "artifacts": [
         "gate1-authority-evidence"
@@ -672,6 +676,7 @@
       "id": "commit-ambiguity",
       "claim": "Process death around COMMIT never triggers blind replay in the synthetic authority gate.",
       "currentStatus": "Gate One verified, 100 runs per boundary",
+      "claimsLedgerRowSha256": "df0ffcb983419ffdf2459f99800388c2c9c1093ec52602280174ef905c80f2fa",
       "proofState": "VERIFIED",
       "artifacts": [
         "gate1-ambiguity-evidence"
@@ -683,6 +688,7 @@
       "id": "full-highwater-drills",
       "claim": "One hundred full high-water drills bind admissibility-ranked memory, one authority winner, exact recovery, and replay behavior end to end.",
       "currentStatus": "Partial; a deterministic offline 100-run specification receipt passes its recomputing local validator, while exact DVI, authority, and recovery per-run binding controls remain independently source-tested and no accepted provider-backed 100-run batch exists",
+      "claimsLedgerRowSha256": "371351c40e4112ddc8e6ee357d6374f78ff326fb71f987f53c1cc68891016505",
       "proofState": "PARTIAL",
       "artifacts": [
         "full-drill-evidence",
@@ -701,6 +707,7 @@
       "id": "successor-context-recovery",
       "claim": "A successor recovers context without inheriting authority.",
       "currentStatus": "Gate One verified, synthetic broker",
+      "claimsLedgerRowSha256": "2450325a46812269ee84251766a28d8cb418d45226ef6ae70573ee49decaf842",
       "proofState": "VERIFIED",
       "artifacts": [
         "gate1-recovery-evidence"
@@ -712,6 +719,7 @@
       "id": "stale-fence-rejection",
       "claim": "Stale fencing tokens cannot produce a protected synthetic effect.",
       "currentStatus": "Gate One verified, database sink only",
+      "claimsLedgerRowSha256": "e05d057cb8c644cb970b01ae57214f7c77a1341c96cdfb7c71eaaa6302d24bf6",
       "proofState": "VERIFIED",
       "artifacts": [
         "gate1-authority-evidence"
@@ -723,6 +731,7 @@
       "id": "outage-fail-closed",
       "claim": "ProofToAct fails closed when its memory or recovery path is unavailable.",
       "currentStatus": "Local broker behavior verified; deployed outage proof pending",
+      "claimsLedgerRowSha256": "124a5d034a08d84b138b01ce9dff47a01e77ebe0b38b6a32e30216cd2d03144f",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
@@ -737,6 +746,7 @@
       "id": "signed-out-aws-judge-surface",
       "claim": "A signed-out AWS judge surface can remain separate from proposal and authority capabilities.",
       "currentStatus": "Hardened local Gate Two candidate verified; live hosting pending",
+      "claimsLedgerRowSha256": "c09bda31375462e281dd8547dd2a3685e8d7e78961fc393854886218be317af2",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
@@ -752,6 +762,7 @@
       "id": "bounded-aws-proposal",
       "claim": "A bounded AWS proposal path can be deployed without giving the model authority.",
       "currentStatus": "Hardened local Gate Two candidate verified; live AWS proof pending",
+      "claimsLedgerRowSha256": "e99e80eef7d15fd36a0080ca924041c7a4e9c7aa9e5650ab3e0639667388b640",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
@@ -766,6 +777,7 @@
       "id": "aws-lambda-authority-race",
       "claim": "Two AWS Lambda contenders can overlap while CockroachDB commits one fresh authority winner.",
       "currentStatus": "Local handler, IAM, transaction, exact-caller evidence binding, durable-proof, and verifier candidate tested; no live AWS/DB race claim",
+      "claimsLedgerRowSha256": "9cd170ad4d31a636b1e117e55c9de6b010c374fb7734b93e49fbe8d8bcf627b3",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
@@ -776,7 +788,7 @@
       ],
       "acceptanceBoundary": "Local code and adversarial tests require positive-duration serializable transactions with a positive overlap interval, an initial fence of one, a canonical lease that remains active through the exact bound durable observation, and the expected terminal-state shape. They do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
       "remainingRequirements": [
-        "Accepted private invocation and CockroachDB receipts plus a sanitized v3 authority-race receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
+        "Accepted private invocation and CockroachDB receipts plus a sanitized tideproof.aws-authority-race-receipt.v6 receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
       ]
     }
   ],
