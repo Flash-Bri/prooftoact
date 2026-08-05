@@ -109,10 +109,26 @@ function parseClaimsLedger(source) {
       .split("|")
       .map((cell) => cell.trim());
     assert(cells.length === 4, `CLAIMS.md row ${index + 1} must have four cells`);
-    claims.push({ claim: cells[0], currentStatus: cells[1] });
+    claims.push({
+      claim: cells[0],
+      currentStatus: cells[1],
+      requiredArtifact: cells[2],
+      acceptanceCondition: cells[3],
+    });
   }
   assert(claims.length > 0, "CLAIMS.md claim table must not be empty");
   return claims;
+}
+
+function claimsLedgerRowSha256(claim) {
+  return sha256(
+    JSON.stringify([
+      claim.claim,
+      claim.currentStatus,
+      claim.requiredArtifact,
+      claim.acceptanceCondition,
+    ])
+  );
 }
 
 function resolveArtifact(rootDir, relativePath, label) {
@@ -318,6 +334,7 @@ export function verifyProofManifest({
         "id",
         "claim",
         "currentStatus",
+        "claimsLedgerRowSha256",
         "proofState",
         "artifacts",
         "acceptanceBoundary",
@@ -328,12 +345,20 @@ export function verifyProofManifest({
     assertNonemptyString(claim.claim, `${label}.claim`);
     assertNonemptyString(claim.currentStatus, `${label}.currentStatus`);
     assert(
+      /^[a-f0-9]{64}$/.test(claim.claimsLedgerRowSha256),
+      `${label}.claimsLedgerRowSha256 is invalid`
+    );
+    assert(
       claim.claim === ledgerClaims[index].claim,
       `${label}.claim does not match CLAIMS.md`
     );
     assert(
       claim.currentStatus === ledgerClaims[index].currentStatus,
       `${label}.currentStatus does not match CLAIMS.md`
+    );
+    assert(
+      claim.claimsLedgerRowSha256 === claimsLedgerRowSha256(ledgerClaims[index]),
+      `${label}.claimsLedgerRowSha256 does not match CLAIMS.md`
     );
     verifyReferences({
       item: claim,

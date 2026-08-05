@@ -72,6 +72,14 @@ function makeFixture() {
         id: "fixture-claim",
         claim: "Fixture claim.",
         currentStatus: "Fixture verified",
+        claimsLedgerRowSha256: sha256(
+          JSON.stringify([
+            "Fixture claim.",
+            "Fixture verified",
+            "fixture",
+            "fixture",
+          ])
+        ),
         proofState: "VERIFIED",
         artifacts: ["fixture-evidence"],
         acceptanceBoundary: "Fixture acceptance only.",
@@ -380,6 +388,54 @@ test("proof manifest rejects a claim omitted from the claims ledger mapping", ()
     assert.throws(
       () => verifyProofManifest(fixture),
       /proof manifest has 1 claims but CLAIMS.md has 2/
+    );
+  } finally {
+    rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects required-artifact drift in the claims ledger mapping", () => {
+  const fixture = makeFixture();
+  try {
+    const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+    const changedClaims = readFileSync(claimsPath, "utf8").replace(
+      "| Fixture claim. | Fixture verified | fixture | fixture |",
+      "| Fixture claim. | Fixture verified | changed fixture | fixture |"
+    );
+    writeFileSync(claimsPath, changedClaims);
+    fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+    writeFileSync(
+      fixture.manifestPath,
+      `${JSON.stringify(fixture.manifest, null, 2)}\n`
+    );
+
+    assert.throws(
+      () => verifyProofManifest(fixture),
+      /claims\[0\]\.claimsLedgerRowSha256 does not match CLAIMS\.md/
+    );
+  } finally {
+    rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest rejects acceptance-condition drift in the claims ledger mapping", () => {
+  const fixture = makeFixture();
+  try {
+    const claimsPath = path.join(fixture.rootDir, "CLAIMS.md");
+    const changedClaims = readFileSync(claimsPath, "utf8").replace(
+      "| Fixture claim. | Fixture verified | fixture | fixture |",
+      "| Fixture claim. | Fixture verified | fixture | changed fixture |"
+    );
+    writeFileSync(claimsPath, changedClaims);
+    fixture.manifest.artifacts[0].sha256 = sha256(changedClaims);
+    writeFileSync(
+      fixture.manifestPath,
+      `${JSON.stringify(fixture.manifest, null, 2)}\n`
+    );
+
+    assert.throws(
+      () => verifyProofManifest(fixture),
+      /claims\[0\]\.claimsLedgerRowSha256 does not match CLAIMS\.md/
     );
   } finally {
     rmSync(fixture.rootDir, { recursive: true, force: true });
