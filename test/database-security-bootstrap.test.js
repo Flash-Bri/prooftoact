@@ -26,6 +26,10 @@ const gate1AuthorityUrl = new URL(
   "../scripts/gate1-authority.js",
   import.meta.url
 );
+const gate1CapabilityRaceUrl = new URL(
+  "../scripts/gate1-capability-race.js",
+  import.meta.url
+);
 const gate1SecurityUrl = new URL(
   "../scripts/gate1-security.js",
   import.meta.url
@@ -249,6 +253,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_commit_dvi_selection_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_authorize_dvi_proposal_v1", /session_user <> 'tp_authorizer_user'/u],
     ["g1_authority_receipt_current_v1", sharedAuthorizerGuard],
+    ["g1_authority_receipt_current_v2", sharedAuthorizerGuard],
     ["g1_spend_authority_v1", sharedAuthorizerGuard],
     ["g2_spend_authority_race_v1", /session_user <> 'tp_gate2_authorizer_user'/u],
     ["g1_resolve_request_v1", sharedAuthorizerGuard],
@@ -259,7 +264,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_source_receipt_v2", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
-    ["g1_record_protected_effect_v1", /session_user = 'tp_dispatch_user'/u]
+    ["g1_record_protected_effect_v1", /session_user <> 'tp_dispatch_user'/u]
   ]);
   for (const [url, expectedGuards] of [
     [primaryUrl, expectedPrimaryGuards],
@@ -423,6 +428,103 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
   assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
 });
 
+test("recovery source resolver requires the exact live authority holder", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const resolver = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(resolver);
+  assert.match(
+    resolver,
+    /JOIN tp_private\.g1_resources AS resource\s+ON resource\.tenant_id = receipt\.tenant_id\s+AND resource\.resource_id = receipt\.resource_id/u
+  );
+  for (const [resourceField, receiptField] of [
+    ["active_run_id", "run_id"],
+    ["holder_incident_id", "incident_id"],
+    ["holder_operation_id", "operation_id"],
+    ["holder_agent_id", "agent_id"],
+    ["holder_proposal_digest", "proposal_digest"],
+    ["holder_logical_authority_key_sha256", "logical_authority_key_sha256"],
+    ["current_fence", "fencing_token"]
+  ]) {
+    assert.match(
+      resolver,
+      new RegExp(
+        `resource\\.${resourceField}\\s*=\\s*receipt\\.${receiptField}`,
+        "u"
+      ),
+      `${resourceField}=${receiptField}`
+    );
+  }
+  assert.match(
+    resolver,
+    /receipt\.lease_expires_at AS receipt_lease_expires_at[\s\S]*resource\.lease_expires_at AS resource_lease_expires_at[\s\S]*proposal\.expires_at AS proposal_expires_at/u
+  );
+  assert.match(
+    resolver,
+    /INTO v_candidate[\s\S]*LIMIT 2;[\s\S]*IF NOT FOUND OR v_candidate\.candidate_count <> 1[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_candidate\.receipt_lease_expires_at <= v_database_now[\s\S]*v_candidate\.resource_lease_expires_at <= v_database_now[\s\S]*v_candidate\.proposal_expires_at <= v_database_now[\s\S]*RETURN QUERY SELECT/u
+  );
+  assert.doesNotMatch(
+    resolver,
+    /g1_list_admissibility_internal_v1/u
+  );
+  assert.match(
+    resolver,
+    /evidence\.observed_at AS evidence_observed_at[\s\S]*evidence\.valid_from AS evidence_valid_from[\s\S]*evidence\.valid_until AS evidence_valid_until[\s\S]*evidence\.conflict_status AS evidence_conflict_status/u
+  );
+  assert.match(
+    resolver,
+    /jsonb_agg\(jsonb_build_object\([\s\S]*'observed_at'[\s\S]*'valid_from'[\s\S]*'valid_until'[\s\S]*other_verification\.signature_digest =[\s\S]*other\.signature_digest[\s\S]*other_key\.status = 'active'[\s\S]*other\.agency_scope IN \(receipt\.agency, '\*'\)[\s\S]*'\[\]'::JSONB\) AS conflict_windows/u
+  );
+  assert.match(
+    resolver,
+    /v_database_now := clock_timestamp\(\);[\s\S]*v_candidate\.evidence_observed_at >[\s\S]*v_database_now \+ INTERVAL '5 minutes'[\s\S]*v_candidate\.evidence_valid_from > v_database_now[\s\S]*v_candidate\.evidence_valid_until <= v_database_now[\s\S]*v_candidate\.evidence_conflict_status = 'unresolved'[\s\S]*jsonb_array_elements\(v_candidate\.conflict_windows\)[\s\S]*window_value->>'observed_at'[\s\S]*window_value->>'valid_from'[\s\S]*window_value->>'valid_until'[\s\S]*v_active_conflict_count > 0/u
+  );
+  const postWaitDecision = resolver.slice(
+    resolver.indexOf("v_database_now := clock_timestamp();")
+  );
+  assert.doesNotMatch(postWaitDecision, /\bFROM\s+tp_/u);
+  assert.doesNotMatch(resolver, /statement_timestamp\(\)/u);
+  assert.doesNotMatch(resolver, /transaction_timestamp\(\)/u);
+
+  const admissibility = source.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_list_admissibility_internal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(admissibility);
+  assert.match(admissibility, /statement_timestamp\(\)/u);
+  assert.doesNotMatch(admissibility, /transaction_timestamp\(\)/u);
+});
+
+test("shared admissibility consumers use fresh database clocks", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const observe = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_observe_admissibility_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const prepare = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_prepare_vector_set_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const authorize = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_authorize_dvi_proposal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(observe);
+  assert.ok(prepare);
+  assert.ok(authorize);
+  assert.doesNotMatch(observe, /transaction_timestamp\(\)/u);
+  assert.match(
+    prepare,
+    /v_admitted_at\s*:=\s*statement_timestamp\(\)/u
+  );
+  assert.doesNotMatch(prepare, /v_admitted_at\s*:=\s*transaction_timestamp\(\)/u);
+  assert.match(
+    authorize,
+    /v_database_now TIMESTAMPTZ\s*:=\s*clock_timestamp\(\)[\s\S]*FOR UPDATE;[\s\S]*v_database_now := clock_timestamp\(\)[\s\S]*dvi_selection_receipt_expired/u
+  );
+  assert.doesNotMatch(
+    authorize,
+    /v_database_now TIMESTAMPTZ\s*:=\s*transaction_timestamp\(\)/u
+  );
+});
+
 test("recovery source resolver upgrades by version without destructive DDL", async () => {
   const source = await readFile(primaryUrl, "utf8");
   assert.match(
@@ -467,8 +569,8 @@ test("primary function SQL is digest-pinned before any database query", async ()
   );
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
-    statementCount: 37,
-    sha256: "fc499c40bfa6faaf5bbc93f5625e1e9739f20b73af09d71927875f476bce58a8"
+    statementCount: 38,
+    sha256: "8e81ea155fc206367c9b6e84c790acbcc8e0b859adc754177ab97c3010f42ce8"
   });
   assert.equal(
     statements.filter((statement) =>
@@ -737,7 +839,7 @@ test("logical-action spend is serialized and unique across authorization epochs"
   );
   assert.match(
     gate1AuthoritySource,
-    /runCrossEpochRaceProof[\s\S]*afterEpochLockObserver[\s\S]*logical_authority_already_spent[\s\S]*maximum_epoch/u
+    /runCrossEpochRaceProof[\s\S]*afterEpochLockObserver[\s\S]*proposal_authorization_expired[\s\S]*explicit_new_authorization_required[\s\S]*current_fence === "0"/u
   );
 });
 
@@ -765,7 +867,7 @@ test("expired unspent proposals cannot implicitly mint a replacement epoch", asy
   );
   assert.match(
     gate1AuthoritySource,
-    /runExpiredUnspentReplacementProof[\s\S]*expireProposalAtDatabaseNowForTest[\s\S]*explicit_new_authorization_required[\s\S]*proposal_receipt_count/u
+    /runExpiredUnspentReplacementProof[\s\S]*expireProposalAtDatabaseNowForTest[\s\S]*store\.spendAuthority[\s\S]*proposal_authorization_expired[\s\S]*explicit_new_authorization_required[\s\S]*proposal_receipt_count/u
   );
 });
 
@@ -824,9 +926,13 @@ test("direct authority replay currentness requires the exact outbox payload", as
     readFile(authorityStoreUrl, "utf8")
   ]);
   const currentBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_authority_receipt_current_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const compatibilityBody = primarySource.match(
     /CREATE OR REPLACE FUNCTION tp_private\.g1_authority_receipt_current_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
   assert.ok(currentBody);
+  assert.ok(compatibilityBody);
   assert.match(
     currentBody,
     /outbox\.request_digest = receipt\.request_digest[\s\S]*outbox\.authorization_binding_sha256 =[\s\S]*receipt\.authorization_binding_sha256[\s\S]*proposal\.payload = outbox\.payload/u
@@ -840,8 +946,197 @@ test("direct authority replay currentness requires the exact outbox payload", as
     /sha256\(proposal\.payload_canonical::BYTES\)[\s\S]*outbox\.payload_digest/u
   );
   assert.match(
+    compatibilityBody,
+    /SELECT currentness\.authority_current[\s\S]*FROM tp_private\.g1_authority_receipt_current_v2\(/u
+  );
+  assert.match(
     authorityStoreSource,
     /async #receiptAuthorityCurrent[\s\S]*JOIN tp_ledger\.g1_outbox_intents AS outbox[\s\S]*const exactOutbox =[\s\S]*canonicalJson\(state\.outbox_payload\)[\s\S]*sha256\(canonicalJson\(state\.outbox_payload\)\)/u
+  );
+});
+
+test("authority spend, replay, and protected effects refresh database time", async () => {
+  const [
+    primarySource,
+    authorityStoreSource,
+    gate1AuthoritySource,
+    gate1CapabilityRaceSource
+  ] = await Promise.all([
+    readFile(primaryUrl, "utf8"),
+    readFile(authorityStoreUrl, "utf8"),
+    readFile(gate1AuthorityUrl, "utf8"),
+    readFile(gate1CapabilityRaceUrl, "utf8")
+  ]);
+  const currentBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_authority_receipt_current_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const spendBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_spend_authority_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const resolveBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_request_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const effectBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_record_protected_effect_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(currentBody);
+  assert.ok(spendBody);
+  assert.ok(resolveBody);
+  assert.ok(effectBody);
+
+  assert.match(
+    currentBody,
+    /SELECT[\s\S]*INTO[\s\S]*v_structural_current[\s\S]*FROM tp_ledger\.g1_authority_receipts[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*RETURN QUERY SELECT[\s\S]*v_receipt_lease_expires_at > v_database_now[\s\S]*v_resource_lease_expires_at > v_database_now[\s\S]*v_proposal_expires_at > v_database_now[\s\S]*v_database_now/u
+  );
+  assert.equal(currentBody.match(/clock_timestamp\(\)/gu)?.length, 1);
+  assert.match(
+    spendBody,
+    /v_database_now TIMESTAMPTZ\s*:=\s*clock_timestamp\(\)[\s\S]*FOR UPDATE;[\s\S]*v_database_now := clock_timestamp\(\)[\s\S]*FOR UPDATE;[\s\S]*v_database_now := clock_timestamp\(\)/u
+  );
+  assert.match(spendBody, /v_proposal_expires_at <= v_database_now/u);
+  assert.match(spendBody, /v_holder_expiry > v_database_now/u);
+  assert.match(
+    spendBody,
+    /lease_expires_at\s*=\s*v_database_now\s*\+\s*\(p_lease_ms \* INTERVAL '1 millisecond'\)/u
+  );
+  assert.match(
+    spendBody,
+    /resource\.lease_expires_at <= v_database_now/u
+  );
+  assert.match(
+    spendBody,
+    /UPDATE tp_private\.g1_resources[\s\S]*AND EXISTS \([\s\S]*proposal\.proposal_digest = p_proposal_digest[\s\S]*proposal\.authorization_binding_sha256 =[\s\S]*v_authorization_binding_sha256[\s\S]*proposal\.expires_at > clock_timestamp\(\)/u
+  );
+  assert.match(
+    resolveBody,
+    /currentness\.authority_current,\s*currentness\.database_now[\s\S]*CROSS JOIN tp_private\.g1_authority_receipt_current_v2\([\s\S]*\) AS currentness/u
+  );
+  assert.doesNotMatch(resolveBody, /statement_timestamp\(\)/u);
+  assert.match(
+    effectBody,
+    /ON CONFLICT DO NOTHING[\s\S]*INTO v_effect_key, v_operation_id;[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_receipt_lease_expires_at <= v_database_now[\s\S]*v_resource_lease_expires_at <= v_database_now[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
+  );
+  assert.equal(
+    spendBody.match(
+      /SELECT currentness\.authority_current, currentness\.database_now\s*INTO v_existing_authority_current, v_database_now\s*FROM tp_private\.g1_authority_receipt_current_v2\([\s\S]*?\) AS currentness;\s*RETURN QUERY SELECT[\s\S]*?v_existing_authority_current,\s*v_database_now/gu
+    )?.length,
+    4
+  );
+  assert.doesNotMatch(
+    spendBody,
+    /g1_authority_receipt_current_v1|v_existing_authority_current :=/u
+  );
+  for (const [name, body] of [
+    ["current receipt", currentBody],
+    ["request resolution", resolveBody],
+    ["protected effect", effectBody]
+  ]) {
+    assert.doesNotMatch(body, /transaction_timestamp\(\)/u, name);
+  }
+  assert.doesNotMatch(spendBody, /transaction_timestamp\(\)/u);
+  assert.doesNotMatch(currentBody, /statement_timestamp\(\)/u);
+
+  const directProposal = authorityStoreSource.match(
+    /async #boundProposal\([\s\S]*?(?=\n  async #receiptAuthorityCurrent)/u
+  )?.[0];
+  const directCurrent = authorityStoreSource.match(
+    /async #receiptAuthorityCurrent\([\s\S]*?(?=\n  async #existingReceipt)/u
+  )?.[0];
+  const directSpend = authorityStoreSource.match(
+    /async spendAuthority\([\s\S]*?(?=\n  async proveSerializableRetry)/u
+  )?.[0];
+  const directReconcile = authorityStoreSource.match(
+    /async reconcileRequest\([\s\S]*?(?=\n  async recordProtectedEffect)/u
+  )?.[0];
+  const directEffect = authorityStoreSource.match(
+    /async recordProtectedEffect\([\s\S]*?(?=\n  async snapshot)/u
+  )?.[0];
+  assert.ok(directProposal);
+  assert.ok(directCurrent);
+  assert.ok(directSpend);
+  assert.ok(directReconcile);
+  assert.ok(directEffect);
+  assert.match(
+    directSpend,
+    /proposal\.expires_at > statement_timestamp\(\)/u
+  );
+  assert.match(
+    directEffect,
+    /resource\.lease_expires_at > statement_timestamp\(\)[\s\S]*proposal\.expires_at > statement_timestamp\(\)/u
+  );
+  for (const [name, body] of [
+    ["direct proposal", directProposal],
+    ["direct current receipt", directCurrent],
+    ["direct authority spend", directSpend],
+    ["direct reconciliation", directReconcile],
+    ["direct protected effect", directEffect]
+  ]) {
+    assert.match(body, /statement_timestamp\(\)/u, name);
+    assert.doesNotMatch(body, /transaction_timestamp\(\)/u, name);
+  }
+  assert.match(
+    gate1AuthoritySource,
+    /runHeldTransactionExpiryProof[\s\S]*setProposalExpiryAfterMsForTest[\s\S]*waitForProposalExpiryForTest[\s\S]*proposal_authorization_expired[\s\S]*current_fence === "0"/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runStoredFunctionHeldExpiryProof[\s\S]*FOR UPDATE[\s\S]*setProposalExpiryAfterMsForTest[\s\S]*waitForProposalExpiryForTest[\s\S]*proposal_authorization_expired[\s\S]*current_fence === "0"/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runStoredReplayHeldExpiryProof[\s\S]*UPDATE tp_ledger\.g1_outbox_intents[\s\S]*SET payload = '\{"temporary-replay-lock-probe":true\}'::JSONB[\s\S]*await queryReady\.wait\(\)[\s\S]*stored replay currentness did not wait on the outbox intent[\s\S]*waitForProposalExpiryForTest[\s\S]*decision_replay_kind === "operation_replay"[\s\S]*decision_authority_current === false[\s\S]*replayDecisionTime - proposalExpiry <= 1_000[\s\S]*stored replay currentness and reported database time used different clocks/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runReplayClockPairBoundaryControl[\s\S]*await client\.connect\(\);[\s\S]*setProposalExpiryAfterMsForTest[\s\S]*BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE[\s\S]*replayAtA\.decision_authority_current === true[\s\S]*decisionAtA < proposalExpiry[\s\S]*proposalExpiry <= databaseNowAtB[\s\S]*amplified old two-clock replay control did not cross proposal expiry[\s\S]*await client\.query\("ROLLBACK"\);[\s\S]*await client\.query\("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE"\);[\s\S]*atBoundaryEnd = await client\.query\(SPEND_SQL[\s\S]*replayAtC\.decision_authority_current === false[\s\S]*replayAtC\.decision_authority_current ===\s*\(decisionAtC < proposalExpiry\)/u
+  );
+  assert.doesNotMatch(
+    gate1CapabilityRaceSource,
+    /SET intent_kind = 'temporary-replay-lock-probe'/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runStoredProtectedEffectHeldExpiryProof[\s\S]*INSERT INTO tp_ledger\.g1_protected_effects[\s\S]*protected effect did not wait on unique occupancy[\s\S]*waitForProposalExpiryForTest[\s\S]*effect\.rowCount === 0/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runRecoveryResolverHeldExpiryProof[\s\S]*temporary-recovery-lock-probe[\s\S]*recovery resolver did not wait behind the receipt intent[\s\S]*waitForProposalExpiryForTest[\s\S]*resolution\.rowCount === 0/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runRecoveryResolverEvidenceExpiryProof[\s\S]*temporary-recovery-evidence-expiry-lock-probe[\s\S]*recovery evidence expiry did not wait on the receipt intent[\s\S]*waitForDatabaseTime[\s\S]*timing\.evidence_expired === true[\s\S]*timing\.receipt_live === true[\s\S]*timing\.resource_live === true[\s\S]*timing\.proposal_live === true/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runRecoveryResolverConflictActivationProof[\s\S]*claimValue: "unavailable"[\s\S]*temporary-recovery-conflict-activation-lock-probe[\s\S]*recovery conflict activation did not wait on the receipt intent[\s\S]*waitForDatabaseTime[\s\S]*timing\.conflict_active === true[\s\S]*timing\.evidence_expired === false/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /class QueryReadyBarrier[\s\S]*query-ready barrier timed out[\s\S]*queryReady\?\.reach\(\);[\s\S]*client\.query\(SPEND_SQL[\s\S]*queryReady\?\.reach\(\);[\s\S]*client\.query\(sql, values\)/u
+  );
+  assert.equal(
+    gate1CapabilityRaceSource.match(
+      /new QueryReadyBarrier\(/gu
+    )?.length,
+    6
+  );
+  assert.equal(
+    gate1CapabilityRaceSource.match(/await queryReady\.wait\(\);/gu)?.length,
+    6
+  );
+  assert.equal(
+    gate1CapabilityRaceSource.match(
+      /await pending(?:Decision|Replay|Effect|Resolution)\.catch\(\(\) => \{\}\);/gu
+    )?.length,
+    6
+  );
+  assert.match(
+    authorityStoreSource,
+    /async authorizeDviProposal[\s\S]*postLockClock[\s\S]*statement_timestamp\(\)[\s\S]*finalCurrent[\s\S]*authority_current[\s\S]*DELETE FROM tp_ledger\.g1_dvi_proposal_receipts[\s\S]*current_epoch = 0/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /setProposalExpiryAfterMsForTest[\s\S]*LEAST\([\s\S]*expires_at > statement_timestamp\(\)/u
   );
 });
 
@@ -906,11 +1201,15 @@ test("protected-effect SQL denies the exact proposal-expiry boundary", async () 
     body,
     /JOIN tp_ledger\.g1_dvi_proposal_receipts AS proposal[\s\S]*proposal\.proposal_digest = outbox\.proposal_digest[\s\S]*proposal\.authorization_epoch = outbox\.authorization_epoch/u
   );
-  assert.match(body, /proposal\.expires_at > transaction_timestamp\(\)/u);
+  assert.match(body, /proposal\.expires_at > clock_timestamp\(\)/u);
   assert.match(body, /proposal\.payload = outbox\.payload/u);
   assert.match(
     body,
     /sha256\(proposal\.payload_canonical::BYTES\)[\s\S]*outbox\.payload_digest/u
   );
-  assert.doesNotMatch(body, /proposal\.expires_at >= transaction_timestamp\(\)/u);
+  assert.match(
+    body,
+    /v_database_now := clock_timestamp\(\);[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
+  );
+  assert.doesNotMatch(body, /proposal\.expires_at >= clock_timestamp\(\)/u);
 });

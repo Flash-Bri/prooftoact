@@ -30,7 +30,7 @@
       "id": "authority-identity-ledger",
       "path": "docs/AUTHORITY_IDENTITY.md",
       "role": "AUTHORITY_IDENTITY_BOUNDARY",
-      "sha256": "d9ee6334ff7d35cc83369b7b555cd146efbf8d432d7c32ab84120a237ee6989e"
+      "sha256": "a926004d097ab8afc40436dfb1a7c89994edbccaaa6efd2faef4446dfa8db9ed"
     },
     {
       "id": "authority-identity-tests",
@@ -42,7 +42,13 @@
       "id": "authority-evidence-runner",
       "path": "scripts/gate1-authority.js",
       "role": "AUTHORITY_IDENTITY_EVIDENCE_RUNNER",
-      "sha256": "20aa595bba9c8e8161d066cab33dcd6cecca138aaccc16f0598085789998fd84"
+      "sha256": "2ac22d6c17ffcc519bd9e9fbd1c093c7290e99088c7e85174552b7ccfed6f9e8"
+    },
+    {
+      "id": "authority-capability-race-runner",
+      "path": "scripts/gate1-capability-race.js",
+      "role": "AUTHORITY_CAPABILITY_WAIT_EVIDENCE_RUNNER",
+      "sha256": "18e2d6b53942b05526a87cd6c522d010db0ec7cd39f8977ab1b18042d8671c8a"
     },
     {
       "id": "authority-runtime",
@@ -66,7 +72,7 @@
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "8bcd28ddcf7540c32ab98714057519cb3bb9b62acef53071de1d71bf7349186f"
+      "sha256": "ef8c2a0fed39f112f8e597e4657d838705fa660033ff314ea7426bbb73f0eefa"
     },
     {
       "id": "aws-alternate-principal-denial-runner",
@@ -234,7 +240,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "5eb5b10e872a664f7db98b24c5103fd62b43f0c512bba4d14b3a85972d932fad"
+      "sha256": "40495a4d4f697f55fd161949561b21f17577bee9006127a091d04adecfc45b21"
     },
     {
       "id": "database-security-posture",
@@ -360,7 +366,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "41a453157d83be360fd40962143f5916799c8aa9370a94975a34701bda46327e"
+      "sha256": "bc05e9d5e498fa7da561fd8e2f49712349f1ae58930f6a8c0f1480754c0a582c"
     },
     {
       "id": "primary-security-runner",

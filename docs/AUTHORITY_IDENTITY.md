@@ -176,12 +176,70 @@ contender in the resource race.
   the exact database-time expiry boundary, then attempt the protected effect.
 - Repair/control: both SQL and JS insert paths join the exact proposal identity
   through proposal, logical action, epoch, authority key, binding, run,
-  incident, resource, and payload, and require `expires_at >
-  transaction_timestamp()`.
+  incident, resource, and payload. The stored dispatch function uses live
+  `clock_timestamp()` checks on admission, then—after any uniqueness or intent
+  wait—reads the exact receipt/resource/proposal expiries, captures a fresh
+  database clock, and deletes its own just-inserted row before returning if
+  any authority is no longer current.
 - Verification/residual/claim: focused source controls and the Gate One boundary
-  drill require zero protected effects at equality and after expiry. Live SQL
-  execution on the target CockroachDB version remains pending, so currentness is
-  still a source-only claim.
+  drill require zero protected effects at equality and after expiry. The
+  provider runner now includes an uncommitted uniqueness occupant held through
+  expiry, but execution on the target CockroachDB version remains pending, so
+  post-wait currentness is still a source-only claim.
+
+### Transaction-start time froze current authority
+
+- Root cause: proposal expiry, receipt/resource currentness, lease creation,
+  reconciliation, and protected-effect admission mixed database statement time
+  with `transaction_timestamp()`, which is fixed when a transaction begins.
+- Missed because: equality tests expired rows before opening the consuming
+  transaction; they did not hold an already-open transaction across expiry.
+- Earliest detection: begin an authority spend while its proposal is current,
+  pause after evidence admission until database time reaches the proposal
+  expiry, then resume acquisition. The spend must finish denied with no fence,
+  outbox, or effect.
+- Repair/control: the stored spend refreshes `clock_timestamp()` after each
+  blocking lock and couples the exact still-current proposal to the
+  lease-creating update. Every stored replay branch refreshes database time
+  after its candidate query and evaluates exact receipt currentness through a
+  helper that completes its structural receipt/resource/outbox/proposal read
+  before capturing one clock, rather than inheriting the outer statement
+  timestamp. That helper returns the boolean and reported decision time from
+  the same row and clock, so proposal expiry cannot cross an unreported gap
+  between the replay decision and its timestamp. Reconciliation projects both
+  values from that same helper row. Direct spend queries refresh statement
+  time, recheck currentness after an awaited pre-commit observer, reconcile expiry
+  to a durable denial, and recheck protected-effect currentness before commit.
+  Recovery export no longer inherits temporal admissibility from the outer
+  statement: its original candidate read captures the selected evidence's
+  observation and validity interval plus every structurally verified
+  conflicting-evidence interval, then one post-wait database clock decides
+  selected-evidence validity and active conflicts without another table read.
+  Proposal authorization also refreshes after the epoch lock and removes a
+  newly inserted proposal while restoring the unspent epoch if it expires
+  before its final currentness check.
+- Verification: red-before-green source controls reject transaction-start time
+  in the spend/currentness/reconciliation/effect chain. Gate One includes
+  exact-equality denial, a direct transaction held past expiry, the reconciled
+  cross-epoch case, and provider-only stored-function resource-lock, replay
+  outbox-intent, protected-effect uniqueness-wait, and recovery receipt-intent
+  drills. Each held-wait drill first awaits a fail-closed query-ready signal
+  emitted after `BEGIN` and immediately before the tested SQL, so connection
+  setup latency cannot impersonate a database wait. Failure cleanup expires
+  the synthetic proposal before releasing a held blocker and drains the
+  pending query, preventing a late background effect. A separate amplified,
+  deterministic counterfactual captures a current replay at database clock A,
+  keeps that transaction open across exact proposal expiry, and then captures
+  clock B to prove that pairing A's boolean with B's timestamp would
+  contradict. A fresh real replay at clock C must return a same-clock expired
+  pair within one second of the boundary. This does not claim that the old
+  production micro-gap itself was reproduced. The recovery lane separately holds that receipt intent while the
+  selected evidence expires and while a pre-captured conflicting claim becomes
+  active; both require the receipt, resource, and proposal authority to remain
+  live while recovery returns no row.
+- Residual risk and claim impact: CockroachDB v26.2 must still execute the held
+  transaction and equality drills. No live authority, concurrency, or
+  exactly-once claim is added by the source repair.
 
 ### Non-current DVI authorization replay
 

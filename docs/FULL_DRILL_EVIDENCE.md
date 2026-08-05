@@ -228,6 +228,74 @@ official release.
   receipt proves that handoff. No live, batch, concurrency, or exactly-once
   claim is added.
 
+### Recovery export accepted stale or replaced authority
+
+- Root cause: the v2 recovery source resolver bounded receipt age but did not
+  require the receipt lease, current resource holder and fence, resource lease,
+  and DVI proposal expiry to remain current at database statement time. Its
+  nested admissibility helper also evaluated the selected evidence interval
+  and conflicting-evidence windows with the outer statement timestamp before
+  or across a receipt-intent wait.
+- Why it was missed: earlier controls bound durable identities across receipt,
+  outbox, and proposal rows, but treated freshness as a separate authorization
+  concern and did not carry its canonical currentness contract into recovery.
+- Earliest detection point: replace the resource holder, advance its fence, or
+  set any lease or proposal expiry equal to database time; the resolver must
+  return no row before recovery signing or publication.
+- Repair: the resolver now joins the exact resource holder across tenant,
+  resource, run, incident, operation, agent, proposal, logical-authority key,
+  and fence. Its original candidate read now captures all static evidence and
+  verification bindings, the selected evidence observation/validity interval,
+  and every structurally valid conflicting-evidence observation/validity
+  interval. Only after that complete read and any intent wait does it capture
+  one `clock_timestamp()` and evaluate receipt age, receipt/resource/proposal
+  expiry, selected-evidence validity, and active conflicts from those captured
+  values. No second protected-table read follows the clock. Its contract is
+  current at that post-read database decision point; it does not claim
+  currentness when a remote client later receives or uses the row. Stored spend likewise refreshes
+  database time after blocking locks and before every replay return. Its
+  exact-currentness helper completes the structural read, captures one
+  `clock_timestamp()`, and returns both the boolean and reported decision time
+  from that same clock. Reconciliation projects that same helper row rather
+  than combining it with an outer statement clock. Direct
+  acquisition rechecks the exact proposal in the lease-creating statement and
+  reports final currentness after an awaited pre-commit observer. Stored
+  protected-effect admission rechecks exact receipt/resource/proposal expiries
+  with fresh post-insert database time and removes its own row if currentness
+  fails.
+- Regression and preventive control: focused source controls check every
+  holder equality, all post-wait strict database-time predicates, and the coupled
+  observer, snapshot, authorization, spend, replay, reconciliation, and effect
+  clocks. Gate One includes exact-equality spend denial, a direct transaction
+  held past proposal expiry, a reconciled cross-epoch wait, and a provider-only
+  call to `tp_api.g1_spend_authority_v1` held behind the resource lock. The
+  provider runner also carries a stored replay whose currentness helper is held
+  behind an outbox intent and must return a same-clock result within one second
+  of the exact proposal-expiry boundary. A separate amplified deterministic
+  control captures a current replay at clock A, keeps that transaction open
+  across expiry, proves that pairing A's boolean with later clock B would
+  contradict, then requires a fresh real replay at clock C to return an aligned
+  expired pair. It does not claim literal reproduction of the old production
+  micro-gap. The runner also carries a
+  protected-effect insert held behind an uncommitted uniqueness occupant, and
+  a recovery resolver held behind a receipt intent. Two additional recovery
+  drills hold that same intent until the selected evidence expires or a
+  structurally verified conflicting claim becomes active, while independently
+  requiring the receipt, resource lease, and proposal to remain live. All
+  expiry/conflict cases require no newly released authority or protected
+  effect. Every held-wait probe awaits a bounded query-ready signal emitted
+  after `BEGIN` and immediately before the tested SQL before starting its
+  expiry or conflict timing; connection setup therefore cannot satisfy the
+  wait assertion. Failure cleanup first expires the synthetic proposal, then
+  releases the blocker and drains the pending query, so no test transaction is
+  left running in the background. The reviewed 38-statement SQL batch digest also changes
+  whenever the emitted SQL changes.
+- Verification: the focused control and the complete local release gate set
+  must pass on the exact commit; provider-backed CockroachDB v26.2 execution is
+  still required.
+- Residual risk and claim impact: source rejects stale and replaced recovery
+  authority, but no live provider receipt or exactly-once claim is added.
+
 ### Resolver return-shape upgrade initially used destructive migration DDL
 
 - Root cause: adding an output column under the unchanged function signature
