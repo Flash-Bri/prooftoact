@@ -219,7 +219,7 @@ official release.
   digests; a static SQL control binds every proposal join; both runners require
   the nine-field operator binding; and the source-digest test is an exact
   hash-bound release-security surface.
-- Verification: 444 local tests, the security/proof/claims/submission gates,
+- Verification: 447 local tests, the security/proof/claims/submission gates,
   zero-vulnerability audit, deterministic build, exact provenance, and two
   independent reviews must pass on the exact commit. Provider execution
   remains pending.
@@ -246,8 +246,13 @@ official release.
   the strict v2-only policy. Existing v1 installations therefore remain
   recoverable as database objects but inaccessible to the runtime. Static and
   upgrade-state controls require that exact transitional policy, v2-only final
-  policy, v2 production call, robust destructive-DDL rejection, and a v1
-  denial-or-absence probe.
+  policy, v2 production call, an exact emitted-SQL batch pin, and a v1
+  denial-or-absence probe. Before the bootstrap issues any function DDL, it
+  materializes the exact 37 statements produced by `createFunctions` and
+  rejects the entire batch unless its framed SHA-256 digest matches the
+  reviewed batch. This control evaluates emitted SQL bytes, not JavaScript
+  source spelling; any SQL change therefore requires an explicit review and
+  digest update before the first database query.
 - Cutover procedure: this is an explicitly quiesced, roll-forward-only
   migration, not a zero-downtime or rollback-compatible change. Stop the
   recovery evidence runners, run bootstrap to completion, require v2 success
@@ -255,10 +260,14 @@ official release.
   install, then deploy only the exact v2 runner bytes. Do not restart an older
   runner after the privilege scrub. Any failed bootstrap or probe keeps
   recovery publication stopped until the v2 path is repaired and reverified.
-- Verification: focused resolver/bootstrap tests and the hash-bound release
-  security gate pass; provider-backed CockroachDB v26.2 upgrade execution and
-  privilege census, including retained-v1 owner and denial checks, remain
-  required.
+- Verification: focused resolver/bootstrap tests exercise direct literal,
+  concatenated, Unicode-whitespace, computed-name, and split-identifier DDL
+  constructions and require rejection while the fake database client still
+  records zero queries; benign JavaScript comments, regular expressions, and
+  dollar-quoted source-only decoys do not affect the emitted batch. The
+  hash-bound release security gate also passes. Provider-backed CockroachDB
+  v26.2 upgrade execution and privilege census, including retained-v1 owner
+  and denial checks, remain required.
 - Residual risk and claim impact: source migration is non-destructive and the
   weaker resolver is not granted after convergence, but the cutover requires
   an outage and has no application rollback window. This is not a live upgrade

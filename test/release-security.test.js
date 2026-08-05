@@ -192,25 +192,11 @@ test("security source contract rejects a removed fail-closed marker", () => {
     () => __test.assertSourceMarkers(sources),
     /RELEASE_SECURITY_FORBIDDEN_MARKER_PRIMARY_SECURITY_BOOTSTRAP/
   );
+  sources.set(
+    "primary-security-bootstrap",
+    __test.SOURCE_MARKERS["primary-security-bootstrap"].join("\n")
+  );
 
-  const primaryMarkers =
-    __test.SOURCE_MARKERS["primary-security-bootstrap"].join("\n");
-  for (const destructiveDdl of [
-    "drop function if exists tp_api.g1_resolve_recovery_source_receipt_v1 (uuid)",
-    "DROP FUNCTION \"tp_api\" . \"g1_resolve_recovery_source_receipt_v2\" (uuid)",
-    "DROP/*comment*/FUNCTION IF EXISTS\n  tp_api.g1_resolve_recovery_source_receipt_v1(uuid)",
-    "DROP /* split */ FUNCTION IF EXISTS \"tp_api\".\"g1_resolve_recovery_source_receipt_v2\"(uuid)"
-  ]) {
-    sources.set(
-      "primary-security-bootstrap",
-      `${primaryMarkers}\n${destructiveDdl}`
-    );
-    assert.throws(
-      () => __test.assertSourceMarkers(sources),
-      /RELEASE_SECURITY_FORBIDDEN_PATTERN_PRIMARY_SECURITY_BOOTSTRAP/
-    );
-  }
-  sources.set("primary-security-bootstrap", primaryMarkers);
   for (const legacyCall of [
     "tp_api.g1_resolve_recovery_source_receipt_v1 (",
     "SELECT * FROM \"tp_api\".\"g1_resolve_recovery_source_receipt_v1\" (",

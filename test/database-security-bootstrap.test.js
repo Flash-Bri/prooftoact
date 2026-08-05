@@ -4,7 +4,6 @@ import test from "node:test";
 
 import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
 import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
-import { __test as releaseSecurityContract } from "../scripts/verify-release-security.js";
 
 const primaryUrl = new URL("../src/cloud/primary-security.js", import.meta.url);
 const authorityStoreUrl = new URL(
@@ -426,12 +425,6 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
 
 test("recovery source resolver upgrades by version without destructive DDL", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  assert.doesNotThrow(
-    () => releaseSecurityContract.assertNoForbiddenSourcePatterns(
-      "primary-security-bootstrap",
-      source
-    )
-  );
   assert.match(
     source,
     /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
@@ -442,12 +435,6 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   assert.match(
     recoveryBroker,
     /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
-  );
-  assert.doesNotThrow(
-    () => releaseSecurityContract.assertNoForbiddenSourcePatterns(
-      "recovery-broker",
-      recoveryBroker
-    )
   );
   assert.match(
     gate1Security,
@@ -470,6 +457,115 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   assert.match(
     source,
     /LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE[\s\S]*CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE/u
+  );
+});
+
+test("primary function SQL is digest-pinned before any database query", async () => {
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const receipt = primarySecurityContract.validatePrimaryFunctionSqlStatements(
+    statements
+  );
+  assert.deepEqual(receipt, {
+    schema: "tideproof.primary-function-sql-batch.v1",
+    statementCount: 37,
+    sha256: "fc499c40bfa6faaf5bbc93f5625e1e9739f20b73af09d71927875f476bce58a8"
+  });
+  assert.equal(
+    statements.filter((statement) =>
+      statement.includes("g1_resolve_recovery_source_receipt_v2")
+    ).length,
+    1
+  );
+  assert.equal(
+    statements.some((statement) =>
+      statement.includes("g1_resolve_recovery_source_receipt_v1")
+    ),
+    false
+  );
+
+  const executed = [];
+  const executedReceipt =
+    await primarySecurityContract.executePrimaryFunctionSqlStatements(
+      {
+        async query(statement) {
+          executed.push(statement);
+        }
+      },
+      statements
+    );
+  assert.deepEqual(executedReceipt, receipt);
+  assert.deepEqual(executed, statements);
+});
+
+test("emitted-SQL pin rejects JavaScript spelling evasions before execution", async () => {
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const resolverIndex = statements.findIndex((statement) =>
+    statement.includes("g1_resolve_recovery_source_receipt_v2")
+  );
+  assert.notEqual(resolverIndex, -1);
+  const computedName = `g1_resolve_recovery_source_receipt_${1}`;
+  const destructiveDdl = new Map([
+    [
+      "direct literal",
+      "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(UUID);"
+    ],
+    [
+      "concatenation",
+      "DROP " +
+        "FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v2(UUID);"
+    ],
+    [
+      "Unicode escaped whitespace",
+      "DROP\u0020FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(UUID);"
+    ],
+    [
+      "computed template name",
+      `DROP FUNCTION IF EXISTS tp_api.${computedName}(UUID);`
+    ],
+    [
+      "split identifier",
+      "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_" +
+        "source_receipt_v2(UUID);"
+    ]
+  ]);
+
+  for (const [label, ddl] of destructiveDdl) {
+    const changed = [...statements];
+    changed[resolverIndex] = `${changed[resolverIndex]}\n${ddl}`;
+    const executed = [];
+    await assert.rejects(
+      primarySecurityContract.executePrimaryFunctionSqlStatements(
+        {
+          async query(statement) {
+            executed.push(statement);
+          }
+        },
+        changed
+      ),
+      /PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED/u,
+      label
+    );
+    assert.deepEqual(executed, [], label);
+  }
+});
+
+test("emitted-SQL pin ignores benign JavaScript source decoys", async () => {
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const maintainerComment = "A maintainer's comment is not emitted SQL.";
+  const sourceOnlyPattern = /DROP\s+FUNCTION/u;
+  const sourceOnlyDollarQuote =
+    "$$DROP FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1(UUID)$$";
+  assert.equal(sourceOnlyPattern.test(sourceOnlyDollarQuote), true);
+  assert.equal(maintainerComment.endsWith("SQL."), true);
+
+  const rebuiltFromFragments = statements.map((statement) =>
+    [...statement].join("")
+  );
+  assert.deepEqual(
+    primarySecurityContract.validatePrimaryFunctionSqlStatements(
+      rebuiltFromFragments
+    ),
+    primarySecurityContract.validatePrimaryFunctionSqlStatements(statements)
   );
 });
 

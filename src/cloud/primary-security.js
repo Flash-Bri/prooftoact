@@ -1,4 +1,5 @@
 import { Client } from "pg";
+import { createHash } from "node:crypto";
 import { setTimeout as sleepTimer } from "node:timers/promises";
 import { AuthorityStore, connectionStringForDatabase } from "./authority-store.js";
 import { bootstrapDatabaseConfig } from "./database-runtime.js";
@@ -48,6 +49,11 @@ const LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
   "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
 const CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
   "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
+  "tideproof.primary-function-sql-batch.v1";
+const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 37;
+const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
+  "fc499c40bfa6faaf5bbc93f5625e1e9739f20b73af09d71927875f476bce58a8";
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -456,7 +462,38 @@ async function createAuditObjects(client, recoveryPublisherTrustRoot) {
   `);
 }
 
-async function createFunctions(client) {
+function primaryFunctionSqlBatchSha256(statements) {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      schema: PRIMARY_FUNCTION_SQL_BATCH_SCHEMA,
+      statements
+    }))
+    .digest("hex");
+}
+
+function validatePrimaryFunctionSqlStatements(statements) {
+  if (
+    !Array.isArray(statements) ||
+    statements.length !== PRIMARY_FUNCTION_SQL_STATEMENT_COUNT ||
+    statements.some(
+      (statement) =>
+        typeof statement !== "string" ||
+        statement.length === 0 ||
+        statement.includes("\u0000")
+    ) ||
+    primaryFunctionSqlBatchSha256(statements) !==
+      PRIMARY_FUNCTION_SQL_BATCH_SHA256
+  ) {
+    throw new Error("PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED");
+  }
+  return Object.freeze({
+    schema: PRIMARY_FUNCTION_SQL_BATCH_SCHEMA,
+    statementCount: statements.length,
+    sha256: PRIMARY_FUNCTION_SQL_BATCH_SHA256
+  });
+}
+
+async function emitPrimaryFunctionSql(client) {
   await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_append_verified_evidence_v1(
       p_tenant_id UUID,
@@ -4349,6 +4386,32 @@ async function createFunctions(client) {
   `);
 }
 
+async function primaryFunctionSqlStatements() {
+  const statements = [];
+  await emitPrimaryFunctionSql({
+    query(...args) {
+      if (args.length !== 1 || typeof args[0] !== "string") {
+        throw new Error("PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED");
+      }
+      statements.push(args[0]);
+    }
+  });
+  return Object.freeze(statements);
+}
+
+async function executePrimaryFunctionSqlStatements(client, statements) {
+  const receipt = validatePrimaryFunctionSqlStatements(statements);
+  for (const statement of statements) {
+    await client.query(statement);
+  }
+  return receipt;
+}
+
+async function createFunctions(client) {
+  const statements = await primaryFunctionSqlStatements();
+  return executePrimaryFunctionSqlStatements(client, statements);
+}
+
 async function transferOwnership(client) {
   for (const object of PRIMARY_MANAGED_BASE_TABLES) {
     await client.query(`ALTER TABLE ${object} OWNER TO tp_owner`);
@@ -4722,6 +4785,13 @@ export async function bootstrapPrimarySecurity({
 }
 
 export const __test = Object.freeze({
+  PRIMARY_FUNCTION_SQL_BATCH_SCHEMA,
+  PRIMARY_FUNCTION_SQL_BATCH_SHA256,
+  PRIMARY_FUNCTION_SQL_STATEMENT_COUNT,
+  executePrimaryFunctionSqlStatements,
+  primaryFunctionSqlBatchSha256,
+  primaryFunctionSqlStatements,
   primaryPostureSpec: PRIMARY_POSTURE_SPEC,
-  primaryPreflightPostureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC
+  primaryPreflightPostureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC,
+  validatePrimaryFunctionSqlStatements
 });

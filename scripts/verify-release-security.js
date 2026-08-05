@@ -1316,6 +1316,12 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
     "tp_api.g1_resolve_recovery_source_receipt_v2",
+    "tideproof.primary-function-sql-batch.v1",
+    "PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED",
+    "primaryFunctionSqlBatchSha256(statements)",
+    "validatePrimaryFunctionSqlStatements(statements);",
+    "await emitPrimaryFunctionSql({",
+    "return executePrimaryFunctionSqlStatements(client, statements);",
     "proposal.authority_evidence_binding_sha256",
     "proposal.selected_evidence_id = receipt.evidence_id",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1",
@@ -1589,9 +1595,6 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
 });
 
 const FORBIDDEN_SOURCE_PATTERNS = Object.freeze({
-  "primary-security-bootstrap": Object.freeze([
-    /\bdrop\s+function(?:\s+if\s+exists)?\s+(?:tp_api\s*\.\s*)?g1_resolve_recovery_source_receipt_v[12]\s*\(/u
-  ]),
   "recovery-broker": Object.freeze([
     /\bg1_resolve_recovery_source_receipt_v1\s*\(/u
   ])
