@@ -423,6 +423,86 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
   assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
 });
 
+test("recovery source resolver requires the exact live authority holder", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const resolver = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(resolver);
+  assert.match(
+    resolver,
+    /JOIN tp_private\.g1_resources AS resource\s+ON resource\.tenant_id = receipt\.tenant_id\s+AND resource\.resource_id = receipt\.resource_id/u
+  );
+  for (const [resourceField, receiptField] of [
+    ["active_run_id", "run_id"],
+    ["holder_incident_id", "incident_id"],
+    ["holder_operation_id", "operation_id"],
+    ["holder_agent_id", "agent_id"],
+    ["holder_proposal_digest", "proposal_digest"],
+    ["holder_logical_authority_key_sha256", "logical_authority_key_sha256"],
+    ["current_fence", "fencing_token"]
+  ]) {
+    assert.match(
+      resolver,
+      new RegExp(
+        `resource\\.${resourceField}\\s*=\\s*receipt\\.${receiptField}`,
+        "u"
+      ),
+      `${resourceField}=${receiptField}`
+    );
+  }
+  assert.match(
+    resolver,
+    /receipt\.lease_expires_at\s*>\s*statement_timestamp\(\)/u
+  );
+  assert.match(
+    resolver,
+    /resource\.lease_expires_at\s*>\s*statement_timestamp\(\)/u
+  );
+  assert.match(
+    resolver,
+    /proposal\.expires_at\s*>\s*statement_timestamp\(\)/u
+  );
+  assert.doesNotMatch(resolver, /transaction_timestamp\(\)/u);
+
+  const admissibility = source.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_list_admissibility_internal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(admissibility);
+  assert.match(admissibility, /statement_timestamp\(\)/u);
+  assert.doesNotMatch(admissibility, /transaction_timestamp\(\)/u);
+});
+
+test("shared admissibility consumers use one statement clock", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const observe = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_observe_admissibility_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const prepare = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_prepare_vector_set_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const authorize = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_authorize_dvi_proposal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(observe);
+  assert.ok(prepare);
+  assert.ok(authorize);
+  assert.doesNotMatch(observe, /transaction_timestamp\(\)/u);
+  assert.match(
+    prepare,
+    /v_admitted_at\s*:=\s*statement_timestamp\(\)/u
+  );
+  assert.doesNotMatch(prepare, /v_admitted_at\s*:=\s*transaction_timestamp\(\)/u);
+  assert.match(
+    authorize,
+    /v_database_now TIMESTAMPTZ\s*:=\s*statement_timestamp\(\)/u
+  );
+  assert.doesNotMatch(
+    authorize,
+    /v_database_now TIMESTAMPTZ\s*:=\s*transaction_timestamp\(\)/u
+  );
+});
+
 test("recovery source resolver upgrades by version without destructive DDL", async () => {
   const source = await readFile(primaryUrl, "utf8");
   assert.match(
@@ -468,7 +548,7 @@ test("primary function SQL is digest-pinned before any database query", async ()
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
     statementCount: 37,
-    sha256: "fc499c40bfa6faaf5bbc93f5625e1e9739f20b73af09d71927875f476bce58a8"
+    sha256: "796752230b3f773e5e8559f80a669f7e7279bb6a35159b80efe421618e1ca724"
   });
   assert.equal(
     statements.filter((statement) =>

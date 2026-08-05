@@ -228,6 +228,34 @@ official release.
   receipt proves that handoff. No live, batch, concurrency, or exactly-once
   claim is added.
 
+### Recovery export accepted stale or replaced authority
+
+- Root cause: the v2 recovery source resolver bounded receipt age but did not
+  require the receipt lease, current resource holder and fence, resource lease,
+  and DVI proposal expiry to remain current at database statement time.
+- Why it was missed: earlier controls bound durable identities across receipt,
+  outbox, and proposal rows, but treated freshness as a separate authorization
+  concern and did not carry its canonical currentness contract into recovery.
+- Earliest detection point: replace the resource holder, advance its fence, or
+  set any lease or proposal expiry equal to database time; the resolver must
+  return no row before recovery signing or publication.
+- Repair: the resolver now joins the exact resource holder across tenant,
+  resource, run, incident, operation, agent, proposal, logical-authority key,
+  and fence, and requires receipt, resource, and proposal expiry strictly after
+  `statement_timestamp()`. The resolver, shared admissibility query, direct
+  observer, snapshot admission time, and proposal-authorization clock use the
+  same statement clock, so a transaction opened before expiry cannot freeze
+  or contradict the accepted time boundary.
+- Regression and preventive control: focused source controls check every
+  holder equality, all three strict database-time predicates, and the coupled
+  observer, snapshot, and authorization clocks. The reviewed 37-statement SQL
+  batch digest also changes whenever the emitted SQL changes.
+- Verification: the focused control and the complete local release gate set
+  must pass on the exact commit; provider-backed CockroachDB v26.2 execution is
+  still required.
+- Residual risk and claim impact: source rejects stale and replaced recovery
+  authority, but no live provider receipt or exactly-once claim is added.
+
 ### Resolver return-shape upgrade initially used destructive migration DDL
 
 - Root cause: adding an output column under the unchanged function signature

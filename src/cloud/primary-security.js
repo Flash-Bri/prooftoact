@@ -53,7 +53,7 @@ const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
   "tideproof.primary-function-sql-batch.v1";
 const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 37;
 const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
-  "fc499c40bfa6faaf5bbc93f5625e1e9739f20b73af09d71927875f476bce58a8";
+  "796752230b3f773e5e8559f80a669f7e7279bb6a35159b80efe421618e1ca724";
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -830,18 +830,18 @@ async function emitPrimaryFunctionSql(client) {
           WHEN evidence.conflict_status = 'unresolved'
             THEN 'unresolved_conflict'
           WHEN evidence.observed_at >
-            transaction_timestamp() + INTERVAL '5 minutes'
+            statement_timestamp() + INTERVAL '5 minutes'
             THEN 'future_observation'
-          WHEN evidence.valid_from > transaction_timestamp()
+          WHEN evidence.valid_from > statement_timestamp()
             THEN 'not_yet_valid'
-          WHEN evidence.valid_until <= transaction_timestamp()
+          WHEN evidence.valid_until <= statement_timestamp()
             THEN 'expired'
           WHEN evidence.agency_scope NOT IN (p_agency, '*')
             THEN 'out_of_scope'
           ELSE 'admissible'
         END,
         evidence.evidence_digest,
-        transaction_timestamp()
+        statement_timestamp()
       FROM tp_private.g1_evidence AS evidence
       WHERE evidence.tenant_id = p_tenant_id
         AND evidence.evidence_id = p_evidence_id
@@ -906,11 +906,11 @@ async function emitPrimaryFunctionSql(client) {
           WHEN evidence.claim_key IS NULL OR evidence.claim_value IS NULL
             THEN 'claim_binding_missing'
           WHEN evidence.observed_at >
-            transaction_timestamp() + INTERVAL '5 minutes'
+            statement_timestamp() + INTERVAL '5 minutes'
             THEN 'future_observation'
-          WHEN evidence.valid_from > transaction_timestamp()
+          WHEN evidence.valid_from > statement_timestamp()
             THEN 'not_yet_valid'
-          WHEN evidence.valid_until <= transaction_timestamp()
+          WHEN evidence.valid_until <= statement_timestamp()
             THEN 'expired'
           WHEN evidence.agency_scope NOT IN (p_agency, '*')
             THEN 'out_of_scope'
@@ -950,9 +950,9 @@ async function emitPrimaryFunctionSql(client) {
               AND other.observed_at >= other_key.valid_from
               AND other.observed_at < other_key.valid_until
               AND other.observed_at <=
-                transaction_timestamp() + INTERVAL '5 minutes'
-              AND other.valid_from <= transaction_timestamp()
-              AND other.valid_until > transaction_timestamp()
+                statement_timestamp() + INTERVAL '5 minutes'
+              AND other.valid_from <= statement_timestamp()
+              AND other.valid_until > statement_timestamp()
               AND other.agency_scope IN (p_agency, '*')
           )
             THEN 'unresolved_conflict'
@@ -961,7 +961,7 @@ async function emitPrimaryFunctionSql(client) {
         evidence.evidence_digest,
         evidence.assertion,
         evidence.embedding,
-        transaction_timestamp()
+        statement_timestamp()
       FROM tp_private.g1_evidence AS evidence
       LEFT JOIN tp_ledger.g1_evidence_verification_receipts AS verification
         ON verification.tenant_id = evidence.tenant_id
@@ -1072,7 +1072,7 @@ async function emitPrimaryFunctionSql(client) {
           USING ERRCODE = '23505';
       END IF;
 
-      v_admitted_at := transaction_timestamp();
+      v_admitted_at := statement_timestamp();
       v_expires_at :=
         v_admitted_at + p_ttl_ms * INTERVAL '1 millisecond';
 
@@ -1744,7 +1744,7 @@ async function emitPrimaryFunctionSql(client) {
     SECURITY DEFINER
     AS $$
     DECLARE
-      v_database_now TIMESTAMPTZ := transaction_timestamp();
+      v_database_now TIMESTAMPTZ := statement_timestamp();
       v_selection RECORD;
       v_evidence RECORD;
       v_existing RECORD;
@@ -4175,8 +4175,19 @@ async function emitPrimaryFunctionSql(client) {
         receipt.resource_id,
         true,
         observed.admissibility,
-        transaction_timestamp()
+        statement_timestamp()
       FROM tp_ledger.g1_authority_receipts AS receipt
+      JOIN tp_private.g1_resources AS resource
+        ON resource.tenant_id = receipt.tenant_id
+       AND resource.resource_id = receipt.resource_id
+       AND resource.active_run_id = receipt.run_id
+       AND resource.holder_incident_id = receipt.incident_id
+       AND resource.holder_operation_id = receipt.operation_id
+       AND resource.holder_agent_id = receipt.agent_id
+       AND resource.holder_proposal_digest = receipt.proposal_digest
+       AND resource.holder_logical_authority_key_sha256 =
+         receipt.logical_authority_key_sha256
+       AND resource.current_fence = receipt.fencing_token
       JOIN tp_private.g1_evidence AS evidence
         ON evidence.tenant_id = receipt.tenant_id
        AND evidence.evidence_id = receipt.evidence_id
@@ -4234,7 +4245,10 @@ async function emitPrimaryFunctionSql(client) {
         AND receipt.request_digest = p_request_digest
         AND receipt.outcome = 'resource_reserved'
         AND receipt.recorded_at >
-          transaction_timestamp() - INTERVAL '50 minutes'
+          statement_timestamp() - INTERVAL '50 minutes'
+        AND receipt.lease_expires_at > statement_timestamp()
+        AND resource.lease_expires_at > statement_timestamp()
+        AND proposal.expires_at > statement_timestamp()
         AND verification.outcome = 'verified'
         AND verification.public_key_digest IS NOT NULL
         AND receipt.evidence_digest = evidence.evidence_digest
