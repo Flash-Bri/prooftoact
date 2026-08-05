@@ -254,7 +254,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
-    ["g1_resolve_recovery_source_receipt_v1", /session_user = 'tp_recovery_source_user'/u],
+    ["g1_resolve_recovery_source_receipt_v2", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user = 'tp_dispatch_user'/u]
   ]);
@@ -344,7 +344,7 @@ test("recovery publisher trust root is immutable and runner-readable only", asyn
   );
   assert.match(
     source,
-    /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
+    /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v2\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
   );
   assert.match(source, /\["tp_recovery_source_role", "tp_recovery_source_user"\]/u);
 });
@@ -368,7 +368,7 @@ test("Gate One trust-root write probes use the shared rollback-bounded verifier"
 test("recovery source resolver binds the full receipt and outbox identity", async () => {
   const source = await readFile(primaryUrl, "utf8");
   const resolver = source.match(
-    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
   assert.ok(resolver);
   for (const field of [
@@ -420,17 +420,34 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
   assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
 });
 
-test("recovery source resolver drops its prior return shape before upgrade", async () => {
+test("recovery source resolver upgrades by version without destructive DDL", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  const dropAt = source.search(
-    /DROP FUNCTION IF EXISTS tp_api\.g1_resolve_recovery_source_receipt_v1\(\s*UUID, UUID, UUID, UUID, STRING, UUID, STRING\s*\)/u
+  assert.doesNotMatch(
+    source,
+    /DROP FUNCTION(?: IF EXISTS)? tp_api\.g1_resolve_recovery_source_receipt_v[12]\(/u
   );
-  const createAt = source.indexOf(
-    "CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1("
+  assert.match(
+    source,
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
   );
-  assert.notEqual(dropAt, -1);
-  assert.notEqual(createAt, -1);
-  assert.equal(dropAt < createAt, true);
+
+  const recoveryBroker = await readFile(recoveryBrokerUrl, "utf8");
+  const gate1Security = await readFile(gate1SecurityUrl, "utf8");
+  for (const [label, runtimeSource] of [
+    ["recovery broker", recoveryBroker],
+    ["Gate One security probe", gate1Security]
+  ]) {
+    assert.match(
+      runtimeSource,
+      /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u,
+      label
+    );
+    assert.doesNotMatch(
+      runtimeSource,
+      /tp_api\.g1_resolve_recovery_source_receipt_v1\(/u,
+      label
+    );
+  }
 });
 
 test("recovery storage enforces one row per exact broker lookup identity", async () => {

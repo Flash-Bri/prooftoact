@@ -228,7 +228,7 @@ official release.
   receipt proves that handoff. No live, batch, concurrency, or exactly-once
   claim is added.
 
-### Resolver return-shape upgrade initially had no migration step
+### Resolver return-shape upgrade initially used destructive migration DDL
 
 - Root cause: adding an output column under the unchanged function signature
   used `CREATE OR REPLACE FUNCTION`, which cannot change an existing
@@ -237,14 +237,21 @@ official release.
   but did not model upgrade from the prior installed return shape.
 - Earliest detection point: compare each unchanged function signature's old
   and new return tables before accepting a bootstrap change.
-- Repair and preventive control: bootstrap explicitly drops the prior resolver
-  signature before recreating it, and an ordering test requires that migration
-  step to precede the new definition. Later ownership and exact grants are
-  reapplied by the same bootstrap.
-- Verification: focused upgrade-ordering and complete static bootstrap tests
-  pass; provider-backed CockroachDB v26.2 upgrade execution remains required.
-- Residual risk and claim impact: source compatibility is repaired, but this is
-  not a live migration receipt and does not close the provider gate.
+- Repair and preventive control: the expanded return contract now has the
+  versioned `g1_resolve_recovery_source_receipt_v2` name. Bootstrap creates v2
+  before ownership and least-privilege grants, never drops v1, and grants only
+  v2 after the managed-principal privilege scrub. Existing v1 installations
+  therefore remain recoverable as database objects but inaccessible to the
+  runtime; rolling application rollback fails closed instead of silently
+  restoring the weaker evidence contract. Static controls require v2 in the
+  broker and both allow/deny probes, forbid v1 runtime calls, and forbid a v1
+  drop in bootstrap.
+- Verification: focused resolver/bootstrap tests and the hash-bound release
+  security gate pass; provider-backed CockroachDB v26.2 upgrade execution and
+  privilege census remain required.
+- Residual risk and claim impact: source migration is non-destructive and the
+  weaker resolver is not granted, but this is not a live upgrade or rollback
+  receipt and does not close the provider gate.
 
 ### Recovery publication trusted process time after canonical insertion
 

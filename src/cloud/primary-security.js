@@ -82,7 +82,7 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   }),
   tp_recovery_source_role: Object.freeze({
     functions: Object.freeze([
-      "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)"
+      "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)"
     ])
   }),
   tp_recovery_audit_role: Object.freeze({
@@ -4057,13 +4057,7 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
-    DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(
-      UUID, UUID, UUID, UUID, STRING, UUID, STRING
-    )
-  `);
-
-  await client.query(`
-    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1(
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2(
       p_tenant_id UUID,
       p_run_id UUID,
       p_incident_id UUID,
@@ -4370,7 +4364,7 @@ async function transferOwnership(client) {
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
     "tp_api.g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
-    "tp_api.g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
+    "tp_api.g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)",
     "tp_api.g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
   ];
@@ -4415,7 +4409,7 @@ async function applyGrants(client, bootstrapOwner) {
   `);
   await client.query(`
     GRANT EXECUTE ON FUNCTION
-      tp_api.g1_resolve_recovery_source_receipt_v1(
+      tp_api.g1_resolve_recovery_source_receipt_v2(
         UUID, UUID, UUID, UUID, STRING, UUID, STRING
       )
     TO tp_recovery_source_role

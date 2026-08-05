@@ -1315,8 +1315,7 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_verified_evidence_v1",
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
-    "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(",
-    "tp_api.g1_resolve_recovery_source_receipt_v1",
+    "tp_api.g1_resolve_recovery_source_receipt_v2",
     "proposal.authority_evidence_binding_sha256",
     "proposal.selected_evidence_id = receipt.evidence_id",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1",
@@ -1350,6 +1349,7 @@ const SOURCE_MARKERS = Object.freeze({
     "directTrustRootWrite",
     "recoverySource",
     "sourceResolverDenied",
+    "g1_resolve_recovery_source_receipt_v2",
     "g1_resolve_recovery_publisher_trust_root_v1",
     "payloadSubstitutionOutcome",
     "proposalAliasOutcome",
@@ -1435,6 +1435,7 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_PRINCIPAL_BINDING_MISMATCH",
     "RECOVERY_MCP_RESULT_CARDINALITY_INVALID",
     "g1_resolve_recovery_audit_event_v1",
+    "g1_resolve_recovery_source_receipt_v2",
     "resolveCommittedRecoverySourceReceipt",
     "RECOVERY_SOURCE_DVI_BINDING_INVALID",
     "selected_evidence_binding_sha256",
@@ -1581,7 +1582,15 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
     "PRIMARY_DATABASE_URL"
   ]),
   "primary-security-bootstrap": Object.freeze([
-    "v_authorization_epoch := v_epoch.current_epoch + 1"
+    "v_authorization_epoch := v_epoch.current_epoch + 1",
+    "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(",
+    "DROP FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1("
+  ]),
+  "primary-security-runner": Object.freeze([
+    "g1_resolve_recovery_source_receipt_v1("
+  ]),
+  "recovery-broker": Object.freeze([
+    "g1_resolve_recovery_source_receipt_v1("
   ])
 });
 

@@ -787,7 +787,7 @@ async function main() {
       const resolved = await client.query(
         `
           SELECT *
-          FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+          FROM tp_api.g1_resolve_recovery_source_receipt_v2(
             $1::UUID, $2::UUID, $3::UUID, $4::UUID,
             $5, $6::UUID, $7
           )
@@ -837,7 +837,7 @@ async function main() {
         client,
         `
           SELECT *
-          FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+          FROM tp_api.g1_resolve_recovery_source_receipt_v2(
             $1::UUID, $2::UUID, $3::UUID, $4::UUID,
             $5, $6::UUID, $7
           )
