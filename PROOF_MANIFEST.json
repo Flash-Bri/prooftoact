@@ -403,13 +403,13 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "dff9f27c2936a47b1fa18280098ff1deada2f597d7ffb013fd2876ee011ebd76",
+      "sha256": "b4a2cdef6db71e92089d0a06c075ded8fcc2b6c3ff287aa205fd3611e9c77d07",
       "kind": "verification-code"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
-      "sha256": "54ff4535306b78608e435b227670c6029d0029f9f773db264a5aee1f01ce4ede",
+      "sha256": "1dcf97f9865b653a875e9b21c8f0fda2e33ecad8279e2f166e7a94954a468154",
       "kind": "verification-code"
     },
     {
@@ -427,13 +427,13 @@
     {
       "id": "release-claims-ledger",
       "path": "docs/RELEASE_CLAIMS.md",
-      "sha256": "7beea35e544dbffab0fa589fe5a8d01b0ddf15ba87055a7c0f1031fef4cf2c5b",
+      "sha256": "f1e4a1f148580e1040c142fdf6b85553a9832a912a4f8ff5beacc965b0907af5",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "7d39e5a8cd700abeb569ff652fb4f4f5a76b3f707ac0803e3db3ca27f06ad3f3",
+      "sha256": "24e7a0404fee2116edc77d47836dcf99e2b2bfa8767f04fda17eade1b05480ad",
       "kind": "boundary-ledger"
     },
     {
@@ -571,7 +571,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "7b630e0bdf98c1e9d03fbbaa4fdb99a2d41fc953f86d42335333042e0cad0255",
+      "sha256": "37e989a12a97a32ba192c11cfc345d6e62cd10993236a136161644a1fdefdd52",
       "kind": "boundary-ledger"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "379408b40c2037e1df8af8457f060684a8fec0a9b0b5ed2164b61bb70c96eaea",
+      "sha256": "769119b8f9cfcaf7880958f009613762af6d75e2d4f139050f4db9b48947ffc3",
       "kind": "boundary-ledger"
     },
     {
@@ -788,7 +788,7 @@
       ],
       "acceptanceBoundary": "Local code and adversarial tests require positive-duration serializable transactions with a positive overlap interval, an initial fence of one, a canonical lease that remains active through the exact bound durable observation, and the expected terminal-state shape. They do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
       "remainingRequirements": [
-        "Accepted private invocation and CockroachDB receipts plus a sanitized v6 authority-race receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
+        "Accepted private invocation and CockroachDB receipts plus a sanitized tideproof.aws-authority-race-receipt.v6 receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
       ]
     }
   ],

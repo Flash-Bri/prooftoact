@@ -89,8 +89,14 @@ function parseClaimsLedger(source) {
   const lines = source.split("\n");
   const header =
     "| Claim | Current status | Required artifact | Acceptance condition |";
-  const headerIndex = lines.indexOf(header);
-  assert(headerIndex !== -1, "CLAIMS.md is missing its canonical claim table");
+  const headerIndexes = lines.flatMap((line, index) =>
+    line === header ? [index] : []
+  );
+  assert(
+    headerIndexes.length === 1,
+    "CLAIMS.md canonical claim-table header must appear exactly once"
+  );
+  const [headerIndex] = headerIndexes;
   assert(
     /^\|\s*-+\s*\|\s*-+\s*\|\s*-+\s*\|\s*-+\s*\|$/.test(
       lines[headerIndex + 1] ?? ""
@@ -99,16 +105,37 @@ function parseClaimsLedger(source) {
   );
 
   const claims = [];
+  const claimTexts = new Set();
   for (let index = headerIndex + 2; index < lines.length; index += 1) {
     const line = lines[index];
     if (!line.startsWith("|")) {
       break;
     }
+    assert(
+      line.endsWith("|"),
+      `CLAIMS.md row ${index + 1} must end with a pipe`
+    );
     const cells = line
       .slice(1, -1)
       .split("|")
       .map((cell) => cell.trim());
     assert(cells.length === 4, `CLAIMS.md row ${index + 1} must have four cells`);
+    for (const [cellIndex, label] of [
+      "claim",
+      "current status",
+      "required artifact",
+      "acceptance condition",
+    ].entries()) {
+      assert(
+        cells[cellIndex].length > 0,
+        `CLAIMS.md row ${index + 1} ${label} must not be empty`
+      );
+    }
+    assert(
+      !claimTexts.has(cells[0]),
+      "CLAIMS.md claim text must be unique"
+    );
+    claimTexts.add(cells[0]);
     claims.push({
       claim: cells[0],
       currentStatus: cells[1],
