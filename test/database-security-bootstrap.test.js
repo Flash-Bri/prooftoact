@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
 import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
+import { __test as releaseSecurityContract } from "../scripts/verify-release-security.js";
 
 const primaryUrl = new URL("../src/cloud/primary-security.js", import.meta.url);
 const authorityStoreUrl = new URL(
@@ -425,9 +426,11 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
 
 test("recovery source resolver upgrades by version without destructive DDL", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  assert.doesNotMatch(
-    source,
-    /\bdrop\s+function(?:\s+if\s+exists)?\s+(?:"?tp_api"?\s*\.\s*)?"?g1_resolve_recovery_source_receipt_v[12]"?\s*\(/iu
+  assert.doesNotThrow(
+    () => releaseSecurityContract.assertNoForbiddenSourcePatterns(
+      "primary-security-bootstrap",
+      source
+    )
   );
   assert.match(
     source,
@@ -440,9 +443,11 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
     recoveryBroker,
     /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
   );
-  assert.doesNotMatch(
-    recoveryBroker,
-    /tp_api\.g1_resolve_recovery_source_receipt_v1\s*\(/iu
+  assert.doesNotThrow(
+    () => releaseSecurityContract.assertNoForbiddenSourcePatterns(
+      "recovery-broker",
+      recoveryBroker
+    )
   );
   assert.match(
     gate1Security,

@@ -197,7 +197,9 @@ test("security source contract rejects a removed fail-closed marker", () => {
     __test.SOURCE_MARKERS["primary-security-bootstrap"].join("\n");
   for (const destructiveDdl of [
     "drop function if exists tp_api.g1_resolve_recovery_source_receipt_v1 (uuid)",
-    "DROP FUNCTION \"tp_api\" . \"g1_resolve_recovery_source_receipt_v2\" (uuid)"
+    "DROP FUNCTION \"tp_api\" . \"g1_resolve_recovery_source_receipt_v2\" (uuid)",
+    "DROP/*comment*/FUNCTION IF EXISTS\n  tp_api.g1_resolve_recovery_source_receipt_v1(uuid)",
+    "DROP /* split */ FUNCTION IF EXISTS \"tp_api\".\"g1_resolve_recovery_source_receipt_v2\"(uuid)"
   ]) {
     sources.set(
       "primary-security-bootstrap",
@@ -209,15 +211,20 @@ test("security source contract rejects a removed fail-closed marker", () => {
     );
   }
   sources.set("primary-security-bootstrap", primaryMarkers);
-  sources.set(
-    "recovery-broker",
-    `${__test.SOURCE_MARKERS["recovery-broker"].join("\n")}\n` +
-      "tp_api.g1_resolve_recovery_source_receipt_v1 ("
-  );
-  assert.throws(
-    () => __test.assertSourceMarkers(sources),
-    /RELEASE_SECURITY_FORBIDDEN_PATTERN_RECOVERY_BROKER/
-  );
+  for (const legacyCall of [
+    "tp_api.g1_resolve_recovery_source_receipt_v1 (",
+    "SELECT * FROM \"tp_api\".\"g1_resolve_recovery_source_receipt_v1\" (",
+    "SELECT * FROM tp_api.g1_resolve_recovery_source_receipt_v1/*comment*/("
+  ]) {
+    sources.set(
+      "recovery-broker",
+      `${__test.SOURCE_MARKERS["recovery-broker"].join("\n")}\n${legacyCall}`
+    );
+    assert.throws(
+      () => __test.assertSourceMarkers(sources),
+      /RELEASE_SECURITY_FORBIDDEN_PATTERN_RECOVERY_BROKER/
+    );
+  }
 });
 
 test("public verifier contract remains exact", () => {

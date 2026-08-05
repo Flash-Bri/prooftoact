@@ -234,7 +234,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "ed80e31e4cd0149e3e881fe81011a4b1f787057417f557dc30a9982e00b8dc88"
+      "sha256": "46b5e56ea01c60c0c6e0290bf3c149e0fe40ca44b29f009301d860320d8caf88"
     },
     {
       "id": "database-security-posture",

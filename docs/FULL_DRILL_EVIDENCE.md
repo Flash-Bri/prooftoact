@@ -219,7 +219,7 @@ official release.
   digests; a static SQL control binds every proposal join; both runners require
   the nine-field operator binding; and the source-digest test is an exact
   hash-bound release-security surface.
-- Verification: 434 local tests, the security/proof/claims/submission gates,
+- Verification: 444 local tests, the security/proof/claims/submission gates,
   zero-vulnerability audit, deterministic build, exact provenance, and two
   independent reviews must pass on the exact commit. Provider execution
   remains pending.

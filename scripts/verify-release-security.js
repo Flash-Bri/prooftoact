@@ -1590,10 +1590,10 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
 
 const FORBIDDEN_SOURCE_PATTERNS = Object.freeze({
   "primary-security-bootstrap": Object.freeze([
-    /\bdrop\s+function(?:\s+if\s+exists)?\s+(?:"?tp_api"?\s*\.\s*)?"?g1_resolve_recovery_source_receipt_v[12]"?\s*\(/iu
+    /\bdrop\s+function(?:\s+if\s+exists)?\s+(?:tp_api\s*\.\s*)?g1_resolve_recovery_source_receipt_v[12]\s*\(/u
   ]),
   "recovery-broker": Object.freeze([
-    /\bg1_resolve_recovery_source_receipt_v1\s*\(/iu
+    /\bg1_resolve_recovery_source_receipt_v1\s*\(/u
   ])
 });
 
@@ -1601,6 +1601,32 @@ function assert(condition, code) {
   if (!condition) {
     throw new Error(code);
   }
+}
+
+function canonicalizeSqlGuardSource(source) {
+  assert(typeof source === "string", "RELEASE_SECURITY_PATTERN_SOURCE");
+  return source
+    .replace(/\/\*[\s\S]*?\*\//gu, " ")
+    .replace(/--[^\r\n]*/gu, " ")
+    .replace(/"((?:""|[^"])*)"/gu, (_, identifier) =>
+      identifier.replaceAll('""', '"'))
+    .replace(/['`]/gu, " ")
+    .toLowerCase()
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function assertNoForbiddenSourcePatterns(id, source) {
+  const patterns = FORBIDDEN_SOURCE_PATTERNS[id];
+  assert(Array.isArray(patterns), "RELEASE_SECURITY_PATTERN_SET");
+  const canonicalSource = canonicalizeSqlGuardSource(source);
+  for (const pattern of patterns) {
+    assert(
+      !pattern.test(canonicalSource),
+      `RELEASE_SECURITY_FORBIDDEN_PATTERN_${id.replaceAll("-", "_").toUpperCase()}`
+    );
+  }
+  return true;
 }
 
 function sha256(value) {
@@ -2275,15 +2301,9 @@ function assertSourceMarkers(sources) {
       );
     }
   }
-  for (const [id, patterns] of Object.entries(FORBIDDEN_SOURCE_PATTERNS)) {
+  for (const id of Object.keys(FORBIDDEN_SOURCE_PATTERNS)) {
     const source = sources.get(id);
-    assert(typeof source === "string", "RELEASE_SECURITY_PATTERN_SOURCE");
-    for (const pattern of patterns) {
-      assert(
-        !pattern.test(source),
-        `RELEASE_SECURITY_FORBIDDEN_PATTERN_${id.replaceAll("-", "_").toUpperCase()}`
-      );
-    }
+    assertNoForbiddenSourcePatterns(id, source);
   }
   return true;
 }
@@ -2462,7 +2482,9 @@ export const __test = Object.freeze({
   FORBIDDEN_SOURCE_PATTERNS,
   REQUIRED_DENY_ACTIONS,
   SOURCE_MARKERS,
+  assertNoForbiddenSourcePatterns,
   assertRuntimeContract,
   assertSourceMarkers,
-  assertTemplateContract
+  assertTemplateContract,
+  canonicalizeSqlGuardSource
 });
