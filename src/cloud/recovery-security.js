@@ -409,6 +409,10 @@ export async function bootstrapRecoverySecurity({
           OR length(p_bundle_digest) <> 64
           OR length(p_signature_digest) <> 64
           OR p_snapshot_version < 1
+          OR p_source_commit_ts < statement_timestamp() - INTERVAL '1 hour'
+          OR p_source_commit_ts > statement_timestamp() + INTERVAL '1 minute'
+          OR p_expires_at <= statement_timestamp()
+          OR p_expires_at > statement_timestamp() + INTERVAL '24 hours'
           OR p_expires_at <= p_source_commit_ts
           OR p_expires_at > p_source_commit_ts + INTERVAL '24 hours'
         THEN

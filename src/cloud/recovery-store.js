@@ -48,6 +48,13 @@ const RECOVERY_COLUMNS = [
   "expires_at"
 ];
 
+const RECOVERY_DATABASE_FRESHNESS_SQL = `
+AND source_commit_ts >= statement_timestamp() - INTERVAL '1 hour'
+AND source_commit_ts <= statement_timestamp() + INTERVAL '1 minute'
+AND expires_at > statement_timestamp()
+AND expires_at <= statement_timestamp() + INTERVAL '24 hours'
+`.trim();
+
 export const RECOVERY_QUERY_TEMPLATE = `
 SELECT
   tenant_id,
@@ -77,7 +84,7 @@ WHERE recovery_session_id = '${QUERY_SESSION_TOKEN}'::UUID
   AND tenant_id = '${QUERY_TENANT_TOKEN}'::UUID
   AND subject_binding_hash = '${QUERY_SUBJECT_TOKEN}'
   AND source_digest = '${QUERY_SOURCE_TOKEN}'
-  AND expires_at > transaction_timestamp()
+  ${RECOVERY_DATABASE_FRESHNESS_SQL}
 `.trim();
 
 function canonicalJson(value) {
@@ -1161,7 +1168,7 @@ export class RecoveryStore {
           AND tenant_id = $2::UUID
           AND subject_binding_hash = $3
           AND source_digest = $4
-          AND expires_at > transaction_timestamp()
+          ${RECOVERY_DATABASE_FRESHNESS_SQL}
       `,
       [sessionId, boundTenantId, boundSubjectHash, boundSourceDigest]
     );

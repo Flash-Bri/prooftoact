@@ -232,6 +232,24 @@ test("fixed recovery query binds tenant, principal, and exact source", () => {
   );
   assert.match(recoveryQueryTemplateDigest(), /^[a-f0-9]{64}$/u);
   assert.equal(RECOVERY_QUERY_TEMPLATE.includes("source_digest ="), true);
+  assert.equal(
+    RECOVERY_QUERY_TEMPLATE.includes(
+      "source_commit_ts >= statement_timestamp() - INTERVAL '1 hour'"
+    ),
+    true
+  );
+  assert.equal(
+    RECOVERY_QUERY_TEMPLATE.includes(
+      "source_commit_ts <= statement_timestamp() + INTERVAL '1 minute'"
+    ),
+    true
+  );
+  assert.equal(
+    RECOVERY_QUERY_TEMPLATE.includes(
+      "expires_at <= statement_timestamp() + INTERVAL '24 hours'"
+    ),
+    true
+  );
   assert.equal(RECOVERY_QUERY_TEMPLATE.includes("ORDER BY"), false);
   assert.equal(RECOVERY_QUERY_TEMPLATE.includes("LIMIT"), false);
 });

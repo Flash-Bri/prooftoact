@@ -246,6 +246,39 @@ official release.
 - Residual risk and claim impact: source compatibility is repaired, but this is
   not a live migration receipt and does not close the provider gate.
 
+### Recovery publication trusted process time after canonical insertion
+
+- Root cause: the production publisher normalized a signed bundle without the
+  process-time freshness validator, while the database append routine checked
+  only source-relative TTL. A stale, future-dated, or already expired bundle
+  could therefore occupy the canonical recovery identity. The fixed MCP read
+  checked only expiry, and the direct Gate One read delegated the remaining
+  freshness checks to the host clock.
+- Why it was missed: freshness negatives exercised row validation after a row
+  was returned. They did not prove that database time rejected the row before
+  canonical lookup and insertion, nor that both database read paths used the
+  same predicates. Initial repair review also used transaction-start time,
+  which a held publisher transaction could age before invoking the routine.
+- Earliest detection point: submit expired, source-stale, source-future, and
+  overlong-expiry inputs to the append routine and require rejection before
+  its first canonical lookup or insert. Then inspect both fixed and direct
+  reads for one shared statement-time filter.
+- Repair: the SECURITY DEFINER append routine now enforces the one-hour source
+  age, one-minute future skew, current expiry, and 24-hour remaining-expiry
+  bounds using `statement_timestamp()` before any canonical lookup or insert.
+  The fixed MCP query and direct Gate One query consume one shared SQL filter
+  with the same boundaries.
+- Regression and preventive control: a red-before-green static control binds
+  all four append predicates ahead of canonical occupancy, a shared-filter
+  control requires both read paths, and a publisher negative requires SQLSTATE
+  `22023` to roll back without commit or retry.
+- Verification: focused freshness, database-bootstrap, publication, and query
+  tests pass. Full local tests, audit, release gates, deterministic build,
+  independent review, and exact-main CI remain required on the final commit.
+- Residual risk and claim impact: provider-backed CockroachDB v26.2 execution
+  must confirm `statement_timestamp()` behavior and the rejection boundaries.
+  No live recovery, availability, or exactly-once claim is added.
+
 ## Precommitted recovery-publisher trust root
 
 The recovery evidence runners no longer generate a publisher key and then

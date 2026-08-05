@@ -223,6 +223,23 @@ test("recovery publisher never retries or rolls back ambiguous transport errors"
   }
 });
 
+test("database freshness rejection rolls back before canonical commit", async () => {
+  const calls = [];
+  const rejection = sqlState("22023", "recovery bundle is not current");
+  const client = {
+    async query(text) {
+      calls.push(text.trim().split(/\s+/u)[0]);
+      if (text.includes("append_recovery_bundle_v2")) throw rejection;
+      return {};
+    }
+  };
+  await assert.rejects(
+    appendRecoveryBundleWithClient(client, BUNDLE),
+    rejection
+  );
+  assert.deepEqual(calls, ["BEGIN", "SELECT", "ROLLBACK"]);
+});
+
 test("recovery publisher stops when rollback fails", async () => {
   const client = {
     async query(text) {
