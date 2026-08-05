@@ -1349,6 +1349,8 @@ const SOURCE_MARKERS = Object.freeze({
     "directTrustRootWrite",
     "recoverySource",
     "sourceResolverDenied",
+    "expectPrivilegeDeniedOrUndefined",
+    "g1_resolve_recovery_source_receipt_v1",
     "g1_resolve_recovery_source_receipt_v2",
     "g1_resolve_recovery_publisher_trust_root_v1",
     "payloadSubstitutionOutcome",
@@ -1582,15 +1584,16 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
     "PRIMARY_DATABASE_URL"
   ]),
   "primary-security-bootstrap": Object.freeze([
-    "v_authorization_epoch := v_epoch.current_epoch + 1",
-    "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(",
-    "DROP FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1("
-  ]),
-  "primary-security-runner": Object.freeze([
-    "g1_resolve_recovery_source_receipt_v1("
+    "v_authorization_epoch := v_epoch.current_epoch + 1"
+  ])
+});
+
+const FORBIDDEN_SOURCE_PATTERNS = Object.freeze({
+  "primary-security-bootstrap": Object.freeze([
+    /\bdrop\s+function(?:\s+if\s+exists)?\s+(?:"?tp_api"?\s*\.\s*)?"?g1_resolve_recovery_source_receipt_v[12]"?\s*\(/iu
   ]),
   "recovery-broker": Object.freeze([
-    "g1_resolve_recovery_source_receipt_v1("
+    /\bg1_resolve_recovery_source_receipt_v1\s*\(/iu
   ])
 });
 
@@ -2272,6 +2275,16 @@ function assertSourceMarkers(sources) {
       );
     }
   }
+  for (const [id, patterns] of Object.entries(FORBIDDEN_SOURCE_PATTERNS)) {
+    const source = sources.get(id);
+    assert(typeof source === "string", "RELEASE_SECURITY_PATTERN_SOURCE");
+    for (const pattern of patterns) {
+      assert(
+        !pattern.test(source),
+        `RELEASE_SECURITY_FORBIDDEN_PATTERN_${id.replaceAll("-", "_").toUpperCase()}`
+      );
+    }
+  }
   return true;
 }
 
@@ -2446,6 +2459,7 @@ export const __test = Object.freeze({
   MANIFEST_SCHEMA,
   MANIFEST_STATUS,
   FORBIDDEN_SOURCE_MARKERS,
+  FORBIDDEN_SOURCE_PATTERNS,
   REQUIRED_DENY_ACTIONS,
   SOURCE_MARKERS,
   assertRuntimeContract,

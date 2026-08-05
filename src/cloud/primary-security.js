@@ -44,6 +44,10 @@ const CLUSTER_PRINCIPAL_DATABASES = Object.freeze(Object.fromEntries([
     "tideproof_recovery"
   ])
 ]));
+const LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
+  "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+const CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
+  "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -82,7 +86,7 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   }),
   tp_recovery_source_role: Object.freeze({
     functions: Object.freeze([
-      "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)"
+      CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
     ])
   }),
   tp_recovery_audit_role: Object.freeze({
@@ -94,6 +98,15 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   }),
   tp_audit_role: Object.freeze({
     relations: Object.freeze(["g1_receipt_audit_v1"])
+  })
+});
+const PRIMARY_PREFLIGHT_ROLE_GRANT_POLICIES = Object.freeze({
+  ...PRIMARY_ROLE_GRANT_POLICIES,
+  tp_recovery_source_role: Object.freeze({
+    functions: Object.freeze([
+      LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE,
+      CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
+    ])
   })
 });
 const PRIMARY_POSTURE_SPEC = Object.freeze({
@@ -109,6 +122,10 @@ const PRIMARY_POSTURE_SPEC = Object.freeze({
   optionalRoles: RECOVERY_SIBLING_ROLES,
   optionalUsers: RECOVERY_SIBLING_USERS,
   optionalBindings: RECOVERY_SIBLING_BINDINGS
+});
+const PRIMARY_PREFLIGHT_POSTURE_SPEC = Object.freeze({
+  ...PRIMARY_POSTURE_SPEC,
+  roleGrantPolicies: PRIMARY_PREFLIGHT_ROLE_GRANT_POLICIES
 });
 
 function requirePassword(passwords, user) {
@@ -204,7 +221,11 @@ async function scrubManagedPrivileges(client) {
 async function collectValidatedPosture(
   client,
   options,
-  { attempts = 1, delayMs = 0 } = {}
+  {
+    attempts = 1,
+    delayMs = 0,
+    postureSpec = PRIMARY_POSTURE_SPEC
+  } = {}
 ) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -212,7 +233,7 @@ async function collectValidatedPosture(
       const posture = await collectDatabaseSecurityPosture(client);
       const summary = validateDatabaseSecurityPosture(
         posture,
-        PRIMARY_POSTURE_SPEC,
+        postureSpec,
         options
       );
       return { posture, summary };
@@ -4615,7 +4636,8 @@ export async function bootstrapPrimarySecurity({
         allowMissingPrincipals: true,
         allowMissingExpectedCapabilities: true,
         allowBootstrapDefaults: true
-      }
+      },
+      { postureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC }
     );
     const clusterPreflight = await collectClusterManagedGrantPosture({
       adminConnectionString,
@@ -4641,7 +4663,8 @@ export async function bootstrapPrimarySecurity({
         allowMissingPrincipals: false,
         allowMissingExpectedCapabilities: true,
         allowBootstrapDefaults: false
-      }
+      },
+      { postureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC }
     );
 
     store = new AuthorityStore({
@@ -4697,3 +4720,8 @@ export async function bootstrapPrimarySecurity({
     await client.end().catch(() => {});
   }
 }
+
+export const __test = Object.freeze({
+  primaryPostureSpec: PRIMARY_POSTURE_SPEC,
+  primaryPreflightPostureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC
+});

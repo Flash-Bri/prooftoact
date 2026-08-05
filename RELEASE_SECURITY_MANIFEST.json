@@ -234,7 +234,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "52c4e5fbc301b216bd29a7a6857d8db422ea41a9a1a0623ece308026b277b38c"
+      "sha256": "ed80e31e4cd0149e3e881fe81011a4b1f787057417f557dc30a9982e00b8dc88"
     },
     {
       "id": "database-security-posture",
@@ -360,13 +360,13 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "c12c4b794a0c470957fa7e84ec1af4d7321ee217d89f9ea9ddb62dd1470789d9"
+      "sha256": "8fd3e2963161d687f25172c3ed6fe0612a639ef6b25f82ed520a69ba58ddba9e"
     },
     {
       "id": "primary-security-runner",
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
-      "sha256": "3e62056a4fea94ba4123158a7afcfc3c0edb3741338666f05f22d708bf303615"
+      "sha256": "dce4ff39282a14af2385514e9cc03f9fdf9b9b28c02e3591a11ec9e6817b8141"
     },
     {
       "id": "proof-manifest-tests",

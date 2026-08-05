@@ -240,17 +240,28 @@ official release.
 - Repair and preventive control: the expanded return contract now has the
   versioned `g1_resolve_recovery_source_receipt_v2` name. Bootstrap creates v2
   before ownership and least-privilege grants, never drops v1, and grants only
-  v2 after the managed-principal privilege scrub. Existing v1 installations
-  therefore remain recoverable as database objects but inaccessible to the
-  runtime; rolling application rollback fails closed instead of silently
-  restoring the weaker evidence contract. Static controls require v2 in the
-  broker and both allow/deny probes, forbid v1 runtime calls, and forbid a v1
-  drop in bootstrap.
+  v2 after the managed-principal privilege scrub. The two preflight censuses
+  admit only the exact historical v1 and current v2 signatures for the source
+  role while allowing capabilities to be missing; the final census returns to
+  the strict v2-only policy. Existing v1 installations therefore remain
+  recoverable as database objects but inaccessible to the runtime. Static and
+  upgrade-state controls require that exact transitional policy, v2-only final
+  policy, v2 production call, robust destructive-DDL rejection, and a v1
+  denial-or-absence probe.
+- Cutover procedure: this is an explicitly quiesced, roll-forward-only
+  migration, not a zero-downtime or rollback-compatible change. Stop the
+  recovery evidence runners, run bootstrap to completion, require v2 success
+  plus either SQLSTATE `42501` for a retained v1 object or `42883` for a clean
+  install, then deploy only the exact v2 runner bytes. Do not restart an older
+  runner after the privilege scrub. Any failed bootstrap or probe keeps
+  recovery publication stopped until the v2 path is repaired and reverified.
 - Verification: focused resolver/bootstrap tests and the hash-bound release
   security gate pass; provider-backed CockroachDB v26.2 upgrade execution and
-  privilege census remain required.
+  privilege census, including retained-v1 owner and denial checks, remain
+  required.
 - Residual risk and claim impact: source migration is non-destructive and the
-  weaker resolver is not granted, but this is not a live upgrade or rollback
+  weaker resolver is not granted after convergence, but the cutover requires
+  an outage and has no application rollback window. This is not a live upgrade
   receipt and does not close the provider gate.
 
 ### Recovery publication trusted process time after canonical insertion

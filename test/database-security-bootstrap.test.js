@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
+import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
+
 const primaryUrl = new URL("../src/cloud/primary-security.js", import.meta.url);
 const authorityStoreUrl = new URL(
   "../src/cloud/authority-store.js",
@@ -424,7 +427,7 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   const source = await readFile(primaryUrl, "utf8");
   assert.doesNotMatch(
     source,
-    /DROP FUNCTION(?: IF EXISTS)? tp_api\.g1_resolve_recovery_source_receipt_v[12]\(/u
+    /\bdrop\s+function(?:\s+if\s+exists)?\s+(?:"?tp_api"?\s*\.\s*)?"?g1_resolve_recovery_source_receipt_v[12]"?\s*\(/iu
   );
   assert.match(
     source,
@@ -433,21 +436,85 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
 
   const recoveryBroker = await readFile(recoveryBrokerUrl, "utf8");
   const gate1Security = await readFile(gate1SecurityUrl, "utf8");
-  for (const [label, runtimeSource] of [
-    ["recovery broker", recoveryBroker],
-    ["Gate One security probe", gate1Security]
-  ]) {
-    assert.match(
-      runtimeSource,
-      /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u,
-      label
-    );
-    assert.doesNotMatch(
-      runtimeSource,
-      /tp_api\.g1_resolve_recovery_source_receipt_v1\(/u,
-      label
-    );
-  }
+  assert.match(
+    recoveryBroker,
+    /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
+  );
+  assert.doesNotMatch(
+    recoveryBroker,
+    /tp_api\.g1_resolve_recovery_source_receipt_v1\s*\(/iu
+  );
+  assert.match(
+    gate1Security,
+    /expectPrivilegeDeniedOrUndefined[\s\S]*g1_resolve_recovery_source_receipt_v1\(/u
+  );
+  assert.match(
+    gate1Security,
+    /error\.code === "42501" \|\| error\.code === "42883"/u
+  );
+  assert.match(
+    gate1Security,
+    /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
+  );
+
+  assert.match(source, /PRIMARY_PREFLIGHT_POSTURE_SPEC/u);
+  assert.equal(
+    source.match(/postureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC/gu)?.length,
+    2
+  );
+  assert.match(
+    source,
+    /LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE[\s\S]*CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE/u
+  );
+});
+
+test("resolver upgrade preflight admits only the exact installed v1 capability", () => {
+  const legacySignature =
+    "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+  const currentSignature =
+    "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+  const finalPolicy =
+    primarySecurityContract.primaryPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.functions;
+  const preflightPolicy =
+    primarySecurityContract.primaryPreflightPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.functions;
+  assert.deepEqual(finalPolicy, [currentSignature]);
+  assert.deepEqual(preflightPolicy, [legacySignature, currentSignature]);
+
+  const installedV1Grant = [{
+    database_name: "tideproof",
+    schema_name: "tp_api",
+    object_name:
+      "g1_resolve_recovery_source_receipt_v1(uuid,uuid,uuid,uuid,string,uuid,string)",
+    object_type: "function",
+    grantee: "tp_recovery_source_role",
+    privilege_type: "EXECUTE",
+    is_grantable: false
+  }];
+  const validateWith = (spec) => validateManagedObjectGrants(
+    installedV1Grant,
+    {
+      databaseName: spec.databaseName,
+      managedSchemas: spec.managedSchemas,
+      managedPrefixes: spec.managedPrefixes,
+      apiSchema: spec.apiSchema,
+      ownerRoles: spec.ownerRoles,
+      roleGrantPolicies: spec.roleGrantPolicies,
+      runtimeUsers: spec.users,
+      knownManagedPrincipals: [...spec.roles, ...spec.users],
+      trustedPrincipals: ["cluster_admin"],
+      allowMissingExpected: true
+    }
+  );
+
+  assert.doesNotThrow(() => validateWith(
+    primarySecurityContract.primaryPreflightPostureSpec
+  ));
+  assert.throws(
+    () => validateWith(primarySecurityContract.primaryPostureSpec),
+    /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
+  );
 });
 
 test("recovery storage enforces one row per exact broker lookup identity", async () => {
