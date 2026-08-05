@@ -277,7 +277,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "ddc47e4eaddb6e774fbdcb691db141bc59a5ce691051429eea93c784fcd64362",
+      "sha256": "e14d4541023ae57a168bdb576ba892e002db1f28c15edef6f49c2e241bb9ee1a",
       "kind": "boundary-ledger"
     },
     {
@@ -433,7 +433,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "8071f9e3bc03a72d6d844c2dbb797ab30a2d6fe780c5741f0f3e564546ee8b82",
+      "sha256": "6e6288dba424889fb8504f0909f4cdc0846df9e22d7a99160a2a5b91ed74f242",
       "kind": "boundary-ledger"
     },
     {
@@ -571,7 +571,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "60aa41ac072cc281c9b0e30e0d71d8535d65fd8604de2ff1c3d3368d83d16720",
+      "sha256": "02ed153da17a96cd57ee0413c8801415701ae92ad2aca5f39fee8286db74dd67",
       "kind": "boundary-ledger"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "5cba27bac119277d41ba0d932fa88d0db5257e2de7f7f36dcfcaba85cbeadda0",
+      "sha256": "c4e05bd57fd2809fca8d1eff25d2a8cf2a0c9d442fe087e4e14f9fa9122f97ea",
       "kind": "boundary-ledger"
     },
     {

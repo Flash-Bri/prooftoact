@@ -234,7 +234,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "c82b548e4962de3b4e6dfcc7f6b3cdc42b70d85b4c6acd50e9e9b6a096a1ee44"
+      "sha256": "866a57ec837498f70acef90ae19ae653195945bd386c653b86302b64890f4ad2"
     },
     {
       "id": "database-security-posture",
@@ -414,7 +414,7 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "779cfe060f9d8bac920fd17101d421038e8956aed245a4ae24514b60652fdb2b"
+      "sha256": "2b63d892863e3622747ec2613e5653ea4746817da06bd8bb86226825b6b7ebac"
     },
     {
       "id": "recovery-audit-reconciliation-tests",
@@ -462,19 +462,19 @@
       "id": "recovery-publication-reconciliation-tests",
       "path": "test/recovery-security.test.js",
       "role": "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION",
-      "sha256": "9e0d823dd5a5c3a4ead4fb2b8a179f23b6d25202539a4ea9ffe16e6920bec1dd"
+      "sha256": "82e0087fa7b581d6183020b0a017664a0965064bf0b6640ae543ef7bcd1cbbc9"
     },
     {
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "3d9ee18d52eea7d9d8b4b40d0beb16e5222dc2253987335fcd1969d76d0fad36"
+      "sha256": "d6ed268d09a2438d090fc11f1414688c48c0255d7c1ffe84c17136594853229b"
     },
     {
       "id": "recovery-store-tests",
       "path": "test/recovery-store.test.js",
       "role": "RECOVERY_STORE_BINDING_VERIFICATION",
-      "sha256": "ccdcf3e7361458ffd83060d468a77ff3482127adfae80049f15d9afb6118121b"
+      "sha256": "2d7dac9c550c35c10d303c63f45b17754c34d03b4cc16b255b5e64f6ae62c1a1"
     },
     {
       "id": "release-security-ledger",

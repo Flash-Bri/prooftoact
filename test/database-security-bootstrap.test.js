@@ -173,6 +173,57 @@ test("recovery bootstrap audits first and grants no private-schema access", asyn
   );
 });
 
+test("recovery publication rejects database-stale input before canonical occupancy", async () => {
+  const source = await readFile(recoveryUrl, "utf8");
+  const start = source.indexOf(
+    "CREATE OR REPLACE FUNCTION mcp_api.append_recovery_bundle_v2"
+  );
+  assert.notEqual(start, -1);
+  const end = source.indexOf("    `);", start);
+  assert.notEqual(end, -1);
+  const definition = source.slice(start, end);
+  const canonicalLookup = definition.indexOf("SELECT count(*)::INT8");
+  const canonicalInsert = definition.indexOf(
+    "INSERT INTO mcp_private.recovery_bundles_v2"
+  );
+  assert.ok(canonicalLookup > 0);
+  assert.ok(canonicalInsert > canonicalLookup);
+  for (const predicate of [
+    "p_source_commit_ts < statement_timestamp() - INTERVAL '1 hour'",
+    "p_source_commit_ts > statement_timestamp() + INTERVAL '1 minute'",
+    "p_expires_at <= statement_timestamp()",
+    "p_expires_at > statement_timestamp() + INTERVAL '24 hours'"
+  ]) {
+    const position = definition.indexOf(predicate);
+    assert.ok(position > 0, predicate);
+    assert.ok(position < canonicalLookup, predicate);
+    assert.ok(position < canonicalInsert, predicate);
+  }
+});
+
+test("fixed and direct recovery reads share one database-time freshness filter", async () => {
+  const source = await readFile(recoveryStoreUrl, "utf8");
+  const declaration = source.indexOf(
+    "const RECOVERY_DATABASE_FRESHNESS_SQL = `"
+  );
+  assert.notEqual(declaration, -1);
+  const declarationEnd = source.indexOf("`.trim();", declaration);
+  assert.notEqual(declarationEnd, -1);
+  const freshnessSql = source.slice(declaration, declarationEnd);
+  for (const predicate of [
+    "source_commit_ts >= statement_timestamp() - INTERVAL '1 hour'",
+    "source_commit_ts <= statement_timestamp() + INTERVAL '1 minute'",
+    "expires_at > statement_timestamp()",
+    "expires_at <= statement_timestamp() + INTERVAL '24 hours'"
+  ]) {
+    assert.equal(freshnessSql.includes(predicate), true, predicate);
+  }
+  assert.equal(
+    source.match(/\$\{RECOVERY_DATABASE_FRESHNESS_SQL\}/gu)?.length,
+    2
+  );
+});
+
 test("every database SECURITY DEFINER body binds the exact session user", async () => {
   const sharedAuthorizerGuard =
     /session_user (?:IN|NOT IN) \(\s*'tp_authorizer_user',\s*'tp_gate2_authorizer_user'\s*\)/u;
