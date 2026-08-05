@@ -31,6 +31,8 @@ const SOURCE_BINDING = Object.freeze({
   authorizationEpoch: 1,
   logicalAuthorityKeySha256: "1".repeat(64),
   authorizationBindingSha256: "2".repeat(64),
+  authorityEvidenceBindingSha256: "3".repeat(64),
+  selectedEvidenceBindingSha256: "4".repeat(64),
   outcome: "resource_reserved"
 });
 const SOURCE_DIGEST = recoverySourceBindingDigestFor(SOURCE_BINDING);

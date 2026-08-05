@@ -83,7 +83,8 @@ acts:
    protected external effects. The model supplies no operation ID, effect key,
    fence, or authorization.
 3. Recovery selects the exact winning receipt by tenant, run, incident,
-   evidence, resource, operation, request digest, and outcome—not by recency.
+   evidence, DVI proposal and selected-evidence digests, resource, operation,
+   request digest, and outcome—not by recency.
    One fixed-query Managed MCP read follows a committed pre-read audit; a
    result-bound terminal audit commits before sanitized context is released.
    No operational capability is returned, an unbound principal is denied
@@ -179,7 +180,8 @@ concurrency, the 100-run harness, or any live evidence.
 The recovery broker no longer selects a bundle by principal, session, and
 recency. `recoverySourceBindingDigestFor` creates one canonical SHA-256 binding
 over the exact tenant, run, incident, admitted evidence digest, resource,
-winning operation, authority request digest, and outcome. The signed bundle,
+winning operation, authority request digest, DVI proposal binding,
+selected-evidence binding, and outcome. The signed bundle,
 session resolver, pre-read audit digest, fixed Managed MCP query, returned row,
 and terminal audit must all carry that same digest.
 
@@ -194,6 +196,55 @@ This is a source-level prerequisite only. It does not prove a Managed MCP
 call, a live database row, the exact 100-run batch, AWS behavior, or final
 release readiness until a fresh provider-backed receipt binds it to the exact
 official release.
+
+### Recovery binding stopped before the DVI proposal
+
+- Root cause: the recovery source resolver joined the winning authority
+  receipt to evidence and its outbox intent, but did not join the exact DVI
+  proposal or carry the proposal's authority-evidence binding into the signed
+  recovery source digest.
+- Why it was missed: the earlier cross-act negatives varied authority and
+  recovery identifiers, while all fixtures reused one synthetic DVI proposal.
+  Static controls checked receipt-to-outbox equality but not
+  proposal-to-receipt equality.
+- Earliest detection point: keep the same winning operation and request while
+  substituting either accepted race-receipt DVI digest; resolution must fail
+  before signing, recovery publication, bootstrap, or MCP.
+- Repair: the resolver joins the exact proposal across proposal,
+  logical-action, authorization, run, incident, resource, agency, policy,
+  selected-evidence, and payload identities. The runtime recomputes the
+  selected-evidence digest and compares both accepted race-receipt DVI
+  digests. Version 3 of the signed source digest includes both.
+- Regression and preventive control: focused mismatch tests cover both DVI
+  digests; a static SQL control binds every proposal join; both runners require
+  the nine-field operator binding; and the source-digest test is an exact
+  hash-bound release-security surface.
+- Verification: 434 local tests, the security/proof/claims/submission gates,
+  zero-vulnerability audit, deterministic build, exact provenance, and two
+  independent reviews must pass on the exact commit. Provider execution
+  remains pending.
+- Residual risk and claim impact: source now preserves one DVI identity through
+  recovery publication and lookup, but no live CockroachDB, AWS, or Managed MCP
+  receipt proves that handoff. No live, batch, concurrency, or exactly-once
+  claim is added.
+
+### Resolver return-shape upgrade initially had no migration step
+
+- Root cause: adding an output column under the unchanged function signature
+  used `CREATE OR REPLACE FUNCTION`, which cannot change an existing
+  CockroachDB/PostgreSQL return type.
+- Why it was missed: clean-bootstrap tests inspected the final SQL definition
+  but did not model upgrade from the prior installed return shape.
+- Earliest detection point: compare each unchanged function signature's old
+  and new return tables before accepting a bootstrap change.
+- Repair and preventive control: bootstrap explicitly drops the prior resolver
+  signature before recreating it, and an ordering test requires that migration
+  step to precede the new definition. Later ownership and exact grants are
+  reapplied by the same bootstrap.
+- Verification: focused upgrade-ordering and complete static bootstrap tests
+  pass; provider-backed CockroachDB v26.2 upgrade execution remains required.
+- Residual risk and claim impact: source compatibility is repaired, but this is
+  not a live migration receipt and does not close the provider gate.
 
 ## Precommitted recovery-publisher trust root
 
@@ -297,6 +348,8 @@ Both runners require these exact private inputs:
 | `RECOVERY_SOURCE_RESOURCE_ID` | Exact resource ID from that same bound race configuration |
 | `RECOVERY_SOURCE_OPERATION_ID` | Accepted race receipt `winner.operationId` |
 | `RECOVERY_SOURCE_REQUEST_DIGEST` | Accepted race receipt `winner.requestDigest` |
+| `RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256` | Accepted race receipt `dvi.authorityEvidenceBindingSha256` |
+| `RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256` | Accepted race receipt `dvi.selectedEvidenceBindingSha256` |
 | `PRIMARY_CLUSTER_ID`, `RECOVERY_CLUSTER_ID` | Exact provider cluster UUIDs from the frozen deployment inventory |
 | `EXPECTED_PRIMARY_HOSTNAME`, `EXPECTED_RECOVERY_HOSTNAME` | Exact provider hostnames from that inventory; wildcards, aliases, proxies, and localhost are invalid |
 | `TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT` | The canonical public-root JSON prepared before bootstrap |
@@ -312,15 +365,18 @@ recorded as private operator inputs; otherwise the runner derives them.
 `RECOVERY_PUBLISHER_DATABASE_URL`, `MCP_API_KEY`, and the exact immutable
 `SOURCE_BUILD_IDENTITY`.
 
-The seven `RECOVERY_SOURCE_*` values are one indivisible binding. Do not copy
+The nine `RECOVERY_SOURCE_*` values are one indivisible binding. Do not copy
 the winner operation and request digest onto tenant, incident, evidence, or
-resource values from another run, and do not reconstruct missing fields from a
-latest-row query. Before any resolver, signing, publication, recovery
+resource values or DVI digests from another run, and do not reconstruct missing
+fields from a latest-row query. Before any resolver, signing, publication, recovery
 bootstrap, or MCP call, both primary credentials must independently return
 SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 18
 managed base-table read probes. The source resolver then joins the authority receipt
-to its outbox intent across request, proposal, logical-action, authorization,
-run, incident, resource, fence, effect, and payload identities. Any mismatch or
+to its outbox intent and exact DVI proposal across request, proposal,
+logical-action, authorization, run, incident, resource, agency, policy,
+selected evidence, fence, effect, and payload identities. The runtime also
+recomputes the selected-evidence binding digest and compares both DVI digests
+to the accepted race receipt before signing or publication. Any mismatch or
 non-singleton result fails closed.
 
 ## Integrated DVI acceptance harness

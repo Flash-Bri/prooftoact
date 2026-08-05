@@ -48,7 +48,13 @@ function exactSourceBinding() {
     evidenceId: requiredEnvironment("RECOVERY_SOURCE_EVIDENCE_ID"),
     resourceId: requiredEnvironment("RECOVERY_SOURCE_RESOURCE_ID"),
     operationId: requiredEnvironment("RECOVERY_SOURCE_OPERATION_ID"),
-    requestDigest: requiredEnvironment("RECOVERY_SOURCE_REQUEST_DIGEST")
+    requestDigest: requiredEnvironment("RECOVERY_SOURCE_REQUEST_DIGEST"),
+    authorityEvidenceBindingSha256: requiredEnvironment(
+      "RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256"
+    ),
+    selectedEvidenceBindingSha256: requiredEnvironment(
+      "RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256"
+    )
   };
 }
 
@@ -143,6 +149,10 @@ async function main() {
     authorizationEpoch: Number(receipt.authorization_epoch),
     logicalAuthorityKeySha256: receipt.logical_authority_key_sha256,
     authorizationBindingSha256: receipt.authorization_binding_sha256,
+    authorityEvidenceBindingSha256:
+      receipt.authority_evidence_binding_sha256,
+    selectedEvidenceBindingSha256:
+      receipt.selected_evidence_binding_sha256,
     outcome: receipt.outcome
   });
   const signer = loadCommittedRecoveryPublisherSigner();
@@ -277,6 +287,12 @@ async function main() {
           recoveryStatus: recovered.status,
           sourceDigest: recovered.sourceDigest,
           bundleDigest: recovered.bundleDigest,
+          dvi: {
+            authorityEvidenceBindingSha256:
+              receipt.authority_evidence_binding_sha256,
+            selectedEvidenceBindingSha256:
+              receipt.selected_evidence_binding_sha256
+          },
           publisherTrustRootCommitment: signer.trustRootCommitment,
           publisherKeySetDigest,
           publisherTrustRootCommittedAt:
@@ -296,7 +312,7 @@ async function main() {
           authorityTransferred: recovered.authorityTransferred,
           requiresFreshAuthorization: recovered.requiresFreshAuthorization,
           claimBoundary:
-            "This proves signed, principal-bound, exact-source recovery publication and direct validation through a least-privilege publisher. Noninteractive Managed MCP broker execution, the 100-drill batch, and primary audit are separate evidence gates."
+            "This proves signed, principal-bound, exact-source recovery publication and direct validation through a least-privilege publisher, with the source resolver bound to the expected DVI proposal and selected-evidence digests. Noninteractive Managed MCP broker execution, the 100-drill batch, provider execution, and primary audit are separate evidence gates."
         },
         null,
         2

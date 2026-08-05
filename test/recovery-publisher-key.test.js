@@ -169,6 +169,13 @@ test("primary-ledger commitment rejects coordinated root commitment and key repl
 });
 
 test("recovery source principal resolves one current exact authority receipt", async () => {
+  const evidenceDigest = "f".repeat(64);
+  const selectedEvidenceBindingSha256 = createHash("sha256")
+    .update(JSON.stringify({
+      evidenceDigest,
+      evidenceId: "44444444-4444-4444-8444-444444444444"
+    }))
+    .digest("hex");
   const binding = {
     tenantId: "11111111-1111-4111-8111-111111111111",
     runId: "22222222-2222-4222-8222-222222222222",
@@ -176,7 +183,9 @@ test("recovery source principal resolves one current exact authority receipt", a
     evidenceId: "44444444-4444-4444-8444-444444444444",
     resourceId: "synthetic-rescue-unit-7",
     operationId: "55555555-5555-4555-8555-555555555555",
-    requestDigest: "a".repeat(64)
+    requestDigest: "a".repeat(64),
+    authorityEvidenceBindingSha256: "9".repeat(64),
+    selectedEvidenceBindingSha256
   };
   const row = {
     tenant_id: binding.tenantId,
@@ -196,7 +205,9 @@ test("recovery source principal resolves one current exact authority receipt", a
     agency: "rescue",
     outcome: "resource_reserved",
     reason: "admissible",
-    evidence_digest: "f".repeat(64),
+    evidence_digest: evidenceDigest,
+    authority_evidence_binding_sha256:
+      binding.authorityEvidenceBindingSha256,
     has_durable_intent: true,
     admissibility: "admissible",
     recorded_at: new Date("2026-08-03T05:00:00.000Z"),
@@ -225,8 +236,33 @@ test("recovery source principal resolves one current exact authority receipt", a
     clientFactory
   });
   assert.equal(resolved.operation_id, binding.operationId);
+  assert.equal(
+    resolved.authority_evidence_binding_sha256,
+    binding.authorityEvidenceBindingSha256
+  );
   assert.equal(resolved.admittedCount, 1);
   assert.equal(resolved.unresolvedCount, 0);
+
+  await assert.rejects(
+    resolveCommittedRecoverySourceReceipt({
+      binding: {
+        ...binding,
+        authorityEvidenceBindingSha256: "8".repeat(64)
+      },
+      clientFactory
+    }),
+    /RECOVERY_SOURCE_DVI_BINDING_INVALID/
+  );
+  await assert.rejects(
+    resolveCommittedRecoverySourceReceipt({
+      binding: {
+        ...binding,
+        selectedEvidenceBindingSha256: "7".repeat(64)
+      },
+      clientFactory
+    }),
+    /RECOVERY_SOURCE_DVI_BINDING_INVALID/
+  );
 });
 
 test("every primary recovery runner credential must be denied trust-root writes", async () => {
