@@ -46,6 +46,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate1-authority.js",
     role: "AUTHORITY_IDENTITY_EVIDENCE_RUNNER"
   }),
+  "authority-capability-race-runner": Object.freeze({
+    path: "scripts/gate1-capability-race.js",
+    role: "AUTHORITY_CAPABILITY_WAIT_EVIDENCE_RUNNER"
+  }),
   "authority-runtime": Object.freeze({
     path: "infra/aws/lambda/authority.cjs",
     role: "AWS_AUTHORITY_RUNTIME"
@@ -672,6 +676,26 @@ const SOURCE_MARKERS = Object.freeze({
     "new retrieval reminted an already-spent logical authority",
     "new retrieval changed ${field}"
   ]),
+  "authority-capability-race-runner": Object.freeze([
+    "class QueryReadyBarrier",
+    "query-ready barrier timed out",
+    "await pendingResolution.catch(() => {})",
+    "runStoredFunctionHeldExpiryProof",
+    "runStoredReplayHeldExpiryProof",
+    "runReplayClockPairBoundaryControl",
+    "temporary-replay-lock-probe",
+    "amplified old two-clock replay control did not cross proposal expiry",
+    "stored replay currentness and reported database time used different clocks",
+    "runStoredProtectedEffectHeldExpiryProof",
+    "protected effect did not wait on unique occupancy",
+    "runRecoveryResolverHeldExpiryProof",
+    "recovery resolver did not wait behind the receipt intent",
+    "runRecoveryResolverEvidenceExpiryProof",
+    "temporary-recovery-evidence-expiry-lock-probe",
+    "runRecoveryResolverConflictActivationProof",
+    "temporary-recovery-conflict-activation-lock-probe",
+    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL"
+  ]),
   "authority-runtime": Object.freeze([
     "parsed.username !== \"tp_gate2_authorizer_user\"",
     "parsed.hostname !== expectedHost",
@@ -1083,6 +1107,8 @@ const SOURCE_MARKERS = Object.freeze({
     "sharedAuthorizerGuard",
     "schemaDefaultLock",
     "direct authority replay currentness requires the exact outbox payload",
+    "g1_authority_receipt_current_v2",
+    "new QueryReadyBarrier",
     "post-COMMIT ambiguity cannot enter a rollback branch",
     "proposal\\.payload = outbox\\.payload"
   ]),
@@ -1302,7 +1328,7 @@ const SOURCE_MARKERS = Object.freeze({
     "ALTER DEFAULT PRIVILEGES ${scope} REVOKE EXECUTE ON FUNCTIONS FROM public",
     "allowMissingExpectedCapabilities: false",
     "session_user = 'tp_ingest_user'",
-    "session_user = 'tp_dispatch_user'",
+    "session_user <> 'tp_dispatch_user'",
     "session_user <> 'tp_recovery_audit_user'",
     "session_user <> 'tp_gate2_authorizer_user'",
     "collectValidatedPosture(",
@@ -1319,6 +1345,9 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
     "tp_api.g1_resolve_recovery_source_receipt_v2",
+    "jsonb_agg(jsonb_build_object(",
+    "jsonb_array_elements(v_candidate.conflict_windows)",
+    "v_candidate.evidence_valid_until <= v_database_now",
     "tideproof.primary-function-sql-batch.v1",
     "PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED",
     "primaryFunctionSqlBatchSha256(statements)",
@@ -1332,6 +1361,8 @@ const SOURCE_MARKERS = Object.freeze({
     "g1_recovery_publisher_trust_roots",
     "ON CONFLICT (trust_root_id) DO NOTHING",
     "tp_api.g1_authorize_dvi_proposal_v1",
+    "tp_private.g1_authority_receipt_current_v2",
+    "SELECT currentness.authority_current, currentness.database_now",
     "dvi_selection_request_mismatch",
     "IF v_epoch.current_epoch = 1 THEN",
     "'explicit_new_authorization_required'::STRING",

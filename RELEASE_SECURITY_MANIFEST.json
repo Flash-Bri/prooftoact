@@ -30,7 +30,7 @@
       "id": "authority-identity-ledger",
       "path": "docs/AUTHORITY_IDENTITY.md",
       "role": "AUTHORITY_IDENTITY_BOUNDARY",
-      "sha256": "ebd80afd09b281b80b71ba434a1118079ee273d5176a04dd4d337ff158e2a750"
+      "sha256": "a926004d097ab8afc40436dfb1a7c89994edbccaaa6efd2faef4446dfa8db9ed"
     },
     {
       "id": "authority-identity-tests",
@@ -43,6 +43,12 @@
       "path": "scripts/gate1-authority.js",
       "role": "AUTHORITY_IDENTITY_EVIDENCE_RUNNER",
       "sha256": "2ac22d6c17ffcc519bd9e9fbd1c093c7290e99088c7e85174552b7ccfed6f9e8"
+    },
+    {
+      "id": "authority-capability-race-runner",
+      "path": "scripts/gate1-capability-race.js",
+      "role": "AUTHORITY_CAPABILITY_WAIT_EVIDENCE_RUNNER",
+      "sha256": "18e2d6b53942b05526a87cd6c522d010db0ec7cd39f8977ab1b18042d8671c8a"
     },
     {
       "id": "authority-runtime",
@@ -234,7 +240,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "fd35625de19d155446ec38bd5c55d18bf85cf88df67dd63914469472b0195824"
+      "sha256": "40495a4d4f697f55fd161949561b21f17577bee9006127a091d04adecfc45b21"
     },
     {
       "id": "database-security-posture",
@@ -360,7 +366,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "cf9e2bf38e794899e8ae70b164184efbd891a37c7fe82bdef066618fa39f30ab"
+      "sha256": "bc05e9d5e498fa7da561fd8e2f49712349f1ae58930f6a8c0f1480754c0a582c"
     },
     {
       "id": "primary-security-runner",
