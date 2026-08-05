@@ -2574,7 +2574,7 @@ export class AuthorityStore {
     return this.#runSerializable(async (client) => {
       const findExisting = async () => client.query(
         `
-          SELECT *, transaction_timestamp() AS database_now
+          SELECT *, statement_timestamp() AS database_now
           FROM tp_ledger.g1_dvi_proposal_receipts
           WHERE tenant_id = $1::UUID
             AND proposal_digest = $2
@@ -2675,7 +2675,7 @@ export class AuthorityStore {
 
       const evidence = await client.query(
         `
-          SELECT evidence.*, transaction_timestamp() AS database_now
+          SELECT evidence.*, statement_timestamp() AS database_now
           FROM tp_private.g1_evidence AS evidence
           WHERE evidence.tenant_id = $1::UUID
             AND evidence.evidence_id = $2::UUID
@@ -2750,6 +2750,29 @@ export class AuthorityStore {
         );
       }
 
+      const postLockClock = await client.query(
+        "SELECT statement_timestamp() AS database_now"
+      );
+      const postLockDatabaseNow = new Date(
+        postLockClock.rows[0]?.database_now
+      ).getTime();
+      if (!Number.isFinite(postLockDatabaseNow)) {
+        throw new InvariantViolationError(
+          "post-lock proposal authorization database time was invalid"
+        );
+      }
+      if (
+        Date.parse(authorization.dviProposal.expiresAt) <=
+        postLockDatabaseNow
+      ) {
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "proposal_expired",
+          authorityCurrent: false,
+          requiresFreshAuthorization: true
+        };
+      }
+
       const racedExisting = await findExisting();
       if (racedExisting.rowCount === 1) {
         if (!proposalReceiptMatches(racedExisting.rows[0], authorization)) {
@@ -2803,7 +2826,7 @@ export class AuthorityStore {
         `
           UPDATE tp_ledger.g1_logical_authority_epochs
           SET current_epoch = 1,
-              updated_at = transaction_timestamp()
+              updated_at = statement_timestamp()
           WHERE tenant_id = $1::UUID
             AND logical_action_digest = $2
             AND current_epoch = 0
@@ -2949,6 +2972,54 @@ export class AuthorityStore {
         throw new InvariantViolationError(
           "durable proposal authorization binding was not observable"
         );
+      }
+      const finalCurrent = await client.query(
+        `
+          SELECT expires_at > statement_timestamp() AS authority_current
+          FROM tp_ledger.g1_dvi_proposal_receipts
+          WHERE tenant_id = $1::UUID
+            AND proposal_digest = $2
+        `,
+        [authorization.logicalAction.tenantId, authorization.proposalDigest]
+      );
+      if (
+        finalCurrent.rowCount !== 1 ||
+        finalCurrent.rows[0].authority_current !== true
+      ) {
+        await client.query(
+          `
+            DELETE FROM tp_ledger.g1_dvi_proposal_receipts
+            WHERE tenant_id = $1::UUID
+              AND proposal_digest = $2
+          `,
+          [authorization.logicalAction.tenantId, authorization.proposalDigest]
+        );
+        const restoredEpoch = await client.query(
+          `
+            UPDATE tp_ledger.g1_logical_authority_epochs
+            SET current_epoch = 0,
+                updated_at = statement_timestamp()
+            WHERE tenant_id = $1::UUID
+              AND logical_action_digest = $2
+              AND current_epoch = 1
+            RETURNING current_epoch
+          `,
+          [
+            authorization.logicalAction.tenantId,
+            authorization.logicalActionDigest
+          ]
+        );
+        if (restoredEpoch.rowCount !== 1) {
+          throw new InvariantViolationError(
+            "expired proposal authorization epoch could not be restored"
+          );
+        }
+        return {
+          outcome: "proposal_authorization_denied",
+          reason: "proposal_expired",
+          authorityCurrent: false,
+          requiresFreshAuthorization: true
+        };
       }
       return {
         outcome: "proposal_authorized",
@@ -3098,11 +3169,14 @@ export class AuthorityStore {
     const result = await this.#pool.query(
       `
         UPDATE tp_ledger.g1_dvi_proposal_receipts
-        SET expires_at =
+        SET expires_at = LEAST(
+          expires_at,
           statement_timestamp() +
-          ($3::INT8 * INTERVAL '1 millisecond')
+            ($3::INT8 * INTERVAL '1 millisecond')
+        )
         WHERE tenant_id = $1::UUID
           AND proposal_digest = $2
+          AND expires_at > statement_timestamp()
         RETURNING
           proposal_digest,
           expires_at,
@@ -4094,11 +4168,51 @@ export class AuthorityStore {
           ]
         );
 
-        beforeCommitObserver?.();
+        await beforeCommitObserver?.();
+        const finalAuthority = await client.query(
+          `
+            SELECT
+              resource.lease_expires_at > statement_timestamp()
+              AND proposal.expires_at > statement_timestamp()
+                AS authority_current
+            FROM tp_private.g1_resources AS resource
+            JOIN tp_ledger.g1_authority_receipts AS final_receipt
+              ON final_receipt.tenant_id = resource.tenant_id
+             AND final_receipt.operation_id = resource.holder_operation_id
+             AND final_receipt.outcome = 'resource_reserved'
+            JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+              ON proposal.tenant_id = final_receipt.tenant_id
+             AND proposal.proposal_digest = final_receipt.proposal_digest
+             AND proposal.logical_action_digest =
+               final_receipt.logical_action_digest
+             AND proposal.authorization_epoch =
+               final_receipt.authorization_epoch
+             AND proposal.logical_authority_key_sha256 =
+               final_receipt.logical_authority_key_sha256
+             AND proposal.authorization_binding_sha256 =
+               final_receipt.authorization_binding_sha256
+            WHERE resource.tenant_id = $1::UUID
+              AND resource.resource_id = $2
+              AND resource.active_run_id = $3::UUID
+              AND resource.holder_operation_id = $4::UUID
+              AND resource.current_fence = $5::INT8
+          `,
+          [
+            request.tenantId,
+            request.resourceId,
+            request.runId,
+            request.operationId,
+            fencingToken
+          ]
+        );
+        const authorityCurrent =
+          finalAuthority.rowCount === 1 &&
+          finalAuthority.rows[0].authority_current === true;
         return {
           outcome: "resource_reserved",
           requestDigest: request.requestDigest,
-          authorityCurrent: true,
+          authorityCurrent,
+          requiresFreshAuthorization: !authorityCurrent,
           receipt: receipt.rows[0],
           outbox: outbox.rows[0]
         };
@@ -4657,6 +4771,61 @@ export class AuthorityStore {
             throw new EffectKeyMismatchError(request.effectKey);
           }
           return { outcome: "effect_already_recorded", effect };
+        }
+        return { outcome: "stale_or_unauthorized_fence_denied" };
+      }
+      const finalCurrent = await client.query(
+        `
+          SELECT
+            resource.lease_expires_at > statement_timestamp()
+            AND proposal.expires_at > statement_timestamp()
+              AS authority_current
+          FROM tp_private.g1_resources AS resource
+          JOIN tp_ledger.g1_authority_receipts AS receipt
+            ON receipt.tenant_id = resource.tenant_id
+           AND receipt.operation_id = resource.holder_operation_id
+           AND receipt.outcome = 'resource_reserved'
+          JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+            ON proposal.tenant_id = receipt.tenant_id
+           AND proposal.proposal_digest = receipt.proposal_digest
+           AND proposal.logical_action_digest = receipt.logical_action_digest
+           AND proposal.authorization_epoch = receipt.authorization_epoch
+           AND proposal.logical_authority_key_sha256 =
+             receipt.logical_authority_key_sha256
+           AND proposal.authorization_binding_sha256 =
+             receipt.authorization_binding_sha256
+          WHERE resource.tenant_id = $1::UUID
+            AND resource.resource_id = $2
+            AND resource.active_run_id = $3::UUID
+            AND resource.holder_operation_id = $4::UUID
+            AND resource.current_fence = $5::INT8
+        `,
+        [
+          request.tenantId,
+          request.resourceId,
+          request.runId,
+          request.operationId,
+          fencingToken
+        ]
+      );
+      if (
+        finalCurrent.rowCount !== 1 ||
+        finalCurrent.rows[0].authority_current !== true
+      ) {
+        const removed = await client.query(
+          `
+            DELETE FROM tp_ledger.g1_protected_effects
+            WHERE tenant_id = $1::UUID
+              AND effect_key = $2::UUID
+              AND operation_id = $3::UUID
+            RETURNING operation_id
+          `,
+          [request.tenantId, request.effectKey, request.operationId]
+        );
+        if (removed.rowCount !== 1) {
+          throw new InvariantViolationError(
+            "expired protected effect could not be removed before commit"
+          );
         }
         return { outcome: "stale_or_unauthorized_fence_denied" };
       }

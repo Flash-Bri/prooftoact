@@ -1455,19 +1455,24 @@ async function runCrossEpochRaceProof(store, proofLabel) {
     resourceId
   });
   assert(
-    firstDecision.outcome === "resource_reserved",
-    "pre-expiry spend did not retain its serialized authority"
+    firstDecision.outcome === "authorization_denied" &&
+      firstDecision.reason === "proposal_authorization_expired" &&
+      firstDecision.authorityCurrent === false,
+    "spend held past expiry retained serialized authority"
   );
   assert(
     freshResult.authorization.outcome ===
         "proposal_authorization_denied" &&
-      freshResult.authorization.reason === "logical_authority_already_spent",
-    "post-expiry authorization raced into a second spendable epoch"
+      freshResult.authorization.reason === "explicit_new_authorization_required",
+    "post-expiry retrieval implicitly minted a replacement epoch"
   );
   assert(
     snapshot.receipts.length === 1 &&
-      snapshot.outbox.length === 1 &&
+      snapshot.receipts[0].outcome === "authorization_denied" &&
+      snapshot.receipts[0].reason === "proposal_authorization_expired" &&
+      snapshot.outbox.length === 0 &&
       snapshot.effects.length === 0 &&
+      snapshot.resource.current_fence === "0" &&
       identityState.maximum_epoch === "1",
     "cross-epoch race changed the singular logical-authority state"
   );
@@ -1478,6 +1483,7 @@ async function runCrossEpochRaceProof(store, proofLabel) {
     authorityReceiptCount: snapshot.receipts.length,
     outboxCount: snapshot.outbox.length,
     protectedEffectCount: snapshot.effects.length,
+    currentFence: snapshot.resource.current_fence,
     maximumEpoch: identityState.maximum_epoch
   };
 }

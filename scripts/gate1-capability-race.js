@@ -4,7 +4,10 @@ import {
   AuthorityStore,
   normalizedAuthorityRequestFor
 } from "../src/cloud/authority-store.js";
-import { authorizeSyntheticContenders } from "./lib/synthetic-authority-proposal.js";
+import {
+  authorizeSyntheticContenders,
+  authorizeSyntheticProposal
+} from "./lib/synthetic-authority-proposal.js";
 import { createSyntheticEvidenceSigner } from "./lib/synthetic-evidence.js";
 
 const CONTENDERS = 50;
@@ -126,6 +129,126 @@ async function callCapability(connectionString, request, barrier) {
   throw new Error("capability retry loop exhausted");
 }
 
+async function runStoredFunctionHeldExpiryProof({
+  store,
+  signer,
+  adminUrl,
+  authorizerUrl
+}) {
+  const fixture = {
+    tenantId: randomUUID(),
+    runId: randomUUID(),
+    incidentId: randomUUID(),
+    evidenceId: randomUUID(),
+    resourceId: `capability-held-expiry-${randomUUID()}`
+  };
+  await signer.register(store, fixture.tenantId);
+  const evidence = await signer.append(store, {
+    tenantId: fixture.tenantId,
+    evidenceId: fixture.evidenceId,
+    incidentId: fixture.incidentId,
+    agencyScope: "rescue",
+    claimKey: "rescue_unit_status",
+    claimValue: "available",
+    observedAt: new Date(Date.now() - 60_000).toISOString(),
+    validFrom: new Date(Date.now() - 120_000).toISOString(),
+    validUntil: new Date(Date.now() + 30 * 60_000).toISOString(),
+    conflictStatus: "none",
+    assertion: "Synthetic stored-function lock-wait expiry evidence.",
+    embedding: [0.86, 0.08, 0.06]
+  });
+  assert(evidence.outcome === "evidence_verified", "held evidence did not verify");
+  await store.prepareResource(fixture);
+  const rawRequest = {
+    ...fixture,
+    operationId: randomUUID(),
+    agentId: "capability-held-expiry-agent",
+    agency: "rescue",
+    intentNonce: randomUUID(),
+    effectKey: randomUUID(),
+    leaseMs: 300_000,
+    payload: {
+      scenario: "synthetic-stored-function-held-expiry",
+      action: "dispatch_rescue_unit",
+      destination: "synthetic-zone-held-expiry"
+    }
+  };
+  const authorization = await authorizeSyntheticProposal(store, rawRequest);
+  const request = normalizedAuthorityRequestFor({
+    ...rawRequest,
+    dviAuthorization: authorization.dviAuthorization
+  });
+  const lockClient = new Client({ connectionString: adminUrl });
+  let lockOpen = false;
+  try {
+    await lockClient.connect();
+    await lockClient.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+    lockOpen = true;
+    const locked = await lockClient.query(
+      `
+        SELECT resource_id
+        FROM tp_private.g1_resources
+        WHERE tenant_id = $1::UUID
+          AND resource_id = $2
+        FOR UPDATE
+      `,
+      [fixture.tenantId, fixture.resourceId]
+    );
+    assert(locked.rowCount === 1, "held-expiry resource lock was not acquired");
+    await store.setProposalExpiryAfterMsForTest({
+      tenantId: fixture.tenantId,
+      proposalDigest: request.proposalDigest,
+      delayMs: 1_500
+    });
+    let settled = false;
+    const pendingDecision = callCapability(authorizerUrl, request, {
+      async wait() {}
+    });
+    pendingDecision.then(
+      () => { settled = true; },
+      () => { settled = true; }
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert(!settled, "stored spend did not wait behind the held resource lock");
+    await store.waitForProposalExpiryForTest({
+      tenantId: fixture.tenantId,
+      proposalDigest: request.proposalDigest
+    });
+    await lockClient.query("COMMIT");
+    lockOpen = false;
+    const decision = await pendingDecision;
+    const snapshot = await store.snapshot(fixture);
+    assert(
+      decision.decision_outcome === "authorization_denied" &&
+        decision.decision_reason === "proposal_authorization_expired" &&
+        decision.decision_authority_current === false,
+      "stored spend held past proposal expiry retained authority"
+    );
+    assert(
+      snapshot.receipts.length === 1 &&
+        snapshot.receipts[0].outcome === "authorization_denied" &&
+        snapshot.outbox.length === 0 &&
+        snapshot.effects.length === 0 &&
+        snapshot.resource.current_fence === "0",
+      "stored held-expiry spend changed protected authority state"
+    );
+    return {
+      decisionOutcome: decision.decision_outcome,
+      decisionReason: decision.decision_reason,
+      authorityCurrent: decision.decision_authority_current,
+      receiptCount: snapshot.receipts.length,
+      outboxCount: snapshot.outbox.length,
+      effectCount: snapshot.effects.length,
+      fence: snapshot.resource.current_fence
+    };
+  } finally {
+    if (lockOpen) {
+      await lockClient.query("ROLLBACK").catch(() => {});
+    }
+    await lockClient.end().catch(() => {});
+  }
+}
+
 async function main() {
   const adminUrl = requiredEnvironment("DATABASE_URL");
   const authorizerUrl = requiredEnvironment("AUTHORIZER_DATABASE_URL");
@@ -215,6 +338,13 @@ async function main() {
       "a capability contender was not SERIALIZABLE"
     );
 
+    const storedFunctionHeldExpiry = await runStoredFunctionHeldExpiryProof({
+      store,
+      signer,
+      adminUrl,
+      authorizerUrl
+    });
+
     const probe = new Client({ connectionString: authorizerUrl });
     await probe.connect();
     let directReadDenied = false;
@@ -251,6 +381,7 @@ async function main() {
             ({ transaction }) => transaction.retryCodes
           ),
           directBaseLedgerReadDenied: directReadDenied,
+          storedFunctionHeldExpiry,
           invariantViolations: 0
         },
         null,

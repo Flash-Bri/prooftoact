@@ -53,7 +53,7 @@ const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
   "tideproof.primary-function-sql-batch.v1";
 const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 37;
 const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
-  "cbe971840c3c870f358f1728aa69f035e6855cd9306c36a7d1af30012b457c14";
+  "3756a7b2a67773eca795d00204ebe6fa13c695528215a01cc306a4f9ba8454f7";
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -1744,7 +1744,7 @@ async function emitPrimaryFunctionSql(client) {
     SECURITY DEFINER
     AS $$
     DECLARE
-      v_database_now TIMESTAMPTZ := statement_timestamp();
+      v_database_now TIMESTAMPTZ := clock_timestamp();
       v_selection RECORD;
       v_evidence RECORD;
       v_existing RECORD;
@@ -2037,6 +2037,22 @@ async function emitPrimaryFunctionSql(client) {
       IF NOT FOUND THEN
         RAISE EXCEPTION 'logical authority epoch lock missing'
           USING ERRCODE = '22000';
+      END IF;
+      v_database_now := clock_timestamp();
+      IF v_selection.expires_at <= v_database_now THEN
+        RETURN QUERY SELECT
+          'proposal_authorization_denied'::STRING,
+          'dvi_selection_receipt_expired'::STRING,
+          v_proposal_digest, v_logical_action_digest, NULL::INT8,
+          NULL::STRING, NULL::STRING,
+          v_selection.authority_evidence_binding_sha256,
+          v_selection.run_id, v_selection.incident_id,
+          v_selection.policy_version, v_selection.selected_rank,
+          v_selection.selected_evidence_id,
+          v_selection.selected_evidence_digest,
+          v_selection.admitted_at, v_selection.expires_at,
+          v_payload_digest, NULL::TIMESTAMPTZ, false, v_database_now;
+        RETURN;
       END IF;
 
       SELECT proposal.*
@@ -2423,7 +2439,7 @@ async function emitPrimaryFunctionSql(client) {
       v_existing_logical_authority_key_sha256 STRING;
       v_existing_authorization_binding_sha256 STRING;
       v_proposal_expires_at TIMESTAMPTZ;
-      v_database_now TIMESTAMPTZ := statement_timestamp();
+      v_database_now TIMESTAMPTZ := clock_timestamp();
     BEGIN
       IF session_user NOT IN (
         'tp_authorizer_user',
@@ -2594,6 +2610,7 @@ async function emitPrimaryFunctionSql(client) {
         RAISE EXCEPTION 'logical authority epoch lock missing'
           USING ERRCODE = 'XX000';
       END IF;
+      v_database_now := clock_timestamp();
 
       SELECT count(*)::INT8
       INTO v_existing_count
@@ -3074,6 +3091,7 @@ async function emitPrimaryFunctionSql(client) {
           v_database_now;
         RETURN;
       END IF;
+      v_database_now := clock_timestamp();
       IF v_active_run <> p_run_id THEN
         UPDATE tp_ledger.g1_authority_receipts AS receipt
         SET outcome = 'authorization_denied',
@@ -3084,6 +3102,30 @@ async function emitPrimaryFunctionSql(client) {
         RETURN QUERY SELECT
           'authorization_denied'::STRING,
           'inactive_run'::STRING,
+          NULL::INT8,
+          NULL::TIMESTAMPTZ,
+          p_operation_id,
+          p_request_digest,
+          NULL::STRING,
+          p_proposal_digest,
+          p_logical_action_digest,
+          v_authorization_epoch,
+          v_logical_authority_key_sha256,
+          v_authorization_binding_sha256,
+          false,
+          v_database_now;
+        RETURN;
+      END IF;
+      IF v_proposal_expires_at <= v_database_now THEN
+        UPDATE tp_ledger.g1_authority_receipts AS receipt
+        SET outcome = 'authorization_denied',
+            reason = 'proposal_authorization_expired',
+            evidence_digest = v_evidence_digest
+        WHERE receipt.tenant_id = p_tenant_id
+          AND receipt.operation_id = p_operation_id;
+        RETURN QUERY SELECT
+          'authorization_denied'::STRING,
+          'proposal_authorization_expired'::STRING,
           NULL::INT8,
           NULL::TIMESTAMPTZ,
           p_operation_id,
@@ -3147,9 +3189,47 @@ async function emitPrimaryFunctionSql(client) {
           resource.holder_operation_id IS NULL
           OR resource.lease_expires_at <= v_database_now
         )
+        AND EXISTS (
+          SELECT 1
+          FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
+          WHERE proposal.tenant_id = p_tenant_id
+            AND proposal.proposal_digest = p_proposal_digest
+            AND proposal.logical_action_digest = p_logical_action_digest
+            AND proposal.authorization_epoch = v_authorization_epoch
+            AND proposal.logical_authority_key_sha256 =
+              v_logical_authority_key_sha256
+            AND proposal.authorization_binding_sha256 =
+              v_authorization_binding_sha256
+            AND proposal.expires_at > clock_timestamp()
+        )
       RETURNING resource.current_fence, resource.lease_expires_at
       INTO v_new_fence, v_new_expiry;
       IF v_new_fence IS NULL THEN
+        v_database_now := clock_timestamp();
+        IF v_proposal_expires_at <= v_database_now THEN
+          UPDATE tp_ledger.g1_authority_receipts AS receipt
+          SET outcome = 'authorization_denied',
+              reason = 'proposal_authorization_expired',
+              evidence_digest = v_evidence_digest
+          WHERE receipt.tenant_id = p_tenant_id
+            AND receipt.operation_id = p_operation_id;
+          RETURN QUERY SELECT
+            'authorization_denied'::STRING,
+            'proposal_authorization_expired'::STRING,
+            NULL::INT8,
+            NULL::TIMESTAMPTZ,
+            p_operation_id,
+            p_request_digest,
+            NULL::STRING,
+            p_proposal_digest,
+            p_logical_action_digest,
+            v_authorization_epoch,
+            v_logical_authority_key_sha256,
+            v_authorization_binding_sha256,
+            false,
+            v_database_now;
+          RETURN;
+        END IF;
         RAISE EXCEPTION 'resource acquisition invariant'
           USING ERRCODE = 'XX000';
       END IF;

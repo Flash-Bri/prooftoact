@@ -26,6 +26,10 @@ const gate1AuthorityUrl = new URL(
   "../scripts/gate1-authority.js",
   import.meta.url
 );
+const gate1CapabilityRaceUrl = new URL(
+  "../scripts/gate1-capability-race.js",
+  import.meta.url
+);
 const gate1SecurityUrl = new URL(
   "../scripts/gate1-security.js",
   import.meta.url
@@ -473,7 +477,7 @@ test("recovery source resolver requires the exact live authority holder", async 
   assert.doesNotMatch(admissibility, /transaction_timestamp\(\)/u);
 });
 
-test("shared admissibility consumers use one statement clock", async () => {
+test("shared admissibility consumers use fresh database clocks", async () => {
   const source = await readFile(primaryUrl, "utf8");
   const observe = source.match(
     /CREATE OR REPLACE FUNCTION tp_api\.g1_observe_admissibility_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
@@ -495,7 +499,7 @@ test("shared admissibility consumers use one statement clock", async () => {
   assert.doesNotMatch(prepare, /v_admitted_at\s*:=\s*transaction_timestamp\(\)/u);
   assert.match(
     authorize,
-    /v_database_now TIMESTAMPTZ\s*:=\s*statement_timestamp\(\)/u
+    /v_database_now TIMESTAMPTZ\s*:=\s*clock_timestamp\(\)[\s\S]*FOR UPDATE;[\s\S]*v_database_now := clock_timestamp\(\)[\s\S]*dvi_selection_receipt_expired/u
   );
   assert.doesNotMatch(
     authorize,
@@ -548,7 +552,7 @@ test("primary function SQL is digest-pinned before any database query", async ()
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
     statementCount: 37,
-    sha256: "cbe971840c3c870f358f1728aa69f035e6855cd9306c36a7d1af30012b457c14"
+    sha256: "3756a7b2a67773eca795d00204ebe6fa13c695528215a01cc306a4f9ba8454f7"
   });
   assert.equal(
     statements.filter((statement) =>
@@ -817,7 +821,7 @@ test("logical-action spend is serialized and unique across authorization epochs"
   );
   assert.match(
     gate1AuthoritySource,
-    /runCrossEpochRaceProof[\s\S]*afterEpochLockObserver[\s\S]*logical_authority_already_spent[\s\S]*maximum_epoch/u
+    /runCrossEpochRaceProof[\s\S]*afterEpochLockObserver[\s\S]*proposal_authorization_expired[\s\S]*explicit_new_authorization_required[\s\S]*current_fence === "0"/u
   );
 });
 
@@ -926,10 +930,16 @@ test("direct authority replay currentness requires the exact outbox payload", as
 });
 
 test("authority spend, replay, and protected effects refresh database time", async () => {
-  const [primarySource, authorityStoreSource, gate1AuthoritySource] = await Promise.all([
+  const [
+    primarySource,
+    authorityStoreSource,
+    gate1AuthoritySource,
+    gate1CapabilityRaceSource
+  ] = await Promise.all([
     readFile(primaryUrl, "utf8"),
     readFile(authorityStoreUrl, "utf8"),
-    readFile(gate1AuthorityUrl, "utf8")
+    readFile(gate1AuthorityUrl, "utf8"),
+    readFile(gate1CapabilityRaceUrl, "utf8")
   ]);
   const currentBody = primarySource.match(
     /CREATE OR REPLACE FUNCTION tp_private\.g1_authority_receipt_current_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
@@ -954,7 +964,7 @@ test("authority spend, replay, and protected effects refresh database time", asy
   );
   assert.match(
     spendBody,
-    /v_database_now TIMESTAMPTZ\s*:=\s*statement_timestamp\(\)/u
+    /v_database_now TIMESTAMPTZ\s*:=\s*clock_timestamp\(\)[\s\S]*FOR UPDATE;[\s\S]*v_database_now := clock_timestamp\(\)[\s\S]*FOR UPDATE;[\s\S]*v_database_now := clock_timestamp\(\)/u
   );
   assert.match(spendBody, /v_proposal_expires_at <= v_database_now/u);
   assert.match(spendBody, /v_holder_expiry > v_database_now/u);
@@ -966,6 +976,10 @@ test("authority spend, replay, and protected effects refresh database time", asy
     spendBody,
     /resource\.lease_expires_at <= v_database_now/u
   );
+  assert.match(
+    spendBody,
+    /UPDATE tp_private\.g1_resources[\s\S]*AND EXISTS \([\s\S]*proposal\.proposal_digest = p_proposal_digest[\s\S]*proposal\.authorization_binding_sha256 =[\s\S]*v_authorization_binding_sha256[\s\S]*proposal\.expires_at > clock_timestamp\(\)/u
+  );
   assert.match(resolveBody, /statement_timestamp\(\)/u);
   assert.match(
     effectBody,
@@ -973,12 +987,12 @@ test("authority spend, replay, and protected effects refresh database time", asy
   );
   for (const [name, body] of [
     ["current receipt", currentBody],
-    ["authority spend", spendBody],
     ["request resolution", resolveBody],
     ["protected effect", effectBody]
   ]) {
     assert.doesNotMatch(body, /transaction_timestamp\(\)/u, name);
   }
+  assert.doesNotMatch(spendBody, /transaction_timestamp\(\)/u);
 
   const directProposal = authorityStoreSource.match(
     /async #boundProposal\([\s\S]*?(?=\n  async #receiptAuthorityCurrent)/u
@@ -1021,6 +1035,18 @@ test("authority spend, replay, and protected effects refresh database time", asy
   assert.match(
     gate1AuthoritySource,
     /runHeldTransactionExpiryProof[\s\S]*setProposalExpiryAfterMsForTest[\s\S]*waitForProposalExpiryForTest[\s\S]*proposal_authorization_expired[\s\S]*current_fence === "0"/u
+  );
+  assert.match(
+    gate1CapabilityRaceSource,
+    /runStoredFunctionHeldExpiryProof[\s\S]*FOR UPDATE[\s\S]*setProposalExpiryAfterMsForTest[\s\S]*waitForProposalExpiryForTest[\s\S]*proposal_authorization_expired[\s\S]*current_fence === "0"/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /async authorizeDviProposal[\s\S]*postLockClock[\s\S]*statement_timestamp\(\)[\s\S]*finalCurrent[\s\S]*authority_current[\s\S]*DELETE FROM tp_ledger\.g1_dvi_proposal_receipts[\s\S]*current_epoch = 0/u
+  );
+  assert.match(
+    authorityStoreSource,
+    /setProposalExpiryAfterMsForTest[\s\S]*LEAST\([\s\S]*expires_at > statement_timestamp\(\)/u
   );
 });
 

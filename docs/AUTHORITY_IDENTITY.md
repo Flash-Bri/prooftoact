@@ -194,14 +194,18 @@ contender in the resource race.
   pause after evidence admission until database time reaches the proposal
   expiry, then resume acquisition. The spend must finish denied with no fence,
   outbox, or effect.
-- Repair/control: the stored spend captures one `statement_timestamp()` and
-  uses it for every decision, returned clock, and lease calculation. Direct
-  spend queries refresh statement time, guard lease acquisition with the exact
-  still-current proposal, reconcile expiry to a durable denial, and use the
-  same statement-time boundary for replay and protected effects.
-- Verification: red-before-green source controls reject any transaction-time
-  call in the spend/currentness/reconciliation/effect chain. Gate One now
-  includes both exact-equality spend denial and a transaction held past expiry.
+- Repair/control: the stored spend refreshes `clock_timestamp()` after each
+  blocking lock and couples the exact still-current proposal to the
+  lease-creating update. Direct spend queries refresh statement time, recheck
+  currentness after an awaited pre-commit observer, reconcile expiry to a
+  durable denial, and recheck protected-effect currentness before commit.
+  Proposal authorization also refreshes after the epoch lock and removes a
+  newly inserted proposal while restoring the unspent epoch if it expires
+  before its final currentness check.
+- Verification: red-before-green source controls reject transaction-start time
+  in the spend/currentness/reconciliation/effect chain. Gate One includes
+  exact-equality denial, a direct transaction held past expiry, the reconciled
+  cross-epoch case, and a provider-only stored-function resource-lock drill.
 - Residual risk and claim impact: CockroachDB v26.2 must still execute the held
   transaction and equality drills. No live authority, concurrency, or
   exactly-once claim is added by the source repair.

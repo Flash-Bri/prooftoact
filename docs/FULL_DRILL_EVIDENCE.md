@@ -245,16 +245,21 @@ official release.
   `statement_timestamp()`. The resolver, shared admissibility query, direct
   observer, snapshot admission time, proposal-authorization clock, authority
   spend, replay currentness, reconciliation, and protected-effect admission use
-  statement time. Stored spend captures one clock for its full decision and
-  lease; direct acquisition rechecks the exact proposal in the lease-creating
-  statement, so a transaction opened before expiry cannot mint an already
-  expired lease.
+  fresh database time. Stored spend refreshes `clock_timestamp()` after its
+  blocking locks and couples the exact current proposal to the lease-creating
+  update. Direct acquisition rechecks the exact proposal in the lease-creating
+  statement and reports final currentness after an awaited pre-commit observer;
+  protected effects are removed within their transaction if the final
+  currentness check fails.
 - Regression and preventive control: focused source controls check every
   holder equality, all three strict database-time predicates, and the coupled
   observer, snapshot, authorization, spend, replay, reconciliation, and effect
-  clocks. Gate One includes exact-equality spend denial and a transaction held
-  past proposal expiry; both require zero outbox/effect occupancy. The reviewed
-  37-statement SQL batch digest also changes whenever the emitted SQL changes.
+  clocks. Gate One includes exact-equality spend denial, a direct transaction
+  held past proposal expiry, a reconciled cross-epoch wait, and a provider-only
+  call to `tp_api.g1_spend_authority_v1` held behind the resource lock; all
+  expiry cases require zero outbox/effect occupancy and no fence advance. The
+  reviewed 37-statement SQL batch digest also changes whenever the emitted SQL
+  changes.
 - Verification: the focused control and the complete local release gate set
   must pass on the exact commit; provider-backed CockroachDB v26.2 execution is
   still required.
