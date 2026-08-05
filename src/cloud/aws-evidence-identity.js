@@ -195,6 +195,8 @@ export function isolatedEvidenceProcessEnvironment(sourceEnvironment) {
     AWS_SHARED_CREDENTIALS_FILE: "/dev/null",
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
+    GIT_NO_LAZY_FETCH: "1",
+    GIT_NO_REPLACE_OBJECTS: "1",
     GIT_TERMINAL_PROMPT: "0"
   };
 }

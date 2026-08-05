@@ -11,9 +11,13 @@ import {
   validateDependencySnapshot
 } from "./lib/dependency-snapshot.js";
 import {
+  assertCleanExactGitCheckout,
+  assertExactGitRepositoryLayout,
+  assertSafeLocalGitConfiguration,
   assertSafeProjectPath,
   gitEnvironment,
   gitInvariantArguments,
+  parseLocalGitConfiguration,
   trustedGitExecutable,
   trustedTemporaryRoot
 } from "./lib/exact-git-source.js";
@@ -25,6 +29,40 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const OFFICIAL_REMOTE =
   "https://github.com/Flash-Bri/prooftoact.git";
+const OFFICIAL_FETCH_REFSPEC =
+  "+refs/heads/main:refs/remotes/origin/main";
+const OFFICIAL_FETCH_CONFIGURATION = Object.freeze([
+  "-c",
+  "core.askPass=",
+  "-c",
+  "credential.helper=",
+  "-c",
+  "credential.interactive=never",
+  "-c",
+  "credential.https://github.com.helper=",
+  "-c",
+  "http.extraHeader=",
+  "-c",
+  "http.followRedirects=initial",
+  "-c",
+  "http.proxy=",
+  "-c",
+  "http.sslVerify=true",
+  "-c",
+  "http.sslVersion=tlsv1.2",
+  "-c",
+  "http.https://github.com/.extraHeader=",
+  "-c",
+  "http.https://github.com/.proxy=",
+  "-c",
+  "http.https://github.com/Flash-Bri/prooftoact.git.extraHeader=",
+  "-c",
+  "http.https://github.com/Flash-Bri/prooftoact.git.proxy=",
+  "-c",
+  "http.https://github.com/Flash-Bri/prooftoact.git.sslVerify=true",
+  "-c",
+  "http.https://github.com/Flash-Bri/prooftoact.git.sslVersion=tlsv1.2"
+]);
 const EXPECTED_BRANCH = "main";
 const EXPECTED_REGION = "us-east-1";
 const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
@@ -69,6 +107,14 @@ const AUTHENTICATED_AWS_ENVIRONMENT_NAMES = new Set([
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN"
 ]);
+const STANDARD_CHILD_PATH_DIRECTORIES = Object.freeze([
+  "/usr/bin",
+  "/bin"
+]);
+const AUTHENTICATED_AWS_CLI_DIRECTORIES = Object.freeze({
+  darwin: Object.freeze(["/opt/homebrew/bin"]),
+  linux: Object.freeze(["/usr/local/bin"])
+});
 
 function requireCondition(condition, code) {
   if (!condition) {
@@ -1173,9 +1219,10 @@ export function validateReleaseProvenance(
         "trackedSymlinksAbsent"
       ]) &&
       receipt.schemaVersion === "tideproof.release-provenance.v8" &&
-      receipt.status === "PASS" &&
+      receipt.status === "READINESS_FETCH_BOUND_PASS" &&
       typeof receipt.claimBoundary === "string" &&
-      receipt.claimBoundary.length > 0 &&
+      receipt.claimBoundary.includes("performs no network fetch") &&
+      receipt.claimBoundary.includes("not a standalone upstream-freshness receipt") &&
       source.commit === sourceCommit &&
       source.tree === treeDigest &&
       source.originMain === sourceCommit &&
@@ -1602,9 +1649,7 @@ export function validatePreflightReceipt(
       /^[0-9a-f]{64}$/.test(
         controls?.callerBinding?.principalIdDigest
       ) &&
-      ["assumed-role", "iam-user"].includes(
-        controls?.callerBinding?.principalType
-      ) &&
+      controls?.callerBinding?.principalType === "assumed-role" &&
       controls.bootstrapStack.name ===
         "tideproof-gate2-artifacts" &&
       ["CREATE_COMPLETE", "UPDATE_COMPLETE"].includes(
@@ -1693,6 +1738,26 @@ export function parseArguments(args) {
   throw new Error("AWS_READINESS_ARGUMENT");
 }
 
+function controlledChildPath({
+  awsAuthenticated = false,
+  platform = process.platform,
+  delimiter = path.delimiter
+} = {}) {
+  requireCondition(
+    typeof delimiter === "string" &&
+      delimiter.length === 1 &&
+      !/[\r\n\0]/.test(delimiter),
+    "AWS_READINESS_PATH_DELIMITER"
+  );
+  const awsCliDirectories = awsAuthenticated
+    ? AUTHENTICATED_AWS_CLI_DIRECTORIES[platform] ?? []
+    : [];
+  return [
+    ...awsCliDirectories,
+    ...STANDARD_CHILD_PATH_DIRECTORIES
+  ].join(delimiter);
+}
+
 function childEnvironment(
   sourceEnvironment,
   { awsAuthenticated = false } = {}
@@ -1719,8 +1784,11 @@ function childEnvironment(
   environment.AWS_SHARED_CREDENTIALS_FILE = "/dev/null";
   environment.GIT_CONFIG_GLOBAL = "/dev/null";
   environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_ATTR_NOSYSTEM = "1";
+  environment.GIT_NO_LAZY_FETCH = "1";
+  environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_TERMINAL_PROMPT = "0";
-  environment.PATH = "/usr/bin:/bin";
+  environment.PATH = controlledChildPath({ awsAuthenticated });
   environment.TMPDIR = trustedTemporaryRoot();
   environment.npm_config_always_auth = "false";
   environment.npm_config_globalconfig =
@@ -1808,23 +1876,6 @@ function jsonCommand(
   }
 }
 
-function fetchOfficialMain(run) {
-  checkedCommand(
-    run,
-    "git",
-    [
-      "-c",
-      "http.https://github.com/.extraheader=",
-      "fetch",
-      "--quiet",
-      "--no-tags",
-      "origin",
-      "refs/heads/main:refs/remotes/origin/main"
-    ],
-    "AWS_READINESS_GIT_FETCH"
-  );
-}
-
 function isOfficialRemote(value) {
   return (
     value === OFFICIAL_REMOTE ||
@@ -1832,96 +1883,184 @@ function isOfficialRemote(value) {
   );
 }
 
-function assertCheckout(run) {
-  const remote = textCommand(
-    run,
-    "git",
-    ["remote", "get-url", "origin"],
-    "AWS_READINESS_GIT_REMOTE"
-  );
-  const branch = textCommand(
-    run,
-    "git",
-    ["symbolic-ref", "--short", "HEAD"],
-    "AWS_READINESS_GIT_BRANCH"
-  );
-  const status = textCommand(
-    run,
-    "git",
-    ["status", "--short"],
-    "AWS_READINESS_GIT_STATUS"
-  );
-  requireCondition(
-    isOfficialRemote(remote) &&
-      branch === EXPECTED_BRANCH &&
-      status.length === 0,
-    "AWS_READINESS_CHECKOUT"
-  );
-  fetchOfficialMain(run);
-  const sourceCommit = textCommand(
-    run,
-    "git",
-    ["rev-parse", "HEAD"],
-    "AWS_READINESS_GIT_HEAD"
-  );
-  const originMain = textCommand(
-    run,
-    "git",
-    ["rev-parse", "refs/remotes/origin/main"],
-    "AWS_READINESS_GIT_ORIGIN_MAIN"
-  );
-  const treeDigest = textCommand(
-    run,
-    "git",
-    ["rev-parse", "HEAD^{tree}"],
-    "AWS_READINESS_GIT_TREE"
-  );
-  requireCondition(
-    HEX_40.test(sourceCommit) &&
-      HEX_40.test(originMain) &&
-      HEX_40.test(treeDigest) &&
-      sourceCommit === originMain,
-    "AWS_READINESS_UPSTREAM"
-  );
-  return {
-    sourceCommit,
-    treeDigest,
-    originMain
-  };
+function validateOfficialLocalGitConfiguration(output) {
+  try {
+    const entries = parseLocalGitConfiguration(
+      output,
+      "AWS_READINESS_GIT_LOCAL_CONFIG"
+    );
+    const validated = assertSafeLocalGitConfiguration(entries, {
+      requireOfficialOrigin: true,
+      requireMainBranch: true
+    });
+    return Object.freeze({
+      entryCount: validated.entryCount,
+      remote: validated.remote
+    });
+  } catch {
+    throw new Error("AWS_READINESS_GIT_LOCAL_CONFIG");
+  }
 }
 
-function assertCheckoutUnchanged(run, initial) {
-  fetchOfficialMain(run);
-  const current = {
+function officialFetchArguments() {
+  return [
+    ...OFFICIAL_FETCH_CONFIGURATION,
+    "fetch",
+    "--quiet",
+    "--no-tags",
+    "--no-recurse-submodules",
+    OFFICIAL_REMOTE,
+    OFFICIAL_FETCH_REFSPEC
+  ];
+}
+
+function fetchOfficialMain(run) {
+  checkedCommand(
+    run,
+    "git",
+    officialFetchArguments(),
+    "AWS_READINESS_GIT_FETCH"
+  );
+}
+
+function readCheckoutState(run) {
+  const localConfiguration = validateOfficialLocalGitConfiguration(
+    checkedCommand(
+      run,
+      "git",
+      ["config", "--local", "--no-includes", "--null", "--list"],
+      "AWS_READINESS_GIT_LOCAL_CONFIG"
+    )
+  );
+  return Object.freeze({
+    remote: localConfiguration.remote,
+    branch: textCommand(
+      run,
+      "git",
+      ["symbolic-ref", "--short", "HEAD"],
+      "AWS_READINESS_GIT_BRANCH"
+    ),
+    status: textCommand(
+      run,
+      "git",
+      ["status", "--porcelain=v1", "--untracked-files=all"],
+      "AWS_READINESS_GIT_STATUS"
+    ),
     sourceCommit: textCommand(
       run,
       "git",
       ["rev-parse", "HEAD"],
-      "AWS_READINESS_FINAL_HEAD"
-    ),
-    originMain: textCommand(
-      run,
-      "git",
-      ["rev-parse", "refs/remotes/origin/main"],
-      "AWS_READINESS_FINAL_ORIGIN_MAIN"
+      "AWS_READINESS_GIT_HEAD"
     ),
     treeDigest: textCommand(
       run,
       "git",
       ["rev-parse", "HEAD^{tree}"],
-      "AWS_READINESS_FINAL_TREE"
-    ),
-    status: textCommand(
-      run,
-      "git",
-      ["status", "--short"],
-      "AWS_READINESS_FINAL_STATUS"
+      "AWS_READINESS_GIT_TREE"
     )
-  };
+  });
+}
+
+function assertExactCheckoutState(
+  projectRoot,
+  state,
+  verifyExactCheckout
+) {
   requireCondition(
-    current.status.length === 0 &&
-      current.sourceCommit === initial.sourceCommit &&
-      current.originMain === initial.originMain &&
+    isOfficialRemote(state.remote) &&
+      state.branch === EXPECTED_BRANCH &&
+      state.status.length === 0 &&
+      HEX_40.test(state.sourceCommit) &&
+      HEX_40.test(state.treeDigest),
+    "AWS_READINESS_CHECKOUT"
+  );
+  const verified = verifyExactCheckout({
+    rootDir: path.resolve(projectRoot),
+    sourceCommit: state.sourceCommit,
+    treeDigest: state.treeDigest
+  });
+  requireCondition(
+    verified?.rootDir === path.resolve(projectRoot) &&
+      verified?.sourceCommit === state.sourceCommit &&
+      verified?.treeDigest === state.treeDigest,
+    "AWS_READINESS_EXACT_CHECKOUT"
+  );
+}
+
+function readOriginMain(run) {
+  return textCommand(
+    run,
+    "git",
+    ["rev-parse", "refs/remotes/origin/main"],
+    "AWS_READINESS_GIT_ORIGIN_MAIN"
+  );
+}
+
+function assertCheckout(
+  run,
+  projectRoot,
+  verifyExactCheckout,
+  verifyRepositoryLayout
+) {
+  verifyRepositoryLayout({ rootDir: path.resolve(projectRoot) });
+  const beforeFetch = readCheckoutState(run);
+  assertExactCheckoutState(
+    projectRoot,
+    beforeFetch,
+    verifyExactCheckout
+  );
+  fetchOfficialMain(run);
+  const afterFetch = readCheckoutState(run);
+  const originMain = readOriginMain(run);
+  assertExactCheckoutState(
+    projectRoot,
+    afterFetch,
+    verifyExactCheckout
+  );
+  requireCondition(
+    HEX_40.test(originMain) &&
+      beforeFetch.sourceCommit === afterFetch.sourceCommit &&
+      beforeFetch.treeDigest === afterFetch.treeDigest &&
+      afterFetch.sourceCommit === originMain,
+    "AWS_READINESS_UPSTREAM"
+  );
+  return {
+    sourceCommit: afterFetch.sourceCommit,
+    treeDigest: afterFetch.treeDigest,
+    originMain
+  };
+}
+
+function assertCheckoutUnchanged(
+  run,
+  projectRoot,
+  initial,
+  verifyExactCheckout,
+  verifyRepositoryLayout
+) {
+  verifyRepositoryLayout({ rootDir: path.resolve(projectRoot) });
+  const beforeFetch = readCheckoutState(run);
+  assertExactCheckoutState(
+    projectRoot,
+    beforeFetch,
+    verifyExactCheckout
+  );
+  requireCondition(
+    beforeFetch.sourceCommit === initial.sourceCommit &&
+      beforeFetch.treeDigest === initial.treeDigest,
+    "AWS_READINESS_CHECKOUT_CHANGED"
+  );
+  fetchOfficialMain(run);
+  const current = readCheckoutState(run);
+  const originMain = readOriginMain(run);
+  assertExactCheckoutState(
+    projectRoot,
+    current,
+    verifyExactCheckout
+  );
+  requireCondition(
+    current.sourceCommit === initial.sourceCommit &&
+      originMain === initial.originMain &&
       current.treeDigest === initial.treeDigest,
     "AWS_READINESS_CHECKOUT_CHANGED"
   );
@@ -1931,9 +2070,16 @@ export async function runAwsReadiness({
   projectRoot = root,
   localOnly = false,
   now = () => new Date(),
-  run = defaultRunner(projectRoot)
+  run = defaultRunner(projectRoot),
+  verifyExactCheckout = assertCleanExactGitCheckout,
+  verifyRepositoryLayout = assertExactGitRepositoryLayout
 } = {}) {
-  const checkout = assertCheckout(run);
+  const checkout = assertCheckout(
+    run,
+    projectRoot,
+    verifyExactCheckout,
+    verifyRepositoryLayout
+  );
   checkedCommand(
     run,
     "npm",
@@ -1949,7 +2095,15 @@ export async function runAwsReadiness({
     jsonCommand(
       run,
       "npm",
-      ["run", "--silent", "release:provenance"],
+      [
+        "run",
+        "--silent",
+        "release:provenance",
+        "--",
+        "--readiness-fetched-official-main",
+        checkout.sourceCommit,
+        checkout.treeDigest
+      ],
       "AWS_READINESS_RELEASE_PROVENANCE"
     ),
     checkout
@@ -1993,7 +2147,13 @@ export async function runAwsReadiness({
         ),
         checkout
       );
-  assertCheckoutUnchanged(run, checkout);
+  assertCheckoutUnchanged(
+    run,
+    projectRoot,
+    checkout,
+    verifyExactCheckout,
+    verifyRepositoryLayout
+  );
 
   const observedAt = preflight?.observedAt ?? now().toISOString();
   requireCondition(
@@ -2068,8 +2228,11 @@ export const __test = Object.freeze({
   EXPECTED_REGION,
   OFFICIAL_REMOTE,
   childEnvironment,
+  controlledChildPath,
   defaultRunner,
   gitBlobId,
   isOfficialRemote,
+  officialFetchArguments,
+  validateOfficialLocalGitConfiguration,
   validateStoredTwoFileZip
 });

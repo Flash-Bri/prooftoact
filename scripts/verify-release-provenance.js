@@ -9,6 +9,14 @@ import { verifyCurrentBundledThirdPartyNotices } from "./verify-bundled-third-pa
 import { verifyAccessibility } from "./verify-accessibility.js";
 import { exactNpmCli } from "./build-gate2-exact.js";
 import {
+  assertExactGitRepositoryLayout,
+  assertSafeLocalGitConfiguration,
+  gitEnvironment,
+  gitInvariantArguments,
+  parseLocalGitConfiguration,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
+import {
   validateReleaseClaimsReceipt,
   verifyReleaseClaims
 } from "./verify-release-claims.js";
@@ -32,11 +40,57 @@ const CLEAN_ROOM_ROOT = "e198f4146d3d769ebdaf62927d3bbe92025e8340";
 const SCHEMA = "tideproof.release-provenance.v8";
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
+const STANDALONE_CHECKOUT_MODE = "STANDALONE_FETCH";
+const READINESS_CHECKOUT_MODE = "READINESS_ALREADY_FETCHED";
+const READINESS_CHECKOUT_ARGUMENT =
+  "--readiness-fetched-official-main";
+const STANDALONE_CHECKOUT_BINDING = Object.freeze({
+  mode: STANDALONE_CHECKOUT_MODE,
+  expectedCommit: null,
+  expectedTree: null
+});
 
 function assert(condition, code) {
   if (!condition) {
     throw new Error(code);
   }
+}
+
+export function parseArguments(args) {
+  assert(Array.isArray(args), "RELEASE_PROVENANCE_ARGUMENT");
+  if (args.length === 0) {
+    return STANDALONE_CHECKOUT_BINDING;
+  }
+  assert(
+    args.length === 3 &&
+      args[0] === READINESS_CHECKOUT_ARGUMENT &&
+      HEX_40.test(args[1]) &&
+      HEX_40.test(args[2]),
+    "RELEASE_PROVENANCE_ARGUMENT"
+  );
+  return Object.freeze({
+    mode: READINESS_CHECKOUT_MODE,
+    expectedCommit: args[1],
+    expectedTree: args[2]
+  });
+}
+
+function validateCheckoutBinding(value) {
+  const keys = value && typeof value === "object"
+    ? Object.keys(value).sort()
+    : [];
+  assert(
+    keys.join("\n") ===
+      ["expectedCommit", "expectedTree", "mode"].sort().join("\n") &&
+      ((value.mode === STANDALONE_CHECKOUT_MODE &&
+        value.expectedCommit === null &&
+        value.expectedTree === null) ||
+        (value.mode === READINESS_CHECKOUT_MODE &&
+          HEX_40.test(value.expectedCommit) &&
+          HEX_40.test(value.expectedTree))),
+    "RELEASE_PROVENANCE_CHECKOUT_BINDING"
+  );
+  return value;
 }
 
 export function validateReleaseSecurityForProvenance(receipt) {
@@ -72,27 +126,19 @@ function isOfficialRemote(value) {
 }
 
 function childEnvironment(source) {
-  const environment = {};
-  for (const [name, value] of Object.entries(source)) {
-    if (
-      name.startsWith("GIT_") ||
-      /^(?:BASH_ENV|CDPATH|DYLD_.+|ENV|LD_PRELOAD|NODE_OPTIONS|NODE_PATH|NPM_CONFIG_.+)$/i.test(
-        name
-      ) ||
-      /^(?:AWS_|DATABASE_URL$|PG(?:HOST|PORT|DATABASE|USER|PASSWORD|SERVICE|SERVICEFILE|PASSFILE)$|COCKROACH_.+|CRDB_.+|OPENAI_.+|ANTHROPIC_.+|GOOGLE_.+|OPENCLAW_.+|CODEX_.+|GH_TOKEN$|GITHUB_TOKEN$)/i.test(
-        name
-      ) ||
-      /(TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIAL)/i.test(name)
-    ) {
-      continue;
-    }
-    environment[name] = value;
-  }
+  const environment = Object.fromEntries(
+    Object.entries(source).filter(([name]) =>
+      ["LANG", "LC_ALL", "LC_CTYPE", "NO_COLOR"].includes(name)
+    )
+  );
+  environment.PATH = "/usr/bin:/bin";
   environment.AWS_CONFIG_FILE = "/dev/null";
   environment.AWS_EC2_METADATA_DISABLED = "true";
   environment.AWS_SHARED_CREDENTIALS_FILE = "/dev/null";
+  environment.GIT_ATTR_NOSYSTEM = "1";
   environment.GIT_CONFIG_GLOBAL = "/dev/null";
   environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_NO_LAZY_FETCH = "1";
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_TERMINAL_PROMPT = "0";
   environment.npm_config_always_auth = "false";
@@ -107,16 +153,23 @@ function defaultRunner(
   sourceEnvironment = process.env,
   spawn = spawnSync
 ) {
+  const gitExecutable = trustedGitExecutable();
   const npmCli = exactNpmCli(sourceEnvironment);
   return (command, args, options = {}) => {
     assert(
       command === "git" || command === "npm",
       "RELEASE_PROVENANCE_COMMAND"
     );
-    const executable = command === "npm" ? process.execPath : command;
-    const exactArguments = command === "npm" ? [npmCli, ...args] : args;
+    const executable =
+      command === "npm" ? process.execPath : gitExecutable;
+    const exactArguments =
+      command === "npm"
+        ? [npmCli, ...args]
+        : [...gitInvariantArguments(), ...args];
     const environment = childEnvironment(sourceEnvironment);
-    if (command === "npm") {
+    if (command === "git") {
+      Object.assign(environment, gitEnvironment(environment));
+    } else {
       environment.npm_execpath = npmCli;
       environment.npm_node_execpath = process.execPath;
     }
@@ -165,9 +218,11 @@ function fetchOfficialMain(run) {
       "-c",
       "http.https://github.com/.extraheader=",
       "fetch",
+      "--force",
       "--quiet",
       "--no-tags",
-      "origin",
+      "--no-recurse-submodules",
+      OFFICIAL_REMOTE,
       "refs/heads/main:refs/remotes/origin/main"
     ],
     "RELEASE_PROVENANCE_GIT_FETCH"
@@ -460,15 +515,30 @@ function assertGitMetadataFileAbsent(run, projectRoot, gitPath, code) {
   throw new Error(code);
 }
 
-function assertExactCheckout(run) {
-  const remote = textCommand(
-    run,
-    "git",
-    ["remote", "get-url", "origin"],
-    "RELEASE_PROVENANCE_GIT_REMOTE"
-  );
+function assertExactCheckout(run, checkoutBinding) {
+  const binding = validateCheckoutBinding(checkoutBinding);
+  let localConfiguration;
+  try {
+    localConfiguration = assertSafeLocalGitConfiguration(
+      parseLocalGitConfiguration(
+        checkedCommand(
+          run,
+          "git",
+          ["config", "--local", "--no-includes", "--null", "--list"],
+          "RELEASE_PROVENANCE_GIT_LOCAL_CONFIG"
+        ),
+        "RELEASE_PROVENANCE_GIT_LOCAL_CONFIG"
+      ),
+      { requireOfficialOrigin: true, requireMainBranch: true }
+    );
+  } catch {
+    throw new Error("RELEASE_PROVENANCE_GIT_LOCAL_CONFIG");
+  }
+  const remote = localConfiguration.remote;
   assert(isOfficialRemote(remote), "RELEASE_PROVENANCE_GIT_REMOTE");
-  fetchOfficialMain(run);
+  if (binding.mode === STANDALONE_CHECKOUT_MODE) {
+    fetchOfficialMain(run);
+  }
   const snapshot = checkoutSnapshot(run);
   assert(
     snapshot.branch === EXPECTED_BRANCH &&
@@ -476,27 +546,51 @@ function assertExactCheckout(run) {
       HEX_40.test(snapshot.commit) &&
       HEX_40.test(snapshot.originMain) &&
       HEX_40.test(snapshot.tree) &&
-      snapshot.commit === snapshot.originMain,
+      snapshot.commit === snapshot.originMain &&
+      (binding.mode !== READINESS_CHECKOUT_MODE ||
+        (snapshot.commit === binding.expectedCommit &&
+          snapshot.tree === binding.expectedTree)),
     "RELEASE_PROVENANCE_CHECKOUT"
   );
-  return { ...snapshot, officialRemote: OFFICIAL_REMOTE };
+  return {
+    ...snapshot,
+    officialRemote: OFFICIAL_REMOTE,
+    checkoutMode: binding.mode
+  };
 }
 
-function assertCheckoutUnchanged(run, initial) {
-  fetchOfficialMain(run);
+function assertCheckoutUnchanged(run, initial, checkoutBinding) {
+  const binding = validateCheckoutBinding(checkoutBinding);
+  if (binding.mode === STANDALONE_CHECKOUT_MODE) {
+    fetchOfficialMain(run);
+  }
   const current = checkoutSnapshot(run);
   assert(
     current.branch === initial.branch &&
       current.status === "" &&
       current.commit === initial.commit &&
       current.originMain === initial.originMain &&
-      current.tree === initial.tree,
+      current.tree === initial.tree &&
+      (binding.mode !== READINESS_CHECKOUT_MODE ||
+        (current.commit === binding.expectedCommit &&
+          current.tree === binding.expectedTree)),
     "RELEASE_PROVENANCE_CHECKOUT_CHANGED"
   );
 }
 
-export function verifyRepositoryHistory({ run, projectRoot = DEFAULT_ROOT }) {
-  const checkout = assertExactCheckout(run);
+export function verifyRepositoryHistory({
+  run,
+  projectRoot = DEFAULT_ROOT,
+  checkoutBinding = STANDALONE_CHECKOUT_BINDING,
+  verifyRepositoryLayout = assertExactGitRepositoryLayout
+}) {
+  const resolvedProjectRoot = path.resolve(projectRoot);
+  const layout = verifyRepositoryLayout({ rootDir: resolvedProjectRoot });
+  assert(
+    layout && layout.rootDir === resolvedProjectRoot,
+    "RELEASE_PROVENANCE_GIT_LAYOUT"
+  );
+  const checkout = assertExactCheckout(run, checkoutBinding);
   assert(
     textCommand(
       run,
@@ -619,6 +713,7 @@ export function verifyRepositoryHistory({ run, projectRoot = DEFAULT_ROOT }) {
 export async function runReleaseProvenance({
   projectRoot = DEFAULT_ROOT,
   run = defaultRunner(projectRoot),
+  checkoutBinding = STANDALONE_CHECKOUT_BINDING,
   verifyAccessibilityReceipt = verifyAccessibility,
   verifyClaims = verifyReleaseClaims,
   verifyCost = verifyReleaseCost,
@@ -626,11 +721,18 @@ export async function runReleaseProvenance({
   verifyInventory = verifyDependencyInventory,
   verifyNotices = verifyCurrentBundledThirdPartyNotices,
   verifyPrivacy = verifyReleasePrivacy,
+  verifyRepositoryLayout = assertExactGitRepositoryLayout,
   verifyRights = verifyReleaseRights,
   verifySecurity = verifyReleaseSecurity,
   verifySubmission = verifyReleaseSubmission
 } = {}) {
-  const source = verifyRepositoryHistory({ run, projectRoot });
+  const binding = validateCheckoutBinding(checkoutBinding);
+  const source = verifyRepositoryHistory({
+    run,
+    projectRoot,
+    checkoutBinding: binding,
+    verifyRepositoryLayout
+  });
   const claims = validateReleaseClaimsForProvenance(
     verifyClaims({ rootDir: projectRoot })
   );
@@ -819,11 +921,14 @@ export async function runReleaseProvenance({
       typeof notices.artifactPackages === "object",
     "RELEASE_PROVENANCE_NOTICES"
   );
-  assertCheckoutUnchanged(run, source.checkout);
+  assertCheckoutUnchanged(run, source.checkout, binding);
 
   return {
     schemaVersion: SCHEMA,
-    status: "PASS",
+    status:
+      binding.mode === READINESS_CHECKOUT_MODE
+        ? "READINESS_FETCH_BOUND_PASS"
+        : "PASS",
     source: {
       commit: source.checkout.commit,
       tree: source.checkout.tree,
@@ -881,13 +986,15 @@ export async function runReleaseProvenance({
       cleanBeforeAndAfter: true
     },
     claimBoundary:
-      "This receipt binds Git ancestry, tracked file modes, the reviewed pending-state public claim surfaces, current-source cost guards, the sanitized historical repository-governance checkpoint, the bounded current-history privacy scan, the current-surface rights inventory, the bounded static accessibility receipt, the current source security and abuse-boundary receipt, the fail-closed submission draft, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The claims, cost, governance, privacy, rights, accessibility, security, and submission controls remain explicitly non-final; they do not prove claim truth, current or final spend, current GitHub settings, exhaustive secret or personal-data absence, grant rights, establish WCAG conformance, establish vulnerability absence, determine eligibility, verify entrant authority, authorize deployment, or authorize submission. This receipt does not independently prove originality, legal clearance, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
+      binding.mode === READINESS_CHECKOUT_MODE
+        ? "READINESS_FETCH_BOUND_PASS performs no network fetch and is valid only as a nested receipt of the readiness gate that explicitly fetched and verified the same official-main commit before invocation and fetches it again before final acceptance. This receipt binds Git ancestry, tracked file modes, the reviewed pending-state public claim surfaces, current-source cost guards, the sanitized historical repository-governance checkpoint, the bounded current-history privacy scan, the current-surface rights inventory, the bounded static accessibility receipt, the current source security and abuse-boundary receipt, the fail-closed submission draft, installed package identities, the dependency inventory, and bundle notice inputs to that exact caller-bound checkout. It is not a standalone upstream-freshness receipt and does not independently prove originality, legal clearance, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
+        : "This receipt binds Git ancestry, tracked file modes, the reviewed pending-state public claim surfaces, current-source cost guards, the sanitized historical repository-governance checkpoint, the bounded current-history privacy scan, the current-surface rights inventory, the bounded static accessibility receipt, the current source security and abuse-boundary receipt, the fail-closed submission draft, installed package identities, the dependency inventory, and bundle notice inputs to the exact official checkout. The claims, cost, governance, privacy, rights, accessibility, security, and submission controls remain explicitly non-final; they do not prove claim truth, current or final spend, current GitHub settings, exhaustive secret or personal-data absence, grant rights, establish WCAG conformance, establish vulnerability absence, determine eligibility, verify entrant authority, authorize deployment, or authorize submission. This receipt does not independently prove originality, legal clearance, deployed bytes, live AWS behavior, human accessibility, or final submission approval."
   };
 }
 
 async function main() {
-  assert(process.argv.length === 2, "RELEASE_PROVENANCE_ARGUMENT");
-  const receipt = await runReleaseProvenance();
+  const checkoutBinding = parseArguments(process.argv.slice(2));
+  const receipt = await runReleaseProvenance({ checkoutBinding });
   process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
 }
 

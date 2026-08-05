@@ -3,9 +3,16 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { __test as actionsCheckoutTest } from "../scripts/normalize-actions-checkout.js";
+import {
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "../scripts/lib/exact-git-source.js";
 import {
   __test,
   verifyReleaseRights
@@ -113,6 +120,117 @@ function verifyFixture(fixture) {
   });
 }
 
+function git(rootDir, ...args) {
+  return execFileSync(
+    trustedGitExecutable(),
+    [...gitInvariantArguments(), ...args],
+    {
+      cwd: rootDir,
+      encoding: "utf8",
+      env: gitEnvironment()
+    }
+  ).trim();
+}
+
+function initializeExactRepository(rootDir) {
+  git(rootDir, "init", "--quiet");
+  git(rootDir, "add", "--all");
+  git(
+    rootDir,
+    "-c",
+    "user.name=Actions Fixture",
+    "-c",
+    "user.email=actions-fixture@invalid",
+    "commit",
+    "--quiet",
+    "-m",
+    "fixture"
+  );
+  return git(rootDir, "rev-parse", "HEAD");
+}
+
+function actionsEnvironment(
+  rootDir,
+  { eventName = "pull_request", sourceCommit } = {}
+) {
+  const resolvedSourceCommit =
+    sourceCommit ?? git(rootDir, "rev-parse", "HEAD");
+  return {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    GITHUB_API_URL: "https://api.github.com",
+    GITHUB_EVENT_NAME: eventName,
+    GITHUB_GRAPHQL_URL: "https://api.github.com/graphql",
+    GITHUB_JOB: "verify",
+    GITHUB_REF:
+      eventName === "pull_request"
+        ? "refs/pull/61/merge"
+        : "refs/heads/main",
+    GITHUB_REPOSITORY: "Flash-Bri/prooftoact",
+    GITHUB_REPOSITORY_ID: "1317716765",
+    GITHUB_SERVER_URL: "https://github.com",
+    GITHUB_SHA: resolvedSourceCommit,
+    GITHUB_WORKFLOW: "CI",
+    GITHUB_WORKFLOW_REF: `Flash-Bri/prooftoact/.github/workflows/ci.yml@${
+      eventName === "pull_request"
+        ? "refs/pull/61/merge"
+        : "refs/heads/main"
+    }`,
+    GITHUB_WORKSPACE: rootDir,
+    RUNNER_ENVIRONMENT: "github-hosted",
+    RUNNER_OS: "Linux"
+  };
+}
+
+function worktreeConfigPath(rootDir) {
+  return path.join(rootDir, ".git", "config.worktree");
+}
+
+function writeExactActionsResidue(rootDir) {
+  const candidate = worktreeConfigPath(rootDir);
+  fs.writeFileSync(
+    candidate,
+    actionsCheckoutTest.EXPECTED_WORKTREE_CONFIG_BYTES,
+    { mode: 0o644 }
+  );
+  fs.chmodSync(candidate, 0o644);
+  return candidate;
+}
+
+function candidateIdentity(candidate) {
+  const stat = fs.lstatSync(candidate);
+  return {
+    bytesSha256: stat.isFile()
+      ? sha256(fs.readFileSync(candidate))
+      : null,
+    dev: stat.dev,
+    ino: stat.ino,
+    linkTarget: stat.isSymbolicLink()
+      ? fs.readlinkSync(candidate)
+      : null,
+    mode: stat.mode,
+    nlink: stat.nlink,
+    type: stat.isSymbolicLink()
+      ? "symlink"
+      : stat.isFile()
+        ? "file"
+        : "other"
+  };
+}
+
+function normalizeFixture(
+  rootDir,
+  environment,
+  { beforeUnlink = null, platform = "linux" } = {}
+) {
+  return actionsCheckoutTest.normalizeWithHook({
+    rootDir,
+    environment,
+    platform,
+    beforeUnlink
+  });
+}
+
 test("current rights inventory passes without claiming final release", () => {
   const receipt = verifyReleaseRights({ rootDir: ROOT });
 
@@ -124,6 +242,501 @@ test("current rights inventory passes without claiming final release", () => {
   assert.equal(receipt.repositoryMediaFileCount, 2);
   assert.equal(receipt.prohibitedSourceDigestCount, 3);
   assert.equal(receipt.checks.awsDistributionBindingsExact, true);
+});
+
+test("Actions PR normalization removes only exact inert residue before strict rights verification", () => {
+  const fixture = copyFixture();
+  try {
+    initializeExactRepository(fixture.rootDir);
+    const candidate = writeExactActionsResidue(fixture.rootDir);
+    const commonConfig = path.join(fixture.rootDir, ".git", "config");
+    const index = path.join(fixture.rootDir, ".git", "index");
+    const commonConfigBefore = sha256(fs.readFileSync(commonConfig));
+    const indexBefore = sha256(fs.readFileSync(index));
+    const statusBefore = git(
+      fixture.rootDir,
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    );
+
+    assert.throws(
+      () => verifyReleaseRights({ rootDir: fixture.rootDir }),
+      /EXACT_GIT_SOURCE_OBJECT_PATH/
+    );
+    const receipt = normalizeFixture(
+      fixture.rootDir,
+      actionsEnvironment(fixture.rootDir)
+    );
+
+    assert.equal(receipt.status, "NORMALIZED_INACTIVE_ACTIONS_RESIDUE");
+    assert.equal(receipt.eventName, "pull_request");
+    assert.equal(receipt.ref, "refs/pull/61/merge");
+    assert.equal(receipt.removedPath, ".git/config.worktree");
+    assert.equal(fs.existsSync(candidate), false);
+    assert.equal(sha256(fs.readFileSync(commonConfig)), commonConfigBefore);
+    assert.equal(sha256(fs.readFileSync(index)), indexBefore);
+    assert.equal(
+      git(
+        fixture.rootDir,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all"
+      ),
+      statusBefore
+    );
+    assert.equal(
+      verifyReleaseRights({ rootDir: fixture.rootDir }).status,
+      "CURRENT_SURFACES_PASS"
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("Actions main-push normalization is a strict no-op without residue", () => {
+  const fixture = copyFixture();
+  try {
+    initializeExactRepository(fixture.rootDir);
+    const commonConfig = path.join(fixture.rootDir, ".git", "config");
+    const index = path.join(fixture.rootDir, ".git", "index");
+    const before = {
+      commonConfig: sha256(fs.readFileSync(commonConfig)),
+      index: sha256(fs.readFileSync(index))
+    };
+    const receipt = normalizeFixture(
+      fixture.rootDir,
+      actionsEnvironment(fixture.rootDir, { eventName: "push" })
+    );
+
+    assert.equal(receipt.status, "ALREADY_STRICT");
+    assert.equal(receipt.eventName, "push");
+    assert.equal(receipt.ref, "refs/heads/main");
+    assert.equal(receipt.removedPath, null);
+    assert.equal(receipt.residueSha256, null);
+    assert.equal(fs.existsSync(worktreeConfigPath(fixture.rootDir)), false);
+    assert.equal(sha256(fs.readFileSync(commonConfig)), before.commonConfig);
+    assert.equal(sha256(fs.readFileSync(index)), before.index);
+    assert.equal(
+      verifyReleaseRights({ rootDir: fixture.rootDir }).status,
+      "CURRENT_SURFACES_PASS"
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("Actions normalization rejects hostile residue without changing its path identity", () => {
+  const cases = [
+    {
+      name: "noncanonical order",
+      mutate(rootDir, candidate) {
+        fs.writeFileSync(
+          candidate,
+          [
+            "[index]",
+            "\tsparse = false",
+            "[core]",
+            "\tsparseCheckout = false",
+            "\tsparseCheckoutCone = false",
+            ""
+          ].join("\n")
+        );
+      }
+    },
+    {
+      name: "extra include",
+      mutate(rootDir, candidate) {
+        fs.appendFileSync(candidate, "[include]\n\tpath = /tmp/ignored\n");
+      }
+    },
+    {
+      name: "active sparse value",
+      mutate(rootDir, candidate) {
+        fs.writeFileSync(
+          candidate,
+          actionsCheckoutTest.EXPECTED_WORKTREE_CONFIG_BYTES
+            .toString("utf8")
+            .replace("sparse = false", "sparse = true")
+        );
+      }
+    },
+    {
+      name: "group writable",
+      mutate(rootDir, candidate) {
+        fs.chmodSync(candidate, 0o664);
+      }
+    },
+    {
+      name: "noncanonical non-writable mode",
+      mutate(rootDir, candidate) {
+        fs.chmodSync(candidate, 0o640);
+      }
+    },
+    {
+      name: "executable mode",
+      mutate(rootDir, candidate) {
+        fs.chmodSync(candidate, 0o755);
+      }
+    },
+    {
+      name: "symlink",
+      mutate(rootDir, candidate) {
+        const target = path.join(rootDir, ".git", "residue-target");
+        fs.writeFileSync(
+          target,
+          actionsCheckoutTest.EXPECTED_WORKTREE_CONFIG_BYTES
+        );
+        fs.rmSync(candidate);
+        fs.symlinkSync(target, candidate);
+      }
+    },
+    {
+      name: "hardlink",
+      mutate(rootDir, candidate) {
+        const target = path.join(rootDir, ".git", "residue-target");
+        fs.renameSync(candidate, target);
+        fs.linkSync(target, candidate);
+      }
+    },
+    {
+      name: "active extension",
+      mutate(rootDir) {
+        git(
+          rootDir,
+          "config",
+          "--file",
+          path.join(rootDir, ".git", "config"),
+          "extensions.worktreeConfig",
+          "true"
+        );
+      }
+    },
+    {
+      name: "sparse checkout file",
+      mutate(rootDir) {
+        fs.writeFileSync(
+          path.join(rootDir, ".git", "info", "sparse-checkout"),
+          "README.md\n"
+        );
+      }
+    }
+  ];
+
+  for (const candidateCase of cases) {
+    const fixture = copyFixture();
+    try {
+      initializeExactRepository(fixture.rootDir);
+      const candidate = writeExactActionsResidue(fixture.rootDir);
+      candidateCase.mutate(fixture.rootDir, candidate);
+      const before = candidateIdentity(candidate);
+
+      assert.throws(
+        () =>
+          normalizeFixture(
+            fixture.rootDir,
+            actionsEnvironment(fixture.rootDir)
+          ),
+        /ACTIONS_CHECKOUT_NORMALIZATION_(?:RESIDUE|SOURCE)/,
+        candidateCase.name
+      );
+      assert.deepEqual(
+        candidateIdentity(candidate),
+        before,
+        candidateCase.name
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
+test("Actions normalization rejects wrong context and pathname replacement before unlink", () => {
+  const fixture = copyFixture();
+  try {
+    initializeExactRepository(fixture.rootDir);
+    const candidate = writeExactActionsResidue(fixture.rootDir);
+    const baseEnvironment = actionsEnvironment(fixture.rootDir);
+    const contextMutations = [
+      { GITHUB_REPOSITORY: "other/repository" },
+      { GITHUB_REPOSITORY_ID: "1" },
+      { GITHUB_API_URL: "https://example.invalid" },
+      { GITHUB_JOB: "other" },
+      {
+        GITHUB_WORKFLOW_REF:
+          "Flash-Bri/prooftoact/.github/workflows/other.yml@refs/pull/61/merge"
+      },
+      { GITHUB_REF: "refs/pull/0/merge" },
+      { GITHUB_SHA: "0".repeat(40) },
+      { RUNNER_ENVIRONMENT: "self-hosted" },
+      { NODE_OPTIONS: "--require=/tmp/hostile.cjs" },
+      { NODE_PATH: "/tmp/hostile-modules" }
+    ];
+
+    for (const mutation of contextMutations) {
+      const before = candidateIdentity(candidate);
+      assert.throws(
+        () =>
+          normalizeFixture(fixture.rootDir, {
+            ...baseEnvironment,
+            ...mutation
+          }),
+        /ACTIONS_CHECKOUT_NORMALIZATION_(?:CONTEXT|SOURCE)/
+      );
+      assert.deepEqual(candidateIdentity(candidate), before);
+    }
+    const beforePlatform = candidateIdentity(candidate);
+    assert.throws(
+      () =>
+        normalizeFixture(fixture.rootDir, baseEnvironment, {
+          platform: "darwin"
+        }),
+      /ACTIONS_CHECKOUT_NORMALIZATION_CONTEXT/
+    );
+    assert.deepEqual(candidateIdentity(candidate), beforePlatform);
+
+    let replacementIdentity;
+    assert.throws(
+      () =>
+        normalizeFixture(fixture.rootDir, baseEnvironment, {
+          beforeUnlink(candidatePath) {
+            const replacement = `${candidatePath}.replacement`;
+            fs.writeFileSync(
+              replacement,
+              actionsCheckoutTest.EXPECTED_WORKTREE_CONFIG_BYTES,
+              { mode: 0o644 }
+            );
+            fs.chmodSync(replacement, 0o644);
+            fs.renameSync(replacement, candidatePath);
+            replacementIdentity = candidateIdentity(candidatePath);
+          }
+        }),
+      /ACTIONS_CHECKOUT_NORMALIZATION_RACE/
+    );
+    assert.deepEqual(candidateIdentity(candidate), replacementIdentity);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("Actions normalization preserves residue when pre-unlink checkout state drifts", () => {
+  const cases = [
+    {
+      name: "tracked byte drift",
+      expected: /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/,
+      mutate(rootDir) {
+        fs.appendFileSync(path.join(rootDir, "README.md"), "\ndrift\n");
+      }
+    },
+    {
+      name: "index flag drift",
+      expected: /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/,
+      mutate(rootDir) {
+        git(rootDir, "update-index", "--skip-worktree", "README.md");
+      }
+    },
+    {
+      name: "staged index drift",
+      expected: /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/,
+      mutate(rootDir) {
+        fs.appendFileSync(path.join(rootDir, "README.md"), "\nstaged\n");
+        git(rootDir, "add", "--", "README.md");
+      }
+    },
+    {
+      name: "HEAD ref and tree drift",
+      expected: /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/,
+      mutate(rootDir) {
+        fs.appendFileSync(path.join(rootDir, "README.md"), "\ncommitted\n");
+        git(rootDir, "add", "--", "README.md");
+        git(
+          rootDir,
+          "-c",
+          "user.name=Actions Fixture",
+          "-c",
+          "user.email=actions-fixture@invalid",
+          "commit",
+          "--quiet",
+          "-m",
+          "drift"
+        );
+      }
+    },
+    {
+      name: "common config drift",
+      expected: /ACTIONS_CHECKOUT_NORMALIZATION_RACE/,
+      mutate(rootDir) {
+        git(rootDir, "config", "--local", "gc.auto", "0");
+      }
+    }
+  ];
+
+  for (const candidateCase of cases) {
+    const fixture = copyFixture();
+    try {
+      initializeExactRepository(fixture.rootDir);
+      const candidate = writeExactActionsResidue(fixture.rootDir);
+      const before = candidateIdentity(candidate);
+
+      assert.throws(
+        () =>
+          normalizeFixture(
+            fixture.rootDir,
+            actionsEnvironment(fixture.rootDir),
+            {
+              beforeUnlink() {
+                candidateCase.mutate(fixture.rootDir);
+              }
+            }
+          ),
+        candidateCase.expected,
+        candidateCase.name
+      );
+      assert.equal(fs.existsSync(candidate), true, candidateCase.name);
+      assert.equal(fs.realpathSync(candidate), candidate, candidateCase.name);
+      assert.deepEqual(
+        candidateIdentity(candidate),
+        before,
+        candidateCase.name
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
+test("Actions normalization rejects dirty and hidden index state before unlink", () => {
+  const cases = [
+    {
+      name: "all-untracked status",
+      mutate(rootDir) {
+        fs.writeFileSync(path.join(rootDir, "unexpected.txt"), "unexpected\n");
+      }
+    },
+    {
+      name: "skip-worktree index flag",
+      mutate(rootDir) {
+        git(rootDir, "update-index", "--skip-worktree", "README.md");
+      }
+    },
+    {
+      name: "assume-unchanged index flag",
+      mutate(rootDir) {
+        git(rootDir, "update-index", "--assume-unchanged", "README.md");
+      }
+    }
+  ];
+
+  for (const candidateCase of cases) {
+    const fixture = copyFixture();
+    try {
+      initializeExactRepository(fixture.rootDir);
+      const candidate = writeExactActionsResidue(fixture.rootDir);
+      candidateCase.mutate(fixture.rootDir);
+      const before = candidateIdentity(candidate);
+      assert.throws(
+        () =>
+          normalizeFixture(
+            fixture.rootDir,
+            actionsEnvironment(fixture.rootDir)
+          ),
+        /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/,
+        candidateCase.name
+      );
+      assert.deepEqual(
+        candidateIdentity(candidate),
+        before,
+        candidateCase.name
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
+test("CI orders one fail-closed normalizer before install and every verifier", () => {
+  const workflow = fs.readFileSync(
+    path.join(ROOT, ".github", "workflows", "ci.yml"),
+    "utf8"
+  );
+  const orderedMarkers = [
+    "uses: actions/checkout@",
+    "uses: actions/setup-node@",
+    "name: Normalize exact GitHub Actions checkout",
+    "run: node scripts/normalize-actions-checkout.js",
+    "name: Install locked dependencies",
+    "name: Verify proof manifest"
+  ];
+  let prior = -1;
+  for (const marker of orderedMarkers) {
+    const index = workflow.indexOf(marker);
+    assert(index > prior, marker);
+    prior = index;
+  }
+  assert.equal(
+    workflow.match(/node scripts\/normalize-actions-checkout\.js/g)?.length,
+    1
+  );
+  assert.equal(workflow.includes("npm run ci:normalize-actions-checkout"), false);
+  for (const marker of [
+    'GIT_OPTIONAL_LOCKS: "0"',
+    'NODE_COMPILE_CACHE: ""',
+    'NODE_EXTRA_CA_CERTS: ""',
+    'NODE_OPTIONS: ""',
+    'NODE_PATH: ""',
+    'NODE_REPL_EXTERNAL_MODULE: ""',
+    'NODE_V8_COVERAGE: ""'
+  ]) {
+    assert(workflow.includes(marker), marker);
+  }
+  assert.equal(workflow.includes("continue-on-error"), false);
+
+  const normalizer = fs.readFileSync(
+    path.join(ROOT, "scripts", "normalize-actions-checkout.js"),
+    "utf8"
+  );
+  for (const marker of [
+    "process.geteuid()",
+    "process.getegid()",
+    "decisionState = checkoutState(context, permissiveLayout)",
+    "sameRepositoryOwnership(ownershipBefore, decisionOwnership)"
+  ]) {
+    assert(normalizer.includes(marker), marker);
+  }
+
+  const productionOptIns = [];
+  for (const name of fs.readdirSync(path.join(ROOT, "scripts"), {
+    recursive: true
+  })) {
+    if (!/\.(?:js|mjs|cjs)$/.test(name)) {
+      continue;
+    }
+    const relativePath = path.posix.join(
+      "scripts",
+      name.split(path.sep).join("/")
+    );
+    const source = fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+    if (/allowInactiveActionsWorktreeConfig\s*:\s*true/.test(source)) {
+      productionOptIns.push(relativePath);
+    }
+  }
+  assert.deepEqual(productionOptIns, [
+    "scripts/normalize-actions-checkout.js"
+  ]);
+});
+
+test("Actions normalization CLI rejects arguments with one fixed diagnostic", () => {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(ROOT, "scripts", "normalize-actions-checkout.js"), "extra"],
+    { encoding: "utf8" }
+  );
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(
+    result.stderr,
+    "TIDEPROOF_ACTIONS_CHECKOUT_FAILED:ACTIONS_CHECKOUT_NORMALIZATION_ARGUMENT\n"
+  );
 });
 
 test("rights inventory rejects one-byte drift across browser source and media", () => {

@@ -36,17 +36,20 @@ and private human review remain required.
   generated-template contract. Both can reject mutable inputs before upload;
   a provider snapshot can then reject deployment drift before any canary.
 - **Repair:** the public build command rejects a dirty or contaminated source
-  checkout, creates a detached exact-commit worktree, executes the committed
-  builder there, runs `npm ci --ignore-scripts` from the lockfile with a new
-  isolated cache and distinct empty user/global npm configuration paths,
+  checkout, proves the complete local reachable object closure, creates and
+  verifies a private full-history Git bundle in a fresh empty repository,
+  imports it into a standalone remote-free exact-commit checkout, executes the
+  committed builder there, runs `npm ci --ignore-scripts` from the lockfile
+  with a new isolated cache and distinct empty user/global npm configuration
+  paths,
   rejects installed-tree symlinks outside npm's unused root `.bin` shims,
   excludes those shims under a fixed `/usr/bin:/bin` build `PATH`, hashes every
   remaining installed file byte and mode, and records the Git/Node/npm
   toolchain plus every build-control and project blob.
   The distinct paths prevent npm from rejecting a duplicated configuration
   source while still excluding ambient npm configuration. The esbuild
-  loader rejects every non-dependency path outside that worktree and gives
-  raw Git inputs repository-relative virtual identities so temporary worktree
+  loader rejects every non-dependency path outside that checkout and gives
+  raw Git inputs repository-relative virtual identities so temporary checkout
   names cannot change bundle bytes. Runtime
   roles, API integrations, permissions, probe targets, and authority-race
   invocation target numeric Lambda versions. `proof` aliases remain monitored
@@ -161,6 +164,73 @@ and private human review remain required.
   network availability, registry integrity, or hostile-host resistance.
 - **Claim impact:** no live or deployment claim changes. The fix restores a
   required local source gate and does not authorize provider mutation.
+
+## Accepted trusted Git execution finding
+
+- **Root cause:** standalone release provenance and the authenticated
+  authority-race runner selected Git through caller `PATH`, and some adjacent
+  release/evidence Git children did not prepend the complete shared invariant
+  set. That left a path-selected wrapper and repository-local
+  `reference-transaction` hook inside the pre-provider evidence path.
+- **Why it was missed:** source-integrity controls exercised hostile local Git
+  metadata and the readiness wrapper, but not the standalone and authority
+  runners with executable and hook sentinels together.
+- **Earliest detection point:** before any authenticated AWS request, invoke a
+  harmless ref update with a sentinel `git` first on `PATH` and a sentinel
+  reference hook installed; either invocation is a failure.
+- **Repair:** the inventoried release/evidence paths resolve the shared trusted
+  absolute Git executable, use a fixed sanitized Git environment, prepend the
+  shared no-transform/no-fsmonitor/no-hook argument set, and validate the exact
+  ordinary repository layout before source-sensitive work. Explicit official
+  fetches disable ambient credentials and submodule recursion.
+- **Regression and preventive controls:** provenance and authority-race tests
+  require zero sentinel invocations. Standalone provenance retains exactly two
+  explicit official-main fetches; the readiness-bound variant retains zero
+  nested fetches.
+- **Verification:** the sentinel tests, fetch-count tests, full and focused
+  suites, exact build, and hash-bound release verifiers must pass at the same
+  clean exact commit.
+- **Residual risk:** this is a process boundary, not certification of the
+  installed Git binary, operating system, filesystem, DNS, TLS, or upstream
+  service, and it does not prevent a same-identity hostile-host race.
+- **Claim impact:** no provider or deployment claim changes. The repair narrows
+  local source execution and grants no AWS mutation or final-release authority.
+
+## Accepted standalone exact-build finding
+
+- **Root cause:** the artifact bootstrap used a linked Git worktree after the
+  shared exact-Git boundary began requiring the checkout root, Git directory,
+  common directory, object store, and index to belong to one standalone clone.
+- **Why it was missed:** layout rejection and post-build revalidation had
+  separate focused tests, but the complete clean-commit artifact bootstrap was
+  not executed against the strengthened shared invariant.
+- **Earliest detection point:** `npm run build:gate2` on the clean rebased
+  candidate, before provider credentials, artifact upload, deployment, or any
+  public action.
+- **Repair:** the bootstrap now creates a private full-history bundle, imports
+  it only after proving the source's complete reachable object closure,
+  verifies it inside a freshly initialized empty repository before import,
+  imports it without Git network access, hardlinks, alternates, promisor state,
+  remotes, or linked-worktree metadata, detaches the exact source commit, and
+  applies the full exact-checkout and closure validation before build
+  execution. It revalidates both source and isolated checkout around the
+  operation and removes the private temporary root afterward. This
+  network-free claim applies only to Git bundle materialization and import;
+  the later `npm ci --ignore-scripts` may contact the pinned
+  `https://registry.npmjs.org/` registry.
+- **Preventive controls:** direct integration coverage proves exact history,
+  tree, bytes, independent object storage, absent remotes, alternates, and
+  promisor state, strict local configuration values, bundle verification before
+  import, private temporary-root mode, and the absence of `worktree add` from
+  the bootstrap. A missing historical blob fixture uses sentinel helper and
+  transport configuration to prove rejection without invocation or hydration.
+- **Residual risk:** this is a process and repository-integrity boundary, not a
+  defense against a compromised kernel, filesystem, or reviewed Git/Node/npm
+  toolchain. npm-registry availability and integrity, live AWS, CockroachDB,
+  upload, deployment, and public verification remain separate required
+  evidence.
+- **Claim impact:** the repair restores deterministic local artifact creation;
+  it grants no provider authority and adds no live or final-release claim.
 
 ## Accepted sanitized test-runtime finding
 

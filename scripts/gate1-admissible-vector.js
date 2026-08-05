@@ -9,6 +9,12 @@ import {
   proveAdmissibleVectorSnapshot
 } from "../src/cloud/admissible-vector-retrieval.js";
 import { isolatedEvidenceProcessEnvironment } from "../src/cloud/aws-evidence-identity.js";
+import {
+  assertExactGitRepositoryLayout,
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
 
 const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/prooftoact.git";
 
@@ -21,16 +27,19 @@ function requiredEnvironment(name) {
 }
 
 function gitOutput(args) {
-  return execFileSync("git", args, {
-    encoding: "utf8",
-    env: {
-      ...isolatedEvidenceProcessEnvironment(process.env),
-      GIT_NO_REPLACE_OBJECTS: "1"
-    },
-    maxBuffer: 1024 * 1024,
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: 30_000
-  });
+  return execFileSync(
+    trustedGitExecutable(),
+    [...gitInvariantArguments(), ...args],
+    {
+      encoding: "utf8",
+      env: gitEnvironment(
+        isolatedEvidenceProcessEnvironment(process.env)
+      ),
+      maxBuffer: 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 30_000
+    }
+  );
 }
 
 function gitValue(args) {
@@ -49,6 +58,7 @@ function cleanIndexFlags() {
 }
 
 function sourceBinding({ officialMain = false } = {}) {
+  assertExactGitRepositoryLayout({ rootDir: process.cwd() });
   const sourceCommit = gitValue(["rev-parse", "HEAD"]);
   const treeDigest = gitValue(["rev-parse", "HEAD^{tree}"]);
   if (gitValue(["replace", "--list"]) !== "") {
@@ -82,9 +92,11 @@ function sourceBinding({ officialMain = false } = {}) {
     "-c",
     "http.https://github.com/.extraheader=",
     "fetch",
+    "--force",
     "--quiet",
     "--no-tags",
-    "origin",
+    "--no-recurse-submodules",
+    OFFICIAL_REMOTE,
     "refs/heads/main:refs/remotes/origin/main"
   ]);
   if (gitValue(["replace", "--list"]) !== "") {

@@ -10,9 +10,7 @@ import {
 } from "./lib/dependency-snapshot.js";
 import {
   assertCleanExactGitCheckout,
-  assertExactWorktreeBytes,
-  assertSafeLocalGitConfiguration,
-  assertSafeExactTreePaths,
+  assertExactGitRepositoryLayout,
   assertSafeProjectPath,
   gitInvariantArguments,
   trustedGitExecutable,
@@ -45,6 +43,7 @@ export function isolatedEnvironment(source = process.env) {
     GIT_ATTR_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
+    GIT_NO_LAZY_FETCH: "1",
     GIT_NO_REPLACE_OBJECTS: "1",
     GIT_TERMINAL_PROMPT: "0"
   };
@@ -134,6 +133,136 @@ export function exactNpmCli(source = process.env) {
   return resolved;
 }
 
+export function createStandaloneExactCheckout({
+  sourceRoot,
+  temporaryRoot,
+  sourceCommit,
+  treeDigest,
+  gitExecutable = trustedGitExecutable()
+}) {
+  const resolvedSourceRoot = path.resolve(sourceRoot);
+  const resolvedTemporaryRoot = path.resolve(temporaryRoot);
+  const temporaryStat = fs.lstatSync(resolvedTemporaryRoot);
+  requireCondition(
+    fs.realpathSync(resolvedTemporaryRoot) === resolvedTemporaryRoot &&
+      path.dirname(resolvedTemporaryRoot) === trustedTemporaryRoot() &&
+      temporaryStat.isDirectory() &&
+      !temporaryStat.isSymbolicLink() &&
+      temporaryStat.uid === process.getuid() &&
+      (temporaryStat.mode & 0o077) === 0 &&
+      /^[0-9a-f]{40}$/.test(sourceCommit) &&
+      /^[0-9a-f]{40}$/.test(treeDigest),
+    "EXACT_BUILD_STANDALONE_ROOT"
+  );
+  const bundlePath = path.join(resolvedTemporaryRoot, "source.bundle");
+  const checkoutRoot = path.join(resolvedTemporaryRoot, "checkout");
+  requireCondition(
+    !fs.existsSync(bundlePath) && !fs.existsSync(checkoutRoot),
+    "EXACT_BUILD_STANDALONE_ROOT"
+  );
+  const sourceBefore = assertCleanExactGitCheckout({
+    rootDir: resolvedSourceRoot,
+    sourceCommit,
+    treeDigest
+  });
+  requireCondition(
+    sourceBefore.sourceCommit === sourceCommit &&
+      sourceBefore.treeDigest === treeDigest,
+    "EXACT_BUILD_SOURCE_CHANGED"
+  );
+  run(
+    gitExecutable,
+    [
+      ...gitInvariantArguments(),
+      "bundle",
+      "create",
+      bundlePath,
+      "HEAD"
+    ],
+    { cwd: resolvedSourceRoot }
+  );
+  const bundleStat = fs.lstatSync(bundlePath);
+  requireCondition(
+    bundleStat.isFile() &&
+      !bundleStat.isSymbolicLink() &&
+      run(
+        gitExecutable,
+        [
+          ...gitInvariantArguments(),
+          "bundle",
+          "list-heads",
+          bundlePath
+        ],
+        { cwd: resolvedTemporaryRoot }
+      ).trim() === `${sourceCommit} HEAD`,
+    "EXACT_BUILD_BUNDLE"
+  );
+  const sourceAfterBundle = assertCleanExactGitCheckout({
+    rootDir: resolvedSourceRoot,
+    sourceCommit,
+    treeDigest
+  });
+  requireCondition(
+    sourceAfterBundle.sourceCommit === sourceCommit &&
+      sourceAfterBundle.treeDigest === treeDigest,
+    "EXACT_BUILD_SOURCE_CHANGED"
+  );
+  run(
+    gitExecutable,
+    [...gitInvariantArguments(), "init", "--quiet", checkoutRoot],
+    { cwd: resolvedTemporaryRoot }
+  );
+  run(
+    gitExecutable,
+    [
+      ...gitInvariantArguments(),
+      "bundle",
+      "verify",
+      bundlePath
+    ],
+    { cwd: checkoutRoot }
+  );
+  run(
+    gitExecutable,
+    [
+      ...gitInvariantArguments(),
+      "fetch",
+      "--no-tags",
+      "--no-recurse-submodules",
+      bundlePath,
+      "HEAD"
+    ],
+    { cwd: checkoutRoot }
+  );
+  run(
+    gitExecutable,
+    [
+      ...gitInvariantArguments(),
+      "checkout",
+      "--quiet",
+      "--detach",
+      sourceCommit
+    ],
+    { cwd: checkoutRoot }
+  );
+  const checkout = assertCleanExactGitCheckout({
+    rootDir: checkoutRoot,
+    sourceCommit,
+    treeDigest
+  });
+  requireCondition(
+    checkout.sourceCommit === sourceCommit &&
+      checkout.treeDigest === treeDigest &&
+      run(
+        gitExecutable,
+        [...gitInvariantArguments(), "remote"],
+        { cwd: checkoutRoot }
+      ).trim() === "",
+    "EXACT_BUILD_STANDALONE_CHECKOUT"
+  );
+  return Object.freeze({ bundlePath, checkoutRoot });
+}
+
 function copyOutputs(stagingRoot, receipt) {
   const expectedTemplates = [
     receipt.bootstrapTemplate?.path,
@@ -190,78 +319,39 @@ export function main(argv = process.argv.slice(2)) {
   );
   requireCondition(
     [
+      "bundle",
       "cat-file",
+      "checkout",
       "config",
+      "fetch",
+      "for-each-ref",
+      "fsck",
+      "init",
       "ls-files",
       "ls-tree",
       "replace",
       "rev-parse",
-      "status",
-      "worktree"
+      "rev-list",
+      "remote",
+      "status"
     ].every((name) => gitBuiltins.has(name)),
     "EXACT_BUILD_GIT_BUILTINS"
   );
+  assertExactGitRepositoryLayout({ rootDir: root });
   const sourceCommit = git(["rev-parse", "HEAD"], root, gitExecutable);
   const treeDigest = git(["rev-parse", "HEAD^{tree}"], root, gitExecutable);
   requireCondition(/^[0-9a-f]{40}$/.test(sourceCommit), "EXACT_BUILD_HEAD");
   requireCondition(/^[0-9a-f]{40}$/.test(treeDigest), "EXACT_BUILD_TREE");
+  const sourceCheckout = assertCleanExactGitCheckout({
+    rootDir: root,
+    sourceCommit,
+    treeDigest
+  });
   requireCondition(
-    git(["rev-parse", "--show-toplevel"], root, gitExecutable) === root,
-    "EXACT_BUILD_ROOT"
+    sourceCheckout.sourceCommit === sourceCommit &&
+      sourceCheckout.treeDigest === treeDigest,
+    "EXACT_BUILD_SOURCE"
   );
-  requireCondition(
-    git(
-      ["status", "--porcelain=v1", "--untracked-files=all"],
-      root,
-      gitExecutable
-    ) === "",
-    "EXACT_BUILD_DIRTY_TREE"
-  );
-  requireCondition(
-    git(
-      ["rev-parse", "--is-shallow-repository"],
-      root,
-      gitExecutable
-    ) === "false" && git(["replace", "-l"], root, gitExecutable) === "",
-    "EXACT_BUILD_OBJECT_STORE"
-  );
-  const localConfigNames = git(
-    ["config", "--local", "--includes", "--name-only", "--list"],
-    root,
-    gitExecutable
-  )
-    .split("\n")
-    .filter(Boolean);
-  assertSafeLocalGitConfiguration(localConfigNames);
-  assertSafeExactTreePaths({ rootDir: root, sourceCommit });
-  const indexEntries = git(
-    ["ls-files", "-v", "-z"],
-    root,
-    gitExecutable
-  )
-    .split("\0")
-    .filter(Boolean);
-  requireCondition(
-    indexEntries.length > 0 &&
-      indexEntries.every((entry) => /^H .+/.test(entry)),
-    "EXACT_BUILD_INDEX_FLAGS"
-  );
-  for (const gitPath of [
-    "info/attributes",
-    "info/grafts",
-    "info/sparse-checkout",
-    "objects/info/alternates"
-  ]) {
-    const candidatePath = git(
-      ["rev-parse", "--git-path", gitPath],
-      root,
-      gitExecutable
-    );
-    const candidate = path.isAbsolute(candidatePath)
-      ? candidatePath
-      : path.resolve(root, candidatePath);
-    requireCondition(!fs.existsSync(candidate), "EXACT_BUILD_OBJECT_STORE");
-  }
   const npmCli = exactNpmCli();
   const npmVersion = run(process.execPath, [npmCli, "--version"]).trim();
   let packageManager;
@@ -283,24 +373,13 @@ export function main(argv = process.argv.slice(2)) {
   );
   const checkoutRoot = path.join(temporaryRoot, "checkout");
   const stagingRoot = path.join(temporaryRoot, "output");
-  let worktreeAdded = false;
   try {
-    run(
-      gitExecutable,
-      [
-        ...gitInvariantArguments(),
-        "worktree",
-        "add",
-        "--detach",
-        checkoutRoot,
-        sourceCommit
-      ],
-      { cwd: root }
-    );
-    worktreeAdded = true;
-    assertExactWorktreeBytes({
-      rootDir: checkoutRoot,
-      sourceCommit
+    createStandaloneExactCheckout({
+      sourceRoot: root,
+      temporaryRoot,
+      sourceCommit,
+      treeDigest,
+      gitExecutable
     });
     run(
       process.execPath,
@@ -381,42 +460,19 @@ export function main(argv = process.argv.slice(2)) {
       "EXACT_BUILD_RECEIPT"
     );
     copyOutputs(stagingRoot, receipt);
+    const postBuildSource = assertCleanExactGitCheckout({
+      rootDir: root,
+      sourceCommit,
+      treeDigest
+    });
     requireCondition(
-      git(
-        ["status", "--porcelain=v1", "--untracked-files=all"],
-        root,
-        gitExecutable
-      ) === "",
+      postBuildSource.sourceCommit === sourceCommit &&
+        postBuildSource.treeDigest === treeDigest,
       "EXACT_BUILD_POST_DIRTY_TREE"
     );
     process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
   } finally {
-    let cleanupError = null;
-    if (worktreeAdded) {
-      const removed = spawnSync(
-        gitExecutable,
-        [
-          ...gitInvariantArguments(),
-          "worktree",
-          "remove",
-          "--force",
-          checkoutRoot
-        ],
-        {
-          cwd: root,
-          encoding: "utf8",
-          env: isolatedEnvironment(),
-          stdio: ["ignore", "pipe", "pipe"]
-        }
-      );
-      if (removed.error || removed.status !== 0) {
-        cleanupError = new Error("EXACT_BUILD_WORKTREE_CLEANUP");
-      }
-    }
     fs.rmSync(temporaryRoot, { force: true, recursive: true });
-    if (cleanupError) {
-      throw cleanupError;
-    }
   }
 }
 

@@ -173,7 +173,12 @@ export function createBuildToolchain({
   );
   const gitResult = spawnSync(resolvedGit, ["--version"], {
     encoding: "utf8",
-    env: { LANG: "C", LC_ALL: "C", PATH: "/usr/bin:/bin" },
+    env: {
+      GIT_NO_LAZY_FETCH: "1",
+      LANG: "C",
+      LC_ALL: "C",
+      PATH: "/usr/bin:/bin"
+    },
     stdio: ["ignore", "pipe", "ignore"]
   });
   requireCondition(

@@ -3,6 +3,12 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  assertExactGitRepositoryLayout,
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
 
 const DEFAULT_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -174,10 +180,18 @@ function parseCanonicalJson(bytes, code) {
 }
 
 function trackedFiles(rootDir) {
+  assertExactGitRepositoryLayout({ rootDir });
   return execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-    { cwd: rootDir }
+    trustedGitExecutable(),
+    [
+      ...gitInvariantArguments(),
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z"
+    ],
+    { cwd: rootDir, env: gitEnvironment(process.env) }
   )
     .toString("utf8")
     .split("\0")

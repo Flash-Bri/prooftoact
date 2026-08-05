@@ -6,6 +6,12 @@ import { createPublicDemoHandler } from "../src/cloud/public-demo.js";
 import { verifyPublicDemo } from "../src/cloud/public-demo-verifier.js";
 import { runScenario } from "../src/scenario.js";
 import { validateBuildReceipt as validateExactBuildReceipt } from "./gate2-aws-readiness.js";
+import {
+  assertExactGitRepositoryLayout,
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -31,9 +37,17 @@ function fail(code) {
 }
 
 function command(args, code) {
-  const result = spawnSync(args[0], args.slice(1), {
+  const gitCommand = args[0] === "git";
+  const executable = gitCommand
+    ? trustedGitExecutable()
+    : args[0];
+  const commandArguments = gitCommand
+    ? [...gitInvariantArguments(), ...args.slice(1)]
+    : args.slice(1);
+  const result = spawnSync(executable, commandArguments, {
     cwd: root,
     encoding: "utf8",
+    env: gitCommand ? gitEnvironment(process.env) : process.env,
     maxBuffer: 20 * 1024 * 1024
   });
   if (result.error || result.status !== 0) {
@@ -140,6 +154,7 @@ async function localDynamicResponses(
 
 export async function runPublicDemoVerification(args) {
   const { baseUrl, configDigest } = parseArguments(args);
+  assertExactGitRepositoryLayout({ rootDir: root });
   const sourceCommit = command(
     ["git", "rev-parse", "HEAD"],
     "PUBLIC_DEMO_VERIFY_GIT_HEAD"

@@ -132,7 +132,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 102);
+  assert.equal(receipt.artifactCount, 103);
   assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
@@ -155,8 +155,59 @@ test("proof manifest propagates nested brand-migration failure", () => {
 
     assert.throws(
       () => verifyProofManifest({ rootDir }),
-      /proof manifest nested brand-migration verification failed/
+      /proof manifest nested brand-migration verification failed:UNCLASSIFIED$/
     );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("proof manifest exposes only fixed allowlisted nested brand failure codes", () => {
+  const rootDir = makeRepositoryFixture();
+  try {
+    const verifyWithBrandFailure = (message) =>
+      verifyProofManifest({
+        rootDir,
+        verifySecurity: () => {},
+        verifyBrand: () => {
+          throw new Error(message);
+        },
+      });
+
+    for (const knownCode of [
+      "BRAND_MANIFEST_JSON",
+      "EXACT_GIT_SOURCE_OBJECT_PATH",
+    ]) {
+      assert.throws(() => verifyWithBrandFailure(knownCode), {
+        message:
+          "proof manifest nested brand-migration verification failed:" +
+          knownCode,
+      });
+    }
+
+    for (const unsafeMessage of [
+      ["AS", "IA", "ABCDEFGHIJKLMNOP"].join(""),
+      "FAKE_SECRET_MARKER",
+      "A".repeat(40),
+      "EXACT_GIT_SOURCE_OBJECT_PATH\n\t\u001b[31mCONTROL_TEXT",
+      "A".repeat(129),
+    ]) {
+      let captured;
+      try {
+        verifyWithBrandFailure(unsafeMessage);
+      } catch (error) {
+        captured = error;
+      }
+      assert(captured instanceof Error);
+      assert.equal(
+        captured.message,
+        "proof manifest nested brand-migration verification failed:UNCLASSIFIED"
+      );
+      assert.equal(captured.message.includes(unsafeMessage), false);
+      assert.equal([...captured.message].some((character) =>
+        character.charCodeAt(0) < 32
+      ), false);
+    }
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

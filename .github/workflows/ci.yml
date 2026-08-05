@@ -31,6 +31,17 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Normalize exact GitHub Actions checkout
+        env:
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: node scripts/normalize-actions-checkout.js
+
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
 

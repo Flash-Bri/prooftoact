@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   AWS_GATE2_PREFLIGHT_DEFAULTS,
@@ -8,14 +11,106 @@ import {
 } from "../src/cloud/aws-gate2-preflight.js";
 import {
   assertAwsPreflightParentEnvironment,
+  awsCostExplorerArguments,
+  awsPreflightAwsEnvironment,
   awsPreflightIdentityExpectation,
-  collectSnapshot
+  collectSnapshot,
+  controlledAwsCliPath,
+  controlledGitPath,
+  gitPreflightEnvironment,
+  trustedAwsCliExecutable,
+  trustedGitCheckout,
+  trustedGitExecutable,
+  trustedGitText
 } from "../scripts/gate2-aws-preflight.js";
 
 const ACCOUNT_ID = "111111111111";
 const BUCKET_NAME = "private-tideproof-artifacts-111111111111";
 const BOOTSTRAP_STACK = "tideproof-gate2-artifacts";
 const BUDGET_NAME = `${BOOTSTRAP_STACK}-account-safety`;
+const OIDC_WORKFLOW = fs.readFileSync(
+  new URL(
+    "../.github/workflows/aws-oidc-identity-bootstrap.yml",
+    import.meta.url
+  ),
+  "utf8"
+);
+
+test("AWS OIDC identity bootstrap is manual, minimal, and encrypted", () => {
+  assert.match(
+    OIDC_WORKFLOW,
+    /\non:\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  id-token: write\n/
+  );
+  assert.doesNotMatch(
+    OIDC_WORKFLOW,
+    /\n  (?:push|pull_request|schedule):/
+  );
+  assert.match(OIDC_WORKFLOW, /environment: aws-preflight/);
+  assert.doesNotMatch(OIDC_WORKFLOW, /actions\/checkout@/);
+  for (const secret of [
+    "AWS_ROLE_ARN",
+    "AWS_ACCOUNT_ID",
+    "RECEIPT_ENCRYPTION_PASSPHRASE"
+  ]) {
+    assert.match(
+      OIDC_WORKFLOW,
+      new RegExp(`secrets\\.${secret}`)
+    );
+  }
+  assert.match(OIDC_WORKFLOW, /ACTIONS_ID_TOKEN_REQUEST_URL/);
+  assert.match(OIDC_WORKFLOW, /ACTIONS_ID_TOKEN_REQUEST_TOKEN/);
+  assert.match(OIDC_WORKFLOW, /audience=sts\.amazonaws\.com/);
+  assert.match(OIDC_WORKFLOW, /Flash-Bri\/prooftoact/);
+  assert.match(OIDC_WORKFLOW, /refs\/heads\/main/);
+  assert.match(
+    OIDC_WORKFLOW,
+    /repo:Flash-Bri\/prooftoact:environment:aws-preflight/
+  );
+  assert.match(OIDC_WORKFLOW, /\.environment == "aws-preflight"/);
+  assert.match(
+    OIDC_WORKFLOW,
+    /AWS_APPROVED_ACCOUNT_ID_SHA256: \$\{\{ vars\.AWS_APPROVED_ACCOUNT_ID_SHA256 \}\}/
+  );
+  assert.match(
+    OIDC_WORKFLOW,
+    /expected_role_arn="arn:aws:iam::\$\{AWS_ACCOUNT_ID\}:role\/ProofToActPreflight"/
+  );
+  assert.doesNotMatch(OIDC_WORKFLOW, /role_prefix|role_resource|role_name=/);
+  assert.match(OIDC_WORKFLOW, /assume-role-with-web-identity/);
+  assert.match(OIDC_WORKFLOW, /--role-session-name release-proof/);
+  assert.match(OIDC_WORKFLOW, /--duration-seconds 900/);
+  assert.match(OIDC_WORKFLOW, /\^ASIA\[A-Z0-9\]\{16\}\$/);
+  assert.match(OIDC_WORKFLOW, /expected_caller_arn/);
+  assert.match(OIDC_WORKFLOW, /\.UserId == \$assumed_role_id/);
+  assert.match(OIDC_WORKFLOW, /\/usr\/local\/bin\/aws/);
+  assert.match(OIDC_WORKFLOW, /\/usr\/local\/aws-cli\/v2\//);
+  assert.match(OIDC_WORKFLOW, /aws_uid" == "0/);
+  assert.match(OIDC_WORKFLOW, /aws_mode_value & 0022/);
+  assert.match(OIDC_WORKFLOW, /"\$aws_cli" sts/);
+  assert.match(OIDC_WORKFLOW, /\.repository == "Flash-Bri\/prooftoact"/);
+  assert.match(OIDC_WORKFLOW, /\.workflow_ref ==/);
+  assert.match(OIDC_WORKFLOW, /\.event_name == "workflow_dispatch"/);
+  assert.match(OIDC_WORKFLOW, /chmod 600/);
+  assert.match(OIDC_WORKFLOW, /--symmetric/);
+  assert.match(OIDC_WORKFLOW, /--cipher-algo AES256/);
+  assert.match(OIDC_WORKFLOW, /retention-days: 1/);
+
+  const actionPins = [
+    ...OIDC_WORKFLOW.matchAll(
+      /^\s*uses:\s*(\S+)(?:\s+#.*)?$/gmu
+    )
+  ].map((match) => match[1]);
+  assert.deepEqual(actionPins, [
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+  ]);
+  const awsServices = [
+    ...OIDC_WORKFLOW.matchAll(/"\$aws_cli"\s+([a-z0-9-]+)/gu)
+  ].map((match) => match[1]);
+  assert.deepEqual(awsServices, ["sts", "sts"]);
+  assert.doesNotMatch(OIDC_WORKFLOW, /^\s*aws\s+/gmu);
+  assert.doesNotMatch(OIDC_WORKFLOW, /\bset\s+-x\b/);
+  assert.doesNotMatch(OIDC_WORKFLOW, /\b(?:cat|tee)\b/);
+});
 
 test("direct AWS preflight rejects Node and endpoint injection before spawning", () => {
   for (const environment of [
@@ -31,10 +126,45 @@ test("direct AWS preflight rejects Node and endpoint injection before spawning",
   }
 });
 
+test("direct AWS preflight requires temporary assumed-role credentials", () => {
+  assert.doesNotThrow(() =>
+    assertAwsPreflightParentEnvironment(
+      expectedPreflightEnvironment()
+    )
+  );
+  assert.throws(
+    () =>
+      assertAwsPreflightParentEnvironment(
+        expectedPreflightEnvironment({
+          AWS_SESSION_TOKEN: undefined
+        })
+      ),
+    /AWS_EVIDENCE_SESSION_TOKEN/
+  );
+  assert.throws(
+    () =>
+      assertAwsPreflightParentEnvironment(
+        expectedPreflightEnvironment({
+          AWS_ACCESS_KEY_ID: "AKIAEXAMPLE12345678"
+        })
+      ),
+    /AWS_EVIDENCE_TEMPORARY_ACCESS_KEY/
+  );
+  assert.throws(
+    () =>
+      assertAwsPreflightParentEnvironment(
+        expectedPreflightEnvironment({
+          AWS_ACCESS_KEY_ID: "ASIAEXAMPLE12345678"
+        })
+      ),
+    /AWS_EVIDENCE_TEMPORARY_ACCESS_KEY/
+  );
+});
+
 function expectedPreflightEnvironment(overrides = {}) {
   return {
     PATH: "/usr/bin",
-    AWS_ACCESS_KEY_ID: "ASIAEXAMPLE12345678",
+    AWS_ACCESS_KEY_ID: ["ASIAEXAMPLE", "123456789"].join(""),
     AWS_SECRET_ACCESS_KEY: "secret-example-value",
     AWS_SESSION_TOKEN: "session-example-value",
     AWS_EVIDENCE_EXPECTED_ACCOUNT_ID: ACCOUNT_ID,
@@ -48,6 +178,312 @@ function expectedPreflightEnvironment(overrides = {}) {
     ...overrides
   };
 }
+
+test("standalone preflight replaces caller PATH with a platform allowlist", () => {
+  assert.equal(
+    controlledAwsCliPath({ platform: "darwin", delimiter: ":" }),
+    "/opt/homebrew/bin:/usr/bin:/bin"
+  );
+  assert.equal(
+    controlledAwsCliPath({ platform: "linux", delimiter: ":" }),
+    "/usr/local/bin:/usr/bin:/bin"
+  );
+  assert.equal(
+    controlledGitPath({ platform: "darwin", delimiter: ":" }),
+    "/usr/bin:/bin"
+  );
+  const isolated = awsPreflightAwsEnvironment(
+    expectedPreflightEnvironment({ PATH: "/tmp/untrusted-bin" }),
+    { platform: "darwin", delimiter: ":" }
+  );
+  assert.equal(isolated.PATH, "/opt/homebrew/bin:/usr/bin:/bin");
+  assert.doesNotMatch(isolated.PATH, /untrusted-bin/);
+  assert.throws(
+    () => controlledAwsCliPath({ platform: "win32" }),
+    /AWS_CLI_UNSUPPORTED_PLATFORM/
+  );
+  assert.throws(
+    () => controlledAwsCliPath({ delimiter: "::" }),
+    /AWS_CLI_PATH_DELIMITER/
+  );
+  assert.throws(
+    () => controlledGitPath({ platform: "win32" }),
+    /GIT_UNSUPPORTED_PLATFORM/
+  );
+});
+
+test("standalone preflight resolves only an owned immutable packaged AWS CLI", () => {
+  const fixtureRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "prooftoact-aws-cli-")
+  );
+  try {
+    const candidateDirectory = path.join(fixtureRoot, "bin");
+    const trustedRoot = path.join(fixtureRoot, "trusted-aws-cli");
+    const resolvedExecutable = path.join(
+      trustedRoot,
+      "2.36.16",
+      "aws"
+    );
+    fs.mkdirSync(candidateDirectory, { recursive: true });
+    fs.mkdirSync(path.dirname(resolvedExecutable), {
+      recursive: true
+    });
+    fs.writeFileSync(resolvedExecutable, "#!/bin/sh\nexit 0\n", {
+      mode: 0o700
+    });
+    const candidate = path.join(candidateDirectory, "aws");
+    fs.symlinkSync(resolvedExecutable, candidate);
+
+    assert.equal(
+      trustedAwsCliExecutable({
+        platform: "darwin",
+        candidatePaths: [candidate],
+        packageRoots: [trustedRoot]
+      }),
+      fs.realpathSync(resolvedExecutable)
+    );
+
+    const untrustedExecutable = path.join(
+      fixtureRoot,
+      "untrusted",
+      "aws"
+    );
+    fs.mkdirSync(path.dirname(untrustedExecutable), {
+      recursive: true
+    });
+    fs.writeFileSync(untrustedExecutable, "#!/bin/sh\nexit 0\n", {
+      mode: 0o700
+    });
+    assert.throws(
+      () =>
+        trustedAwsCliExecutable({
+          platform: "darwin",
+          candidatePaths: [untrustedExecutable],
+          packageRoots: [trustedRoot]
+        }),
+      /AWS_CLI_TRUSTED_EXECUTABLE/
+    );
+
+    const directWrapper = path.join(candidateDirectory, "direct", "aws");
+    fs.mkdirSync(path.dirname(directWrapper), { recursive: true });
+    fs.writeFileSync(directWrapper, "#!/bin/sh\nexit 0\n", {
+      mode: 0o700
+    });
+    assert.throws(
+      () =>
+        trustedAwsCliExecutable({
+          platform: "darwin",
+          candidatePaths: [directWrapper],
+          packageRoots: [path.dirname(directWrapper)]
+        }),
+      /AWS_CLI_TRUSTED_EXECUTABLE/
+    );
+
+    fs.chmodSync(resolvedExecutable, 0o720);
+    assert.throws(
+      () =>
+        trustedAwsCliExecutable({
+          platform: "darwin",
+          candidatePaths: [candidate],
+          packageRoots: [trustedRoot]
+        }),
+      /AWS_CLI_TRUSTED_EXECUTABLE/
+    );
+
+    fs.chmodSync(resolvedExecutable, 0o700);
+    assert.throws(
+      () =>
+        trustedAwsCliExecutable({
+          platform: "darwin",
+          candidatePaths: [candidate],
+          packageRoots: [trustedRoot],
+          expectedOwnerUid: process.getuid() + 1
+        }),
+      /AWS_CLI_TRUSTED_EXECUTABLE/
+    );
+
+    fs.chmodSync(resolvedExecutable, 0o600);
+    assert.throws(
+      () =>
+        trustedAwsCliExecutable({
+          platform: "darwin",
+          candidatePaths: [candidate],
+          packageRoots: [trustedRoot]
+        }),
+      /AWS_CLI_TRUSTED_EXECUTABLE/
+    );
+  } finally {
+    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+  }
+});
+
+test("standalone preflight ignores caller Git PATH and configuration", () => {
+  const fixtureRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "prooftoact-git-wrapper-")
+  );
+  try {
+    const marker = path.join(fixtureRoot, "wrapper-ran");
+    const wrapper = path.join(fixtureRoot, "git");
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nprintf used >${JSON.stringify(marker)}\nprintf '%040d\\n' 0\n`,
+      { mode: 0o700 }
+    );
+    const sourceEnvironment = {
+      PATH: fixtureRoot,
+      GIT_CONFIG_GLOBAL: path.join(fixtureRoot, "malicious.gitconfig"),
+      GIT_CONFIG_NOSYSTEM: "0",
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "status.showUntrackedFiles",
+      GIT_CONFIG_VALUE_0: "no",
+      GIT_DIR: fixtureRoot,
+      GIT_INDEX_FILE: path.join(fixtureRoot, "index"),
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: path.join(
+        fixtureRoot,
+        "objects"
+      ),
+      GIT_REPLACE_REF_BASE: "refs/hostile/replace"
+    };
+    const isolated = gitPreflightEnvironment(sourceEnvironment, {
+      platform: "darwin",
+      delimiter: ":"
+    });
+    assert.equal(isolated.PATH, "/usr/bin:/bin");
+    assert.equal(isolated.GIT_CONFIG_GLOBAL, "/dev/null");
+    assert.equal(isolated.GIT_CONFIG_NOSYSTEM, "1");
+    assert.equal(isolated.GIT_CONFIG_COUNT, undefined);
+    assert.equal(isolated.GIT_DIR, undefined);
+    assert.equal(isolated.GIT_INDEX_FILE, undefined);
+    assert.equal(isolated.GIT_ALTERNATE_OBJECT_DIRECTORIES, undefined);
+    assert.equal(isolated.GIT_REPLACE_REF_BASE, undefined);
+    assert.equal(isolated.GIT_ATTR_NOSYSTEM, "1");
+    assert.equal(isolated.GIT_NO_LAZY_FETCH, "1");
+    assert.equal(isolated.GIT_NO_REPLACE_OBJECTS, "1");
+
+    const actual = trustedGitText(
+      "git",
+      ["rev-parse", "HEAD"],
+      "GIT_SOURCE_COMMIT",
+      { sourceEnvironment }
+    );
+    assert.match(actual, /^[0-9a-f]{40}$/);
+    assert.equal(fs.existsSync(marker), false);
+    assert.equal(trustedGitExecutable(), "/usr/bin/git");
+    const gitMetadata = fs.statSync(trustedGitExecutable());
+    assert.equal(gitMetadata.uid, 0);
+    assert.equal((gitMetadata.mode & 0o022), 0);
+    assert.notEqual((gitMetadata.mode & 0o111), 0);
+    assert.throws(
+      () =>
+        trustedGitText(
+          "git",
+          ["config", "--list"],
+          "GIT_UNREVIEWED",
+          { sourceEnvironment }
+        ),
+      /GIT_COMMAND_NOT_ALLOWED/
+    );
+  } finally {
+    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+  }
+});
+
+test("standalone preflight binds an explicit exact Git checkout", () => {
+  const requests = [];
+  const rootDir = path.resolve("/tmp/prooftoact-preflight-fixture");
+  const checkout = trustedGitCheckout({
+    rootDir,
+    verifyRepositoryLayout: () => ({ rootDir }),
+    readCommandText(_command, args) {
+      requests.push(args);
+      if (args.join(" ") === "rev-parse HEAD") {
+        return "a".repeat(40);
+      }
+      if (args.join(" ") === "rev-parse HEAD^{tree}") {
+        return "b".repeat(40);
+      }
+      if (
+        args.join(" ") ===
+        "status --porcelain=v1 --untracked-files=all"
+      ) {
+        return "";
+      }
+      throw new Error("UNEXPECTED_TEST_COMMAND");
+    },
+    verifyCheckout(value) {
+      assert.deepEqual(value, {
+        rootDir,
+        sourceCommit: "a".repeat(40),
+        treeDigest: "b".repeat(40)
+      });
+      return value;
+    }
+  });
+  assert.deepEqual(checkout, {
+    sourceCommit: "a".repeat(40),
+    treeDigest: "b".repeat(40),
+    workingTreeClean: true
+  });
+  assert.deepEqual(requests, [
+    ["rev-parse", "HEAD"],
+    ["rev-parse", "HEAD^{tree}"],
+    ["status", "--porcelain=v1", "--untracked-files=all"]
+  ]);
+});
+
+test("trusted Git rejects unapproved paths, owners, and writable modes", () => {
+  const fixtureRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "prooftoact-trusted-git-")
+  );
+  try {
+    const candidate = path.join(fixtureRoot, "git");
+    fs.writeFileSync(candidate, "#!/bin/sh\nexit 0\n", {
+      mode: 0o700
+    });
+    assert.equal(
+      trustedGitExecutable({
+        platform: "darwin",
+        candidatePaths: [candidate],
+        resolvedPaths: [candidate],
+        expectedOwnerUid: process.getuid()
+      }),
+      candidate
+    );
+    assert.throws(
+      () =>
+        trustedGitExecutable({
+          platform: "darwin",
+          candidatePaths: [candidate],
+          resolvedPaths: [path.join(fixtureRoot, "other", "git")],
+          expectedOwnerUid: process.getuid()
+        }),
+      /GIT_TRUSTED_EXECUTABLE/
+    );
+    assert.throws(
+      () =>
+        trustedGitExecutable({
+          platform: "darwin",
+          candidatePaths: [candidate],
+          resolvedPaths: [candidate],
+          expectedOwnerUid: process.getuid() + 1
+        }),
+      /GIT_TRUSTED_EXECUTABLE/
+    );
+    fs.chmodSync(candidate, 0o722);
+    assert.throws(
+      () =>
+        trustedGitExecutable({
+          platform: "darwin",
+          candidatePaths: [candidate],
+          resolvedPaths: [candidate],
+          expectedOwnerUid: process.getuid()
+        }),
+      /GIT_TRUSTED_EXECUTABLE/
+    );
+  } finally {
+    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+  }
+});
 
 const PREFLIGHT_BINDING_CONTEXT = Object.freeze({
   purpose: "gate2-read-only-preflight",
@@ -79,28 +515,74 @@ test("AWS preflight validates a self-consistent identity expectation before STS"
         }),
         PREFLIGHT_BINDING_CONTEXT
       ),
-    /AWS_EVIDENCE_PRINCIPAL_ACCOUNT/
+    /AWS_PREFLIGHT_EXPECTED_ROLE/
   );
+
+  for (const [overrides, expectedCode] of [
+    [
+      {
+        AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN:
+          `arn:aws:iam::${ACCOUNT_ID}:role/OtherReadOnlyRole`,
+        AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN:
+          `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+          "OtherReadOnlyRole/release-proof"
+      },
+      "AWS_PREFLIGHT_EXPECTED_ROLE"
+    ],
+    [
+      {
+        AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN:
+          `arn:aws:iam::${ACCOUNT_ID}:role/team/ProofToActPreflight`
+      },
+      "AWS_PREFLIGHT_EXPECTED_ROLE"
+    ],
+    [
+      {
+        AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN:
+          `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+          "ProofToActPreflight/other-session",
+        AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
+          "AROAPROOFTOACTROLE1:other-session"
+      },
+      "AWS_PREFLIGHT_EXPECTED_CALLER_ARN"
+    ],
+    [
+      {
+        AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
+          "AROAPROOFTOACTROLE1:other-session"
+      },
+      "AWS_PREFLIGHT_EXPECTED_CALLER_USER_ID"
+    ]
+  ]) {
+    assert.throws(
+      () =>
+        awsPreflightIdentityExpectation(
+          expectedPreflightEnvironment(overrides),
+          PREFLIGHT_BINDING_CONTEXT
+        ),
+      new RegExp(expectedCode)
+    );
+  }
 });
 
-function exactCheckoutCommandText(_command, args) {
-  const request = args.join(" ");
-  if (request === "rev-parse HEAD") {
-    return "a".repeat(40);
-  }
-  if (request === "rev-parse HEAD^{tree}") {
-    return "b".repeat(40);
-  }
-  if (request === "status --short") {
-    return "";
-  }
-  throw new Error("UNEXPECTED_TEST_COMMAND");
+function exactCheckout() {
+  return {
+    sourceCommit: "a".repeat(40),
+    treeDigest: "b".repeat(40),
+    workingTreeClean: true
+  };
 }
 
-test("AWS preflight rejects malformed IAM user expectations before STS", () => {
+test("AWS preflight rejects every non-lane identity expectation before STS", () => {
   const validUserArn =
     `arn:aws:iam::${ACCOUNT_ID}:user/prooftoact-preflight`;
   for (const overrides of [
+    {
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN: validUserArn,
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN: validUserArn,
+      AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
+        "AIDAPROOFTOACT001"
+    },
     {
       AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN:
         `arn:aws:iam::${ACCOUNT_ID}:user/release operator`,
@@ -121,13 +603,13 @@ test("AWS preflight rejects malformed IAM user expectations before STS", () => {
       () =>
         collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
           environment: expectedPreflightEnvironment(overrides),
-          readCommandText: exactCheckoutCommandText,
+          readGitCheckout: exactCheckout,
           readAwsJson() {
             awsCallCount += 1;
             throw new Error("AWS_CALL_MUST_NOT_OCCUR");
           }
         }),
-      /AWS_EVIDENCE_(?:EXPECTED_PRINCIPAL|CALLER_USER_ID)/
+      /(?:AWS_EVIDENCE_(?:EXPECTED_PRINCIPAL|CALLER_USER_ID)|AWS_PREFLIGHT_EXPECTED_(?:ROLE|CALLER_ARN|CALLER_USER_ID))/
     );
     assert.equal(awsCallCount, 0);
   }
@@ -152,7 +634,7 @@ test("AWS preflight stops after STS when the caller misses its expectation", () 
     () =>
       collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
         environment: expectedPreflightEnvironment(),
-        readCommandText: exactCheckoutCommandText,
+        readGitCheckout: exactCheckout,
         readAwsJson
       }),
     /AWS_EVIDENCE_CALLER_ACCOUNT/
@@ -192,14 +674,17 @@ function validSnapshot() {
     region: "us-east-1",
     expectedAccountId: ACCOUNT_ID,
     expectedPrincipalArn:
-      `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
+      `arn:aws:iam::${ACCOUNT_ID}:role/ProofToActPreflight`,
     expectedCallerArn:
-      `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
-    expectedCallerUserId: "AIDATIDEPROOF001",
+      `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+      "ProofToActPreflight/release-proof",
+    expectedCallerUserId: "AROAPROOFTOACTROLE1:release-proof",
     callerIdentity: {
       Account: ACCOUNT_ID,
-      Arn: `arn:aws:iam::${ACCOUNT_ID}:user/tideproof-deployer`,
-      UserId: "AIDATIDEPROOF001"
+      Arn:
+        `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+        "ProofToActPreflight/release-proof",
+      UserId: "AROAPROOFTOACTROLE1:release-proof"
     },
     bootstrapStackName: BOOTSTRAP_STACK,
     bootstrapStack: {
@@ -353,7 +838,10 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
     receipt.controls.callerBinding.callerIdentityDigest,
     receipt.controls.callerBinding.expectedIdentityDigest
   );
-  assert.equal(receipt.controls.callerBinding.principalType, "iam-user");
+  assert.equal(
+    receipt.controls.callerBinding.principalType,
+    "assumed-role"
+  );
   assert.equal(receipt.controls.bedrock.catalogStatus, "ACTIVE");
   assert.equal(receipt.controls.artifactBucket.tlsOnlyPolicy, true);
   assert.equal(receipt.controls.budget.scope, "ACCOUNT_WIDE");
@@ -397,7 +885,54 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   assert.doesNotMatch(serialized, new RegExp(ACCOUNT_ID));
   assert.doesNotMatch(serialized, new RegExp(BUCKET_NAME));
   assert.doesNotMatch(serialized, /private@example\.invalid/);
-  assert.doesNotMatch(serialized, /tideproof-deployer/);
+  assert.doesNotMatch(serialized, /ProofToActPreflight/);
+});
+
+test("AWS Gate Two preflight rejects an IAM-user receipt", () => {
+  const snapshot = validSnapshot();
+  const userArn =
+    `arn:aws:iam::${ACCOUNT_ID}:user/prooftoact-preflight`;
+  snapshot.expectedPrincipalArn = userArn;
+  snapshot.expectedCallerArn = userArn;
+  snapshot.expectedCallerUserId = "AIDAPROOFTOACT001";
+  snapshot.callerIdentity = {
+    Account: ACCOUNT_ID,
+    Arn: userArn,
+    UserId: "AIDAPROOFTOACT001"
+  };
+  assert.throws(
+    () => validateAwsGate2Preflight(snapshot),
+    /AWS_PREFLIGHT_EXPECTED_ROLE/
+  );
+});
+
+test("AWS Gate Two preflight rejects a different assumed-role lane", () => {
+  for (const mutate of [
+    (snapshot) => {
+      snapshot.expectedPrincipalArn =
+        `arn:aws:iam::${ACCOUNT_ID}:role/OtherReadOnlyRole`;
+      snapshot.expectedCallerArn =
+        `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+        "OtherReadOnlyRole/release-proof";
+      snapshot.callerIdentity.Arn = snapshot.expectedCallerArn;
+    },
+    (snapshot) => {
+      snapshot.expectedCallerArn =
+        `arn:aws:sts::${ACCOUNT_ID}:assumed-role/` +
+        "ProofToActPreflight/other-session";
+      snapshot.expectedCallerUserId =
+        "AROAPROOFTOACTROLE1:other-session";
+      snapshot.callerIdentity.Arn = snapshot.expectedCallerArn;
+      snapshot.callerIdentity.UserId = snapshot.expectedCallerUserId;
+    }
+  ]) {
+    const snapshot = validSnapshot();
+    mutate(snapshot);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      /AWS_PREFLIGHT_EXPECTED_(?:ROLE|CALLER_ARN)/
+    );
+  }
 });
 
 test("AWS Gate Two preflight requests modern filter visibility", () => {
@@ -427,6 +962,29 @@ test("AWS Gate Two preflight binds Cost Explorer through today", () => {
       periodStart: "2026-07-01",
       periodEndExclusive: "2026-09-01"
     }
+  );
+  assert.deepEqual(
+    awsCostExplorerArguments({
+      periodStart: "2026-07-01",
+      periodEndExclusive: "2026-09-01"
+    }),
+    [
+      "--time-period",
+      "Start=2026-07-01,End=2026-09-01",
+      "--granularity",
+      "MONTHLY",
+      "--metrics",
+      "UnblendedCost",
+      "--no-paginate"
+    ]
+  );
+  assert.equal(
+    AWS_GATE2_PREFLIGHT_DEFAULTS.maxCostExplorerRequests,
+    1
+  );
+  assert.equal(
+    AWS_GATE2_PREFLIGHT_DEFAULTS.approvedPreflightMeteredSpendCapUsd,
+    0.02
   );
 });
 
@@ -594,6 +1152,17 @@ test("AWS Gate Two preflight binds the Cost Explorer response period", () => {
     () => validateAwsGate2Preflight(snapshot),
     /CURRENT_COST_ROW_PERIOD/
   );
+});
+
+test("AWS Gate Two preflight rejects every Cost Explorer pagination token", () => {
+  for (const token of ["next-page", ""]) {
+    const snapshot = validSnapshot();
+    snapshot.currentCost.response.NextPageToken = token;
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      /CURRENT_COST_NEXT_PAGE_TOKEN/
+    );
+  }
 });
 
 test("AWS Gate Two preflight totals every month in the project window", () => {

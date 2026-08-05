@@ -22,6 +22,18 @@ const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
 ]);
 
 const EXPECTED_SURFACES = Object.freeze({
+  "actions-checkout-normalizer": Object.freeze({
+    path: "scripts/normalize-actions-checkout.js",
+    role: "GITHUB_ACTIONS_EXACT_CHECKOUT_NORMALIZATION"
+  }),
+  "actions-checkout-normalizer-tests": Object.freeze({
+    path: "test/release-rights.test.js",
+    role: "GITHUB_ACTIONS_CHECKOUT_NORMALIZATION_VERIFICATION"
+  }),
+  "actions-ci-workflow": Object.freeze({
+    path: ".github/workflows/ci.yml",
+    role: "GITHUB_ACTIONS_RELEASE_VERIFICATION_WORKFLOW"
+  }),
   "admissible-vector-retrieval": Object.freeze({
     path: "src/cloud/admissible-vector-retrieval.js",
     role: "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME"
@@ -102,6 +114,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/aws-evidence-identity.test.js",
     role: "AWS_EVIDENCE_IDENTITY_VERIFICATION"
   }),
+  "aws-oidc-identity-bootstrap": Object.freeze({
+    path: ".github/workflows/aws-oidc-identity-bootstrap.yml",
+    role: "MANUAL_SHORT_LIVED_AWS_IDENTITY_BOOTSTRAP"
+  }),
   "aws-provider-bundle-entry": Object.freeze({
     path: "scripts/lib/aws-provider-bundle-entry.js",
     role: "AWS_ATTESTATION_PROVIDER_BUNDLE_ENTRY"
@@ -126,6 +142,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate2-aws-preflight.js",
     role: "READ_ONLY_AWS_PREFLIGHT"
   }),
+  "aws-preflight-validator": Object.freeze({
+    path: "src/cloud/aws-gate2-preflight.js",
+    role: "READ_ONLY_AWS_PREFLIGHT_VALIDATOR"
+  }),
   "aws-preflight-tests": Object.freeze({
     path: "test/aws-gate2-preflight.test.js",
     role: "READ_ONLY_AWS_PREFLIGHT_VERIFICATION"
@@ -133,6 +153,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "aws-readiness": Object.freeze({
     path: "scripts/gate2-aws-readiness.js",
     role: "EXACT_CHECKOUT_READINESS"
+  }),
+  "aws-readiness-tests": Object.freeze({
+    path: "test/aws-gate2-readiness.test.js",
+    role: "EXACT_CHECKOUT_READINESS_VERIFICATION"
   }),
   "aws-security-tests": Object.freeze({
     path: "test/aws-gate2.test.js",
@@ -600,6 +624,41 @@ const REQUIRED_DENY_ACTIONS = Object.freeze({
 });
 
 const SOURCE_MARKERS = Object.freeze({
+  "actions-checkout-normalizer": Object.freeze([
+    "const OFFICIAL_REPOSITORY_ID = \"1317716765\"",
+    "GIT_OPTIONAL_LOCKS: \"0\"",
+    "environment.GITHUB_JOB === \"verify\"",
+    "environment.GITHUB_WORKFLOW_REF === expectedWorkflowRef",
+    "fs.constants.O_NOFOLLOW",
+    "descriptorStat.size === EXPECTED_WORKTREE_CONFIG_BYTES.length",
+    "[0o600, 0o644].includes(descriptorStat.mode & 0o7777)",
+    "process.geteuid()",
+    "process.getegid()",
+    "allowInactiveActionsWorktreeConfig",
+    "sameSnapshot(firstSnapshot, unlinkHandle.snapshot)",
+    "decisionState = checkoutState(context, permissiveLayout)",
+    "sameRepositoryOwnership(ownershipBefore, decisionOwnership)",
+    "fs.fstatSync(unlinkHandle.descriptor).nlink === 0",
+    "assertExactGitRepositoryLayout({ rootDir: context.rootDir })",
+    "PUBLIC_DIAGNOSTIC_CODES.includes(message)"
+  ]),
+  "actions-checkout-normalizer-tests": Object.freeze([
+    "Actions PR normalization removes only exact inert residue before strict rights verification",
+    "Actions main-push normalization is a strict no-op without residue",
+    "Actions normalization rejects hostile residue without changing its path identity",
+    "Actions normalization rejects wrong context and pathname replacement before unlink",
+    "Actions normalization preserves residue when pre-unlink checkout state drifts",
+    "CI orders one fail-closed normalizer before install and every verifier",
+    "scripts/normalize-actions-checkout.js"
+  ]),
+  "actions-ci-workflow": Object.freeze([
+    "name: Normalize exact GitHub Actions checkout",
+    "GIT_OPTIONAL_LOCKS: \"0\"",
+    "NODE_OPTIONS: \"\"",
+    "run: node scripts/normalize-actions-checkout.js",
+    "name: Install locked dependencies",
+    "name: Verify proof manifest"
+  ]),
   "admissible-vector-retrieval": Object.freeze([
     "connectionStringForDatabase(",
     "\"tideproof\"",
@@ -634,8 +693,11 @@ const SOURCE_MARKERS = Object.freeze({
     "ADMISSIBLE_VECTOR_WORKTREE_DIRTY",
     "ADMISSIBLE_VECTOR_GIT_REPLACEMENT_REJECTED",
     "ADMISSIBLE_VECTOR_GIT_INDEX_FLAGS_REJECTED",
-    "GIT_NO_REPLACE_OBJECTS",
-    "core.fsmonitor=false",
+    "trustedGitExecutable()",
+    "...gitInvariantArguments()",
+    "gitEnvironment(",
+    "assertExactGitRepositoryLayout",
+    "--no-recurse-submodules",
     "refs/heads/main:refs/remotes/origin/main",
     "TIDEPROOF_AUDITOR_DATABASE_URL",
     "TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC",
@@ -800,8 +862,12 @@ const SOURCE_MARKERS = Object.freeze({
     "error.$metadata.attempts === 1"
   ]),
   "aws-authority-race": Object.freeze([
-    "GIT_NO_REPLACE_OBJECTS: \"1\"",
-    "objects/info/alternates",
+    "trustedGitExecutable()",
+    "...gitInvariantArguments()",
+    "gitEnvironment(",
+    "assertExactGitRepositoryLayout",
+    "assertCleanExactGitCheckout",
+    "--no-recurse-submodules",
     "DescribeStackResourceCommand",
     "receipt.treeDigest !== checkout.treeDigest",
     "runId: options.runId",
@@ -838,7 +904,10 @@ const SOURCE_MARKERS = Object.freeze({
     "must never be updated",
     "Any wrong-run, cross-DVI,",
     "sequential, ambiguous, replayed, expanded, stale, extra, or unresolved",
-    "result is not evidence."
+    "result is not evidence.",
+    "Release Git children inherited caller selection and repository hooks",
+    "reference-transaction",
+    "exactly two standalone official"
   ]),
   "aws-deployment-attestation": Object.freeze([
     "tideproof.gate2.aws-deployment-expectation.v4",
@@ -996,8 +1065,35 @@ const SOURCE_MARKERS = Object.freeze({
     "caller binding supports an exact IAM user for preflight",
     "AIDATIDEPROOF001"
   ]),
+  "aws-oidc-identity-bootstrap": Object.freeze([
+    "workflow_dispatch:",
+    "id-token: write",
+    "environment: aws-preflight",
+    "ACTIONS_ID_TOKEN_REQUEST_URL",
+    "AWS_APPROVED_ACCOUNT_ID_SHA256",
+    "repo:Flash-Bri/prooftoact:environment:aws-preflight",
+    "refs/heads/main",
+    "role/ProofToActPreflight",
+    "/usr/local/aws-cli/v2/",
+    "aws_mode_value & 0022",
+    "assume-role-with-web-identity",
+    "--role-session-name release-proof",
+    "--duration-seconds 900",
+    "^ASIA[A-Z0-9]{16}$",
+    ".UserId == $assumed_role_id",
+    "--symmetric",
+    "retention-days: 1",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+  ]),
   "aws-preflight": Object.freeze([
     "awsPreflightIdentityExpectation(",
+    "trustedAwsCliExecutable(",
+    "trustedGitExecutable(",
+    "trustedGitCheckout(",
+    "gitInvariantArguments()",
+    "--untracked-files=all",
+    "GIT_NO_REPLACE_OBJECTS: \"1\"",
+    "--no-paginate",
     "sts",
     "get-caller-identity",
     "validateAwsEvidenceCaller(callerIdentity",
@@ -1006,10 +1102,20 @@ const SOURCE_MARKERS = Object.freeze({
     "get-cost-and-usage",
     "get-foundation-model"
   ]),
+  "aws-preflight-validator": Object.freeze([
+    "validateAwsGate2PreflightIdentityExpectation(",
+    "ProofToActPreflight",
+    "release-proof",
+    "NextPageToken",
+    "MAX_COST_EXPLORER_REQUESTS = 1",
+    "APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD = 0.02"
+  ]),
   "aws-preflight-tests": Object.freeze([
-    "AWS preflight rejects malformed IAM user expectations before STS",
+    "AWS preflight rejects every non-lane identity expectation before STS",
     "AWS preflight stops after STS when the caller misses its expectation",
-    "awsCallCount"
+    "AWS Gate Two preflight rejects every Cost Explorer pagination token",
+    "standalone preflight ignores caller Git PATH and configuration",
+    "trusted Git rejects unapproved paths, owners, and writable modes"
   ]),
   "aws-readiness": Object.freeze([
     "LOCAL_ONLY_PASS",
@@ -1023,7 +1129,19 @@ const SOURCE_MARKERS = Object.freeze({
     "validateDependencySnapshot(",
     "templateReceipt(JSON.parse",
     "gitBlobId(inputBytes)",
-    "AWS_READINESS_EXACT_GIT_INPUT_DIGEST"
+    "AWS_READINESS_EXACT_GIT_INPUT_DIGEST",
+    "validateOfficialLocalGitConfiguration(",
+    "officialFetchArguments()",
+    "--readiness-fetched-official-main",
+    "READINESS_FETCH_BOUND_PASS",
+    "credential.helper=",
+    "http.sslVerify=true"
+  ]),
+  "aws-readiness-tests": Object.freeze([
+    "AWS readiness rejects repository-local provenance and transport overrides",
+    "AWS readiness fetches only the explicit official URL with sanitized transport",
+    "--readiness-fetched-official-main",
+    "verifyExactCheckout: fixtureExactCheckout(current.projectRoot)"
   ]),
   "aws-security-tests": Object.freeze([
     "Gate Two template invokes numeric versions and keeps monitored aliases",
@@ -1177,9 +1295,18 @@ const SOURCE_MARKERS = Object.freeze({
     "reconciliation_started"
   ]),
   "exact-git-source": Object.freeze([
+    "GIT_NO_LAZY_FETCH: \"1\"",
     "GIT_NO_REPLACE_OBJECTS: \"1\"",
+    "assertSafeLocalGitConfiguration(",
+    "EXACT_GIT_SOURCE_PROMISOR",
+    "assertCompleteLocalObjectClosure({",
+    "--missing=print",
+    "--batch-check=%(objectname) %(objecttype) %(objectsize)",
+    "fsck\", \"--strict\", \"--no-dangling",
     "rev-parse\", \"--is-shallow-repository",
-    "objects/info/alternates",
+    "assertExactGitRepositoryLayout({",
+    "rev-parse\", \"--absolute-git-dir",
+    "for-each-ref\", \"--format=%(refname)\", \"refs/replace/",
     "ls-tree\", \"-z\", sourceCommit",
     "cat-file\", \"blob\", match[1]",
     "tideproof-exact-git-source",
@@ -1200,6 +1327,10 @@ const SOURCE_MARKERS = Object.freeze({
     "exact Git bundling rejects every non-dependency path escape",
     "exact build Git processes reject ambient repository redirection",
     "exact checkout validation rejects hidden index mutations",
+    "exact checkout rejects skip-worktree and hidden untracked files",
+    "exact checkout rejects linked worktrees and repository object indirection",
+    "exact build Git bundle materialization and import are network-free",
+    "exact source rejects partial-clone state without transport or hydration",
     "artifact paths reject symlinked parent components",
     "exact build rejects committed checkout transforms",
     "exact build selects one canonical npm CLI and sanitized install environment"
@@ -1240,7 +1371,13 @@ const SOURCE_MARKERS = Object.freeze({
     "GATE2_GENERATED_TEMPLATE_DRIFT_REQUIRES_COMMIT"
   ]),
   "gate2-exact-build-bootstrap": Object.freeze([
-    "worktree",
+    "createStandaloneExactCheckout({",
+    "bundle",
+    "list-heads",
+    "verify",
+    "fetch",
+    "--no-recurse-submodules",
+    "checkout",
     "--detach",
     "ci",
     "--ignore-scripts",
@@ -1248,10 +1385,13 @@ const SOURCE_MARKERS = Object.freeze({
     "TIDEPROOF_EXACT_BUILD_SOURCE_COMMIT",
     "TIDEPROOF_EXACT_BUILD_TREE_DIGEST",
     "EXACT_BUILD_POST_DIRTY_TREE",
+    "EXACT_BUILD_STANDALONE_ROOT",
+    "EXACT_BUILD_SOURCE_CHANGED",
+    "GIT_NO_LAZY_FETCH: \"1\"",
     "GIT_NO_REPLACE_OBJECTS: \"1\"",
     "trustedGitExecutable()",
     "trustedTemporaryRoot()",
-    "assertExactWorktreeBytes({"
+    "assertCleanExactGitCheckout({"
   ]),
   "immutable-deployment-attestation-ledger": Object.freeze([
     "SOURCE_CLOSED_PROVIDER_VALIDATION_PENDING",
@@ -1261,6 +1401,11 @@ const SOURCE_MARKERS = Object.freeze({
     "Preventive controls:",
     "Residual risk:",
     "It must not say that live AWS deployment identity",
+    "Accepted standalone exact-build finding",
+    "Accepted trusted Git execution finding",
+    "reference-transaction",
+    "exactly two explicit official-main fetches",
+    "network-free claim applies only to Git bundle materialization and import",
     "Accepted semantic-monitoring finding",
     "CloudWatch Embedded Metric Format",
     "alarm state transition"
@@ -1571,7 +1716,10 @@ const SOURCE_MARKERS = Object.freeze({
     "CURRENT SOURCE SECURITY PASS — LIVE AND PRIVATE REVIEW PENDING",
     "not a vulnerability-free claim",
     "numeric Lambda invocation targets",
-    "detached exact-commit build, exact-Git builder and bundle inputs",
+    "standalone closure-complete exact-commit build",
+    "suppress repository hooks including `reference-transaction`",
+    "Standalone provenance",
+    "network-free claim covers only Git bundle materialization and import",
     "administrator exclusion",
     "The template currently uses one API/stage/method-scoped `GET/*` Lambda permission",
     "Any unresolved security, privacy, cost, eligibility, or claim finding keeps release and submission blocked."
@@ -1615,6 +1763,11 @@ const SOURCE_MARKERS = Object.freeze({
 });
 
 const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
+  "aws-oidc-identity-bootstrap": Object.freeze([
+    "actions/checkout@",
+    "pull_request:",
+    "schedule:"
+  ]),
   "recovery-broker-runner": Object.freeze([
     "createSyntheticRecoverySigner",
     "PRIMARY_DATABASE_URL"
@@ -1629,6 +1782,11 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
 });
 
 const FORBIDDEN_SOURCE_PATTERNS = Object.freeze({
+  "gate2-exact-build-bootstrap": Object.freeze([
+    /["']worktree["']\s*,\s*["']add["']/u,
+    /["']clone["']\s*,/u,
+    /--(?:reference|shared|local|hardlinks)\b/u
+  ]),
   "recovery-broker": Object.freeze([
     /\bg1_resolve_recovery_source_receipt_v1\s*\(/u
   ])
