@@ -4057,6 +4057,12 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
+    DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(
+      UUID, UUID, UUID, UUID, STRING, UUID, STRING
+    )
+  `);
+
+  await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1(
       p_tenant_id UUID,
       p_run_id UUID,
@@ -4085,6 +4091,7 @@ async function createFunctions(client) {
       outcome STRING,
       reason STRING,
       evidence_digest STRING,
+      authority_evidence_binding_sha256 STRING,
       resource_id STRING,
       has_durable_intent BOOL,
       admissibility STRING,
@@ -4112,6 +4119,7 @@ async function createFunctions(client) {
         receipt.outcome,
         receipt.reason,
         receipt.evidence_digest,
+        proposal.authority_evidence_binding_sha256,
         receipt.resource_id,
         true,
         observed.admissibility,
@@ -4140,6 +4148,24 @@ async function createFunctions(client) {
        AND outbox.fencing_token = receipt.fencing_token
        AND outbox.effect_key = receipt.effect_key
        AND outbox.payload_digest = receipt.payload_digest
+      JOIN tp_ledger.g1_dvi_proposal_receipts AS proposal
+        ON proposal.tenant_id = receipt.tenant_id
+       AND proposal.proposal_digest = receipt.proposal_digest
+       AND proposal.logical_action_digest = receipt.logical_action_digest
+       AND proposal.authorization_epoch = receipt.authorization_epoch
+       AND proposal.logical_authority_key_sha256 =
+         receipt.logical_authority_key_sha256
+       AND proposal.authorization_binding_sha256 =
+         receipt.authorization_binding_sha256
+       AND proposal.run_id = receipt.run_id
+       AND proposal.incident_id = receipt.incident_id
+       AND proposal.resource_id = receipt.resource_id
+       AND proposal.agency = receipt.agency
+       AND proposal.policy_version = receipt.policy_version
+       AND proposal.selected_evidence_id = receipt.evidence_id
+       AND proposal.selected_evidence_digest = receipt.evidence_digest
+       AND proposal.payload = outbox.payload
+       AND proposal.payload_digest = receipt.payload_digest
       JOIN tp_private.g1_list_admissibility_internal_v1(
         receipt.tenant_id,
         receipt.incident_id,
@@ -4160,6 +4186,10 @@ async function createFunctions(client) {
         AND verification.outcome = 'verified'
         AND verification.public_key_digest IS NOT NULL
         AND receipt.evidence_digest = evidence.evidence_digest
+        AND encode(
+          sha256(proposal.payload_canonical::BYTES),
+          'hex'
+        ) = outbox.payload_digest
         AND observed.admissibility = 'admissible'
     $$
   `);

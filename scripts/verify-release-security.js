@@ -330,6 +330,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/recovery-store.js",
     role: "RECOVERY_STORE_RUNTIME"
   }),
+  "recovery-store-tests": Object.freeze({
+    path: "test/recovery-store.test.js",
+    role: "RECOVERY_STORE_BINDING_VERIFICATION"
+  }),
   "release-security-ledger": Object.freeze({
     path: "docs/RELEASE_SECURITY.md",
     role: "SECURITY_CONTROL_LEDGER"
@@ -1311,7 +1315,10 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_verified_evidence_v1",
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
+    "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(",
     "tp_api.g1_resolve_recovery_source_receipt_v1",
+    "proposal.authority_evidence_binding_sha256",
+    "proposal.selected_evidence_id = receipt.evidence_id",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1",
     "tp_recovery_source_user",
     "g1_recovery_publisher_trust_roots",
@@ -1429,6 +1436,8 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_MCP_RESULT_CARDINALITY_INVALID",
     "g1_resolve_recovery_audit_event_v1",
     "resolveCommittedRecoverySourceReceipt",
+    "RECOVERY_SOURCE_DVI_BINDING_INVALID",
+    "selected_evidence_binding_sha256",
     "resolveCommittedRecoveryAuditEvent",
     "assertRecoveryPublisherTrustRootWriteDenied",
     "RECOVERY_TRUST_ROOT_WRITE_PROBE_ROLLBACK_FAILED",
@@ -1446,6 +1455,8 @@ const SOURCE_MARKERS = Object.freeze({
   "recovery-broker-runner": Object.freeze([
     "RECOVERY_SOURCE_OPERATION_ID",
     "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256",
+    "RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256",
     "loadCommittedRecoveryPublisherSigner()",
     "signer.trustedPublisherKeys",
     "resolveCommittedRecoveryPublisherTrustRoot({",
@@ -1460,6 +1471,8 @@ const SOURCE_MARKERS = Object.freeze({
   "recovery-evidence-runner": Object.freeze([
     "RECOVERY_SOURCE_OPERATION_ID",
     "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256",
+    "RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256",
     "loadCommittedRecoveryPublisherSigner()",
     "signer.trustedPublisherKeys",
     "resolveCommittedRecoveryPublisherTrustRoot({",
@@ -1496,12 +1509,20 @@ const SOURCE_MARKERS = Object.freeze({
   "recovery-store": Object.freeze([
     "runtimeDatabaseConfig({",
     "bootstrapDatabaseConfig({",
+    "tideproof.highwater-recovery-binding.v3",
+    "authorityEvidenceBindingSha256",
+    "selectedEvidenceBindingSha256",
     "RECOVERY_AUTHORITY_INVARIANT_VIOLATION",
     "RECOVERY_SIGNATURE_INVALID",
     "mcp_private.recovery_bundles_v2",
     "databaseClientMustBeDiscarded(error)",
     "read_reconciled",
     "commitDefinitivelyAborted"
+  ]),
+  "recovery-store-tests": Object.freeze([
+    "cross-act source binding digest changes with every authority identity field",
+    "authorityEvidenceBindingSha256",
+    "selectedEvidenceBindingSha256"
   ]),
   "release-security-ledger": Object.freeze([
     "CURRENT SOURCE SECURITY PASS — LIVE AND PRIVATE REVIEW PENDING",

@@ -60,7 +60,7 @@
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
       "role": "EVIDENCE_BOUNDARY",
-      "sha256": "d073976a60a4c944632d4ba7b320eaf7db371cf9db2c59329480a7f4346ea7c9"
+      "sha256": "ddc47e4eaddb6e774fbdcb691db141bc59a5ce691051429eea93c784fcd64362"
     },
     {
       "id": "public-demo-runtime",

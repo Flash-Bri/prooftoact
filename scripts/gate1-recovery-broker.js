@@ -63,7 +63,13 @@ function exactSourceBinding() {
     evidenceId: requiredEnvironment("RECOVERY_SOURCE_EVIDENCE_ID"),
     resourceId: requiredEnvironment("RECOVERY_SOURCE_RESOURCE_ID"),
     operationId: requiredEnvironment("RECOVERY_SOURCE_OPERATION_ID"),
-    requestDigest: requiredEnvironment("RECOVERY_SOURCE_REQUEST_DIGEST")
+    requestDigest: requiredEnvironment("RECOVERY_SOURCE_REQUEST_DIGEST"),
+    authorityEvidenceBindingSha256: requiredEnvironment(
+      "RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256"
+    ),
+    selectedEvidenceBindingSha256: requiredEnvironment(
+      "RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256"
+    )
   };
 }
 
@@ -152,6 +158,10 @@ async function main() {
     authorizationEpoch: Number(receipt.authorization_epoch),
     logicalAuthorityKeySha256: receipt.logical_authority_key_sha256,
     authorizationBindingSha256: receipt.authorization_binding_sha256,
+    authorityEvidenceBindingSha256:
+      receipt.authority_evidence_binding_sha256,
+    selectedEvidenceBindingSha256:
+      receipt.selected_evidence_binding_sha256,
     outcome: receipt.outcome
   });
   const signer = loadCommittedRecoveryPublisherSigner();
@@ -426,6 +436,12 @@ async function main() {
         unauthorizedStatus: unauthorized.status,
         sourceDigest: recovered.sourceDigest,
         bundleDigest: recovered.bundleDigest,
+        dvi: {
+          authorityEvidenceBindingSha256:
+            receipt.authority_evidence_binding_sha256,
+          selectedEvidenceBindingSha256:
+            receipt.selected_evidence_binding_sha256
+        },
         auditInteractionId: recovered.auditInteractionId,
         preReadAuditId: recovered.preReadAuditId,
         terminalAuditId: recovered.auditId,
@@ -437,7 +453,7 @@ async function main() {
         requiresFreshAuthorization: recovered.requiresFreshAuthorization,
         operationalCapabilitiesReturned: false,
         claimBoundary:
-          "This proves a noninteractive, cluster-scoped Managed MCP read through a deterministic fixed query bound to the exact tenant, run, incident, evidence, resource, operation, request digest, outcome, and successor principal; signed context validation; context-only recovery; and a separate primary-cluster audit receipt. It does not transfer authority, satisfy the 100-drill batch, or prove a real-world external effect."
+          "This proves a noninteractive, cluster-scoped Managed MCP read through a deterministic fixed query bound to the exact tenant, run, incident, DVI proposal and selected-evidence digests, evidence, resource, operation, request digest, outcome, and successor principal; signed context validation; context-only recovery; and a separate primary-cluster audit receipt. It does not transfer authority, satisfy the 100-drill batch, prove provider execution, or prove a real-world external effect."
       },
       null,
       2

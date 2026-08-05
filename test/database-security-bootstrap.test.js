@@ -243,7 +243,9 @@ test("recovery evidence selects one exact upstream authority receipt", async () 
       "RECOVERY_SOURCE_EVIDENCE_ID",
       "RECOVERY_SOURCE_RESOURCE_ID",
       "RECOVERY_SOURCE_OPERATION_ID",
-      "RECOVERY_SOURCE_REQUEST_DIGEST"
+      "RECOVERY_SOURCE_REQUEST_DIGEST",
+      "RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256",
+      "RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256"
     ]) {
       assert.equal(source.includes(field), true, `${url.pathname}:${field}`);
     }
@@ -338,6 +340,46 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
       field
     );
   }
+  for (const field of [
+    "proposal_digest",
+    "logical_action_digest",
+    "authorization_epoch",
+    "logical_authority_key_sha256",
+    "authorization_binding_sha256",
+    "run_id",
+    "incident_id",
+    "resource_id",
+    "agency",
+    "policy_version"
+  ]) {
+    assert.match(
+      resolver,
+      new RegExp(`proposal\\.${field}\\s*=\\s*receipt\\.${field}`, "u"),
+      `proposal.${field}`
+    );
+  }
+  assert.match(
+    resolver,
+    /proposal\.selected_evidence_id\s*=\s*receipt\.evidence_id/u
+  );
+  assert.match(
+    resolver,
+    /proposal\.selected_evidence_digest\s*=\s*receipt\.evidence_digest/u
+  );
+  assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
+});
+
+test("recovery source resolver drops its prior return shape before upgrade", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const dropAt = source.search(
+    /DROP FUNCTION IF EXISTS tp_api\.g1_resolve_recovery_source_receipt_v1\(\s*UUID, UUID, UUID, UUID, STRING, UUID, STRING\s*\)/u
+  );
+  const createAt = source.indexOf(
+    "CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1("
+  );
+  assert.notEqual(dropAt, -1);
+  assert.notEqual(createAt, -1);
+  assert.equal(dropAt < createAt, true);
 });
 
 test("recovery storage enforces one row per exact broker lookup identity", async () => {
@@ -368,6 +410,8 @@ test("recovery operator contract enumerates every exact private input", async ()
     "RECOVERY_SOURCE_RESOURCE_ID",
     "RECOVERY_SOURCE_OPERATION_ID",
     "RECOVERY_SOURCE_REQUEST_DIGEST",
+    "RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256",
+    "RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256",
     "PRIMARY_CLUSTER_ID",
     "RECOVERY_CLUSTER_ID",
     "EXPECTED_PRIMARY_HOSTNAME",
@@ -386,6 +430,9 @@ test("recovery operator contract enumerates every exact private input", async ()
   }
   assert.match(source, /winner\.operationId/u);
   assert.match(source, /winner\.requestDigest/u);
+  assert.match(source, /race receipt `dvi\.authorityEvidenceBindingSha256`/u);
+  assert.match(source, /race receipt `dvi\.selectedEvidenceBindingSha256`/u);
+  assert.match(source, /The nine `RECOVERY_SOURCE_\*` values/u);
   assert.match(source, /all 18[\s\S]*managed base-table read probes/u);
   assert.match(source, /administrator URL/u);
 });

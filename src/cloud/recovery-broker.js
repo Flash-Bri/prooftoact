@@ -204,6 +204,14 @@ export async function resolveCommittedRecoverySourceReceipt({
     requestDigest: requireSha256(
       binding?.requestDigest,
       "binding.requestDigest"
+    ),
+    authorityEvidenceBindingSha256: requireSha256(
+      binding?.authorityEvidenceBindingSha256,
+      "binding.authorityEvidenceBindingSha256"
+    ),
+    selectedEvidenceBindingSha256: requireSha256(
+      binding?.selectedEvidenceBindingSha256,
+      "binding.selectedEvidenceBindingSha256"
     )
   });
   const client = primaryRuntimeClient({
@@ -260,12 +268,31 @@ export async function resolveCommittedRecoverySourceReceipt({
       ["logical_action_digest", row.logical_action_digest],
       ["logical_authority_key_sha256", row.logical_authority_key_sha256],
       ["authorization_binding_sha256", row.authorization_binding_sha256],
-      ["evidence_digest", row.evidence_digest]
+      ["evidence_digest", row.evidence_digest],
+      [
+        "authority_evidence_binding_sha256",
+        row.authority_evidence_binding_sha256
+      ]
     ]) {
       requireSha256(value, name);
     }
+    const selectedEvidenceBindingSha256 = sha256(
+      canonicalJson({
+        evidenceId: row.evidence_id,
+        evidenceDigest: row.evidence_digest
+      })
+    );
+    if (
+      row.authority_evidence_binding_sha256 !==
+        expected.authorityEvidenceBindingSha256 ||
+      selectedEvidenceBindingSha256 !==
+        expected.selectedEvidenceBindingSha256
+    ) {
+      throw new Error("RECOVERY_SOURCE_DVI_BINDING_INVALID");
+    }
     return Object.freeze({
       ...row,
+      selected_evidence_binding_sha256: selectedEvidenceBindingSha256,
       recorded_at: recordedAt.toISOString(),
       database_now: databaseNow.toISOString(),
       admittedCount: 1,
