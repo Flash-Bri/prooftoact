@@ -126,6 +126,22 @@ async function expectPrivilegeDenied(client, query, values = []) {
   return expectSqlState(client, query, values, "42501");
 }
 
+async function expectPrivilegeDeniedOrUndefined(client, query, values = []) {
+  try {
+    await client.query(query, values);
+  } catch (error) {
+    if (error.code === "42501" || error.code === "42883") {
+      return {
+        denied: true,
+        legacyObjectPresent: error.code === "42501",
+        sqlstate: error.code
+      };
+    }
+    throw error;
+  }
+  throw new Error("expected legacy resolver denial or absence");
+}
+
 async function main() {
   const adminConnectionString = requireEnvironment("DATABASE_URL");
   const passwords = Object.fromEntries(
@@ -784,10 +800,30 @@ async function main() {
           recoveryPublisherKeySetDigest
         ]
       );
+      const legacySourceResolverDeniedOrAbsent =
+        await expectPrivilegeDeniedOrUndefined(
+          client,
+          `
+            SELECT *
+            FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+              $1::UUID, $2::UUID, $3::UUID, $4::UUID,
+              $5, $6::UUID, $7
+            )
+          `,
+          [
+            authorityFixture.tenantId,
+            authorityFixture.runId,
+            authorityFixture.incidentId,
+            authorityFixture.evidenceId,
+            authorityFixture.resourceId,
+            normalizedCapabilityRequest.operationId,
+            normalizedCapabilityRequest.requestDigest
+          ]
+        );
       const resolved = await client.query(
         `
           SELECT *
-          FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+          FROM tp_api.g1_resolve_recovery_source_receipt_v2(
             $1::UUID, $2::UUID, $3::UUID, $4::UUID,
             $5, $6::UUID, $7
           )
@@ -814,6 +850,7 @@ async function main() {
         directRead,
         directTrustRootWrite,
         auditResolverDenied,
+        legacySourceResolverDeniedOrAbsent,
         operationId: resolved.rows[0].operation_id,
         databaseNow: resolved.rows[0].database_now
       };
@@ -837,7 +874,7 @@ async function main() {
         client,
         `
           SELECT *
-          FROM tp_api.g1_resolve_recovery_source_receipt_v1(
+          FROM tp_api.g1_resolve_recovery_source_receipt_v2(
             $1::UUID, $2::UUID, $3::UUID, $4::UUID,
             $5, $6::UUID, $7
           )

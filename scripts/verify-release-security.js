@@ -1315,8 +1315,13 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_verified_evidence_v1",
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
-    "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(",
-    "tp_api.g1_resolve_recovery_source_receipt_v1",
+    "tp_api.g1_resolve_recovery_source_receipt_v2",
+    "tideproof.primary-function-sql-batch.v1",
+    "PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED",
+    "primaryFunctionSqlBatchSha256(statements)",
+    "validatePrimaryFunctionSqlStatements(statements);",
+    "await emitPrimaryFunctionSql({",
+    "return executePrimaryFunctionSqlStatements(client, statements);",
     "proposal.authority_evidence_binding_sha256",
     "proposal.selected_evidence_id = receipt.evidence_id",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1",
@@ -1350,6 +1355,9 @@ const SOURCE_MARKERS = Object.freeze({
     "directTrustRootWrite",
     "recoverySource",
     "sourceResolverDenied",
+    "expectPrivilegeDeniedOrUndefined",
+    "g1_resolve_recovery_source_receipt_v1",
+    "g1_resolve_recovery_source_receipt_v2",
     "g1_resolve_recovery_publisher_trust_root_v1",
     "payloadSubstitutionOutcome",
     "proposalAliasOutcome",
@@ -1435,6 +1443,7 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_PRINCIPAL_BINDING_MISMATCH",
     "RECOVERY_MCP_RESULT_CARDINALITY_INVALID",
     "g1_resolve_recovery_audit_event_v1",
+    "g1_resolve_recovery_source_receipt_v2",
     "resolveCommittedRecoverySourceReceipt",
     "RECOVERY_SOURCE_DVI_BINDING_INVALID",
     "selected_evidence_binding_sha256",
@@ -1585,10 +1594,42 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
   ])
 });
 
+const FORBIDDEN_SOURCE_PATTERNS = Object.freeze({
+  "recovery-broker": Object.freeze([
+    /\bg1_resolve_recovery_source_receipt_v1\s*\(/u
+  ])
+});
+
 function assert(condition, code) {
   if (!condition) {
     throw new Error(code);
   }
+}
+
+function canonicalizeSqlGuardSource(source) {
+  assert(typeof source === "string", "RELEASE_SECURITY_PATTERN_SOURCE");
+  return source
+    .replace(/\/\*[\s\S]*?\*\//gu, " ")
+    .replace(/--[^\r\n]*/gu, " ")
+    .replace(/"((?:""|[^"])*)"/gu, (_, identifier) =>
+      identifier.replaceAll('""', '"'))
+    .replace(/['`]/gu, " ")
+    .toLowerCase()
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function assertNoForbiddenSourcePatterns(id, source) {
+  const patterns = FORBIDDEN_SOURCE_PATTERNS[id];
+  assert(Array.isArray(patterns), "RELEASE_SECURITY_PATTERN_SET");
+  const canonicalSource = canonicalizeSqlGuardSource(source);
+  for (const pattern of patterns) {
+    assert(
+      !pattern.test(canonicalSource),
+      `RELEASE_SECURITY_FORBIDDEN_PATTERN_${id.replaceAll("-", "_").toUpperCase()}`
+    );
+  }
+  return true;
 }
 
 function sha256(value) {
@@ -2263,6 +2304,10 @@ function assertSourceMarkers(sources) {
       );
     }
   }
+  for (const id of Object.keys(FORBIDDEN_SOURCE_PATTERNS)) {
+    const source = sources.get(id);
+    assertNoForbiddenSourcePatterns(id, source);
+  }
   return true;
 }
 
@@ -2437,9 +2482,12 @@ export const __test = Object.freeze({
   MANIFEST_SCHEMA,
   MANIFEST_STATUS,
   FORBIDDEN_SOURCE_MARKERS,
+  FORBIDDEN_SOURCE_PATTERNS,
   REQUIRED_DENY_ACTIONS,
   SOURCE_MARKERS,
+  assertNoForbiddenSourcePatterns,
   assertRuntimeContract,
   assertSourceMarkers,
-  assertTemplateContract
+  assertTemplateContract,
+  canonicalizeSqlGuardSource
 });

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
+import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
+
 const primaryUrl = new URL("../src/cloud/primary-security.js", import.meta.url);
 const authorityStoreUrl = new URL(
   "../src/cloud/authority-store.js",
@@ -254,7 +257,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
-    ["g1_resolve_recovery_source_receipt_v1", /session_user = 'tp_recovery_source_user'/u],
+    ["g1_resolve_recovery_source_receipt_v2", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user = 'tp_dispatch_user'/u]
   ]);
@@ -344,7 +347,7 @@ test("recovery publisher trust root is immutable and runner-readable only", asyn
   );
   assert.match(
     source,
-    /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
+    /tp_recovery_source_role:[\s\S]*g1_resolve_recovery_source_receipt_v2\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)/u
   );
   assert.match(source, /\["tp_recovery_source_role", "tp_recovery_source_user"\]/u);
 });
@@ -368,7 +371,7 @@ test("Gate One trust-root write probes use the shared rollback-bounded verifier"
 test("recovery source resolver binds the full receipt and outbox identity", async () => {
   const source = await readFile(primaryUrl, "utf8");
   const resolver = source.match(
-    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
   assert.ok(resolver);
   for (const field of [
@@ -420,17 +423,199 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
   assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
 });
 
-test("recovery source resolver drops its prior return shape before upgrade", async () => {
+test("recovery source resolver upgrades by version without destructive DDL", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  const dropAt = source.search(
-    /DROP FUNCTION IF EXISTS tp_api\.g1_resolve_recovery_source_receipt_v1\(\s*UUID, UUID, UUID, UUID, STRING, UUID, STRING\s*\)/u
+  assert.match(
+    source,
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
   );
-  const createAt = source.indexOf(
-    "CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1("
+
+  const recoveryBroker = await readFile(recoveryBrokerUrl, "utf8");
+  const gate1Security = await readFile(gate1SecurityUrl, "utf8");
+  assert.match(
+    recoveryBroker,
+    /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
   );
-  assert.notEqual(dropAt, -1);
-  assert.notEqual(createAt, -1);
-  assert.equal(dropAt < createAt, true);
+  assert.match(
+    gate1Security,
+    /expectPrivilegeDeniedOrUndefined[\s\S]*g1_resolve_recovery_source_receipt_v1\(/u
+  );
+  assert.match(
+    gate1Security,
+    /error\.code === "42501" \|\| error\.code === "42883"/u
+  );
+  assert.match(
+    gate1Security,
+    /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
+  );
+
+  assert.match(source, /PRIMARY_PREFLIGHT_POSTURE_SPEC/u);
+  assert.equal(
+    source.match(/postureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC/gu)?.length,
+    2
+  );
+  assert.match(
+    source,
+    /LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE[\s\S]*CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE/u
+  );
+});
+
+test("primary function SQL is digest-pinned before any database query", async () => {
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const receipt = primarySecurityContract.validatePrimaryFunctionSqlStatements(
+    statements
+  );
+  assert.deepEqual(receipt, {
+    schema: "tideproof.primary-function-sql-batch.v1",
+    statementCount: 37,
+    sha256: "fc499c40bfa6faaf5bbc93f5625e1e9739f20b73af09d71927875f476bce58a8"
+  });
+  assert.equal(
+    statements.filter((statement) =>
+      statement.includes("g1_resolve_recovery_source_receipt_v2")
+    ).length,
+    1
+  );
+  assert.equal(
+    statements.some((statement) =>
+      statement.includes("g1_resolve_recovery_source_receipt_v1")
+    ),
+    false
+  );
+
+  const executed = [];
+  const executedReceipt =
+    await primarySecurityContract.executePrimaryFunctionSqlStatements(
+      {
+        async query(statement) {
+          executed.push(statement);
+        }
+      },
+      statements
+    );
+  assert.deepEqual(executedReceipt, receipt);
+  assert.deepEqual(executed, statements);
+});
+
+test("emitted-SQL pin rejects JavaScript spelling evasions before execution", async () => {
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const resolverIndex = statements.findIndex((statement) =>
+    statement.includes("g1_resolve_recovery_source_receipt_v2")
+  );
+  assert.notEqual(resolverIndex, -1);
+  const computedName = `g1_resolve_recovery_source_receipt_${1}`;
+  const destructiveDdl = new Map([
+    [
+      "direct literal",
+      "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(UUID);"
+    ],
+    [
+      "concatenation",
+      "DROP " +
+        "FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v2(UUID);"
+    ],
+    [
+      "Unicode escaped whitespace",
+      "DROP\u0020FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(UUID);"
+    ],
+    [
+      "computed template name",
+      `DROP FUNCTION IF EXISTS tp_api.${computedName}(UUID);`
+    ],
+    [
+      "split identifier",
+      "DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_" +
+        "source_receipt_v2(UUID);"
+    ]
+  ]);
+
+  for (const [label, ddl] of destructiveDdl) {
+    const changed = [...statements];
+    changed[resolverIndex] = `${changed[resolverIndex]}\n${ddl}`;
+    const executed = [];
+    await assert.rejects(
+      primarySecurityContract.executePrimaryFunctionSqlStatements(
+        {
+          async query(statement) {
+            executed.push(statement);
+          }
+        },
+        changed
+      ),
+      /PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED/u,
+      label
+    );
+    assert.deepEqual(executed, [], label);
+  }
+});
+
+test("emitted-SQL pin ignores benign JavaScript source decoys", async () => {
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const maintainerComment = "A maintainer's comment is not emitted SQL.";
+  const sourceOnlyPattern = /DROP\s+FUNCTION/u;
+  const sourceOnlyDollarQuote =
+    "$$DROP FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1(UUID)$$";
+  assert.equal(sourceOnlyPattern.test(sourceOnlyDollarQuote), true);
+  assert.equal(maintainerComment.endsWith("SQL."), true);
+
+  const rebuiltFromFragments = statements.map((statement) =>
+    [...statement].join("")
+  );
+  assert.deepEqual(
+    primarySecurityContract.validatePrimaryFunctionSqlStatements(
+      rebuiltFromFragments
+    ),
+    primarySecurityContract.validatePrimaryFunctionSqlStatements(statements)
+  );
+});
+
+test("resolver upgrade preflight admits only the exact installed v1 capability", () => {
+  const legacySignature =
+    "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+  const currentSignature =
+    "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+  const finalPolicy =
+    primarySecurityContract.primaryPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.functions;
+  const preflightPolicy =
+    primarySecurityContract.primaryPreflightPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.functions;
+  assert.deepEqual(finalPolicy, [currentSignature]);
+  assert.deepEqual(preflightPolicy, [legacySignature, currentSignature]);
+
+  const installedV1Grant = [{
+    database_name: "tideproof",
+    schema_name: "tp_api",
+    object_name:
+      "g1_resolve_recovery_source_receipt_v1(uuid,uuid,uuid,uuid,string,uuid,string)",
+    object_type: "function",
+    grantee: "tp_recovery_source_role",
+    privilege_type: "EXECUTE",
+    is_grantable: false
+  }];
+  const validateWith = (spec) => validateManagedObjectGrants(
+    installedV1Grant,
+    {
+      databaseName: spec.databaseName,
+      managedSchemas: spec.managedSchemas,
+      managedPrefixes: spec.managedPrefixes,
+      apiSchema: spec.apiSchema,
+      ownerRoles: spec.ownerRoles,
+      roleGrantPolicies: spec.roleGrantPolicies,
+      runtimeUsers: spec.users,
+      knownManagedPrincipals: [...spec.roles, ...spec.users],
+      trustedPrincipals: ["cluster_admin"],
+      allowMissingExpected: true
+    }
+  );
+
+  assert.doesNotThrow(() => validateWith(
+    primarySecurityContract.primaryPreflightPostureSpec
+  ));
+  assert.throws(
+    () => validateWith(primarySecurityContract.primaryPostureSpec),
+    /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
+  );
 });
 
 test("recovery storage enforces one row per exact broker lookup identity", async () => {

@@ -217,7 +217,7 @@ test("recovery source principal resolves one current exact authority receipt", a
     async connect() {},
     async end() {},
     async query(text, values) {
-      assert.match(text, /g1_resolve_recovery_source_receipt_v1/u);
+      assert.match(text, /g1_resolve_recovery_source_receipt_v2/u);
       assert.deepEqual(values, [
         binding.tenantId,
         binding.runId,

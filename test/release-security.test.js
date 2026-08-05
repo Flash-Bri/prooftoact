@@ -192,6 +192,25 @@ test("security source contract rejects a removed fail-closed marker", () => {
     () => __test.assertSourceMarkers(sources),
     /RELEASE_SECURITY_FORBIDDEN_MARKER_PRIMARY_SECURITY_BOOTSTRAP/
   );
+  sources.set(
+    "primary-security-bootstrap",
+    __test.SOURCE_MARKERS["primary-security-bootstrap"].join("\n")
+  );
+
+  for (const legacyCall of [
+    "tp_api.g1_resolve_recovery_source_receipt_v1 (",
+    "SELECT * FROM \"tp_api\".\"g1_resolve_recovery_source_receipt_v1\" (",
+    "SELECT * FROM tp_api.g1_resolve_recovery_source_receipt_v1/*comment*/("
+  ]) {
+    sources.set(
+      "recovery-broker",
+      `${__test.SOURCE_MARKERS["recovery-broker"].join("\n")}\n${legacyCall}`
+    );
+    assert.throws(
+      () => __test.assertSourceMarkers(sources),
+      /RELEASE_SECURITY_FORBIDDEN_PATTERN_RECOVERY_BROKER/
+    );
+  }
 });
 
 test("public verifier contract remains exact", () => {

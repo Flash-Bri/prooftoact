@@ -1,4 +1,5 @@
 import { Client } from "pg";
+import { createHash } from "node:crypto";
 import { setTimeout as sleepTimer } from "node:timers/promises";
 import { AuthorityStore, connectionStringForDatabase } from "./authority-store.js";
 import { bootstrapDatabaseConfig } from "./database-runtime.js";
@@ -44,6 +45,15 @@ const CLUSTER_PRINCIPAL_DATABASES = Object.freeze(Object.fromEntries([
     "tideproof_recovery"
   ])
 ]));
+const LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
+  "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+const CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
+  "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
+  "tideproof.primary-function-sql-batch.v1";
+const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 37;
+const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
+  "fc499c40bfa6faaf5bbc93f5625e1e9739f20b73af09d71927875f476bce58a8";
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -82,7 +92,7 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   }),
   tp_recovery_source_role: Object.freeze({
     functions: Object.freeze([
-      "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)"
+      CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
     ])
   }),
   tp_recovery_audit_role: Object.freeze({
@@ -94,6 +104,15 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   }),
   tp_audit_role: Object.freeze({
     relations: Object.freeze(["g1_receipt_audit_v1"])
+  })
+});
+const PRIMARY_PREFLIGHT_ROLE_GRANT_POLICIES = Object.freeze({
+  ...PRIMARY_ROLE_GRANT_POLICIES,
+  tp_recovery_source_role: Object.freeze({
+    functions: Object.freeze([
+      LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE,
+      CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
+    ])
   })
 });
 const PRIMARY_POSTURE_SPEC = Object.freeze({
@@ -109,6 +128,10 @@ const PRIMARY_POSTURE_SPEC = Object.freeze({
   optionalRoles: RECOVERY_SIBLING_ROLES,
   optionalUsers: RECOVERY_SIBLING_USERS,
   optionalBindings: RECOVERY_SIBLING_BINDINGS
+});
+const PRIMARY_PREFLIGHT_POSTURE_SPEC = Object.freeze({
+  ...PRIMARY_POSTURE_SPEC,
+  roleGrantPolicies: PRIMARY_PREFLIGHT_ROLE_GRANT_POLICIES
 });
 
 function requirePassword(passwords, user) {
@@ -204,7 +227,11 @@ async function scrubManagedPrivileges(client) {
 async function collectValidatedPosture(
   client,
   options,
-  { attempts = 1, delayMs = 0 } = {}
+  {
+    attempts = 1,
+    delayMs = 0,
+    postureSpec = PRIMARY_POSTURE_SPEC
+  } = {}
 ) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -212,7 +239,7 @@ async function collectValidatedPosture(
       const posture = await collectDatabaseSecurityPosture(client);
       const summary = validateDatabaseSecurityPosture(
         posture,
-        PRIMARY_POSTURE_SPEC,
+        postureSpec,
         options
       );
       return { posture, summary };
@@ -435,7 +462,38 @@ async function createAuditObjects(client, recoveryPublisherTrustRoot) {
   `);
 }
 
-async function createFunctions(client) {
+function primaryFunctionSqlBatchSha256(statements) {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      schema: PRIMARY_FUNCTION_SQL_BATCH_SCHEMA,
+      statements
+    }))
+    .digest("hex");
+}
+
+function validatePrimaryFunctionSqlStatements(statements) {
+  if (
+    !Array.isArray(statements) ||
+    statements.length !== PRIMARY_FUNCTION_SQL_STATEMENT_COUNT ||
+    statements.some(
+      (statement) =>
+        typeof statement !== "string" ||
+        statement.length === 0 ||
+        statement.includes("\u0000")
+    ) ||
+    primaryFunctionSqlBatchSha256(statements) !==
+      PRIMARY_FUNCTION_SQL_BATCH_SHA256
+  ) {
+    throw new Error("PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED");
+  }
+  return Object.freeze({
+    schema: PRIMARY_FUNCTION_SQL_BATCH_SCHEMA,
+    statementCount: statements.length,
+    sha256: PRIMARY_FUNCTION_SQL_BATCH_SHA256
+  });
+}
+
+async function emitPrimaryFunctionSql(client) {
   await client.query(`
     CREATE OR REPLACE FUNCTION tp_api.g1_append_verified_evidence_v1(
       p_tenant_id UUID,
@@ -4057,13 +4115,7 @@ async function createFunctions(client) {
   `);
 
   await client.query(`
-    DROP FUNCTION IF EXISTS tp_api.g1_resolve_recovery_source_receipt_v1(
-      UUID, UUID, UUID, UUID, STRING, UUID, STRING
-    )
-  `);
-
-  await client.query(`
-    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v1(
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2(
       p_tenant_id UUID,
       p_run_id UUID,
       p_incident_id UUID,
@@ -4334,6 +4386,32 @@ async function createFunctions(client) {
   `);
 }
 
+async function primaryFunctionSqlStatements() {
+  const statements = [];
+  await emitPrimaryFunctionSql({
+    query(...args) {
+      if (args.length !== 1 || typeof args[0] !== "string") {
+        throw new Error("PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED");
+      }
+      statements.push(args[0]);
+    }
+  });
+  return Object.freeze(statements);
+}
+
+async function executePrimaryFunctionSqlStatements(client, statements) {
+  const receipt = validatePrimaryFunctionSqlStatements(statements);
+  for (const statement of statements) {
+    await client.query(statement);
+  }
+  return receipt;
+}
+
+async function createFunctions(client) {
+  const statements = await primaryFunctionSqlStatements();
+  return executePrimaryFunctionSqlStatements(client, statements);
+}
+
 async function transferOwnership(client) {
   for (const object of PRIMARY_MANAGED_BASE_TABLES) {
     await client.query(`ALTER TABLE ${object} OWNER TO tp_owner`);
@@ -4370,7 +4448,7 @@ async function transferOwnership(client) {
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
     "tp_api.g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
-    "tp_api.g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
+    "tp_api.g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)",
     "tp_api.g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
   ];
@@ -4415,7 +4493,7 @@ async function applyGrants(client, bootstrapOwner) {
   `);
   await client.query(`
     GRANT EXECUTE ON FUNCTION
-      tp_api.g1_resolve_recovery_source_receipt_v1(
+      tp_api.g1_resolve_recovery_source_receipt_v2(
         UUID, UUID, UUID, UUID, STRING, UUID, STRING
       )
     TO tp_recovery_source_role
@@ -4621,7 +4699,8 @@ export async function bootstrapPrimarySecurity({
         allowMissingPrincipals: true,
         allowMissingExpectedCapabilities: true,
         allowBootstrapDefaults: true
-      }
+      },
+      { postureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC }
     );
     const clusterPreflight = await collectClusterManagedGrantPosture({
       adminConnectionString,
@@ -4647,7 +4726,8 @@ export async function bootstrapPrimarySecurity({
         allowMissingPrincipals: false,
         allowMissingExpectedCapabilities: true,
         allowBootstrapDefaults: false
-      }
+      },
+      { postureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC }
     );
 
     store = new AuthorityStore({
@@ -4703,3 +4783,15 @@ export async function bootstrapPrimarySecurity({
     await client.end().catch(() => {});
   }
 }
+
+export const __test = Object.freeze({
+  PRIMARY_FUNCTION_SQL_BATCH_SCHEMA,
+  PRIMARY_FUNCTION_SQL_BATCH_SHA256,
+  PRIMARY_FUNCTION_SQL_STATEMENT_COUNT,
+  executePrimaryFunctionSqlStatements,
+  primaryFunctionSqlBatchSha256,
+  primaryFunctionSqlStatements,
+  primaryPostureSpec: PRIMARY_POSTURE_SPEC,
+  primaryPreflightPostureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC,
+  validatePrimaryFunctionSqlStatements
+});

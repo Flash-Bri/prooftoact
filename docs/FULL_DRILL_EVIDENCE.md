@@ -219,7 +219,7 @@ official release.
   digests; a static SQL control binds every proposal join; both runners require
   the nine-field operator binding; and the source-digest test is an exact
   hash-bound release-security surface.
-- Verification: 434 local tests, the security/proof/claims/submission gates,
+- Verification: 447 local tests, the security/proof/claims/submission gates,
   zero-vulnerability audit, deterministic build, exact provenance, and two
   independent reviews must pass on the exact commit. Provider execution
   remains pending.
@@ -228,7 +228,7 @@ official release.
   receipt proves that handoff. No live, batch, concurrency, or exactly-once
   claim is added.
 
-### Resolver return-shape upgrade initially had no migration step
+### Resolver return-shape upgrade initially used destructive migration DDL
 
 - Root cause: adding an output column under the unchanged function signature
   used `CREATE OR REPLACE FUNCTION`, which cannot change an existing
@@ -237,14 +237,41 @@ official release.
   but did not model upgrade from the prior installed return shape.
 - Earliest detection point: compare each unchanged function signature's old
   and new return tables before accepting a bootstrap change.
-- Repair and preventive control: bootstrap explicitly drops the prior resolver
-  signature before recreating it, and an ordering test requires that migration
-  step to precede the new definition. Later ownership and exact grants are
-  reapplied by the same bootstrap.
-- Verification: focused upgrade-ordering and complete static bootstrap tests
-  pass; provider-backed CockroachDB v26.2 upgrade execution remains required.
-- Residual risk and claim impact: source compatibility is repaired, but this is
-  not a live migration receipt and does not close the provider gate.
+- Repair and preventive control: the expanded return contract now has the
+  versioned `g1_resolve_recovery_source_receipt_v2` name. Bootstrap creates v2
+  before ownership and least-privilege grants, never drops v1, and grants only
+  v2 after the managed-principal privilege scrub. The two preflight censuses
+  admit only the exact historical v1 and current v2 signatures for the source
+  role while allowing capabilities to be missing; the final census returns to
+  the strict v2-only policy. Existing v1 installations therefore remain
+  recoverable as database objects but inaccessible to the runtime. Static and
+  upgrade-state controls require that exact transitional policy, v2-only final
+  policy, v2 production call, an exact emitted-SQL batch pin, and a v1
+  denial-or-absence probe. Before the bootstrap issues any function DDL, it
+  materializes the exact 37 statements produced by `createFunctions` and
+  rejects the entire batch unless its framed SHA-256 digest matches the
+  reviewed batch. This control evaluates emitted SQL bytes, not JavaScript
+  source spelling; any SQL change therefore requires an explicit review and
+  digest update before the first database query.
+- Cutover procedure: this is an explicitly quiesced, roll-forward-only
+  migration, not a zero-downtime or rollback-compatible change. Stop the
+  recovery evidence runners, run bootstrap to completion, require v2 success
+  plus either SQLSTATE `42501` for a retained v1 object or `42883` for a clean
+  install, then deploy only the exact v2 runner bytes. Do not restart an older
+  runner after the privilege scrub. Any failed bootstrap or probe keeps
+  recovery publication stopped until the v2 path is repaired and reverified.
+- Verification: focused resolver/bootstrap tests exercise direct literal,
+  concatenated, Unicode-whitespace, computed-name, and split-identifier DDL
+  constructions and require rejection while the fake database client still
+  records zero queries; benign JavaScript comments, regular expressions, and
+  dollar-quoted source-only decoys do not affect the emitted batch. The
+  hash-bound release security gate also passes. Provider-backed CockroachDB
+  v26.2 upgrade execution and privilege census, including retained-v1 owner
+  and denial checks, remain required.
+- Residual risk and claim impact: source migration is non-destructive and the
+  weaker resolver is not granted after convergence, but the cutover requires
+  an outage and has no application rollback window. This is not a live upgrade
+  receipt and does not close the provider gate.
 
 ### Recovery publication trusted process time after canonical insertion
 
