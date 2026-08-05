@@ -3087,6 +3087,85 @@ export class AuthorityStore {
     return result.rows[0];
   }
 
+  async setProposalExpiryAfterMsForTest({
+    tenantId,
+    proposalDigest,
+    delayMs
+  }) {
+    if (!Number.isSafeInteger(delayMs) || delayMs < 100 || delayMs > 10_000) {
+      throw new TypeError("delayMs must be an integer from 100 through 10000");
+    }
+    const result = await this.#pool.query(
+      `
+        UPDATE tp_ledger.g1_dvi_proposal_receipts
+        SET expires_at =
+          statement_timestamp() +
+          ($3::INT8 * INTERVAL '1 millisecond')
+        WHERE tenant_id = $1::UUID
+          AND proposal_digest = $2
+        RETURNING
+          proposal_digest,
+          expires_at,
+          statement_timestamp() AS database_now
+      `,
+      [
+        requireUuid(tenantId, "tenantId"),
+        requireSha256(proposalDigest, "proposalDigest"),
+        delayMs
+      ]
+    );
+    if (result.rowCount !== 1) {
+      throw new InvariantViolationError(
+        "proposal missing while scheduling held-transaction expiry"
+      );
+    }
+    return result.rows[0];
+  }
+
+  async waitForProposalExpiryForTest({
+    tenantId,
+    proposalDigest,
+    timeoutMs = 10_000
+  }) {
+    const tenant = requireUuid(tenantId, "tenantId");
+    const proposal = requireSha256(proposalDigest, "proposalDigest");
+    if (
+      !Number.isSafeInteger(timeoutMs) ||
+      timeoutMs < 100 ||
+      timeoutMs > 30_000
+    ) {
+      throw new TypeError("timeoutMs must be an integer from 100 through 30000");
+    }
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const result = await this.#pool.query(
+        `
+          SELECT
+            proposal_digest,
+            expires_at,
+            statement_timestamp() AS database_now,
+            expires_at <= statement_timestamp() AS expired
+          FROM tp_ledger.g1_dvi_proposal_receipts
+          WHERE tenant_id = $1::UUID
+            AND proposal_digest = $2
+        `,
+        [tenant, proposal]
+      );
+      if (result.rowCount !== 1) {
+        throw new InvariantViolationError(
+          "proposal missing while awaiting held-transaction expiry"
+        );
+      }
+      if (result.rows[0].expired === true) {
+        return result.rows[0];
+      }
+      await sleepTimer(25);
+    }
+    throw new InvariantViolationError(
+      "proposal did not expire before held-transaction timeout"
+    );
+  }
+
   async #runSerializable(
     work,
     {
@@ -3123,7 +3202,7 @@ export class AuthorityStore {
           barrier: attempt === 0 ? barrier : null
         });
         const databaseClock = await client.query(
-          "SELECT transaction_timestamp() AS database_now"
+          "SELECT statement_timestamp() AS database_now"
         );
         const restoreCommitObserver = observeCommitDispatch(
           client,
@@ -3194,7 +3273,7 @@ export class AuthorityStore {
   async #boundProposal(client, request, { requireCurrent = true } = {}) {
     const result = await client.query(
       `
-        SELECT proposal.*, transaction_timestamp() AS database_now
+        SELECT proposal.*, statement_timestamp() AS database_now
         FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
         WHERE proposal.tenant_id = $1::UUID
           AND proposal.proposal_digest = $2
@@ -3271,7 +3350,7 @@ export class AuthorityStore {
           proposal.payload AS proposal_payload,
           proposal.payload_digest AS proposal_payload_digest,
           proposal.expires_at AS proposal_expires_at,
-          transaction_timestamp() AS database_now
+          statement_timestamp() AS database_now
         FROM tp_private.g1_resources AS resource
         JOIN tp_ledger.g1_outbox_intents AS outbox
           ON outbox.tenant_id = resource.tenant_id
@@ -3600,7 +3679,7 @@ export class AuthorityStore {
           `
             SELECT
               evidence.*,
-              transaction_timestamp() AS database_now,
+              statement_timestamp() AS database_now,
               CASE
                 WHEN evidence.verification_key_id IS NULL
                   OR evidence.verifier_version IS NULL
@@ -3644,11 +3723,11 @@ export class AuthorityStore {
                   OR evidence.claim_value IS NULL
                   THEN 'claim_binding_missing'
                 WHEN evidence.observed_at >
-                  transaction_timestamp() + INTERVAL '5 minutes'
+                  statement_timestamp() + INTERVAL '5 minutes'
                   THEN 'future_observation'
-                WHEN evidence.valid_from > transaction_timestamp()
+                WHEN evidence.valid_from > statement_timestamp()
                   THEN 'not_yet_valid'
-                WHEN evidence.valid_until <= transaction_timestamp()
+                WHEN evidence.valid_until <= statement_timestamp()
                   THEN 'expired'
                 WHEN evidence.agency_scope NOT IN ($4, '*')
                   THEN 'out_of_scope'
@@ -3689,9 +3768,9 @@ export class AuthorityStore {
                     AND other.observed_at >= other_key.valid_from
                     AND other.observed_at < other_key.valid_until
                     AND other.observed_at <=
-                      transaction_timestamp() + INTERVAL '5 minutes'
-                    AND other.valid_from <= transaction_timestamp()
-                    AND other.valid_until > transaction_timestamp()
+                      statement_timestamp() + INTERVAL '5 minutes'
+                    AND other.valid_from <= statement_timestamp()
+                    AND other.valid_until > statement_timestamp()
                     AND other.agency_scope IN ($4, '*')
                 )
                   THEN 'unresolved_conflict'
@@ -3776,7 +3855,7 @@ export class AuthorityStore {
 
         const resource = await client.query(
           `
-            SELECT *, transaction_timestamp() AS database_now
+            SELECT *, statement_timestamp() AS database_now
             FROM tp_private.g1_resources
             WHERE tenant_id = $1::UUID
               AND resource_id = $2
@@ -3871,16 +3950,24 @@ export class AuthorityStore {
                 holder_proposal_digest = $8,
                 holder_logical_authority_key_sha256 = $9,
                 lease_expires_at =
-                  transaction_timestamp() +
+                  statement_timestamp() +
                   ($6::INT8 * INTERVAL '1 millisecond'),
-                updated_at = transaction_timestamp()
+                updated_at = statement_timestamp()
             WHERE tenant_id = $1::UUID
               AND resource_id = $2
               AND active_run_id = $7::UUID
               AND current_fence < 9223372036854775807
               AND (
                 holder_operation_id IS NULL
-                OR lease_expires_at <= transaction_timestamp()
+                OR lease_expires_at <= statement_timestamp()
+              )
+              AND EXISTS (
+                SELECT 1
+                FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
+                WHERE proposal.tenant_id = $1::UUID
+                  AND proposal.proposal_digest = $8
+                  AND proposal.logical_authority_key_sha256 = $9
+                  AND proposal.expires_at > statement_timestamp()
               )
             RETURNING current_fence, lease_expires_at
           `,
@@ -3897,6 +3984,31 @@ export class AuthorityStore {
           ]
         );
         if (acquired.rowCount !== 1) {
+          const currentProposal = await this.#boundProposal(client, request);
+          if (
+            !currentProposal.ok &&
+            currentProposal.reason === "proposal_authorization_expired"
+          ) {
+            const denied = await client.query(
+              `
+                UPDATE tp_ledger.g1_authority_receipts
+                SET outcome = 'authorization_denied',
+                    reason = 'proposal_authorization_expired',
+                    evidence_digest = $3
+                WHERE tenant_id = $1::UUID
+                  AND operation_id = $2::UUID
+                RETURNING *
+              `,
+              [request.tenantId, request.operationId, evidenceDigest]
+            );
+            return {
+              outcome: "authorization_denied",
+              reason: "proposal_authorization_expired",
+              requestDigest: request.requestDigest,
+              authorityCurrent: false,
+              receipt: denied.rows[0]
+            };
+          }
           throw new InvariantViolationError(
             "locked resource could not be acquired or denied deterministically"
           );
@@ -4232,7 +4344,7 @@ export class AuthorityStore {
               receipt_proposal_logical_authority_key_sha256,
             proposal.authorization_binding_sha256 AS
               receipt_proposal_authorization_binding_sha256,
-            transaction_timestamp() AS database_now
+            statement_timestamp() AS database_now
           FROM selected_receipt AS receipt
           LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
             ON outbox.tenant_id = receipt.tenant_id
@@ -4475,8 +4587,8 @@ export class AuthorityStore {
               sha256(proposal.payload_canonical::BYTES),
               'hex'
             ) = outbox.payload_digest
-            AND resource.lease_expires_at > transaction_timestamp()
-            AND proposal.expires_at > transaction_timestamp()
+            AND resource.lease_expires_at > statement_timestamp()
+            AND proposal.expires_at > statement_timestamp()
           ON CONFLICT DO NOTHING
           RETURNING *
         `,

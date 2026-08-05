@@ -548,7 +548,7 @@ test("primary function SQL is digest-pinned before any database query", async ()
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
     statementCount: 37,
-    sha256: "796752230b3f773e5e8559f80a669f7e7279bb6a35159b80efe421618e1ca724"
+    sha256: "cbe971840c3c870f358f1728aa69f035e6855cd9306c36a7d1af30012b457c14"
   });
   assert.equal(
     statements.filter((statement) =>
@@ -845,7 +845,7 @@ test("expired unspent proposals cannot implicitly mint a replacement epoch", asy
   );
   assert.match(
     gate1AuthoritySource,
-    /runExpiredUnspentReplacementProof[\s\S]*expireProposalAtDatabaseNowForTest[\s\S]*explicit_new_authorization_required[\s\S]*proposal_receipt_count/u
+    /runExpiredUnspentReplacementProof[\s\S]*expireProposalAtDatabaseNowForTest[\s\S]*store\.spendAuthority[\s\S]*proposal_authorization_expired[\s\S]*explicit_new_authorization_required[\s\S]*proposal_receipt_count/u
   );
 });
 
@@ -925,6 +925,105 @@ test("direct authority replay currentness requires the exact outbox payload", as
   );
 });
 
+test("authority spend, replay, and protected effects refresh database time", async () => {
+  const [primarySource, authorityStoreSource, gate1AuthoritySource] = await Promise.all([
+    readFile(primaryUrl, "utf8"),
+    readFile(authorityStoreUrl, "utf8"),
+    readFile(gate1AuthorityUrl, "utf8")
+  ]);
+  const currentBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_authority_receipt_current_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const spendBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_spend_authority_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const resolveBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_request_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const effectBody = primarySource.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_record_protected_effect_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(currentBody);
+  assert.ok(spendBody);
+  assert.ok(resolveBody);
+  assert.ok(effectBody);
+
+  assert.match(
+    currentBody,
+    /receipt\.lease_expires_at > statement_timestamp\(\)[\s\S]*resource\.lease_expires_at > statement_timestamp\(\)[\s\S]*proposal\.expires_at > statement_timestamp\(\)/u
+  );
+  assert.match(
+    spendBody,
+    /v_database_now TIMESTAMPTZ\s*:=\s*statement_timestamp\(\)/u
+  );
+  assert.match(spendBody, /v_proposal_expires_at <= v_database_now/u);
+  assert.match(spendBody, /v_holder_expiry > v_database_now/u);
+  assert.match(
+    spendBody,
+    /lease_expires_at\s*=\s*v_database_now\s*\+\s*\(p_lease_ms \* INTERVAL '1 millisecond'\)/u
+  );
+  assert.match(
+    spendBody,
+    /resource\.lease_expires_at <= v_database_now/u
+  );
+  assert.match(resolveBody, /statement_timestamp\(\)/u);
+  assert.match(
+    effectBody,
+    /resource\.lease_expires_at > statement_timestamp\(\)[\s\S]*proposal\.expires_at > statement_timestamp\(\)/u
+  );
+  for (const [name, body] of [
+    ["current receipt", currentBody],
+    ["authority spend", spendBody],
+    ["request resolution", resolveBody],
+    ["protected effect", effectBody]
+  ]) {
+    assert.doesNotMatch(body, /transaction_timestamp\(\)/u, name);
+  }
+
+  const directProposal = authorityStoreSource.match(
+    /async #boundProposal\([\s\S]*?(?=\n  async #receiptAuthorityCurrent)/u
+  )?.[0];
+  const directCurrent = authorityStoreSource.match(
+    /async #receiptAuthorityCurrent\([\s\S]*?(?=\n  async #existingReceipt)/u
+  )?.[0];
+  const directSpend = authorityStoreSource.match(
+    /async spendAuthority\([\s\S]*?(?=\n  async proveSerializableRetry)/u
+  )?.[0];
+  const directReconcile = authorityStoreSource.match(
+    /async reconcileRequest\([\s\S]*?(?=\n  async recordProtectedEffect)/u
+  )?.[0];
+  const directEffect = authorityStoreSource.match(
+    /async recordProtectedEffect\([\s\S]*?(?=\n  async snapshot)/u
+  )?.[0];
+  assert.ok(directProposal);
+  assert.ok(directCurrent);
+  assert.ok(directSpend);
+  assert.ok(directReconcile);
+  assert.ok(directEffect);
+  assert.match(
+    directSpend,
+    /proposal\.expires_at > statement_timestamp\(\)/u
+  );
+  assert.match(
+    directEffect,
+    /resource\.lease_expires_at > statement_timestamp\(\)[\s\S]*proposal\.expires_at > statement_timestamp\(\)/u
+  );
+  for (const [name, body] of [
+    ["direct proposal", directProposal],
+    ["direct current receipt", directCurrent],
+    ["direct authority spend", directSpend],
+    ["direct reconciliation", directReconcile],
+    ["direct protected effect", directEffect]
+  ]) {
+    assert.match(body, /statement_timestamp\(\)/u, name);
+    assert.doesNotMatch(body, /transaction_timestamp\(\)/u, name);
+  }
+  assert.match(
+    gate1AuthoritySource,
+    /runHeldTransactionExpiryProof[\s\S]*setProposalExpiryAfterMsForTest[\s\S]*waitForProposalExpiryForTest[\s\S]*proposal_authorization_expired[\s\S]*current_fence === "0"/u
+  );
+});
+
 test("post-COMMIT ambiguity cannot enter a rollback branch", async () => {
   const [
     authorityStore,
@@ -986,11 +1085,11 @@ test("protected-effect SQL denies the exact proposal-expiry boundary", async () 
     body,
     /JOIN tp_ledger\.g1_dvi_proposal_receipts AS proposal[\s\S]*proposal\.proposal_digest = outbox\.proposal_digest[\s\S]*proposal\.authorization_epoch = outbox\.authorization_epoch/u
   );
-  assert.match(body, /proposal\.expires_at > transaction_timestamp\(\)/u);
+  assert.match(body, /proposal\.expires_at > statement_timestamp\(\)/u);
   assert.match(body, /proposal\.payload = outbox\.payload/u);
   assert.match(
     body,
     /sha256\(proposal\.payload_canonical::BYTES\)[\s\S]*outbox\.payload_digest/u
   );
-  assert.doesNotMatch(body, /proposal\.expires_at >= transaction_timestamp\(\)/u);
+  assert.doesNotMatch(body, /proposal\.expires_at >= statement_timestamp\(\)/u);
 });

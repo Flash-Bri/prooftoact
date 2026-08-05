@@ -30,7 +30,7 @@
       "id": "authority-identity-ledger",
       "path": "docs/AUTHORITY_IDENTITY.md",
       "role": "AUTHORITY_IDENTITY_BOUNDARY",
-      "sha256": "d9ee6334ff7d35cc83369b7b555cd146efbf8d432d7c32ab84120a237ee6989e"
+      "sha256": "6af9d47c170f2745a0c3fe50a6b9e0e4528f04481828188314bbf3ed7f8ee999"
     },
     {
       "id": "authority-identity-tests",
@@ -42,7 +42,7 @@
       "id": "authority-evidence-runner",
       "path": "scripts/gate1-authority.js",
       "role": "AUTHORITY_IDENTITY_EVIDENCE_RUNNER",
-      "sha256": "20aa595bba9c8e8161d066cab33dcd6cecca138aaccc16f0598085789998fd84"
+      "sha256": "11ab8eebca396483c5ec15a5716c2e4cfc1c24080516a4a7401c733d3c388bfb"
     },
     {
       "id": "authority-runtime",
@@ -66,7 +66,7 @@
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "8bcd28ddcf7540c32ab98714057519cb3bb9b62acef53071de1d71bf7349186f"
+      "sha256": "2e9912b5e0c48be1a8594e0d0334961bd74bfc9a42eea031b0f3b1b38e85de61"
     },
     {
       "id": "aws-alternate-principal-denial-runner",
@@ -234,7 +234,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "235f100d0370c3072cb8ee51c75e1dbb54cbad1154879485895d06bda210537f"
+      "sha256": "13aece2e92a7c09d4f47a6257c7ed9d353df12d108418f75cbe389de8ee22b71"
     },
     {
       "id": "database-security-posture",
@@ -360,7 +360,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "3609bf95a2f930c5b51417ae1ad136d89eb845e3409546756eca952c0b71fec6"
+      "sha256": "0b0640efc251367461af81e0c3c2860c2bb87afd8640bc4e30e24c57badcf0c3"
     },
     {
       "id": "primary-security-runner",

@@ -752,6 +752,16 @@ async function runExpiredUnspentReplacementProof(store, proofLabel) {
     proposalBoundary.exact_boundary === true,
     "unspent proposal did not reach the exact database-time expiry boundary"
   );
+  const expiredSpend = await store.spendAuthority({
+    ...request,
+    dviAuthorization: original.dviAuthorization
+  });
+  assert(
+    expiredSpend.outcome === "authorization_denied" &&
+      expiredSpend.reason === "proposal_authorization_expired" &&
+      expiredSpend.durableMutation === false,
+    "exact-boundary proposal expiry remained spendable"
+  );
   const beforeReplacement = await store.authorityIdentityStateForTest({
     tenantId,
     resourceId
@@ -795,14 +805,93 @@ async function runExpiredUnspentReplacementProof(store, proofLabel) {
     "expired unspent replacement changed durable authority state"
   );
   return {
-    outcome: replacement.authorization.outcome,
-    reason: replacement.authorization.reason,
+    expiredSpendOutcome: expiredSpend.outcome,
+    expiredSpendReason: expiredSpend.reason,
+    expiredSpendDurableMutation: expiredSpend.durableMutation,
+    replacementOutcome: replacement.authorization.outcome,
+    replacementReason: replacement.authorization.reason,
     proposalReceiptCount: afterReplacement.proposal_receipt_count,
     maximumEpoch: afterReplacement.maximum_epoch,
     authorityReceiptCount: afterReplacement.authority_receipt_count,
     outboxCount: afterReplacement.outbox_count,
     protectedEffectCount: afterReplacement.protected_effect_count,
     fenceAfter: afterReplacement.current_fence
+  };
+}
+
+async function runHeldTransactionExpiryProof(store, proofLabel) {
+  const tenantId = randomUUID();
+  const runId = randomUUID();
+  const incidentId = randomUUID();
+  const evidenceId = randomUUID();
+  const resourceId = `${proofLabel}-held-transaction-expiry`;
+  await prepareAdmissibleFixture(store, {
+    tenantId,
+    runId,
+    incidentId,
+    resourceId,
+    evidenceId
+  });
+  const request = baseRequest({
+    tenantId,
+    runId,
+    incidentId,
+    resourceId,
+    evidenceId,
+    index: 155
+  });
+  const authorization = await authorizeSyntheticProposal(store, request);
+  await store.setProposalExpiryAfterMsForTest({
+    tenantId,
+    proposalDigest: authorization.proposal.proposal_digest,
+    delayMs: 750
+  });
+  let barrierCalls = 0;
+  const decision = await store.spendAuthority(
+    {
+      ...request,
+      dviAuthorization: authorization.dviAuthorization
+    },
+    {
+      barrier: {
+        async wait() {
+          barrierCalls += 1;
+          await store.waitForProposalExpiryForTest({
+            tenantId,
+            proposalDigest: authorization.proposal.proposal_digest
+          });
+        }
+      }
+    }
+  );
+  const snapshot = await store.snapshot({ tenantId, resourceId });
+  assert(
+    barrierCalls === 1,
+    "held-transaction expiry barrier did not run exactly once"
+  );
+  assert(
+    decision.outcome === "authorization_denied" &&
+      decision.reason === "proposal_authorization_expired" &&
+      decision.authorityCurrent === false,
+    "transaction held past proposal expiry retained authority"
+  );
+  assert(
+    snapshot.receipts.length === 1 &&
+      snapshot.receipts[0].outcome === "authorization_denied" &&
+      snapshot.outbox.length === 0 &&
+      snapshot.effects.length === 0 &&
+      snapshot.resource.current_fence === "0",
+    "held-transaction expiry changed protected authority state"
+  );
+  return {
+    barrierCalls,
+    decisionOutcome: decision.outcome,
+    decisionReason: decision.reason,
+    authorityCurrent: decision.authorityCurrent,
+    authorityReceiptCount: snapshot.receipts.length,
+    outboxCount: snapshot.outbox.length,
+    protectedEffectCount: snapshot.effects.length,
+    currentFence: snapshot.resource.current_fence
   };
 }
 
@@ -1428,6 +1517,8 @@ async function main() {
       await runRuntimeIdentityNegativeProof(store, proofLabel);
     const expiredUnspentReplacement =
       await runExpiredUnspentReplacementProof(store, proofLabel);
+    const heldTransactionExpiry =
+      await runHeldTransactionExpiryProof(store, proofLabel);
     const fencing = await runFencingProof(store, proofLabel);
     const crossEpochRace = await runCrossEpochRaceProof(store, proofLabel);
     const admissibility = await runAdmissibilityProof(store, proofLabel);
@@ -1448,6 +1539,7 @@ async function main() {
           replay,
           runtimeIdentityNegatives,
           expiredUnspentReplacement,
+          heldTransactionExpiry,
           fencing,
           crossEpochRace,
           admissibility,

@@ -53,7 +53,7 @@ const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
   "tideproof.primary-function-sql-batch.v1";
 const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 37;
 const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
-  "796752230b3f773e5e8559f80a669f7e7279bb6a35159b80efe421618e1ca724";
+  "cbe971840c3c870f358f1728aa69f035e6855cd9306c36a7d1af30012b457c14";
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -2308,9 +2308,9 @@ async function emitPrimaryFunctionSql(client) {
             sha256(proposal.payload_canonical::BYTES),
             'hex'
           ) = outbox.payload_digest
-          AND receipt.lease_expires_at > transaction_timestamp()
-          AND resource.lease_expires_at > transaction_timestamp()
-          AND proposal.expires_at > transaction_timestamp()
+          AND receipt.lease_expires_at > statement_timestamp()
+          AND resource.lease_expires_at > statement_timestamp()
+          AND proposal.expires_at > statement_timestamp()
         FROM tp_ledger.g1_authority_receipts AS receipt
         JOIN tp_private.g1_resources AS resource
           ON resource.tenant_id = receipt.tenant_id
@@ -2423,6 +2423,7 @@ async function emitPrimaryFunctionSql(client) {
       v_existing_logical_authority_key_sha256 STRING;
       v_existing_authorization_binding_sha256 STRING;
       v_proposal_expires_at TIMESTAMPTZ;
+      v_database_now TIMESTAMPTZ := statement_timestamp();
     BEGIN
       IF session_user NOT IN (
         'tp_authorizer_user',
@@ -2528,7 +2529,7 @@ async function emitPrimaryFunctionSql(client) {
           NULL::STRING,
           NULL::STRING,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -2655,7 +2656,7 @@ async function emitPrimaryFunctionSql(client) {
             p_tenant_id,
             v_existing_operation
           ),
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -2719,7 +2720,7 @@ async function emitPrimaryFunctionSql(client) {
             p_tenant_id,
             v_existing_operation
           ),
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -2783,7 +2784,7 @@ async function emitPrimaryFunctionSql(client) {
             p_tenant_id,
             v_existing_operation
           ),
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -2803,11 +2804,11 @@ async function emitPrimaryFunctionSql(client) {
           v_logical_authority_key_sha256,
           v_authorization_binding_sha256,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
-      IF v_proposal_expires_at <= transaction_timestamp() THEN
+      IF v_proposal_expires_at <= v_database_now THEN
         RETURN QUERY SELECT
           'authorization_denied'::STRING,
           'proposal_authorization_expired'::STRING,
@@ -2822,7 +2823,7 @@ async function emitPrimaryFunctionSql(client) {
           v_logical_authority_key_sha256,
           v_authorization_binding_sha256,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -2969,7 +2970,7 @@ async function emitPrimaryFunctionSql(client) {
             p_tenant_id,
             v_existing_operation
           ),
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -3006,7 +3007,7 @@ async function emitPrimaryFunctionSql(client) {
           v_logical_authority_key_sha256,
           v_authorization_binding_sha256,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
       IF v_evidence_digest <> p_selected_evidence_digest THEN
@@ -3030,7 +3031,7 @@ async function emitPrimaryFunctionSql(client) {
           v_logical_authority_key_sha256,
           v_authorization_binding_sha256,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -3070,7 +3071,7 @@ async function emitPrimaryFunctionSql(client) {
           v_logical_authority_key_sha256,
           v_authorization_binding_sha256,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
       IF v_active_run <> p_run_id THEN
@@ -3094,11 +3095,11 @@ async function emitPrimaryFunctionSql(client) {
           v_logical_authority_key_sha256,
           v_authorization_binding_sha256,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
       IF v_holder_operation IS NOT NULL
-        AND v_holder_expiry > transaction_timestamp() THEN
+        AND v_holder_expiry > v_database_now THEN
         UPDATE tp_ledger.g1_authority_receipts AS receipt
         SET outcome = 'resource_held_denied',
             reason = 'active_holder',
@@ -3121,7 +3122,7 @@ async function emitPrimaryFunctionSql(client) {
           v_logical_authority_key_sha256,
           v_authorization_binding_sha256,
           false,
-          transaction_timestamp();
+          v_database_now;
         RETURN;
       END IF;
 
@@ -3135,16 +3136,16 @@ async function emitPrimaryFunctionSql(client) {
           holder_logical_authority_key_sha256 =
             v_logical_authority_key_sha256,
           lease_expires_at =
-            transaction_timestamp() +
+            v_database_now +
             (p_lease_ms * INTERVAL '1 millisecond'),
-          updated_at = transaction_timestamp()
+          updated_at = v_database_now
       WHERE resource.tenant_id = p_tenant_id
         AND resource.resource_id = p_resource_id
         AND resource.active_run_id = p_run_id
         AND resource.current_fence < 9223372036854775807
         AND (
           resource.holder_operation_id IS NULL
-          OR resource.lease_expires_at <= transaction_timestamp()
+          OR resource.lease_expires_at <= v_database_now
         )
       RETURNING resource.current_fence, resource.lease_expires_at
       INTO v_new_fence, v_new_expiry;
@@ -3212,7 +3213,7 @@ async function emitPrimaryFunctionSql(client) {
         v_logical_authority_key_sha256,
         v_authorization_binding_sha256,
         true,
-        transaction_timestamp();
+        v_database_now;
     END
     $$
   `);
@@ -3529,7 +3530,7 @@ async function emitPrimaryFunctionSql(client) {
           receipt.tenant_id,
           receipt.operation_id
         ),
-        transaction_timestamp()
+        statement_timestamp()
       FROM selected_receipt AS receipt
       LEFT JOIN tp_ledger.g1_outbox_intents AS outbox
         ON outbox.tenant_id = receipt.tenant_id
@@ -3761,7 +3762,7 @@ async function emitPrimaryFunctionSql(client) {
             AND receipt.request_digest = p_bravo_request_digest
           LIMIT 1
         ),
-        transaction_timestamp()
+        statement_timestamp()
       FROM tp_private.g1_resources AS resource
       WHERE resource.tenant_id = p_tenant_id
         AND resource.resource_id = p_resource_id
@@ -4392,8 +4393,8 @@ async function emitPrimaryFunctionSql(client) {
           sha256(proposal.payload_canonical::BYTES),
           'hex'
         ) = outbox.payload_digest
-        AND resource.lease_expires_at > transaction_timestamp()
-        AND proposal.expires_at > transaction_timestamp()
+        AND resource.lease_expires_at > statement_timestamp()
+        AND proposal.expires_at > statement_timestamp()
       ON CONFLICT DO NOTHING
       RETURNING effect_key, operation_id
     $$

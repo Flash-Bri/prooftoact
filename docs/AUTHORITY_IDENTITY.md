@@ -177,11 +177,34 @@ contender in the resource race.
 - Repair/control: both SQL and JS insert paths join the exact proposal identity
   through proposal, logical action, epoch, authority key, binding, run,
   incident, resource, and payload, and require `expires_at >
-  transaction_timestamp()`.
+  statement_timestamp()`.
 - Verification/residual/claim: focused source controls and the Gate One boundary
   drill require zero protected effects at equality and after expiry. Live SQL
   execution on the target CockroachDB version remains pending, so currentness is
   still a source-only claim.
+
+### Transaction-start time froze current authority
+
+- Root cause: proposal expiry, receipt/resource currentness, lease creation,
+  reconciliation, and protected-effect admission mixed database statement time
+  with `transaction_timestamp()`, which is fixed when a transaction begins.
+- Missed because: equality tests expired rows before opening the consuming
+  transaction; they did not hold an already-open transaction across expiry.
+- Earliest detection: begin an authority spend while its proposal is current,
+  pause after evidence admission until database time reaches the proposal
+  expiry, then resume acquisition. The spend must finish denied with no fence,
+  outbox, or effect.
+- Repair/control: the stored spend captures one `statement_timestamp()` and
+  uses it for every decision, returned clock, and lease calculation. Direct
+  spend queries refresh statement time, guard lease acquisition with the exact
+  still-current proposal, reconcile expiry to a durable denial, and use the
+  same statement-time boundary for replay and protected effects.
+- Verification: red-before-green source controls reject any transaction-time
+  call in the spend/currentness/reconciliation/effect chain. Gate One now
+  includes both exact-equality spend denial and a transaction held past expiry.
+- Residual risk and claim impact: CockroachDB v26.2 must still execute the held
+  transaction and equality drills. No live authority, concurrency, or
+  exactly-once claim is added by the source repair.
 
 ### Non-current DVI authorization replay
 

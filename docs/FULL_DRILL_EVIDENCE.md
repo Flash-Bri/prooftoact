@@ -243,13 +243,18 @@ official release.
   resource, run, incident, operation, agent, proposal, logical-authority key,
   and fence, and requires receipt, resource, and proposal expiry strictly after
   `statement_timestamp()`. The resolver, shared admissibility query, direct
-  observer, snapshot admission time, and proposal-authorization clock use the
-  same statement clock, so a transaction opened before expiry cannot freeze
-  or contradict the accepted time boundary.
+  observer, snapshot admission time, proposal-authorization clock, authority
+  spend, replay currentness, reconciliation, and protected-effect admission use
+  statement time. Stored spend captures one clock for its full decision and
+  lease; direct acquisition rechecks the exact proposal in the lease-creating
+  statement, so a transaction opened before expiry cannot mint an already
+  expired lease.
 - Regression and preventive control: focused source controls check every
   holder equality, all three strict database-time predicates, and the coupled
-  observer, snapshot, and authorization clocks. The reviewed 37-statement SQL
-  batch digest also changes whenever the emitted SQL changes.
+  observer, snapshot, authorization, spend, replay, reconciliation, and effect
+  clocks. Gate One includes exact-equality spend denial and a transaction held
+  past proposal expiry; both require zero outbox/effect occupancy. The reviewed
+  37-statement SQL batch digest also changes whenever the emitted SQL changes.
 - Verification: the focused control and the complete local release gate set
   must pass on the exact commit; provider-backed CockroachDB v26.2 execution is
   still required.
