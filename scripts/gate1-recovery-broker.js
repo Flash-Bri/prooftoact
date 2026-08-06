@@ -278,6 +278,7 @@ async function main() {
   } finally {
     await rawMcpClient.close();
   }
+  const mcpProviderEvidence = rawMcpClient.transportEvidence();
 
   assert(
     recovered.status === "RECOVERED_CONTEXT_ONLY",
@@ -442,6 +443,13 @@ async function main() {
           selectedEvidenceBindingSha256:
             receipt.selected_evidence_binding_sha256
         },
+        winnerOperationBindingSha256: sha256(
+          canonicalJson({
+            operationId: receipt.operation_id,
+            requestDigest: receipt.request_digest
+          })
+        ),
+        mcpProviderEvidence,
         auditInteractionId: recovered.auditInteractionId,
         preReadAuditId: recovered.preReadAuditId,
         terminalAuditId: recovered.auditId,

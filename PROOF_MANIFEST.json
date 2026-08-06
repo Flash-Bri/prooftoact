@@ -97,13 +97,13 @@
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
-      "sha256": "c27db879f2fdd22e83fa3a9709772a2750c350c6f7a64ca0e2d5a81ef4f30d44",
+      "sha256": "66ebb63c5103b95799bad2585f2e8781ada9c6bce8ed0dcb5181727c1d4dc9ae",
       "kind": "verification-code"
     },
     {
       "id": "aws-deployment-attestation-validator",
       "path": "src/cloud/aws-deployment-attestation.js",
-      "sha256": "62ad076f13aa772df48bd5f438a4bc701539a77146d6e2969d27665184c3a09a",
+      "sha256": "a0a2c387aca4a3fdc98b45709e86a32290ebdb0e55c1d5d6bbfdb701b7da4134",
       "kind": "verification-code"
     },
     {
@@ -325,13 +325,13 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "f122e21d14da990f49c3cefcd8f49be2acc1ef458b35c05dbfcbe0e6014f3c3a",
+      "sha256": "c21439b508344a33bda3a75d0b1d2c44ec4154b6a59365bad4564e7fa85ee30e",
       "kind": "verification-code"
     },
     {
       "id": "gate2-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
-      "sha256": "24c71692dfc75df9557e12bed9853ad11ad6cafcc40514705aa66223c3046395",
+      "sha256": "e05d18e268fc2f4defa6388747fddefc7113958b17226fd9bd2961926284e11c",
       "kind": "verification-code"
     },
     {
@@ -367,19 +367,19 @@
     {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "45698c19e22c5962a52771cd6b6f88d5a7a728174820ec01b1325af7cdcaf4c6",
+      "sha256": "e7fc2be8ccce32b03ab9ac7338027b31cd1bd1b2f411ce63959b8cdae329bc69",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
-      "sha256": "a1bd8a16cc7329cacd14afe187ecbb770b9577e53970a2b4bfe935ba6ce63c2d",
+      "sha256": "bd4a460daf2efe34fc964af442de19e0567d789d9e71f1426e0c4a10290f8a73",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "4c6643df8934081e72193f47c1be0a6c664c46943b9b3eb3d5d2f6c4c507cef2",
+      "sha256": "12112fc2fc178da76d9bf5fa361af5f4a15790b210eaf69af01ccc5e5fda9b00",
       "kind": "verification-code"
     },
     {
@@ -481,7 +481,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "ed41ede0e14b1bb2a0e0c6d3271b0de312a5bb18db4b9f1884cfef8154bf16d4",
+      "sha256": "00d76c064aeda9a5701c65a8d0ec8f0d71f17c91b5559fbf86348b908106a6a8",
       "kind": "boundary-ledger"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "11a6c001b4cf62e622ccd288af92b72a1baf959d95f816e4b2e403eaac9047e9",
+      "sha256": "f0f92cbe1dea3b4dc2b10d6dd417c7cf90e36735c1678ca150bbf359e1332459",
       "kind": "boundary-ledger"
     },
     {

@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import {
+  parseAuthorityDrillBinding,
   parseAuthorityRaceArguments,
   runAuthorityRace
 } from "../src/cloud/aws-authority-race.js";
@@ -59,7 +60,7 @@ export function createAuthorityRaceGitRunner({
   };
 }
 
-function fetchOfficialMain(
+export function fetchOfficialMain(
   readGit,
   {
     rootDir = process.cwd(),
@@ -167,6 +168,25 @@ export function safeAuthorityRaceFailureCode(error) {
     : "AUTHORITY_RACE_UNKNOWN";
 }
 
+export function authorityDrillBindingFromEnvironment(environment) {
+  const raw = environment?.TIDEPROOF_AUTHORITY_DRILL_BINDING;
+  if (
+    typeof raw !== "string" ||
+    raw.length === 0 ||
+    raw.length > 4096 ||
+    /[\0\r\n]/u.test(raw)
+  ) {
+    throw new Error("AUTHORITY_RACE_DRILL_BINDING_REJECTED");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("AUTHORITY_RACE_DRILL_BINDING_REJECTED");
+  }
+  return parseAuthorityDrillBinding(parsed);
+}
+
 export function awsEvidenceClientOptions(credentials, requestHandler) {
   return {
     region: "us-east-1",
@@ -233,6 +253,10 @@ async function evidenceClients(credentials) {
 
 export async function main(argv = process.argv.slice(2)) {
   const options = parseAuthorityRaceArguments(argv);
+  const drill = authorityDrillBindingFromEnvironment(process.env);
+  if (drill.runId !== options.runId) {
+    throw new Error("AUTHORITY_RACE_DRILL_BINDING_REJECTED");
+  }
   const rootDir = process.cwd();
   const readGit = createAuthorityRaceGitRunner({ rootDir });
   fetchOfficialMain(readGit, { rootDir });
@@ -286,6 +310,14 @@ export async function main(argv = process.argv.slice(2)) {
         raceId: options.raceId,
         runId: options.runId,
         functionArn: options.functionArn,
+        authorityEvidenceBindingSha256:
+          drill.authorityEvidenceBindingSha256,
+        selectedEvidenceId: drill.selectedEvidenceId,
+        selectedEvidenceDigest: drill.selectedEvidenceDigest,
+        alphaProposalDigest: drill.alphaProposalDigest,
+        bravoProposalDigest: drill.bravoProposalDigest,
+        alphaLogicalActionDigest: drill.alphaLogicalActionDigest,
+        bravoLogicalActionDigest: drill.bravoLogicalActionDigest,
         packageLockDigest:
           provenance.dependencies.installedTree.packageLockSha256,
         dependencyInventoryDigest:
@@ -295,6 +327,7 @@ export async function main(argv = process.argv.slice(2)) {
   );
   const receipt = await runAuthorityRace({
     ...options,
+    drill,
     callerBinding,
     invoke: clients.invoke
   });

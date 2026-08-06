@@ -39,7 +39,17 @@ const EXPECTED = Object.freeze({
     "arn:aws:lambda:us-east-1:111111111111:function:tideproof-authority:7",
   raceId: "55555555-5555-4555-8555-555555555555",
   runId: "66666666-6666-4666-8666-666666666666",
-  sourceCommit: "a".repeat(40)
+  sourceCommit: "a".repeat(40),
+  drill: Object.freeze({
+    runId: "66666666-6666-4666-8666-666666666666",
+    authorityEvidenceBindingSha256: "6".repeat(64),
+    selectedEvidenceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    selectedEvidenceDigest: "0".repeat(64),
+    alphaProposalDigest: "8".repeat(64),
+    bravoProposalDigest: "a".repeat(64),
+    alphaLogicalActionDigest: "9".repeat(64),
+    bravoLogicalActionDigest: "b".repeat(64)
+  })
 });
 
 const IDS = Object.freeze({
@@ -320,7 +330,13 @@ test("authority race CLI accepts only an exact numeric proof target", () => {
       "--config-digest",
       EXPECTED.configDigest
     ]),
-    EXPECTED
+    {
+      configDigest: EXPECTED.configDigest,
+      functionArn: EXPECTED.functionArn,
+      raceId: EXPECTED.raceId,
+      runId: EXPECTED.runId,
+      sourceCommit: EXPECTED.sourceCommit
+    }
   );
   for (const argv of [
     [],
@@ -541,27 +557,34 @@ test("authority race errors never publish AWS identity or resource details", () 
 });
 
 test("authority race emits exact contender and proof events without authority fields", () => {
-  assert.deepEqual(authorityRaceEvent(EXPECTED.raceId, "alpha"), {
+  assert.deepEqual(authorityRaceEvent(EXPECTED.raceId, EXPECTED.drill, "alpha"), {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "reserve",
     raceId: EXPECTED.raceId,
+    drill: EXPECTED.drill,
     contender: "alpha"
   });
   assert.throws(
-    () => authorityRaceEvent(EXPECTED.raceId, "third"),
+    () => authorityRaceEvent(EXPECTED.raceId, EXPECTED.drill, "third"),
     /AUTHORITY_RACE_EVENT_REJECTED/
   );
-  assert.deepEqual(authorityProofEvent(EXPECTED.raceId), {
+  assert.deepEqual(authorityProofEvent(EXPECTED.raceId, EXPECTED.drill), {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "proof",
-    raceId: EXPECTED.raceId
+    raceId: EXPECTED.raceId,
+    drill: EXPECTED.drill
   });
   assert.deepEqual(
-    authorityChangedInputEvent(EXPECTED.raceId, "alpha"),
+    authorityChangedInputEvent(
+      EXPECTED.raceId,
+      EXPECTED.drill,
+      "alpha"
+    ),
     {
       schemaVersion: AUTHORITY_REQUEST_SCHEMA,
       mode: "changed_input",
       raceId: EXPECTED.raceId,
+      drill: EXPECTED.drill,
       contender: "alpha"
     }
   );
@@ -720,7 +743,7 @@ test("authority race rejects non-overlap, numeric-version drift, and outcome dri
           },
           EXPECTED
         ),
-      /AUTHORITY_RACE_RESULT_REJECTED/
+      /AUTHORITY_RACE_RESPONSE_REJECTED/
     );
   }
 });

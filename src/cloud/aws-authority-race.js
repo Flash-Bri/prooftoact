@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 export const AUTHORITY_REQUEST_SCHEMA =
-  "tideproof.aws-authority-request.v2";
+  "tideproof.aws-authority-request.v3";
 export const AUTHORITY_RESPONSE_SCHEMA =
   "tideproof.aws-authority-boundary.v3";
 export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
@@ -128,7 +128,37 @@ export function parseAuthorityRaceArguments(argv) {
   };
 }
 
-export function authorityRaceEvent(raceId, contender) {
+export function parseAuthorityDrillBinding(value) {
+  if (
+    !exactKeys(value, [
+      "alphaLogicalActionDigest",
+      "alphaProposalDigest",
+      "authorityEvidenceBindingSha256",
+      "bravoLogicalActionDigest",
+      "bravoProposalDigest",
+      "runId",
+      "selectedEvidenceDigest",
+      "selectedEvidenceId"
+    ]) ||
+    !UUID_PATTERN.test(value.runId ?? "") ||
+    !UUID_PATTERN.test(value.selectedEvidenceId ?? "") ||
+    ![
+      value.alphaLogicalActionDigest,
+      value.alphaProposalDigest,
+      value.authorityEvidenceBindingSha256,
+      value.bravoLogicalActionDigest,
+      value.bravoProposalDigest,
+      value.selectedEvidenceDigest
+    ].every((entry) => SHA256_PATTERN.test(entry ?? "")) ||
+    value.alphaProposalDigest === value.bravoProposalDigest ||
+    value.alphaLogicalActionDigest === value.bravoLogicalActionDigest
+  ) {
+    throw new Error("AUTHORITY_RACE_DRILL_BINDING_REJECTED");
+  }
+  return Object.freeze({ ...value });
+}
+
+export function authorityRaceEvent(raceId, drill, contender) {
   if (!UUID_PATTERN.test(raceId) || !CONTENDERS.includes(contender)) {
     throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
   }
@@ -136,22 +166,24 @@ export function authorityRaceEvent(raceId, contender) {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "reserve",
     raceId,
+    drill: parseAuthorityDrillBinding(drill),
     contender
   };
 }
 
-export function authorityProofEvent(raceId) {
+export function authorityProofEvent(raceId, drill) {
   if (!UUID_PATTERN.test(raceId)) {
     throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
   }
   return {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "proof",
-    raceId
+    raceId,
+    drill: parseAuthorityDrillBinding(drill)
   };
 }
 
-export function authorityChangedInputEvent(raceId, contender) {
+export function authorityChangedInputEvent(raceId, drill, contender) {
   if (!UUID_PATTERN.test(raceId) || !CONTENDERS.includes(contender)) {
     throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
   }
@@ -159,6 +191,7 @@ export function authorityChangedInputEvent(raceId, contender) {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "changed_input",
     raceId,
+    drill: parseAuthorityDrillBinding(drill),
     contender
   };
 }
@@ -200,6 +233,15 @@ function validateCommittedResponse(
   expected,
   expectedReplayKind = null
 ) {
+  const expectedDrill = parseAuthorityDrillBinding(expected?.drill);
+  const expectedProposalDigest =
+    contender === "alpha"
+      ? expectedDrill.alphaProposalDigest
+      : expectedDrill.bravoProposalDigest;
+  const expectedLogicalActionDigest =
+    contender === "alpha"
+      ? expectedDrill.alphaLogicalActionDigest
+      : expectedDrill.bravoLogicalActionDigest;
   const allowedKeys = [
     "authorityArtifactDigest",
     "authorityCurrent",
@@ -255,6 +297,17 @@ function validateCommittedResponse(
     value.committedOperationId !== value.operationId ||
     !SHA256_PATTERN.test(value.requestDigest) ||
     value.committedRequestDigest !== value.requestDigest ||
+    value.proposalDigest !== expectedProposalDigest ||
+    value.committedProposalDigest !== expectedProposalDigest ||
+    value.logicalActionDigest !== expectedLogicalActionDigest ||
+    value.committedAuthorityEvidenceBindingSha256 !==
+      expectedDrill.authorityEvidenceBindingSha256 ||
+    value.committedSelectedEvidenceId !==
+      expectedDrill.selectedEvidenceId ||
+    value.selectedEvidenceDigest !==
+      expectedDrill.selectedEvidenceDigest ||
+    value.committedSelectedEvidenceDigest !==
+      expectedDrill.selectedEvidenceDigest ||
     !Number.isSafeInteger(value.authorizationEpoch) ||
     value.authorizationEpoch < 1 ||
     !SHA256_PATTERN.test(value.logicalAuthorityKeySha256) ||
@@ -533,12 +586,17 @@ export function validateAuthorityRaceInvocations(
     !exactKeys(invocations, CONTENDERS) ||
     !exactKeys(expected, [
       "configDigest",
+      "drill",
       "functionArn",
       "raceId",
       "runId",
       "sourceCommit"
     ])
   ) {
+    throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
+  }
+  const expectedDrill = parseAuthorityDrillBinding(expected.drill);
+  if (expectedDrill.runId !== expected.runId) {
     throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
   }
   const decoded = Object.fromEntries(
@@ -715,12 +773,14 @@ export function validateAuthorityRaceProof(
   callerBinding
 ) {
   const acceptedCallerBinding = validatedCallerBinding(callerBinding);
+  const expectedDrill = parseAuthorityDrillBinding(expected?.drill);
   const observationBinding = validatedObservationBindings.get(observation);
   if (
     !observationBinding ||
     observationBinding.digest !== sha256Hex(JSON.stringify(observation)) ||
     !exactKeys(expected, [
       "configDigest",
+      "drill",
       "functionArn",
       "raceId",
       "runId",
@@ -761,6 +821,7 @@ export function validateAuthorityRaceProof(
     observation.configDigest !== expected.configDigest ||
     observation.raceId !== expected.raceId ||
     observation.runId !== expected.runId ||
+    expectedDrill.runId !== expected.runId ||
     !exactKeys(observation.dvi, [
       "authorityEvidenceBindingSha256",
       "selectedEvidenceBindingSha256"
@@ -771,6 +832,13 @@ export function validateAuthorityRaceProof(
     !SHA256_PATTERN.test(
       observation.dvi.selectedEvidenceBindingSha256
     ) ||
+    observation.dvi.authorityEvidenceBindingSha256 !==
+      expectedDrill.authorityEvidenceBindingSha256 ||
+    observation.dvi.selectedEvidenceBindingSha256 !==
+      sha256Hex(canonicalJson({
+        evidenceId: expectedDrill.selectedEvidenceId,
+        evidenceDigest: expectedDrill.selectedEvidenceDigest
+      })) ||
     observation.functionArnDigest !== sha256Hex(expected.functionArn)
     || observation.distinctLogicalActions !== true
     || observation.distinctProposals !== true
@@ -960,6 +1028,7 @@ export async function runAuthorityRace({
   raceId,
   runId,
   sourceCommit,
+  drill,
   callerBinding,
   invoke
 }) {
@@ -968,6 +1037,7 @@ export async function runAuthorityRace({
   }
   const expected = {
     configDigest,
+    drill: parseAuthorityDrillBinding(drill),
     functionArn,
     raceId,
     runId,
@@ -979,7 +1049,7 @@ export async function runAuthorityRace({
       contender,
       await invoke(
         functionArn,
-        authorityRaceEvent(raceId, contender)
+        authorityRaceEvent(raceId, drill, contender)
       )
     ])
   );
@@ -990,7 +1060,11 @@ export async function runAuthorityRace({
   const replay = validateAuthorityReplayInvocation(
     await invoke(
       functionArn,
-      authorityRaceEvent(raceId, observation.winner.contender)
+      authorityRaceEvent(
+        raceId,
+        drill,
+        observation.winner.contender
+      )
     ),
     observation,
     expected
@@ -1000,6 +1074,7 @@ export async function runAuthorityRace({
       functionArn,
       authorityChangedInputEvent(
         raceId,
+        drill,
         observation.winner.contender
       )
     ),
@@ -1008,7 +1083,7 @@ export async function runAuthorityRace({
   );
   const proof = await invoke(
     functionArn,
-    authorityProofEvent(raceId)
+    authorityProofEvent(raceId, drill)
   );
   const receipt = validateAuthorityRaceProof(
     proof,
@@ -1029,6 +1104,9 @@ export async function runAuthorityRace({
       ...receipt.awsInvokeRequestDigests,
       replay: replay.awsInvokeRequestDigest,
       changedInput: changedInput.awsInvokeRequestDigest
+    },
+    providerOperations: {
+      lambdaInvocations: 5
     }
   };
 }

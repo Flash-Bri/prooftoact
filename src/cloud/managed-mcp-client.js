@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { recoveryQueryBindingsFor } from "./recovery-store.js";
 
 const MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
@@ -11,6 +11,10 @@ function requireText(value, name) {
     throw new TypeError(`${name} must be a non-empty string`);
   }
   return value.trim();
+}
+
+function sha256(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
 }
 
 function requireUuid(value, name) {
@@ -130,6 +134,9 @@ export class CockroachManagedMcpRecoveryClient {
   #fetch;
   #nextId = 1;
   #sessionId = null;
+  #rpcEvidence = [];
+  #notificationCount = 0;
+  #closeAttempted = false;
 
   constructor({ apiKey, clusterId, fetchImpl = globalThis.fetch } = {}) {
     this.#apiKey = requireText(apiKey, "apiKey");
@@ -147,6 +154,7 @@ export class CockroachManagedMcpRecoveryClient {
     if (!this.#sessionId) {
       return;
     }
+    this.#closeAttempted = true;
     await this.#fetch(MCP_ENDPOINT, {
       method: "DELETE",
       headers: this.#headers(),
@@ -156,6 +164,21 @@ export class CockroachManagedMcpRecoveryClient {
       .then(cancelResponseBody)
       .catch(() => {});
     this.#sessionId = null;
+  }
+
+  transportEvidence() {
+    return Object.freeze({
+      schemaVersion: "tideproof.managed-mcp-transport-evidence.v1",
+      endpointSha256: sha256(MCP_ENDPOINT),
+      endpointAuthority: "cockroachlabs.cloud",
+      clusterIdSha256: sha256(this.#clusterId),
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      rpcCalls: this.#rpcEvidence.map((entry) => Object.freeze({ ...entry })),
+      notificationCount: this.#notificationCount,
+      closeAttempted: this.#closeAttempted,
+      redirectPolicy: "error",
+      boundedResponseBytes: RECOVERY_MCP_RESPONSE_LIMIT_BYTES
+    });
   }
 
   async #initialize() {
@@ -204,6 +227,7 @@ export class CockroachManagedMcpRecoveryClient {
       await cancelResponseBody(response);
       throw new Error(`RECOVERY_MCP_HTTP_${response.status}`);
     }
+    this.#notificationCount += 1;
     await cancelResponseBody(response);
   }
 
@@ -252,6 +276,21 @@ export class CockroachManagedMcpRecoveryClient {
         .toUpperCase();
       throw new Error(`RECOVERY_MCP_RPC_${code}`);
     }
+    this.#rpcEvidence.push(Object.freeze({
+      method,
+      requestIdSha256: sha256(id),
+      responseIdSha256: sha256(String(message.id)),
+      responseCorrelated: true,
+      httpStatus: response.status,
+      contentType:
+        contentType.includes("application/json")
+          ? "application/json"
+          : "text/event-stream",
+      sessionIdSha256:
+        typeof this.#sessionId === "string" && this.#sessionId.length > 0
+          ? sha256(this.#sessionId)
+          : null
+    }));
     return message.result;
   }
 

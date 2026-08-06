@@ -72,7 +72,7 @@
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
-      "sha256": "7d3b9ebd2aa31752e2789f0ff98cdec0011599e62bf8f152b060e53037d53af6"
+      "sha256": "e3e5b475bec680f3757648a5d93775c58bbd306ad2cf6fb4a2c27b4608e80ab9"
     },
     {
       "id": "authority-runtime-identity-tests",
@@ -84,7 +84,7 @@
       "id": "authority-runtime-reconciliation-tests",
       "path": "test/aws-authority-lambda.test.js",
       "role": "AUTHORITY_RUNTIME_RECONCILIATION_VERIFICATION",
-      "sha256": "f4439ff6891bda126ba62f2bec13368241eaeaf20b6ba38d6d2115ae5637d99a"
+      "sha256": "747fab44d14a49aebe5665493a89b20480608d4f7814282e25fce2a5004ae0c2"
     },
     {
       "id": "authority-store",
@@ -102,13 +102,13 @@
       "id": "aws-authority-race",
       "path": "scripts/gate2-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
-      "sha256": "2fceb2f0186585140fa4f747ef532c25f95a571e98198d01155633e2867ff1c8"
+      "sha256": "23cc928340c0817c0b867fdec535310bccdc93bd0521b7a6a795b2e04e720a97"
     },
     {
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "24c71692dfc75df9557e12bed9853ad11ad6cafcc40514705aa66223c3046395"
+      "sha256": "e05d18e268fc2f4defa6388747fddefc7113958b17226fd9bd2961926284e11c"
     },
     {
       "id": "aws-boundary-ledger",
@@ -120,7 +120,7 @@
       "id": "aws-deployment-attestation",
       "path": "src/cloud/aws-deployment-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
-      "sha256": "62ad076f13aa772df48bd5f438a4bc701539a77146d6e2969d27665184c3a09a"
+      "sha256": "a0a2c387aca4a3fdc98b45709e86a32290ebdb0e55c1d5d6bbfdb701b7da4134"
     },
     {
       "id": "aws-deployment-attestation-runner",
@@ -132,7 +132,7 @@
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "c27db879f2fdd22e83fa3a9709772a2750c350c6f7a64ca0e2d5a81ef4f30d44"
+      "sha256": "66ebb63c5103b95799bad2585f2e8781ada9c6bce8ed0dcb5181727c1d4dc9ae"
     },
     {
       "id": "aws-evidence-identity",
@@ -216,19 +216,19 @@
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "45951c031d4c5324fc6d45b8da74309b337de434242d92f3f542e7582ef2e755"
+      "sha256": "0d9266d940843e15e76618492362014e453d5b30bf419ba5ee11000360d5addf"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "2eec05a757bd531f15c773baf0a1a20611881d61b7006c5becfddba449a5c311"
+      "sha256": "13a2df296d9d5faec2009698523df7da5aab50c70e45e0618bcefd623aeb4798"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "d9dff3c34d0ae4aac3db8d45183559143a96c5477e4f50fbff95c359fcbdee51"
+      "sha256": "b1c88255712e928c0bbafee8b1f8890b9af31f3c607f6846f1679d01285fd400"
     },
     {
       "id": "aws-template-security-tests",
@@ -366,19 +366,19 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "45698c19e22c5962a52771cd6b6f88d5a7a728174820ec01b1325af7cdcaf4c6"
+      "sha256": "e7fc2be8ccce32b03ab9ac7338027b31cd1bd1b2f411ce63959b8cdae329bc69"
     },
     {
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER",
-      "sha256": "a1bd8a16cc7329cacd14afe187ecbb770b9577e53970a2b4bfe935ba6ce63c2d"
+      "sha256": "bd4a460daf2efe34fc964af442de19e0567d789d9e71f1426e0c4a10290f8a73"
     },
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "4c6643df8934081e72193f47c1be0a6c664c46943b9b3eb3d5d2f6c4c507cef2"
+      "sha256": "12112fc2fc178da76d9bf5fa361af5f4a15790b210eaf69af01ccc5e5fda9b00"
     },
     {
       "id": "local-full-drill-harness",
@@ -414,7 +414,7 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "1eeb6970b345ae2206fac51021396512ab3276647d563d58014afc19d4c30f95"
+      "sha256": "e8f9ea4bf6dc8d31136a7c8107ec552c699f332c230a5d1fd56f80c540416063"
     },
     {
       "id": "primary-security-bootstrap",
@@ -498,7 +498,7 @@
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "66d84295f7c1d6f8dfb521cd9bcc7b61a6a69a81b16f80975b12821957295607"
+      "sha256": "888587d542c35c8970a41c0e2622792d6ff8096a65c04e63d310ad277016c75c"
     },
     {
       "id": "recovery-evidence-runner",

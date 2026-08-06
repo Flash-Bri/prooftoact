@@ -2,7 +2,7 @@
 
 const crypto = require("node:crypto");
 
-const REQUEST_SCHEMA = "tideproof.aws-authority-request.v2";
+const REQUEST_SCHEMA = "tideproof.aws-authority-request.v3";
 const RESPONSE_SCHEMA = "tideproof.aws-authority-boundary.v3";
 const PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
@@ -196,31 +196,8 @@ function configuration() {
       "AUTHORITY_DATABASE_PORT"
     ),
     tenantId: requiredUuidEnvironment("AUTHORITY_TENANT_ID"),
-    runId: requiredUuidEnvironment("AUTHORITY_RUN_ID"),
     incidentId: requiredUuidEnvironment("AUTHORITY_INCIDENT_ID"),
-    evidenceId: requiredUuidEnvironment("AUTHORITY_EVIDENCE_ID"),
-    raceId: requiredUuidEnvironment("AUTHORITY_RACE_ID"),
     resourceId: requiredEnvironment("AUTHORITY_RESOURCE_ID", 160),
-    alphaProposalDigest: requiredEnvironment(
-      "AUTHORITY_ALPHA_PROPOSAL_DIGEST",
-      64
-    ),
-    bravoProposalDigest: requiredEnvironment(
-      "AUTHORITY_BRAVO_PROPOSAL_DIGEST",
-      64
-    ),
-    alphaLogicalActionDigest: requiredEnvironment(
-      "AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST",
-      64
-    ),
-    bravoLogicalActionDigest: requiredEnvironment(
-      "AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST",
-      64
-    ),
-    selectedEvidenceDigest: requiredEnvironment(
-      "AUTHORITY_SELECTED_EVIDENCE_DIGEST",
-      64
-    ),
     sourceCommit: requiredEnvironment("SOURCE_COMMIT", 64),
     configDigest: requiredEnvironment("CONFIG_DIGEST", 64),
     treeDigest: requiredEnvironment("TREE_DIGEST", 64),
@@ -245,71 +222,142 @@ function configuration() {
       config.configDigest,
       config.packageLockDigest,
       config.authoritySourceDigest,
-      config.authorityArtifactDigest,
-      config.alphaProposalDigest,
-      config.bravoProposalDigest,
-      config.alphaLogicalActionDigest,
-      config.bravoLogicalActionDigest,
-      config.selectedEvidenceDigest
+      config.authorityArtifactDigest
     ].every((value) => /^[0-9a-f]{64}$/.test(value))
-    || config.alphaProposalDigest === config.bravoProposalDigest
-    || config.alphaLogicalActionDigest ===
-      config.bravoLogicalActionDigest
   ) {
     throw new Error("AUTHORITY_CONFIGURATION_REJECTED");
   }
   return config;
 }
 
+function validatedDrill(value) {
+  if (
+    !exactKeys(value, [
+      "alphaLogicalActionDigest",
+      "alphaProposalDigest",
+      "authorityEvidenceBindingSha256",
+      "bravoLogicalActionDigest",
+      "bravoProposalDigest",
+      "runId",
+      "selectedEvidenceDigest",
+      "selectedEvidenceId"
+    ])
+  ) {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
+  let runId;
+  let selectedEvidenceId;
+  try {
+    runId = String(value.runId).toLowerCase();
+    selectedEvidenceId = String(value.selectedEvidenceId).toLowerCase();
+    uuidBytes(runId);
+    uuidBytes(selectedEvidenceId);
+  } catch {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
+  const digests = [
+    value.alphaLogicalActionDigest,
+    value.alphaProposalDigest,
+    value.authorityEvidenceBindingSha256,
+    value.bravoLogicalActionDigest,
+    value.bravoProposalDigest,
+    value.selectedEvidenceDigest
+  ];
+  if (
+    !digests.every(
+      (digest) => typeof digest === "string" && /^[0-9a-f]{64}$/.test(digest)
+    ) ||
+    value.alphaProposalDigest === value.bravoProposalDigest ||
+    value.alphaLogicalActionDigest === value.bravoLogicalActionDigest
+  ) {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
+  return Object.freeze({
+    ...value,
+    runId,
+    selectedEvidenceId
+  });
+}
+
 function parseReserveEvent(event, config) {
   if (
-    !exactKeys(event, ["contender", "mode", "raceId", "schemaVersion"]) ||
+    !exactKeys(event, [
+      "contender",
+      "drill",
+      "mode",
+      "raceId",
+      "schemaVersion"
+    ]) ||
     event.schemaVersion !== REQUEST_SCHEMA ||
     event.mode !== "reserve" ||
-    event.raceId !== config.raceId ||
+    typeof event.raceId !== "string" ||
     !CONTENDERS.has(event.contender)
   ) {
     throw new Error("AUTHORITY_REQUEST_REJECTED");
   }
+  try {
+    uuidBytes(event.raceId);
+  } catch {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
   return {
-    raceId: event.raceId,
-    contender: event.contender
+    raceId: event.raceId.toLowerCase(),
+    contender: event.contender,
+    drill: validatedDrill(event.drill)
   };
 }
 
 function parseProofEvent(event, config) {
   if (
-    !exactKeys(event, ["mode", "raceId", "schemaVersion"]) ||
+    !exactKeys(event, ["drill", "mode", "raceId", "schemaVersion"]) ||
     event.schemaVersion !== REQUEST_SCHEMA ||
     event.mode !== "proof" ||
-    event.raceId !== config.raceId
+    typeof event.raceId !== "string"
   ) {
     throw new Error("AUTHORITY_REQUEST_REJECTED");
   }
+  try {
+    uuidBytes(event.raceId);
+  } catch {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
   return {
-    raceId: event.raceId,
-    contender: null
+    raceId: event.raceId.toLowerCase(),
+    contender: null,
+    drill: validatedDrill(event.drill)
   };
 }
 
 function parseChangedInputEvent(event, config) {
   if (
-    !exactKeys(event, ["contender", "mode", "raceId", "schemaVersion"]) ||
+    !exactKeys(event, [
+      "contender",
+      "drill",
+      "mode",
+      "raceId",
+      "schemaVersion"
+    ]) ||
     event.schemaVersion !== REQUEST_SCHEMA ||
     event.mode !== "changed_input" ||
-    event.raceId !== config.raceId ||
+    typeof event.raceId !== "string" ||
     !CONTENDERS.has(event.contender)
   ) {
     throw new Error("AUTHORITY_REQUEST_REJECTED");
   }
+  try {
+    uuidBytes(event.raceId);
+  } catch {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
   return {
-    raceId: event.raceId,
-    contender: event.contender
+    raceId: event.raceId.toLowerCase(),
+    contender: event.contender,
+    drill: validatedDrill(event.drill)
   };
 }
 
 function authorityRequestFor(event, config) {
-  const { raceId, contender } = parseReserveEvent(event, config);
+  const { raceId, contender, drill } = parseReserveEvent(event, config);
   const agentId = `aws-authority-${contender}`;
   const payload = {
     scenario: "synthetic-highwater",
@@ -320,7 +368,7 @@ function authorityRequestFor(event, config) {
   const request = {
     digestVersion: 2,
     tenantId: config.tenantId,
-    runId: config.runId,
+    runId: drill.runId,
     incidentId: config.incidentId,
     resourceId: config.resourceId,
     operationId: uuidV5(
@@ -329,7 +377,7 @@ function authorityRequestFor(event, config) {
     ),
     agentId,
     agency: "rescue",
-    evidenceId: config.evidenceId,
+    evidenceId: drill.selectedEvidenceId,
     intentNonce: uuidV5(
       AUTHORITY_NAMESPACE,
       `${raceId}:${contender}:intent`
@@ -345,13 +393,15 @@ function authorityRequestFor(event, config) {
     payloadDigest: sha256Hex(payload),
     proposalDigest:
       contender === "alpha"
-        ? config.alphaProposalDigest
-        : config.bravoProposalDigest,
+        ? drill.alphaProposalDigest
+        : drill.bravoProposalDigest,
     logicalActionDigest:
       contender === "alpha"
-        ? config.alphaLogicalActionDigest
-        : config.bravoLogicalActionDigest,
-    selectedEvidenceDigest: config.selectedEvidenceDigest
+        ? drill.alphaLogicalActionDigest
+        : drill.bravoLogicalActionDigest,
+    authorityEvidenceBindingSha256:
+      drill.authorityEvidenceBindingSha256,
+    selectedEvidenceDigest: drill.selectedEvidenceDigest
   };
   request.requestPayload = {
     digestVersion: request.digestVersion,
@@ -677,6 +727,9 @@ function normalizeSpendRow(row, request) {
     reason === "evidence_missing";
   if (
     !committedDviBindingValid ||
+    (replayKind !== "logical_authority_replay" &&
+      committedAuthorityEvidenceBindingSha256 !==
+        request.authorityEvidenceBindingSha256) ||
     !committedEvidenceIdValid ||
     (replayKind !== "logical_authority_replay" &&
       committedSelectedEvidenceId !== request.evidenceId) ||
@@ -947,7 +1000,10 @@ function normalizeResolvedRow(row, request) {
     row.logical_authority_key_sha256 !==
       identity.logicalAuthorityKeySha256 ||
     row.authorization_binding_sha256 !==
-      identity.authorizationBindingSha256
+      identity.authorizationBindingSha256 ||
+    (!logicalReplay &&
+      receiptProposal.authorityEvidenceBindingSha256 !==
+        request.authorityEvidenceBindingSha256)
   ) {
     throw new Error("AUTHORITY_RECONCILIATION_REJECTED");
   }
@@ -1087,7 +1143,7 @@ function normalizeResolvedRow(row, request) {
   };
 }
 
-function normalizeProofRow(row, config, requests) {
+function normalizeProofRow(row, drill, requests) {
   const rowKeys = [
     "active_run_id",
     "alpha_fencing_token",
@@ -1171,7 +1227,7 @@ function normalizeProofRow(row, config, requests) {
   const currentFence = String(row.current_fence);
   const observedAt = normalizeTimestamp(row.observed_at);
   if (
-    row.active_run_id !== config.runId ||
+    row.active_run_id !== drill.runId ||
     !winner ||
     !denial ||
     winner === denial ||
@@ -1258,6 +1314,8 @@ async function reconcile({
 async function observeAuthorityRace({
   connectionString,
   config,
+  drill,
+  raceId,
   createClient
 }) {
   const requests = Object.fromEntries(
@@ -1267,7 +1325,8 @@ async function observeAuthorityRace({
         {
           schemaVersion: REQUEST_SCHEMA,
           mode: "reserve",
-          raceId: config.raceId,
+          raceId,
+          drill,
           contender
         },
         config
@@ -1288,7 +1347,7 @@ async function observeAuthorityRace({
     );
     const result = await client.query(PROOF_SQL, [
       config.tenantId,
-      config.runId,
+      drill.runId,
       config.resourceId,
       requests.alpha.operationId,
       requests.alpha.requestDigest,
@@ -1304,14 +1363,14 @@ async function observeAuthorityRace({
     ) {
       throw new Error("AUTHORITY_PROOF_REJECTED");
     }
-    const state = normalizeProofRow(result.rows[0], config, requests);
+    const state = normalizeProofRow(result.rows[0], drill, requests);
     return {
       state,
       transaction: {
         isolation: "serializable",
         databaseObservedAt: state.observedAt,
         databaseSessionDigest: sha256Hex(
-          `${config.raceId}:${backend.rows[0].backend_id}`
+          `${raceId}:${backend.rows[0].backend_id}`
         )
       }
     };
@@ -1569,6 +1628,8 @@ async function runAuthority({
       const proof = await observeAuthorityRace({
         connectionString,
         config,
+        drill: parsed.drill,
+        raceId: parsed.raceId,
         createClient: clientFactory
       });
       return {
@@ -1785,10 +1846,11 @@ exports.__test = {
   runAuthority,
   safeCode,
   secretRequestFor,
+  uuidV5,
   semanticFailureMetric,
   sha256Hex,
-  spendValues,
   spendAuthority,
-  uuidV5,
+  spendValues,
+  validatedDrill,
   validateConnectionString
 };

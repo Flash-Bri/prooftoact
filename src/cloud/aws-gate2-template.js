@@ -666,32 +666,8 @@ export function buildGate2Template() {
     AuthorityTenantId: uuidParameter(
       "Synthetic Gate Two tenant UUID prepared in CockroachDB."
     ),
-    AuthorityRunId: uuidParameter(
-      "Synthetic active-run UUID prepared in CockroachDB."
-    ),
     AuthorityIncidentId: uuidParameter(
       "Synthetic incident UUID bound to the prepared evidence and resource."
-    ),
-    AuthorityEvidenceId: uuidParameter(
-      "Verified synthetic evidence UUID admitted by CockroachDB."
-    ),
-    AuthorityAlphaProposalDigest: hexParameter(
-      "Database-authorized alpha DVI proposal identity consumed by Gate Two."
-    ),
-    AuthorityBravoProposalDigest: hexParameter(
-      "Database-authorized bravo DVI proposal identity consumed by Gate Two."
-    ),
-    AuthorityAlphaLogicalActionDigest: hexParameter(
-      "Stable alpha logical-action identity consumed by Gate Two."
-    ),
-    AuthorityBravoLogicalActionDigest: hexParameter(
-      "Stable bravo logical-action identity consumed by Gate Two."
-    ),
-    AuthoritySelectedEvidenceDigest: hexParameter(
-      "Exact selected evidence digest bound by the authorized DVI proposal."
-    ),
-    AuthorityRaceId: uuidParameter(
-      "One exact proof-race UUID accepted by both authority contenders."
     ),
     AuthorityResourceId: {
       Type: "String",
@@ -1000,25 +976,7 @@ export function buildGate2Template() {
       AUTHORITY_DATABASE_HOST: ref("AuthorityDatabaseHost"),
       AUTHORITY_DATABASE_PORT: ref("AuthorityDatabasePort"),
       AUTHORITY_TENANT_ID: ref("AuthorityTenantId"),
-      AUTHORITY_RUN_ID: ref("AuthorityRunId"),
       AUTHORITY_INCIDENT_ID: ref("AuthorityIncidentId"),
-      AUTHORITY_EVIDENCE_ID: ref("AuthorityEvidenceId"),
-      AUTHORITY_ALPHA_PROPOSAL_DIGEST: ref(
-        "AuthorityAlphaProposalDigest"
-      ),
-      AUTHORITY_BRAVO_PROPOSAL_DIGEST: ref(
-        "AuthorityBravoProposalDigest"
-      ),
-      AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST: ref(
-        "AuthorityAlphaLogicalActionDigest"
-      ),
-      AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST: ref(
-        "AuthorityBravoLogicalActionDigest"
-      ),
-      AUTHORITY_SELECTED_EVIDENCE_DIGEST: ref(
-        "AuthoritySelectedEvidenceDigest"
-      ),
-      AUTHORITY_RACE_ID: ref("AuthorityRaceId"),
       AUTHORITY_RESOURCE_ID: ref("AuthorityResourceId"),
       SOURCE_COMMIT: ref("SourceCommit"),
       CONFIG_DIGEST: ref("ConfigDigest"),
@@ -1714,21 +1672,6 @@ export function buildGate2Template() {
       AuthorityArtifactDigest: {
         Value: ref("AuthorityArtifactDigest")
       },
-      AuthorityAlphaProposalDigest: {
-        Value: ref("AuthorityAlphaProposalDigest")
-      },
-      AuthorityBravoProposalDigest: {
-        Value: ref("AuthorityBravoProposalDigest")
-      },
-      AuthorityAlphaLogicalActionDigest: {
-        Value: ref("AuthorityAlphaLogicalActionDigest")
-      },
-      AuthorityBravoLogicalActionDigest: {
-        Value: ref("AuthorityBravoLogicalActionDigest")
-      },
-      AuthoritySelectedEvidenceDigest: {
-        Value: ref("AuthoritySelectedEvidenceDigest")
-      },
       ProbeSourceDigest: {
         Value: ref("ProbeSourceDigest")
       },
@@ -1817,16 +1760,8 @@ export function deploymentConfigDigest(configuration) {
         "databasePort",
         "databaseSecretArn",
         "databaseSecretVersionId",
-        "evidenceId",
         "incidentId",
-        "alphaLogicalActionDigest",
-        "alphaProposalDigest",
-        "bravoLogicalActionDigest",
-        "bravoProposalDigest",
-        "raceId",
         "resourceId",
-        "runId",
-        "selectedEvidenceDigest",
         "tenantId"
       ]
         .sort()

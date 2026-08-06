@@ -82,7 +82,7 @@ const ALPHA_PROPOSAL = proposalFixture({
 const BRAVO_PROPOSAL = proposalFixture({
   contender: "bravo",
   retrievalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-  authorityEvidenceBindingSha256: "7".repeat(64)
+  authorityEvidenceBindingSha256: "6".repeat(64)
 });
 
 function configureEnvironment() {
@@ -157,11 +157,27 @@ test("authority semantic failures emit provider-bound EMF without authority inpu
   assert.equal(JSON.stringify(metric).includes("logicalActionDigest"), false);
 });
 
-function validEvent(contender = "alpha") {
+function drillBinding(overrides = {}) {
+  return {
+    runId: FIXTURE.runId,
+    authorityEvidenceBindingSha256: "6".repeat(64),
+    selectedEvidenceId: FIXTURE.evidenceId,
+    selectedEvidenceDigest: "3".repeat(64),
+    alphaProposalDigest: ALPHA_PROPOSAL.proposalDigest,
+    bravoProposalDigest: BRAVO_PROPOSAL.proposalDigest,
+    alphaLogicalActionDigest: ALPHA_PROPOSAL.logicalActionDigest,
+    bravoLogicalActionDigest: BRAVO_PROPOSAL.logicalActionDigest,
+    ...overrides
+  };
+}
+
+function validEvent(contender = "alpha", overrides = {}) {
   return {
     schemaVersion: authority.REQUEST_SCHEMA,
     mode: "reserve",
     raceId: FIXTURE.raceId,
+    drill: drillBinding(),
+    ...overrides,
     contender
   };
 }
@@ -170,7 +186,8 @@ function proofEvent() {
   return {
     schemaVersion: authority.REQUEST_SCHEMA,
     mode: "proof",
-    raceId: FIXTURE.raceId
+    raceId: FIXTURE.raceId,
+    drill: drillBinding()
   };
 }
 
@@ -179,6 +196,7 @@ function changedInputEvent(contender = "alpha") {
     schemaVersion: authority.REQUEST_SCHEMA,
     mode: "changed_input",
     raceId: FIXTURE.raceId,
+    drill: drillBinding(),
     contender
   };
 }
@@ -534,7 +552,7 @@ function proofRow(config, changes = {}) {
     config
   );
   return {
-    active_run_id: config.runId,
+    active_run_id: drillBinding().runId,
     current_fence: "1",
     holder_operation_id: alpha.operationId,
     race_receipt_count: "2",
@@ -620,7 +638,7 @@ test("authority derives two distinct logical acts that contend for one resource"
 
   for (const event of [
     { ...validEvent(), authorize: true },
-    { ...validEvent(), raceId: FIXTURE.runId },
+    { ...validEvent(), raceId: "not-a-race-id" },
     { ...validEvent(), contender: "model-selected" },
     { mode: "reserve" }
   ]) {
@@ -724,14 +742,16 @@ test("authority requires exact endpoint/version configuration and bounded databa
     );
     process.env[name] = original;
   }
-  const originalBravo = process.env.AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST;
-  process.env.AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST =
-    process.env.AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST;
+  assert.equal("runId" in config, false);
+  assert.equal("raceId" in config, false);
+  assert.equal("evidenceId" in config, false);
   assert.throws(
-    () => authority.configuration(),
-    /AUTHORITY_CONFIGURATION_REJECTED/
+    () => authority.validatedDrill(drillBinding({
+      bravoLogicalActionDigest:
+        ALPHA_PROPOSAL.logicalActionDigest
+    })),
+    /AUTHORITY_REQUEST_REJECTED/
   );
-  process.env.AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST = originalBravo;
 
   assert.deepEqual(
     authority.databaseClientConfiguration(
