@@ -6,6 +6,8 @@ const REQUEST_SCHEMA = "tideproof.aws-authority-request.v2";
 const RESPONSE_SCHEMA = "tideproof.aws-authority-boundary.v3";
 const PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
+const CHANGED_INPUT_RESPONSE_SCHEMA =
+  "tideproof.aws-authority-changed-input-denial.v1";
 const POLICY_VERSION = "gate1-policy-v2";
 const LEASE_MS = 300_000;
 const MAX_TRANSACTION_RETRIES = 6;
@@ -290,6 +292,22 @@ function parseProofEvent(event, config) {
   };
 }
 
+function parseChangedInputEvent(event, config) {
+  if (
+    !exactKeys(event, ["contender", "mode", "raceId", "schemaVersion"]) ||
+    event.schemaVersion !== REQUEST_SCHEMA ||
+    event.mode !== "changed_input" ||
+    event.raceId !== config.raceId ||
+    !CONTENDERS.has(event.contender)
+  ) {
+    throw new Error("AUTHORITY_REQUEST_REJECTED");
+  }
+  return {
+    raceId: event.raceId,
+    contender: event.contender
+  };
+}
+
 function authorityRequestFor(event, config) {
   const { raceId, contender } = parseReserveEvent(event, config);
   const agentId = `aws-authority-${contender}`;
@@ -356,6 +374,25 @@ function authorityRequestFor(event, config) {
     selectedEvidenceDigest: request.selectedEvidenceDigest
   };
   request.requestDigest = sha256Hex(request.requestPayload);
+  return request;
+}
+
+function changedInputRequestFor(event, config) {
+  const parsed = parseChangedInputEvent(event, config);
+  const request = authorityRequestFor(
+    { ...event, mode: "reserve" },
+    config
+  );
+  request.selectedEvidenceDigest = sha256Hex({
+    schemaVersion: "tideproof.aws-authority-changed-input.v1",
+    originalSelectedEvidenceDigest: request.selectedEvidenceDigest
+  });
+  request.requestPayload = {
+    ...request.requestPayload,
+    selectedEvidenceDigest: request.selectedEvidenceDigest
+  };
+  request.requestDigest = sha256Hex(request.requestPayload);
+  request.raceId = parsed.raceId;
   return request;
 }
 
@@ -1552,6 +1589,61 @@ async function runAuthority({
         ...buildBindings(config)
       };
     }
+    if (event?.mode === "changed_input") {
+      parsed = parseChangedInputEvent(event, config);
+      request = changedInputRequestFor(event, config);
+      const connectionString = await getConnectionString(config);
+      const clientFactory =
+        createClient ??
+        ((value) => {
+          const { Client } = require("pg");
+          return new Client(
+            databaseClientConfiguration(
+              value,
+              "tideproof-aws-authority"
+            )
+          );
+        });
+      let denial;
+      try {
+        await spendAuthority({
+          connectionString,
+          request,
+          createClient: clientFactory,
+          now
+        });
+      } catch (error) {
+        if (
+          error?.code === "22000" &&
+          error?.message === "operation digest mismatch"
+        ) {
+          denial = error;
+        } else {
+          throw error;
+        }
+      }
+      if (!denial) {
+        throw new Error("AUTHORITY_CHANGED_INPUT_ACCEPTED");
+      }
+      return {
+        schemaVersion: CHANGED_INPUT_RESPONSE_SCHEMA,
+        status: "DENIED_CHANGED_INPUT",
+        code: "OPERATION_DIGEST_MISMATCH",
+        raceId: parsed.raceId,
+        contender: parsed.contender,
+        operationId: request.operationId,
+        changedRequestDigest: request.requestDigest,
+        functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
+        invocationRequestId:
+          typeof context?.awsRequestId === "string"
+            ? context.awsRequestId.slice(0, 160)
+            : null,
+        authorityTransferred: false,
+        requiresFreshAuthorization: true,
+        modelAccess: false,
+        ...buildBindings(config)
+      };
+    }
     parsed = parseReserveEvent(event, config);
     request = authorityRequestFor(event, config);
     request.raceId = parsed.raceId;
@@ -1666,6 +1758,7 @@ async function handler(event, context) {
 exports.handler = handler;
 exports.__test = {
   AUTHORITY_NAMESPACE,
+  CHANGED_INPUT_RESPONSE_SCHEMA,
   DATABASE_TIMEOUTS,
   PROOF_RESPONSE_SCHEMA,
   PROOF_SQL,
@@ -1675,6 +1768,7 @@ exports.__test = {
   RESOLVE_SQL,
   authorityIdentityFor,
   authorityRequestFor,
+  changedInputRequestFor,
   canonicalJson,
   configuration,
   connectionStringFromSecret,
@@ -1686,6 +1780,7 @@ exports.__test = {
   normalizeSpendRow,
   observeAuthorityRace,
   parseProofEvent,
+  parseChangedInputEvent,
   parseReserveEvent,
   runAuthority,
   safeCode,

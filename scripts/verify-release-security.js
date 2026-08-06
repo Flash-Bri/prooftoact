@@ -258,6 +258,18 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
     role: "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY"
   }),
+  "integrated-live-drill-harness": Object.freeze({
+    path: "src/cloud/integrated-live-drill.js",
+    role: "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT"
+  }),
+  "integrated-live-drill-runner": Object.freeze({
+    path: "scripts/gate2-integrated-live-drill.js",
+    role: "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER"
+  }),
+  "integrated-live-drill-tests": Object.freeze({
+    path: "test/integrated-live-drill.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION"
+  }),
   "local-full-drill-harness": Object.freeze({
     path: "src/local-full-drill.js",
     role: "LOCAL_FULL_DRILL_EVIDENCE_CONTRACT"
@@ -796,7 +808,11 @@ const SOURCE_MARKERS = Object.freeze({
     "tideproof.aws-semantic-failure.v1",
     "Dimensions: [[\"Deployment\", \"Service\"]]",
     "process.stdout.write(",
-    "result.code !== \"STATUS_ONLY_NO_AUTHORIZATION\""
+    "result.code !== \"STATUS_ONLY_NO_AUTHORIZATION\"",
+    "tideproof.aws-authority-changed-input-denial.v1",
+    "operation digest mismatch",
+    "DENIED_CHANGED_INPUT",
+    "AUTHORITY_CHANGED_INPUT_ACCEPTED"
   ]),
   "authority-runtime-identity-tests": Object.freeze([
     "derives all identity digests without a client epoch",
@@ -816,6 +832,7 @@ const SOURCE_MARKERS = Object.freeze({
     "COMMITTED_BUT_NO_LONGER_CURRENT",
     "result.commit.observation, \"read_reconciled\"",
     "result.committedProposalDigest",
+    "provider negative probe denies changed input under the committed operation",
     "receipt_proposal_payload",
     "destination: \"drifted\""
   ]),
@@ -888,13 +905,16 @@ const SOURCE_MARKERS = Object.freeze({
     "committedSelectedEvidenceDigest",
     "authorityEvidenceBindingSha256",
     "selectedEvidenceBindingSha256",
+    "operation_replay",
+    "OPERATION_DIGEST_MISMATCH",
+    "AUTHORITY_RACE_CHANGED_INPUT_REJECTED",
     "expectedAuthorizationBindingSha256",
     ":[1-9][0-9]*$/.test("
   ]),
   "aws-boundary-ledger": Object.freeze([
     "The command is read-only and fail closed.",
     "The evidence runner rejects endpoint, profile, proxy, custom-CA, Git replacement/graft/alternate, shallow-checkout, and tree-digest contamination",
-    "`tideproof.aws-authority-race-receipt.v6`",
+    "`tideproof.aws-authority-race-receipt.v7`",
     "Every project input is then read as a regular tracked blob from the exact `HEAD` commit",
     "The `proof` aliases are monitored pointers for inspection and metadata only, not invocation authority.",
     "npm run gate2:aws-attest",
@@ -903,7 +923,7 @@ const SOURCE_MARKERS = Object.freeze({
     "fresh `prooftoact-gate2` main stack",
     "must never be updated",
     "Any wrong-run, cross-DVI,",
-    "sequential, ambiguous, replayed, expanded, stale, extra, or unresolved",
+    "ambiguous, replay-drifted, changed-input-accepted, expanded, stale, extra,",
     "result is not evidence.",
     "Release Git children inherited caller selection and repository hooks",
     "reference-transaction",
@@ -1409,6 +1429,30 @@ const SOURCE_MARKERS = Object.freeze({
     "Accepted semantic-monitoring finding",
     "CloudWatch Embedded Metric Format",
     "alarm state transition"
+  ]),
+  "integrated-live-drill-harness": Object.freeze([
+    "INTEGRATED_LIVE_DRILL_SCHEMA",
+    "tideproof.highwater-drill-live.v1",
+    "exactReplayReturnedOriginalDecision: true",
+    "changedInputUnderOperationDenied: true",
+    "managedMcpCalledExactlyOnce: true",
+    "operationalCapabilityReturned: false",
+    "invariantViolations: 0",
+    "providerBacked: true"
+  ]),
+  "integrated-live-drill-runner": Object.freeze([
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+    "gate1-admissible-vector.js",
+    "gate2-authority-race.js",
+    "gate1-recovery-broker.js",
+    "RECOVERY_SOURCE_OPERATION_ID: race.winner?.operationId",
+    "RECOVERY_SOURCE_REQUEST_DIGEST: race.winner?.requestDigest",
+    "INTEGRATED_LIVE_DRILL_COMPONENT_FAILED"
+  ]),
+  "integrated-live-drill-tests": Object.freeze([
+    "one provider drill binds DVI, overlap, negatives, recovery, and cleanup",
+    "integrated receipt fails closed on every cross-act boundary",
+    "orchestrator executes exactly DVI, race, then exact-winner recovery"
   ]),
   "local-full-drill-harness": Object.freeze([
     "LOCAL_FULL_DRILL_CLAIM_BOUNDARY",

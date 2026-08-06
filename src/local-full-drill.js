@@ -11,7 +11,7 @@ export const LOCAL_FULL_DRILL_VERIFICATION_SCHEMA =
   "tideproof.highwater-drill-local-batch-verification.v1";
 export const LOCAL_FULL_DRILL_RUN_COUNT = 100;
 export const LOCAL_FULL_DRILL_CLAIM_BOUNDARY =
-  "Local synthetic specification only. This receipt proves 100 deterministic in-memory scenario executions against the hash-bound source set with zero declared invariant violations. It does not prove or substitute for CockroachDB DVI execution, serializable provider concurrency, AWS Lambda overlap, Managed MCP recovery, a deployed artifact, the provider-backed 100-drill batch, production safety, or final release readiness.";
+  "Local synthetic specification only. This receipt proves the offline half of the approved 100+1 target: 100 deterministic in-memory scenario executions against the hash-bound source set, 1,100 invariant evaluations, and zero declared invariant violations. It does not prove or substitute for the one exact-release provider-backed integrated drill, CockroachDB DVI execution, serializable provider concurrency, AWS Lambda overlap, Managed MCP recovery, a deployed artifact, production safety, or final release readiness.";
 
 const LOCAL_RUN_SCHEMA = "tideproof.highwater-drill-local-run.v1";
 const FIXED_TIME = "2026-08-01T12:00:00.000Z";

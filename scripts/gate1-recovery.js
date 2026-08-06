@@ -312,7 +312,7 @@ async function main() {
           authorityTransferred: recovered.authorityTransferred,
           requiresFreshAuthorization: recovered.requiresFreshAuthorization,
           claimBoundary:
-            "This proves signed, principal-bound, exact-source recovery publication and direct validation through a least-privilege publisher, with the source resolver bound to the expected DVI proposal and selected-evidence digests. Noninteractive Managed MCP broker execution, the 100-drill batch, provider execution, and primary audit are separate evidence gates."
+            "This proves signed, principal-bound, exact-source recovery publication and direct validation through a least-privilege publisher, with the source resolver bound to the expected DVI proposal and selected-evidence digests. Noninteractive Managed MCP broker execution, the +1 integrated live drill, provider execution, and primary audit are separate evidence gates."
         },
         null,
         2

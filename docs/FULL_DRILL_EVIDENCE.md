@@ -1,27 +1,29 @@
 # Full high-water drill evidence contract
 
-Status: **provider-backed batch pending**.
+Status: **one exact-release integrated provider drill pending**.
 
-The frozen project goal requires 100 full drills. Existing receipts prove
-important components independently—100 fifty-contender CockroachDB races,
-100 ambiguity injections at each COMMIT boundary, isolated Distributed Vector
-Index mechanics, and one Managed MCP recovery run—but they do not share one
-drill identity. They cannot be added together or relabeled as 100 end-to-end
-drills.
+Brian approved a 100+1 acceptance target on 2026-08-06: one already completed
+batch of 100 deterministic offline specification runs plus exactly one fresh,
+exact-release provider-backed integrated live drill. Existing historical
+receipts prove important components independently—100 fifty-contender
+CockroachDB races, 100 ambiguity injections at each COMMIT boundary, isolated
+Distributed Vector Index mechanics, and one Managed MCP recovery run—but they
+do not share one drill identity and cannot substitute for the +1 drill.
 
 ## Non-interchangeable evidence classes
 
-A local specification batch may repeat the in-memory three-act scenario 100
-times to detect deterministic invariant regressions. Its receipt must identify
-itself as local and synthetic. It cannot satisfy, substitute for, or unlock the
+A local specification batch repeats the in-memory three-act scenario exactly
+100 times to detect deterministic invariant regressions. Its receipt must
+identify itself as local and synthetic. It satisfies only the offline half of
+the 100+1 target and cannot satisfy, substitute for, or unlock the +1
 provider-backed claim.
 
 ## Deterministic offline harness
 
-Use `npm run --silent full-drill:local` for canonical file generation. The
-command executes the exact local scenario 100 times and emits one canonical
-`tideproof.highwater-drill-local-batch.v1` receipt to standard output; redirect
-that output when refreshing the checked-in receipt at
+Use `npm run --silent full-drill:local -- --output evidence/local-full-drill-100-2026-08-04.json`
+for canonical file generation. The command executes the exact local scenario
+100 times and writes one canonical `tideproof.highwater-drill-local-batch.v1`
+receipt only to the allowlisted checked-in path at
 [`evidence/local-full-drill-100-2026-08-04.json`](../evidence/local-full-drill-100-2026-08-04.json).
 `npm run full-drill:local:verify -- evidence/local-full-drill-100-2026-08-04.json`
 recomputes all 100 scenarios through the same `buildLocalFullDrillReceipt` and
@@ -60,11 +62,11 @@ mutation between source reads,
 scenario execution, validation, or later receipt use remains a TOCTOU residual.
 The receipt remains a local regression control only.
 
-The accepted release artifact must be a fresh
-`tideproof.highwater-drill-live-batch.v1` receipt from the exact clean release
-commit and exact deployed configuration. It must contain exactly 100 unique,
-ordered, consecutive drill bindings. A partial, resumed, skipped, ambiguous,
-99-run, or 101-run batch fails closed.
+The accepted +1 artifact must be one fresh
+`tideproof.highwater-drill-live.v1` receipt from the exact clean release commit
+and exact deployed configuration. A partial, resumed, mixed-release,
+component-only, or second selected provider run fails closed; one independently
+accepted integrated receipt is the complete provider target.
 
 ## Per-drill binding
 
@@ -95,13 +97,14 @@ The snapshot is retired after each run without deleting evidence or authority
 receipts. An uncertain authority attempt is reconciled and never blindly
 replayed.
 
-## Batch acceptance
+## Integrated-live acceptance
 
 Acceptance additionally requires:
 
 - exact clean public `main`, tree, lockfile, artifacts, configuration, caller
   binding, primary cluster, and recovery cluster digests;
-- exactly 100 unique passing run digests and zero invariant violations;
+- exactly one passing integrated run digest, all enumerated invariants true,
+  and zero invariant violations;
 - a fresh `EXPLAIN (VERBOSE)` receipt naming
   `g1_vector_candidates_embedding_idx`, `vector search`, and exact
   tenant/retrieval prefix spans;
@@ -114,7 +117,7 @@ Acceptance additionally requires:
   an explicit historical-only boundary.
 
 The 100 × 50 race and COMMIT-ambiguity receipts remain separate controls. They
-may be referenced by digest, but they are not counted as full drills.
+may be referenced by digest, but they are not the +1 integrated live drill.
 
 ## Present release boundary
 
@@ -124,23 +127,26 @@ its selected top-ranked evidence to one exact synthetic drill run. The source
 path now consumes database-authorized DVI proposal identities and the exact
 selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
-recomputing receipt validator now exist, but the provider-backed batch harness,
-bounded multi-race deployment shape, and live receipt do not. The exact
+recomputing receipt validator now exist. The source now also contains a
+single-run integrated orchestrator and strict sanitized receipt composer, but
+the provider-backed execution and accepted live receipt do not. The exact
 cross-act recovery lookup now has a locally tested source control, but no
 provider-backed receipt. Public claims and final release readiness must
 therefore remain partial and blocked.
 
-The sanitized `tideproof.aws-authority-race-receipt.v6` source contract carries
+The sanitized `tideproof.aws-authority-race-receipt.v7` source contract carries
 the exact configured active-run UUID and validates each contender's configured
 proposal identity and selected-evidence digest against the committed database
 response. Both durable contender results must now carry the same selected
 evidence identity and the same non-reversible
 `authorityEvidenceBindingSha256`; the sanitized receipt publishes that shared
 DVI binding plus a digest of the selected evidence identity. Its durable proof
-rejects a database observation for any other run. This closes source-level
-prerequisites for joining the authority race to one per-drill DVI snapshot. It
-does not prove the live authorizer, exact retrieval prefixes, provider
-concurrency, the 100-run harness, or any live evidence.
+rejects a database observation for any other run.
+This closes source-level prerequisites for joining the authority race to one
+per-drill DVI snapshot. The race lane also requires an exact operation replay
+and a changed-input denial before its v7 receipt can pass. It does not prove the
+live authorizer, exact retrieval prefixes, provider concurrency, or any live
+evidence.
 
 ### Race receipt omitted the shared DVI snapshot identity
 
@@ -194,7 +200,7 @@ identifiers in the public receipt.
 
 This is a source-level prerequisite only. It does not prove a Managed MCP
 call, a live database row, the exact 100-run batch, AWS behavior, or final
-release readiness until a fresh provider-backed receipt binds it to the exact
+  release readiness until the +1 provider-backed receipt binds it to the exact
 official release.
 
 ### Recovery binding stopped before the DVI proposal
@@ -566,9 +572,10 @@ attempted only after an exact direct or read-reconciled prepare receipt has
 validated the snapshot identity; an uncommitted or unresolved prepare never
 deletes by the caller-supplied retrieval ID. A cleanup failure is preserved
 alongside the primary failure. Pool shutdown must also succeed before the
-`PASS` receipt is emitted. A `PASS` remains subject to independent acceptance
-review and does not prove that AWS consumed the binding or satisfy the
-100-drill, authorization, production-safety, or final-release gates by itself.
+receipt is emitted.
+`PASS` remains subject to independent acceptance review and does not prove that
+AWS consumed the binding or satisfy the +1 integrated, authorization,
+production-safety, or final-release gates by itself.
 
 No provider-backed receipt from this lane exists yet.
 
@@ -603,7 +610,7 @@ No provider-backed receipt from this lane exists yet.
   path and ACK-loss preparation reconciliation. Provider-backed CockroachDB
   v26.2 execution remains pending.
 - Residual risk: the persisted source contract does not prove a live DVI plan,
-  the actual provider authorizer, AWS consumption, the 100-drill batch, or
+  the actual provider authorizer, AWS consumption, the +1 integrated drill, or
   cluster-wide inherited-capability exclusion.
 - Claim impact: source can claim persisted snapshot-bound exclusion reasons;
   live and release claims remain blocked until the fresh provider receipt and

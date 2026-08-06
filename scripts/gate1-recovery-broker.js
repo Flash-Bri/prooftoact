@@ -453,7 +453,7 @@ async function main() {
         requiresFreshAuthorization: recovered.requiresFreshAuthorization,
         operationalCapabilitiesReturned: false,
         claimBoundary:
-          "This proves a noninteractive, cluster-scoped Managed MCP read through a deterministic fixed query bound to the exact tenant, run, incident, DVI proposal and selected-evidence digests, evidence, resource, operation, request digest, outcome, and successor principal; signed context validation; context-only recovery; and a separate primary-cluster audit receipt. It does not transfer authority, satisfy the 100-drill batch, prove provider execution, or prove a real-world external effect."
+          "This proves a noninteractive, cluster-scoped Managed MCP read through a deterministic fixed query bound to the exact tenant, run, incident, DVI proposal and selected-evidence digests, evidence, resource, operation, request digest, outcome, and successor principal; signed context validation; context-only recovery; and a separate primary-cluster audit receipt. It does not transfer authority, satisfy the +1 integrated live drill by itself, prove provider execution outside this component, or prove a real-world external effect."
       },
       null,
       2

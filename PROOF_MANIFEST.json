@@ -109,7 +109,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "7e10f702e7b1583ae545da4b70595827669951950e1c4e719543aab6fbb1ce67",
+      "sha256": "331bc5942e4fb4a24a4ed1eebd43ff032de4ef5c9fd7b0218d427431bdce2503",
       "kind": "boundary-ledger"
     },
     {
@@ -199,7 +199,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "6249b00931fc40754944afdf004f6bdd1f69958b576715282d9f65dacda4bbd1",
+      "sha256": "ef9a5ec2737b876a71dd5f608fe0ef56ea43e5b084fbbcf46aa5a0b0948939af",
       "kind": "boundary-ledger"
     },
     {
@@ -283,7 +283,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "7d86f800dde377598a17ebc4a663df12880e241896e992bf85708aa9407d2344",
+      "sha256": "dd1f1167cc6cb6d2055a99f350c71ebced17bfb046ed5c3f8d54bf38824e5c90",
       "kind": "boundary-ledger"
     },
     {
@@ -325,13 +325,13 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "012f92b50e5602073e058a5d483dd9ced20ad0ff6bdd971c46b91f1fb70637b6",
+      "sha256": "f122e21d14da990f49c3cefcd8f49be2acc1ef458b35c05dbfcbe0e6014f3c3a",
       "kind": "verification-code"
     },
     {
       "id": "gate2-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
-      "sha256": "a3ec55a057fb6d38f2c7ace6b485a712af793366022988165bcdef856d7df80d",
+      "sha256": "24c71692dfc75df9557e12bed9853ad11ad6cafcc40514705aa66223c3046395",
       "kind": "verification-code"
     },
     {
@@ -365,27 +365,45 @@
       "kind": "verification-code"
     },
     {
+      "id": "integrated-live-drill-harness",
+      "path": "src/cloud/integrated-live-drill.js",
+      "sha256": "45698c19e22c5962a52771cd6b6f88d5a7a728174820ec01b1325af7cdcaf4c6",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-runner",
+      "path": "scripts/gate2-integrated-live-drill.js",
+      "sha256": "a1bd8a16cc7329cacd14afe187ecbb770b9577e53970a2b4bfe935ba6ce63c2d",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-tests",
+      "path": "test/integrated-live-drill.test.js",
+      "sha256": "4c6643df8934081e72193f47c1be0a6c664c46943b9b3eb3d5d2f6c4c507cef2",
+      "kind": "verification-code"
+    },
+    {
       "id": "local-full-drill-harness",
       "path": "src/local-full-drill.js",
-      "sha256": "56e3d6dbe2d7493f0204d14f1d7093abdfc18d20e9cf209514720842c41b81f7",
+      "sha256": "0ab8e5270a1ee07af0f424c4ee47361607a1c83693f4cc9ec634652c8df0fedc",
       "kind": "verification-code"
     },
     {
       "id": "local-full-drill-receipt",
       "path": "evidence/local-full-drill-100-2026-08-04.json",
-      "sha256": "fa0e19647819400d7131ebc4ae7acd9b7c6076f78d3fa1f4c6fc1074a90a6181",
+      "sha256": "eac97d80c5a628d2be6ce68263308541fdbeee921ac3cbb04a4116722d2904e7",
       "kind": "local-validation"
     },
     {
       "id": "local-full-drill-runner",
       "path": "scripts/run-local-full-drills.js",
-      "sha256": "432f5de81f73c620148c5121916acd3f05fcd0dd38ac4d1b3808cac62944dcdd",
+      "sha256": "f0eff6a3d8a19e05510c594b4a616b279b5ee3ce206b0c2f5222db4112338e87",
       "kind": "verification-code"
     },
     {
       "id": "local-full-drill-tests",
       "path": "test/local-full-drill.test.js",
-      "sha256": "35d01c95206cfeea4b604353ca7c49d0fced2d0a358319c34ca129a2f74cb114",
+      "sha256": "a68481ef18d5cdb37f5bf53a455a9c904eca57b8fee89f61ce642d8001026e69",
       "kind": "verification-code"
     },
     {
@@ -409,7 +427,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "6b56b7279fead6682dc4d4d5d0c9588931707f1870f9d65c97b2309dab669ed5",
+      "sha256": "78a5c75d00f4113a0dbe9f78bb50dbbc5c67f2d89343af63a91abb500478b7e0",
       "kind": "verification-code"
     },
     {
@@ -439,7 +457,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "17d970dd6d366fab6f0e50baf1e755d9d027d64a873d9d49f9912aac94390505",
+      "sha256": "87982c163ae456407e6d66275ee0911093a46d2476839e0c096ba686e15d36f2",
       "kind": "boundary-ledger"
     },
     {
@@ -451,7 +469,7 @@
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "cdb52b8b7ffd55943d854af5e2852e602ba28bdcdcece47d6f36d268b4a21e40",
+      "sha256": "f5626eecfbddb10c5a1977e39804ef6288a1f31e87335f88a61ca47cae888b01",
       "kind": "verification-code"
     },
     {
@@ -463,7 +481,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "2eda7cf4c27f6b8772e52675781795f1c4a8a7f478eeddb67c974e4fe7644faf",
+      "sha256": "ed41ede0e14b1bb2a0e0c6d3271b0de312a5bb18db4b9f1884cfef8154bf16d4",
       "kind": "boundary-ledger"
     },
     {
@@ -577,19 +595,19 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "4fab30f6a98263cd7262f5284be57adf69d31e9fb0936cd452d411cf71f71f49",
+      "sha256": "11a6c001b4cf62e622ccd288af92b72a1baf959d95f816e4b2e403eaac9047e9",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "549fec92357bc6f4a34ff34d9dca84cc1947537fa4f2a0188b6abbf4bc43c7d1",
+      "sha256": "9f3109d8fbc5055783243c32b585f59e0340deb6927968f7ab7fa402d0fc733d",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "679a2bdcad6d338bf8199602808e895805ab1f1872305893ee00c6511dd339aa",
+      "sha256": "a48bea180e7791735a903fb4bc99fe6b8ead5f41428a2418a12602aac6657531",
       "kind": "verification-code"
     },
     {
@@ -601,7 +619,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "93a9e77c43da1991e330ea04ab61d3c9574e6aed9483fe8aece90064064c8a2c",
+      "sha256": "330354236ebf3560042eb0b0c786e3f3db347d4459a3fc367c2de15b2dee907f",
       "kind": "boundary-ledger"
     },
     {
@@ -692,21 +710,24 @@
     },
     {
       "id": "full-highwater-drills",
-      "claim": "One hundred full high-water drills bind admissibility-ranked memory, one authority winner, exact recovery, and replay behavior end to end.",
-      "currentStatus": "Partial; a deterministic offline 100-run specification receipt passes its recomputing local validator, while exact DVI, authority, and recovery per-run binding controls remain independently source-tested and no accepted provider-backed 100-run batch exists",
-      "claimsLedgerRowSha256": "371351c40e4112ddc8e6ee357d6374f78ff326fb71f987f53c1cc68891016505",
+      "claim": "The approved 100+1 high-water target binds 100 deterministic offline specifications plus one exact-release provider-backed integrated drill.",
+      "currentStatus": "Partial; the recomputing offline receipt passes 100 unique runs and 1,100 invariant evaluations with zero violations, while the +1 provider execution and acceptance review remain pending",
+      "claimsLedgerRowSha256": "0287c34e63cfd2d022e69ecbe4d0ec2943b7b4155200f9a922aea538d9703f6a",
       "proofState": "PARTIAL",
       "artifacts": [
         "full-drill-evidence",
+        "integrated-live-drill-harness",
+        "integrated-live-drill-runner",
+        "integrated-live-drill-tests",
         "local-full-drill-harness",
         "local-full-drill-receipt",
         "local-full-drill-runner",
         "local-full-drill-tests",
         "local-full-drill-verifier"
       ],
-      "acceptanceBoundary": "Existing vector, race, ambiguity, and recovery receipts are independent controls and cannot be composed into full drills. The validator-passing local receipt recomputes 100 exact deterministic scenario runs with zero declared invariant violations, but exercises only the sequential in-memory specification. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Only one fresh exact-release provider-backed batch with a shared per-run binding can satisfy this claim.",
+      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized shared-binding receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. No provider execution has occurred, so the +1 half and release claim remain pending.",
       "remainingRequirements": [
-        "Implement the bounded provider-backed live batch harness, then accept exactly 100 unique consecutive full drills with integrated DVI, overlapping Lambda authority races, exact-source-bound winner recovery through Managed MCP, replay checks, cleanup, and zero invariant violations."
+        "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, exact-winner Managed MCP recovery, bounded cleanup, and zero invariant violations."
       ]
     },
     {
@@ -782,8 +803,8 @@
     {
       "id": "aws-lambda-authority-race",
       "claim": "Two AWS Lambda contenders can overlap while CockroachDB commits one fresh authority winner.",
-      "currentStatus": "Local handler, IAM, transaction, exact-caller evidence binding, durable-proof, and verifier candidate tested; no live AWS/DB race claim",
-      "claimsLedgerRowSha256": "9cd170ad4d31a636b1e117e55c9de6b010c374fb7734b93e49fbe8d8bcf627b3",
+      "currentStatus": "Local handler, IAM, transaction, exact-caller evidence binding, replay/changed-input negatives, durable-proof, and verifier candidate tested; no live AWS/DB race claim",
+      "claimsLedgerRowSha256": "46616542025e4594ef1ba6b512b0f29764f180fb9925937cd0138b5f3d8b2c45",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
@@ -794,7 +815,7 @@
       ],
       "acceptanceBoundary": "Local code and adversarial tests require positive-duration serializable transactions with a positive overlap interval, an initial fence of one, a canonical lease that remains active through the exact bound durable observation, and the expected terminal-state shape. They do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
       "remainingRequirements": [
-        "Accepted private invocation and CockroachDB receipts plus a sanitized tideproof.aws-authority-race-receipt.v6 receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
+        "Accepted private invocation and CockroachDB receipts plus a sanitized tideproof.aws-authority-race-receipt.v7 receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, exact operation replay, changed-input denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
       ]
     }
   ],

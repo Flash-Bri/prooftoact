@@ -857,6 +857,10 @@ export async function proveAdmissibleVectorSnapshot({
         specSha256,
         treeDigest
       });
+    const selectedEvidenceBindingSha256 = sha256(canonicalJson({
+      evidenceId: ranked[0].evidenceId,
+      evidenceDigest: ranked[0].evidenceDigest
+    }));
     const committedSelection = await authorizer.query(
       `
         SELECT *
@@ -915,6 +919,7 @@ export async function proveAdmissibleVectorSnapshot({
         queryEmbeddingSha256,
         resultLimit: accepted.limit,
         authorityEvidenceBindingSha256,
+        selectedEvidenceBindingSha256,
         durableSelectionCommitted: true
       },
       database: {
@@ -954,7 +959,7 @@ export async function proveAdmissibleVectorSnapshot({
       },
       cleanup: null,
       claimBoundary:
-        "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, its synthetic drill identity, a non-reversible binding from the top-ranked admissible evidence to the exact source, spec, snapshot, and ranked sequence, the persisted snapshot-bound adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove that AWS consumed the binding, authorization, the 100-drill batch, production suitability, or final release readiness."
+        "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, its synthetic drill identity, non-reversible bindings from the top-ranked admissible evidence to the exact source, spec, snapshot, ranked sequence, and selected evidence, the persisted snapshot-bound adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove that AWS consumed the binding, authorization, the +1 integrated live drill, production suitability, or final release readiness."
     };
   } catch (error) {
     primaryError = error;

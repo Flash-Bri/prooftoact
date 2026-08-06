@@ -124,8 +124,8 @@ const REQUIRED_MARKERS = Object.freeze({
     "The final video must not be recorded until the accepted advisory receipt supplies the exact final Gate Two wording and this scene map is relocked to the release commit."
   ]),
   "full-drill-evidence": Object.freeze([
-    "Status: **provider-backed batch pending**.",
-    "Its receipt must identify itself as local and synthetic. It cannot satisfy, substitute for, or unlock the provider-backed claim.",
+    "Status: **one exact-release integrated provider drill pending**.",
+    "It satisfies only the offline half of the 100+1 target and cannot satisfy, substitute for, or unlock the +1 provider-backed claim.",
     "The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff.",
     "No provider-backed receipt from this lane exists yet."
   ]),

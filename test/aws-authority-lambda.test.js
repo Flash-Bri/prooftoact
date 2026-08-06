@@ -174,6 +174,15 @@ function proofEvent() {
   };
 }
 
+function changedInputEvent(contender = "alpha") {
+  return {
+    schemaVersion: authority.REQUEST_SCHEMA,
+    mode: "changed_input",
+    raceId: FIXTURE.raceId,
+    contender
+  };
+}
+
 function spendRow(request, outcome = "resource_reserved") {
   const winner = outcome === "resource_reserved";
   const identity = authority.authorityIdentityFor(request, 1);
@@ -1062,6 +1071,46 @@ test("authority commits one strict SERIALIZABLE decision without returning the s
   assert.ok(client.queries.includes(authority.SPEND_SQL));
   assert.equal(JSON.stringify(result).includes(CONNECTION_STRING), false);
   assert.equal("effectKey" in result, false);
+});
+
+test("provider negative probe denies changed input under the committed operation", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const original = authority.authorityRequestFor(validEvent(), config);
+  const changed = authority.changedInputRequestFor(
+    changedInputEvent(),
+    config
+  );
+  assert.equal(changed.operationId, original.operationId);
+  assert.notEqual(changed.requestDigest, original.requestDigest);
+  assert.notEqual(
+    changed.selectedEvidenceDigest,
+    original.selectedEvidenceDigest
+  );
+  const error = Object.assign(new Error("operation digest mismatch"), {
+    code: "22000"
+  });
+  const client = successfulClient(changed, { spendError: error });
+  const result = await authority.runAuthority({
+    event: changedInputEvent(),
+    context: {
+      awsRequestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    },
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => client,
+    now: () => 1_000
+  });
+  assert.equal(
+    result.schemaVersion,
+    authority.CHANGED_INPUT_RESPONSE_SCHEMA
+  );
+  assert.equal(result.status, "DENIED_CHANGED_INPUT");
+  assert.equal(result.code, "OPERATION_DIGEST_MISMATCH");
+  assert.equal(result.operationId, original.operationId);
+  assert.equal(result.changedRequestDigest, changed.requestDigest);
+  assert.equal(result.authorityTransferred, false);
+  assert.equal(result.requiresFreshAuthorization, true);
+  assert.equal(client.queries.includes("ROLLBACK"), true);
 });
 
 test("authority retries only a pre-commit serialization failure", async () => {

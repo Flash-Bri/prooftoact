@@ -702,6 +702,10 @@ test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup
     receipt.drill.authorityEvidenceBindingSha256,
     /^[0-9a-f]{64}$/u
   );
+  assert.match(
+    receipt.drill.selectedEvidenceBindingSha256,
+    /^[0-9a-f]{64}$/u
+  );
   assert.equal(receipt.fixture.candidateCount, 10_000);
   assert.equal(receipt.fixture.exclusionCaseCount, 7);
   assert.equal(receipt.fixture.nearestExcludedCloserThanRanked, true);

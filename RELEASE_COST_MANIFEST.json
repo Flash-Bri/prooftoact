@@ -61,7 +61,7 @@
       "id": "authority-semantic-metric-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "SEMANTIC_METRIC_CARDINALITY",
-      "sha256": "3bacd801ff9e9c4abd9900cd4cf65303f618b587917091ae86e2c595af8e1938"
+      "sha256": "7d3b9ebd2aa31752e2789f0ff98cdec0011599e62bf8f152b060e53037d53af6"
     },
     {
       "id": "aws-bootstrap-template",

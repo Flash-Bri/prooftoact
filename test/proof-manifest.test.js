@@ -132,7 +132,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 103);
+  assert.equal(receipt.artifactCount, 106);
   assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
@@ -309,6 +309,9 @@ test("release copy matches executable and generated source contracts", () => {
   assert(dviClaim, "DVI proof claim missing");
   assert.deepEqual(fullDrillClaim.artifacts, [
     "full-drill-evidence",
+    "integrated-live-drill-harness",
+    "integrated-live-drill-runner",
+    "integrated-live-drill-tests",
     "local-full-drill-harness",
     "local-full-drill-receipt",
     "local-full-drill-runner",
@@ -328,7 +331,7 @@ test("release copy matches executable and generated source contracts", () => {
     [
       "full high-water drill claim",
       claimRows.find((line) =>
-        line.startsWith("| One hundred full high-water drills bind")
+        line.startsWith("| The approved 100+1 high-water target binds")
       ),
     ],
   ];

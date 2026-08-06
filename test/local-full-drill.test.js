@@ -247,7 +247,7 @@ test("the evidence contract preserves generator and validator trust boundaries",
 
   assert.match(
     evidenceContract,
-    /`npm run --silent full-drill:local` for canonical file generation/u
+    /`npm run --silent full-drill:local -- --output evidence\/local-full-drill-100-2026-08-04\.json`/u
   );
   assert.match(evidenceContract, /shared local implementation/u);
   assert.match(evidenceContract, /common-mode defects remain possible/u);

@@ -7,10 +7,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  AUTHORITY_CHANGED_INPUT_RESPONSE_SCHEMA,
   AUTHORITY_PROOF_RESPONSE_SCHEMA,
   AUTHORITY_RACE_RECEIPT_SCHEMA,
   AUTHORITY_REQUEST_SCHEMA,
   AUTHORITY_RESPONSE_SCHEMA,
+  authorityChangedInputEvent,
   authorityProofEvent,
   authorityRaceEvent,
   parseAuthorityRaceArguments,
@@ -258,6 +260,49 @@ function proofResponse(options = {}) {
     $metadata: {
       requestId: "aws-invoke-request-proof"
     }
+  };
+}
+
+function replayResponse() {
+  const invocation = response("alpha");
+  const body = JSON.parse(Buffer.from(invocation.Payload).toString("utf8"));
+  body.replayKind = "operation_replay";
+  body.invocationRequestId =
+    "88888888-8888-4888-8888-888888888888";
+  body.transaction.databaseStartedAt = "2026-08-01T12:00:03.100Z";
+  body.transaction.databaseCompletedAt = "2026-08-01T12:00:03.200Z";
+  body.commit.databaseNow = "2026-08-01T12:00:03.150Z";
+  invocation.Payload = Buffer.from(JSON.stringify(body));
+  invocation.$metadata.requestId = "aws-invoke-request-replay";
+  return invocation;
+}
+
+function changedInputResponse() {
+  return {
+    StatusCode: 200,
+    ExecutedVersion: "7",
+    Payload: Buffer.from(JSON.stringify({
+      schemaVersion: AUTHORITY_CHANGED_INPUT_RESPONSE_SCHEMA,
+      status: "DENIED_CHANGED_INPUT",
+      code: "OPERATION_DIGEST_MISMATCH",
+      raceId: EXPECTED.raceId,
+      contender: "alpha",
+      operationId: IDS.alpha,
+      changedRequestDigest: "7".repeat(64),
+      functionVersion: "7",
+      invocationRequestId:
+        "99999999-9999-4999-8999-999999999999",
+      authorityTransferred: false,
+      requiresFreshAuthorization: true,
+      modelAccess: false,
+      sourceCommit: EXPECTED.sourceCommit,
+      configDigest: EXPECTED.configDigest,
+      treeDigest: "c".repeat(40),
+      packageLockDigest: "d".repeat(64),
+      authoritySourceDigest: "e".repeat(64),
+      authorityArtifactDigest: "f".repeat(64)
+    })),
+    $metadata: { requestId: "aws-invoke-request-changed-input" }
   };
 }
 
@@ -511,22 +556,42 @@ test("authority race emits exact contender and proof events without authority fi
     mode: "proof",
     raceId: EXPECTED.raceId
   });
+  assert.deepEqual(
+    authorityChangedInputEvent(EXPECTED.raceId, "alpha"),
+    {
+      schemaVersion: AUTHORITY_REQUEST_SCHEMA,
+      mode: "changed_input",
+      raceId: EXPECTED.raceId,
+      contender: "alpha"
+    }
+  );
 });
 
 test("authority race requires one overlapping winner and one durable denial", async () => {
   const invoked = [];
+  let alphaInvocations = 0;
   const receipt = await runAuthorityRace({
     ...EXPECTED,
     callerBinding: CALLER_BINDING,
     invoke: async (functionArn, event) => {
       invoked.push({ functionArn, event });
-      return event.mode === "proof"
-        ? proofResponse()
-        : response(event.contender);
+      if (event.mode === "proof") {
+        return proofResponse();
+      }
+      if (event.mode === "changed_input") {
+        return changedInputResponse();
+      }
+      if (event.contender === "alpha") {
+        alphaInvocations += 1;
+        return alphaInvocations === 1
+          ? response("alpha")
+          : replayResponse();
+      }
+      return response(event.contender);
     }
   });
 
-  assert.equal(invoked.length, 3);
+  assert.equal(invoked.length, 5);
   assert.equal(
     invoked.every(
       ({ functionArn }) => functionArn === EXPECTED.functionArn
@@ -563,6 +628,13 @@ test("authority race requires one overlapping winner and one durable denial", as
     receipt.winner.fencingToken
   );
   assert.equal(receipt.protectedEffectExecuted, false);
+  assert.equal(receipt.replay.replayKind, "operation_replay");
+  assert.equal(receipt.replay.exactDecisionReturned, true);
+  assert.equal(receipt.changedInputDenial.denied, true);
+  assert.equal(
+    receipt.changedInputDenial.code,
+    "OPERATION_DIGEST_MISMATCH"
+  );
   assert.equal(receipt.authorityTransferredByModel, false);
   assert.deepEqual(receipt.callerBinding, CALLER_BINDING);
   assert.equal("functionArn" in receipt, false);
