@@ -87,11 +87,16 @@ acts:
 3. Recovery selects the exact winning receipt by tenant, run, incident,
    evidence, DVI proposal and selected-evidence digests, resource, operation,
    request digest, and outcome—not by recency.
-   One fixed-query Managed MCP read follows a committed pre-read audit; a
-   result-bound terminal audit commits before sanitized context is released.
-   No operational capability is returned, an unbound principal is denied
-   before MCP, exact replay returns the original decision, and changed inputs
-   under the operation ID are rejected.
+   The tenant, caller, durable source digest, and committed source time derive
+   one canonical recovery attempt and signed bundle identity. One fixed-query
+   Managed MCP read follows a committed pre-read audit within one continuously
+   negotiated session; canonical request, response, and result digests bind
+   every RPC through session close. A result-bound terminal audit commits
+   before sanitized context is released. No operational capability is
+   returned, an unbound principal is denied before MCP, exact replay returns
+   the original decision and signed bundle, and changed inputs under the
+   operation ID are rejected. These controls do not turn local receipt fields
+   into an independent provider signature.
 
 The snapshot is retired after each run without deleting evidence or authority
 receipts. An uncertain authority attempt is reconciled and never blindly
@@ -105,6 +110,9 @@ Acceptance additionally requires:
   binding, primary cluster, and recovery cluster digests;
 - exactly one passing integrated run digest, all enumerated invariants true,
   and zero invariant violations;
+- one source-derived canonical recovery attempt whose replay returns the same
+  signed bundle, plus one continuous Managed MCP session with canonical
+  request, response, and result digests through a successful close;
 - a fresh `EXPLAIN (VERBOSE)` receipt naming
   `g1_vector_candidates_embedding_idx`, `vector search`, and exact
   tenant/retrieval prefix spans;

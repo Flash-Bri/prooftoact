@@ -12,6 +12,7 @@ import {
   runIntegratedLiveDrill,
   safeIntegratedLiveDrillFailureCode
 } from "../scripts/gate2-integrated-live-drill.js";
+import { canonicalRecoveryAttempt } from "../src/cloud/recovery-broker.js";
 
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const sourceCommit = "a".repeat(40);
@@ -182,34 +183,66 @@ function components() {
     replayOutcome: "bundle_replay",
     mcpTool: "select_query",
     mcpCallCount: 1,
+    mcpResultSha256: "9".repeat(64),
     mcpProviderEvidence: {
-      schemaVersion: "tideproof.managed-mcp-transport-evidence.v1",
+      schemaVersion: "tideproof.managed-mcp-transport-evidence.v2",
       endpointSha256: "1".repeat(64),
       endpointAuthority: "cockroachlabs.cloud",
       clusterIdSha256: "2".repeat(64),
+      sessionIdSha256: "4".repeat(64),
       protocolVersion: "2025-03-26",
       rpcCalls: [
         {
           method: "initialize",
           requestIdSha256: "3".repeat(64),
           responseIdSha256: "3".repeat(64),
+          requestBytes: 100,
+          responseBytes: 101,
+          requestPayloadSha256: "6".repeat(64),
+          responsePayloadSha256: "7".repeat(64),
+          resultSha256: "8".repeat(64),
           responseCorrelated: true,
           httpStatus: 200,
           contentType: "application/json",
-          sessionIdSha256: "4".repeat(64)
+          sessionIdSha256: "4".repeat(64),
+          outboundSessionIdSha256: null,
+          responseSessionIdSha256: "4".repeat(64),
+          sessionContinuous: true
         },
         {
           method: "tools/call",
           requestIdSha256: "5".repeat(64),
           responseIdSha256: "5".repeat(64),
+          requestBytes: 102,
+          responseBytes: 103,
+          requestPayloadSha256: "a".repeat(64),
+          responsePayloadSha256: "b".repeat(64),
+          resultSha256: "9".repeat(64),
           responseCorrelated: true,
           httpStatus: 200,
           contentType: "text/event-stream",
-          sessionIdSha256: "4".repeat(64)
+          sessionIdSha256: "4".repeat(64),
+          outboundSessionIdSha256: "4".repeat(64),
+          responseSessionIdSha256: null,
+          sessionContinuous: true
         }
       ],
-      notificationCount: 1,
-      closeAttempted: true,
+      notifications: [{
+        method: "notifications/initialized",
+        requestBytes: 80,
+        requestPayloadSha256: "c".repeat(64),
+        httpStatus: 202,
+        outboundSessionIdSha256: "4".repeat(64),
+        responseSessionIdSha256: null,
+        sessionContinuous: true
+      }],
+      close: {
+        attempted: true,
+        httpStatus: 200,
+        outboundSessionIdSha256: "4".repeat(64),
+        responseSessionIdSha256: null,
+        sessionContinuous: true
+      },
       redirectPolicy: "error",
       boundedResponseBytes: 256 * 1024
     },
@@ -227,6 +260,22 @@ function components() {
       auditBaseTableReads: { denied: true }
     }
   };
+  recovery.tenantId = "88888888-8888-4888-8888-888888888888";
+  recovery.callerSubjectBindingSha256 = "6".repeat(64);
+  recovery.sourceDigest = "7".repeat(64);
+  recovery.bundleDigest = "8".repeat(64);
+  recovery.canonicalRecovery = {
+    ...canonicalRecoveryAttempt({
+      tenantId: recovery.tenantId,
+      subjectBindingHash: recovery.callerSubjectBindingSha256,
+      sourceDigest: recovery.sourceDigest,
+      sourceCommitTs: "2026-08-06T12:00:03.000Z"
+    }),
+    bundleDigest: recovery.bundleDigest,
+    replayMatched: true
+  };
+  recovery.recoverySessionId =
+    recovery.canonicalRecovery.recoverySessionId;
   return { dvi, race, recovery };
 }
 
@@ -240,7 +289,7 @@ test("one provider drill binds DVI, overlap, negatives, recovery, and cleanup", 
   assert.equal(receipt.schemaVersion, INTEGRATED_LIVE_DRILL_SCHEMA);
   assert.equal(receipt.status, "PASS");
   assert.equal(receipt.providerBacked, true);
-  assert.equal(receipt.invariantCount, 21);
+  assert.equal(receipt.invariantCount, 24);
   assert.equal(receipt.invariantViolations, 0);
   assert.match(receipt.receiptSha256, /^[0-9a-f]{64}$/u);
   const publicReceipt = JSON.stringify(receipt);
@@ -260,7 +309,11 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
     (value) => { value.race.changedInputDenial.denied = false; },
     (value) => { value.recovery.mcpCallCount = 2; },
     (value) => { value.recovery.terminalAuditCommitted = false; },
-    (value) => { value.recovery.dvi.selectedEvidenceBindingSha256 = "0".repeat(64); }
+    (value) => { value.recovery.dvi.selectedEvidenceBindingSha256 = "0".repeat(64); },
+    (value) => { value.recovery.canonicalRecovery.bundleDigest = "0".repeat(64); },
+    (value) => { value.recovery.mcpProviderEvidence.rpcCalls[1].sessionContinuous = false; },
+    (value) => { value.recovery.mcpProviderEvidence.rpcCalls[1].resultSha256 = "0".repeat(64); },
+    (value) => { value.recovery.mcpProviderEvidence.close.httpStatus = 500; }
   ]) {
     const value = structuredClone(components());
     mutate(value);

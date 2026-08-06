@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "./canonical-json.js";
+import { canonicalRecoveryAttempt } from "./recovery-broker.js";
 
 export const INTEGRATED_LIVE_DRILL_SCHEMA =
   "tideproof.highwater-drill-live.v1";
@@ -209,15 +210,51 @@ function acceptedRecovery(recovery, spec, race) {
   const denials = recovery?.runnerCredentialDenials;
   const provider = recovery?.mcpProviderEvidence;
   const rpcCalls = provider?.rpcCalls;
+  const notifications = provider?.notifications;
+  const close = provider?.close;
   const expectedWinnerBinding = sha256(canonicalJson({
     operationId: race?.winner?.operationId,
     requestDigest: race?.winner?.requestDigest
   }));
+  let expectedCanonicalRecovery = null;
+  try {
+    expectedCanonicalRecovery = canonicalRecoveryAttempt({
+      tenantId: recovery?.tenantId,
+      subjectBindingHash: recovery?.callerSubjectBindingSha256,
+      sourceDigest: recovery?.sourceDigest,
+      sourceCommitTs: recovery?.canonicalRecovery?.sourceCommitTs
+    });
+  } catch {
+    return false;
+  }
   return (
     recovery?.gate ===
       "noninteractive Managed MCP deterministic recovery broker" &&
     recovery.passed === true &&
     recovery.sourceBuildIdentity === spec.sourceBuildIdentity &&
+    recovery.recoverySessionId ===
+      expectedCanonicalRecovery.recoverySessionId &&
+    exactKeys(recovery.canonicalRecovery, [
+      "bindingSha256",
+      "bundleDigest",
+      "expiresAt",
+      "recoverySessionId",
+      "replayMatched",
+      "snapshotVersion",
+      "sourceCommitTs"
+    ]) &&
+    recovery.canonicalRecovery.recoverySessionId ===
+      expectedCanonicalRecovery.recoverySessionId &&
+    recovery.canonicalRecovery.snapshotVersion ===
+      expectedCanonicalRecovery.snapshotVersion &&
+    recovery.canonicalRecovery.sourceCommitTs ===
+      expectedCanonicalRecovery.sourceCommitTs &&
+    recovery.canonicalRecovery.expiresAt ===
+      expectedCanonicalRecovery.expiresAt &&
+    recovery.canonicalRecovery.bindingSha256 ===
+      expectedCanonicalRecovery.bindingSha256 &&
+    recovery.canonicalRecovery.bundleDigest === recovery.bundleDigest &&
+    recovery.canonicalRecovery.replayMatched === true &&
     recovery.winnerOperationBindingSha256 === expectedWinnerBinding &&
     recovery.dvi?.authorityEvidenceBindingSha256 ===
       race.dvi.authorityEvidenceBindingSha256 &&
@@ -229,15 +266,51 @@ function acceptedRecovery(recovery, spec, race) {
     recovery.mcpTool === "select_query" &&
     recovery.mcpCallCount === 1 &&
     provider?.schemaVersion ===
-      "tideproof.managed-mcp-transport-evidence.v1" &&
+      "tideproof.managed-mcp-transport-evidence.v2" &&
     SHA256.test(provider.endpointSha256 ?? "") &&
     provider.endpointAuthority === "cockroachlabs.cloud" &&
     SHA256.test(provider.clusterIdSha256 ?? "") &&
+    SHA256.test(provider.sessionIdSha256 ?? "") &&
     provider.protocolVersion === "2025-03-26" &&
     provider.redirectPolicy === "error" &&
     provider.boundedResponseBytes === 256 * 1024 &&
-    provider.notificationCount === 1 &&
-    provider.closeAttempted === true &&
+    Array.isArray(notifications) &&
+    notifications.length === 1 &&
+    exactKeys(notifications[0], [
+      "httpStatus",
+      "method",
+      "outboundSessionIdSha256",
+      "requestBytes",
+      "requestPayloadSha256",
+      "responseSessionIdSha256",
+      "sessionContinuous"
+    ]) &&
+    notifications[0].method === "notifications/initialized" &&
+    [200, 202].includes(notifications[0].httpStatus) &&
+    Number.isSafeInteger(notifications[0].requestBytes) &&
+    notifications[0].requestBytes > 0 &&
+    SHA256.test(notifications[0].requestPayloadSha256 ?? "") &&
+    notifications[0].outboundSessionIdSha256 ===
+      provider.sessionIdSha256 &&
+    (notifications[0].responseSessionIdSha256 === null ||
+      notifications[0].responseSessionIdSha256 ===
+        provider.sessionIdSha256) &&
+    notifications[0].sessionContinuous === true &&
+    exactKeys(close, [
+      "attempted",
+      "httpStatus",
+      "outboundSessionIdSha256",
+      "responseSessionIdSha256",
+      "sessionContinuous"
+    ]) &&
+    close.attempted === true &&
+    Number.isInteger(close.httpStatus) &&
+    close.httpStatus >= 200 &&
+    close.httpStatus < 300 &&
+    close.outboundSessionIdSha256 === provider.sessionIdSha256 &&
+    (close.responseSessionIdSha256 === null ||
+      close.responseSessionIdSha256 === provider.sessionIdSha256) &&
+    close.sessionContinuous === true &&
     Array.isArray(rpcCalls) &&
     rpcCalls.length === 2 &&
     rpcCalls[0]?.method === "initialize" &&
@@ -247,18 +320,41 @@ function acceptedRecovery(recovery, spec, race) {
         "contentType",
         "httpStatus",
         "method",
+        "outboundSessionIdSha256",
+        "requestBytes",
         "requestIdSha256",
+        "requestPayloadSha256",
+        "responseBytes",
         "responseCorrelated",
         "responseIdSha256",
+        "responsePayloadSha256",
+        "responseSessionIdSha256",
+        "resultSha256",
+        "sessionContinuous",
         "sessionIdSha256"
       ]) &&
       call.httpStatus === 200 &&
       call.responseCorrelated === true &&
       call.requestIdSha256 === call.responseIdSha256 &&
       SHA256.test(call.requestIdSha256 ?? "") &&
-      SHA256.test(call.sessionIdSha256 ?? "") &&
+      SHA256.test(call.requestPayloadSha256 ?? "") &&
+      SHA256.test(call.responsePayloadSha256 ?? "") &&
+      SHA256.test(call.resultSha256 ?? "") &&
+      call.sessionIdSha256 === provider.sessionIdSha256 &&
+      Number.isSafeInteger(call.requestBytes) &&
+      call.requestBytes > 0 &&
+      Number.isSafeInteger(call.responseBytes) &&
+      call.responseBytes > 0 &&
+      call.sessionContinuous === true &&
       ["application/json", "text/event-stream"].includes(call.contentType)
     ) &&
+    rpcCalls[0].outboundSessionIdSha256 === null &&
+    rpcCalls[0].responseSessionIdSha256 === provider.sessionIdSha256 &&
+    rpcCalls[1].outboundSessionIdSha256 === provider.sessionIdSha256 &&
+    (rpcCalls[1].responseSessionIdSha256 === null ||
+      rpcCalls[1].responseSessionIdSha256 ===
+        provider.sessionIdSha256) &&
+    rpcCalls[1].resultSha256 === recovery.mcpResultSha256 &&
     recovery.recoveryStatus === "RECOVERED_CONTEXT_ONLY" &&
     recovery.unauthorizedStatus === "UNKNOWN_DO_NOT_ACT" &&
     recovery.preReadAuditCommitted === true &&
@@ -312,7 +408,10 @@ export function buildIntegratedLiveDrillReceipt({
     exactReplayReturnedOriginalDecision: true,
     changedInputUnderOperationDenied: true,
     exactWinnerRecoveryBound: true,
+    oneCanonicalRecoveryBundle: true,
     managedMcpTransportReceiptBound: true,
+    managedMcpSessionContinuous: true,
+    managedMcpPayloadDigestsBound: true,
     managedMcpCalledExactlyOnce: true,
     unboundPrincipalDeniedBeforeMcp: true,
     bothRecoveryAuditsCommitted: true,
@@ -372,7 +471,7 @@ export function buildIntegratedLiveDrillReceipt({
     invariantViolations: 0,
     providerBacked: true,
     claimBoundary:
-      "This sanitized receipt proves one exact-release provider-backed integrated synthetic drill whose CockroachDB DVI selection, five receipt-bound numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner TLS-endpoint-bound Managed MCP recovery share one binding with zero declared invariant violations. Its fixed operation count is constrained by a $0.02 AWS ceiling, but the actual provider billing receipt remains separately required. It must be accepted together with the separately verified 100-run deterministic offline receipt. It does not prove a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized receipt proves one exact-release provider-backed integrated synthetic drill whose CockroachDB DVI selection, five receipt-bound numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared invariant violations. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests; it is not an independent provider signature. Its fixed operation count is constrained by a $0.02 AWS ceiling, but the actual provider billing receipt remains separately required. It must be accepted together with the separately verified 100-run deterministic offline receipt. It does not prove a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,

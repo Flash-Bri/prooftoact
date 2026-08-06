@@ -199,7 +199,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "ef9a5ec2737b876a71dd5f608fe0ef56ea43e5b084fbbcf46aa5a0b0948939af",
+      "sha256": "3e7a06a020149c835368490c13c1bd3bba5c6febb80f00cf3e249f5cdfa5b452",
       "kind": "boundary-ledger"
     },
     {
@@ -283,7 +283,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "dd1f1167cc6cb6d2055a99f350c71ebced17bfb046ed5c3f8d54bf38824e5c90",
+      "sha256": "ea3a09d5391580d5dd9dd2af20d7bca4aaa0116044e8a3aed458f4211502e005",
       "kind": "boundary-ledger"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "e7fc2be8ccce32b03ab9ac7338027b31cd1bd1b2f411ce63959b8cdae329bc69",
+      "sha256": "95b61e86171dfdd05862a3a1707947ce48d697b5fe3ef8bffc3e18fcac353399",
       "kind": "verification-code"
     },
     {
@@ -379,7 +379,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "12112fc2fc178da76d9bf5fa361af5f4a15790b210eaf69af01ccc5e5fda9b00",
+      "sha256": "5e5a56436dd5dcf85d9f08ca3e05462919b8b381c219c638d8c572789d50fbd0",
       "kind": "verification-code"
     },
     {
@@ -457,7 +457,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "87982c163ae456407e6d66275ee0911093a46d2476839e0c096ba686e15d36f2",
+      "sha256": "87286294632881244925e9d7a7cfe5f957d833c17886b84edb6340f20257cb4a",
       "kind": "boundary-ledger"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "f0f92cbe1dea3b4dc2b10d6dd417c7cf90e36735c1678ca150bbf359e1332459",
+      "sha256": "8a1e175fe9f39db83da5271db7148c7fe075bb600242193b4d76505552266c06",
       "kind": "boundary-ledger"
     },
     {
@@ -619,7 +619,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "330354236ebf3560042eb0b0c786e3f3db347d4459a3fc367c2de15b2dee907f",
+      "sha256": "069dbed64e4677cffd7ed5f943b462988e39acabe53625ba44aa710510f7f8f2",
       "kind": "boundary-ledger"
     },
     {
@@ -712,7 +712,7 @@
       "id": "full-highwater-drills",
       "claim": "The approved 100+1 high-water target binds 100 deterministic offline specifications plus one exact-release provider-backed integrated drill.",
       "currentStatus": "Partial; the recomputing offline receipt passes 100 unique runs and 1,100 invariant evaluations with zero violations, while the +1 provider execution and acceptance review remain pending",
-      "claimsLedgerRowSha256": "0287c34e63cfd2d022e69ecbe4d0ec2943b7b4155200f9a922aea538d9703f6a",
+      "claimsLedgerRowSha256": "1864554666e00576f8f3ba16f610b75c453e9429853a4799d6a651ca0c3ad020",
       "proofState": "PARTIAL",
       "artifacts": [
         "full-drill-evidence",
@@ -725,9 +725,9 @@
         "local-full-drill-tests",
         "local-full-drill-verifier"
       ],
-      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized shared-binding receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. No provider execution has occurred, so the +1 half and release claim remain pending.",
+      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized shared-binding receipt. Recovery uses one source-derived canonical attempt and requires replay to return the same signed bundle; one negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Those are fail-closed source controls, not independent provider signatures. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. The +1 half and release claim remain pending.",
       "remainingRequirements": [
-        "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, exact-winner Managed MCP recovery, bounded cleanup, and zero invariant violations."
+        "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, one canonical exact-winner recovery bundle, one continuous digest-bound Managed MCP session, bounded cleanup, and zero invariant violations."
       ]
     },
     {

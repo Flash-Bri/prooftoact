@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { canonicalJson } from "./canonical-json.js";
 import { recoveryQueryBindingsFor } from "./recovery-store.js";
 
 const MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
@@ -15,6 +16,18 @@ function requireText(value, name) {
 
 function sha256(value) {
   return createHash("sha256").update(String(value)).digest("hex");
+}
+
+function sessionId(value) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 1024 ||
+    /[\0\r\n]/u.test(value)
+  ) {
+    throw new Error("RECOVERY_MCP_SESSION_INVALID");
+  }
+  return value;
 }
 
 function requireUuid(value, name) {
@@ -135,8 +148,8 @@ export class CockroachManagedMcpRecoveryClient {
   #nextId = 1;
   #sessionId = null;
   #rpcEvidence = [];
-  #notificationCount = 0;
-  #closeAttempted = false;
+  #notificationEvidence = [];
+  #closeEvidence = null;
 
   constructor({ apiKey, clusterId, fetchImpl = globalThis.fetch } = {}) {
     this.#apiKey = requireText(apiKey, "apiKey");
@@ -154,28 +167,55 @@ export class CockroachManagedMcpRecoveryClient {
     if (!this.#sessionId) {
       return;
     }
-    this.#closeAttempted = true;
-    await this.#fetch(MCP_ENDPOINT, {
-      method: "DELETE",
-      headers: this.#headers(),
-      redirect: "error",
-      signal: AbortSignal.timeout(10_000)
-    })
-      .then(cancelResponseBody)
-      .catch(() => {});
+    const expectedSessionId = this.#sessionId;
+    const expectedSessionIdSha256 = sha256(expectedSessionId);
+    this.#closeEvidence = Object.freeze({
+      attempted: true,
+      httpStatus: null,
+      outboundSessionIdSha256: expectedSessionIdSha256,
+      responseSessionIdSha256: null,
+      sessionContinuous: false
+    });
+    try {
+      const response = await this.#fetch(MCP_ENDPOINT, {
+        method: "DELETE",
+        headers: this.#headers(),
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000)
+      });
+      const received = response.headers.get("mcp-session-id");
+      if (received && sessionId(received) !== expectedSessionId) {
+        await cancelResponseBody(response);
+        throw new Error("RECOVERY_MCP_SESSION_CHANGED");
+      }
+      this.#closeEvidence = Object.freeze({
+        attempted: true,
+        httpStatus: response.status,
+        outboundSessionIdSha256: expectedSessionIdSha256,
+        responseSessionIdSha256: received ? sha256(received) : null,
+        sessionContinuous: true
+      });
+      await cancelResponseBody(response);
+    } catch {
+      // Closing is best-effort, but the failed continuity receipt is retained.
+    }
     this.#sessionId = null;
   }
 
   transportEvidence() {
     return Object.freeze({
-      schemaVersion: "tideproof.managed-mcp-transport-evidence.v1",
+      schemaVersion: "tideproof.managed-mcp-transport-evidence.v2",
       endpointSha256: sha256(MCP_ENDPOINT),
       endpointAuthority: "cockroachlabs.cloud",
       clusterIdSha256: sha256(this.#clusterId),
       protocolVersion: MCP_PROTOCOL_VERSION,
       rpcCalls: this.#rpcEvidence.map((entry) => Object.freeze({ ...entry })),
-      notificationCount: this.#notificationCount,
-      closeAttempted: this.#closeAttempted,
+      notifications: this.#notificationEvidence.map((entry) =>
+        Object.freeze({ ...entry })
+      ),
+      sessionIdSha256:
+        this.#rpcEvidence.at(-1)?.sessionIdSha256 ?? null,
+      close: this.#closeEvidence,
       redirectPolicy: "error",
       boundedResponseBytes: RECOVERY_MCP_RESPONSE_LIMIT_BYTES
     });
@@ -216,34 +256,63 @@ export class CockroachManagedMcpRecoveryClient {
   }
 
   async #notification(method, params) {
+    const outboundSessionId = sessionId(this.#sessionId);
+    const body = JSON.stringify({ jsonrpc: "2.0", method, params });
     const response = await this.#fetch(MCP_ENDPOINT, {
       method: "POST",
       headers: this.#headers(),
-      body: JSON.stringify({ jsonrpc: "2.0", method, params }),
+      body,
       redirect: "error",
       signal: AbortSignal.timeout(20_000)
     });
+    const received = response.headers.get("mcp-session-id");
+    if (received && sessionId(received) !== outboundSessionId) {
+      await cancelResponseBody(response);
+      throw new Error("RECOVERY_MCP_SESSION_CHANGED");
+    }
     if (!response.ok) {
       await cancelResponseBody(response);
       throw new Error(`RECOVERY_MCP_HTTP_${response.status}`);
     }
-    this.#notificationCount += 1;
+    this.#notificationEvidence.push(Object.freeze({
+      method,
+      requestBytes: Buffer.byteLength(body, "utf8"),
+      requestPayloadSha256: sha256(body),
+      httpStatus: response.status,
+      outboundSessionIdSha256: sha256(outboundSessionId),
+      responseSessionIdSha256: received ? sha256(received) : null,
+      sessionContinuous: true
+    }));
     await cancelResponseBody(response);
   }
 
   async #rpc(method, params) {
     const id = `${randomUUID()}:${this.#nextId}`;
     this.#nextId += 1;
+    const outboundSessionId = this.#sessionId;
+    const body = JSON.stringify({ jsonrpc: "2.0", id, method, params });
     const response = await this.#fetch(MCP_ENDPOINT, {
       method: "POST",
       headers: this.#headers(),
-      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      body,
       redirect: "error",
       signal: AbortSignal.timeout(30_000)
     });
     const receivedSessionId = response.headers.get("mcp-session-id");
     if (receivedSessionId) {
-      this.#sessionId = receivedSessionId;
+      const acceptedSessionId = sessionId(receivedSessionId);
+      if (
+        outboundSessionId !== null &&
+        acceptedSessionId !== outboundSessionId
+      ) {
+        await cancelResponseBody(response);
+        throw new Error("RECOVERY_MCP_SESSION_CHANGED");
+      }
+      this.#sessionId = acceptedSessionId;
+    }
+    if (method === "initialize" && this.#sessionId === null) {
+      await cancelResponseBody(response);
+      throw new Error("RECOVERY_MCP_SESSION_REQUIRED");
     }
     if (!response.ok) {
       await cancelResponseBody(response);
@@ -280,6 +349,11 @@ export class CockroachManagedMcpRecoveryClient {
       method,
       requestIdSha256: sha256(id),
       responseIdSha256: sha256(String(message.id)),
+      requestBytes: Buffer.byteLength(body, "utf8"),
+      responseBytes: Buffer.byteLength(responseText, "utf8"),
+      requestPayloadSha256: sha256(body),
+      responsePayloadSha256: sha256(responseText),
+      resultSha256: sha256(canonicalJson(message.result)),
       responseCorrelated: true,
       httpStatus: response.status,
       contentType:
@@ -289,7 +363,15 @@ export class CockroachManagedMcpRecoveryClient {
       sessionIdSha256:
         typeof this.#sessionId === "string" && this.#sessionId.length > 0
           ? sha256(this.#sessionId)
-          : null
+          : null,
+      outboundSessionIdSha256:
+        outboundSessionId === null ? null : sha256(outboundSessionId),
+      responseSessionIdSha256:
+        receivedSessionId === null ? null : sha256(receivedSessionId),
+      sessionContinuous:
+        outboundSessionId === null ||
+        receivedSessionId === null ||
+        outboundSessionId === receivedSessionId
     }));
     return message.result;
   }

@@ -366,7 +366,7 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "e7fc2be8ccce32b03ab9ac7338027b31cd1bd1b2f411ce63959b8cdae329bc69"
+      "sha256": "95b61e86171dfdd05862a3a1707947ce48d697b5fe3ef8bffc3e18fcac353399"
     },
     {
       "id": "integrated-live-drill-runner",
@@ -378,7 +378,7 @@
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "12112fc2fc178da76d9bf5fa361af5f4a15790b210eaf69af01ccc5e5fda9b00"
+      "sha256": "5e5a56436dd5dcf85d9f08ca3e05462919b8b381c219c638d8c572789d50fbd0"
     },
     {
       "id": "local-full-drill-harness",
@@ -414,7 +414,7 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "e8f9ea4bf6dc8d31136a7c8107ec552c699f332c230a5d1fd56f80c540416063"
+      "sha256": "02a218a564c2cc333d1172ef97f8e8ca2f707a80bd846ac2eeba32e43b8ce204"
     },
     {
       "id": "primary-security-bootstrap",
@@ -486,7 +486,7 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "ab4e013846f046d8708942a926639bde1674401a89a7d6603f704f2a79b7cf66"
+      "sha256": "7e02eeb484a91e2954a564588eaef122a0605e1c26ba6a8ac49c88f923a0c0d4"
     },
     {
       "id": "recovery-security-contract",
@@ -498,7 +498,7 @@
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "888587d542c35c8970a41c0e2622792d6ff8096a65c04e63d310ad277016c75c"
+      "sha256": "9e598a4b80ae2c57dc64d8aefb2f56cf6a32c49cd409e57d7b86335c4503738c"
     },
     {
       "id": "recovery-evidence-runner",

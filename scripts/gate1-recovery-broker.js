@@ -1,8 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import {
   assertRecoveryPublisherTrustRootWriteDenied,
   assertRecoveryRunnerBaseTableReadsDenied,
   assertSeparatedDatabaseEndpoints,
+  canonicalRecoveryAttempt,
   DeterministicRecoveryBroker,
   principalBindingHash,
   RecoveryAuditSink,
@@ -94,7 +96,7 @@ async function readAuditEvents({
   return resolved;
 }
 
-async function main() {
+export async function main() {
   const primarySourceUrl = requiredEnvironment(
     "PRIMARY_RECOVERY_SOURCE_DATABASE_URL"
   );
@@ -143,7 +145,6 @@ async function main() {
     connectionString: primarySourceUrl,
     binding: exactSourceBinding()
   });
-  const recoverySessionId = randomUUID();
   const subjectBindingHash = principalBindingHash(SYNTHETIC_PRINCIPAL);
   const sourceDigest = recoverySourceBindingDigestFor({
     tenantId: receipt.tenant_id,
@@ -164,6 +165,13 @@ async function main() {
       receipt.selected_evidence_binding_sha256,
     outcome: receipt.outcome
   });
+  const canonicalAttempt = canonicalRecoveryAttempt({
+    tenantId: receipt.tenant_id,
+    subjectBindingHash,
+    sourceDigest,
+    sourceCommitTs: receipt.recorded_at
+  });
+  const recoverySessionId = canonicalAttempt.recoverySessionId;
   const signer = loadCommittedRecoveryPublisherSigner();
   const publisherKeySetDigest = trustedPublisherKeysDigest(
     signer.trustedPublisherKeys
@@ -174,19 +182,14 @@ async function main() {
       trustRootCommitment: signer.trustRootCommitment,
       publisherKeySetDigest
     });
-  const sourceCommitMs = new Date(receipt.recorded_at).getTime();
-  assert(
-    Number.isFinite(sourceCommitMs),
-    "source receipt timestamp could not be normalized"
-  );
   const bundle = signer.sign({
     tenantId: receipt.tenant_id,
     recoverySessionId,
     subjectBindingHash,
     schemaVersion: 2,
-    snapshotVersion: Math.max(1, Date.now()),
+    snapshotVersion: canonicalAttempt.snapshotVersion,
     sourceClusterId: primaryClusterId,
-    sourceCommitTs: new Date(sourceCommitMs).toISOString(),
+    sourceCommitTs: canonicalAttempt.sourceCommitTs,
     sourceDigest,
     policyVersion: receipt.policy_version,
     checkpointSummary: {
@@ -210,12 +213,7 @@ async function main() {
       reason: receipt.reason,
       resourceLabel: receipt.resource_id
     },
-    expiresAt: new Date(
-      Math.min(
-        sourceCommitMs + 24 * 60 * 60 * 1_000,
-        Date.now() + 30 * 60 * 1_000
-      )
-    ).toISOString()
+    expiresAt: canonicalAttempt.expiresAt
   });
 
   const publisher = new RecoveryPublisher({
@@ -416,10 +414,12 @@ async function main() {
         },
         recoverySessionId,
         tenantId: receipt.tenant_id,
+        callerSubjectBindingSha256: subjectBindingHash,
         appendOutcome: appended.outcome,
         replayOutcome: replay.outcome,
         mcpTool: "select_query",
         mcpCallCount,
+        mcpResultSha256: sha256(canonicalJson(capturedMcpResult)),
         queryTemplateDigest: recoveryQueryTemplateDigest(),
         brokerConfigDigest: expectedBrokerDigest,
         sourceBuildIdentity,
@@ -437,6 +437,11 @@ async function main() {
         unauthorizedStatus: unauthorized.status,
         sourceDigest: recovered.sourceDigest,
         bundleDigest: recovered.bundleDigest,
+        canonicalRecovery: {
+          ...canonicalAttempt,
+          bundleDigest: recovered.bundleDigest,
+          replayMatched: replay.bundleDigest === recovered.bundleDigest
+        },
         dvi: {
           authorityEvidenceBindingSha256:
             receipt.authority_evidence_binding_sha256,
@@ -469,15 +474,20 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(
-    JSON.stringify({
-      gate: "noninteractive Managed MCP deterministic recovery broker",
-      passed: false,
-      name: error.name,
-      code: error.code,
-      message: error.message
-    })
-  );
-  process.exitCode = 1;
-});
+const startedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (startedDirectly) {
+  main().catch((error) => {
+    console.error(
+      JSON.stringify({
+        gate: "noninteractive Managed MCP deterministic recovery broker",
+        passed: false,
+        name: error.name,
+        code: error.code,
+        message: error.message
+      })
+    );
+    process.exitCode = 1;
+  });
+}
