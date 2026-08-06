@@ -24,6 +24,35 @@ const ARTIFACT_KINDS = new Set([
   "stop-receipt",
   "verification-code",
 ]);
+const NESTED_BRAND_FAILURE_CODES = Object.freeze([
+  "BRAND_EVIDENCE_BASELINE",
+  "BRAND_FILE",
+  "BRAND_MANIFEST_FILE",
+  "BRAND_MANIFEST_JSON",
+  "BRAND_MANIFEST_KEYS",
+  "BRAND_SUBMISSION_JSON",
+  "BRAND_TRACKED_DUPLICATE",
+  "BRAND_TRACKED_FILES",
+  "BRAND_TRACKED_PATH",
+  "BROWSER_TITLE",
+  "DOMAIN_REFERENCE_FILE_COUNT",
+  "DOMAIN_REFERENCE_OCCURRENCE_COUNT",
+  "EXACT_GIT_SOURCE_COMMON_DIR",
+  "EXACT_GIT_SOURCE_EXECUTABLE",
+  "EXACT_GIT_SOURCE_GIT_DIR",
+  "EXACT_GIT_SOURCE_INDEX_PATH",
+  "EXACT_GIT_SOURCE_LAYOUT",
+  "EXACT_GIT_SOURCE_LOCAL_CONFIG",
+  "EXACT_GIT_SOURCE_OBJECT_DIRECTORY",
+  "EXACT_GIT_SOURCE_OBJECT_PATH",
+  "EXACT_GIT_SOURCE_PROMISOR",
+  "EXACT_GIT_SOURCE_ROOT",
+  "EXACT_GIT_SOURCE_WORKTREE_CONFIG",
+  "HISTORICAL_EVIDENCE_FILE",
+  "PACKAGE_NAME_BINDING",
+  "README_NAME",
+  "SUBMISSION_COORDINATES",
+]);
 
 function assert(condition, message) {
   if (!condition) {
@@ -39,6 +68,19 @@ function sorted(values) {
   return [...values].sort((left, right) =>
     left < right ? -1 : left > right ? 1 : 0
   );
+}
+
+function allowlistedNestedBrandFailureCode(error) {
+  let message;
+  try {
+    message = error instanceof Error ? error.message : null;
+  } catch {
+    return "UNCLASSIFIED";
+  }
+  return typeof message === "string" &&
+    NESTED_BRAND_FAILURE_CODES.includes(message)
+    ? message
+    : "UNCLASSIFIED";
 }
 
 function assertExactKeys(value, expected, label) {
@@ -235,6 +277,7 @@ export function verifyProofManifest({
   rootDir = DEFAULT_ROOT,
   manifestPath = path.join(rootDir, MANIFEST_NAME),
   verifySecurity = verifyReleaseSecurity,
+  verifyBrand = verifyBrandMigration,
 } = {}) {
   const resolvedRoot = path.resolve(rootDir);
   const resolvedManifest = path.resolve(manifestPath);
@@ -319,9 +362,12 @@ export function verifyProofManifest({
   }
   if (artifactById.has("brand-migration-manifest")) {
     try {
-      verifyBrandMigration({ rootDir: resolvedRoot });
-    } catch {
-      throw new Error("proof manifest nested brand-migration verification failed");
+      verifyBrand({ rootDir: resolvedRoot });
+    } catch (error) {
+      throw new Error(
+        "proof manifest nested brand-migration verification failed:" +
+          allowlistedNestedBrandFailureCode(error)
+      );
     }
   }
   if (artifactById.has("local-full-drill-receipt")) {

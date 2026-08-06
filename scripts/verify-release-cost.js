@@ -604,6 +604,10 @@ function assertPreflightDefaults() {
       effectiveAwsSpendCeilingUsd: 13.14,
       projectCostWindowStart: "2026-07-01",
       budgetCostBasis: "UnblendedCost",
+      expectedPreflightRoleName: "ProofToActPreflight",
+      expectedPreflightSessionName: "release-proof",
+      maxCostExplorerRequests: 1,
+      approvedPreflightMeteredSpendCapUsd: 0.02,
       minimumBudgetCoverageEnd: "2026-09-16T00:00:00.000Z"
     }),
     "RELEASE_COST_PREFLIGHT_DEFAULTS"

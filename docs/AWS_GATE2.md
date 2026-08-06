@@ -204,8 +204,16 @@ unbound.
 rechecks cleanliness after regenerating the tracked templates. Every project
 input is then read as a regular tracked blob from the exact `HEAD` commit;
 replacement refs, legacy grafts, alternate object databases, shallow history,
-path escape, untracked inputs, and unsupported loaders fail closed. On that
-commit it bundles each runtime role separately into six two-entry, stored ZIPs
+partial-clone or promisor configuration and markers, an incomplete reachable
+object closure, path escape, untracked inputs, and unsupported loaders fail
+closed. The source closure is bundled only after those checks. The bundle is
+verified in a fresh empty repository before local import, and the imported
+checkout must remain full, standalone, remote-free, alternate-free, and byte
+identical. Only this Git bundle materialization and import path is network-free;
+the later `npm ci --ignore-scripts` may contact the pinned
+`registry.npmjs.org` registry. Registry availability and integrity
+remain outside this local source claim. On that commit it bundles each runtime
+role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
 the 46-package union present across the six Lambda graphs and the separately
@@ -268,15 +276,18 @@ Run it only from a fresh official checkout in the authenticated AWS lane,
 before any candidate upload or main-stack mutation. It is read-only with
 respect to AWS. The gate:
 
-- requires the exact public ProofToAct origin, `main`, a clean tree, and
-  `HEAD == origin/main`, fetching `origin/main` again before and after the
-  checks so a moving release target fails closed;
+- requires the raw local Git configuration to match a narrow fresh-clone
+  allowlist, the exact public ProofToAct origin, `main`, a clean single-root
+  tree, and `HEAD == origin/main`; each readiness fetch names the pinned HTTPS
+  URL and exact refspec directly, and repeats before and after the checks so a
+  moving release target fails closed;
 - performs a lockfile install with dependency lifecycle scripts disabled,
-  then runs the exact-release provenance control over the full single-root Git
-  ancestry, object integrity, replacement refs, legacy grafts, alternate object
-  databases, tracked file modes, installed package identities, dependency
-  inventory, bundle notice inputs, the current-surface rights receipt, and the
-  bounded static accessibility receipt;
+  then runs the exact-release provenance control in a caller-bound no-fetch
+  mode over the full single-root Git ancestry, object integrity, replacement
+  refs, legacy grafts, alternate object databases, tracked file modes,
+  installed package identities, dependency inventory, bundle notice inputs,
+  the current-surface rights receipt, and the bounded static accessibility
+  receipt;
 - runs the full test suite and a zero-vulnerability dependency audit;
 - creates a fresh exact-head Gate Two build and independently rechecks the
   package lock, tracked templates, six source files, six artifact hashes,
@@ -286,6 +297,15 @@ respect to AWS. The gate:
   the same commit and tree; and
 - rechecks the official upstream and clean tree before emitting
   `tideproof.gate2.aws-readiness.v1` with status `PASS`.
+
+The readiness wrapper passes its already-fetched exact commit and tree through
+`--readiness-fetched-official-main`. The nested provenance process must verify
+that binding before and after its work, perform zero network fetches, and emit
+the distinct `READINESS_FETCH_BOUND_PASS` status; an ordinary standalone
+`npm run release:provenance` still performs its own before-and-after fetches and
+emits `PASS`. The readiness validator rejects that standalone status, so only
+the wrapper's two explicitly pinned and sanitized fetches can establish
+upstream freshness for this combined gate.
 
 It executes only reviewed `git` and `npm` command families. The nested AWS
 preflight uses read-only service calls; the readiness gate cannot upload,
@@ -297,6 +317,35 @@ credential-file and metadata discovery disabled. Git, Node, npm, dynamic
 loader, and shell-startup environment overrides are removed before child
 commands. Only the exact nested preflight receives the authenticated AWS
 environment, and unrelated application credentials remain removed there too.
+It does not inherit the invoking shell's `PATH`: unauthenticated children use
+only `/usr/bin:/bin`, while the authenticated macOS child additionally allows
+`/opt/homebrew/bin` so the reviewed Homebrew AWS CLI can be located (Linux
+allows `/usr/local/bin`). These directories are a fixed platform allowlist;
+caller-provided path entries are never retained.
+
+The readiness Git runner disables system, global, environment-provided, and
+replacement-object configuration. It rejects unreviewed repository-local or
+worktree configuration, requires the checkout root, Git directory, common
+directory, object directory, and index to resolve to the one ordinary clone,
+and rejects replacement refs, legacy grafts, alternate object databases,
+sparse checkout, assume-unchanged or skip-worktree entries, transformed tracked
+bytes, and hidden untracked files. Fetches do not use the configurable `origin`
+transport: they name `https://github.com/Flash-Bri/prooftoact.git` directly,
+clear credential helpers, askpass, proxy, and extra-header settings, require
+certificate verification with TLS 1.2 or newer, disable submodule recursion,
+and update only the reviewed `origin/main` tracking ref.
+
+The standalone preflight also resolves Git independently of caller `PATH`.
+Only the root-owned `/usr/bin/git` system executable (or the same approved
+Linux package target) is accepted; it must be a regular executable with no
+group/world write bits. Git receives a fixed `/usr/bin:/bin` path, no system or
+global or command-environment configuration, no terminal prompting, disabled
+hooks, file-system monitoring, checkout transforms, and untracked cache, plus
+an explicit all-untracked status request. Its source binding then runs the same
+single-root layout, local-config, replacement, graft, alternate-object, index-
+flag, tracked-byte, and sparse-checkout invariants used by the exact build. A
+caller-supplied Git wrapper, configuration, alternate index, or repository
+indirection cannot provide the accepted checkout identity used by this gate.
 
 Local maintainers can exercise every non-AWS part with:
 
@@ -322,6 +371,57 @@ provide four independently reviewed, nonsecret expectations:
 - `AWS_EVIDENCE_EXPECTED_PREFLIGHT_PRINCIPAL_ARN`;
 - `AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN`; and
 - `AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID`.
+
+The same lane must use temporary STS assumed-role credentials: an
+`AWS_ACCESS_KEY_ID` beginning with `ASIA`, `AWS_SECRET_ACCESS_KEY`, and a
+nonempty `AWS_SESSION_TOKEN`. Static `AKIA` credentials, tokenless
+credentials, IAM-user principal expectations, and IAM-user caller identities
+are rejected before the first AWS request. The standalone command also
+ignores caller `PATH`, resolves the AWS CLI from a fixed platform allowlist,
+and executes only the trusted absolute package real path. A direct regular
+wrapper in a bin directory is rejected. On the current macOS lane,
+`/opt/homebrew/bin/aws` must be a symlink into Homebrew's `awscli` Cellar; the
+resolved executable must be owned by the current user, be a regular executable,
+and have no group/world write bits. The Linux lane requires the corresponding
+root-owned `/usr/local/aws-cli` package target. This is an owner, mode, and
+location control, not a byte hash or independent package-signature attestation.
+
+The Cost Explorer census is bounded to exactly one CLI request: automatic CLI
+pagination is disabled, SDK retries are capped at one total attempt, and the
+response is rejected if a `NextPageToken` property is present, including an
+empty one. The explicitly priced Cost Explorer portion is therefore bounded to
+one `GetCostAndUsage` request. The operational approval cap for the complete
+preflight is at most `$0.02`; operators must reconfirm current pricing for that
+request and the fixed read-only control-plane census before a live run. The
+source contract bounds the Cost Explorer call count but does not freeze or
+independently verify AWS pricing or claim every metadata request is unmetered.
+
+The manual-only `AWS OIDC Identity Bootstrap` workflow provides a separate
+short-lived identity bootstrap for the protected `aws-preflight` environment.
+It checks out no repository code, requests a GitHub OIDC token directly,
+requires the exact `Flash-Bri/prooftoact` repository, protected-environment
+subject, `refs/heads/main`, manual event, workflow reference, and GitHub-hosted
+runner claims before STS. The decoded OIDC header and payload stay in `0600`
+temporary files and are validated locally without logging the token. The
+configured account secret must match the independently stored protected
+environment variable `AWS_APPROVED_ACCOUNT_ID_SHA256`; this separates the
+approved account binding from the role/account secret pair, although an
+environment administrator can still change that variable. The role is exactly
+the pathless `ProofToActPreflight` role and the 900-second session is exactly
+`release-proof`.
+
+The workflow accepts only the root-owned GitHub-runner AWS CLI symlink whose
+real path is an executable, non-group/world-writable official
+`/usr/local/aws-cli/v2/<version>/dist/aws` package file. It makes only the two
+STS identity calls, validates the exact assumed-role ARN and session, and
+requires the `AssumedRoleId` returned by `AssumeRoleWithWebIdentity` to equal
+the `UserId` returned by `GetCallerIdentity`. It then symmetrically encrypts
+the caller-only JSON receipt before uploading it as a one-day artifact. OIDC
+and AWS credentials, the account, role, ARN, token, passphrase, and raw receipt
+are never intended for logs or artifacts. This workflow proves only that the
+configured GitHub environment can obtain the expected temporary identity; it
+does not run the account-safety preflight, call paid AWS services, upload a
+deployment artifact, or authorize deployment.
 
 Do not discover or infer these values inside the preflight. The command first
 rejects a missing, malformed, or internally inconsistent expectation set. It
@@ -437,6 +537,266 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
   integrity; exact release provenance remains a main-only gate.
 - Claim impact: the receipt may claim the named regression controls were the
   reviewed bytes, not that source or tests are exhaustive.
+
+### Repository-local Git metadata could falsify source binding
+
+- Root cause: the standalone preflight disabled ambient system and global Git
+  configuration but still accepted repository-local worktree, index, and
+  object indirection, while readiness fetched the configurable `origin` and
+  requested a short status without forcing all untracked paths. A later hosted
+  runner failure exposed a narrower compatibility case: Git 2.54 writes
+  `.git/config.worktree` while `actions/checkout` disables sparse checkout,
+  then checkout removes `extensions.worktreeConfig` but leaves exactly three
+  inactive false-valued settings behind. The generic object-path rejection
+  first stopped the nested brand verifier, then a hosted rerun exposed the same
+  strict-layout failure at the rights verifier. Rights was only the first of
+  several strict callers: privacy, the exact build, main-only provenance, and
+  readiness would have failed serially on the same residue. The proof wrapper
+  also discarded the brand verifier's exact bounded error code. The first
+  diagnostic repair accepted any short
+  uppercase-and-underscore token, which could reflect an AWS-shaped identifier
+  or arbitrary attacker-controlled token that happened to match that syntax.
+- Why it was missed: executable and process-environment isolation tests covered
+  caller-selected wrappers and environment variables, but not hostile
+  `.git/config`, replacement refs, grafts, alternates, index flags, or transport
+  settings stored inside an otherwise ordinary-looking checkout. The original
+  fresh-clone fixture also modeled only GitHub's `.git`-suffixed canonical HTTPS
+  spelling, while an official Actions clone records the same origin without the
+  suffix. The first runner correction did not yet reproduce the exact
+  `gc.auto=0` entry that `actions/checkout` leaves after its temporary credential
+  configuration is removed. The next correction still did not reproduce the
+  runner's ordered `git sparse-checkout disable` and
+  `extensions.worktreeConfig` removal on Linux Git 2.54. Its diagnostic test
+  covered control characters and overlength text but not an untrusted
+  regex-shaped token within the length bound. Treating each downstream verifier
+  as a separate compatibility exception would also have weakened strict local,
+  build, provenance, readiness, and provider lanes.
+- Earliest detection: set `status.showUntrackedFiles=no`, add an untracked file,
+  mark a tracked file skip-worktree or assume-unchanged, use a linked worktree
+  or alternate object database, or add a proxy, credential helper, TLS override,
+  or URL rewrite to local configuration. For the hosted compatibility case,
+  execute the exact checkout cleanup sequence and run the complete ordered CI
+  command sequence, including rights, privacy, tests, and the exact build. Pass an
+  AWS-shaped uppercase token through the nested diagnostic boundary as a
+  negative control; any reflection is a release blocker.
+- Repair: require one exact ordinary repository layout and index, validate
+  tracked worktree bytes, reject every listed metadata and index indirection,
+  allow only the expected fresh-clone local configuration, accept exactly the
+  two official public HTTPS origin spellings with and without `.git` (without
+  normalization), optionally accept only the conservative no-network checkout
+  setting `gc.auto=0`, and fetch the explicit official HTTPS URL with sanitized
+  credential, header, proxy, and TLS options. Credential, `includeIf`, proxy,
+  header, URL-rewrite, and every other local configuration remain rejected.
+  Default brand, proof, rights, privacy, exact-source, readiness, preflight, and
+  build validation all reject every `.git/config.worktree`. A single dedicated
+  GitHub-hosted Linux CI step runs directly through Node after pinned Node setup
+  and before dependency installation or any verifier. It requires the exact
+  repository ID, repository name, official server/API URLs, CI workflow/job,
+  PR-merge or main-push ref, real workspace, and `GITHUB_SHA == HEAD`, while
+  clearing and rejecting Node preload/search-path inputs and disabling optional
+  Git locks. If the checkout is already strict, the step performs no mutation
+  and still proves a clean exact checkout. Otherwise it accepts only the exact
+  observed LF-terminated Git 2.54 bytes for the three false-valued settings in
+  an effective-UID/effective-GID-owned, one-link, non-symlink `0600` or `0644`
+  regular file. The repository root and `.git` directory must have that same
+  effective identity. It rejects
+  an active extension, sparse file, include, extra entry, noncanonical bytes,
+  unsafe mode, object indirection, non-stage-zero index, non-`H` index flag,
+  dirty or hidden untracked path, or changed source identity. With a no-follow
+  descriptor held open, it rechecks device, inode, size, bytes, owner, mode,
+  link count, common config, index, status, `HEAD`, and tree after the testable
+  pre-unlink boundary and immediately before unlinking only
+  `.git/config.worktree`; any tracked-byte, index-flag, staged-index, ref, tree,
+  ownership, or common-config drift fails while preserving the residue path.
+  The held descriptor must report zero links afterward. Default strict layout
+  and the complete clean-checkout control then run again and every pre/post
+  state digest must match. The nested proof
+  wrapper exposes only an exact member of a fixed reviewed brand/exact-Git
+  error-code allowlist or `UNCLASSIFIED`; syntax, length, or a broad prefix can
+  never grant reflection.
+- Regression/preventive control: exact-Git, standalone-preflight, readiness,
+  proof, cost, claims, and security controls hash-bind the implementation and
+  adversarial tests; readiness repeats both exact checkout verification and the
+  explicit official fetch before accepting its final receipt. The compatibility
+  parser appears at one production call site, the pre-verification normalizer;
+  no release, build, readiness, preflight, brand, proof, or provider caller can
+  opt into it.
+- Verification: focused tests cover both accepted official origin spellings;
+  accept only `gc.auto=0` while rejecting alternate or duplicate garbage-
+  collection settings; reject credentialed, rewritten, and near-miss origins;
+  and cover hidden untracked files, both hidden index flags, linked worktrees,
+  replacement refs, alternates, local transport overrides, and the exact fetch
+  arguments. Dedicated residue tests reject every missing field, duplicates,
+  true or other wrong values, extras, includes, symlinks, an active extension,
+  and an active sparse-checkout file while preserving every rejected target's
+  path identity and bytes. PR and main-push context tests cover mutation and
+  strict no-op paths; wrong repository, job, ref, SHA, runner, mode, link, and
+  Node environment inputs fail before deletion, and a pathname replacement is
+  detected by the device/inode recheck. Deterministic pre-unlink tests mutate a
+  tracked byte, index flag, staged index, `HEAD`/ref/tree, and common config;
+  every case fails before deletion with the candidate inode, bytes, and path
+  preserved. Workflow tests require the exact order
+  checkout, Node setup, normalization, dependency install, then proof, with no
+  continue-on-error and no other production opt-in. Diagnostic tests retain one valid bounded
+  brand code and one valid bounded exact-Git code while proving an AWS-shaped
+  uppercase identifier, arbitrary uppercase-and-underscore text, forty `A`
+  characters, control-character text, and overlength text all become
+  `UNCLASSIFIED`. The exact Linux Git 2.54 pull-request merge sequence must pass
+  the direct normalization step followed by the complete CI command sequence.
+  Live GitHub execution remains an exact-main acceptance gate.
+- Residual risk: these controls do not establish a hostile-kernel boundary,
+  independently certify the installed Git/libcurl/CA toolchain, or eliminate a
+  same-UID process or kernel race outside the held-descriptor, inode, byte, and
+  pre/post state checks. The workflow step reduces but cannot eliminate that
+  hostile-host boundary; it is not safe for self-hosted runners. The narrow
+  parser trusts only the reviewed bytes and semantic meaning of the three false
+  values in the tested Git version; every other worktree-local shape remains
+  fail-closed. New diagnostic codes require an explicit reviewed allowlist
+  change; unknown codes intentionally lose detail as `UNCLASSIFIED`.
+- Claim impact: source may claim bounded fail-closed checkout and fetch
+  invariants, not universal host integrity or live upstream availability.
+
+### Nested provenance repeated a less constrained fetch
+
+- Root cause: readiness invoked the standalone provenance command after its
+  own hardened fetch, so provenance silently repeated two older fetches through
+  the configurable `origin` transport.
+- Why it was missed: the readiness integration runner treated the nested npm
+  command as opaque and counted only the wrapper's visible Git calls, while the
+  provenance tests verified standalone behavior in isolation.
+- Earliest detection: run the complete provenance function with the exact
+  commit/tree binding used by readiness and assert that its injected command
+  log contains no fetch, while the wrapper still contains exactly two fetches.
+- Repair: add a canonical readiness-only already-fetched mode, bind it to the
+  wrapper-verified commit and tree, skip both nested fetches, and require the
+  distinct `READINESS_FETCH_BOUND_PASS` status and bounded claim text.
+- Regression/preventive control: provenance tests exercise the complete bound
+  path with zero fetches and retain the two-fetch standalone check; readiness
+  tests require the exact bound invocation and only the two pinned, sanitized
+  wrapper fetch argument sets.
+- Verification: focused source tests and the hash-bound proof and security
+  receipts cover both sides of the delegation. No live GitHub fetch was run in
+  this repair worktree.
+- Residual risk: standalone provenance deliberately retains its independent
+  fetch behavior, and these process-level controls do not establish a
+  hostile-kernel or compromised Git/toolchain boundary.
+- Claim impact: readiness may claim that every fetch in its combined flow uses
+  its reviewed official transport; this adds no live upstream-availability or
+  hosted-runner claim.
+
+### Release Git children inherited caller selection and repository hooks
+
+- Root cause: standalone provenance and the authenticated authority-race
+  runner still launched Git through a name selected by caller `PATH`; several
+  related release and evidence paths also omitted the shared invariant that
+  disables repository hooks. A repository-local `reference-transaction` hook
+  could therefore run during a ref update even after earlier source checks.
+- Why it was missed: prior adversarial coverage proved exact checkout content,
+  rejected ambient Git object indirection, and hardened the readiness wrapper,
+  but did not execute the standalone provenance or authority-race Git child
+  with both a hostile `PATH` and a harmless executable reference hook.
+- Earliest detection: prepend a sentinel Git wrapper to caller `PATH`, install
+  a sentinel `.git/hooks/reference-transaction`, perform a bounded ref update
+  through each runner, and require both sentinels to remain absent.
+- Repair: all inventoried release/evidence Git children now resolve the shared
+  trusted absolute Git executable, use the fixed sanitized Git environment,
+  prepend the complete shared invariant argument set, and validate the exact
+  repository layout before source-sensitive work. Fetching uses the explicit
+  official HTTPS URL, a fixed refspec, no tags, and no submodule recursion.
+- Regression/preventive control: dedicated provenance and authority-race tests
+  prove that hostile `PATH` lookup and `reference-transaction` hooks are never
+  invoked. Complete provenance still performs exactly two standalone official
+  fetches, while readiness-bound provenance performs zero nested fetches.
+- Verification: the hostile-path/hook tests, complete provenance fetch-count
+  tests, focused source suites, full suite, exact build, and hash-bound proof
+  and security verifiers must pass at one clean candidate commit.
+- Residual risk: trusted-path and hook suppression are process controls, not a
+  hostile-kernel boundary or independent certification of Git, the filesystem,
+  DNS, TLS, or the upstream host. Same-identity mutation between repeated
+  checks remains outside the claim.
+- Claim impact: the source gates may claim reviewed executable selection and
+  hook suppression for these bounded Git children. This grants no AWS,
+  CockroachDB, deployment, publication, or final-release authority.
+
+### Exact builder used a now-forbidden linked worktree
+
+- Root cause: the exact artifact bootstrap still created its isolated checkout
+  with `git worktree add`, while the shared exact-Git control now correctly
+  rejects linked worktrees whose Git directory, common directory, object store,
+  and index do not belong to one ordinary repository root.
+- Why it was missed: focused source tests exercised the new layout rejection
+  and the outer builder's post-build ordering separately, but no test executed
+  the complete builder after the single-root invariant was introduced.
+- Earliest detection: run `npm run build:gate2` from the clean rebased source
+  candidate before any provider credential, upload, deployment, or public
+  action. The child stops at `EXACT_GIT_SOURCE_LAYOUT` before artifact output.
+- Repair: materialize a private, full-history Git bundle from the repeatedly
+  validated and closure-complete source, initialize a fresh repository under
+  the trusted temporary root, verify the bundle there before import, fetch only
+  that local bundle, detach the exact source commit, and apply the full
+  single-root, object-store, config, index, byte, closure, and tree validation
+  before dependency installation or generation. The Git bundle
+  materialization and import perform no network fetch, clone, hardlink,
+  alternate-object, or linked-worktree operation. The subsequent pinned
+  `npm ci --ignore-scripts` step may use the npm registry and is not part of
+  that network-free Git claim.
+- Regression/preventive control: the integration test uses a source repository
+  that rejects unapproved URL, helper, partial-clone, and promisor
+  configuration; verifies the bundle in the empty destination before import;
+  proves the destination has no remote, alternate, promisor, or shallow state
+  and has exact bytes; rejects a group/world-readable temporary root; and
+  forbids reintroducing `worktree add` in the outer builder.
+- Verification: privacy runs first on the final history; the exact build and
+  reproduction, focused exact-Git/AWS/provenance/security tests, full suite,
+  hash-bound release verifiers, syntax checks, and strict object/topology checks
+  must then pass from the same clean commit.
+- Residual risk: the control trusts the reviewed root-owned Git, Node, and npm
+  toolchain plus the host kernel and filesystem. It is not a hostile-host proof
+  and does not validate AWS, CockroachDB, registry integrity, deployment, or
+  public behavior.
+- Claim impact: this restores a local source/artifact gate without adding any
+  live AWS, provider, deployment, publication, or submission claim.
+
+### Partial-clone state could lazily hydrate missing source history
+
+- Root cause: the exact-source boundary rejected shallow repositories and
+  alternate object stores but did not reject partial-clone/promisor
+  configuration or pack markers, disable lazy fetching, or prove that every
+  object reachable from the exact source commit already existed locally. A
+  later object read or bundle creation could therefore ask a configured helper
+  or transport to hydrate a missing historical object.
+- Why it was missed: the prior adversarial fixtures covered replacement refs,
+  grafts, alternates, linked worktrees, local URL rewrites, and index flags but
+  always began with a complete ordinary object database.
+- Earliest detection: delete a historical reachable blob from a two-commit
+  fixture, add partial-clone/promisor configuration plus a sentinel upload-pack
+  helper and `.promisor` marker, then run the exact-checkout control before any
+  blob, tree, history, build, readiness, or provenance read.
+- Repair: set `GIT_NO_LAZY_FETCH=1` in every sanitized Git child environment;
+  read the literal local config file with includes disabled before the first
+  object read; accept only the exact ordinary-clone keys and values; reject
+  promisor markers, shallow state, alternates, grafts, and object-store
+  indirection; and prove the complete unique reachable object closure with
+  `rev-list`, batched `cat-file`, and strict `fsck` before bundle creation.
+  The bundle must verify inside a fresh empty repository before local import,
+  after which the destination repeats closure, no-remote, no-alternate,
+  no-promisor, non-shallow, exact-tree, index, and worktree-byte checks.
+- Regression/preventive control: the missing-blob fixture asserts fail-closed
+  rejection at configuration, promisor-marker, and closure layers while the
+  sentinel helper remains uninvoked, the missing blob remains absent, and the
+  object inventory remains byte-for-byte unhydrated. Security and proof
+  manifests bind the implementation, fixture, and bounded documentation.
+- Verification: privacy must run first after the final commit, followed by the
+  exact build, two-run reproduction, focused and full suites, all release
+  verifiers, syntax checks, dependency audit, and strict Git fsck/topology from
+  the same clean exact commit.
+- Residual risk: these controls trust the reviewed Git executable, process
+  environment semantics, host kernel, and filesystem against same-identity
+  races. The later `npm ci --ignore-scripts` may contact the pinned npm
+  registry; registry availability and integrity are not established here.
+- Claim impact: only Git bundle materialization/import may be described as
+  network-free and locally closure-complete. This adds no live provider,
+  deployment, publication, or final-release claim.
 
 ## Live acceptance sequence
 

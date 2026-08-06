@@ -3,6 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  assertExactGitRepositoryLayout,
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_PATH = "RELEASE_PRIVACY_MANIFEST.json";
@@ -309,15 +315,25 @@ export function reviewFindings(findings, manifest) {
 }
 
 function defaultRunner(projectRoot) {
-  return (command, args, options = {}) =>
-    spawnSync(command, args, {
-      cwd: projectRoot,
-      encoding: Object.hasOwn(options, "encoding")
-        ? options.encoding
-        : "utf8",
-      input: options.input,
-      maxBuffer: options.maxBuffer ?? 160 * 1024 * 1024
-    });
+  const resolvedProjectRoot = path.resolve(projectRoot);
+  assertExactGitRepositoryLayout({ rootDir: resolvedProjectRoot });
+  const gitExecutable = trustedGitExecutable();
+  return (command, args, options = {}) => {
+    assert(command === "git", "RELEASE_PRIVACY_COMMAND");
+    return spawnSync(
+      gitExecutable,
+      [...gitInvariantArguments(), ...args],
+      {
+        cwd: resolvedProjectRoot,
+        encoding: Object.hasOwn(options, "encoding")
+          ? options.encoding
+          : "utf8",
+        env: gitEnvironment(process.env),
+        input: options.input,
+        maxBuffer: options.maxBuffer ?? 160 * 1024 * 1024
+      }
+    );
+  };
 }
 
 function checked(run, command, args, code, options = {}) {

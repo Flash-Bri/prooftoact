@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
-  "reviewedOn": "2026-08-03",
+  "reviewedOn": "2026-08-06",
   "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
   "limits": {
     "awsBudgetLimitUsd": 15,
@@ -79,19 +79,19 @@
       "id": "aws-preflight-library",
       "path": "src/cloud/aws-gate2-preflight.js",
       "role": "FAIL_CLOSED_COST_POLICY",
-      "sha256": "835e9a3b402f7eafef465425997ec45ca8b610e0b6202d065f47694e4f361e2a"
+      "sha256": "20a77e1e9b994d5a66eac67ced6fb520e910871ac55b4b90ca8b4addf073b15d"
     },
     {
       "id": "aws-preflight-runner",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "a8f001fb509bd045d5c2a80815a7160a8dc72479f898b7885b0fc9ae4b787dcf"
+      "sha256": "0155681d9e89e7e987e255fc77bab29b72d4bdf3d003c3025b8b175bae2d24ea"
     },
     {
       "id": "aws-readiness-runner",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
-      "sha256": "7f3f1e289c758303b0e685fea17b145cb89c6d46951108148346fba087bc9ec9"
+      "sha256": "f774a19826f695b0feeb3781d9c278a4dc1e6f4dcc48aacc18b710f6bc6856b7"
     },
     {
       "id": "boundary-semantic-metric-runtime",

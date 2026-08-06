@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
 import { readFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   AUTHORITY_PROOF_RESPONSE_SCHEMA,
@@ -17,9 +21,15 @@ import {
 import {
   authorityPrincipalFromStackResource,
   awsEvidenceClientOptions,
+  createAuthorityRaceGitRunner,
   safeAuthorityRaceFailureCode,
   validateAuthorityRaceExpectedPrincipal
 } from "../scripts/gate2-authority-race.js";
+import {
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "../scripts/lib/exact-git-source.js";
 
 const EXPECTED = Object.freeze({
   configDigest: "b".repeat(64),
@@ -317,15 +327,85 @@ test("authority race checkout rejects Git object indirection and binds the tree"
     "utf8"
   );
   for (const required of [
-    'GIT_NO_REPLACE_OBJECTS: "1"',
-    '"core.fsmonitor=false"',
-    '["replace", "-l"]',
-    '"info/grafts"',
-    '"objects/info/alternates"',
-    '"--is-shallow-repository"',
+    "trustedGitExecutable()",
+    "...gitInvariantArguments()",
+    "gitEnvironment(",
+    "assertExactGitRepositoryLayout",
+    "assertCleanExactGitCheckout",
+    '"--no-recurse-submodules"',
+    "runReleaseProvenance({",
     'receipt.treeDigest !== checkout.treeDigest'
   ]) {
     assert.equal(source.includes(required), true, required);
+  }
+});
+
+test("authority race Git runner bypasses hostile PATH and reference hooks", () => {
+  const fixtureRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "tideproof-authority-race-git-")
+  );
+  const repositoryRoot = path.join(fixtureRoot, "repository");
+  const fakeBin = path.join(fixtureRoot, "fake-bin");
+  const hostileMarker = path.join(fixtureRoot, "hostile-git-invoked");
+  const hookMarker = path.join(fixtureRoot, "reference-hook-invoked");
+  try {
+    fs.mkdirSync(repositoryRoot);
+    fs.mkdirSync(fakeBin);
+    fs.writeFileSync(
+      path.join(fakeBin, "git"),
+      `#!/bin/sh\nprintf invoked > ${JSON.stringify(hostileMarker)}\nexit 97\n`,
+      { mode: 0o700 }
+    );
+    const gitExecutable = trustedGitExecutable();
+    const gitArgs = gitInvariantArguments();
+    const setupGit = (args) =>
+      execFileSync(gitExecutable, [...gitArgs, ...args], {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        env: gitEnvironment(),
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+    setupGit(["init"]);
+    fs.writeFileSync(
+      path.join(repositoryRoot, "README.md"),
+      "fixture\n"
+    );
+    setupGit(["add", "README.md"]);
+    setupGit([
+      "-c",
+      "user.name=ProofToAct Fixture",
+      "-c",
+      "user.email=fixture.invalid",
+      "commit",
+      "-m",
+      "fixture"
+    ]);
+    const hookPath = path.join(
+      repositoryRoot,
+      ".git",
+      "hooks",
+      "reference-transaction"
+    );
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh\nprintf invoked > ${JSON.stringify(hookMarker)}\nexit 98\n`,
+      { mode: 0o700 }
+    );
+    const readGit = createAuthorityRaceGitRunner({
+      rootDir: repositoryRoot,
+      sourceEnvironment: {
+        PATH: `${fakeBin}:/usr/bin:/bin`
+      }
+    });
+    readGit(["update-ref", "refs/heads/sentinel", "HEAD"]);
+    assert.equal(fs.existsSync(hostileMarker), false);
+    assert.equal(fs.existsSync(hookMarker), false);
+    assert.equal(
+      readGit(["rev-parse", "refs/heads/sentinel"]),
+      readGit(["rev-parse", "HEAD"])
+    );
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
 });
 

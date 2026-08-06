@@ -15,6 +15,10 @@ const EFFECTIVE_AWS_SPEND_CEILING_USD = Number(
   ).toFixed(2)
 );
 const EXPECTED_BUDGET_COST_BASIS = "UnblendedCost";
+const EXPECTED_PREFLIGHT_ROLE_NAME = "ProofToActPreflight";
+const EXPECTED_PREFLIGHT_SESSION_NAME = "release-proof";
+const MAX_COST_EXPLORER_REQUESTS = 1;
+const APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD = 0.02;
 const MINIMUM_BUDGET_COVERAGE_END =
   "2026-09-16T00:00:00.000Z";
 const EXPECTED_COST_TYPES = Object.freeze({
@@ -84,6 +88,34 @@ function isAbsentOrEmptyObject(value) {
       Object.keys(value).length === 0
     )
   );
+}
+
+export function validateAwsGate2PreflightIdentityExpectation(
+  expectation
+) {
+  const expectedAccountId = expectation?.expectedAccountId;
+  requireCondition(
+    /^\d{12}$/.test(expectedAccountId ?? ""),
+    "AWS_PREFLIGHT_EXPECTED_ACCOUNT"
+  );
+  requireCondition(
+    expectation?.expectedPrincipalArn ===
+      `arn:aws:iam::${expectedAccountId}:role/${EXPECTED_PREFLIGHT_ROLE_NAME}`,
+    "AWS_PREFLIGHT_EXPECTED_ROLE"
+  );
+  requireCondition(
+    expectation?.expectedCallerArn ===
+      `arn:aws:sts::${expectedAccountId}:assumed-role/` +
+        `${EXPECTED_PREFLIGHT_ROLE_NAME}/${EXPECTED_PREFLIGHT_SESSION_NAME}`,
+    "AWS_PREFLIGHT_EXPECTED_CALLER_ARN"
+  );
+  requireCondition(
+    new RegExp(
+      `^AROA[A-Z0-9]{12,124}:${EXPECTED_PREFLIGHT_SESSION_NAME}$`
+    ).test(expectation?.expectedCallerUserId ?? ""),
+    "AWS_PREFLIGHT_EXPECTED_CALLER_USER_ID"
+  );
+  return expectation;
 }
 
 function timestampMilliseconds(value, code) {
@@ -319,6 +351,16 @@ function validateCost(cost, ceilingUsd, expectedPeriod) {
       expectedPeriod.periodEndExclusive,
     "CURRENT_COST_PERIOD_END"
   );
+  requireCondition(
+    cost?.response &&
+      typeof cost.response === "object" &&
+      !Array.isArray(cost.response) &&
+      !Object.prototype.hasOwnProperty.call(
+        cost.response,
+        "NextPageToken"
+      ),
+    "CURRENT_COST_NEXT_PAGE_TOKEN"
+  );
   const rows = asArray(cost?.response?.ResultsByTime);
   const expectedRows = [];
   let cursor = new Date(`${expectedPeriod.periodStart}T00:00:00.000Z`);
@@ -436,6 +478,12 @@ export function validateAwsGate2Preflight(
   requireCondition(snapshot?.workingTreeClean === true, "WORKING_TREE_DIRTY");
 
   const caller = snapshot?.callerIdentity;
+  validateAwsGate2PreflightIdentityExpectation({
+    expectedAccountId: snapshot?.expectedAccountId,
+    expectedPrincipalArn: snapshot?.expectedPrincipalArn,
+    expectedCallerArn: snapshot?.expectedCallerArn,
+    expectedCallerUserId: snapshot?.expectedCallerUserId
+  });
   const callerBinding = validateAwsEvidenceCaller(caller, {
     expectedAccountId: snapshot?.expectedAccountId,
     expectedPrincipalArn: snapshot?.expectedPrincipalArn,
@@ -449,6 +497,10 @@ export function validateAwsGate2Preflight(
       bootstrapStackName: snapshot?.bootstrapStackName
     }
   });
+  requireCondition(
+    callerBinding.principalType === "assumed-role",
+    "AWS_PREFLIGHT_ASSUMED_ROLE_REQUIRED"
+  );
 
   const bootstrap = snapshot?.bootstrapStack;
   requireCondition(
@@ -672,5 +724,10 @@ export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({
     EFFECTIVE_AWS_SPEND_CEILING_USD,
   projectCostWindowStart: PROJECT_COST_WINDOW_START,
   budgetCostBasis: EXPECTED_BUDGET_COST_BASIS,
+  expectedPreflightRoleName: EXPECTED_PREFLIGHT_ROLE_NAME,
+  expectedPreflightSessionName: EXPECTED_PREFLIGHT_SESSION_NAME,
+  maxCostExplorerRequests: MAX_COST_EXPLORER_REQUESTS,
+  approvedPreflightMeteredSpendCapUsd:
+    APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD,
   minimumBudgetCoverageEnd: MINIMUM_BUDGET_COVERAGE_END
 });

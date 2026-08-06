@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
   parseAuthorityRaceArguments,
@@ -11,77 +10,100 @@ import {
   isolatedEvidenceProcessEnvironment,
   validateAwsEvidenceCaller
 } from "../src/cloud/aws-evidence-identity.js";
+import {
+  assertCleanExactGitCheckout,
+  assertExactGitRepositoryLayout,
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
 import { runReleaseProvenance } from "./verify-release-provenance.js";
 
-function checkoutValue(args) {
-  return execFileSync("git", ["-c", "core.fsmonitor=false", ...args], {
-    encoding: "utf8",
-    env: {
-      ...isolatedEvidenceProcessEnvironment(process.env),
-      GIT_NO_REPLACE_OBJECTS: "1"
-    },
-    stdio: ["ignore", "pipe", "ignore"]
-  }).trim();
+const OFFICIAL_REMOTE =
+  "https://github.com/Flash-Bri/prooftoact.git";
+
+export function createAuthorityRaceGitRunner({
+  rootDir = process.cwd(),
+  sourceEnvironment = process.env,
+  execute = execFileSync,
+  gitExecutable = trustedGitExecutable()
+} = {}) {
+  const environment = gitEnvironment(
+    isolatedEvidenceProcessEnvironment(sourceEnvironment)
+  );
+  return (args) => {
+    if (
+      !Array.isArray(args) ||
+      args.length === 0 ||
+      args.some(
+        (value) =>
+          typeof value !== "string" ||
+          value.length === 0 ||
+          /[\r\n\0]/.test(value)
+      )
+    ) {
+      throw new Error("AUTHORITY_RACE_GIT_ARGUMENTS_REJECTED");
+    }
+    return execute(
+      gitExecutable,
+      [...gitInvariantArguments(), ...args],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        env: environment,
+        maxBuffer: 8 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 30_000
+      }
+    ).trim();
+  };
 }
 
-function checkoutOptionalValue(args) {
-  try {
-    return checkoutValue(args);
-  } catch {
-    return "";
-  }
-}
-
-function fetchOfficialMain() {
-  checkoutValue([
+function fetchOfficialMain(
+  readGit,
+  {
+    rootDir = process.cwd(),
+    verifyRepositoryLayout = assertExactGitRepositoryLayout
+  } = {}
+) {
+  verifyRepositoryLayout({ rootDir });
+  readGit([
+    "-c",
+    "http.https://github.com/.extraheader=",
     "fetch",
     "--force",
     "--no-tags",
-    "origin",
+    "--no-recurse-submodules",
+    OFFICIAL_REMOTE,
     "refs/heads/main:refs/remotes/origin/main"
   ]);
 }
 
-export function assertExactCleanCheckout(sourceCommit) {
-  const graftsPath = checkoutValue(["rev-parse", "--git-path", "info/grafts"]);
-  const alternatesPath = checkoutValue([
-    "rev-parse",
-    "--git-path",
-    "objects/info/alternates"
-  ]);
-  const treeDigest = checkoutValue(["rev-parse", "HEAD^{tree}"]);
-  const assumeUnchanged = checkoutValue(["ls-files", "-v"])
-    .split("\n")
-    .filter(Boolean)
-    .some((line) => /^[a-z]/u.test(line));
-  const skipWorktree = checkoutValue(["ls-files", "-t"])
-    .split("\n")
-    .filter(Boolean)
-    .some((line) => line.startsWith("S "));
-  const sparseCheckoutPath = checkoutValue([
-    "rev-parse",
-    "--git-path",
-    "info/sparse-checkout"
-  ]);
+export function assertExactCleanCheckout(
+  sourceCommit,
+  {
+    rootDir = process.cwd(),
+    readGit = createAuthorityRaceGitRunner({ rootDir }),
+    verifyCheckout = assertCleanExactGitCheckout,
+    verifyRepositoryLayout = assertExactGitRepositoryLayout
+  } = {}
+) {
+  if (!/^[0-9a-f]{40}$/.test(sourceCommit ?? "")) {
+    throw new Error("AUTHORITY_RACE_CHECKOUT_REJECTED");
+  }
+  verifyRepositoryLayout({ rootDir });
+  const treeDigest = readGit(["rev-parse", "HEAD^{tree}"]);
+  const checkout = verifyCheckout({
+    rootDir,
+    sourceCommit,
+    treeDigest
+  });
   if (
-    checkoutValue(["rev-parse", "--show-toplevel"]) !==
-      process.cwd() ||
-    checkoutValue(["rev-parse", "--abbrev-ref", "HEAD"]) !== "main" ||
-    checkoutValue(["rev-parse", "HEAD"]) !== sourceCommit ||
-    checkoutValue(["status", "--porcelain=v1"]) !== "" ||
-    checkoutValue(["rev-parse", "origin/main"]) !== sourceCommit ||
-    checkoutValue(["replace", "-l"]) !== "" ||
-    existsSync(graftsPath) ||
-    existsSync(alternatesPath) ||
-    existsSync(sparseCheckoutPath) ||
-    checkoutOptionalValue(["config", "--get", "core.sparseCheckout"]) !== "" ||
-    assumeUnchanged ||
-    skipWorktree ||
-    !/^[0-9a-f]{40}$/.test(treeDigest) ||
-    checkoutValue(["rev-parse", "--is-shallow-repository"]) !== "false" ||
-    !/^https:\/\/github\.com\/Flash-Bri\/prooftoact(?:\.git)?$/.test(
-      checkoutValue(["remote", "get-url", "origin"])
-    )
+    checkout.sourceCommit !== sourceCommit ||
+    checkout.treeDigest !== treeDigest ||
+    readGit(["symbolic-ref", "--short", "HEAD"]) !== "main" ||
+    readGit(["rev-parse", "refs/remotes/origin/main"]) !== sourceCommit ||
+    readGit(["remote", "get-url", "origin"]) !== OFFICIAL_REMOTE
   ) {
     throw new Error("AUTHORITY_RACE_CHECKOUT_REJECTED");
   }
@@ -211,9 +233,14 @@ async function evidenceClients(credentials) {
 
 export async function main(argv = process.argv.slice(2)) {
   const options = parseAuthorityRaceArguments(argv);
-  fetchOfficialMain();
-  const checkout = assertExactCleanCheckout(options.sourceCommit);
-  const provenance = await runReleaseProvenance();
+  const rootDir = process.cwd();
+  const readGit = createAuthorityRaceGitRunner({ rootDir });
+  fetchOfficialMain(readGit, { rootDir });
+  const checkout = assertExactCleanCheckout(options.sourceCommit, {
+    rootDir,
+    readGit
+  });
+  const provenance = await runReleaseProvenance({ projectRoot: rootDir });
   if (
     provenance.source.commit !== checkout.sourceCommit ||
     provenance.source.tree !== checkout.treeDigest
@@ -274,9 +301,14 @@ export async function main(argv = process.argv.slice(2)) {
   if (receipt.treeDigest !== checkout.treeDigest) {
     throw new Error("AUTHORITY_RACE_TREE_BINDING_REJECTED");
   }
-  fetchOfficialMain();
-  const finalCheckout = assertExactCleanCheckout(options.sourceCommit);
-  const finalProvenance = await runReleaseProvenance();
+  fetchOfficialMain(readGit, { rootDir });
+  const finalCheckout = assertExactCleanCheckout(options.sourceCommit, {
+    rootDir,
+    readGit
+  });
+  const finalProvenance = await runReleaseProvenance({
+    projectRoot: rootDir
+  });
   if (
     finalCheckout.treeDigest !== checkout.treeDigest ||
     finalProvenance.source.commit !== provenance.source.commit ||
@@ -307,3 +339,8 @@ if (startedDirectly) {
     process.exitCode = 1;
   });
 }
+
+export const __test = Object.freeze({
+  OFFICIAL_REMOTE,
+  fetchOfficialMain
+});

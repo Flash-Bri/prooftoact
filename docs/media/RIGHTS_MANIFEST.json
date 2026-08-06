@@ -80,7 +80,7 @@
     {
       "id": "aws-demo-verifier",
       "path": "scripts/gate2-public-demo-verify.js",
-      "sha256": "527ed16a0e003f8bb8947ed43e9d6c4246b9653ee02cd65bd0dd297c7f6fdab4"
+      "sha256": "0c5bdaa9a23ece5d29badac8831de9765b642ceb7cd760c9849267596beac7f1"
     },
     {
       "id": "brand-migration-ledger",

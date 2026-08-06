@@ -3,6 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  assertExactGitRepositoryLayout,
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "./lib/exact-git-source.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_PATH = "docs/media/RIGHTS_MANIFEST.json";
@@ -267,32 +273,18 @@ function readRegularFile(rootDir, relativePath, code) {
   return fs.readFileSync(current);
 }
 
-function childEnvironment(source) {
-  const environment = {};
-  for (const [name, value] of Object.entries(source)) {
-    if (
-      name.startsWith("GIT_") ||
-      /^(?:BASH_ENV|CDPATH|DYLD_.+|ENV|LD_PRELOAD|NODE_OPTIONS|NODE_PATH)$/i.test(
-        name
-      )
-    ) {
-      continue;
-    }
-    environment[name] = value;
-  }
-  environment.GIT_CONFIG_GLOBAL = "/dev/null";
-  environment.GIT_CONFIG_NOSYSTEM = "1";
-  environment.GIT_TERMINAL_PROMPT = "0";
-  return environment;
-}
-
 function defaultTrackedFiles(rootDir) {
-  const result = spawnSync("git", ["ls-files", "-z", "--"], {
-    cwd: rootDir,
-    encoding: "utf8",
-    env: childEnvironment(process.env),
-    maxBuffer: 8 * 1024 * 1024
-  });
+  assertExactGitRepositoryLayout({ rootDir });
+  const result = spawnSync(
+    trustedGitExecutable(),
+    [...gitInvariantArguments(), "ls-files", "-z", "--"],
+    {
+      cwd: rootDir,
+      encoding: "utf8",
+      env: gitEnvironment(process.env),
+      maxBuffer: 8 * 1024 * 1024
+    }
+  );
   assert(
     !result.error && result.status === 0 && typeof result.stdout === "string",
     "RELEASE_RIGHTS_GIT_TRACKED"

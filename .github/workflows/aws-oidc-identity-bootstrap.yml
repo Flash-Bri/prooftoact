@@ -1,0 +1,306 @@
+name: AWS OIDC Identity Bootstrap
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-oidc-identity-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  identity-bootstrap:
+    environment: aws-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Capture encrypted assumed-role identity receipt
+        shell: bash
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ vars.AWS_APPROVED_ACCOUNT_ID_SHA256 }}
+          RECEIPT_ENCRYPTION_PASSPHRASE: ${{ secrets.RECEIPT_ENCRYPTION_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          oidc_response=""
+          oidc_token=""
+          oidc_header=""
+          oidc_payload=""
+          sts_response=""
+          caller_receipt=""
+          passphrase_file=""
+          error_file=""
+          encrypted_receipt="${RUNNER_TEMP}/aws-preflight-caller-receipt.json.gpg"
+
+          cleanup_sensitive_files() {
+            for file in \
+              "$oidc_response" \
+              "$oidc_token" \
+              "$oidc_header" \
+              "$oidc_payload" \
+              "$sts_response" \
+              "$caller_receipt" \
+              "$passphrase_file" \
+              "$error_file"; do
+              if [[ -n "$file" ]]; then
+                /usr/bin/rm -f -- "$file"
+              fi
+            done
+          }
+          trap cleanup_sensitive_files EXIT
+
+          fail_closed() {
+            printf '%s\n' \
+              '::error::AWS identity bootstrap failed closed.' >&2
+            exit 1
+          }
+
+          [[ "${GITHUB_REPOSITORY:-}" == "Flash-Bri/prooftoact" ]] || fail_closed
+          [[ "${GITHUB_REF:-}" == "refs/heads/main" ]] || fail_closed
+          [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]] || fail_closed
+          [[ "${GITHUB_WORKFLOW_REF:-}" == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-identity-bootstrap.yml@refs/heads/main" ]] || fail_closed
+          [[ "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          [[ "${RUNNER_ENVIRONMENT:-}" == "github-hosted" ]] || fail_closed
+          [[ "${AWS_ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || fail_closed
+          [[ "${AWS_APPROVED_ACCOUNT_ID_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || fail_closed
+          account_digest="$(printf '%s' "$AWS_ACCOUNT_ID" | /usr/bin/sha256sum)" || fail_closed
+          account_digest="${account_digest%% *}"
+          [[ "$account_digest" == "$AWS_APPROVED_ACCOUNT_ID_SHA256" ]] || fail_closed
+          unset account_digest AWS_APPROVED_ACCOUNT_ID_SHA256
+          expected_role_arn="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ProofToActPreflight"
+          [[ "${AWS_ROLE_ARN:-}" == "$expected_role_arn" ]] || fail_closed
+          expected_caller_arn="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/ProofToActPreflight/release-proof"
+          (( ${#RECEIPT_ENCRYPTION_PASSPHRASE} >= 20 )) || fail_closed
+          [[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\n'* ]] || fail_closed
+          [[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\r'* ]] || fail_closed
+          [[ "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" == https://pipelines.actions.githubusercontent.com/*\?* ]] || fail_closed
+          [[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed
+
+          aws_candidate="/usr/local/bin/aws"
+          [[ -L "$aws_candidate" ]] || fail_closed
+          aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed
+          [[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed
+          aws_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$aws_cli")" || fail_closed
+          IFS=':' read -r aws_uid aws_mode aws_type <<<"$aws_metadata"
+          [[ "$aws_uid" == "0" ]] || fail_closed
+          [[ "$aws_mode" =~ ^[0-7]{3,4}$ ]] || fail_closed
+          [[ "$aws_type" == "regular file" ]] || fail_closed
+          aws_mode_value=$((8#$aws_mode))
+          (( (aws_mode_value & 0111) != 0 )) || fail_closed
+          (( (aws_mode_value & 0022) == 0 )) || fail_closed
+          unset aws_metadata aws_uid aws_mode aws_type aws_mode_value
+
+          oidc_response="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-response.XXXXXX")" || fail_closed
+          oidc_token="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-token.XXXXXX")" || fail_closed
+          oidc_header="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-header.XXXXXX")" || fail_closed
+          oidc_payload="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-payload.XXXXXX")" || fail_closed
+          sts_response="$(/usr/bin/mktemp "${RUNNER_TEMP}/sts-response.XXXXXX")" || fail_closed
+          caller_receipt="$(/usr/bin/mktemp "${RUNNER_TEMP}/caller-receipt.XXXXXX")" || fail_closed
+          passphrase_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/receipt-passphrase.XXXXXX")" || fail_closed
+          error_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/bootstrap-error.XXXXXX")" || fail_closed
+          /usr/bin/chmod 600 \
+            "$oidc_response" \
+            "$oidc_token" \
+            "$oidc_header" \
+            "$oidc_payload" \
+            "$sts_response" \
+            "$caller_receipt" \
+            "$passphrase_file" \
+            "$error_file" || fail_closed
+
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com"
+          if ! /usr/bin/curl \
+            --proto '=https' \
+            --tlsv1.2 \
+            --fail \
+            --silent \
+            --show-error \
+            --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$oidc_url" >"$oidc_response" 2>"$error_file"; then
+            fail_closed
+          fi
+          if ! /usr/bin/jq -e \
+            'type == "object" and
+             keys == ["value"] and
+             (.value | type == "string" and
+              test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"))' \
+            "$oidc_response" >/dev/null 2>"$error_file"; then
+            fail_closed
+          fi
+          if ! /usr/bin/jq -j '.value' "$oidc_response" \
+            >"$oidc_token" 2>"$error_file"; then
+            fail_closed
+          fi
+          [[ -s "$oidc_token" ]] || fail_closed
+
+          token_value="$(<"$oidc_token")"
+          IFS='.' read -r jwt_header jwt_payload jwt_signature jwt_extra <<<"$token_value"
+          [[ -n "$jwt_header" && -n "$jwt_payload" && -n "$jwt_signature" && -z "$jwt_extra" ]] || fail_closed
+          decode_base64url() {
+            local encoded="$1"
+            local destination="$2"
+            local normalized="${encoded//-/+}"
+            normalized="${normalized//_/\/}"
+            case $(( ${#normalized} % 4 )) in
+              0) ;;
+              2) normalized="${normalized}==" ;;
+              3) normalized="${normalized}=" ;;
+              *) return 1 ;;
+            esac
+            printf '%s' "$normalized" | /usr/bin/base64 --decode \
+              >"$destination" 2>"$error_file"
+          }
+          decode_base64url "$jwt_header" "$oidc_header" || fail_closed
+          decode_base64url "$jwt_payload" "$oidc_payload" || fail_closed
+          unset token_value jwt_header jwt_payload jwt_signature jwt_extra
+          if ! /usr/bin/jq -e \
+            'type == "object" and
+             .alg == "RS256" and
+             .typ == "JWT" and
+             (.kid | type == "string" and length > 0)' \
+            "$oidc_header" >/dev/null 2>"$error_file"; then
+            fail_closed
+          fi
+          oidc_now="$(/usr/bin/date +%s)" || fail_closed
+          if ! /usr/bin/jq -e \
+            --arg sha "$GITHUB_SHA" \
+            --argjson now "$oidc_now" \
+            'type == "object" and
+             .iss == "https://token.actions.githubusercontent.com" and
+             .aud == "sts.amazonaws.com" and
+             .repository == "Flash-Bri/prooftoact" and
+             .repository_owner == "Flash-Bri" and
+             .ref == "refs/heads/main" and
+             .ref_type == "branch" and
+             .environment == "aws-preflight" and
+             .sub == "repo:Flash-Bri/prooftoact:environment:aws-preflight" and
+             .workflow == "AWS OIDC Identity Bootstrap" and
+             .workflow_ref == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-identity-bootstrap.yml@refs/heads/main" and
+             .event_name == "workflow_dispatch" and
+             .runner_environment == "github-hosted" and
+             .sha == $sha and
+             (.jti | type == "string" and length > 0) and
+             (.iat | type == "number" and . >= ($now - 600) and . <= ($now + 60)) and
+             (.nbf | type == "number" and . <= ($now + 60)) and
+             (.exp | type == "number" and . > $now and . <= ($now + 600)) and
+             (.exp > .iat)' \
+            "$oidc_payload" >/dev/null 2>"$error_file"; then
+            fail_closed
+          fi
+          unset oidc_now
+
+          unset \
+            AWS_ACCESS_KEY_ID \
+            AWS_SECRET_ACCESS_KEY \
+            AWS_SESSION_TOKEN \
+            AWS_PROFILE \
+            AWS_DEFAULT_PROFILE \
+            AWS_ROLE_ARN \
+            AWS_WEB_IDENTITY_TOKEN_FILE
+          export AWS_CONFIG_FILE=/dev/null
+          export AWS_SHARED_CREDENTIALS_FILE=/dev/null
+          export AWS_EC2_METADATA_DISABLED=true
+          export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true
+          export AWS_MAX_ATTEMPTS=1
+          export AWS_PAGER=""
+          export AWS_REGION=us-east-1
+
+          if ! "$aws_cli" sts assume-role-with-web-identity \
+            --role-arn "$expected_role_arn" \
+            --role-session-name release-proof \
+            --duration-seconds 900 \
+            --web-identity-token "file://${oidc_token}" \
+            --region us-east-1 \
+            --output json \
+            --no-cli-pager \
+            >"$sts_response" 2>"$error_file"; then
+            fail_closed
+          fi
+          if ! /usr/bin/jq -e \
+            --arg expected_arn "$expected_caller_arn" \
+            'type == "object" and
+             (.Credentials | type == "object") and
+             (.Credentials.AccessKeyId |
+              type == "string" and test("^ASIA[A-Z0-9]{16}$")) and
+             (.Credentials.SecretAccessKey |
+              type == "string" and length >= 16) and
+             (.Credentials.SessionToken |
+              type == "string" and length >= 16) and
+             (.AssumedRoleUser.Arn == $expected_arn) and
+             (.AssumedRoleUser.AssumedRoleId |
+              type == "string" and
+              test("^AROA[A-Z0-9]{12,124}:release-proof$"))' \
+            "$sts_response" >/dev/null 2>"$error_file"; then
+            fail_closed
+          fi
+
+          assumed_role_id="$(/usr/bin/jq -r '.AssumedRoleUser.AssumedRoleId' "$sts_response")" || fail_closed
+          AWS_ACCESS_KEY_ID="$(/usr/bin/jq -r '.Credentials.AccessKeyId' "$sts_response")" || fail_closed
+          AWS_SECRET_ACCESS_KEY="$(/usr/bin/jq -r '.Credentials.SecretAccessKey' "$sts_response")" || fail_closed
+          AWS_SESSION_TOKEN="$(/usr/bin/jq -r '.Credentials.SessionToken' "$sts_response")" || fail_closed
+          export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+          unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+
+          if ! "$aws_cli" sts get-caller-identity \
+            --region us-east-1 \
+            --output json \
+            --no-cli-pager \
+            >"$caller_receipt" 2>"$error_file"; then
+            fail_closed
+          fi
+          if ! /usr/bin/jq -e \
+            --arg account "$AWS_ACCOUNT_ID" \
+            --arg expected_arn "$expected_caller_arn" \
+            --arg assumed_role_id "$assumed_role_id" \
+            'type == "object" and
+             (keys | sort) == ["Account", "Arn", "UserId"] and
+             .Account == $account and
+             .Arn == $expected_arn and
+             .UserId == $assumed_role_id and
+             (.UserId | type == "string" and
+              test("^AROA[A-Z0-9]{12,124}:release-proof$"))' \
+            "$caller_receipt" >/dev/null 2>"$error_file"; then
+            fail_closed
+          fi
+
+          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN assumed_role_id
+          printf '%s' "$RECEIPT_ENCRYPTION_PASSPHRASE" \
+            >"$passphrase_file"
+          unset RECEIPT_ENCRYPTION_PASSPHRASE
+          /usr/bin/rm -f -- "$encrypted_receipt"
+          if ! /usr/bin/gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase-file "$passphrase_file" \
+            --symmetric \
+            --cipher-algo AES256 \
+            --output "$encrypted_receipt" \
+            "$caller_receipt" \
+            >/dev/null 2>"$error_file"; then
+            fail_closed
+          fi
+          /usr/bin/chmod 600 "$encrypted_receipt" || fail_closed
+          [[ -s "$encrypted_receipt" ]] || fail_closed
+
+      - name: Upload encrypted caller identity receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aws-preflight-caller-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/aws-preflight-caller-receipt.json.gpg
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          include-hidden-files: false
+
+      - name: Remove encrypted receipt from runner
+        if: always()
+        shell: bash
+        run: /usr/bin/rm -f -- "${RUNNER_TEMP}/aws-preflight-caller-receipt.json.gpg"

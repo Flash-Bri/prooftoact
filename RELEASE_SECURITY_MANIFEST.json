@@ -1,13 +1,31 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-04",
+  "reviewedOn": "2026-08-06",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
     "Separate private human security and abuse review of the exact deployed application, repository metadata, CloudFormation change set, IAM policies, database grants, logs, receipts, media, public URLs, and submission fields."
   ],
   "surfaces": [
+    {
+      "id": "actions-checkout-normalizer",
+      "path": "scripts/normalize-actions-checkout.js",
+      "role": "GITHUB_ACTIONS_EXACT_CHECKOUT_NORMALIZATION",
+      "sha256": "6bb3aedcb9685d831b25c355150392d0cae146b4446d80487daf040c7beb5cde"
+    },
+    {
+      "id": "actions-checkout-normalizer-tests",
+      "path": "test/release-rights.test.js",
+      "role": "GITHUB_ACTIONS_CHECKOUT_NORMALIZATION_VERIFICATION",
+      "sha256": "05ec2009f15688b39cc0ab4a557b2d411de9a6ba5f0502a37b9bc6a3a8f5ae63"
+    },
+    {
+      "id": "actions-ci-workflow",
+      "path": ".github/workflows/ci.yml",
+      "role": "GITHUB_ACTIONS_RELEASE_VERIFICATION_WORKFLOW",
+      "sha256": "df81495e8dd15a38afe25f25eaf55142533ec36459e95603f99c0ae31ade9512"
+    },
     {
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
@@ -18,7 +36,7 @@
       "id": "admissible-vector-runner",
       "path": "scripts/gate1-admissible-vector.js",
       "role": "ADMISSIBLE_VECTOR_EVIDENCE_RUNNER",
-      "sha256": "47da76a44ccc6e2946157eced0c5a28d524c55307df9b1dff9b5b69d3f350894"
+      "sha256": "cc1cd89c46ee3d31cd4b1001da24c51f5f39986b0d12bd3ba1d46e6fa881e9e4"
     },
     {
       "id": "authority-identity-contract",
@@ -84,7 +102,7 @@
       "id": "aws-authority-race",
       "path": "scripts/gate2-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
-      "sha256": "eae1b369eaddc2363b9176bd3e7968faa06f70d1d77002308640ef9553b37e13"
+      "sha256": "2fceb2f0186585140fa4f747ef532c25f95a571e98198d01155633e2867ff1c8"
     },
     {
       "id": "aws-authority-race-validator",
@@ -96,7 +114,7 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "235601649c08a0055c6dc2592c9399e53867a492492d29f8230a19bd609da18f"
+      "sha256": "7e10f702e7b1583ae545da4b70595827669951950e1c4e719543aab6fbb1ce67"
     },
     {
       "id": "aws-deployment-attestation",
@@ -120,13 +138,19 @@
       "id": "aws-evidence-identity",
       "path": "src/cloud/aws-evidence-identity.js",
       "role": "AWS_EVIDENCE_IDENTITY_BOUNDARY",
-      "sha256": "6503ae37c16a21a3f6a842962905f547264bc750332e0f3947e7c21bab1aec5b"
+      "sha256": "242dbe0a0984d393a1a489595112a248f79a9be1744d440cffdcc76f3b2e013a"
     },
     {
       "id": "aws-evidence-identity-tests",
       "path": "test/aws-evidence-identity.test.js",
       "role": "AWS_EVIDENCE_IDENTITY_VERIFICATION",
-      "sha256": "c598d313dd64548505616ece6ff8b13257f836b1052de7bc53c368996af50846"
+      "sha256": "b0973fe3049a427d1e7d44a3666f43312c6730ffaf5e9ce19a0dd7f5eb92545f"
+    },
+    {
+      "id": "aws-oidc-identity-bootstrap",
+      "path": ".github/workflows/aws-oidc-identity-bootstrap.yml",
+      "role": "MANUAL_SHORT_LIVED_AWS_IDENTITY_BOOTSTRAP",
+      "sha256": "004f190dfde3acd791e922c701794fc4423548e5ef6db1987de75a164e7fbe25"
     },
     {
       "id": "aws-provider-bundle-entry",
@@ -162,19 +186,31 @@
       "id": "aws-preflight",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "a8f001fb509bd045d5c2a80815a7160a8dc72479f898b7885b0fc9ae4b787dcf"
+      "sha256": "0155681d9e89e7e987e255fc77bab29b72d4bdf3d003c3025b8b175bae2d24ea"
+    },
+    {
+      "id": "aws-preflight-validator",
+      "path": "src/cloud/aws-gate2-preflight.js",
+      "role": "READ_ONLY_AWS_PREFLIGHT_VALIDATOR",
+      "sha256": "20a77e1e9b994d5a66eac67ced6fb520e910871ac55b4b90ca8b4addf073b15d"
     },
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
       "role": "READ_ONLY_AWS_PREFLIGHT_VERIFICATION",
-      "sha256": "67285d9e6ce23840df6d962ca2d8a39d58881233f5ea0e223a68fc3c5c66c166"
+      "sha256": "5fcee7ed44031388850719eb5d202e3cddef8ed283d111f99c6c8675784472a8"
     },
     {
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "7f3f1e289c758303b0e685fea17b145cb89c6d46951108148346fba087bc9ec9"
+      "sha256": "f774a19826f695b0feeb3781d9c278a4dc1e6f4dcc48aacc18b710f6bc6856b7"
+    },
+    {
+      "id": "aws-readiness-tests",
+      "path": "test/aws-gate2-readiness.test.js",
+      "role": "EXACT_CHECKOUT_READINESS_VERIFICATION",
+      "sha256": "3a56694627d423315ee2e3f1f335ec90b8fe6a3a859f70aa198fd08742fc21b2"
     },
     {
       "id": "aws-security-tests",
@@ -258,7 +294,7 @@
       "id": "dependency-snapshot",
       "path": "scripts/lib/dependency-snapshot.js",
       "role": "IMMUTABLE_DEPENDENCY_AND_TOOLCHAIN_BINDING",
-      "sha256": "c6b08041cca41f6ffa3083324b891355251df9a1d958ecf94b8d288704adef07"
+      "sha256": "238b2d9f653a211d66bb9b7ab37a58f77e11a7b94481cf0f61d147faea7ad5cd"
     },
     {
       "id": "dependency-snapshot-tests",
@@ -300,13 +336,13 @@
       "id": "exact-git-source",
       "path": "scripts/lib/exact-git-source.js",
       "role": "IMMUTABLE_GIT_BUILD_INPUT",
-      "sha256": "db8da309b3f54c3ba79896895172d85b8d945764a7b4631ddd2570a562581701"
+      "sha256": "c711f6ff3797def19d18a4296ac3c26b815bc6e2003ea73f3de1cddfeedfd0d9"
     },
     {
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
       "role": "IMMUTABLE_GIT_BUILD_VERIFICATION",
-      "sha256": "b3079a5dede48a8d7a630c6f2b3633f6ece66fb4c4dcc3e3e003d492a9ab0951"
+      "sha256": "899c44ee394c7fb91feaa980d737cc4c1f76c3ba12a6192b9d39046ccfa5dcbb"
     },
     {
       "id": "gate2-build-runner",
@@ -318,13 +354,13 @@
       "id": "gate2-exact-build-bootstrap",
       "path": "scripts/build-gate2-exact.js",
       "role": "ISOLATED_EXACT_GIT_BUILD_BOOTSTRAP",
-      "sha256": "1d272f1564fdc65ede236079776cf82c1bd4108ac791bfe5a8abe22e7995a3b8"
+      "sha256": "42b483a980f4e17799ca1a9049b2f2180c7d337c36076a2ef2c6d1b4672167d6"
     },
     {
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
-      "sha256": "6af707711ceecaf6a8583966b4ca1ef405138133bdcea7eeb3502f901c4f2638"
+      "sha256": "427286ab6ad83fdbd790adbc86a20ef1b888f674b74f75019c378172de91f3e2"
     },
     {
       "id": "local-full-drill-harness",
@@ -378,13 +414,13 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "b4a2cdef6db71e92089d0a06c075ded8fcc2b6c3ff287aa205fd3611e9c77d07"
+      "sha256": "6b56b7279fead6682dc4d4d5d0c9588931707f1870f9d65c97b2309dab669ed5"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFIER",
-      "sha256": "1dcf97f9865b653a875e9b21c8f0fda2e33ecad8279e2f166e7a94954a468154"
+      "sha256": "835a097a58d6e14ad862fc58e17934ad7f902b9f0ec34f856241100f59639d0a"
     },
     {
       "id": "probe-runtime",
@@ -486,7 +522,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "f3e77730031fcf1ea7cbb844132bfda9eff43cb9b4b477049421988d6f5c472f"
+      "sha256": "17f4f77077b68f3db7aaf4ca9de13f8e4a76d05a6c674db5590b75773434da0f"
     },
     {
       "id": "security-policy",

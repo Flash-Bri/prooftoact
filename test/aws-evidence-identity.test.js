@@ -95,6 +95,8 @@ test("non-AWS evidence children receive no credentials or identity expectations"
   assert.equal(isolated.AWS_EVIDENCE_EXPECTED_ACCOUNT_ID, undefined);
   assert.equal(isolated.NODE_OPTIONS, undefined);
   assert.equal(isolated.GIT_CONFIG_GLOBAL, "/dev/null");
+  assert.equal(isolated.GIT_NO_LAZY_FETCH, "1");
+  assert.equal(isolated.GIT_NO_REPLACE_OBJECTS, "1");
 });
 
 test("AWS CLI evidence environment retains only explicit credentials and safe process inputs", () => {

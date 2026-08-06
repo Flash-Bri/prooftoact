@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-04",
+  "reviewedOn": "2026-08-06",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -47,6 +47,12 @@
       "kind": "verification-code"
     },
     {
+      "id": "actions-checkout-normalizer",
+      "path": "scripts/normalize-actions-checkout.js",
+      "sha256": "6bb3aedcb9685d831b25c355150392d0cae146b4446d80487daf040c7beb5cde",
+      "kind": "verification-code"
+    },
+    {
       "id": "architecture-png",
       "path": "docs/media/architecture.png",
       "sha256": "6228172f7a5a462940a05543ee455e0de21aa53c805e9466076b9e33fed1f168",
@@ -79,7 +85,7 @@
     {
       "id": "aws-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
-      "sha256": "6af707711ceecaf6a8583966b4ca1ef405138133bdcea7eeb3502f901c4f2638",
+      "sha256": "427286ab6ad83fdbd790adbc86a20ef1b888f674b74f75019c378172de91f3e2",
       "kind": "boundary-ledger"
     },
     {
@@ -103,13 +109,13 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "235601649c08a0055c6dc2592c9399e53867a492492d29f8230a19bd609da18f",
+      "sha256": "7e10f702e7b1583ae545da4b70595827669951950e1c4e719543aab6fbb1ce67",
       "kind": "boundary-ledger"
     },
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
-      "sha256": "67285d9e6ce23840df6d962ca2d8a39d58881233f5ea0e223a68fc3c5c66c166",
+      "sha256": "5fcee7ed44031388850719eb5d202e3cddef8ed283d111f99c6c8675784472a8",
       "kind": "verification-code"
     },
     {
@@ -163,7 +169,7 @@
     {
       "id": "brand-migration-verifier",
       "path": "scripts/verify-brand-migration.js",
-      "sha256": "493e06438780769ebc2eecd6b38a08ab586c00ccb6422702c0b5f65f90e231c2",
+      "sha256": "8432d35e77f04c665182fa19e6639ce958b95ee5f23f63632a8c7c01b618b03b",
       "kind": "verification-code"
     },
     {
@@ -235,7 +241,7 @@
     {
       "id": "dependency-snapshot-library",
       "path": "scripts/lib/dependency-snapshot.js",
-      "sha256": "c6b08041cca41f6ffa3083324b891355251df9a1d958ecf94b8d288704adef07",
+      "sha256": "238b2d9f653a211d66bb9b7ab37a58f77e11a7b94481cf0f61d147faea7ad5cd",
       "kind": "verification-code"
     },
     {
@@ -265,13 +271,13 @@
     {
       "id": "exact-git-source-library",
       "path": "scripts/lib/exact-git-source.js",
-      "sha256": "db8da309b3f54c3ba79896895172d85b8d945764a7b4631ddd2570a562581701",
+      "sha256": "c711f6ff3797def19d18a4296ac3c26b815bc6e2003ea73f3de1cddfeedfd0d9",
       "kind": "verification-code"
     },
     {
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
-      "sha256": "b3079a5dede48a8d7a630c6f2b3633f6ece66fb4c4dcc3e3e003d492a9ab0951",
+      "sha256": "899c44ee394c7fb91feaa980d737cc4c1f76c3ba12a6192b9d39046ccfa5dcbb",
       "kind": "verification-code"
     },
     {
@@ -319,7 +325,7 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "f08c34043ac2be005527853845cb56142b3b2a34dd704ddc873e549d4408bd97",
+      "sha256": "012f92b50e5602073e058a5d483dd9ced20ad0ff6bdd971c46b91f1fb70637b6",
       "kind": "verification-code"
     },
     {
@@ -337,7 +343,7 @@
     {
       "id": "gate2-exact-build-bootstrap",
       "path": "scripts/build-gate2-exact.js",
-      "sha256": "1d272f1564fdc65ede236079776cf82c1bd4108ac791bfe5a8abe22e7995a3b8",
+      "sha256": "42b483a980f4e17799ca1a9049b2f2180c7d337c36076a2ef2c6d1b4672167d6",
       "kind": "verification-code"
     },
     {
@@ -349,13 +355,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "d68f533ea39114bc59776b5b9f92f58eac87d6c112664cbbd1ae36c433609a27",
+      "sha256": "3a56694627d423315ee2e3f1f335ec90b8fe6a3a859f70aa198fd08742fc21b2",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "7f3f1e289c758303b0e685fea17b145cb89c6d46951108148346fba087bc9ec9",
+      "sha256": "f774a19826f695b0feeb3781d9c278a4dc1e6f4dcc48aacc18b710f6bc6856b7",
       "kind": "verification-code"
     },
     {
@@ -403,13 +409,13 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "b4a2cdef6db71e92089d0a06c075ded8fcc2b6c3ff287aa205fd3611e9c77d07",
+      "sha256": "6b56b7279fead6682dc4d4d5d0c9588931707f1870f9d65c97b2309dab669ed5",
       "kind": "verification-code"
     },
     {
       "id": "proof-manifest-verifier",
       "path": "scripts/verify-proof-manifest.js",
-      "sha256": "1dcf97f9865b653a875e9b21c8f0fda2e33ecad8279e2f166e7a94954a468154",
+      "sha256": "835a097a58d6e14ad862fc58e17934ad7f902b9f0ec34f856241100f59639d0a",
       "kind": "verification-code"
     },
     {
@@ -421,7 +427,7 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "4111d3acd3ba11fc4b2c6a721708d6a62588705b2cbf78002d17030378518413",
+      "sha256": "df81495e8dd15a38afe25f25eaf55142533ec36459e95603f99c0ae31ade9512",
       "kind": "verification-code"
     },
     {
@@ -433,7 +439,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "7441fbb638b8705b52f699d1cd7ccb2721a7feb342a30fccb8bb392c1844ce81",
+      "sha256": "17d970dd6d366fab6f0e50baf1e755d9d027d64a873d9d49f9912aac94390505",
       "kind": "boundary-ledger"
     },
     {
@@ -457,7 +463,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "c2522121e8e79a0951ef8bb7922bcc485b53e0292fba07c6d21180060411c6f4",
+      "sha256": "2eda7cf4c27f6b8772e52675781795f1c4a8a7f478eeddb67c974e4fe7644faf",
       "kind": "boundary-ledger"
     },
     {
@@ -469,7 +475,7 @@
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "23e037d4b8f1de1f9292c9f581c60e7035ff176657373172ffa44dd592add776",
+      "sha256": "d12ae266506355025eb93a9f465293fe689c7a761752f8b74234558438b32166",
       "kind": "verification-code"
     },
     {
@@ -481,7 +487,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "773328eb496eb31ccfd98d6388f780f45e503b428084170c69ccc603c23d3a67",
+      "sha256": "ddb11ebec6b6ab13463dfcd467c0f47bfd97b69b4b6ba676a7d856fdd1a13b17",
       "kind": "boundary-ledger"
     },
     {
@@ -517,7 +523,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "493c45452662242d7de35ce5f23dc4f90ad30a40b17a17791f3531b83c815b24",
+      "sha256": "259b33325070c31b9a08b1e3e59fd02911e3910c63489009d1270b362e8223e2",
       "kind": "boundary-ledger"
     },
     {
@@ -529,61 +535,61 @@
     {
       "id": "release-privacy-verifier",
       "path": "scripts/verify-release-privacy.js",
-      "sha256": "6469564812fba14b54cdc8ee4cd162d076f018ebde1ac9e5b9a1a575797aaa1c",
+      "sha256": "71d14c321e8341618016cd052f9dc4fea89c0e530c05ef2a6718794a2e69c198",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-tests",
       "path": "test/release-provenance.test.js",
-      "sha256": "8f9bd166aedda40c86960582a4c375918f96dcd23565fe0de55464c20451b9bd",
+      "sha256": "26792d40db6d4a5ca17f92a0a2b7cc6119a5618406a1e3a169579eacb22fd761",
       "kind": "verification-code"
     },
     {
       "id": "release-provenance-verifier",
       "path": "scripts/verify-release-provenance.js",
-      "sha256": "fffbabed80f87d761074eaa3a6745cfa8afc990f63c960824623c18cf5479024",
+      "sha256": "042ea699a815cfdfcf19ff59032405e9a939cfa9d9ac833b8e950b6d0f0bd053",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "2bd7097a98e36034ed0e4cab70fcc2d5b7fa334b11b7073525ac5a0a96229569",
+      "sha256": "0bec86b43d299ee46bb992d2573cf7b466fcf68e944580d6c08e377e28d01db1",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-rights-tests",
       "path": "test/release-rights.test.js",
-      "sha256": "ce0e26b6bb8758ec747fad25d98346fd45be053b3e89bad6c9d545099e57f832",
+      "sha256": "05ec2009f15688b39cc0ab4a557b2d411de9a6ba5f0502a37b9bc6a3a8f5ae63",
       "kind": "verification-code"
     },
     {
       "id": "release-rights-verifier",
       "path": "scripts/verify-release-rights.js",
-      "sha256": "a8d04c563581a98e68df5d4190bd27f54dd407d2290749ac4afb40a1ef9cb6dc",
+      "sha256": "fccf7d530c2b947deb6f7ecbddcea708bb850efae773e48849c07e681cbd3ff0",
       "kind": "verification-code"
     },
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "f3e77730031fcf1ea7cbb844132bfda9eff43cb9b4b477049421988d6f5c472f",
+      "sha256": "17f4f77077b68f3db7aaf4ca9de13f8e4a76d05a6c674db5590b75773434da0f",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "887fb4555ae145dc681a0f6f53f210ece2402b050a0f1037b8506fc01cfaab1d",
+      "sha256": "429d18956ea7ff5f3741f50cf2618e68ab1142ebcec0f973ed038870b19bed9d",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "69d38247b893e133cb21738acb6b86ef5b64719423d764a70e0231bcb4de55f7",
+      "sha256": "549fec92357bc6f4a34ff34d9dca84cc1947537fa4f2a0188b6abbf4bc43c7d1",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "d068f9ff2a8013e170cde0973ae0bbebb49113189d2c11d6430f428e099b6214",
+      "sha256": "679a2bdcad6d338bf8199602808e895805ab1f1872305893ee00c6511dd339aa",
       "kind": "verification-code"
     },
     {
@@ -595,7 +601,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "0e5069e9818d1172554090f38b48abf61e8ea28e840c180209654e7b19cc3b5e",
+      "sha256": "93a9e77c43da1991e330ea04ab61d3c9574e6aed9483fe8aece90064064c8a2c",
       "kind": "boundary-ledger"
     },
     {
@@ -977,6 +983,7 @@
       "id": "release-provenance-control",
       "proofState": "PARTIAL",
       "artifacts": [
+        "actions-checkout-normalizer",
         "release-ci-workflow",
         "release-claims-ledger",
         "release-claims-manifest",
@@ -1007,7 +1014,7 @@
         "release-submission-tests",
         "release-submission-verifier"
       ],
-      "boundary": "On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, current-source cost, historical repository-governance, bounded privacy, current-surface rights, static accessibility, current-source security, and fail-closed submission-draft receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, current or final spend, current GitHub settings, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, entrant eligibility or authority, deployment approval, or submission approval.",
+      "boundary": "On GitHub-hosted CI, one hash-bound pre-verification step removes only the byte-exact inert Git 2.54 worktree-config residue and then restores strict default layout before any verifier. On official main, the exact verifier fetches origin/main before and after, requires a clean matching checkout and the pinned clean-room root, rejects shallow history, replacement refs, legacy grafts, alternate object databases, tracked symlinks and submodules, runs strict Git object verification, requires the non-final claim-surface, current-source cost, historical repository-governance, bounded privacy, current-surface rights, static accessibility, current-source security, and fail-closed submission-draft receipts, compares every installed package identity with the lock, and rechecks the dependency inventory and bundle notice inputs. CI uses full history and no persisted checkout credential. This technical receipt is not independent proof of claim truth, current or final spend, current GitHub settings, originality, legal clearance, exhaustive secret or personal-data absence, WCAG conformance, vulnerability status, deployed bytes, live behavior, entrant eligibility or authority, deployment approval, or submission approval.",
       "remainingRequirements": [
         "Rerun the control at the final official-main commit and bind its PASS receipt to hosted CI, the zero-vulnerability report, exact build, uploaded object versions, deployed Lambda CodeSha256 values, human rights/clean-room review, and final submission receipt."
       ]
@@ -1030,6 +1037,7 @@
       "id": "release-security-control",
       "proofState": "PARTIAL",
       "artifacts": [
+        "actions-checkout-normalizer",
         "aws-alternate-principal-denial-runner",
         "aws-deployment-attestation-ledger",
         "aws-deployment-attestation-runner",
@@ -1047,12 +1055,14 @@
         "exact-git-source-library",
         "exact-git-source-tests",
         "gate2-exact-build-bootstrap",
+        "release-ci-workflow",
+        "release-rights-tests",
         "release-security-ledger",
         "release-security-manifest",
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the GitHub-hosted-only pre-verification checkout normalizer, its workflow placement and hostile-residue tests, the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

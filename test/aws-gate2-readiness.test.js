@@ -614,7 +614,7 @@ function releaseSubmissionReceipt() {
 function releaseProvenanceReceipt() {
   return {
     schemaVersion: "tideproof.release-provenance.v8",
-    status: "PASS",
+    status: "READINESS_FETCH_BOUND_PASS",
     source: {
       commit: SOURCE_COMMIT,
       tree: TREE_DIGEST,
@@ -722,7 +722,8 @@ function releaseProvenanceReceipt() {
       submissionDraftFailClosed: true,
       cleanBeforeAndAfter: true
     },
-    claimBoundary: "Fixture provenance only."
+    claimBoundary:
+      "READINESS_FETCH_BOUND_PASS performs no network fetch and is not a standalone upstream-freshness receipt."
   };
 }
 
@@ -743,7 +744,7 @@ function preflightReceipt() {
         expectedIdentityDigest: "8".repeat(64),
         expectedPrincipalDigest: "9".repeat(64),
         principalIdDigest: "5".repeat(64),
-        principalType: "iam-user"
+        principalType: "assumed-role"
       },
       bootstrapStack: {
         name: "tideproof-gate2-artifacts",
@@ -830,8 +831,11 @@ function successfulRunner(buildReceipt, calls) {
     calls.push(call);
     const shape = `${command} ${args.join(" ")}`;
     let stdout = "";
-    if (shape === "git remote get-url origin") {
-      stdout = `${__test.OFFICIAL_REMOTE}\n`;
+    if (
+      shape ===
+      "git config --local --no-includes --null --list"
+    ) {
+      stdout = officialLocalGitConfiguration();
     } else if (shape === "git symbolic-ref --short HEAD") {
       stdout = "main\n";
     } else if (shape === "git rev-parse HEAD") {
@@ -843,7 +847,8 @@ function successfulRunner(buildReceipt, calls) {
     } else if (shape === "git rev-parse HEAD^{tree}") {
       stdout = `${TREE_DIGEST}\n`;
     } else if (
-      shape === "npm run --silent release:provenance"
+      shape ===
+      `npm run --silent release:provenance -- --readiness-fetched-official-main ${SOURCE_COMMIT} ${TREE_DIGEST}`
     ) {
       stdout = JSON.stringify(releaseProvenanceReceipt());
     } else if (
@@ -860,6 +865,33 @@ function successfulRunner(buildReceipt, calls) {
       stdout = JSON.stringify(preflightReceipt());
     }
     return { status: 0, stdout, stderr: "" };
+  };
+}
+
+function officialLocalGitConfiguration(extraEntries = []) {
+  return [
+    ["core.repositoryformatversion", "0"],
+    ["core.filemode", "true"],
+    ["core.bare", "false"],
+    ["core.logallrefupdates", "true"],
+    ["remote.origin.url", __test.OFFICIAL_REMOTE],
+    ["remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"],
+    ["branch.main.remote", "origin"],
+    ["branch.main.merge", "refs/heads/main"],
+    ...extraEntries
+  ]
+    .map(([name, value]) => `${name}\n${value}\0`)
+    .join("");
+}
+
+function fixtureExactCheckout(projectRoot) {
+  return (value) => {
+    assert.deepEqual(value, {
+      rootDir: path.resolve(projectRoot),
+      sourceCommit: SOURCE_COMMIT,
+      treeDigest: TREE_DIGEST
+    });
+    return Object.freeze({ ...value });
   };
 }
 
@@ -1048,6 +1080,17 @@ test("AWS readiness binds the preflight to the exact checkout", () => {
       }),
     /AWS_READINESS_PREFLIGHT/
   );
+
+  const iamUserReceipt = structuredClone(receipt);
+  iamUserReceipt.controls.callerBinding.principalType = "iam-user";
+  assert.throws(
+    () =>
+      validatePreflightReceipt(iamUserReceipt, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_PREFLIGHT/
+  );
 });
 
 test("AWS readiness binds release provenance to the exact checkout", () => {
@@ -1063,6 +1106,26 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
     () =>
       validateReleaseProvenance(receipt, {
         sourceCommit: "e".repeat(40),
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const standalone = releaseProvenanceReceipt();
+  standalone.status = "PASS";
+  assert.throws(
+    () =>
+      validateReleaseProvenance(standalone, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
+  );
+  const unboundClaim = releaseProvenanceReceipt();
+  unboundClaim.claimBoundary = "Standalone provenance fixture.";
+  assert.throws(
+    () =>
+      validateReleaseProvenance(unboundClaim, {
+        sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),
     /AWS_READINESS_RELEASE_PROVENANCE/
@@ -1208,7 +1271,9 @@ test("AWS readiness full mode performs only reviewed command families", async ()
   try {
     const receipt = await runAwsReadiness({
       projectRoot: current.projectRoot,
-      run: successfulRunner(current.buildReceipt, calls)
+      run: successfulRunner(current.buildReceipt, calls),
+      verifyExactCheckout: fixtureExactCheckout(current.projectRoot),
+      verifyRepositoryLayout: () => ({ rootDir: current.projectRoot })
     });
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.checks.awsPreflight, "PASS");
@@ -1256,15 +1321,41 @@ test("AWS readiness full mode performs only reviewed command families", async ()
       ),
       true
     );
+    const provenanceCall = calls.find(
+      (call) =>
+        call[0] === "npm" &&
+        call.includes("release:provenance")
+    );
+    assert.deepEqual(provenanceCall.slice(1), [
+      "run",
+      "--silent",
+      "release:provenance",
+      "--",
+      "--readiness-fetched-official-main",
+      SOURCE_COMMIT,
+      TREE_DIGEST
+    ]);
+    assert.notEqual(provenanceCall.options.awsAuthenticated, true);
     const fetches = calls.filter((call) =>
       call.includes("fetch")
     );
     assert.equal(fetches.length, 2);
     assert.equal(
-      fetches.every((call) =>
-        call.includes(
-          "http.https://github.com/.extraheader="
-        )
+      fetches.every(
+        (call) =>
+          JSON.stringify(call.slice(1)) ===
+          JSON.stringify(__test.officialFetchArguments())
+      ),
+      true
+    );
+    assert.equal(
+      fetches.every(
+        (call) =>
+          call.includes(__test.OFFICIAL_REMOTE) &&
+          !call.includes("origin") &&
+          call.includes("credential.helper=") &&
+          call.includes("http.proxy=") &&
+          call.includes("http.sslVerify=true")
       ),
       true
     );
@@ -1281,7 +1372,9 @@ test("AWS readiness local mode is explicit non-AWS evidence", async () => {
       projectRoot: current.projectRoot,
       localOnly: true,
       now: () => new Date("2026-07-31T05:45:00.000Z"),
-      run: successfulRunner(current.buildReceipt, calls)
+      run: successfulRunner(current.buildReceipt, calls),
+      verifyExactCheckout: fixtureExactCheckout(current.projectRoot),
+      verifyRepositoryLayout: () => ({ rootDir: current.projectRoot })
     });
     assert.equal(receipt.status, "LOCAL_ONLY_PASS");
     assert.equal(receipt.awsPreflight, null);
@@ -1334,6 +1427,82 @@ test("AWS readiness accepts only public official remote forms", () => {
   );
 });
 
+test("AWS readiness rejects repository-local provenance and transport overrides", () => {
+  assert.deepEqual(
+    __test.validateOfficialLocalGitConfiguration(
+      officialLocalGitConfiguration()
+    ),
+    {
+      entryCount: 8,
+      remote: __test.OFFICIAL_REMOTE
+    }
+  );
+  for (const [name, value] of [
+    ["core.worktree", "/tmp/hostile-worktree"],
+    ["credential.helper", "/tmp/hostile-helper"],
+    ["extensions.worktreeConfig", "true"],
+    ["http.proxy", "http://127.0.0.1:8080"],
+    ["http.sslVerify", "false"],
+    ["include.path", "/tmp/hostile-config"],
+    ["extensions.partialClone", "origin"],
+    ["remote.origin.partialCloneFilter", "blob:none"],
+    ["remote.origin.promisor", "true"],
+    ["remote.origin.proxy", "http://127.0.0.1:8080"],
+    ["remote.origin.uploadpack", "sentinel-upload-pack"],
+    ["remote.origin.vcs", "sentinel"],
+    ["status.showUntrackedFiles", "no"],
+    ["url.https://github.com/Flash-Bri/prooftoact.git.insteadOf", "https://example.invalid/repository"]
+  ]) {
+    assert.throws(
+      () =>
+        __test.validateOfficialLocalGitConfiguration(
+          officialLocalGitConfiguration([[name, value]])
+        ),
+      /AWS_READINESS_GIT_LOCAL_CONFIG/
+    );
+  }
+  assert.throws(
+    () =>
+      __test.validateOfficialLocalGitConfiguration(
+        officialLocalGitConfiguration([
+          ["remote.origin.url", "https://example.invalid/repository"]
+        ])
+      ),
+    /AWS_READINESS_GIT_LOCAL_CONFIG/
+  );
+});
+
+test("AWS readiness fetches only the explicit official URL with sanitized transport", () => {
+  const args = __test.officialFetchArguments();
+  assert.deepEqual(args.slice(-6), [
+    "fetch",
+    "--quiet",
+    "--no-tags",
+    "--no-recurse-submodules",
+    __test.OFFICIAL_REMOTE,
+    "+refs/heads/main:refs/remotes/origin/main"
+  ]);
+  for (const binding of [
+    "core.askPass=",
+    "credential.helper=",
+    "credential.interactive=never",
+    "credential.https://github.com.helper=",
+    "http.extraHeader=",
+    "http.proxy=",
+    "http.sslVerify=true",
+    "http.sslVersion=tlsv1.2",
+    "http.https://github.com/.extraHeader=",
+    "http.https://github.com/.proxy=",
+    "http.https://github.com/Flash-Bri/prooftoact.git.extraHeader=",
+    "http.https://github.com/Flash-Bri/prooftoact.git.proxy=",
+    "http.https://github.com/Flash-Bri/prooftoact.git.sslVerify=true",
+    "http.https://github.com/Flash-Bri/prooftoact.git.sslVersion=tlsv1.2"
+  ]) {
+    assert.equal(args.includes(binding), true);
+  }
+  assert.equal(args.includes("origin"), false);
+});
+
 test("AWS readiness isolates credentials outside the AWS preflight", () => {
   const source = {
     PATH: "/usr/bin",
@@ -1352,7 +1521,16 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
     AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID:
       "AIDATIDEPROOF001",
     DATABASE_URL: "postgresql://private",
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: "/tmp/alternate-objects",
+    GIT_ASKPASS: "/tmp/askpass",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.sslVerify",
+    GIT_CONFIG_VALUE_0: "false",
+    GIT_INDEX_FILE: "/tmp/hostile-index",
     GIT_OBJECT_DIRECTORY: "/tmp/objects",
+    GIT_REPLACE_REF_BASE: "refs/hostile/replace",
+    GIT_SSL_NO_VERIFY: "true",
+    HTTPS_PROXY: "http://127.0.0.1:8080",
     NODE_OPTIONS: "--require=/tmp/inject.js",
     NODE_DEBUG: "child_process",
     NODE_TLS_REJECT_UNAUTHORIZED: "0",
@@ -1375,7 +1553,14 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(isolated.AWS_ACCESS_KEY_ID, undefined);
   assert.equal(isolated.AWS_SESSION_TOKEN, undefined);
   assert.equal(isolated.DATABASE_URL, undefined);
+  assert.equal(isolated.GIT_ALTERNATE_OBJECT_DIRECTORIES, undefined);
+  assert.equal(isolated.GIT_ASKPASS, undefined);
+  assert.equal(isolated.GIT_CONFIG_COUNT, undefined);
+  assert.equal(isolated.GIT_INDEX_FILE, undefined);
   assert.equal(isolated.GIT_OBJECT_DIRECTORY, undefined);
+  assert.equal(isolated.GIT_REPLACE_REF_BASE, undefined);
+  assert.equal(isolated.GIT_SSL_NO_VERIFY, undefined);
+  assert.equal(isolated.HTTPS_PROXY, undefined);
   assert.equal(isolated.NODE_OPTIONS, undefined);
   assert.equal(isolated.OPENAI_API_KEY, undefined);
   assert.equal(
@@ -1392,6 +1577,9 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(isolated.LD_LIBRARY_PATH, undefined);
   assert.equal(isolated.DYLD_INSERT_LIBRARIES, undefined);
   assert.equal(isolated.GIT_TERMINAL_PROMPT, "0");
+  assert.equal(isolated.GIT_ATTR_NOSYSTEM, "1");
+  assert.equal(isolated.GIT_NO_LAZY_FETCH, "1");
+  assert.equal(isolated.GIT_NO_REPLACE_OBJECTS, "1");
   assert.equal(
     isolated.npm_config_userconfig,
     "/etc/tideproof-npm-userconfig"
@@ -1421,6 +1609,10 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(
     authenticated.AWS_ACCESS_KEY_ID,
     "temporary-access"
+  );
+  assert.equal(
+    authenticated.PATH,
+    __test.controlledChildPath({ awsAuthenticated: true })
   );
   assert.equal(
     authenticated.AWS_SESSION_TOKEN,
@@ -1453,6 +1645,49 @@ test("AWS readiness isolates credentials outside the AWS preflight", () => {
   assert.equal(authenticated.DATABASE_URL, undefined);
   assert.equal(authenticated.OPENAI_API_KEY, undefined);
   assert.equal(authenticated.AWS_CONFIG_FILE, "/dev/null");
+});
+
+test("AWS readiness uses platform-specific allowlisted AWS CLI paths", () => {
+  assert.equal(
+    __test.controlledChildPath({
+      awsAuthenticated: true,
+      platform: "darwin",
+      delimiter: ":"
+    }),
+    "/opt/homebrew/bin:/usr/bin:/bin"
+  );
+  assert.equal(
+    __test.controlledChildPath({
+      awsAuthenticated: true,
+      platform: "linux",
+      delimiter: ":"
+    }),
+    "/usr/local/bin:/usr/bin:/bin"
+  );
+  assert.equal(
+    __test.controlledChildPath({
+      awsAuthenticated: false,
+      platform: "darwin",
+      delimiter: ":"
+    }),
+    "/usr/bin:/bin"
+  );
+  assert.equal(
+    __test.controlledChildPath({
+      awsAuthenticated: true,
+      platform: "win32",
+      delimiter: ";"
+    }),
+    "/usr/bin;/bin"
+  );
+  assert.throws(
+    () =>
+      __test.controlledChildPath({
+        awsAuthenticated: true,
+        delimiter: "::"
+      }),
+    /AWS_READINESS_PATH_DELIMITER/
+  );
 });
 
 test("AWS readiness ignores PATH-selected Git and npm wrappers", () => {

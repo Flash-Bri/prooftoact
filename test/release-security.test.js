@@ -79,6 +79,15 @@ test("security manifest binds every AWS provider runtime and template-security c
     ],
     ["aws-provider-clients-tests", "test/aws-provider-clients.test.js"],
     [
+      "aws-preflight-validator",
+      "src/cloud/aws-gate2-preflight.js"
+    ],
+    [
+      "aws-oidc-identity-bootstrap",
+      ".github/workflows/aws-oidc-identity-bootstrap.yml"
+    ],
+    ["aws-readiness-tests", "test/aws-gate2-readiness.test.js"],
+    [
       "aws-template-security-tests",
       "test/aws-gate2-template-security.test.js"
     ]

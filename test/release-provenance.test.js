@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -8,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   __test,
+  parseArguments,
   runReleaseProvenance,
   validateReleaseClaimsForProvenance,
   validateReleaseCostForProvenance,
@@ -32,6 +34,11 @@ import {
   RELEASE_SECURITY_SURFACE_COUNT,
   verifyReleaseSecurity
 } from "../scripts/verify-release-security.js";
+import {
+  gitEnvironment,
+  gitInvariantArguments,
+  trustedGitExecutable
+} from "../scripts/lib/exact-git-source.js";
 
 const SOURCE_COMMIT = "a".repeat(40);
 const TREE_DIGEST = "b".repeat(40);
@@ -354,13 +361,40 @@ function indexOutput() {
   return "H README.md\0H scripts/check\0";
 }
 
-function repositoryRunner({ branch = "main", calls = [] } = {}) {
+function officialLocalGitConfiguration(extraEntries = []) {
+  return [
+    ["core.repositoryformatversion", "0"],
+    ["core.filemode", "true"],
+    ["core.bare", "false"],
+    ["core.logallrefupdates", "true"],
+    ["remote.origin.url", __test.OFFICIAL_REMOTE],
+    ["remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"],
+    ["branch.main.remote", "origin"],
+    ["branch.main.merge", "refs/heads/main"],
+    ...extraEntries
+  ]
+    .map(([name, value]) => `${name}\n${value}\0`)
+    .join("");
+}
+
+function fixtureRepositoryLayout({ rootDir }) {
+  return { rootDir };
+}
+
+function repositoryRunner({
+  branch = "main",
+  calls = [],
+  localConfiguration = officialLocalGitConfiguration()
+} = {}) {
   return (command, args) => {
     const call = [command, ...args];
     calls.push(call);
     const shape = `${command} ${args.join(" ")}`;
     const outputs = new Map([
-      ["git remote get-url origin", `${__test.OFFICIAL_REMOTE}\n`],
+      [
+        "git config --local --no-includes --null --list",
+        localConfiguration
+      ],
       ["git symbolic-ref --short HEAD", `${branch}\n`],
       [
         "git -c core.fsmonitor=false status --porcelain=v1 --untracked-files=all",
@@ -510,7 +544,8 @@ test("tracked release index rejects skip-worktree and assume-unchanged flags", (
 test("repository history binds the official full clean-room ancestry", () => {
   const calls = [];
   const receipt = verifyRepositoryHistory({
-    run: repositoryRunner({ calls })
+    run: repositoryRunner({ calls }),
+    verifyRepositoryLayout: fixtureRepositoryLayout
   });
   assert.equal(receipt.checkout.commit, SOURCE_COMMIT);
   assert.equal(receipt.checkout.tree, TREE_DIGEST);
@@ -528,14 +563,99 @@ test("repository history binds the official full clean-room ancestry", () => {
   assert.equal(calls.filter((call) => call.includes("fetch")).length, 1);
 });
 
+test("readiness-bound repository history performs no nested fetch", () => {
+  const calls = [];
+  const checkoutBinding = parseArguments([
+    "--readiness-fetched-official-main",
+    SOURCE_COMMIT,
+    TREE_DIGEST
+  ]);
+  const receipt = verifyRepositoryHistory({
+    run: repositoryRunner({ calls }),
+    checkoutBinding,
+    verifyRepositoryLayout: fixtureRepositoryLayout
+  });
+  assert.equal(receipt.checkout.commit, SOURCE_COMMIT);
+  assert.equal(receipt.checkout.tree, TREE_DIGEST);
+  assert.equal(receipt.checkout.checkoutMode, "READINESS_ALREADY_FETCHED");
+  assert.equal(calls.filter((call) => call.includes("fetch")).length, 0);
+  assert.throws(
+    () =>
+      verifyRepositoryHistory({
+        run: repositoryRunner(),
+        checkoutBinding: parseArguments([
+          "--readiness-fetched-official-main",
+          "e".repeat(40),
+          TREE_DIGEST
+        ]),
+        verifyRepositoryLayout: fixtureRepositoryLayout
+      }),
+    /RELEASE_PROVENANCE_CHECKOUT/
+  );
+});
+
+test("provenance accepts only canonical standalone or readiness arguments", () => {
+  assert.deepEqual(parseArguments([]), {
+    mode: "STANDALONE_FETCH",
+    expectedCommit: null,
+    expectedTree: null
+  });
+  assert.deepEqual(
+    parseArguments([
+      "--readiness-fetched-official-main",
+      SOURCE_COMMIT,
+      TREE_DIGEST
+    ]),
+    {
+      mode: "READINESS_ALREADY_FETCHED",
+      expectedCommit: SOURCE_COMMIT,
+      expectedTree: TREE_DIGEST
+    }
+  );
+  for (const args of [
+    ["--readiness-fetched-official-main"],
+    ["--readiness-fetched-official-main", SOURCE_COMMIT, "invalid"],
+    ["--skip-fetch", SOURCE_COMMIT, TREE_DIGEST],
+    ["unexpected"]
+  ]) {
+    assert.throws(
+      () => parseArguments(args),
+      /RELEASE_PROVENANCE_ARGUMENT/
+    );
+  }
+});
+
 test("repository history rejects a feature branch", () => {
   assert.throws(
     () =>
       verifyRepositoryHistory({
-        run: repositoryRunner({ branch: "agent/work" })
+        run: repositoryRunner({ branch: "agent/work" }),
+        verifyRepositoryLayout: fixtureRepositoryLayout
       }),
     /RELEASE_PROVENANCE_CHECKOUT/
   );
+});
+
+test("repository history rejects promisor configuration before object reads", () => {
+  const calls = [];
+  assert.throws(
+    () =>
+      verifyRepositoryHistory({
+        run: repositoryRunner({
+          calls,
+          localConfiguration: officialLocalGitConfiguration([
+            ["extensions.partialClone", "origin"],
+            ["remote.origin.promisor", "true"],
+            ["remote.origin.uploadpack", "sentinel-upload-pack"]
+          ])
+        }),
+        verifyRepositoryLayout: fixtureRepositoryLayout
+      }),
+    /RELEASE_PROVENANCE_GIT_LOCAL_CONFIG/
+  );
+  assert.deepEqual(calls, [
+    ["git", "config", "--local", "--no-includes", "--null", "--list"]
+  ]);
 });
 
 test("repository history rejects legacy graft metadata", () => {
@@ -549,7 +669,8 @@ test("repository history rejects legacy graft metadata", () => {
       () =>
         verifyRepositoryHistory({
           projectRoot,
-          run: repositoryRunner()
+          run: repositoryRunner(),
+          verifyRepositoryLayout: fixtureRepositoryLayout
         }),
       /RELEASE_PROVENANCE_GIT_GRAFTS/
     );
@@ -576,37 +697,39 @@ test("complete provenance receipt binds source, install, inventory, and notices"
     path.join(fixture.projectRoot, "package-lock.json")
   );
   const packageLockSha256 = sha256(lockBytes);
+  const verificationOptions = {
+    projectRoot: fixture.projectRoot,
+    run,
+    verifyInventory: () => ({
+      status: "PASS",
+      sourceLockSha256: packageLockSha256,
+      inventorySha256: "1".repeat(64),
+      packageCount: 2
+    }),
+    verifyNotices: async () => ({
+      status: "PASS",
+      noticePath: "THIRD_PARTY_NOTICES.txt",
+      noticeSha256: "2".repeat(64),
+      noticeBytes: 100,
+      packageLockSha256,
+      packageCount: 1,
+      licenseTextCount: 1,
+      fallbackCount: 0,
+      licenses: { MIT: 1 },
+      artifactPackages: { demo: ["required"] }
+    }),
+    verifyAccessibilityReceipt: () => accessibilityReceipt(),
+    verifyClaims: () => claimsReceipt(),
+    verifyCost: () => costReceipt(),
+    verifyGovernance: () => governanceReceipt(),
+    verifyPrivacy: () => privacyReceipt(),
+    verifyRepositoryLayout: fixtureRepositoryLayout,
+    verifyRights: () => rightsReceipt(),
+    verifySecurity: () => verifyReleaseSecurity({ rootDir: ROOT }),
+    verifySubmission: () => submissionReceipt()
+  };
   try {
-    const receipt = await runReleaseProvenance({
-      projectRoot: fixture.projectRoot,
-      run,
-      verifyInventory: () => ({
-        status: "PASS",
-        sourceLockSha256: packageLockSha256,
-        inventorySha256: "1".repeat(64),
-        packageCount: 2
-      }),
-      verifyNotices: async () => ({
-        status: "PASS",
-        noticePath: "THIRD_PARTY_NOTICES.txt",
-        noticeSha256: "2".repeat(64),
-        noticeBytes: 100,
-        packageLockSha256,
-        packageCount: 1,
-        licenseTextCount: 1,
-        fallbackCount: 0,
-        licenses: { MIT: 1 },
-        artifactPackages: { demo: ["required"] }
-      }),
-      verifyAccessibilityReceipt: () => accessibilityReceipt(),
-      verifyClaims: () => claimsReceipt(),
-      verifyCost: () => costReceipt(),
-      verifyGovernance: () => governanceReceipt(),
-      verifyPrivacy: () => privacyReceipt(),
-      verifyRights: () => rightsReceipt(),
-      verifySecurity: () => verifyReleaseSecurity({ rootDir: ROOT }),
-      verifySubmission: () => submissionReceipt()
-    });
+    const receipt = await runReleaseProvenance(verificationOptions);
     assert.equal(receipt.schemaVersion, "tideproof.release-provenance.v8");
     assert.equal(receipt.status, "PASS");
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
@@ -632,6 +755,22 @@ test("complete provenance receipt binds source, install, inventory, and notices"
     assert.equal(receipt.security.finalReleaseReady, false);
     assert.equal(receipt.submission.finalReleaseReady, false);
     assert.equal(calls.filter((call) => call.includes("fetch")).length, 2);
+
+    calls.length = 0;
+    const readinessBound = await runReleaseProvenance({
+      ...verificationOptions,
+      checkoutBinding: parseArguments([
+        "--readiness-fetched-official-main",
+        SOURCE_COMMIT,
+        TREE_DIGEST
+      ])
+    });
+    assert.equal(readinessBound.status, "READINESS_FETCH_BOUND_PASS");
+    assert.match(
+      readinessBound.claimBoundary,
+      /performs no network fetch/
+    );
+    assert.equal(calls.filter((call) => call.includes("fetch")).length, 0);
   } finally {
     fixture.cleanup();
   }
@@ -684,7 +823,7 @@ test("provenance consumes the shared current cost receipt contract", () => {
 
 test("provenance child environment removes credentials and Git overrides", () => {
   const isolated = __test.childEnvironment({
-    PATH: "/usr/bin",
+    PATH: "/tmp/hostile-bin:/usr/bin",
     SAFE_VALUE: "retained",
     AWS_SESSION_TOKEN: "secret",
     DATABASE_URL: "postgresql://private",
@@ -693,19 +832,21 @@ test("provenance child environment removes credentials and Git overrides", () =>
     NODE_OPTIONS: "--require=/tmp/inject.js",
     npm_config_userconfig: "/tmp/npmrc"
   });
-  assert.equal(isolated.PATH, "/usr/bin");
-  assert.equal(isolated.SAFE_VALUE, "retained");
+  assert.equal(isolated.PATH, "/usr/bin:/bin");
+  assert.equal(isolated.SAFE_VALUE, undefined);
   assert.equal(isolated.AWS_SESSION_TOKEN, undefined);
   assert.equal(isolated.DATABASE_URL, undefined);
   assert.equal(isolated.GIT_OBJECT_DIRECTORY, undefined);
   assert.equal(isolated.GITHUB_TOKEN, undefined);
   assert.equal(isolated.NODE_OPTIONS, undefined);
+  assert.equal(isolated.GIT_ATTR_NOSYSTEM, "1");
   assert.equal(isolated.GIT_CONFIG_GLOBAL, "/dev/null");
+  assert.equal(isolated.GIT_NO_LAZY_FETCH, "1");
   assert.equal(isolated.GIT_NO_REPLACE_OBJECTS, "1");
   assert.equal(isolated.npm_config_userconfig, "/dev/null");
 });
 
-test("provenance binds npm to the invoking CLI under a sanitized PATH", () => {
+test("provenance binds Git and npm to trusted executables and invariants", () => {
   const fixtureRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), "tideproof-provenance-runner-")
   );
@@ -726,27 +867,118 @@ test("provenance binds npm to the invoking CLI under a sanitized PATH", () => {
       }
     );
 
+    run("git", ["status", "--short"]);
     run("npm", ["query", "*", "--json"]);
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].command, process.execPath);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].command, trustedGitExecutable());
     assert.deepEqual(calls[0].args, [
+      ...gitInvariantArguments(),
+      "status",
+      "--short"
+    ]);
+    assert.equal(calls[0].options.env.PATH, "/usr/bin:/bin");
+    assert.equal(calls[0].options.env.GIT_NO_LAZY_FETCH, "1");
+    assert.equal(calls[0].options.env.GIT_NO_REPLACE_OBJECTS, "1");
+    assert.equal(
+      calls[0].args.includes("core.hooksPath=/dev/null"),
+      true
+    );
+    assert.equal(calls[1].command, process.execPath);
+    assert.deepEqual(calls[1].args, [
       fs.realpathSync(npmCli),
       "query",
       "*",
       "--json"
     ]);
-    assert.equal(calls[0].options.env.PATH, "/usr/bin:/bin");
+    assert.equal(calls[1].options.env.PATH, "/usr/bin:/bin");
     assert.equal(
-      calls[0].options.env.npm_execpath,
+      calls[1].options.env.npm_execpath,
       fs.realpathSync(npmCli)
     );
     assert.equal(
-      calls[0].options.env.npm_node_execpath,
+      calls[1].options.env.npm_node_execpath,
       process.execPath
     );
     assert.throws(
       () => run("curl", ["https://example.invalid"]),
       /RELEASE_PROVENANCE_COMMAND/
+    );
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("provenance Git runner bypasses hostile PATH and reference hooks", () => {
+  const fixtureRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "tideproof-provenance-git-runner-")
+  );
+  const repositoryRoot = path.join(fixtureRoot, "repository");
+  const fakeBin = path.join(fixtureRoot, "fake-bin");
+  const hostileMarker = path.join(fixtureRoot, "hostile-git-invoked");
+  const hookMarker = path.join(fixtureRoot, "reference-hook-invoked");
+  try {
+    fs.mkdirSync(repositoryRoot);
+    fs.mkdirSync(fakeBin);
+    const npmCli = path.join(fixtureRoot, "npm-cli.js");
+    fs.writeFileSync(npmCli, "// synthetic npm CLI fixture\n");
+    fs.writeFileSync(
+      path.join(fakeBin, "git"),
+      `#!/bin/sh\nprintf invoked > ${JSON.stringify(hostileMarker)}\nexit 97\n`,
+      { mode: 0o700 }
+    );
+    const gitExecutable = trustedGitExecutable();
+    const gitArgs = gitInvariantArguments();
+    const setupGit = (args) =>
+      execFileSync(gitExecutable, [...gitArgs, ...args], {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        env: gitEnvironment(),
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+    setupGit(["init"]);
+    fs.writeFileSync(
+      path.join(repositoryRoot, "README.md"),
+      "fixture\n"
+    );
+    setupGit(["add", "README.md"]);
+    setupGit([
+      "-c",
+      "user.name=ProofToAct Fixture",
+      "-c",
+      "user.email=fixture.invalid",
+      "commit",
+      "-m",
+      "fixture"
+    ]);
+    const hookPath = path.join(
+      repositoryRoot,
+      ".git",
+      "hooks",
+      "reference-transaction"
+    );
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh\nprintf invoked > ${JSON.stringify(hookMarker)}\nexit 98\n`,
+      { mode: 0o700 }
+    );
+    const run = __test.defaultRunner(repositoryRoot, {
+      PATH: `${fakeBin}:/usr/bin:/bin`,
+      npm_execpath: npmCli,
+      npm_node_execpath: process.execPath
+    });
+    const result = run("git", [
+      "update-ref",
+      "refs/heads/sentinel",
+      "HEAD"
+    ]);
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0);
+    assert.equal(fs.existsSync(hostileMarker), false);
+    assert.equal(fs.existsSync(hookMarker), false);
+    assert.equal(
+      setupGit(["rev-parse", "refs/heads/sentinel"])
+        .trim(),
+      setupGit(["rev-parse", "HEAD"]).trim()
     );
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
