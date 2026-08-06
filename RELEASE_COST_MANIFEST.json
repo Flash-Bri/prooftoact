@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
-  "reviewedOn": "2026-08-03",
+  "reviewedOn": "2026-08-06",
   "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
   "limits": {
     "awsBudgetLimitUsd": 15,
