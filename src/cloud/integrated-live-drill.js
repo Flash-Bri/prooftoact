@@ -1407,7 +1407,8 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       managedMcpCallCount: 1,
       unauthorizedPrincipalDenied: true,
       auditsCommitted: 2,
-      operationalCapabilitiesReturned: false
+      operationalCapabilitiesReturned: false,
+      restartStableSignedBundleReuseProven: false
     },
     providerOperations: {
       aws: {
@@ -1447,6 +1448,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       blockers: [
         "SIGNED_PRE_POST_DEPLOYMENT_ATTESTATION_NOT_BOUND",
         "PRIVATE_RAW_EVIDENCE_NOT_INDEPENDENTLY_ATTESTED",
+        "RESTART_STABLE_SIGNED_BUNDLE_REUSE_NOT_PROVEN",
         "CRASH_SAFE_RECOVERY_NOT_PROVEN",
         "PROVIDER_PRICING_AND_BILLING_NOT_PROVEN"
       ]
@@ -1454,9 +1456,9 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     invariants,
     invariantCount: Object.keys(invariants).length,
     invariantViolations: 0,
-    providerBacked: true,
+    providerBacked: false,
     claimBoundary:
-      "This sanitized candidate summarizes one provider-backed integrated synthetic component run whose CockroachDB DVI selection, five observed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. Before the first provider component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal and bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; crash-safe single-call recovery is not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized candidate summarizes one runner-observed integrated synthetic component result whose claimed CockroachDB DVI selection, five claimed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. The candidate does not independently establish that any component receipt came from a provider, so providerBacked remains false. The immediate duplicate recovery append reuses one in-memory signed bundle, but restart-stable reuse of those exact signed bytes is not proven. Before the first component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal and bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; restart-stable signed-bundle reuse and crash-safe single-call recovery are not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, provider execution, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,

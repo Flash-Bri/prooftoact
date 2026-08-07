@@ -1453,12 +1453,15 @@ const SOURCE_MARKERS = Object.freeze({
     "preProviderJournalCurrentBytesBound: true",
     "privateEvidenceCurrentBytesBound: true",
     "crashSafeRecoveryProven: false",
+    "restartStableSignedBundleReuseProven: false",
+    "RESTART_STABLE_SIGNED_BUNDLE_REUSE_NOT_PROVEN",
     "exactReplayReturnedOriginalDecision: true",
     "changedInputUnderOperationDenied: true",
     "managedMcpCalledExactlyOnce: true",
     "operationalCapabilityReturned: false",
     "invariantViolations: 0",
-    "providerBacked: true"
+    "providerBacked: false",
+    "does not independently establish that any component receipt came from a provider"
   ]),
   "integrated-live-drill-runner": Object.freeze([
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",

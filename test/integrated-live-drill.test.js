@@ -563,7 +563,22 @@ test("unattested provider components remain a non-accepting candidate", () => {
   assert.equal(receipt.acceptance.preProviderJournalPersisted, false);
   assert.equal(receipt.acceptance.privateEvidencePersisted, false);
   assert.equal(receipt.acceptance.crashSafeRecoveryProven, false);
-  assert.equal(receipt.providerBacked, true);
+  assert.equal(receipt.recovery.restartStableSignedBundleReuseProven, false);
+  assert.equal(
+    receipt.acceptance.blockers.includes(
+      "RESTART_STABLE_SIGNED_BUNDLE_REUSE_NOT_PROVEN"
+    ),
+    true
+  );
+  assert.equal(receipt.providerBacked, false);
+  assert.match(
+    receipt.claimBoundary,
+    /does not independently establish that any component receipt came from a provider/
+  );
+  assert.match(
+    receipt.claimBoundary,
+    /restart-stable reuse of those exact signed bytes is not proven/
+  );
   assert.equal(receipt.invariantCount, 24);
   assert.equal(receipt.invariantViolations, 0);
   assert.deepEqual(receipt.providerOperations.aws, {

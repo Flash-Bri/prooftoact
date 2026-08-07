@@ -366,7 +366,7 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "d884c1b0348486dd165d735e9c8f2d21e6733da979fddb076ea71cc2bf9faf63"
+      "sha256": "f67106c61a7f8fbd765d0d9154fd41224a832f8c65ae5b7ad13021b9d5adcc2d"
     },
     {
       "id": "integrated-live-drill-runner",
@@ -378,7 +378,7 @@
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "0c80087387f5361747ef04c6f0a3a561a309bd5bf566de7ef3064dd198dadecb"
+      "sha256": "6f196e7ba2fb83f5484c545679c36b50477ef85b846c7c43afdff3fb8ced2c06"
     },
     {
       "id": "local-full-drill-harness",

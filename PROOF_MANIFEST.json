@@ -199,7 +199,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "284ceb9e73d2466e4e496ae5144304652fdfb774172342c2821dabea8c8272c5",
+      "sha256": "dfaac18f6bc0823d8e6e2664465f8932e63625da5fb577c0523ef288f1c2a537",
       "kind": "boundary-ledger"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "d884c1b0348486dd165d735e9c8f2d21e6733da979fddb076ea71cc2bf9faf63",
+      "sha256": "f67106c61a7f8fbd765d0d9154fd41224a832f8c65ae5b7ad13021b9d5adcc2d",
       "kind": "verification-code"
     },
     {
@@ -379,7 +379,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "0c80087387f5361747ef04c6f0a3a561a309bd5bf566de7ef3064dd198dadecb",
+      "sha256": "6f196e7ba2fb83f5484c545679c36b50477ef85b846c7c43afdff3fb8ced2c06",
       "kind": "verification-code"
     },
     {
@@ -457,7 +457,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "9981c243331d3d3bdf6d4c6a99e12c89b202243708bbd34b6795e1a3d9e565b1",
+      "sha256": "ffb7087805cf4f8f54abfcfc25c431e28d1f7f2d186c1e950844ac488953b61f",
       "kind": "boundary-ledger"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "ec79583865fd49a03c53753e639d7d14b340bee7e34bff6fb4ddd4ff2ac648da",
+      "sha256": "824261e3de945e15045c65733f43b10968872e8777e775338f2044e76606ca9b",
       "kind": "boundary-ledger"
     },
     {
@@ -607,7 +607,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "c01b749ba27d2a14d9789a6802467f2456b192c6755bcfddcaa3e3f97df21167",
+      "sha256": "1c18e67800e8c196b2899d4537e2c327de80244526ce127168801f67a1806689",
       "kind": "verification-code"
     },
     {
@@ -619,7 +619,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "d991401e41f05bab0e97788d0e5df7519e096510125ca51585736341c7829163",
+      "sha256": "3b0f373d3a7ac0f167a6a8ac3ccac4266988daff7aad548183f8572ccc6a1d68",
       "kind": "boundary-ledger"
     },
     {
@@ -712,7 +712,7 @@
       "id": "full-highwater-drills",
       "claim": "The approved 100+1 high-water target binds 100 deterministic offline specifications plus one exact-release provider-backed integrated drill.",
       "currentStatus": "Partial; the recomputing offline receipt passes 100 unique runs and 1,100 invariant evaluations with zero violations, while the +1 provider execution and acceptance review remain pending",
-      "claimsLedgerRowSha256": "4988167bba5682cbfa141ca390a6f60dcab012458191f6be7f1ddd041d94522d",
+      "claimsLedgerRowSha256": "a1b2ee41b17cae4d4c245ea0df975a25bfc434122d4e0d6854bd769d8f18abe6",
       "proofState": "PARTIAL",
       "artifacts": [
         "full-drill-evidence",
@@ -725,7 +725,7 @@
         "local-full-drill-tests",
         "local-full-drill-verifier"
       ],
-      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt and requires replay to return the same signed bundle; one negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in a canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. The candidate explicitly leaves signed deployment attestation, independent private-evidence retention/recomputation review, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending.",
+      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Its immediate duplicate append reuses one in-memory signed bundle, but restart-stable reuse of those exact signed bytes is unproven; one negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in a canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. The candidate explicitly leaves signed deployment attestation, independent private-evidence retention/recomputation review, restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending.",
       "remainingRequirements": [
         "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, one canonical exact-winner recovery bundle, one continuous digest-bound Managed MCP session, bounded cleanup, and zero invariant violations."
       ]
