@@ -140,6 +140,7 @@ function acceptedRace(race, spec, dvi) {
       "contextDigest",
       "expectedIdentityDigest",
       "expectedPrincipalDigest",
+      "principalIdDigest",
       "principalType"
     ]) &&
     caller.principalType === "assumed-role" &&
@@ -149,7 +150,8 @@ function acceptedRace(race, spec, dvi) {
       caller.callerIdentityDigest,
       caller.contextDigest,
       caller.expectedIdentityDigest,
-      caller.expectedPrincipalDigest
+      caller.expectedPrincipalDigest,
+      caller.principalIdDigest
     ].every((entry) => SHA256.test(entry ?? "")) &&
     race.dvi?.authorityEvidenceBindingSha256 ===
       dvi.drill.authorityEvidenceBindingSha256 &&

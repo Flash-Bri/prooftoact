@@ -108,7 +108,7 @@
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "e05d18e268fc2f4defa6388747fddefc7113958b17226fd9bd2961926284e11c"
+      "sha256": "d8243f47bdfa7b14575dc6794a8712ce6f1cff8307e80625628ffa2e2e42f10a"
     },
     {
       "id": "aws-boundary-ledger",
@@ -366,7 +366,7 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "95b61e86171dfdd05862a3a1707947ce48d697b5fe3ef8bffc3e18fcac353399"
+      "sha256": "fbb40281e4db23bb265a7334ea37841e22d75cb4b4154e0f1657c256b4b21c69"
     },
     {
       "id": "integrated-live-drill-runner",
@@ -378,7 +378,7 @@
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "5e5a56436dd5dcf85d9f08ca3e05462919b8b381c219c638d8c572789d50fbd0"
+      "sha256": "19ed1fb52f4af837393294283f53c15de227143cd3616ba1514dfaf589bb2377"
     },
     {
       "id": "local-full-drill-harness",

@@ -58,6 +58,7 @@ function validatedCallerBinding(value) {
       "contextDigest",
       "expectedIdentityDigest",
       "expectedPrincipalDigest",
+      "principalIdDigest",
       "principalType"
     ]) ||
     !SHA256_PATTERN.test(value.bindingDigest) ||
@@ -65,6 +66,7 @@ function validatedCallerBinding(value) {
     !SHA256_PATTERN.test(value.contextDigest) ||
     value.expectedIdentityDigest !== value.callerIdentityDigest ||
     !SHA256_PATTERN.test(value.expectedPrincipalDigest) ||
+    !SHA256_PATTERN.test(value.principalIdDigest) ||
     value.principalType !== "assumed-role"
   ) {
     throw new Error("AUTHORITY_RACE_CALLER_BINDING_REJECTED");

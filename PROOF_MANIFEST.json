@@ -325,13 +325,13 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "c21439b508344a33bda3a75d0b1d2c44ec4154b6a59365bad4564e7fa85ee30e",
+      "sha256": "5a5bd48c5b276b23cc714b89f44b0e1e82b18d4c6f59f8ed7c660e006c320ffa",
       "kind": "verification-code"
     },
     {
       "id": "gate2-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
-      "sha256": "e05d18e268fc2f4defa6388747fddefc7113958b17226fd9bd2961926284e11c",
+      "sha256": "d8243f47bdfa7b14575dc6794a8712ce6f1cff8307e80625628ffa2e2e42f10a",
       "kind": "verification-code"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "95b61e86171dfdd05862a3a1707947ce48d697b5fe3ef8bffc3e18fcac353399",
+      "sha256": "fbb40281e4db23bb265a7334ea37841e22d75cb4b4154e0f1657c256b4b21c69",
       "kind": "verification-code"
     },
     {
@@ -379,7 +379,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "5e5a56436dd5dcf85d9f08ca3e05462919b8b381c219c638d8c572789d50fbd0",
+      "sha256": "19ed1fb52f4af837393294283f53c15de227143cd3616ba1514dfaf589bb2377",
       "kind": "verification-code"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "8a1e175fe9f39db83da5271db7148c7fe075bb600242193b4d76505552266c06",
+      "sha256": "9dd1b959449d6f3ad21124c3c209aee2622926ace82e75b8cb0260602e70881d",
       "kind": "boundary-ledger"
     },
     {

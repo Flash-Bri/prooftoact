@@ -20,6 +20,8 @@ import {
   validateAuthorityRaceInvocations,
   validateAuthorityRaceProof
 } from "../src/cloud/aws-authority-race.js";
+import { validateAwsEvidenceCaller } from
+  "../src/cloud/aws-evidence-identity.js";
 import {
   authorityPrincipalFromStackResource,
   awsEvidenceClientOptions,
@@ -57,14 +59,34 @@ const IDS = Object.freeze({
   bravo: "22222222-2222-5222-8222-222222222222"
 });
 
-const CALLER_BINDING = Object.freeze({
-  bindingDigest: "5".repeat(64),
-  callerIdentityDigest: "6".repeat(64),
-  contextDigest: "8".repeat(64),
-  expectedIdentityDigest: "6".repeat(64),
-  expectedPrincipalDigest: "7".repeat(64),
-  principalType: "assumed-role"
-});
+const CALLER_ACCOUNT_ID = "111111111111";
+const CALLER_ROLE_NAME =
+  "prooftoact-gate2-AuthorityRaceCallerRole-Test123";
+const CALLER_ROLE_ARN =
+  `arn:aws:iam::${CALLER_ACCOUNT_ID}:role/${CALLER_ROLE_NAME}`;
+const CALLER_SESSION_NAME = "integrated-live-drill";
+const CALLER_ARN =
+  `arn:aws:sts::${CALLER_ACCOUNT_ID}:assumed-role/` +
+  `${CALLER_ROLE_NAME}/${CALLER_SESSION_NAME}`;
+const CALLER_USER_ID =
+  `AROA1234567890ABCD:${CALLER_SESSION_NAME}`;
+const CALLER_BINDING = validateAwsEvidenceCaller(
+  {
+    Account: CALLER_ACCOUNT_ID,
+    Arn: CALLER_ARN,
+    UserId: CALLER_USER_ID
+  },
+  {
+    expectedAccountId: CALLER_ACCOUNT_ID,
+    expectedPrincipalArn: CALLER_ROLE_ARN,
+    expectedCallerArn: CALLER_ARN,
+    expectedCallerUserId: CALLER_USER_ID,
+    bindingContext: {
+      purpose: "authority-race-live-binding-regression",
+      sourceCommit: EXPECTED.sourceCommit
+    }
+  }
+);
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -660,7 +682,40 @@ test("authority race requires one overlapping winner and one durable denial", as
   );
   assert.equal(receipt.authorityTransferredByModel, false);
   assert.deepEqual(receipt.callerBinding, CALLER_BINDING);
+  assert.match(receipt.callerBinding.principalIdDigest, /^[0-9a-f]{64}$/);
   assert.equal("functionArn" in receipt, false);
+});
+
+test("authority race accepts the live seven-field STS binding and rejects a stripped principal identity", () => {
+  const observation = validateAuthorityRaceInvocations(
+    {
+      alpha: response("alpha"),
+      bravo: response("bravo")
+    },
+    EXPECTED
+  );
+  assert.doesNotThrow(() =>
+    validateAuthorityRaceProof(
+      proofResponse(),
+      observation,
+      EXPECTED,
+      CALLER_BINDING
+    )
+  );
+  const {
+    principalIdDigest: _principalIdDigest,
+    ...strippedCallerBinding
+  } = CALLER_BINDING;
+  assert.throws(
+    () =>
+      validateAuthorityRaceProof(
+        proofResponse(),
+        observation,
+        EXPECTED,
+        strippedCallerBinding
+      ),
+    /AUTHORITY_RACE_CALLER_BINDING_REJECTED/
+  );
 });
 
 test("authority race rejects non-overlap, numeric-version drift, and outcome drift", () => {

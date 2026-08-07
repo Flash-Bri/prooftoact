@@ -98,6 +98,7 @@ function components() {
       contextDigest: "6".repeat(64),
       expectedIdentityDigest: "5".repeat(64),
       expectedPrincipalDigest: "7".repeat(64),
+      principalIdDigest: "8".repeat(64),
       principalType: "assumed-role"
     },
     contenders: 2,
