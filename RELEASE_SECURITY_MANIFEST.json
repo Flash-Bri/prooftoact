@@ -366,19 +366,19 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "84fd0c98d4cbddfbb9697ef51d713aa3a996f562dceaaa3e29c4fe5867763e14"
+      "sha256": "652e77722fe592afcb8c62eee1bf3d1ed80ac44143c88cad897626e1c78084ca"
     },
     {
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER",
-      "sha256": "bd4a460daf2efe34fc964af442de19e0567d789d9e71f1426e0c4a10290f8a73"
+      "sha256": "d33d1c23616887f2831c0c58fe16e9ec09bc9b7a0cba74646fac654a8ea7293a"
     },
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "7f874f299d1e87e66cf505d897c5f05c013217b62462e1921b428e1b4b289ec1"
+      "sha256": "21bc945c93dcebfb3b848f7f0a1029e62bb68ecd6107ef544f8dd22272fc3662"
     },
     {
       "id": "local-full-drill-harness",

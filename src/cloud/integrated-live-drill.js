@@ -4,6 +4,8 @@ import { canonicalRecoveryAttempt } from "./recovery-broker.js";
 
 export const INTEGRATED_LIVE_DRILL_SCHEMA =
   "tideproof.highwater-drill-live.v1";
+export const INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA =
+  "tideproof.highwater-drill-live-candidate.v1";
 export const INTEGRATED_LIVE_DRILL_SPEC_SCHEMA =
   "tideproof.highwater-drill-live-spec.v1";
 
@@ -382,7 +384,7 @@ function acceptedRecovery(recovery, spec, race) {
   );
 }
 
-export function buildIntegratedLiveDrillReceipt({
+export function buildIntegratedLiveDrillCandidateReceipt({
   spec,
   dvi,
   race,
@@ -403,8 +405,6 @@ export function buildIntegratedLiveDrillReceipt({
     throw new Error("INTEGRATED_LIVE_DRILL_COMPONENT_REJECTED");
   }
   const invariants = Object.freeze({
-    exactReleaseSource: true,
-    exactNumericLambdaVersion: true,
     exactAwsCallerBound: true,
     fiveAwsInvocationReceiptsBound: true,
     oneDatabaseProducedDviSnapshot: true,
@@ -434,8 +434,8 @@ export function buildIntegratedLiveDrillReceipt({
     recovery: sha256(canonicalJson(recovery))
   };
   const receipt = {
-    schemaVersion: INTEGRATED_LIVE_DRILL_SCHEMA,
-    status: "PASS",
+    schemaVersion: INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA,
+    status: "INCOMPLETE_LIVE_GATES_PENDING",
     sourceCommit: acceptedSpec.sourceCommit,
     treeDigest: dvi.treeDigest,
     runId: acceptedSpec.runId,
@@ -492,12 +492,25 @@ export function buildIntegratedLiveDrillReceipt({
       spendAuthorizationProvenByReceipt: false,
       actualProviderBillingReceiptRequiredSeparately: true
     },
+    acceptance: {
+      accepted: false,
+      finalReceiptSchema: INTEGRATED_LIVE_DRILL_SCHEMA,
+      deploymentAttestationBound: false,
+      privateEvidencePersisted: false,
+      crashSafeRecoveryProven: false,
+      blockers: [
+        "SIGNED_PRE_POST_DEPLOYMENT_ATTESTATION_NOT_BOUND",
+        "PRIVATE_RAW_EVIDENCE_NOT_PERSISTED",
+        "CRASH_SAFE_RECOVERY_NOT_PROVEN",
+        "PROVIDER_PRICING_AND_BILLING_NOT_PROVEN"
+      ]
+    },
     invariants,
     invariantCount: Object.keys(invariants).length,
     invariantViolations: 0,
     providerBacked: true,
     claimBoundary:
-      "This sanitized receipt proves one exact-release provider-backed integrated synthetic drill whose CockroachDB DVI selection, five receipt-bound numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared invariant violations. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests; it is not an independent provider signature. The receipt enumerates the fixed top-level AWS, CockroachDB component, and Managed MCP operations observed by this orchestrator, but it does not enumerate every database statement or provider-internal request, verify current pricing or billing, prove spend authorization, or establish that the operator-declared $0.02 AWS maximum was met. A separate approved cost gate and provider billing receipt remain required. It must be accepted together with the separately verified 100-run deterministic offline receipt. It does not prove a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized candidate summarizes one provider-backed integrated synthetic component run whose CockroachDB DVI selection, five observed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. It is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; raw private component evidence is not yet durably persisted and independently recomputed; crash-safe single-call recovery is not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,

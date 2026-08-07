@@ -1433,6 +1433,12 @@ const SOURCE_MARKERS = Object.freeze({
   "integrated-live-drill-harness": Object.freeze([
     "INTEGRATED_LIVE_DRILL_SCHEMA",
     "tideproof.highwater-drill-live.v1",
+    "INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA",
+    "tideproof.highwater-drill-live-candidate.v1",
+    "INCOMPLETE_LIVE_GATES_PENDING",
+    "deploymentAttestationBound: false",
+    "privateEvidencePersisted: false",
+    "crashSafeRecoveryProven: false",
     "exactReplayReturnedOriginalDecision: true",
     "changedInputUnderOperationDenied: true",
     "managedMcpCalledExactlyOnce: true",
@@ -1450,7 +1456,7 @@ const SOURCE_MARKERS = Object.freeze({
     "INTEGRATED_LIVE_DRILL_COMPONENT_FAILED"
   ]),
   "integrated-live-drill-tests": Object.freeze([
-    "one provider drill binds DVI, overlap, negatives, recovery, and cleanup",
+    "unattested provider components remain a non-accepting candidate",
     "integrated receipt fails closed on every cross-act boundary",
     "orchestrator executes exactly DVI, race, then exact-winner recovery"
   ]),

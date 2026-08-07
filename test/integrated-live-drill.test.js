@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import {
-  buildIntegratedLiveDrillReceipt,
+  buildIntegratedLiveDrillCandidateReceipt,
+  INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA,
   INTEGRATED_LIVE_DRILL_SCHEMA,
   INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   integratedSourceBuildIdentity,
@@ -284,17 +285,25 @@ function components() {
   return { dvi, race, recovery };
 }
 
-test("one provider drill binds DVI, overlap, negatives, recovery, and cleanup", () => {
-  const receipt = buildIntegratedLiveDrillReceipt({
+test("unattested provider components remain a non-accepting candidate", () => {
+  const receipt = buildIntegratedLiveDrillCandidateReceipt({
     spec,
     ...components(),
     authorityEvidenceId: evidenceId,
     authoritySelectedEvidenceDigest: evidenceDigest
   });
-  assert.equal(receipt.schemaVersion, INTEGRATED_LIVE_DRILL_SCHEMA);
-  assert.equal(receipt.status, "PASS");
+  assert.equal(
+    receipt.schemaVersion,
+    INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA
+  );
+  assert.notEqual(receipt.schemaVersion, INTEGRATED_LIVE_DRILL_SCHEMA);
+  assert.equal(receipt.status, "INCOMPLETE_LIVE_GATES_PENDING");
+  assert.equal(receipt.acceptance.accepted, false);
+  assert.equal(receipt.acceptance.deploymentAttestationBound, false);
+  assert.equal(receipt.acceptance.privateEvidencePersisted, false);
+  assert.equal(receipt.acceptance.crashSafeRecoveryProven, false);
   assert.equal(receipt.providerBacked, true);
-  assert.equal(receipt.invariantCount, 24);
+  assert.equal(receipt.invariantCount, 22);
   assert.equal(receipt.invariantViolations, 0);
   assert.deepEqual(receipt.providerOperations.aws, {
     cloudFormationDescribeStackResourceRequests: 1,
@@ -333,7 +342,7 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
     const value = structuredClone(components());
     mutate(value);
     assert.throws(
-      () => buildIntegratedLiveDrillReceipt({
+      () => buildIntegratedLiveDrillCandidateReceipt({
         spec,
         ...value,
         authorityEvidenceId: evidenceId,
@@ -398,7 +407,8 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
       return outputs[calls.length - 1];
     }
   });
-  assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.status, "INCOMPLETE_LIVE_GATES_PENDING");
+  assert.equal(receipt.acceptance.accepted, false);
   assert.equal(calls.length, 3);
   assert.match(calls[0].script, /gate1-admissible-vector\.js$/u);
   assert.match(calls[1].script, /gate2-authority-race\.js$/u);

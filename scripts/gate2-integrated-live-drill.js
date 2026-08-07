@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-  buildIntegratedLiveDrillReceipt,
+  buildIntegratedLiveDrillCandidateReceipt,
   parseIntegratedLiveDrillSpec
 } from "../src/cloud/integrated-live-drill.js";
 import { parseAuthorityDrillBinding } from
@@ -270,7 +270,7 @@ export async function runIntegratedLiveDrill({
   if (JSON.stringify(postRelease) !== JSON.stringify(preRelease)) {
     throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
   }
-  return buildIntegratedLiveDrillReceipt({
+  return buildIntegratedLiveDrillCandidateReceipt({
     spec,
     dvi,
     race,

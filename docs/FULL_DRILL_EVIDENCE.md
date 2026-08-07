@@ -68,6 +68,14 @@ and exact deployed configuration. A partial, resumed, mixed-release,
 component-only, or second selected provider run fails closed; one independently
 accepted integrated receipt is the complete provider target.
 
+The current source runner emits only a
+`tideproof.highwater-drill-live-candidate.v1` receipt with status
+`INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
+The candidate remains blocked until a separate reviewed finalizer validates a
+signed pre/post deployment-attestation pair around the drill, durably persists
+and rereads the private component evidence, and proves crash-safe recovery
+without a second Managed MCP read for the same canonical attempt.
+
 ## Per-drill binding
 
 Every accepted run must carry one synthetic drill binding through all three
@@ -106,6 +114,14 @@ replayed.
 
 Acceptance additionally requires:
 
+- one signed pre/post deployment-attestation pair whose exact expectation
+  binds the source commit, tree, configuration, Authority numeric-version ARN,
+  code hash, execution role, revisions, and alias target around the drill;
+- an atomic mode-restricted private evidence bundle that is reread before
+  acceptance and lets an independent reviewer recompute every component digest;
+- crash/failpoint evidence that retry after pre-read audit, Managed MCP response,
+  terminal-audit COMMIT dispatch/ACK loss, or receipt-publication loss reconciles
+  the same canonical recovery attempt without issuing a second MCP read;
 - exact clean public `main`, tree, lockfile, artifacts, configuration, caller
   binding, primary cluster, and recovery cluster digests;
 - exactly one passing integrated run digest, all enumerated invariants true,
@@ -144,8 +160,10 @@ path now consumes database-authorized DVI proposal identities and the exact
 selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
 recomputing receipt validator now exist. The source now also contains a
-single-run integrated orchestrator and strict sanitized receipt composer, but
-the provider-backed execution and accepted live receipt do not. The exact
+single-run integrated orchestrator and strict sanitized candidate composer, but
+the provider-backed execution and accepted live receipt do not. The candidate
+explicitly records that deployment attestation, private evidence persistence,
+crash-safe recovery, and provider pricing/billing are unproven. The exact
 cross-act recovery lookup now has a locally tested source control, but no
 provider-backed receipt. Public claims and final release readiness must
 therefore remain partial and blocked.
@@ -218,6 +236,27 @@ This is a source-level prerequisite only. It does not prove a Managed MCP
 call, a live database row, the exact 100-run batch, AWS behavior, or final
   release readiness until the +1 provider-backed receipt binds it to the exact
 official release.
+
+### Unattested components were accepted as an exact-release receipt
+
+- Root cause: the integrated composer trusted self-reported source/configuration
+  digests and an observed numeric Lambda version without consuming the existing
+  signed pre/post deployment-attestation contract.
+- Why it was missed: tests mocked valid DVI, race, and recovery outputs and
+  asserted `PASS`; none required an attestation expectation or pair.
+- Earliest detection point: omit deployment attestation from an otherwise valid
+  component set and require that the accepted schema and `PASS` remain
+  unreachable.
+- Repair: the current runner now emits only a non-accepting candidate, removes
+  exact-release invariants, and publishes explicit acceptance blockers.
+- Regression/preventive control: focused tests and the release-security verifier
+  bind the candidate schema, incomplete status, and blocker fields.
+- Verification: source tests and release gates must pass on the exact repaired
+  head; provider execution remains prohibited and pending.
+- Residual risk and claim impact: a reviewed attestation-aware finalizer, private
+  evidence sink, and crash-safe recovery repair are still required. Until then,
+  ProofToAct may claim only a source-level component candidate, not an accepted
+  exact-release +1 drill.
 
 ### Recovery binding stopped before the DVI proposal
 
