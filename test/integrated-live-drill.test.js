@@ -5,15 +5,19 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  appendIntegratedLiveDrillJournal,
   buildIntegratedLiveDrillCandidateReceipt,
   INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA,
   INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA_V1,
+  INTEGRATED_LIVE_DRILL_JOURNAL_RECEIPT_SCHEMA,
   INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA,
   INTEGRATED_LIVE_DRILL_SCHEMA,
   INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   integratedSourceBuildIdentity,
   persistIntegratedLiveDrillPrivateEvidence,
   selectedEvidenceBindingSha256,
+  startIntegratedLiveDrillJournal,
+  verifyIntegratedLiveDrillJournal,
   verifyIntegratedLiveDrillPrivateEvidence
 } from "../src/cloud/integrated-live-drill.js";
 import {
@@ -33,6 +37,7 @@ const evidenceDigest = "d".repeat(64);
 const authorityBinding = "e".repeat(64);
 const operationId = "44444444-4444-4444-8444-444444444444";
 const requestDigest = "f".repeat(64);
+const journalIntentBindingSha256 = "6".repeat(64);
 
 const specWithoutIdentity = {
   schemaVersion: INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
@@ -51,6 +56,11 @@ const specWithoutIdentity = {
 const spec = Object.freeze({
   ...specWithoutIdentity,
   sourceBuildIdentity: integratedSourceBuildIdentity(specWithoutIdentity)
+});
+const postRelease = Object.freeze({
+  sourceCommit,
+  treeDigest,
+  packageLockDigest: spec.packageLockDigest
 });
 
 function components() {
@@ -302,6 +312,28 @@ function privateEvidenceDirectory() {
 
 function persistPrivateEvidence(values = components()) {
   const directory = privateEvidenceDirectory();
+  const journalPath = path.join(directory, `${runId}.journal`);
+  const journalArguments = {
+    journalPath,
+    evidenceRootPath: directory,
+    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    spec
+  };
+  startIntegratedLiveDrillJournal({
+    ...journalArguments,
+    intentBindingSha256: journalIntentBindingSha256
+  });
+  for (const [phase, payload] of [
+    ["DVI_RESULT", values.dvi],
+    ["AUTHORITY_RACE_RESULT", values.race],
+    ["RECOVERY_RESULT", values.recovery]
+  ]) {
+    appendIntegratedLiveDrillJournal({
+      ...journalArguments,
+      phase,
+      payload
+    });
+  }
   const destinationPath = path.join(
     directory,
     `${runId}.private-evidence.json`
@@ -315,7 +347,23 @@ function persistPrivateEvidence(values = components()) {
     authorityEvidenceId: evidenceId,
     authoritySelectedEvidenceDigest: evidenceDigest
   });
-  return { directory, destinationPath, receipt };
+  appendIntegratedLiveDrillJournal({
+    ...journalArguments,
+    phase: "PRIVATE_EVIDENCE_RESULT",
+    payload: receipt
+  });
+  const journalReceipt = appendIntegratedLiveDrillJournal({
+    ...journalArguments,
+    phase: "POST_RELEASE_VERIFICATION",
+    payload: postRelease
+  });
+  return {
+    directory,
+    destinationPath,
+    receipt,
+    journalPath,
+    journalReceipt
+  };
 }
 
 test("private evidence source control binds current bytes before candidate composition", () => {
@@ -424,6 +472,58 @@ test("private evidence rejects non-canonical or permissive destinations", () => 
   );
 });
 
+test("pre-provider journal is create-only, chained, synced, and tamper evident", () => {
+  const persisted = persistPrivateEvidence();
+  try {
+    const verified = verifyIntegratedLiveDrillJournal({
+      journalPath: persisted.journalPath,
+      evidenceRootPath: persisted.directory,
+      forbiddenRootPath: fs.realpathSync(process.cwd()),
+      spec,
+      receipt: persisted.journalReceipt,
+      requireComplete: true
+    });
+    assert.equal(
+      verified.schemaVersion,
+      INTEGRATED_LIVE_DRILL_JOURNAL_RECEIPT_SCHEMA
+    );
+    assert.equal(verified.entryCount, 6);
+    assert.equal(verified.preProviderIntentDurableBeforeReturn, true);
+    assert.equal(verified.entryFilesCreateOnly, true);
+    assert.equal(verified.entryFilesSynced, true);
+    assert.equal(verified.directoryEntriesSynced, true);
+    assert.equal(verified.hashChainVerified, true);
+    assert.throws(
+      () => appendIntegratedLiveDrillJournal({
+        journalPath: persisted.journalPath,
+        evidenceRootPath: persisted.directory,
+        forbiddenRootPath: fs.realpathSync(process.cwd()),
+        spec,
+        phase: "DVI_RESULT",
+        payload: components().dvi
+      }),
+      /INTEGRATED_LIVE_DRILL_JOURNAL_SEQUENCE_REJECTED/u
+    );
+    fs.appendFileSync(path.join(
+      persisted.journalPath,
+      "02-authority-race-result.json"
+    ), " ");
+    assert.throws(
+      () => verifyIntegratedLiveDrillJournal({
+        journalPath: persisted.journalPath,
+        evidenceRootPath: persisted.directory,
+        forbiddenRootPath: fs.realpathSync(process.cwd()),
+        spec,
+        receipt: persisted.journalReceipt,
+        requireComplete: true
+      }),
+      /INTEGRATED_LIVE_DRILL_(?:JOURNAL|PRIVATE_EVIDENCE)_/u
+    );
+  } finally {
+    fs.rmSync(persisted.directory, { recursive: true, force: true });
+  }
+});
+
 test("unattested provider components remain a non-accepting candidate", () => {
   const values = components();
   const persisted = persistPrivateEvidence(values);
@@ -432,6 +532,11 @@ test("unattested provider components remain a non-accepting candidate", () => {
       return buildIntegratedLiveDrillCandidateReceipt({
         spec,
         ...values,
+        journalPath: persisted.journalPath,
+        journalRootPath: persisted.directory,
+        journalReceipt: persisted.journalReceipt,
+        journalIntentBindingSha256,
+        postRelease,
         privateEvidencePath: persisted.destinationPath,
         privateEvidenceRootPath: persisted.directory,
         forbiddenPrivateEvidenceRootPath: fs.realpathSync(process.cwd()),
@@ -455,10 +560,11 @@ test("unattested provider components remain a non-accepting candidate", () => {
   assert.equal(receipt.status, "INCOMPLETE_LIVE_GATES_PENDING");
   assert.equal(receipt.acceptance.accepted, false);
   assert.equal(receipt.acceptance.deploymentAttestationBound, false);
+  assert.equal(receipt.acceptance.preProviderJournalPersisted, false);
   assert.equal(receipt.acceptance.privateEvidencePersisted, false);
   assert.equal(receipt.acceptance.crashSafeRecoveryProven, false);
   assert.equal(receipt.providerBacked, true);
-  assert.equal(receipt.invariantCount, 23);
+  assert.equal(receipt.invariantCount, 24);
   assert.equal(receipt.invariantViolations, 0);
   assert.deepEqual(receipt.providerOperations.aws, {
     cloudFormationDescribeStackResourceRequests: 1,
@@ -469,6 +575,9 @@ test("unattested provider components remain a non-accepting candidate", () => {
   assert.equal(receipt.costControl.providerPricingVerified, false);
   assert.equal(receipt.costControl.actualAwsSpendVerified, false);
   assert.equal(receipt.costControl.spendAuthorizationProvenByReceipt, false);
+  assert.equal(receipt.preProviderJournal.entryCount, 6);
+  assert.equal(receipt.preProviderJournal.currentBytesBound, true);
+  assert.equal(receipt.preProviderJournal.independentlyAttested, false);
   assert.match(receipt.receiptSha256, /^[0-9a-f]{64}$/u);
   const publicReceipt = JSON.stringify(receipt);
   assert.equal(publicReceipt.includes(evidenceId), false);
@@ -503,6 +612,11 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
         () => buildIntegratedLiveDrillCandidateReceipt({
           spec,
           ...value,
+          journalPath: persistence.journalPath,
+          journalRootPath: persistence.directory,
+          journalReceipt: persistence.journalReceipt,
+          journalIntentBindingSha256,
+          postRelease,
           privateEvidencePath: persistence.destinationPath,
           privateEvidenceRootPath: persistence.directory,
           forbiddenPrivateEvidenceRootPath: fs.realpathSync(process.cwd()),
@@ -531,6 +645,10 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
     ),
     TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT:
       privateDirectory,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH: path.join(
+      privateDirectory,
+      `${runId}.journal`
+    ),
     DATABASE_URL: "postgresql://authorizer.invalid/db",
     TIDEPROOF_AUDITOR_DATABASE_URL: "postgresql://auditor.invalid/db",
     TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC: "{}",
@@ -577,6 +695,19 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
     }),
     runComponent: async (script, args, childEnvironment) => {
       calls.push({ script, args, environment: childEnvironment });
+      if (calls.length === 1) {
+        const journalNames = fs.readdirSync(
+          environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH
+        );
+        assert.deepEqual(journalNames, [
+          "00-pre-provider-intent.json"
+        ]);
+        const intent = JSON.parse(fs.readFileSync(path.join(
+          environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH,
+          journalNames[0]
+        ), "utf8"));
+        assert.equal(intent.phase, "PRE_PROVIDER_INTENT");
+      }
       return outputs[calls.length - 1];
     }
   });
@@ -616,6 +747,18 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
       environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH
     ).mode & 0o777,
     0o600
+  );
+  assert.equal(
+    fs.statSync(
+      environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH
+    ).mode & 0o777,
+    0o700
+  );
+  assert.equal(
+    fs.readdirSync(
+      environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH
+    ).length,
+    6
   );
 });
 

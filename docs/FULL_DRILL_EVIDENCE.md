@@ -71,14 +71,19 @@ accepted integrated receipt is the complete provider target.
 The current source runner emits only a
 `tideproof.highwater-drill-live-candidate.v2` receipt with status
 `INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
-Before candidate composition, a source-local helper writes the canonical raw
+After release verification and before the first provider component, the runner
+creates a source-local owner-only journal and durably publishes a run-intent
+digest. It then writes create-only, fsynced hash-chain entries for each observed
+component, the private bundle receipt, and post-release verification. Before
+candidate composition, a source-local helper writes the canonical raw
 component bundle through an owner-only temporary file in a canonical mode-0700
 directory outside the Git checkout, links the final run-specific name, syncs
 the directory entry, and rereads the mode-0600 file byte-for-byte. The final
 clean-release check runs after that write. The public candidate carries only
 the bundle and source-control-receipt digests. Because that receipt is unkeyed
-and reconstructible from current bytes, it does not independently prove the
-historical write protocol, durable retention, or crash continuity. The
+and reconstructible from current bytes, neither the journal nor bundle receipt
+independently proves the historical write protocol, durable retention, or crash
+continuity. The
 candidate remains blocked until a separate reviewed finalizer validates a
 signed pre/post deployment-attestation pair around the drill, independently
 attests and recomputes the private evidence, and proves crash-safe recovery
@@ -89,9 +94,10 @@ The live runner requires
 absolute path named `<run-id>.private-evidence.json` whose parent exactly
 matches `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT`. That
 precreated, canonical, process-owned mode-0700 root must be outside the Git
-checkout. The final path must not already exist. The runner never passes this
-path or the private bundle to a component child and never includes the path in
-the public candidate.
+checkout. It also requires `TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH` to
+be the sibling canonical absolute path `<run-id>.journal`. Neither final path
+may already exist. The runner never passes these paths or their private bytes
+to a component child and never includes a path in the public candidate.
 
 ## Per-drill binding
 
@@ -282,11 +288,45 @@ official release.
   the repaired head; no provider execution is implied.
 - Residual risk and claim impact: the unkeyed receipt is forgeable from current
   bytes and therefore proves neither historical atomic operations nor off-host
-  retention. Provider actions still precede persistence, so a crash can lose
-  the run evidence. An independently attested pre-provider journal, reviewer
-  recomputation, signed deployment identity, and crash-safe Managed MCP
-  recovery remain required. The public claim remains a non-accepting component
-  candidate.
+  retention. The source-local journal described below now preserves a durable
+  pre-provider intent and chained current-state result digests, but it is also
+  unkeyed. Independent journal attestation, reviewer recomputation, signed
+  deployment identity, and crash-safe Managed MCP recovery remain required.
+  The public claim remains a non-accepting component candidate.
+
+### Provider actions began before a durable run intent existed
+
+- Root cause: the integrated runner verified source bytes and then immediately
+  invoked the DVI component, leaving no durable record of the intended run or
+  the last completed boundary if the process died before final evidence
+  persistence.
+- Why it was missed: the first private-evidence repair protected completed raw
+  component bytes, while its tests began only after all provider components had
+  returned.
+- Earliest detection point: inspect the evidence root from inside the first
+  component callback and require a create-only, fsynced intent entry before the
+  callback can observe control.
+- Repair: after exact-release verification and before the first component call,
+  the runner creates an owner-only journal outside the Git checkout and writes
+  a mode-0600 intent entry through a same-filesystem temporary inode, hard-link
+  publication, file fsync, and directory fsync. It then adds create-only,
+  canonical entries for DVI, authority race, recovery, private-evidence, and
+  post-release digests. Every entry binds the exact release/run identity and
+  the preceding entry digest.
+- Regression/preventive control: focused tests require the intent to be the
+  only journal entry visible before the first provider component, reject phase
+  reordering and reuse, and detect entry-byte tampering. Candidate composition
+  rereads all six entries and verifies the complete hash chain and expected
+  payload digests.
+- Verification: the focused integrated-drill suite plus the release security,
+  privacy, claims, proof, and exact-source gates must pass on the exact head.
+  No provider execution is implied.
+- Residual risk and claim impact: the journal is source-local and unkeyed, so
+  current bytes do not independently prove when or by whom entries were
+  created, off-host retention, or successful recovery across a real crash.
+  Independent pre/post attestation, an external evidence finalizer, and the
+  provider-backed crash drill remain mandatory. The candidate stays
+  non-accepting.
 
 ### Unattested components were accepted as an exact-release receipt
 

@@ -1,12 +1,16 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  appendIntegratedLiveDrillJournal,
   buildIntegratedLiveDrillCandidateReceipt,
   parseIntegratedLiveDrillSpec,
-  persistIntegratedLiveDrillPrivateEvidence
+  persistIntegratedLiveDrillPrivateEvidence,
+  startIntegratedLiveDrillJournal
 } from "../src/cloud/integrated-live-drill.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 import { parseAuthorityDrillBinding } from
   "../src/cloud/aws-authority-race.js";
 import { isolatedEvidenceProcessEnvironment } from
@@ -64,6 +68,10 @@ function parseJson(value, code) {
   } catch {
     throw new Error(code);
   }
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function isolatedComponentEnvironment(environment, names, additions = {}) {
@@ -189,37 +197,115 @@ export async function runIntegratedLiveDrill({
     throw new Error("INTEGRATED_LIVE_DRILL_ENVIRONMENT_REJECTED");
   }
   const preRelease = await verifyRelease(spec, rootDir);
+  const privateEvidenceRootPath = requiredEnvironment(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
+    4096
+  );
+  const journalPath = requiredEnvironment(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH",
+    4096
+  );
+  const forbiddenPrivateEvidenceRootPath = fs.realpathSync(rootDir);
+  const authorityAlphaProposalDigest = requiredEnvironment(
+    environment,
+    "AUTHORITY_ALPHA_PROPOSAL_DIGEST",
+    64
+  );
+  const authorityBravoProposalDigest = requiredEnvironment(
+    environment,
+    "AUTHORITY_BRAVO_PROPOSAL_DIGEST",
+    64
+  );
+  const authorityAlphaLogicalActionDigest = requiredEnvironment(
+    environment,
+    "AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST",
+    64
+  );
+  const authorityBravoLogicalActionDigest = requiredEnvironment(
+    environment,
+    "AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST",
+    64
+  );
+  const authorityTenantId = requiredEnvironment(
+    environment,
+    "AUTHORITY_TENANT_ID",
+    64
+  );
+  const authorityIncidentId = requiredEnvironment(
+    environment,
+    "AUTHORITY_INCIDENT_ID",
+    64
+  );
+  const authorityResourceId = requiredEnvironment(
+    environment,
+    "AUTHORITY_RESOURCE_ID",
+    160
+  );
+  const journalIntentBindingSha256 = sha256(canonicalJson({
+    schemaVersion: "tideproof.highwater-drill-live-journal-intent.v1",
+    spec,
+    authorityEvidenceId,
+    authoritySelectedEvidenceDigest,
+    authorityAlphaProposalDigest,
+    authorityBravoProposalDigest,
+    authorityAlphaLogicalActionDigest,
+    authorityBravoLogicalActionDigest,
+    authorityTenantId,
+    authorityIncidentId,
+    authorityResourceId,
+    dviProofSpecSha256: sha256(requiredEnvironment(
+      environment,
+      "TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC",
+      16_384
+    )),
+    primaryClusterId: requiredEnvironment(
+      environment,
+      "PRIMARY_CLUSTER_ID",
+      16_384
+    ),
+    recoveryClusterId: requiredEnvironment(
+      environment,
+      "RECOVERY_CLUSTER_ID",
+      16_384
+    ),
+    recoveryPublisherTrustRootCommitment: requiredEnvironment(
+      environment,
+      "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT",
+      16_384
+    )
+  }));
+  startIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: privateEvidenceRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    spec,
+    intentBindingSha256: journalIntentBindingSha256
+  });
   const dvi = await runComponent(
     path.join(rootDir, "scripts/gate1-admissible-vector.js"),
     ["--proof"],
     dviComponentEnvironment(environment)
   );
+  appendIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: privateEvidenceRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    spec,
+    phase: "DVI_RESULT",
+    payload: dvi
+  });
   const drill = parseAuthorityDrillBinding({
     runId: spec.runId,
     authorityEvidenceBindingSha256:
       dvi?.drill?.authorityEvidenceBindingSha256,
     selectedEvidenceId: authorityEvidenceId,
     selectedEvidenceDigest: authoritySelectedEvidenceDigest,
-    alphaProposalDigest: requiredEnvironment(
-      environment,
-      "AUTHORITY_ALPHA_PROPOSAL_DIGEST",
-      64
-    ),
-    bravoProposalDigest: requiredEnvironment(
-      environment,
-      "AUTHORITY_BRAVO_PROPOSAL_DIGEST",
-      64
-    ),
-    alphaLogicalActionDigest: requiredEnvironment(
-      environment,
-      "AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST",
-      64
-    ),
-    bravoLogicalActionDigest: requiredEnvironment(
-      environment,
-      "AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST",
-      64
-    )
+    alphaProposalDigest: authorityAlphaProposalDigest,
+    bravoProposalDigest: authorityBravoProposalDigest,
+    alphaLogicalActionDigest: authorityAlphaLogicalActionDigest,
+    bravoLogicalActionDigest: authorityBravoLogicalActionDigest
   });
   const race = await runComponent(
     path.join(rootDir, "scripts/gate2-authority-race.js"),
@@ -237,24 +323,20 @@ export async function runIntegratedLiveDrill({
     ],
     authorityComponentEnvironment(environment, drill)
   );
+  appendIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: privateEvidenceRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    spec,
+    phase: "AUTHORITY_RACE_RESULT",
+    payload: race
+  });
   const recoveryEnvironment = recoveryComponentEnvironment(environment, {
-    RECOVERY_SOURCE_TENANT_ID: requiredEnvironment(
-      environment,
-      "AUTHORITY_TENANT_ID",
-      64
-    ),
+    RECOVERY_SOURCE_TENANT_ID: authorityTenantId,
     RECOVERY_SOURCE_RUN_ID: spec.runId,
-    RECOVERY_SOURCE_INCIDENT_ID: requiredEnvironment(
-      environment,
-      "AUTHORITY_INCIDENT_ID",
-      64
-    ),
+    RECOVERY_SOURCE_INCIDENT_ID: authorityIncidentId,
     RECOVERY_SOURCE_EVIDENCE_ID: authorityEvidenceId,
-    RECOVERY_SOURCE_RESOURCE_ID: requiredEnvironment(
-      environment,
-      "AUTHORITY_RESOURCE_ID",
-      160
-    ),
+    RECOVERY_SOURCE_RESOURCE_ID: authorityResourceId,
     RECOVERY_SOURCE_OPERATION_ID: race.winner?.operationId,
     RECOVERY_SOURCE_REQUEST_DIGEST: race.winner?.requestDigest,
     RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256:
@@ -268,17 +350,19 @@ export async function runIntegratedLiveDrill({
     [],
     recoveryEnvironment
   );
+  appendIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: privateEvidenceRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    spec,
+    phase: "RECOVERY_RESULT",
+    payload: recovery
+  });
   const privateEvidencePath = requiredEnvironment(
     environment,
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH",
     4096
   );
-  const privateEvidenceRootPath = requiredEnvironment(
-    environment,
-    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
-    4096
-  );
-  const forbiddenPrivateEvidenceRootPath = fs.realpathSync(rootDir);
   const privateEvidenceReceipt =
     persistIntegratedLiveDrillPrivateEvidence({
       destinationPath: privateEvidencePath,
@@ -291,11 +375,36 @@ export async function runIntegratedLiveDrill({
       authorityEvidenceId,
       authoritySelectedEvidenceDigest
     });
-  const candidate = buildIntegratedLiveDrillCandidateReceipt({
+  appendIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: privateEvidenceRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    spec,
+    phase: "PRIVATE_EVIDENCE_RESULT",
+    payload: privateEvidenceReceipt
+  });
+  const postRelease = await verifyRelease(spec, rootDir);
+  if (JSON.stringify(postRelease) !== JSON.stringify(preRelease)) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
+  }
+  const journalReceipt = appendIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: privateEvidenceRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    spec,
+    phase: "POST_RELEASE_VERIFICATION",
+    payload: postRelease
+  });
+  return buildIntegratedLiveDrillCandidateReceipt({
     spec,
     dvi,
     race,
     recovery,
+    journalPath,
+    journalRootPath: privateEvidenceRootPath,
+    journalReceipt,
+    journalIntentBindingSha256,
+    postRelease,
     privateEvidencePath,
     privateEvidenceRootPath,
     forbiddenPrivateEvidenceRootPath,
@@ -303,11 +412,6 @@ export async function runIntegratedLiveDrill({
     authorityEvidenceId,
     authoritySelectedEvidenceDigest
   });
-  const postRelease = await verifyRelease(spec, rootDir);
-  if (JSON.stringify(postRelease) !== JSON.stringify(preRelease)) {
-    throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
-  }
-  return candidate;
 }
 
 export async function main() {

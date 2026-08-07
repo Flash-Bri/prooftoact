@@ -16,12 +16,24 @@ export const INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_SCHEMA =
   "tideproof.highwater-drill-live-private-evidence.v1";
 export const INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA =
   "tideproof.highwater-drill-live-private-evidence-persistence.v1";
+export const INTEGRATED_LIVE_DRILL_JOURNAL_ENTRY_SCHEMA =
+  "tideproof.highwater-drill-live-journal-entry.v1";
+export const INTEGRATED_LIVE_DRILL_JOURNAL_RECEIPT_SCHEMA =
+  "tideproof.highwater-drill-live-journal-receipt.v1";
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const SHA1 = /^[0-9a-f]{40}$/;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const PRIVATE_EVIDENCE_MAX_BYTES = 8 * 1024 * 1024;
+const JOURNAL_PHASES = Object.freeze([
+  "PRE_PROVIDER_INTENT",
+  "DVI_RESULT",
+  "AUTHORITY_RACE_RESULT",
+  "RECOVERY_RESULT",
+  "PRIVATE_EVIDENCE_RESULT",
+  "POST_RELEASE_VERIFICATION"
+]);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -843,6 +855,373 @@ export function verifyIntegratedLiveDrillPrivateEvidence({
   return recomputed;
 }
 
+function journalEntryFileName(index, phase) {
+  return `${String(index).padStart(2, "0")}-${phase.toLowerCase().replaceAll("_", "-")}.json`;
+}
+
+function secureJournalDirectory({
+  journalPath,
+  evidenceRootPath,
+  forbiddenRootPath,
+  create = false
+}) {
+  const root = securePrivateEvidenceParent(
+    journalPath,
+    evidenceRootPath,
+    forbiddenRootPath
+  );
+  if (create) {
+    try {
+      fs.mkdirSync(journalPath, { mode: 0o700 });
+      syncDirectory(root.parentPath, root.parentStat);
+    } catch (cause) {
+      throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_CREATE_REJECTED", {
+        cause
+      });
+    }
+  }
+  let journalStat;
+  try {
+    journalStat = fs.lstatSync(journalPath);
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+  }
+  if (
+    !journalStat.isDirectory() ||
+    journalStat.isSymbolicLink() ||
+    journalStat.uid !== root.expectedUid ||
+    (journalStat.mode & 0o777) !== 0o700 ||
+    fs.realpathSync(journalPath) !== journalPath
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+  }
+  assertSamePrivateEvidenceParent(root.parentPath, root.parentStat);
+  return Object.freeze({ ...root, journalStat });
+}
+
+function readIntegratedLiveDrillJournal({
+  journalPath,
+  evidenceRootPath,
+  forbiddenRootPath,
+  spec
+}) {
+  const acceptedSpec = parseIntegratedLiveDrillSpec(spec);
+  if (
+    typeof journalPath !== "string" ||
+    path.basename(journalPath) !== `${acceptedSpec.runId}.journal`
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+  }
+  const secure = secureJournalDirectory({
+    journalPath,
+    evidenceRootPath,
+    forbiddenRootPath
+  });
+  assertSamePrivateEvidenceParent(journalPath, secure.journalStat);
+  const names = fs.readdirSync(journalPath).sort();
+  if (
+    names.length > JOURNAL_PHASES.length ||
+    names.some((name, index) =>
+      name !== journalEntryFileName(index, JOURNAL_PHASES[index]))
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+  }
+  const entries = [];
+  let previousEntrySha256 = null;
+  for (const [index, name] of names.entries()) {
+    const reread = rereadPrivateEvidence({
+      destinationPath: path.join(journalPath, name),
+      expectedUid: secure.expectedUid,
+      parentPath: journalPath,
+      parentStat: secure.journalStat
+    });
+    let parsed;
+    try {
+      parsed = JSON.parse(reread.bytes.toString("utf8"));
+    } catch {
+      throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+    }
+    const { entrySha256, ...body } = parsed ?? {};
+    if (
+      !exactKeys(parsed, [
+        "configDigest",
+        "entrySha256",
+        "index",
+        "payloadSha256",
+        "phase",
+        "previousEntrySha256",
+        "runId",
+        "schemaVersion",
+        "sourceBuildIdentitySha256",
+        "sourceCommit",
+        "treeDigest"
+      ]) ||
+      parsed.schemaVersion !== INTEGRATED_LIVE_DRILL_JOURNAL_ENTRY_SCHEMA ||
+      parsed.index !== index ||
+      parsed.phase !== JOURNAL_PHASES[index] ||
+      parsed.sourceCommit !== acceptedSpec.sourceCommit ||
+      parsed.treeDigest !== acceptedSpec.treeDigest ||
+      parsed.runId !== acceptedSpec.runId ||
+      parsed.configDigest !== acceptedSpec.configDigest ||
+      parsed.sourceBuildIdentitySha256 !==
+        sha256(acceptedSpec.sourceBuildIdentity) ||
+      parsed.previousEntrySha256 !== previousEntrySha256 ||
+      !SHA256.test(parsed.payloadSha256 ?? "") ||
+      !SHA256.test(entrySha256 ?? "") ||
+      entrySha256 !== sha256(canonicalJson(body)) ||
+      reread.bytes.toString("utf8") !== `${canonicalJson(parsed)}\n`
+    ) {
+      throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+    }
+    entries.push(parsed);
+    previousEntrySha256 = entrySha256;
+  }
+  assertSamePrivateEvidenceParent(journalPath, secure.journalStat);
+  return Object.freeze({
+    acceptedSpec,
+    entries: Object.freeze(entries),
+    secure
+  });
+}
+
+function integratedLiveDrillJournalReceipt({
+  journalPath,
+  acceptedSpec,
+  entries
+}) {
+  const phasePayloadSha256 = Object.freeze(Object.fromEntries(
+    entries.map((entry) => [entry.phase, entry.payloadSha256])
+  ));
+  const receipt = {
+    schemaVersion: INTEGRATED_LIVE_DRILL_JOURNAL_RECEIPT_SCHEMA,
+    sourceCommit: acceptedSpec.sourceCommit,
+    treeDigest: acceptedSpec.treeDigest,
+    runId: acceptedSpec.runId,
+    configDigest: acceptedSpec.configDigest,
+    sourceBuildIdentitySha256: sha256(acceptedSpec.sourceBuildIdentity),
+    journalPathSha256: sha256(journalPath),
+    entryCount: entries.length,
+    firstEntrySha256: entries[0]?.entrySha256 ?? null,
+    lastEntrySha256: entries.at(-1)?.entrySha256 ?? null,
+    phasePayloadSha256,
+    preProviderIntentDurableBeforeReturn: entries.length > 0,
+    entryFilesCreateOnly: true,
+    entryFilesSynced: true,
+    directoryEntriesSynced: true,
+    hashChainVerified: true,
+    journalDirectoryMode: "0700",
+    entryFileMode: "0600"
+  };
+  return Object.freeze({
+    ...receipt,
+    receiptSha256: sha256(canonicalJson(receipt))
+  });
+}
+
+function createJournalEntry({
+  journalPath,
+  secure,
+  acceptedSpec,
+  index,
+  payloadSha256
+}) {
+  const phase = JOURNAL_PHASES[index];
+  if (!phase || !SHA256.test(payloadSha256 ?? "")) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_ENTRY_REJECTED");
+  }
+  const existing = readIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: secure.parentPath,
+    forbiddenRootPath: secure.forbiddenRootPath,
+    spec: acceptedSpec
+  });
+  if (existing.entries.length !== index) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_SEQUENCE_REJECTED");
+  }
+  const body = {
+    schemaVersion: INTEGRATED_LIVE_DRILL_JOURNAL_ENTRY_SCHEMA,
+    index,
+    phase,
+    sourceCommit: acceptedSpec.sourceCommit,
+    treeDigest: acceptedSpec.treeDigest,
+    runId: acceptedSpec.runId,
+    configDigest: acceptedSpec.configDigest,
+    sourceBuildIdentitySha256: sha256(acceptedSpec.sourceBuildIdentity),
+    previousEntrySha256:
+      existing.entries.at(-1)?.entrySha256 ?? null,
+    payloadSha256
+  };
+  const entry = Object.freeze({
+    ...body,
+    entrySha256: sha256(canonicalJson(body))
+  });
+  const serialized = Buffer.from(`${canonicalJson(entry)}\n`, "utf8");
+  const temporaryPath = path.join(
+    secure.parentPath,
+    `.${acceptedSpec.runId}.journal-${index}.${process.pid}.` +
+      `${randomBytes(16).toString("hex")}.tmp`
+  );
+  const destinationPath = path.join(
+    journalPath,
+    journalEntryFileName(index, phase)
+  );
+  let descriptor;
+  let linked = false;
+  try {
+    assertSamePrivateEvidenceParent(secure.parentPath, secure.parentStat);
+    assertSamePrivateEvidenceParent(journalPath, secure.journalStat);
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600
+    );
+    fs.writeFileSync(descriptor, serialized);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    assertSamePrivateEvidenceParent(journalPath, secure.journalStat);
+    fs.linkSync(temporaryPath, destinationPath);
+    linked = true;
+    fs.unlinkSync(temporaryPath);
+    syncDirectory(journalPath, secure.journalStat);
+    syncDirectory(secure.parentPath, secure.parentStat);
+  } catch (cause) {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the first fail-closed error.
+      }
+    }
+    try {
+      fs.unlinkSync(temporaryPath);
+    } catch {
+      // The temporary link may already be gone.
+    }
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_WRITE_REJECTED", {
+      cause,
+      linked
+    });
+  }
+  return entry;
+}
+
+export function startIntegratedLiveDrillJournal({
+  journalPath,
+  evidenceRootPath,
+  forbiddenRootPath,
+  spec,
+  intentBindingSha256
+}) {
+  const acceptedSpec = parseIntegratedLiveDrillSpec(spec);
+  if (
+    path.basename(journalPath ?? "") !== `${acceptedSpec.runId}.journal` ||
+    !SHA256.test(intentBindingSha256 ?? "")
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+  }
+  const secure = secureJournalDirectory({
+    journalPath,
+    evidenceRootPath,
+    forbiddenRootPath,
+    create: true
+  });
+  createJournalEntry({
+    journalPath,
+    secure: Object.freeze({
+      ...secure,
+      forbiddenRootPath
+    }),
+    acceptedSpec,
+    index: 0,
+    payloadSha256: intentBindingSha256
+  });
+  return verifyIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath,
+    forbiddenRootPath,
+    spec: acceptedSpec,
+    expectedPhasePayloadSha256: {
+      PRE_PROVIDER_INTENT: intentBindingSha256
+    }
+  });
+}
+
+export function appendIntegratedLiveDrillJournal({
+  journalPath,
+  evidenceRootPath,
+  forbiddenRootPath,
+  spec,
+  phase,
+  payload
+}) {
+  const current = readIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath,
+    forbiddenRootPath,
+    spec
+  });
+  const index = current.entries.length;
+  if (phase !== JOURNAL_PHASES[index] || payload === undefined) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_SEQUENCE_REJECTED");
+  }
+  createJournalEntry({
+    journalPath,
+    secure: Object.freeze({
+      ...current.secure,
+      forbiddenRootPath
+    }),
+    acceptedSpec: current.acceptedSpec,
+    index,
+    payloadSha256: sha256(canonicalJson(payload))
+  });
+  return verifyIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath,
+    forbiddenRootPath,
+    spec: current.acceptedSpec
+  });
+}
+
+export function verifyIntegratedLiveDrillJournal({
+  journalPath,
+  evidenceRootPath,
+  forbiddenRootPath,
+  spec,
+  receipt = null,
+  expectedPhasePayloadSha256 = null,
+  requireComplete = false
+}) {
+  const current = readIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath,
+    forbiddenRootPath,
+    spec
+  });
+  if (
+    (requireComplete && current.entries.length !== JOURNAL_PHASES.length) ||
+    (expectedPhasePayloadSha256 !== null &&
+      Object.entries(expectedPhasePayloadSha256).some(([phase, digest]) =>
+        !SHA256.test(digest ?? "") ||
+        current.entries.find((entry) => entry.phase === phase)
+          ?.payloadSha256 !== digest))
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_REJECTED");
+  }
+  const recomputed = integratedLiveDrillJournalReceipt({
+    journalPath,
+    acceptedSpec: current.acceptedSpec,
+    entries: current.entries
+  });
+  if (receipt !== null && canonicalJson(receipt) !== canonicalJson(recomputed)) {
+    throw new Error("INTEGRATED_LIVE_DRILL_JOURNAL_RECEIPT_REJECTED");
+  }
+  return recomputed;
+}
+
 function acceptedPrivateEvidence(receipt, spec, selectedBinding, digests) {
   if (
     !exactKeys(receipt, [
@@ -897,6 +1276,11 @@ export function buildIntegratedLiveDrillCandidateReceipt({
   dvi,
   race,
   recovery,
+  journalPath,
+  journalRootPath,
+  journalReceipt,
+  journalIntentBindingSha256,
+  postRelease,
   privateEvidencePath,
   privateEvidenceRootPath,
   forbiddenPrivateEvidenceRootPath,
@@ -923,6 +1307,24 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       authorityEvidenceId,
       authoritySelectedEvidenceDigest
     });
+  const verifiedJournalReceipt = verifyIntegratedLiveDrillJournal({
+    journalPath,
+    evidenceRootPath: journalRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    receipt: journalReceipt,
+    spec: acceptedSpec,
+    requireComplete: true,
+    expectedPhasePayloadSha256: {
+      PRE_PROVIDER_INTENT: journalIntentBindingSha256,
+      DVI_RESULT: componentDigests.dvi,
+      AUTHORITY_RACE_RESULT: componentDigests.authorityRace,
+      RECOVERY_RESULT: componentDigests.recovery,
+      PRIVATE_EVIDENCE_RESULT: sha256(canonicalJson(
+        verifiedPrivateEvidenceReceipt
+      )),
+      POST_RELEASE_VERIFICATION: sha256(canonicalJson(postRelease))
+    }
+  });
   if (
     !acceptedDvi(dvi, acceptedSpec, selectedBinding) ||
     !acceptedRace(race, acceptedSpec, dvi) ||
@@ -956,6 +1358,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     managedMcpCalledExactlyOnce: true,
     unboundPrincipalDeniedBeforeMcp: true,
     bothRecoveryAuditsCommitted: true,
+    preProviderJournalCurrentBytesBound: true,
     privateEvidenceCurrentBytesBound: true,
     fixedTopLevelProviderOperationCount: true,
     operationalCapabilityReturned: false,
@@ -975,6 +1378,14 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       sourceControlReceiptSha256:
         verifiedPrivateEvidenceReceipt.receiptSha256,
       currentBytesBound: true
+    },
+    preProviderJournal: {
+      firstEntrySha256: verifiedJournalReceipt.firstEntrySha256,
+      lastEntrySha256: verifiedJournalReceipt.lastEntrySha256,
+      sourceControlReceiptSha256: verifiedJournalReceipt.receiptSha256,
+      entryCount: verifiedJournalReceipt.entryCount,
+      currentBytesBound: true,
+      independentlyAttested: false
     },
     dvi: {
       authorityEvidenceBindingSha256:
@@ -1030,6 +1441,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       accepted: false,
       finalReceiptSchema: INTEGRATED_LIVE_DRILL_SCHEMA,
       deploymentAttestationBound: false,
+      preProviderJournalPersisted: false,
       privateEvidencePersisted: false,
       crashSafeRecoveryProven: false,
       blockers: [
@@ -1044,7 +1456,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     invariantViolations: 0,
     providerBacked: true,
     claimBoundary:
-      "This sanitized candidate summarizes one provider-backed integrated synthetic component run whose CockroachDB DVI selection, five observed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. A source-local helper writes a raw private component bundle outside the Git checkout and the candidate binds the currently reread bytes plus an unkeyed source-control receipt digest. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; an independently attested pre-provider journal and private-evidence finalizer remain mandatory; crash-safe single-call recovery is not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized candidate summarizes one provider-backed integrated synthetic component run whose CockroachDB DVI selection, five observed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. Before the first provider component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal and bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; crash-safe single-call recovery is not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,
