@@ -1447,6 +1447,9 @@ const SOURCE_MARKERS = Object.freeze({
     "verifyIntegratedLiveDrillJournal",
     "persistOrReuseIntegratedLiveDrillRecoveryBundle",
     "INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_RECEIPT_SCHEMA",
+    "canonicalJson(parsed.signedBundle) !== canonicalJson(persistedBundle)",
+    "creationProtocolObserved",
+    "fileDataSynced",
     "PRE_PROVIDER_INTENT",
     "fs.constants.O_NOFOLLOW",
     "fs.linkSync(temporaryPath, destinationPath)",
@@ -1496,7 +1499,9 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "recovery-bundle-persistence-tests": Object.freeze([
     "signed recovery bundle survives restart with the exact first signature bytes",
-    "persisted signed recovery bundle rejects tamper and changed canonical input"
+    "persisted signed recovery bundle rejects tamper and changed canonical input",
+    "pre-existing exact bytes attest only current reuse durability",
+    "reuse rejects a pathname replaced while its original inode is read"
   ]),
   "local-full-drill-harness": Object.freeze([
     "LOCAL_FULL_DRILL_CLAIM_BOUNDARY",
@@ -1790,6 +1795,7 @@ const SOURCE_MARKERS = Object.freeze({
     "selectedEvidenceBindingSha256",
     "RECOVERY_AUTHORITY_INVARIANT_VIOLATION",
     "RECOVERY_SIGNATURE_INVALID",
+    "bytes.toString(\"base64\") !== text",
     "verifyRecoveryBundleSourceSignature",
     "mcp_private.recovery_bundles_v2",
     "databaseClientMustBeDiscarded(error)",

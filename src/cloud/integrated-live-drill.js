@@ -296,7 +296,9 @@ function acceptedRecovery(recovery, spec, race) {
       "atomicCreateOnly",
       "bundleDigest",
       "configDigest",
+      "creationProtocolObserved",
       "directoryEntrySynced",
+      "fileDataSynced",
       "fileByteLength",
       "fileMode",
       "parentDirectoryMode",
@@ -328,13 +330,18 @@ function acceptedRecovery(recovery, spec, race) {
     Number.isSafeInteger(signedBundlePersistence.fileByteLength) &&
     signedBundlePersistence.fileByteLength > 0 &&
     signedBundlePersistence.fileByteLength <= RECOVERY_BUNDLE_MAX_BYTES &&
-    signedBundlePersistence.atomicCreateOnly === true &&
     signedBundlePersistence.fileMode === "0600" &&
     signedBundlePersistence.parentDirectoryMode === "0700" &&
-    signedBundlePersistence.sameFilesystemAtomicLink === true &&
     signedBundlePersistence.directoryEntrySynced === true &&
+    signedBundlePersistence.fileDataSynced === true &&
     signedBundlePersistence.rereadVerified === true &&
     typeof signedBundlePersistence.reusedExisting === "boolean" &&
+    signedBundlePersistence.creationProtocolObserved ===
+      !signedBundlePersistence.reusedExisting &&
+    signedBundlePersistence.atomicCreateOnly ===
+      !signedBundlePersistence.reusedExisting &&
+    signedBundlePersistence.sameFilesystemAtomicLink ===
+      !signedBundlePersistence.reusedExisting &&
     signedBundlePersistence.receiptSha256 === sha256(canonicalJson(
       Object.fromEntries(Object.entries(signedBundlePersistence).filter(
         ([key]) => key !== "receiptSha256"
@@ -592,7 +599,8 @@ function rereadPrivateEvidence({
   expectedBytes = null,
   expectedUid,
   parentPath,
-  parentStat
+  parentStat,
+  syncDurability = false
 }) {
   assertSamePrivateEvidenceParent(parentPath, parentStat);
   let descriptor;
@@ -616,6 +624,9 @@ function rereadPrivateEvidence({
       );
     }
     const reread = fs.readFileSync(descriptor);
+    if (syncDurability) {
+      fs.fsyncSync(descriptor);
+    }
     const after = fs.fstatSync(descriptor);
     assertSamePrivateEvidenceParent(parentPath, parentStat);
     if (
@@ -627,6 +638,36 @@ function rereadPrivateEvidence({
       throw new Error(
         "INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED"
       );
+    }
+    const assertPathStillNamesOpenedFile = () => {
+      let currentPath;
+      try {
+        currentPath = fs.lstatSync(destinationPath);
+      } catch {
+        throw new Error(
+          "INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED"
+        );
+      }
+      if (
+        !currentPath.isFile() ||
+        currentPath.isSymbolicLink() ||
+        currentPath.dev !== after.dev ||
+        currentPath.ino !== after.ino ||
+        currentPath.uid !== expectedUid ||
+        (currentPath.mode & 0o777) !== 0o600 ||
+        currentPath.nlink !== 1 ||
+        currentPath.size !== after.size
+      ) {
+        throw new Error(
+          "INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED"
+        );
+      }
+    };
+    assertPathStillNamesOpenedFile();
+    if (syncDurability) {
+      syncDirectory(parentPath, parentStat);
+      assertSamePrivateEvidenceParent(parentPath, parentStat);
+      assertPathStillNamesOpenedFile();
     }
     return Object.freeze({
       byteLength: before.size,
@@ -660,10 +701,12 @@ function recoveryBundlePersistenceReceipt({
     signedBundleSha256: envelope.signedBundleSha256,
     fileByteLength,
     pathSha256: sha256(destinationPath),
-    atomicCreateOnly: true,
+    creationProtocolObserved: !reusedExisting,
+    atomicCreateOnly: !reusedExisting,
     fileMode: "0600",
     parentDirectoryMode: "0700",
-    sameFilesystemAtomicLink: true,
+    sameFilesystemAtomicLink: !reusedExisting,
+    fileDataSynced: true,
     directoryEntrySynced: true,
     rereadVerified: true,
     reusedExisting
@@ -688,7 +731,8 @@ function readIntegratedLiveDrillRecoveryBundle({
       destinationPath,
       expectedUid: secure.expectedUid,
       parentPath: secure.parentPath,
-      parentStat: secure.parentStat
+      parentStat: secure.parentStat,
+      syncDurability: true
     });
   } catch (cause) {
     throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED", {
@@ -742,6 +786,11 @@ function readIntegratedLiveDrillRecoveryBundle({
     throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED", {
       cause
     });
+  }
+  if (
+    canonicalJson(parsed.signedBundle) !== canonicalJson(persistedBundle)
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED");
   }
   if (persistedBundle.bundleDigest !== candidateBundle.bundleDigest) {
     throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_MISMATCH");
@@ -1761,7 +1810,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     invariantViolations: 0,
     providerBacked: false,
     claimBoundary:
-      "This sanitized candidate summarizes one runner-observed integrated synthetic component result whose claimed CockroachDB DVI selection, five claimed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. The candidate does not independently establish that any component receipt came from a provider, so providerBacked remains false. Before publication, the recovery runner create-only persists and rereads an owner-only canonical envelope containing the exact signed recovery bundle; a later invocation with the same unsigned bundle must reuse those first signature bytes. The current file bytes are bound, but actual restart reuse and crash continuity are not proven. Before the first component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal, signed-bundle, and private-bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; provider-backed restart-stable signed-bundle reuse and crash-safe single-call recovery are not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, provider execution, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized candidate summarizes one runner-observed integrated synthetic component result whose claimed CockroachDB DVI selection, five claimed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. The candidate does not independently establish that any component receipt came from a provider, so providerBacked remains false. Before publication, the recovery runner create-only persists and rereads an owner-only canonical envelope containing the exact signed recovery bundle; a later invocation with the same unsigned bundle must reuse those first signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, while its receipt marks the original create/link protocol unobserved. The current file bytes are bound, but actual restart reuse and crash continuity are not proven. Before the first component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal, signed-bundle, and private-bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; provider-backed restart-stable signed-bundle reuse and crash-safe single-call recovery are not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, provider execution, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,12 +10,14 @@ import {
   integratedSourceBuildIdentity,
   persistOrReuseIntegratedLiveDrillRecoveryBundle
 } from "../src/cloud/integrated-live-drill.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 import { normalizedRecoveryBundleFor } from
   "../src/cloud/recovery-store.js";
 import { createSyntheticRecoverySigner } from
   "../scripts/lib/synthetic-recovery-signer.js";
 
 const runId = "11111111-1111-4111-8111-111111111111";
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const specWithoutIdentity = {
   schemaVersion: INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   sourceCommit: "a".repeat(40),
@@ -72,6 +75,42 @@ function privateDirectory() {
   return fs.realpathSync(directory);
 }
 
+test("signed recovery bundle accepts only the exact recovery-child path", () => {
+  const directory = privateDirectory();
+  const signer = createSyntheticRecoverySigner();
+  const trustedPublisherKeys = {
+    [signer.publisherKeyId]: signer.publicKeySpkiBase64
+  };
+  const argumentsFor = (destinationPath) => ({
+    destinationPath,
+    evidenceRootPath: directory,
+    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    spec,
+    signedBundle: signer.sign(unsignedBundle),
+    trustedPublisherKeys
+  });
+  try {
+    assert.throws(
+      () => persistOrReuseIntegratedLiveDrillRecoveryBundle(argumentsFor(
+        path.join(directory, "wrong.signed-recovery-bundle.json")
+      )),
+      /INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED/u
+    );
+    assert.throws(
+      () => persistOrReuseIntegratedLiveDrillRecoveryBundle(argumentsFor(
+        path.join(
+          directory,
+          "nested",
+          `${runId}.signed-recovery-bundle.json`
+        )
+      )),
+      /INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_REJECTED/u
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("signed recovery bundle survives restart with the exact first signature bytes", () => {
   const directory = privateDirectory();
   const destinationPath = path.join(
@@ -124,9 +163,17 @@ test("signed recovery bundle survives restart with the exact first signature byt
       normalizedFirst.signatureDigest
     );
     assert.equal(fs.statSync(destinationPath).mode & 0o777, 0o600);
+    assert.equal(first.receipt.creationProtocolObserved, true);
     assert.equal(first.receipt.atomicCreateOnly, true);
+    assert.equal(first.receipt.sameFilesystemAtomicLink, true);
+    assert.equal(first.receipt.fileDataSynced, true);
     assert.equal(first.receipt.directoryEntrySynced, true);
     assert.equal(first.receipt.rereadVerified, true);
+    assert.equal(restarted.receipt.creationProtocolObserved, false);
+    assert.equal(restarted.receipt.atomicCreateOnly, false);
+    assert.equal(restarted.receipt.sameFilesystemAtomicLink, false);
+    assert.equal(restarted.receipt.fileDataSynced, true);
+    assert.equal(restarted.receipt.directoryEntrySynced, true);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -154,6 +201,7 @@ test("persisted signed recovery bundle rejects tamper and changed canonical inpu
     persistOrReuseIntegratedLiveDrillRecoveryBundle(
       argumentsFor(signer.sign(unsignedBundle))
     );
+    const originalBytes = fs.readFileSync(destinationPath);
     assert.throws(
       () => persistOrReuseIntegratedLiveDrillRecoveryBundle(
         argumentsFor(signer.sign({
@@ -163,6 +211,33 @@ test("persisted signed recovery bundle rejects tamper and changed canonical inpu
       ),
       /INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_MISMATCH/u
     );
+    for (const mutate of [
+      (bundle) => {
+        bundle.authorityTransferred = true;
+        bundle.requiresFreshAuthorization = false;
+        bundle.unsignedExtension = "not-signed";
+      },
+      (bundle) => { bundle.sourceCommitTs = "2026-08-07T12:00:00Z"; },
+      (bundle) => { bundle.bundleDigest = bundle.bundleDigest.toUpperCase(); },
+      (bundle) => { bundle.sourceSignatureBase64 += "="; }
+    ]) {
+      const forgedEnvelope = JSON.parse(originalBytes.toString("utf8"));
+      mutate(forgedEnvelope.signedBundle);
+      forgedEnvelope.signedBundleSha256 = sha256(
+        canonicalJson(forgedEnvelope.signedBundle)
+      );
+      fs.writeFileSync(
+        destinationPath,
+        `${canonicalJson(forgedEnvelope)}\n`
+      );
+      assert.throws(
+        () => persistOrReuseIntegratedLiveDrillRecoveryBundle(
+          argumentsFor(signer.sign(unsignedBundle))
+        ),
+        /INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED/u
+      );
+    }
+    fs.writeFileSync(destinationPath, originalBytes);
     fs.appendFileSync(destinationPath, " ");
     assert.throws(
       () => persistOrReuseIntegratedLiveDrillRecoveryBundle(
@@ -171,6 +246,107 @@ test("persisted signed recovery bundle rejects tamper and changed canonical inpu
       /INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED/u
     );
   } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pre-existing exact bytes attest only current reuse durability", () => {
+  const directory = privateDirectory();
+  const destinationPath = path.join(
+    directory,
+    `${runId}.signed-recovery-bundle.json`
+  );
+  const signer = createSyntheticRecoverySigner();
+  const trustedPublisherKeys = {
+    [signer.publisherKeyId]: signer.publicKeySpkiBase64
+  };
+  const input = {
+    destinationPath,
+    evidenceRootPath: directory,
+    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    spec,
+    signedBundle: signer.sign(unsignedBundle),
+    trustedPublisherKeys
+  };
+  const originalFsyncSync = fs.fsyncSync;
+  try {
+    persistOrReuseIntegratedLiveDrillRecoveryBundle(input);
+    const exactBytes = fs.readFileSync(destinationPath);
+    fs.unlinkSync(destinationPath);
+    fs.writeFileSync(destinationPath, exactBytes, {
+      flag: "wx",
+      mode: 0o600
+    });
+    let fileSyncs = 0;
+    let directorySyncs = 0;
+    fs.fsyncSync = function countedFsync(descriptor) {
+      const stat = fs.fstatSync(descriptor);
+      if (stat.isDirectory()) {
+        directorySyncs += 1;
+      } else {
+        fileSyncs += 1;
+      }
+      return originalFsyncSync.call(fs, descriptor);
+    };
+    const reused = persistOrReuseIntegratedLiveDrillRecoveryBundle({
+      ...input,
+      signedBundle: signer.sign(unsignedBundle)
+    });
+    assert.equal(reused.receipt.reusedExisting, true);
+    assert.equal(reused.receipt.creationProtocolObserved, false);
+    assert.equal(reused.receipt.atomicCreateOnly, false);
+    assert.equal(reused.receipt.sameFilesystemAtomicLink, false);
+    assert.equal(reused.receipt.fileDataSynced, true);
+    assert.equal(reused.receipt.directoryEntrySynced, true);
+    assert.equal(fileSyncs >= 1, true);
+    assert.equal(directorySyncs >= 1, true);
+  } finally {
+    fs.fsyncSync = originalFsyncSync;
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("reuse rejects a pathname replaced while its original inode is read", () => {
+  const directory = privateDirectory();
+  const destinationPath = path.join(
+    directory,
+    `${runId}.signed-recovery-bundle.json`
+  );
+  const signer = createSyntheticRecoverySigner();
+  const trustedPublisherKeys = {
+    [signer.publisherKeyId]: signer.publicKeySpkiBase64
+  };
+  const argumentsFor = () => ({
+    destinationPath,
+    evidenceRootPath: directory,
+    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    spec,
+    signedBundle: signer.sign(unsignedBundle),
+    trustedPublisherKeys
+  });
+  const originalReadFileSync = fs.readFileSync;
+  try {
+    persistOrReuseIntegratedLiveDrillRecoveryBundle(argumentsFor());
+    let replaced = false;
+    fs.readFileSync = function readAndReplace(target, ...args) {
+      const bytes = originalReadFileSync.call(fs, target, ...args);
+      if (!replaced && typeof target === "number") {
+        replaced = true;
+        fs.unlinkSync(destinationPath);
+        fs.writeFileSync(destinationPath, bytes, {
+          flag: "wx",
+          mode: 0o600
+        });
+      }
+      return bytes;
+    };
+    assert.throws(
+      () => persistOrReuseIntegratedLiveDrillRecoveryBundle(argumentsFor()),
+      /INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED/u
+    );
+    assert.equal(replaced, true);
+  } finally {
+    fs.readFileSync = originalReadFileSync;
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });

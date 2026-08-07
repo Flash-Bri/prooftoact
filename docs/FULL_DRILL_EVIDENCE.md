@@ -355,11 +355,17 @@ official release.
   envelope in the owner-only evidence root through a synced temporary inode and
   hard link, syncs the directory entry, and rereads the final file. A later
   invocation verifies the persisted signature and exact release/run envelope
-  and reuses those bytes when the unsigned bundle digest matches.
+  and reuses those bytes when the unsigned bundle digest matches. Reuse fsyncs
+  the validated file and parent again, verifies that the pathname still names
+  the opened inode, and marks the original create/link protocol unobserved
+  rather than inventing historical durability.
 - Regression/preventive control: focused tests cover separate randomized
-  signatures, exact first-byte reuse, changed canonical input, byte tamper,
-  mode-0600 output, mode-0700 parent ownership, and the recovery-child path
-  allowlist. Candidate composition requires the bounded persistence receipt.
+  signatures, exact first-byte reuse, changed canonical input, altered
+  authority markers, unknown nested fields, equivalent timestamps, uppercase
+  digests, noncanonical base64 padding, byte tamper, pre-existing exact bytes,
+  pathname replacement, mode-0600 output, mode-0700 parent ownership, and the
+  recovery-child path allowlist. Candidate composition requires the bounded
+  persistence receipt.
 - Verification: focused recovery-store, persistence, and integrated-drill tests
   plus release security, proof, privacy, and claim gates must pass on the exact
   repaired head. No provider execution is implied.
@@ -656,7 +662,7 @@ to `npm run gate1:security`; keep the JSON and
 them only to the two recovery runners. Never record the private key, database
 passwords, or MCP key in a shell transcript or evidence artifact.
 
-Both runners require these exact private inputs:
+Both runners require these exact shared private inputs:
 
 | Input | Required source |
 | --- | --- |
@@ -676,11 +682,6 @@ Both runners require these exact private inputs:
 | `TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT` | The canonical public-root JSON prepared before bootstrap |
 | `TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT` | The same commitment inserted during primary security bootstrap |
 | `RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64` | The separately held matching P-256 private key |
-| `TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC` | Exact canonical integrated spec supplied by the source-controlled orchestrator |
-| `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT` | Canonical process-owned mode-0700 root outside the Git checkout |
-| `TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH` | Exact sibling `<run-id>.signed-recovery-bundle.json` path under that root |
-| `TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT` | Canonical Git checkout root that the private path must not enter |
-
 `npm run gate1:recovery` additionally requires the recovery administrator URL
 as `RECOVERY_DATABASE_URL` and `RECOVERY_PUBLISHER_PASSWORD` because that
 component creates and narrows the disposable recovery database. Optional
@@ -688,7 +689,16 @@ component creates and narrows the disposable recovery database. Optional
 recorded as private operator inputs; otherwise the runner derives them.
 `npm run gate1:recovery-broker` instead requires the already narrowed
 `RECOVERY_PUBLISHER_DATABASE_URL`, `MCP_API_KEY`, and the exact immutable
-`SOURCE_BUILD_IDENTITY`.
+`SOURCE_BUILD_IDENTITY`. When that broker is invoked by the integrated-live
+orchestrator, it alone also requires these source-controlled persistence
+bindings; `gate1:recovery` does not consume them:
+
+| Broker-only integrated input | Required source |
+| --- | --- |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC` | Exact canonical integrated spec supplied by the source-controlled orchestrator |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT` | Canonical process-owned mode-0700 root outside the Git checkout |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH` | Exact sibling `<run-id>.signed-recovery-bundle.json` path under that root |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT` | Canonical Git checkout root that the private path must not enter |
 
 The nine `RECOVERY_SOURCE_*` values are one indivisible binding. Do not copy
 the winner operation and request digest onto tenant, incident, evidence, or

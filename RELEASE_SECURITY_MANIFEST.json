@@ -276,7 +276,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "5cf79efebf84a9f4e9ce675ca47e844ac28c02d881f7574d9c63c33e135acea5"
+      "sha256": "16e10be2e0d0173726ab712bbb3a404fc4e9ec208f87680eb4ee3c58ed80bf0f"
     },
     {
       "id": "database-security-posture",
@@ -366,7 +366,7 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "83c987796e06a6fa18a02a548b8c502aaa4f7290160570ea7322c6ddcf599d87"
+      "sha256": "3a73cd9a3a476f84953b49aef7093989e3dbd2c8a3a49e78bb62207f6b0f31c7"
     },
     {
       "id": "integrated-live-drill-runner",
@@ -378,13 +378,13 @@
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "a938da1bb9122b179ee9eedadb47eb30195f60bbdb5b3e3448a7c80e9daf2d95"
+      "sha256": "34bfd46cba5c0072024fc2f191bea87b8a0a1283bf04859e9dadd1e3e1985d17"
     },
     {
       "id": "recovery-bundle-persistence-tests",
       "path": "test/recovery-bundle-persistence.test.js",
       "role": "RESTART_STABLE_SIGNED_BUNDLE_SOURCE_VERIFICATION",
-      "sha256": "e3aeebee89742081d19f83b24e7d55b2f503cbbc3fd16fb43f27a548bbbfa4a2"
+      "sha256": "11b1b33b7dfe04052bf68f1dc2b8e88daae90b1c1ead8293f9a51d126031c3b6"
     },
     {
       "id": "local-full-drill-harness",
@@ -534,7 +534,7 @@
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "d724e1205fd85b54c591988f2d6f80c1d7a3de5bd3077ddb7e0edccde8125574"
+      "sha256": "a900d90f6fd9580dd10428c12f032188313edc9cbb7dc16ff4e1a41b248329bf"
     },
     {
       "id": "recovery-store-tests",

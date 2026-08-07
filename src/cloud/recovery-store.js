@@ -380,8 +380,7 @@ function requireBase64(value, name) {
   const bytes = Buffer.from(text, "base64");
   if (
     bytes.length === 0 ||
-    bytes.toString("base64").replace(/=+$/u, "") !==
-      text.replace(/=+$/u, "")
+    bytes.toString("base64") !== text
   ) {
     throw new TypeError(`${name} must be canonical base64`);
   }

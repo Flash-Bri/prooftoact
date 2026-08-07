@@ -313,10 +313,12 @@ function components() {
     signedBundleSha256: "b".repeat(64),
     fileByteLength: 2048,
     pathSha256: "c".repeat(64),
+    creationProtocolObserved: true,
     atomicCreateOnly: true,
     fileMode: "0600",
     parentDirectoryMode: "0700",
     sameFilesystemAtomicLink: true,
+    fileDataSynced: true,
     directoryEntrySynced: true,
     rereadVerified: true,
     reusedExisting: false

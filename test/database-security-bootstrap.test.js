@@ -737,7 +737,11 @@ test("recovery storage enforces one row per exact broker lookup identity", async
 });
 
 test("recovery operator contract enumerates every exact private input", async () => {
-  const source = await readFile(fullDrillEvidenceUrl, "utf8");
+  const [source, recoveryRunner, brokerRunner] = await Promise.all([
+    readFile(fullDrillEvidenceUrl, "utf8"),
+    readFile(recoveryScriptUrls[0], "utf8"),
+    readFile(recoveryScriptUrls[1], "utf8")
+  ]);
   for (const input of [
     "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
     "PRIMARY_AUDIT_DATABASE_URL",
@@ -777,6 +781,17 @@ test("recovery operator contract enumerates every exact private input", async ()
   assert.match(source, /The nine `RECOVERY_SOURCE_\*` values/u);
   assert.match(source, /all 18[\s\S]*managed base-table read probes/u);
   assert.match(source, /administrator URL/u);
+  assert.match(source, /exact shared private inputs/u);
+  assert.match(source, /broker is invoked by the integrated-live[\s\S]*it alone also requires/u);
+  for (const input of [
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT"
+  ]) {
+    assert.equal(brokerRunner.includes(input), true, `broker:${input}`);
+    assert.equal(recoveryRunner.includes(input), false, `recovery:${input}`);
+  }
 });
 
 test("recovery broker verifies audit events only through the narrow resolver", async () => {

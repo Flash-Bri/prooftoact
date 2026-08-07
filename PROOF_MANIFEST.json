@@ -199,7 +199,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "e7aacdd36efe1ec958f01169e33d0bab5c5747a35ce1bbc630c0f6324854f366",
+      "sha256": "b5f66918189e8f3497a12b5e5b57efedbc4b898987658bd822847001d8683667",
       "kind": "boundary-ledger"
     },
     {
@@ -283,7 +283,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "29c23650b9e84c6485ad4afedf567ad766cb2fd6e615a1b3940f46bd4bae242f",
+      "sha256": "3c15d7a0a9696b1e01b3514a509b838e5eef88854a17faff2145c76a5b2f5542",
       "kind": "boundary-ledger"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "83c987796e06a6fa18a02a548b8c502aaa4f7290160570ea7322c6ddcf599d87",
+      "sha256": "3a73cd9a3a476f84953b49aef7093989e3dbd2c8a3a49e78bb62207f6b0f31c7",
       "kind": "verification-code"
     },
     {
@@ -379,7 +379,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "a938da1bb9122b179ee9eedadb47eb30195f60bbdb5b3e3448a7c80e9daf2d95",
+      "sha256": "34bfd46cba5c0072024fc2f191bea87b8a0a1283bf04859e9dadd1e3e1985d17",
       "kind": "verification-code"
     },
     {
@@ -445,7 +445,7 @@
     {
       "id": "recovery-bundle-persistence-tests",
       "path": "test/recovery-bundle-persistence.test.js",
-      "sha256": "e3aeebee89742081d19f83b24e7d55b2f503cbbc3fd16fb43f27a548bbbfa4a2",
+      "sha256": "11b1b33b7dfe04052bf68f1dc2b8e88daae90b1c1ead8293f9a51d126031c3b6",
       "kind": "verification-code"
     },
     {
@@ -463,7 +463,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "4d697a843497d7859fcd28d6fb80ff89cd5eda2844c0eaa4d98e005bcd7900b7",
+      "sha256": "e1f39f95676f8c6a8bcca31a3a816872a66890700f9bb91d191f9be9577b1071",
       "kind": "boundary-ledger"
     },
     {
@@ -601,7 +601,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "b58674ca401af3033baaa9bbf3d3505600e36715e5c37445f28cc8c8186d9931",
+      "sha256": "d0dd920611453f981c7b3bf063049769e1b1bd02361fc18cf1004c237edeae0d",
       "kind": "boundary-ledger"
     },
     {
@@ -613,7 +613,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "1e0bee17aa1c35738b2b7c6b29f7cf53493ee87d58c43a5c80b6ce25b8dd73e7",
+      "sha256": "18fd60d2e0c2c73fa83a8cfeb83ff7334602c839612f8651bf2c2231094b3289",
       "kind": "verification-code"
     },
     {
@@ -625,7 +625,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "5b917fa7572ea8fae7325d1e13c9bc1d3a45912266fe7fbc2b189e6ace53cb7a",
+      "sha256": "2076c4750e1301ceca015743aaaded88caa4eb4e055d3cadb7f1c753f47cdc80",
       "kind": "boundary-ledger"
     },
     {
@@ -718,7 +718,7 @@
       "id": "full-highwater-drills",
       "claim": "The approved 100+1 high-water target binds 100 deterministic offline specifications plus one exact-release provider-backed integrated drill.",
       "currentStatus": "Partial; the recomputing offline receipt passes 100 unique runs and 1,100 invariant evaluations with zero violations, while the +1 provider execution and acceptance review remain pending",
-      "claimsLedgerRowSha256": "44f0831fd82e51cc49a887a2c278f4977da58d755cc4dd826e79381684c4af1f",
+      "claimsLedgerRowSha256": "2ad642bd4dc783b46da56d1320a7b945b009dd0ced5de3aa0057af728856febe",
       "proofState": "PARTIAL",
       "artifacts": [
         "full-drill-evidence",
@@ -732,7 +732,7 @@
         "local-full-drill-verifier",
         "recovery-bundle-persistence-tests"
       ],
-      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Before publication it create-only persists and verifies an owner-only canonical envelope containing the exact normalized signed recovery bundle; a later invocation with the same unsigned bundle must reuse the first randomized P-256 signature bytes. Current bytes are source-bound, but provider-backed restart reuse and crash continuity remain unproven. One negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in the same canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. The candidate explicitly leaves signed deployment attestation, independent journal/private-evidence retention and recomputation review, provider-backed restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending.",
+      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Before publication it create-only persists and verifies an owner-only canonical envelope containing the exact normalized signed recovery bundle; a later invocation with the same unsigned bundle must reuse the first randomized P-256 signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, but explicitly does not claim that invocation observed the original create/link protocol. Current bytes are source-bound, but provider-backed restart reuse and crash continuity remain unproven. One negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in the same canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. The candidate explicitly leaves signed deployment attestation, independent journal/private-evidence retention and recomputation review, provider-backed restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending.",
       "remainingRequirements": [
         "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, one canonical exact-winner recovery bundle, one continuous digest-bound Managed MCP session, bounded cleanup, and zero invariant violations."
       ]
