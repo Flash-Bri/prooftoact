@@ -118,6 +118,14 @@ Acceptance additionally requires:
   tenant/retrieval prefix spans;
 - current cost controls and the exact AWS account, CloudFormation-managed role,
   and observed STS caller triple validated before any Lambda invocation;
+- an exact top-level operation ledger for one STS identity read, one
+  CloudFormation role-resource read, five Lambda invokes, one DVI component
+  run, one authority-race component run, one recovery-broker component run,
+  and the Managed MCP initialize, initialized notification, tool call, and
+  close requests. This ledger does not enumerate every database statement or
+  provider-internal request and therefore does not prove pricing, billing,
+  spend authorization, or compliance with an operator-declared dollar cap;
+  those remain separate fail-closed evidence gates;
 - private raw provider evidence retained, while public receipts contain only
   bounded facts and digests—never credentials, account IDs, ARNs, caller IDs,
   endpoints, or MCP keys; and

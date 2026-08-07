@@ -1106,9 +1106,6 @@ export async function runAuthorityRace({
       ...receipt.awsInvokeRequestDigests,
       replay: replay.awsInvokeRequestDigest,
       changedInput: changedInput.awsInvokeRequestDigest
-    },
-    providerOperations: {
-      lambdaInvocations: 5
     }
   };
 }

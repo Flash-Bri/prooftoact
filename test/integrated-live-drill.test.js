@@ -125,7 +125,11 @@ function components() {
       proof: "c".repeat(64),
       replay: "d".repeat(64)
     },
-    providerOperations: { lambdaInvocations: 5 },
+    providerOperations: {
+      cloudFormationDescribeStackResourceRequests: 1,
+      lambdaInvokeRequests: 5,
+      stsGetCallerIdentityRequests: 1
+    },
     durableStateVerified: true,
     durableState: {
       receiptCount: 2,
@@ -292,6 +296,15 @@ test("one provider drill binds DVI, overlap, negatives, recovery, and cleanup", 
   assert.equal(receipt.providerBacked, true);
   assert.equal(receipt.invariantCount, 24);
   assert.equal(receipt.invariantViolations, 0);
+  assert.deepEqual(receipt.providerOperations.aws, {
+    cloudFormationDescribeStackResourceRequests: 1,
+    lambdaInvokeRequests: 5,
+    stsGetCallerIdentityRequests: 1
+  });
+  assert.equal(receipt.costControl.completeProviderRequestAccounting, false);
+  assert.equal(receipt.costControl.providerPricingVerified, false);
+  assert.equal(receipt.costControl.actualAwsSpendVerified, false);
+  assert.equal(receipt.costControl.spendAuthorizationProvenByReceipt, false);
   assert.match(receipt.receiptSha256, /^[0-9a-f]{64}$/u);
   const publicReceipt = JSON.stringify(receipt);
   assert.equal(publicReceipt.includes(evidenceId), false);
@@ -308,6 +321,7 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
     (value) => { value.race.overlappingDatabaseIntervals = false; },
     (value) => { value.race.replay.exactDecisionReturned = false; },
     (value) => { value.race.changedInputDenial.denied = false; },
+    (value) => { value.race.providerOperations.stsGetCallerIdentityRequests = 2; },
     (value) => { value.recovery.mcpCallCount = 2; },
     (value) => { value.recovery.terminalAuditCommitted = false; },
     (value) => { value.recovery.dvi.selectedEvidenceBindingSha256 = "0".repeat(64); },

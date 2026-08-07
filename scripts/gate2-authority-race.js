@@ -325,12 +325,20 @@ export async function main(argv = process.argv.slice(2)) {
       }
     }
   );
-  const receipt = await runAuthorityRace({
+  const raceReceipt = await runAuthorityRace({
     ...options,
     drill,
     callerBinding,
     invoke: clients.invoke
   });
+  const receipt = {
+    ...raceReceipt,
+    providerOperations: {
+      cloudFormationDescribeStackResourceRequests: 1,
+      lambdaInvokeRequests: 5,
+      stsGetCallerIdentityRequests: 1
+    }
+  };
   if (receipt.treeDigest !== checkout.treeDigest) {
     throw new Error("AUTHORITY_RACE_TREE_BINDING_REJECTED");
   }

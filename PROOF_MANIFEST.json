@@ -283,7 +283,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "ea3a09d5391580d5dd9dd2af20d7bca4aaa0116044e8a3aed458f4211502e005",
+      "sha256": "593a4f9ad3eeecfc05865d9d0b76dc48e60ae4b92ec5b4e13aa29c77e1c790f2",
       "kind": "boundary-ledger"
     },
     {
@@ -325,13 +325,13 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "5a5bd48c5b276b23cc714b89f44b0e1e82b18d4c6f59f8ed7c660e006c320ffa",
+      "sha256": "0c5634be4509ad0a42e80eaf2d525fa1acd0263a035c2d24e3e85de3bc749ebd",
       "kind": "verification-code"
     },
     {
       "id": "gate2-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
-      "sha256": "d8243f47bdfa7b14575dc6794a8712ce6f1cff8307e80625628ffa2e2e42f10a",
+      "sha256": "b959eb76be9d34a154512d15ba4d201154d587d2485038e0c369639d5dd0b94c",
       "kind": "verification-code"
     },
     {
@@ -367,7 +367,7 @@
     {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "fbb40281e4db23bb265a7334ea37841e22d75cb4b4154e0f1657c256b4b21c69",
+      "sha256": "84fd0c98d4cbddfbb9697ef51d713aa3a996f562dceaaa3e29c4fe5867763e14",
       "kind": "verification-code"
     },
     {
@@ -379,7 +379,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "19ed1fb52f4af837393294283f53c15de227143cd3616ba1514dfaf589bb2377",
+      "sha256": "7f874f299d1e87e66cf505d897c5f05c013217b62462e1921b428e1b4b289ec1",
       "kind": "verification-code"
     },
     {
@@ -457,7 +457,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "87286294632881244925e9d7a7cfe5f957d833c17886b84edb6340f20257cb4a",
+      "sha256": "a510aa7422e218c54e39eebe5ab72f32f4dff2d07310f8378d13a09f44410ff4",
       "kind": "boundary-ledger"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "9dd1b959449d6f3ad21124c3c209aee2622926ace82e75b8cb0260602e70881d",
+      "sha256": "5b2a4090a608f900ccd3b7bf21113c5d1b2d09b51cc39ad39dca52c287ed7988",
       "kind": "boundary-ledger"
     },
     {
@@ -619,7 +619,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "069dbed64e4677cffd7ed5f943b462988e39acabe53625ba44aa710510f7f8f2",
+      "sha256": "0598d766723a12c177a94d44c2c1620922772bc4aef3dae5955c8d5aa1c259a7",
       "kind": "boundary-ledger"
     },
     {

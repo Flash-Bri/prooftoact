@@ -102,13 +102,13 @@
       "id": "aws-authority-race",
       "path": "scripts/gate2-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
-      "sha256": "23cc928340c0817c0b867fdec535310bccdc93bd0521b7a6a795b2e04e720a97"
+      "sha256": "aa96e8acad56261eec8ce58ad698af9cfb5f0a31662f661650a9cacfb97bf806"
     },
     {
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "d8243f47bdfa7b14575dc6794a8712ce6f1cff8307e80625628ffa2e2e42f10a"
+      "sha256": "b959eb76be9d34a154512d15ba4d201154d587d2485038e0c369639d5dd0b94c"
     },
     {
       "id": "aws-boundary-ledger",
@@ -366,7 +366,7 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "fbb40281e4db23bb265a7334ea37841e22d75cb4b4154e0f1657c256b4b21c69"
+      "sha256": "84fd0c98d4cbddfbb9697ef51d713aa3a996f562dceaaa3e29c4fe5867763e14"
     },
     {
       "id": "integrated-live-drill-runner",
@@ -378,7 +378,7 @@
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "19ed1fb52f4af837393294283f53c15de227143cd3616ba1514dfaf589bb2377"
+      "sha256": "7f874f299d1e87e66cf505d897c5f05c013217b62462e1921b428e1b4b289ec1"
     },
     {
       "id": "local-full-drill-harness",

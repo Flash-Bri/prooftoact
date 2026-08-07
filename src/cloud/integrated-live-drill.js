@@ -168,7 +168,14 @@ function acceptedRace(race, spec, dvi) {
     intervalStart < intervalEnd &&
     digestMapAccepted(invocationDigests) &&
     digestMapAccepted(awsInvocationDigests) &&
-    race.providerOperations?.lambdaInvocations === 5 &&
+    exactKeys(race.providerOperations, [
+      "cloudFormationDescribeStackResourceRequests",
+      "lambdaInvokeRequests",
+      "stsGetCallerIdentityRequests"
+    ]) &&
+    race.providerOperations.cloudFormationDescribeStackResourceRequests === 1 &&
+    race.providerOperations.lambdaInvokeRequests === 5 &&
+    race.providerOperations.stsGetCallerIdentityRequests === 1 &&
     race.durableStateVerified === true &&
     race.durableState?.receiptCount === 2 &&
     race.durableState?.resourceReceiptCount === 2 &&
@@ -417,7 +424,7 @@ export function buildIntegratedLiveDrillReceipt({
     managedMcpCalledExactlyOnce: true,
     unboundPrincipalDeniedBeforeMcp: true,
     bothRecoveryAuditsCommitted: true,
-    fixedProviderOperationCostBound: true,
+    fixedTopLevelProviderOperationCount: true,
     operationalCapabilityReturned: false,
     authorityTransferredByModelOrRecovery: false
   });
@@ -458,14 +465,31 @@ export function buildIntegratedLiveDrillReceipt({
       operationalCapabilitiesReturned: false
     },
     providerOperations: {
-      dviProofRuns: 1,
-      lambdaInvocations: 5,
-      managedMcpToolCalls: 1,
+      aws: {
+        cloudFormationDescribeStackResourceRequests: 1,
+        lambdaInvokeRequests: 5,
+        stsGetCallerIdentityRequests: 1
+      },
+      cockroachDb: {
+        dviProofRuns: 1,
+        authorityRaceRuns: 1,
+        recoveryBrokerRuns: 1
+      },
+      managedMcp: {
+        closeRequests: 1,
+        initializeRequests: 1,
+        initializedNotifications: 1,
+        toolCallRequests: 1
+      },
       cloudResourcesCreatedByDrill: 0
     },
     costControl: {
-      maximumAwsCostUsd: acceptedSpec.maximumAwsCostUsd,
-      fixedInvocationBound: true,
+      operatorDeclaredMaximumAwsCostUsd: acceptedSpec.maximumAwsCostUsd,
+      fixedTopLevelProviderOperationCount: true,
+      completeProviderRequestAccounting: false,
+      providerPricingVerified: false,
+      actualAwsSpendVerified: false,
+      spendAuthorizationProvenByReceipt: false,
       actualProviderBillingReceiptRequiredSeparately: true
     },
     invariants,
@@ -473,7 +497,7 @@ export function buildIntegratedLiveDrillReceipt({
     invariantViolations: 0,
     providerBacked: true,
     claimBoundary:
-      "This sanitized receipt proves one exact-release provider-backed integrated synthetic drill whose CockroachDB DVI selection, five receipt-bound numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared invariant violations. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests; it is not an independent provider signature. Its fixed operation count is constrained by a $0.02 AWS ceiling, but the actual provider billing receipt remains separately required. It must be accepted together with the separately verified 100-run deterministic offline receipt. It does not prove a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized receipt proves one exact-release provider-backed integrated synthetic drill whose CockroachDB DVI selection, five receipt-bound numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared invariant violations. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests; it is not an independent provider signature. The receipt enumerates the fixed top-level AWS, CockroachDB component, and Managed MCP operations observed by this orchestrator, but it does not enumerate every database statement or provider-internal request, verify current pricing or billing, prove spend authorization, or establish that the operator-declared $0.02 AWS maximum was met. A separate approved cost gate and provider billing receipt remain required. It must be accepted together with the separately verified 100-run deterministic offline receipt. It does not prove a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,

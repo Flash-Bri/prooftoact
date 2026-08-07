@@ -684,6 +684,7 @@ test("authority race requires one overlapping winner and one durable denial", as
   assert.deepEqual(receipt.callerBinding, CALLER_BINDING);
   assert.match(receipt.callerBinding.principalIdDigest, /^[0-9a-f]{64}$/);
   assert.equal("functionArn" in receipt, false);
+  assert.equal("providerOperations" in receipt, false);
 });
 
 test("authority race accepts the live seven-field STS binding and rejects a stripped principal identity", () => {
