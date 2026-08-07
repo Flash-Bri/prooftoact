@@ -541,7 +541,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "259b33325070c31b9a08b1e3e59fd02911e3910c63489009d1270b362e8223e2",
+      "sha256": "10def44cebb99325cf3218f983544376fe1ab5b0a5b5344ad2a78b0000fed1ee",
       "kind": "boundary-ledger"
     },
     {
