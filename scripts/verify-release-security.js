@@ -1435,9 +1435,17 @@ const SOURCE_MARKERS = Object.freeze({
     "tideproof.highwater-drill-live.v1",
     "INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA",
     "tideproof.highwater-drill-live-candidate.v1",
+    "tideproof.highwater-drill-live-candidate.v2",
+    "persistIntegratedLiveDrillPrivateEvidence",
+    "verifyIntegratedLiveDrillPrivateEvidence",
+    "fs.constants.O_NOFOLLOW",
+    "fs.linkSync(temporaryPath, destinationPath)",
+    "parentDirectoryMode: \"0700\"",
+    "fileMode: \"0600\"",
     "INCOMPLETE_LIVE_GATES_PENDING",
     "deploymentAttestationBound: false",
     "privateEvidencePersisted: false",
+    "privateEvidenceCurrentBytesBound: true",
     "crashSafeRecoveryProven: false",
     "exactReplayReturnedOriginalDecision: true",
     "changedInputUnderOperationDenied: true",
@@ -1448,6 +1456,9 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "integrated-live-drill-runner": Object.freeze([
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
+    "persistIntegratedLiveDrillPrivateEvidence",
     "gate1-admissible-vector.js",
     "gate2-authority-race.js",
     "gate1-recovery-broker.js",
@@ -1456,6 +1467,8 @@ const SOURCE_MARKERS = Object.freeze({
     "INTEGRATED_LIVE_DRILL_COMPONENT_FAILED"
   ]),
   "integrated-live-drill-tests": Object.freeze([
+    "private evidence source control binds current bytes before candidate composition",
+    "private evidence rejects non-canonical or permissive destinations",
     "unattested provider components remain a non-accepting candidate",
     "integrated receipt fails closed on every cross-act boundary",
     "orchestrator executes exactly DVI, race, then exact-winner recovery"

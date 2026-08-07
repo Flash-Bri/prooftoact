@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   buildIntegratedLiveDrillCandidateReceipt,
-  parseIntegratedLiveDrillSpec
+  parseIntegratedLiveDrillSpec,
+  persistIntegratedLiveDrillPrivateEvidence
 } from "../src/cloud/integrated-live-drill.js";
 import { parseAuthorityDrillBinding } from
   "../src/cloud/aws-authority-race.js";
@@ -266,18 +268,46 @@ export async function runIntegratedLiveDrill({
     [],
     recoveryEnvironment
   );
-  const postRelease = await verifyRelease(spec, rootDir);
-  if (JSON.stringify(postRelease) !== JSON.stringify(preRelease)) {
-    throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
-  }
-  return buildIntegratedLiveDrillCandidateReceipt({
+  const privateEvidencePath = requiredEnvironment(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH",
+    4096
+  );
+  const privateEvidenceRootPath = requiredEnvironment(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
+    4096
+  );
+  const forbiddenPrivateEvidenceRootPath = fs.realpathSync(rootDir);
+  const privateEvidenceReceipt =
+    persistIntegratedLiveDrillPrivateEvidence({
+      destinationPath: privateEvidencePath,
+      evidenceRootPath: privateEvidenceRootPath,
+      forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+      spec,
+      dvi,
+      race,
+      recovery,
+      authorityEvidenceId,
+      authoritySelectedEvidenceDigest
+    });
+  const candidate = buildIntegratedLiveDrillCandidateReceipt({
     spec,
     dvi,
     race,
     recovery,
+    privateEvidencePath,
+    privateEvidenceRootPath,
+    forbiddenPrivateEvidenceRootPath,
+    privateEvidenceReceipt,
     authorityEvidenceId,
     authoritySelectedEvidenceDigest
   });
+  const postRelease = await verifyRelease(spec, rootDir);
+  if (JSON.stringify(postRelease) !== JSON.stringify(preRelease)) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
+  }
+  return candidate;
 }
 
 export async function main() {

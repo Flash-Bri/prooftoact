@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   buildIntegratedLiveDrillCandidateReceipt,
   INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA,
+  INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA_V1,
+  INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA,
   INTEGRATED_LIVE_DRILL_SCHEMA,
   INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   integratedSourceBuildIdentity,
-  selectedEvidenceBindingSha256
+  persistIntegratedLiveDrillPrivateEvidence,
+  selectedEvidenceBindingSha256,
+  verifyIntegratedLiveDrillPrivateEvidence
 } from "../src/cloud/integrated-live-drill.js";
 import {
   runIntegratedLiveDrill,
@@ -285,16 +292,164 @@ function components() {
   return { dvi, race, recovery };
 }
 
-test("unattested provider components remain a non-accepting candidate", () => {
-  const receipt = buildIntegratedLiveDrillCandidateReceipt({
+function privateEvidenceDirectory() {
+  const directory = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), "prooftoact-live-evidence-")
+  );
+  fs.chmodSync(directory, 0o700);
+  return fs.realpathSync(directory);
+}
+
+function persistPrivateEvidence(values = components()) {
+  const directory = privateEvidenceDirectory();
+  const destinationPath = path.join(
+    directory,
+    `${runId}.private-evidence.json`
+  );
+  const receipt = persistIntegratedLiveDrillPrivateEvidence({
+    destinationPath,
+    evidenceRootPath: directory,
+    forbiddenRootPath: fs.realpathSync(process.cwd()),
     spec,
-    ...components(),
+    ...values,
     authorityEvidenceId: evidenceId,
     authoritySelectedEvidenceDigest: evidenceDigest
   });
+  return { directory, destinationPath, receipt };
+}
+
+test("private evidence source control binds current bytes before candidate composition", () => {
+  const directory = privateEvidenceDirectory();
+  const destinationPath = path.join(
+    directory,
+    `${runId}.private-evidence.json`
+  );
+  try {
+    const values = components();
+    const persistence = persistIntegratedLiveDrillPrivateEvidence({
+      destinationPath,
+      evidenceRootPath: directory,
+      forbiddenRootPath: fs.realpathSync(process.cwd()),
+      spec,
+      ...values,
+      authorityEvidenceId: evidenceId,
+      authoritySelectedEvidenceDigest: evidenceDigest
+    });
+    assert.equal(
+      persistence.schemaVersion,
+      INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA
+    );
+    assert.equal(persistence.atomicCreateOnly, true);
+    assert.equal(persistence.rereadVerified, true);
+    assert.equal(persistence.fileMode, "0600");
+    assert.equal(persistence.parentDirectoryMode, "0700");
+    assert.equal(fs.statSync(destinationPath).mode & 0o777, 0o600);
+    const privateBundle = JSON.parse(fs.readFileSync(destinationPath, "utf8"));
+    assert.equal(privateBundle.authorityEvidenceId, evidenceId);
+    assert.equal(privateBundle.components.authorityRace.raceId, raceId);
+    assert.equal(privateBundle.bundleSha256, persistence.bundleSha256);
+    assert.throws(
+      () => persistIntegratedLiveDrillPrivateEvidence({
+        destinationPath,
+        evidenceRootPath: directory,
+        forbiddenRootPath: fs.realpathSync(process.cwd()),
+        spec,
+        ...values,
+        authorityEvidenceId: evidenceId,
+        authoritySelectedEvidenceDigest: evidenceDigest
+      }),
+      /INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_WRITE_REJECTED/u
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(destinationPath, "utf8")).bundleSha256,
+      persistence.bundleSha256
+    );
+    fs.appendFileSync(destinationPath, " ");
+    assert.throws(
+      () => verifyIntegratedLiveDrillPrivateEvidence({
+        destinationPath,
+        evidenceRootPath: directory,
+        forbiddenRootPath: fs.realpathSync(process.cwd()),
+        receipt: persistence,
+        spec,
+        ...values,
+        authorityEvidenceId: evidenceId,
+        authoritySelectedEvidenceDigest: evidenceDigest
+      }),
+      /INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED/u
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("private evidence rejects non-canonical or permissive destinations", () => {
+  const directory = privateEvidenceDirectory();
+  const permissive = path.join(directory, "permissive");
+  fs.mkdirSync(permissive, { mode: 0o755 });
+  fs.chmodSync(permissive, 0o755);
+  try {
+    assert.throws(
+      () => persistIntegratedLiveDrillPrivateEvidence({
+        destinationPath: path.join(
+          permissive,
+          `${runId}.private-evidence.json`
+        ),
+        evidenceRootPath: permissive,
+        forbiddenRootPath: fs.realpathSync(process.cwd()),
+        spec,
+        ...components(),
+        authorityEvidenceId: evidenceId,
+        authoritySelectedEvidenceDigest: evidenceDigest
+      }),
+      /INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_REJECTED/u
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+  assert.throws(
+    () => persistIntegratedLiveDrillPrivateEvidence({
+      destinationPath: path.join(
+        fs.realpathSync(process.cwd()),
+        `${runId}.private-evidence.json`
+      ),
+      evidenceRootPath: fs.realpathSync(process.cwd()),
+      forbiddenRootPath: fs.realpathSync(process.cwd()),
+      spec,
+      ...components(),
+      authorityEvidenceId: evidenceId,
+      authoritySelectedEvidenceDigest: evidenceDigest
+    }),
+    /INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_REJECTED/u
+  );
+});
+
+test("unattested provider components remain a non-accepting candidate", () => {
+  const values = components();
+  const persisted = persistPrivateEvidence(values);
+  const receipt = (() => {
+    try {
+      return buildIntegratedLiveDrillCandidateReceipt({
+        spec,
+        ...values,
+        privateEvidencePath: persisted.destinationPath,
+        privateEvidenceRootPath: persisted.directory,
+        forbiddenPrivateEvidenceRootPath: fs.realpathSync(process.cwd()),
+        privateEvidenceReceipt: persisted.receipt,
+        authorityEvidenceId: evidenceId,
+        authoritySelectedEvidenceDigest: evidenceDigest
+      });
+    } finally {
+      fs.rmSync(persisted.directory, { recursive: true, force: true });
+    }
+  })();
   assert.equal(
     receipt.schemaVersion,
     INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA
+  );
+  assert.notEqual(
+    receipt.schemaVersion,
+    INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA_V1
   );
   assert.notEqual(receipt.schemaVersion, INTEGRATED_LIVE_DRILL_SCHEMA);
   assert.equal(receipt.status, "INCOMPLETE_LIVE_GATES_PENDING");
@@ -303,7 +458,7 @@ test("unattested provider components remain a non-accepting candidate", () => {
   assert.equal(receipt.acceptance.privateEvidencePersisted, false);
   assert.equal(receipt.acceptance.crashSafeRecoveryProven, false);
   assert.equal(receipt.providerBacked, true);
-  assert.equal(receipt.invariantCount, 22);
+  assert.equal(receipt.invariantCount, 23);
   assert.equal(receipt.invariantViolations, 0);
   assert.deepEqual(receipt.providerOperations.aws, {
     cloudFormationDescribeStackResourceRequests: 1,
@@ -318,6 +473,7 @@ test("unattested provider components remain a non-accepting candidate", () => {
   const publicReceipt = JSON.stringify(receipt);
   assert.equal(publicReceipt.includes(evidenceId), false);
   assert.equal(publicReceipt.includes(spec.functionArn), false);
+  assert.equal(publicReceipt.includes("private-evidence.json"), false);
   assert.equal(
     receipt.sourceBuildIdentitySha256,
     sha(spec.sourceBuildIdentity)
@@ -325,7 +481,9 @@ test("unattested provider components remain a non-accepting candidate", () => {
 });
 
 test("integrated receipt fails closed on every cross-act boundary", () => {
-  for (const mutate of [
+  const persistence = persistPrivateEvidence();
+  try {
+    for (const mutate of [
     (value) => { value.dvi.cleanup.snapshotRetired = false; },
     (value) => { value.race.overlappingDatabaseIntervals = false; },
     (value) => { value.race.replay.exactDecisionReturned = false; },
@@ -338,26 +496,41 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
     (value) => { value.recovery.mcpProviderEvidence.rpcCalls[1].sessionContinuous = false; },
     (value) => { value.recovery.mcpProviderEvidence.rpcCalls[1].resultSha256 = "0".repeat(64); },
     (value) => { value.recovery.mcpProviderEvidence.close.httpStatus = 500; }
-  ]) {
-    const value = structuredClone(components());
-    mutate(value);
-    assert.throws(
-      () => buildIntegratedLiveDrillCandidateReceipt({
-        spec,
-        ...value,
-        authorityEvidenceId: evidenceId,
-        authoritySelectedEvidenceDigest: evidenceDigest
-      }),
-      /INTEGRATED_LIVE_DRILL_COMPONENT_REJECTED/u
-    );
+    ]) {
+      const value = structuredClone(components());
+      mutate(value);
+      assert.throws(
+        () => buildIntegratedLiveDrillCandidateReceipt({
+          spec,
+          ...value,
+          privateEvidencePath: persistence.destinationPath,
+          privateEvidenceRootPath: persistence.directory,
+          forbiddenPrivateEvidenceRootPath: fs.realpathSync(process.cwd()),
+          privateEvidenceReceipt: persistence.receipt,
+          authorityEvidenceId: evidenceId,
+          authoritySelectedEvidenceDigest: evidenceDigest
+        }),
+        /INTEGRATED_LIVE_DRILL_(?:COMPONENT|PRIVATE_EVIDENCE)_/u
+      );
+    }
+  } finally {
+    fs.rmSync(persistence.directory, { recursive: true, force: true });
   }
 });
 
-test("orchestrator executes exactly DVI, race, then exact-winner recovery", async () => {
+test("orchestrator executes exactly DVI, race, then exact-winner recovery", async (t) => {
   const values = components();
   const calls = [];
+  const privateDirectory = privateEvidenceDirectory();
+  t.after(() => fs.rmSync(privateDirectory, { recursive: true, force: true }));
   const environment = {
     TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec),
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH: path.join(
+      privateDirectory,
+      `${runId}.private-evidence.json`
+    ),
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT:
+      privateDirectory,
     DATABASE_URL: "postgresql://authorizer.invalid/db",
     TIDEPROOF_AUDITOR_DATABASE_URL: "postgresql://auditor.invalid/db",
     TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC: "{}",
@@ -396,7 +569,7 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
   const outputs = [values.dvi, values.race, values.recovery];
   const receipt = await runIntegratedLiveDrill({
     environment,
-    rootDir: "/repo",
+    rootDir: fs.realpathSync(process.cwd()),
     verifyRelease: async () => ({
       sourceCommit,
       treeDigest,
@@ -409,6 +582,7 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
   });
   assert.equal(receipt.status, "INCOMPLETE_LIVE_GATES_PENDING");
   assert.equal(receipt.acceptance.accepted, false);
+  assert.equal(receipt.acceptance.privateEvidencePersisted, false);
   assert.equal(calls.length, 3);
   assert.match(calls[0].script, /gate1-admissible-vector\.js$/u);
   assert.match(calls[1].script, /gate2-authority-race\.js$/u);
@@ -436,6 +610,12 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
     "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64" in
       calls[0].environment,
     false
+  );
+  assert.equal(
+    fs.statSync(
+      environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH
+    ).mode & 0o777,
+    0o600
   );
 });
 

@@ -69,12 +69,29 @@ component-only, or second selected provider run fails closed; one independently
 accepted integrated receipt is the complete provider target.
 
 The current source runner emits only a
-`tideproof.highwater-drill-live-candidate.v1` receipt with status
+`tideproof.highwater-drill-live-candidate.v2` receipt with status
 `INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
-The candidate remains blocked until a separate reviewed finalizer validates a
-signed pre/post deployment-attestation pair around the drill, durably persists
-and rereads the private component evidence, and proves crash-safe recovery
+Before candidate composition, a source-local helper writes the canonical raw
+component bundle through an owner-only temporary file in a canonical mode-0700
+directory outside the Git checkout, links the final run-specific name, syncs
+the directory entry, and rereads the mode-0600 file byte-for-byte. The final
+clean-release check runs after that write. The public candidate carries only
+the bundle and source-control-receipt digests. Because that receipt is unkeyed
+and reconstructible from current bytes, it does not independently prove the
+historical write protocol, durable retention, or crash continuity. The
+candidate remains blocked until a separate reviewed finalizer validates a
+signed pre/post deployment-attestation pair around the drill, independently
+attests and recomputes the private evidence, and proves crash-safe recovery
 without a second Managed MCP read for the same canonical attempt.
+
+The live runner requires
+`TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH` to be one canonical
+absolute path named `<run-id>.private-evidence.json` whose parent exactly
+matches `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT`. That
+precreated, canonical, process-owned mode-0700 root must be outside the Git
+checkout. The final path must not already exist. The runner never passes this
+path or the private bundle to a component child and never includes the path in
+the public candidate.
 
 ## Per-drill binding
 
@@ -160,10 +177,13 @@ path now consumes database-authorized DVI proposal identities and the exact
 selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
 recomputing receipt validator now exist. The source now also contains a
-single-run integrated orchestrator and strict sanitized candidate composer, but
-the provider-backed execution and accepted live receipt do not. The candidate
-explicitly records that deployment attestation, private evidence persistence,
-crash-safe recovery, and provider pricing/billing are unproven. The exact
+single-run integrated orchestrator, owner-restricted external private-evidence
+source control, current-byte reread verifier, and strict sanitized candidate composer,
+but the provider-backed execution and accepted live receipt do not. The
+candidate explicitly records that deployment attestation, independently
+attested private-evidence retention/recomputation, pre-provider crash journaling,
+crash-safe recovery, and provider
+pricing/billing are unproven. The exact
 cross-act recovery lookup now has a locally tested source control, but no
 provider-backed receipt. Public claims and final release readiness must
 therefore remain partial and blocked.
@@ -237,6 +257,37 @@ call, a live database row, the exact 100-run batch, AWS behavior, or final
   release readiness until the +1 provider-backed receipt binds it to the exact
 official release.
 
+### Raw integrated component evidence disappeared after composition
+
+- Root cause: the runner held DVI, authority-race, and recovery receipts only in
+  process memory and emitted a sanitized digest summary without first creating
+  a durable private source for independent recomputation.
+- Why it was missed: component and privacy tests correctly rejected raw public
+  identifiers, but did not require a separate private evidence lifecycle before
+  sanitization.
+- Earliest detection point: terminate the runner after candidate composition
+  and require another process to recompute all three component digests from one
+  immutable, mode-restricted bundle.
+- Repair: candidate v2 is unreachable until the canonical raw bundle is written
+  through a mode-0600 source-local temporary file in an approved canonical
+  mode-0700 owner directory outside the Git checkout, directory-synced, and
+  reread byte-for-byte. Candidate composition rereads it again and binds the
+  current bundle plus source-control-receipt digests without exposing its path
+  or raw identifiers. The final clean-release check now follows persistence.
+- Regression/preventive control: focused tests reject permissive or
+  non-canonical parents, preexisting destinations, post-write byte drift,
+  component drift, and any candidate path that lacks the verified private
+  file.
+- Verification: the focused suite and exact-source release gates must pass on
+  the repaired head; no provider execution is implied.
+- Residual risk and claim impact: the unkeyed receipt is forgeable from current
+  bytes and therefore proves neither historical atomic operations nor off-host
+  retention. Provider actions still precede persistence, so a crash can lose
+  the run evidence. An independently attested pre-provider journal, reviewer
+  recomputation, signed deployment identity, and crash-safe Managed MCP
+  recovery remain required. The public claim remains a non-accepting component
+  candidate.
+
 ### Unattested components were accepted as an exact-release receipt
 
 - Root cause: the integrated composer trusted self-reported source/configuration
@@ -253,10 +304,10 @@ official release.
   bind the candidate schema, incomplete status, and blocker fields.
 - Verification: source tests and release gates must pass on the exact repaired
   head; provider execution remains prohibited and pending.
-- Residual risk and claim impact: a reviewed attestation-aware finalizer, private
-  evidence sink, and crash-safe recovery repair are still required. Until then,
-  ProofToAct may claim only a source-level component candidate, not an accepted
-  exact-release +1 drill.
+- Residual risk and claim impact: a reviewed attestation-aware finalizer,
+  independent retention/recomputation of the private evidence, and crash-safe
+  recovery repair are still required. Until then, ProofToAct may claim only a
+  source-level component candidate, not an accepted exact-release +1 drill.
 
 ### Recovery binding stopped before the DVI proposal
 

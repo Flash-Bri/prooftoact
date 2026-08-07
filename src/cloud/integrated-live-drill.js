@@ -1,18 +1,27 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { canonicalJson } from "./canonical-json.js";
 import { canonicalRecoveryAttempt } from "./recovery-broker.js";
 
 export const INTEGRATED_LIVE_DRILL_SCHEMA =
   "tideproof.highwater-drill-live.v1";
-export const INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA =
+export const INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA_V1 =
   "tideproof.highwater-drill-live-candidate.v1";
+export const INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA =
+  "tideproof.highwater-drill-live-candidate.v2";
 export const INTEGRATED_LIVE_DRILL_SPEC_SCHEMA =
   "tideproof.highwater-drill-live-spec.v1";
+export const INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_SCHEMA =
+  "tideproof.highwater-drill-live-private-evidence.v1";
+export const INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA =
+  "tideproof.highwater-drill-live-private-evidence-persistence.v1";
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const SHA1 = /^[0-9a-f]{40}$/;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const PRIVATE_EVIDENCE_MAX_BYTES = 8 * 1024 * 1024;
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -384,7 +393,227 @@ function acceptedRecovery(recovery, spec, race) {
   );
 }
 
-export function buildIntegratedLiveDrillCandidateReceipt({
+function componentDigestsFor({ dvi, race, recovery }) {
+  return Object.freeze({
+    dvi: sha256(canonicalJson(dvi)),
+    authorityRace: sha256(canonicalJson(race)),
+    recovery: sha256(canonicalJson(recovery))
+  });
+}
+
+function pathIsWithin(candidatePath, rootPath) {
+  const relative = path.relative(rootPath, candidatePath);
+  return relative === "" || (
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+function assertSamePrivateEvidenceParent(parentPath, expectedStat) {
+  let current;
+  try {
+    current = fs.lstatSync(parentPath);
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_DRIFT");
+  }
+  if (
+    !current.isDirectory() ||
+    current.isSymbolicLink() ||
+    current.dev !== expectedStat.dev ||
+    current.ino !== expectedStat.ino ||
+    current.uid !== expectedStat.uid ||
+    (current.mode & 0o777) !== 0o700 ||
+    fs.realpathSync(parentPath) !== parentPath
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_DRIFT");
+  }
+}
+
+function securePrivateEvidenceParent(
+  destinationPath,
+  evidenceRootPath,
+  forbiddenRootPath
+) {
+  if (
+    typeof destinationPath !== "string" ||
+    destinationPath.length === 0 ||
+    destinationPath.length > 4096 ||
+    /[\0\r\n]/.test(destinationPath) ||
+    !path.isAbsolute(destinationPath) ||
+    path.resolve(destinationPath) !== destinationPath
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH_REJECTED");
+  }
+  if (
+    typeof evidenceRootPath !== "string" ||
+    typeof forbiddenRootPath !== "string" ||
+    !path.isAbsolute(evidenceRootPath) ||
+    !path.isAbsolute(forbiddenRootPath) ||
+    path.resolve(evidenceRootPath) !== evidenceRootPath ||
+    path.resolve(forbiddenRootPath) !== forbiddenRootPath
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_REJECTED");
+  }
+  const parentPath = path.dirname(destinationPath);
+  let canonicalForbiddenRoot;
+  try {
+    canonicalForbiddenRoot = fs.realpathSync(forbiddenRootPath);
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_REJECTED");
+  }
+  if (
+    parentPath !== evidenceRootPath ||
+    pathIsWithin(evidenceRootPath, canonicalForbiddenRoot) ||
+    pathIsWithin(destinationPath, canonicalForbiddenRoot)
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_REJECTED");
+  }
+  let parentStat;
+  try {
+    parentStat = fs.lstatSync(parentPath);
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_REJECTED");
+  }
+  const expectedUid = typeof process.getuid === "function"
+    ? process.getuid()
+    : parentStat.uid;
+  if (
+    !parentStat.isDirectory() ||
+    parentStat.isSymbolicLink() ||
+    (parentStat.mode & 0o777) !== 0o700 ||
+    parentStat.uid !== expectedUid
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_REJECTED");
+  }
+  let canonicalParent;
+  try {
+    canonicalParent = fs.realpathSync(parentPath);
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_REJECTED");
+  }
+  if (canonicalParent !== parentPath) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_REJECTED");
+  }
+  return Object.freeze({ parentPath, parentStat, expectedUid });
+}
+
+function syncDirectory(directoryPath, expectedStat) {
+  let descriptor;
+  try {
+    descriptor = fs.openSync(
+      directoryPath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
+    );
+    const opened = fs.fstatSync(descriptor);
+    if (
+      opened.dev !== expectedStat.dev ||
+      opened.ino !== expectedStat.ino ||
+      opened.uid !== expectedStat.uid ||
+      (opened.mode & 0o777) !== 0o700
+    ) {
+      throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PARENT_DRIFT");
+    }
+    fs.fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== undefined) {
+      fs.closeSync(descriptor);
+    }
+  }
+}
+
+function rereadPrivateEvidence({
+  destinationPath,
+  expectedBytes = null,
+  expectedUid,
+  parentPath,
+  parentStat
+}) {
+  assertSamePrivateEvidenceParent(parentPath, parentStat);
+  let descriptor;
+  try {
+    descriptor = fs.openSync(
+      destinationPath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
+    );
+    const before = fs.fstatSync(descriptor);
+    if (
+      !before.isFile() ||
+      (before.mode & 0o777) !== 0o600 ||
+      before.uid !== expectedUid ||
+      before.nlink !== 1 ||
+      (expectedBytes !== null && before.size !== expectedBytes.length) ||
+      before.size < 1 ||
+      before.size > PRIVATE_EVIDENCE_MAX_BYTES
+    ) {
+      throw new Error(
+        "INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_FILE_REJECTED"
+      );
+    }
+    const reread = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    assertSamePrivateEvidenceParent(parentPath, parentStat);
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      (expectedBytes !== null && !reread.equals(expectedBytes))
+    ) {
+      throw new Error(
+        "INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED"
+      );
+    }
+    return Object.freeze({
+      byteLength: before.size,
+      bytes: reread,
+      device: String(before.dev),
+      inode: String(before.ino)
+    });
+  } finally {
+    if (descriptor !== undefined) {
+      fs.closeSync(descriptor);
+    }
+  }
+}
+
+function privateEvidencePersistenceReceipt({
+  spec,
+  selectedBinding,
+  componentDigests,
+  bundleSha256,
+  destinationPath,
+  fileByteLength
+}) {
+  const receipt = {
+    schemaVersion:
+      INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA,
+    sourceCommit: spec.sourceCommit,
+    treeDigest: spec.treeDigest,
+    runId: spec.runId,
+    configDigest: spec.configDigest,
+    sourceBuildIdentitySha256: sha256(spec.sourceBuildIdentity),
+    selectedEvidenceBindingSha256: selectedBinding,
+    componentDigests,
+    bundleSha256,
+    fileByteLength,
+    pathSha256: sha256(destinationPath),
+    atomicCreateOnly: true,
+    fileMode: "0600",
+    parentDirectoryMode: "0700",
+    sameFilesystemAtomicLink: true,
+    directoryEntrySynced: true,
+    rereadVerified: true
+  };
+  return Object.freeze({
+    ...receipt,
+    receiptSha256: sha256(canonicalJson(receipt))
+  });
+}
+
+export function persistIntegratedLiveDrillPrivateEvidence({
+  destinationPath,
+  evidenceRootPath,
+  forbiddenRootPath,
   spec,
   dvi,
   race,
@@ -398,9 +627,312 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     authoritySelectedEvidenceDigest
   );
   if (
+    typeof destinationPath !== "string" ||
+    path.basename(destinationPath) !==
+      `${acceptedSpec.runId}.private-evidence.json` ||
     !acceptedDvi(dvi, acceptedSpec, selectedBinding) ||
     !acceptedRace(race, acceptedSpec, dvi) ||
     !acceptedRecovery(recovery, acceptedSpec, race)
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REJECTED");
+  }
+  const { parentPath, parentStat, expectedUid } =
+    securePrivateEvidenceParent(
+      destinationPath,
+      evidenceRootPath,
+      forbiddenRootPath
+    );
+  const componentDigests = componentDigestsFor({ dvi, race, recovery });
+  const body = {
+    schemaVersion: INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_SCHEMA,
+    sourceCommit: acceptedSpec.sourceCommit,
+    treeDigest: acceptedSpec.treeDigest,
+    runId: acceptedSpec.runId,
+    configDigest: acceptedSpec.configDigest,
+    sourceBuildIdentity: acceptedSpec.sourceBuildIdentity,
+    authorityEvidenceId,
+    authoritySelectedEvidenceDigest,
+    selectedEvidenceBindingSha256: selectedBinding,
+    componentDigests,
+    components: { dvi, authorityRace: race, recovery },
+    spec: acceptedSpec
+  };
+  const bundle = Object.freeze({
+    ...body,
+    bundleSha256: sha256(canonicalJson(body))
+  });
+  const serialized = Buffer.from(`${canonicalJson(bundle)}\n`, "utf8");
+  if (
+    serialized.length < 1 ||
+    serialized.length > PRIVATE_EVIDENCE_MAX_BYTES
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_SIZE_REJECTED");
+  }
+  const temporaryPath = path.join(
+    parentPath,
+    `.${path.basename(destinationPath)}.${process.pid}.` +
+      `${randomBytes(16).toString("hex")}.tmp`
+  );
+  let descriptor;
+  let linked = false;
+  try {
+    assertSamePrivateEvidenceParent(parentPath, parentStat);
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600
+    );
+    fs.writeFileSync(descriptor, serialized);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    assertSamePrivateEvidenceParent(parentPath, parentStat);
+    fs.linkSync(temporaryPath, destinationPath);
+    linked = true;
+    assertSamePrivateEvidenceParent(parentPath, parentStat);
+    fs.unlinkSync(temporaryPath);
+    assertSamePrivateEvidenceParent(parentPath, parentStat);
+    syncDirectory(parentPath, parentStat);
+    assertSamePrivateEvidenceParent(parentPath, parentStat);
+  } catch (cause) {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the first fail-closed error.
+      }
+    }
+    if (!linked) {
+      try {
+        fs.unlinkSync(temporaryPath);
+      } catch {
+        // The temporary file may not have been created.
+      }
+    }
+    throw new Error(
+      "INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_WRITE_REJECTED",
+      { cause }
+    );
+  }
+  const reread = rereadPrivateEvidence({
+    destinationPath,
+    expectedBytes: serialized,
+    expectedUid,
+    parentPath,
+    parentStat
+  });
+  let parsed;
+  try {
+    parsed = JSON.parse(reread.bytes.toString("utf8"));
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED");
+  }
+  if (
+    parsed.bundleSha256 !== bundle.bundleSha256 ||
+    canonicalJson(parsed) !== canonicalJson(bundle)
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED");
+  }
+  return privateEvidencePersistenceReceipt({
+    spec: acceptedSpec,
+    selectedBinding,
+    componentDigests,
+    bundleSha256: bundle.bundleSha256,
+    destinationPath,
+    fileByteLength: reread.byteLength
+  });
+}
+
+export function verifyIntegratedLiveDrillPrivateEvidence({
+  destinationPath,
+  evidenceRootPath,
+  forbiddenRootPath,
+  receipt,
+  spec,
+  dvi,
+  race,
+  recovery,
+  authorityEvidenceId,
+  authoritySelectedEvidenceDigest
+}) {
+  const acceptedSpec = parseIntegratedLiveDrillSpec(spec);
+  const selectedBinding = selectedEvidenceBindingSha256(
+    authorityEvidenceId,
+    authoritySelectedEvidenceDigest
+  );
+  if (
+    typeof destinationPath !== "string" ||
+    path.basename(destinationPath) !==
+      `${acceptedSpec.runId}.private-evidence.json`
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REJECTED");
+  }
+  const { parentPath, parentStat, expectedUid } =
+    securePrivateEvidenceParent(
+      destinationPath,
+      evidenceRootPath,
+      forbiddenRootPath
+    );
+  const reread = rereadPrivateEvidence({
+    destinationPath,
+    expectedUid,
+    parentPath,
+    parentStat
+  });
+  let parsed;
+  try {
+    parsed = JSON.parse(reread.bytes.toString("utf8"));
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED");
+  }
+  const expectedDigests = componentDigestsFor({ dvi, race, recovery });
+  const { bundleSha256, ...body } = parsed ?? {};
+  if (
+    !exactKeys(parsed, [
+      "authorityEvidenceId",
+      "authoritySelectedEvidenceDigest",
+      "bundleSha256",
+      "componentDigests",
+      "components",
+      "configDigest",
+      "runId",
+      "schemaVersion",
+      "selectedEvidenceBindingSha256",
+      "sourceBuildIdentity",
+      "sourceCommit",
+      "spec",
+      "treeDigest"
+    ]) ||
+    parsed.schemaVersion !== INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_SCHEMA ||
+    parsed.sourceCommit !== acceptedSpec.sourceCommit ||
+    parsed.treeDigest !== acceptedSpec.treeDigest ||
+    parsed.runId !== acceptedSpec.runId ||
+    parsed.configDigest !== acceptedSpec.configDigest ||
+    parsed.sourceBuildIdentity !== acceptedSpec.sourceBuildIdentity ||
+    parsed.authorityEvidenceId !== authorityEvidenceId ||
+    parsed.authoritySelectedEvidenceDigest !==
+      authoritySelectedEvidenceDigest ||
+    parsed.selectedEvidenceBindingSha256 !== selectedBinding ||
+    canonicalJson(parsed.spec) !== canonicalJson(acceptedSpec) ||
+    canonicalJson(parsed.componentDigests) !== canonicalJson(expectedDigests) ||
+    canonicalJson(parsed.components) !== canonicalJson({
+      dvi,
+      authorityRace: race,
+      recovery
+    }) ||
+    !SHA256.test(bundleSha256 ?? "") ||
+    bundleSha256 !== sha256(canonicalJson(body)) ||
+    reread.bytes.toString("utf8") !== `${canonicalJson(parsed)}\n`
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REREAD_REJECTED");
+  }
+  const recomputed = privateEvidencePersistenceReceipt({
+    spec: acceptedSpec,
+    selectedBinding,
+    componentDigests: expectedDigests,
+    bundleSha256,
+    destinationPath,
+    fileByteLength: reread.byteLength
+  });
+  if (canonicalJson(receipt) !== canonicalJson(recomputed)) {
+    throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_REJECTED");
+  }
+  return recomputed;
+}
+
+function acceptedPrivateEvidence(receipt, spec, selectedBinding, digests) {
+  if (
+    !exactKeys(receipt, [
+      "atomicCreateOnly",
+      "bundleSha256",
+      "componentDigests",
+      "configDigest",
+      "directoryEntrySynced",
+      "fileByteLength",
+      "fileMode",
+      "parentDirectoryMode",
+      "pathSha256",
+      "receiptSha256",
+      "rereadVerified",
+      "runId",
+      "sameFilesystemAtomicLink",
+      "schemaVersion",
+      "selectedEvidenceBindingSha256",
+      "sourceBuildIdentitySha256",
+      "sourceCommit",
+      "treeDigest"
+    ]) ||
+    receipt.schemaVersion !==
+      INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA ||
+    receipt.sourceCommit !== spec.sourceCommit ||
+    receipt.treeDigest !== spec.treeDigest ||
+    receipt.runId !== spec.runId ||
+    receipt.configDigest !== spec.configDigest ||
+    receipt.sourceBuildIdentitySha256 !== sha256(spec.sourceBuildIdentity) ||
+    receipt.selectedEvidenceBindingSha256 !== selectedBinding ||
+    canonicalJson(receipt.componentDigests) !== canonicalJson(digests) ||
+    !SHA256.test(receipt.bundleSha256 ?? "") ||
+    !SHA256.test(receipt.pathSha256 ?? "") ||
+    !Number.isSafeInteger(receipt.fileByteLength) ||
+    receipt.fileByteLength < 1 ||
+    receipt.fileByteLength > PRIVATE_EVIDENCE_MAX_BYTES ||
+    receipt.atomicCreateOnly !== true ||
+    receipt.fileMode !== "0600" ||
+    receipt.parentDirectoryMode !== "0700" ||
+    receipt.sameFilesystemAtomicLink !== true ||
+    receipt.directoryEntrySynced !== true ||
+    receipt.rereadVerified !== true
+  ) {
+    return false;
+  }
+  const { receiptSha256, ...unsigned } = receipt;
+  return receiptSha256 === sha256(canonicalJson(unsigned));
+}
+
+export function buildIntegratedLiveDrillCandidateReceipt({
+  spec,
+  dvi,
+  race,
+  recovery,
+  privateEvidencePath,
+  privateEvidenceRootPath,
+  forbiddenPrivateEvidenceRootPath,
+  privateEvidenceReceipt,
+  authorityEvidenceId,
+  authoritySelectedEvidenceDigest
+}) {
+  const acceptedSpec = parseIntegratedLiveDrillSpec(spec);
+  const selectedBinding = selectedEvidenceBindingSha256(
+    authorityEvidenceId,
+    authoritySelectedEvidenceDigest
+  );
+  const componentDigests = componentDigestsFor({ dvi, race, recovery });
+  const verifiedPrivateEvidenceReceipt =
+    verifyIntegratedLiveDrillPrivateEvidence({
+      destinationPath: privateEvidencePath,
+      evidenceRootPath: privateEvidenceRootPath,
+      forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+      receipt: privateEvidenceReceipt,
+      spec: acceptedSpec,
+      dvi,
+      race,
+      recovery,
+      authorityEvidenceId,
+      authoritySelectedEvidenceDigest
+    });
+  if (
+    !acceptedDvi(dvi, acceptedSpec, selectedBinding) ||
+    !acceptedRace(race, acceptedSpec, dvi) ||
+    !acceptedRecovery(recovery, acceptedSpec, race) ||
+    !acceptedPrivateEvidence(
+      verifiedPrivateEvidenceReceipt,
+      acceptedSpec,
+      selectedBinding,
+      componentDigests
+    )
   ) {
     throw new Error("INTEGRATED_LIVE_DRILL_COMPONENT_REJECTED");
   }
@@ -424,15 +956,11 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     managedMcpCalledExactlyOnce: true,
     unboundPrincipalDeniedBeforeMcp: true,
     bothRecoveryAuditsCommitted: true,
+    privateEvidenceCurrentBytesBound: true,
     fixedTopLevelProviderOperationCount: true,
     operationalCapabilityReturned: false,
     authorityTransferredByModelOrRecovery: false
   });
-  const componentDigests = {
-    dvi: sha256(canonicalJson(dvi)),
-    authorityRace: sha256(canonicalJson(race)),
-    recovery: sha256(canonicalJson(recovery))
-  };
   const receipt = {
     schemaVersion: INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA,
     status: "INCOMPLETE_LIVE_GATES_PENDING",
@@ -442,6 +970,12 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     configDigest: acceptedSpec.configDigest,
     sourceBuildIdentitySha256: sha256(acceptedSpec.sourceBuildIdentity),
     componentDigests,
+    privateEvidence: {
+      bundleSha256: verifiedPrivateEvidenceReceipt.bundleSha256,
+      sourceControlReceiptSha256:
+        verifiedPrivateEvidenceReceipt.receiptSha256,
+      currentBytesBound: true
+    },
     dvi: {
       authorityEvidenceBindingSha256:
         dvi.drill.authorityEvidenceBindingSha256,
@@ -500,7 +1034,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       crashSafeRecoveryProven: false,
       blockers: [
         "SIGNED_PRE_POST_DEPLOYMENT_ATTESTATION_NOT_BOUND",
-        "PRIVATE_RAW_EVIDENCE_NOT_PERSISTED",
+        "PRIVATE_RAW_EVIDENCE_NOT_INDEPENDENTLY_ATTESTED",
         "CRASH_SAFE_RECOVERY_NOT_PROVEN",
         "PROVIDER_PRICING_AND_BILLING_NOT_PROVEN"
       ]
@@ -510,7 +1044,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     invariantViolations: 0,
     providerBacked: true,
     claimBoundary:
-      "This sanitized candidate summarizes one provider-backed integrated synthetic component run whose CockroachDB DVI selection, five observed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. It is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; raw private component evidence is not yet durably persisted and independently recomputed; crash-safe single-call recovery is not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized candidate summarizes one provider-backed integrated synthetic component run whose CockroachDB DVI selection, five observed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. A source-local helper writes a raw private component bundle outside the Git checkout and the candidate binds the currently reread bytes plus an unkeyed source-control receipt digest. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; an independently attested pre-provider journal and private-evidence finalizer remain mandatory; crash-safe single-call recovery is not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,
