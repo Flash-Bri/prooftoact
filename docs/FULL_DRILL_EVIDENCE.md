@@ -75,13 +75,18 @@ After release verification and before the first provider component, the runner
 creates a source-local owner-only journal and durably publishes a run-intent
 digest. It then writes create-only, fsynced hash-chain entries for each observed
 component, the private bundle receipt, and post-release verification. Before
-candidate composition, a source-local helper writes the canonical raw
+recovery publication, the recovery child create-only writes an owner-only
+canonical envelope containing the exact normalized signed bundle, syncs and
+rereads it, and on a later invocation with the same unsigned bundle reuses the
+first persisted signature bytes instead of a new randomized P-256 signature.
+Before candidate composition, a source-local helper writes the canonical raw
 component bundle through an owner-only temporary file in a canonical mode-0700
 directory outside the Git checkout, links the final run-specific name, syncs
 the directory entry, and rereads the mode-0600 file byte-for-byte. The final
 clean-release check runs after that write. The public candidate carries only
 the bundle and source-control-receipt digests. Because that receipt is unkeyed
-and reconstructible from current bytes, neither the journal nor bundle receipt
+and reconstructible from current bytes, neither the journal, signed-bundle, nor
+private-bundle receipt
 independently proves the historical write protocol, durable retention, or crash
 continuity. The
 candidate remains blocked until a separate reviewed finalizer validates a
@@ -96,8 +101,11 @@ matches `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT`. That
 precreated, canonical, process-owned mode-0700 root must be outside the Git
 checkout. It also requires `TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH` to
 be the sibling canonical absolute path `<run-id>.journal`. Neither final path
-may already exist. The runner never passes these paths or their private bytes
-to a component child and never includes a path in the public candidate.
+may already exist. The orchestrator supplies the recovery child one additional
+sibling canonical path named `<run-id>.signed-recovery-bundle.json`, the
+mode-0700 root, the exact integrated spec, and the forbidden checkout root.
+No raw private bytes or path is included in the public candidate; only bounded
+digests and source-control receipt facts leave the child.
 
 ## Per-drill binding
 
@@ -150,7 +158,8 @@ Acceptance additionally requires:
 - exactly one passing integrated run digest, all enumerated invariants true,
   and zero invariant violations;
 - one source-derived canonical recovery attempt whose replay returns the same
-  signed bundle, plus one continuous Managed MCP session with canonical
+  signed bundle, whose exact first signature bytes are durably available for
+  restart reuse, plus one continuous Managed MCP session with canonical
   request, response, and result digests through a successful close;
 - a fresh `EXPLAIN (VERBOSE)` receipt naming
   `g1_vector_candidates_embedding_idx`, `vector search`, and exact
@@ -327,6 +336,38 @@ official release.
   Independent pre/post attestation, an external evidence finalizer, and the
   provider-backed crash drill remain mandatory. The candidate stays
   non-accepting.
+
+### A restart could re-sign one canonical recovery bundle
+
+- Root cause: P-256 signing is randomized. The recovery runner signed the
+  canonical bundle in memory and immediately appended it twice, so a process
+  restart could produce different signature bytes for the same unsigned bundle
+  even though the bundle digest remained stable.
+- Why it was missed: the idempotency tests compared the database bundle digest
+  and reused one in-memory object; none constructed a second signer invocation
+  against a durable first-signature artifact.
+- Earliest detection point: sign the same canonical unsigned bundle twice,
+  persist the first result, and require the second invocation to return the
+  byte-exact first normalized signed bundle. Changed unsigned input, signature
+  tamper, permissive paths, and noncanonical bytes must fail before publication.
+- Repair: before the first recovery publication, the runner normalizes and
+  verifies the signature, create-only publishes a canonical signed-bundle
+  envelope in the owner-only evidence root through a synced temporary inode and
+  hard link, syncs the directory entry, and rereads the final file. A later
+  invocation verifies the persisted signature and exact release/run envelope
+  and reuses those bytes when the unsigned bundle digest matches.
+- Regression/preventive control: focused tests cover separate randomized
+  signatures, exact first-byte reuse, changed canonical input, byte tamper,
+  mode-0600 output, mode-0700 parent ownership, and the recovery-child path
+  allowlist. Candidate composition requires the bounded persistence receipt.
+- Verification: focused recovery-store, persistence, and integrated-drill tests
+  plus release security, proof, privacy, and claim gates must pass on the exact
+  repaired head. No provider execution is implied.
+- Residual risk and claim impact: current bytes and source behavior still do
+  not prove a real restart occurred, that the host retained them across a
+  crash, or that reconciliation avoided a second Managed MCP call. Provider
+  failpoints, independent attestation, and crash-safe orchestration remain
+  mandatory; the candidate stays non-accepting.
 
 ### Unattested components were accepted as an exact-release receipt
 
@@ -635,6 +676,10 @@ Both runners require these exact private inputs:
 | `TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT` | The canonical public-root JSON prepared before bootstrap |
 | `TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT` | The same commitment inserted during primary security bootstrap |
 | `RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64` | The separately held matching P-256 private key |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC` | Exact canonical integrated spec supplied by the source-controlled orchestrator |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT` | Canonical process-owned mode-0700 root outside the Git checkout |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH` | Exact sibling `<run-id>.signed-recovery-bundle.json` path under that root |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT` | Canonical Git checkout root that the private path must not enter |
 
 `npm run gate1:recovery` additionally requires the recovery administrator URL
 as `RECOVERY_DATABASE_URL` and `RECOVERY_PUBLISHER_PASSWORD` because that

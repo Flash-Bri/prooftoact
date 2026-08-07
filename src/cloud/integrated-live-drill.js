@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { canonicalJson } from "./canonical-json.js";
 import { canonicalRecoveryAttempt } from "./recovery-broker.js";
+import { verifyRecoveryBundleSourceSignature } from "./recovery-store.js";
 
 export const INTEGRATED_LIVE_DRILL_SCHEMA =
   "tideproof.highwater-drill-live.v1";
@@ -20,12 +21,15 @@ export const INTEGRATED_LIVE_DRILL_JOURNAL_ENTRY_SCHEMA =
   "tideproof.highwater-drill-live-journal-entry.v1";
 export const INTEGRATED_LIVE_DRILL_JOURNAL_RECEIPT_SCHEMA =
   "tideproof.highwater-drill-live-journal-receipt.v1";
+export const INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_RECEIPT_SCHEMA =
+  "tideproof.highwater-drill-live-recovery-bundle-persistence.v1";
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const SHA1 = /^[0-9a-f]{40}$/;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const PRIVATE_EVIDENCE_MAX_BYTES = 8 * 1024 * 1024;
+const RECOVERY_BUNDLE_MAX_BYTES = 64 * 1024;
 const JOURNAL_PHASES = Object.freeze([
   "PRE_PROVIDER_INTENT",
   "DVI_RESULT",
@@ -240,6 +244,7 @@ function acceptedRace(race, spec, dvi) {
 
 function acceptedRecovery(recovery, spec, race) {
   const denials = recovery?.runnerCredentialDenials;
+  const signedBundlePersistence = recovery?.signedBundlePersistence;
   const provider = recovery?.mcpProviderEvidence;
   const rpcCalls = provider?.rpcCalls;
   const notifications = provider?.notifications;
@@ -287,6 +292,54 @@ function acceptedRecovery(recovery, spec, race) {
       expectedCanonicalRecovery.bindingSha256 &&
     recovery.canonicalRecovery.bundleDigest === recovery.bundleDigest &&
     recovery.canonicalRecovery.replayMatched === true &&
+    exactKeys(signedBundlePersistence, [
+      "atomicCreateOnly",
+      "bundleDigest",
+      "configDigest",
+      "directoryEntrySynced",
+      "fileByteLength",
+      "fileMode",
+      "parentDirectoryMode",
+      "pathSha256",
+      "receiptSha256",
+      "rereadVerified",
+      "reusedExisting",
+      "runId",
+      "sameFilesystemAtomicLink",
+      "schemaVersion",
+      "signatureDigest",
+      "signedBundleSha256",
+      "sourceBuildIdentitySha256",
+      "sourceCommit",
+      "treeDigest"
+    ]) &&
+    signedBundlePersistence.schemaVersion ===
+      INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_RECEIPT_SCHEMA &&
+    signedBundlePersistence.sourceCommit === spec.sourceCommit &&
+    signedBundlePersistence.treeDigest === spec.treeDigest &&
+    signedBundlePersistence.runId === spec.runId &&
+    signedBundlePersistence.configDigest === spec.configDigest &&
+    signedBundlePersistence.sourceBuildIdentitySha256 ===
+      sha256(spec.sourceBuildIdentity) &&
+    signedBundlePersistence.bundleDigest === recovery.bundleDigest &&
+    SHA256.test(signedBundlePersistence.signatureDigest ?? "") &&
+    SHA256.test(signedBundlePersistence.signedBundleSha256 ?? "") &&
+    SHA256.test(signedBundlePersistence.pathSha256 ?? "") &&
+    Number.isSafeInteger(signedBundlePersistence.fileByteLength) &&
+    signedBundlePersistence.fileByteLength > 0 &&
+    signedBundlePersistence.fileByteLength <= RECOVERY_BUNDLE_MAX_BYTES &&
+    signedBundlePersistence.atomicCreateOnly === true &&
+    signedBundlePersistence.fileMode === "0600" &&
+    signedBundlePersistence.parentDirectoryMode === "0700" &&
+    signedBundlePersistence.sameFilesystemAtomicLink === true &&
+    signedBundlePersistence.directoryEntrySynced === true &&
+    signedBundlePersistence.rereadVerified === true &&
+    typeof signedBundlePersistence.reusedExisting === "boolean" &&
+    signedBundlePersistence.receiptSha256 === sha256(canonicalJson(
+      Object.fromEntries(Object.entries(signedBundlePersistence).filter(
+        ([key]) => key !== "receiptSha256"
+      ))
+    )) &&
     recovery.winnerOperationBindingSha256 === expectedWinnerBinding &&
     recovery.dvi?.authorityEvidenceBindingSha256 ===
       race.dvi.authorityEvidenceBindingSha256 &&
@@ -586,6 +639,252 @@ function rereadPrivateEvidence({
       fs.closeSync(descriptor);
     }
   }
+}
+
+function recoveryBundlePersistenceReceipt({
+  spec,
+  destinationPath,
+  envelope,
+  fileByteLength,
+  reusedExisting
+}) {
+  const receipt = {
+    schemaVersion: INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_RECEIPT_SCHEMA,
+    sourceCommit: spec.sourceCommit,
+    treeDigest: spec.treeDigest,
+    runId: spec.runId,
+    configDigest: spec.configDigest,
+    sourceBuildIdentitySha256: sha256(spec.sourceBuildIdentity),
+    bundleDigest: envelope.signedBundle.bundleDigest,
+    signatureDigest: envelope.signedBundle.signatureDigest,
+    signedBundleSha256: envelope.signedBundleSha256,
+    fileByteLength,
+    pathSha256: sha256(destinationPath),
+    atomicCreateOnly: true,
+    fileMode: "0600",
+    parentDirectoryMode: "0700",
+    sameFilesystemAtomicLink: true,
+    directoryEntrySynced: true,
+    rereadVerified: true,
+    reusedExisting
+  };
+  return Object.freeze({
+    ...receipt,
+    receiptSha256: sha256(canonicalJson(receipt))
+  });
+}
+
+function readIntegratedLiveDrillRecoveryBundle({
+  destinationPath,
+  secure,
+  spec,
+  candidateBundle,
+  trustedPublisherKeys,
+  reusedExisting
+}) {
+  let reread;
+  try {
+    reread = rereadPrivateEvidence({
+      destinationPath,
+      expectedUid: secure.expectedUid,
+      parentPath: secure.parentPath,
+      parentStat: secure.parentStat
+    });
+  } catch (cause) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED", {
+      cause
+    });
+  }
+  if (
+    reread.byteLength < 1 ||
+    reread.byteLength > RECOVERY_BUNDLE_MAX_BYTES
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(reread.bytes.toString("utf8"));
+  } catch {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED");
+  }
+  if (
+    !exactKeys(parsed, [
+      "configDigest",
+      "runId",
+      "schemaVersion",
+      "signedBundle",
+      "signedBundleSha256",
+      "sourceBuildIdentitySha256",
+      "sourceCommit",
+      "treeDigest"
+    ]) ||
+    parsed.schemaVersion !==
+      "tideproof.highwater-drill-live-signed-recovery-bundle.v1" ||
+    parsed.sourceCommit !== spec.sourceCommit ||
+    parsed.treeDigest !== spec.treeDigest ||
+    parsed.runId !== spec.runId ||
+    parsed.configDigest !== spec.configDigest ||
+    parsed.sourceBuildIdentitySha256 !== sha256(spec.sourceBuildIdentity) ||
+    !SHA256.test(parsed.signedBundleSha256 ?? "") ||
+    parsed.signedBundleSha256 !==
+      sha256(canonicalJson(parsed.signedBundle)) ||
+    reread.bytes.toString("utf8") !== `${canonicalJson(parsed)}\n`
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED");
+  }
+  let persistedBundle;
+  try {
+    persistedBundle = verifyRecoveryBundleSourceSignature(
+      parsed.signedBundle,
+      trustedPublisherKeys
+    );
+  } catch (cause) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED", {
+      cause
+    });
+  }
+  if (persistedBundle.bundleDigest !== candidateBundle.bundleDigest) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_MISMATCH");
+  }
+  const envelope = Object.freeze({
+    ...parsed,
+    signedBundle: Object.freeze(persistedBundle)
+  });
+  return Object.freeze({
+    bundle: envelope.signedBundle,
+    receipt: recoveryBundlePersistenceReceipt({
+      spec,
+      destinationPath,
+      envelope,
+      fileByteLength: reread.byteLength,
+      reusedExisting
+    })
+  });
+}
+
+export function persistOrReuseIntegratedLiveDrillRecoveryBundle({
+  destinationPath,
+  evidenceRootPath,
+  forbiddenRootPath,
+  spec,
+  signedBundle,
+  trustedPublisherKeys
+}) {
+  const acceptedSpec = parseIntegratedLiveDrillSpec(spec);
+  if (
+    typeof destinationPath !== "string" ||
+    path.basename(destinationPath) !==
+      `${acceptedSpec.runId}.signed-recovery-bundle.json`
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED");
+  }
+  const secure = securePrivateEvidenceParent(
+    destinationPath,
+    evidenceRootPath,
+    forbiddenRootPath
+  );
+  let candidateBundle;
+  try {
+    candidateBundle = verifyRecoveryBundleSourceSignature(
+      signedBundle,
+      trustedPublisherKeys
+    );
+  } catch (cause) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED", {
+      cause
+    });
+  }
+  if (fs.existsSync(destinationPath)) {
+    return readIntegratedLiveDrillRecoveryBundle({
+      destinationPath,
+      secure,
+      spec: acceptedSpec,
+      candidateBundle,
+      trustedPublisherKeys,
+      reusedExisting: true
+    });
+  }
+  const envelope = Object.freeze({
+    schemaVersion:
+      "tideproof.highwater-drill-live-signed-recovery-bundle.v1",
+    sourceCommit: acceptedSpec.sourceCommit,
+    treeDigest: acceptedSpec.treeDigest,
+    runId: acceptedSpec.runId,
+    configDigest: acceptedSpec.configDigest,
+    sourceBuildIdentitySha256: sha256(acceptedSpec.sourceBuildIdentity),
+    signedBundle: Object.freeze(candidateBundle),
+    signedBundleSha256: sha256(canonicalJson(candidateBundle))
+  });
+  const serialized = Buffer.from(`${canonicalJson(envelope)}\n`, "utf8");
+  if (
+    serialized.length < 1 ||
+    serialized.length > RECOVERY_BUNDLE_MAX_BYTES
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_REJECTED");
+  }
+  const temporaryPath = path.join(
+    secure.parentPath,
+    `.${path.basename(destinationPath)}.${process.pid}.` +
+      `${randomBytes(16).toString("hex")}.tmp`
+  );
+  let descriptor;
+  let linked = false;
+  try {
+    assertSamePrivateEvidenceParent(secure.parentPath, secure.parentStat);
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600
+    );
+    fs.writeFileSync(descriptor, serialized);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    assertSamePrivateEvidenceParent(secure.parentPath, secure.parentStat);
+    fs.linkSync(temporaryPath, destinationPath);
+    linked = true;
+    fs.unlinkSync(temporaryPath);
+    assertSamePrivateEvidenceParent(secure.parentPath, secure.parentStat);
+    syncDirectory(secure.parentPath, secure.parentStat);
+  } catch (cause) {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the first fail-closed error.
+      }
+    }
+    try {
+      fs.unlinkSync(temporaryPath);
+    } catch {
+      // The temporary file may not have been created or may be unlinked.
+    }
+    if (!linked && cause?.code === "EEXIST") {
+      return readIntegratedLiveDrillRecoveryBundle({
+        destinationPath,
+        secure,
+        spec: acceptedSpec,
+        candidateBundle,
+        trustedPublisherKeys,
+        reusedExisting: true
+      });
+    }
+    throw new Error("INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_WRITE_REJECTED", {
+      cause,
+      linked
+    });
+  }
+  return readIntegratedLiveDrillRecoveryBundle({
+    destinationPath,
+    secure,
+    spec: acceptedSpec,
+    candidateBundle,
+    trustedPublisherKeys,
+    reusedExisting: false
+  });
 }
 
 function privateEvidencePersistenceReceipt({
@@ -1360,6 +1659,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     bothRecoveryAuditsCommitted: true,
     preProviderJournalCurrentBytesBound: true,
     privateEvidenceCurrentBytesBound: true,
+    signedRecoveryBundleCurrentBytesBound: true,
     fixedTopLevelProviderOperationCount: true,
     operationalCapabilityReturned: false,
     authorityTransferredByModelOrRecovery: false
@@ -1408,6 +1708,9 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       unauthorizedPrincipalDenied: true,
       auditsCommitted: 2,
       operationalCapabilitiesReturned: false,
+      signedBundleCurrentBytesBound: true,
+      signedBundleSourceControlReceiptSha256:
+        recovery.signedBundlePersistence.receiptSha256,
       restartStableSignedBundleReuseProven: false
     },
     providerOperations: {
@@ -1458,7 +1761,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     invariantViolations: 0,
     providerBacked: false,
     claimBoundary:
-      "This sanitized candidate summarizes one runner-observed integrated synthetic component result whose claimed CockroachDB DVI selection, five claimed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. The candidate does not independently establish that any component receipt came from a provider, so providerBacked remains false. The immediate duplicate recovery append reuses one in-memory signed bundle, but restart-stable reuse of those exact signed bytes is not proven. Before the first component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal and bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; restart-stable signed-bundle reuse and crash-safe single-call recovery are not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, provider execution, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized candidate summarizes one runner-observed integrated synthetic component result whose claimed CockroachDB DVI selection, five claimed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. The candidate does not independently establish that any component receipt came from a provider, so providerBacked remains false. Before publication, the recovery runner create-only persists and rereads an owner-only canonical envelope containing the exact signed recovery bundle; a later invocation with the same unsigned bundle must reuse those first signature bytes. The current file bytes are bound, but actual restart reuse and crash continuity are not proven. Before the first component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal, signed-bundle, and private-bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; provider-backed restart-stable signed-bundle reuse and crash-safe single-call recovery are not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, provider execution, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,

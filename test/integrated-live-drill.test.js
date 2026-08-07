@@ -11,6 +11,7 @@ import {
   INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA_V1,
   INTEGRATED_LIVE_DRILL_JOURNAL_RECEIPT_SCHEMA,
   INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_RECEIPT_SCHEMA,
+  INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_RECEIPT_SCHEMA,
   INTEGRATED_LIVE_DRILL_SCHEMA,
   INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   integratedSourceBuildIdentity,
@@ -20,6 +21,7 @@ import {
   verifyIntegratedLiveDrillJournal,
   verifyIntegratedLiveDrillPrivateEvidence
 } from "../src/cloud/integrated-live-drill.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 import {
   runIntegratedLiveDrill,
   safeIntegratedLiveDrillFailureCode
@@ -299,6 +301,30 @@ function components() {
   };
   recovery.recoverySessionId =
     recovery.canonicalRecovery.recoverySessionId;
+  const signedBundlePersistence = {
+    schemaVersion: INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_RECEIPT_SCHEMA,
+    sourceCommit,
+    treeDigest,
+    runId,
+    configDigest,
+    sourceBuildIdentitySha256: sha(spec.sourceBuildIdentity),
+    bundleDigest: recovery.bundleDigest,
+    signatureDigest: "a".repeat(64),
+    signedBundleSha256: "b".repeat(64),
+    fileByteLength: 2048,
+    pathSha256: "c".repeat(64),
+    atomicCreateOnly: true,
+    fileMode: "0600",
+    parentDirectoryMode: "0700",
+    sameFilesystemAtomicLink: true,
+    directoryEntrySynced: true,
+    rereadVerified: true,
+    reusedExisting: false
+  };
+  recovery.signedBundlePersistence = {
+    ...signedBundlePersistence,
+    receiptSha256: sha(canonicalJson(signedBundlePersistence))
+  };
   return { dvi, race, recovery };
 }
 
@@ -577,9 +603,9 @@ test("unattested provider components remain a non-accepting candidate", () => {
   );
   assert.match(
     receipt.claimBoundary,
-    /restart-stable reuse of those exact signed bytes is not proven/
+    /current file bytes are bound, but actual restart reuse and crash continuity are not proven/
   );
-  assert.equal(receipt.invariantCount, 24);
+  assert.equal(receipt.invariantCount, 25);
   assert.equal(receipt.invariantViolations, 0);
   assert.deepEqual(receipt.providerOperations.aws, {
     cloudFormationDescribeStackResourceRequests: 1,
@@ -593,6 +619,7 @@ test("unattested provider components remain a non-accepting candidate", () => {
   assert.equal(receipt.preProviderJournal.entryCount, 6);
   assert.equal(receipt.preProviderJournal.currentBytesBound, true);
   assert.equal(receipt.preProviderJournal.independentlyAttested, false);
+  assert.equal(receipt.recovery.signedBundleCurrentBytesBound, true);
   assert.match(receipt.receiptSha256, /^[0-9a-f]{64}$/u);
   const publicReceipt = JSON.stringify(receipt);
   assert.equal(publicReceipt.includes(evidenceId), false);
@@ -615,6 +642,7 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
     (value) => { value.race.providerOperations.stsGetCallerIdentityRequests = 2; },
     (value) => { value.recovery.mcpCallCount = 2; },
     (value) => { value.recovery.terminalAuditCommitted = false; },
+    (value) => { value.recovery.signedBundlePersistence.bundleDigest = "0".repeat(64); },
     (value) => { value.recovery.dvi.selectedEvidenceBindingSha256 = "0".repeat(64); },
     (value) => { value.recovery.canonicalRecovery.bundleDigest = "0".repeat(64); },
     (value) => { value.recovery.mcpProviderEvidence.rpcCalls[1].sessionContinuous = false; },
@@ -740,6 +768,25 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
   assert.equal(
     calls[2].environment.RECOVERY_SOURCE_REQUEST_DIGEST,
     requestDigest
+  );
+  assert.equal(
+    calls[2].environment
+      .TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH,
+    path.join(
+      privateDirectory,
+      `${runId}.signed-recovery-bundle.json`
+    )
+  );
+  assert.equal(
+    calls[2].environment
+      .TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT,
+    privateDirectory
+  );
+  assert.deepEqual(
+    JSON.parse(
+      calls[2].environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC
+    ),
+    spec
   );
   assert.equal(
     calls[2].environment.RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256,

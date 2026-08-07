@@ -276,7 +276,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "40495a4d4f697f55fd161949561b21f17577bee9006127a091d04adecfc45b21"
+      "sha256": "5cf79efebf84a9f4e9ce675ca47e844ac28c02d881f7574d9c63c33e135acea5"
     },
     {
       "id": "database-security-posture",
@@ -366,19 +366,25 @@
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "f67106c61a7f8fbd765d0d9154fd41224a832f8c65ae5b7ad13021b9d5adcc2d"
+      "sha256": "83c987796e06a6fa18a02a548b8c502aaa4f7290160570ea7322c6ddcf599d87"
     },
     {
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER",
-      "sha256": "d823b9cbd8c831a4ab4e83b4d51db6e0de707947a974004e48bed6adbc0f11fb"
+      "sha256": "295a9a85fcd6da7494fbefdc4a02b8f01f2a7e7eba99ba7f7845b8b9ec7d2825"
     },
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "6f196e7ba2fb83f5484c545679c36b50477ef85b846c7c43afdff3fb8ced2c06"
+      "sha256": "a938da1bb9122b179ee9eedadb47eb30195f60bbdb5b3e3448a7c80e9daf2d95"
+    },
+    {
+      "id": "recovery-bundle-persistence-tests",
+      "path": "test/recovery-bundle-persistence.test.js",
+      "role": "RESTART_STABLE_SIGNED_BUNDLE_SOURCE_VERIFICATION",
+      "sha256": "e3aeebee89742081d19f83b24e7d55b2f503cbbc3fd16fb43f27a548bbbfa4a2"
     },
     {
       "id": "local-full-drill-harness",
@@ -432,7 +438,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "78a5c75d00f4113a0dbe9f78bb50dbbc5c67f2d89343af63a91abb500478b7e0"
+      "sha256": "0f599ad99212c4632ec897b3d12de812ab277eecf2b51167c15f7d785b39be65"
     },
     {
       "id": "proof-manifest-verifier",
@@ -498,7 +504,7 @@
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "9e598a4b80ae2c57dc64d8aefb2f56cf6a32c49cd409e57d7b86335c4503738c"
+      "sha256": "172f5fa31d8781176b3ee8adec7c8b24d8cc852df6bf1a887e1f534c054537a5"
     },
     {
       "id": "recovery-evidence-runner",
@@ -528,7 +534,7 @@
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "d6ed268d09a2438d090fc11f1414688c48c0255d7c1ffe84c17136594853229b"
+      "sha256": "d724e1205fd85b54c591988f2d6f80c1d7a3de5bd3077ddb7e0edccde8125574"
     },
     {
       "id": "recovery-store-tests",
