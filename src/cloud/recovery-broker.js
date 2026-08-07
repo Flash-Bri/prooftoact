@@ -23,6 +23,7 @@ const FIXED_DATABASE = "tideproof_recovery";
 const FIXED_TOOL = "select_query";
 const RECOVERY_PUBLISHER_TRUST_ROOT_ID =
   "gate1-recovery-publisher-v1";
+const RECOVERY_ID_NAMESPACE = "50e8fa14-7b36-5cbc-8f65-5ef89eca266e";
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -66,6 +67,63 @@ function requireSha256(value, name) {
     throw new TypeError(`${name} must be a SHA-256 digest`);
   }
   return text;
+}
+
+function uuidBytes(value) {
+  return Buffer.from(value.replaceAll("-", ""), "hex");
+}
+
+function uuidV5(namespace, name) {
+  const digest = createHash("sha1")
+    .update(uuidBytes(namespace))
+    .update(name)
+    .digest();
+  digest[6] = (digest[6] & 0x0f) | 0x50;
+  digest[8] = (digest[8] & 0x3f) | 0x80;
+  const hex = digest.subarray(0, 16).toString("hex");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20)
+  ].join("-");
+}
+
+export function canonicalRecoveryAttempt({
+  tenantId,
+  subjectBindingHash,
+  sourceDigest,
+  sourceCommitTs
+}) {
+  const acceptedTenantId = requireUuid(tenantId, "tenantId");
+  const acceptedSubjectBindingHash = requireSha256(
+    subjectBindingHash,
+    "subjectBindingHash"
+  );
+  const acceptedSourceDigest = requireSha256(sourceDigest, "sourceDigest");
+  const sourceCommitMs = new Date(sourceCommitTs).getTime();
+  if (!Number.isSafeInteger(sourceCommitMs) || sourceCommitMs < 1) {
+    throw new TypeError("sourceCommitTs must be a canonical timestamp");
+  }
+  const canonicalSourceCommitTs = new Date(sourceCommitMs).toISOString();
+  if (canonicalSourceCommitTs !== sourceCommitTs) {
+    throw new TypeError("sourceCommitTs must be a canonical timestamp");
+  }
+  const binding = canonicalJson({
+    schemaVersion: "tideproof.canonical-recovery-attempt.v1",
+    tenantId: acceptedTenantId,
+    subjectBindingHash: acceptedSubjectBindingHash,
+    sourceDigest: acceptedSourceDigest,
+    sourceCommitTs: canonicalSourceCommitTs
+  });
+  return Object.freeze({
+    recoverySessionId: uuidV5(RECOVERY_ID_NAMESPACE, binding),
+    snapshotVersion: sourceCommitMs,
+    sourceCommitTs: canonicalSourceCommitTs,
+    expiresAt: new Date(sourceCommitMs + 30 * 60 * 1_000).toISOString(),
+    bindingSha256: sha256(binding)
+  });
 }
 
 function primaryRuntimeClient({

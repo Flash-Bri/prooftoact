@@ -147,6 +147,7 @@ test("Managed MCP client initializes and invokes only fixed select_query", async
     query: fixedQuery()
   });
   await client.close();
+  const evidence = client.transportEvidence();
 
   assert.equal(result.content[0].type, "text");
   assert.deepEqual(
@@ -175,6 +176,86 @@ test("Managed MCP client initializes and invokes only fixed select_query", async
   );
   assert.equal(toolCall.options.redirect, "error");
   assert.equal(cancelledUnusedBodies, 2);
+  assert.equal(
+    evidence.schemaVersion,
+    "tideproof.managed-mcp-transport-evidence.v2"
+  );
+  assert.match(evidence.sessionIdSha256, /^[0-9a-f]{64}$/u);
+  assert.equal(evidence.rpcCalls.length, 2);
+  assert.equal(evidence.rpcCalls[0].outboundSessionIdSha256, null);
+  assert.equal(
+    evidence.rpcCalls[0].responseSessionIdSha256,
+    evidence.sessionIdSha256
+  );
+  assert.equal(
+    evidence.rpcCalls[1].outboundSessionIdSha256,
+    evidence.sessionIdSha256
+  );
+  assert.equal(evidence.rpcCalls[1].sessionContinuous, true);
+  assert.equal(evidence.notifications.length, 1);
+  assert.equal(evidence.notifications[0].sessionContinuous, true);
+  assert.equal(evidence.close.sessionContinuous, true);
+  assert.equal(
+    evidence.close.outboundSessionIdSha256,
+    evidence.sessionIdSha256
+  );
+  for (const rpc of evidence.rpcCalls) {
+    assert.match(rpc.requestPayloadSha256, /^[0-9a-f]{64}$/u);
+    assert.match(rpc.responsePayloadSha256, /^[0-9a-f]{64}$/u);
+    assert.match(rpc.resultSha256, /^[0-9a-f]{64}$/u);
+    assert.equal(rpc.requestBytes > 0, true);
+    assert.equal(rpc.responseBytes > 0, true);
+  }
+});
+
+test("Managed MCP client rejects a missing or replaced negotiated session", async () => {
+  for (const mode of ["missing", "replaced"]) {
+    const client = new CockroachManagedMcpRecoveryClient({
+      apiKey: API_KEY,
+      clusterId: CLUSTER_ID,
+      fetchImpl: async (_url, options) => {
+        const payload = JSON.parse(options.body);
+        if (payload.method === "initialize") {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: payload.id,
+              result: {
+                protocolVersion: "2025-03-26",
+                capabilities: {}
+              }
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+                ...(mode === "missing"
+                  ? {}
+                  : { "mcp-session-id": "session-one" })
+              }
+            }
+          );
+        }
+        if (payload.method === "notifications/initialized") {
+          return new Response(null, {
+            status: 202,
+            headers: { "mcp-session-id": "session-two" }
+          });
+        }
+        throw new Error("tool call must not be reached");
+      }
+    });
+    await assert.rejects(
+      client.selectQuery({
+        clusterId: CLUSTER_ID,
+        database: "tideproof_recovery",
+        query: fixedQuery()
+      }),
+      mode === "missing"
+        ? /RECOVERY_MCP_SESSION_REQUIRED/
+        : /RECOVERY_MCP_SESSION_CHANGED/
+    );
+  }
 });
 
 test("Managed MCP client rejects any query outside the fixed template", async () => {

@@ -966,25 +966,7 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
       AUTHORITY_DATABASE_HOST: { Ref: "AuthorityDatabaseHost" },
       AUTHORITY_DATABASE_PORT: { Ref: "AuthorityDatabasePort" },
       AUTHORITY_TENANT_ID: { Ref: "AuthorityTenantId" },
-      AUTHORITY_RUN_ID: { Ref: "AuthorityRunId" },
       AUTHORITY_INCIDENT_ID: { Ref: "AuthorityIncidentId" },
-      AUTHORITY_EVIDENCE_ID: { Ref: "AuthorityEvidenceId" },
-      AUTHORITY_ALPHA_PROPOSAL_DIGEST: {
-        Ref: "AuthorityAlphaProposalDigest"
-      },
-      AUTHORITY_BRAVO_PROPOSAL_DIGEST: {
-        Ref: "AuthorityBravoProposalDigest"
-      },
-      AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST: {
-        Ref: "AuthorityAlphaLogicalActionDigest"
-      },
-      AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST: {
-        Ref: "AuthorityBravoLogicalActionDigest"
-      },
-      AUTHORITY_SELECTED_EVIDENCE_DIGEST: {
-        Ref: "AuthoritySelectedEvidenceDigest"
-      },
-      AUTHORITY_RACE_ID: { Ref: "AuthorityRaceId" },
       AUTHORITY_RESOURCE_ID: { Ref: "AuthorityResourceId" },
       SOURCE_COMMIT: { Ref: "SourceCommit" },
       CONFIG_DIGEST: { Ref: "ConfigDigest" },
@@ -1650,16 +1632,8 @@ test("effective config digest changes with every deployment control", () => {
         "arn:aws:secretsmanager:us-east-1:111111111111:secret:prooftoact/authorizer-AbCd12",
       databaseSecretVersionId: "a".repeat(32),
       tenantId: "11111111-1111-4111-8111-111111111111",
-      runId: "22222222-2222-4222-8222-222222222222",
       incidentId: "33333333-3333-4333-8333-333333333333",
-      evidenceId: "44444444-4444-4444-8444-444444444444",
-      raceId: "55555555-5555-4555-8555-555555555555",
-      resourceId: "synthetic-rescue-unit-aws-proof",
-      alphaProposalDigest: "1".repeat(64),
-      bravoProposalDigest: "4".repeat(64),
-      alphaLogicalActionDigest: "2".repeat(64),
-      bravoLogicalActionDigest: "5".repeat(64),
-      selectedEvidenceDigest: "3".repeat(64),
+      resourceId: "synthetic-rescue-unit-aws-proof"
     },
     bedrockModelId: "amazon.nova-micro-v1:0",
     budgetUsd: 15,

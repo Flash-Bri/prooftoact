@@ -65,49 +65,9 @@
       "Description": "Synthetic Gate Two tenant UUID prepared in CockroachDB.",
       "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
-    "AuthorityRunId": {
-      "Type": "String",
-      "Description": "Synthetic active-run UUID prepared in CockroachDB.",
-      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
     "AuthorityIncidentId": {
       "Type": "String",
       "Description": "Synthetic incident UUID bound to the prepared evidence and resource.",
-      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    "AuthorityEvidenceId": {
-      "Type": "String",
-      "Description": "Verified synthetic evidence UUID admitted by CockroachDB.",
-      "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    "AuthorityAlphaProposalDigest": {
-      "Type": "String",
-      "Description": "Database-authorized alpha DVI proposal identity consumed by Gate Two.",
-      "AllowedPattern": "^[0-9a-f]{64}$"
-    },
-    "AuthorityBravoProposalDigest": {
-      "Type": "String",
-      "Description": "Database-authorized bravo DVI proposal identity consumed by Gate Two.",
-      "AllowedPattern": "^[0-9a-f]{64}$"
-    },
-    "AuthorityAlphaLogicalActionDigest": {
-      "Type": "String",
-      "Description": "Stable alpha logical-action identity consumed by Gate Two.",
-      "AllowedPattern": "^[0-9a-f]{64}$"
-    },
-    "AuthorityBravoLogicalActionDigest": {
-      "Type": "String",
-      "Description": "Stable bravo logical-action identity consumed by Gate Two.",
-      "AllowedPattern": "^[0-9a-f]{64}$"
-    },
-    "AuthoritySelectedEvidenceDigest": {
-      "Type": "String",
-      "Description": "Exact selected evidence digest bound by the authorized DVI proposal.",
-      "AllowedPattern": "^[0-9a-f]{64}$"
-    },
-    "AuthorityRaceId": {
-      "Type": "String",
-      "Description": "One exact proof-race UUID accepted by both authority contenders.",
       "AllowedPattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
     "AuthorityResourceId": {
@@ -1475,32 +1435,8 @@
             "AUTHORITY_TENANT_ID": {
               "Ref": "AuthorityTenantId"
             },
-            "AUTHORITY_RUN_ID": {
-              "Ref": "AuthorityRunId"
-            },
             "AUTHORITY_INCIDENT_ID": {
               "Ref": "AuthorityIncidentId"
-            },
-            "AUTHORITY_EVIDENCE_ID": {
-              "Ref": "AuthorityEvidenceId"
-            },
-            "AUTHORITY_ALPHA_PROPOSAL_DIGEST": {
-              "Ref": "AuthorityAlphaProposalDigest"
-            },
-            "AUTHORITY_BRAVO_PROPOSAL_DIGEST": {
-              "Ref": "AuthorityBravoProposalDigest"
-            },
-            "AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST": {
-              "Ref": "AuthorityAlphaLogicalActionDigest"
-            },
-            "AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST": {
-              "Ref": "AuthorityBravoLogicalActionDigest"
-            },
-            "AUTHORITY_SELECTED_EVIDENCE_DIGEST": {
-              "Ref": "AuthoritySelectedEvidenceDigest"
-            },
-            "AUTHORITY_RACE_ID": {
-              "Ref": "AuthorityRaceId"
             },
             "AUTHORITY_RESOURCE_ID": {
               "Ref": "AuthorityResourceId"
@@ -3947,31 +3883,6 @@
     "AuthorityArtifactDigest": {
       "Value": {
         "Ref": "AuthorityArtifactDigest"
-      }
-    },
-    "AuthorityAlphaProposalDigest": {
-      "Value": {
-        "Ref": "AuthorityAlphaProposalDigest"
-      }
-    },
-    "AuthorityBravoProposalDigest": {
-      "Value": {
-        "Ref": "AuthorityBravoProposalDigest"
-      }
-    },
-    "AuthorityAlphaLogicalActionDigest": {
-      "Value": {
-        "Ref": "AuthorityAlphaLogicalActionDigest"
-      }
-    },
-    "AuthorityBravoLogicalActionDigest": {
-      "Value": {
-        "Ref": "AuthorityBravoLogicalActionDigest"
-      }
-    },
-    "AuthoritySelectedEvidenceDigest": {
-      "Value": {
-        "Ref": "AuthoritySelectedEvidenceDigest"
       }
     },
     "ProbeSourceDigest": {

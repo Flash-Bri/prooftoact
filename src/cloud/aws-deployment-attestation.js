@@ -118,22 +118,12 @@ export function deploymentStackParameterBindings(configuration) {
   const authority = configuration.authority;
   const bindings = {
     ArtifactBucket: configuration.artifactBucket,
-    AuthorityAlphaLogicalActionDigest:
-      authority.alphaLogicalActionDigest,
-    AuthorityAlphaProposalDigest: authority.alphaProposalDigest,
-    AuthorityBravoLogicalActionDigest:
-      authority.bravoLogicalActionDigest,
-    AuthorityBravoProposalDigest: authority.bravoProposalDigest,
     AuthorityDatabaseHost: authority.databaseHost,
     AuthorityDatabasePort: authority.databasePort,
     AuthorityDatabaseSecretArn: authority.databaseSecretArn,
     AuthorityDatabaseSecretVersionId: authority.databaseSecretVersionId,
-    AuthorityEvidenceId: authority.evidenceId,
     AuthorityIncidentId: authority.incidentId,
-    AuthorityRaceId: authority.raceId,
     AuthorityResourceId: authority.resourceId,
-    AuthorityRunId: authority.runId,
-    AuthoritySelectedEvidenceDigest: authority.selectedEvidenceDigest,
     AuthorityTenantId: authority.tenantId,
     BedrockModelId: configuration.bedrockModelId,
     ConfigDigest: configDigest,
@@ -157,7 +147,7 @@ export function deploymentStackParameterBindings(configuration) {
       configuration.artifactSourceDigests[name];
   }
   requireCondition(
-    Object.keys(bindings).length === 53 &&
+    Object.keys(bindings).length === 45 &&
       Object.values(bindings).every(
         (value) => typeof value === "string" && value.length > 0
       ),
@@ -577,7 +567,7 @@ export function validateDeploymentExpectation(expectation) {
       HEX_64.test(expectation.basis.configurationSha256) &&
       HEX_64.test(expectation.basis.providerDependencyTreeDigest) &&
       HEX_64.test(expectation.basis.providerRuntimeSha256) &&
-      expectation.basis.stackParameterCount === 53 &&
+      expectation.basis.stackParameterCount === 45 &&
       HEX_64.test(expectation.basis.stackParametersDigest),
     "AWS_ATTEST_EXPECTATION"
   );
@@ -2165,7 +2155,7 @@ export function validateDeploymentAttestationPair({
     },
     finalReleaseReady: false,
     claimBoundary:
-      "This self-contained signed-evidence validator verifies and embeds two independently signed provider snapshots plus one independently signed end-to-end alternate-principal AccessDenied observation. It binds them to the exact build, all 53 CloudFormation parameter values, the five primary runtime functions, their shared roles, the two evidence roles, the exact HTTP API route/integration/stage and explicit active-deployment census, 37 drift-supported CloudFormation resources, two directly attested integrations, and one directly attested explicit API deployment. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation; any update requires teardown and a fresh create. The denial observation does not by itself attribute AccessDenied to one IAM, session-policy, or organization-policy cause. Probe resources are required absent; other account resources remain outside this census. A PASS is not administrator exclusion, vulnerability absence, live CockroachDB proof, application correctness, public-release approval, or submission authorization."
+      "This self-contained signed-evidence validator verifies and embeds two independently signed provider snapshots plus one independently signed end-to-end alternate-principal AccessDenied observation. It binds them to the exact build, all 45 CloudFormation parameter values, the five primary runtime functions, their shared roles, the two evidence roles, the exact HTTP API route/integration/stage and explicit active-deployment census, 37 drift-supported CloudFormation resources, two directly attested integrations, and one directly attested explicit API deployment. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation; any update requires teardown and a fresh create. The denial observation does not by itself attribute AccessDenied to one IAM, session-policy, or organization-policy cause. Probe resources are required absent; other account resources remain outside this census. A PASS is not administrator exclusion, vulnerability absence, live CockroachDB proof, application correctness, public-release approval, or submission authorization."
   });
 }
 

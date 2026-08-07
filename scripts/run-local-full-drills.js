@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -15,11 +16,27 @@ export function runLocalFullDrills() {
   });
 }
 
-function main() {
-  if (process.argv.length !== 2) {
+function main(args = process.argv.slice(2)) {
+  if (
+    !(
+      args.length === 0 ||
+      (args.length === 2 &&
+        args[0] === "--output" &&
+        args[1] === "evidence/local-full-drill-100-2026-08-04.json")
+    )
+  ) {
     throw new Error("LOCAL_FULL_DRILL_ARGUMENTS_REJECTED");
   }
-  process.stdout.write(serializeLocalFullDrillReceipt(runLocalFullDrills()));
+  const serialized = serializeLocalFullDrillReceipt(runLocalFullDrills());
+  if (args.length === 0) {
+    process.stdout.write(serialized);
+    return;
+  }
+  fs.writeFileSync(path.join(ROOT, args[1]), serialized, {
+    encoding: "utf8",
+    flag: "w",
+    mode: 0o644
+  });
 }
 
 const startedDirectly =

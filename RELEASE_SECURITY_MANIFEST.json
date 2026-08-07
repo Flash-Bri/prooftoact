@@ -30,7 +30,7 @@
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
       "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
-      "sha256": "3d2f77d9d943db995cd53b705123a6c1d4f04b26a575d3e61a8a80a8c0436620"
+      "sha256": "0fa708862a99ff1737ec934799c835002d6244bc0ba6c3e88a54fa54ef1dfc55"
     },
     {
       "id": "admissible-vector-runner",
@@ -72,7 +72,7 @@
       "id": "authority-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "AWS_AUTHORITY_RUNTIME",
-      "sha256": "3bacd801ff9e9c4abd9900cd4cf65303f618b587917091ae86e2c595af8e1938"
+      "sha256": "e3e5b475bec680f3757648a5d93775c58bbd306ad2cf6fb4a2c27b4608e80ab9"
     },
     {
       "id": "authority-runtime-identity-tests",
@@ -84,7 +84,7 @@
       "id": "authority-runtime-reconciliation-tests",
       "path": "test/aws-authority-lambda.test.js",
       "role": "AUTHORITY_RUNTIME_RECONCILIATION_VERIFICATION",
-      "sha256": "b4fe70cb51affbe6499e3cf9aca098933bed9d22c26f77c08ac4d334aae85fde"
+      "sha256": "747fab44d14a49aebe5665493a89b20480608d4f7814282e25fce2a5004ae0c2"
     },
     {
       "id": "authority-store",
@@ -102,25 +102,25 @@
       "id": "aws-authority-race",
       "path": "scripts/gate2-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_RUNNER",
-      "sha256": "2fceb2f0186585140fa4f747ef532c25f95a571e98198d01155633e2867ff1c8"
+      "sha256": "aa96e8acad56261eec8ce58ad698af9cfb5f0a31662f661650a9cacfb97bf806"
     },
     {
       "id": "aws-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
       "role": "AWS_AUTHORITY_EVIDENCE_VALIDATOR",
-      "sha256": "a3ec55a057fb6d38f2c7ace6b485a712af793366022988165bcdef856d7df80d"
+      "sha256": "b959eb76be9d34a154512d15ba4d201154d587d2485038e0c369639d5dd0b94c"
     },
     {
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "7e10f702e7b1583ae545da4b70595827669951950e1c4e719543aab6fbb1ce67"
+      "sha256": "331bc5942e4fb4a24a4ed1eebd43ff032de4ef5c9fd7b0218d427431bdce2503"
     },
     {
       "id": "aws-deployment-attestation",
       "path": "src/cloud/aws-deployment-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
-      "sha256": "62ad076f13aa772df48bd5f438a4bc701539a77146d6e2969d27665184c3a09a"
+      "sha256": "a0a2c387aca4a3fdc98b45709e86a32290ebdb0e55c1d5d6bbfdb701b7da4134"
     },
     {
       "id": "aws-deployment-attestation-runner",
@@ -132,7 +132,7 @@
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "c27db879f2fdd22e83fa3a9709772a2750c350c6f7a64ca0e2d5a81ef4f30d44"
+      "sha256": "66ebb63c5103b95799bad2585f2e8781ada9c6bce8ed0dcb5181727c1d4dc9ae"
     },
     {
       "id": "aws-evidence-identity",
@@ -216,19 +216,19 @@
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "45951c031d4c5324fc6d45b8da74309b337de434242d92f3f542e7582ef2e755"
+      "sha256": "0d9266d940843e15e76618492362014e453d5b30bf419ba5ee11000360d5addf"
     },
     {
       "id": "aws-template-generated",
       "path": "infra/aws/gate2-template.json",
       "role": "GENERATED_CLOUDFORMATION",
-      "sha256": "2eec05a757bd531f15c773baf0a1a20611881d61b7006c5becfddba449a5c311"
+      "sha256": "13a2df296d9d5faec2009698523df7da5aab50c70e45e0618bcefd623aeb4798"
     },
     {
       "id": "aws-template-source",
       "path": "src/cloud/aws-gate2-template.js",
       "role": "CLOUDFORMATION_SOURCE",
-      "sha256": "d9dff3c34d0ae4aac3db8d45183559143a96c5477e4f50fbff95c359fcbdee51"
+      "sha256": "b1c88255712e928c0bbafee8b1f8890b9af31f3c607f6846f1679d01285fd400"
     },
     {
       "id": "aws-template-security-tests",
@@ -330,7 +330,7 @@
       "id": "dvi-reconciliation-tests",
       "path": "test/admissible-vector-retrieval.test.js",
       "role": "DVI_PREPARATION_RECONCILIATION_VERIFICATION",
-      "sha256": "2ad0996f8e031c28f4b6691209c2904956924a26e5907c280a364e574e04e0e4"
+      "sha256": "598d6fd154cee5ef7fbb2f47aba43c23a76120d580c2ca1387a11b297520e226"
     },
     {
       "id": "exact-git-source",
@@ -363,10 +363,28 @@
       "sha256": "427286ab6ad83fdbd790adbc86a20ef1b888f674b74f75019c378172de91f3e2"
     },
     {
+      "id": "integrated-live-drill-harness",
+      "path": "src/cloud/integrated-live-drill.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT",
+      "sha256": "f67106c61a7f8fbd765d0d9154fd41224a832f8c65ae5b7ad13021b9d5adcc2d"
+    },
+    {
+      "id": "integrated-live-drill-runner",
+      "path": "scripts/gate2-integrated-live-drill.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER",
+      "sha256": "d823b9cbd8c831a4ab4e83b4d51db6e0de707947a974004e48bed6adbc0f11fb"
+    },
+    {
+      "id": "integrated-live-drill-tests",
+      "path": "test/integrated-live-drill.test.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
+      "sha256": "6f196e7ba2fb83f5484c545679c36b50477ef85b846c7c43afdff3fb8ced2c06"
+    },
+    {
       "id": "local-full-drill-harness",
       "path": "src/local-full-drill.js",
       "role": "LOCAL_FULL_DRILL_EVIDENCE_CONTRACT",
-      "sha256": "56e3d6dbe2d7493f0204d14f1d7093abdfc18d20e9cf209514720842c41b81f7"
+      "sha256": "0ab8e5270a1ee07af0f424c4ee47361607a1c83693f4cc9ec634652c8df0fedc"
     },
     {
       "id": "local-full-drill-receipt-verifier",
@@ -378,13 +396,13 @@
       "id": "local-full-drill-runner",
       "path": "scripts/run-local-full-drills.js",
       "role": "LOCAL_FULL_DRILL_EVIDENCE_RUNNER",
-      "sha256": "432f5de81f73c620148c5121916acd3f05fcd0dd38ac4d1b3808cac62944dcdd"
+      "sha256": "f0eff6a3d8a19e05510c594b4a616b279b5ee3ce206b0c2f5222db4112338e87"
     },
     {
       "id": "local-full-drill-tests",
       "path": "test/local-full-drill.test.js",
       "role": "LOCAL_FULL_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "35d01c95206cfeea4b604353ca7c49d0fced2d0a358319c34ca129a2f74cb114"
+      "sha256": "a68481ef18d5cdb37f5bf53a455a9c904eca57b8fee89f61ce642d8001026e69"
     },
     {
       "id": "local-server",
@@ -396,7 +414,7 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "1eeb6970b345ae2206fac51021396512ab3276647d563d58014afc19d4c30f95"
+      "sha256": "02a218a564c2cc333d1172ef97f8e8ca2f707a80bd846ac2eeba32e43b8ce204"
     },
     {
       "id": "primary-security-bootstrap",
@@ -414,7 +432,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "6b56b7279fead6682dc4d4d5d0c9588931707f1870f9d65c97b2309dab669ed5"
+      "sha256": "78a5c75d00f4113a0dbe9f78bb50dbbc5c67f2d89343af63a91abb500478b7e0"
     },
     {
       "id": "proof-manifest-verifier",
@@ -468,7 +486,7 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "ab4e013846f046d8708942a926639bde1674401a89a7d6603f704f2a79b7cf66"
+      "sha256": "7e02eeb484a91e2954a564588eaef122a0605e1c26ba6a8ac49c88f923a0c0d4"
     },
     {
       "id": "recovery-security-contract",
@@ -480,13 +498,13 @@
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "fb7e2575b1caba504ae6f5bcb5bc5f08de6020965bcab56a84bb45e9ecaa5b4d"
+      "sha256": "9e598a4b80ae2c57dc64d8aefb2f56cf6a32c49cd409e57d7b86335c4503738c"
     },
     {
       "id": "recovery-evidence-runner",
       "path": "scripts/gate1-recovery.js",
       "role": "RECOVERY_EVIDENCE_RUNNER",
-      "sha256": "fe5ead1de020508a81f54cadbe3d3e2cba21a80e8620225821bbd6bb0d442f5b"
+      "sha256": "5c4b97999f65613a3181e30a147055b393516a45e7ca7b94744132d4a8f85ffd"
     },
     {
       "id": "recovery-publisher-key",

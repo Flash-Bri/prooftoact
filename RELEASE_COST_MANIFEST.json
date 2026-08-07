@@ -61,7 +61,7 @@
       "id": "authority-semantic-metric-runtime",
       "path": "infra/aws/lambda/authority.cjs",
       "role": "SEMANTIC_METRIC_CARDINALITY",
-      "sha256": "3bacd801ff9e9c4abd9900cd4cf65303f618b587917091ae86e2c595af8e1938"
+      "sha256": "e3e5b475bec680f3757648a5d93775c58bbd306ad2cf6fb4a2c27b4608e80ab9"
     },
     {
       "id": "aws-bootstrap-template",
@@ -73,7 +73,7 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "2eec05a757bd531f15c773baf0a1a20611881d61b7006c5becfddba449a5c311"
+      "sha256": "13a2df296d9d5faec2009698523df7da5aab50c70e45e0618bcefd623aeb4798"
     },
     {
       "id": "aws-preflight-library",

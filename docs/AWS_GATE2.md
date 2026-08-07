@@ -918,9 +918,13 @@ evidence only and must not be used to deploy the repaired candidate.
     require both durable contender results to carry one shared selected
     evidence identity and one shared non-reversible DVI authority-evidence
     binding; publish only the reviewed sanitized
-    `tideproof.aws-authority-race-receipt.v6`. Any wrong-run, cross-DVI,
-    sequential, ambiguous, replayed, expanded, stale, extra, or unresolved
-    result is not evidence.
+    `tideproof.aws-authority-race-receipt.v7`. Before the durable proof, invoke
+    the winning contender once more and require an exact `operation_replay`,
+    then invoke the dedicated changed-input probe under that same operation ID
+    and require SQLSTATE `22000` to become the sanitized
+    `OPERATION_DIGEST_MISMATCH` denial. Any wrong-run, cross-DVI, sequential,
+    ambiguous, replay-drifted, changed-input-accepted, expanded, stale, extra,
+    or unresolved result is not evidence.
 14. From a signed-out browser, request only the ten enumerated public `GET`
     routes. From the exact clean deployment checkout, run:
 

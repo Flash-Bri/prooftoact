@@ -7,10 +7,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  AUTHORITY_CHANGED_INPUT_RESPONSE_SCHEMA,
   AUTHORITY_PROOF_RESPONSE_SCHEMA,
   AUTHORITY_RACE_RECEIPT_SCHEMA,
   AUTHORITY_REQUEST_SCHEMA,
   AUTHORITY_RESPONSE_SCHEMA,
+  authorityChangedInputEvent,
   authorityProofEvent,
   authorityRaceEvent,
   parseAuthorityRaceArguments,
@@ -18,6 +20,8 @@ import {
   validateAuthorityRaceInvocations,
   validateAuthorityRaceProof
 } from "../src/cloud/aws-authority-race.js";
+import { validateAwsEvidenceCaller } from
+  "../src/cloud/aws-evidence-identity.js";
 import {
   authorityPrincipalFromStackResource,
   awsEvidenceClientOptions,
@@ -37,7 +41,17 @@ const EXPECTED = Object.freeze({
     "arn:aws:lambda:us-east-1:111111111111:function:tideproof-authority:7",
   raceId: "55555555-5555-4555-8555-555555555555",
   runId: "66666666-6666-4666-8666-666666666666",
-  sourceCommit: "a".repeat(40)
+  sourceCommit: "a".repeat(40),
+  drill: Object.freeze({
+    runId: "66666666-6666-4666-8666-666666666666",
+    authorityEvidenceBindingSha256: "6".repeat(64),
+    selectedEvidenceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    selectedEvidenceDigest: "0".repeat(64),
+    alphaProposalDigest: "8".repeat(64),
+    bravoProposalDigest: "a".repeat(64),
+    alphaLogicalActionDigest: "9".repeat(64),
+    bravoLogicalActionDigest: "b".repeat(64)
+  })
 });
 
 const IDS = Object.freeze({
@@ -45,14 +59,34 @@ const IDS = Object.freeze({
   bravo: "22222222-2222-5222-8222-222222222222"
 });
 
-const CALLER_BINDING = Object.freeze({
-  bindingDigest: "5".repeat(64),
-  callerIdentityDigest: "6".repeat(64),
-  contextDigest: "8".repeat(64),
-  expectedIdentityDigest: "6".repeat(64),
-  expectedPrincipalDigest: "7".repeat(64),
-  principalType: "assumed-role"
-});
+const CALLER_ACCOUNT_ID = "111111111111";
+const CALLER_ROLE_NAME =
+  "prooftoact-gate2-AuthorityRaceCallerRole-Test123";
+const CALLER_ROLE_ARN =
+  `arn:aws:iam::${CALLER_ACCOUNT_ID}:role/${CALLER_ROLE_NAME}`;
+const CALLER_SESSION_NAME = "integrated-live-drill";
+const CALLER_ARN =
+  `arn:aws:sts::${CALLER_ACCOUNT_ID}:assumed-role/` +
+  `${CALLER_ROLE_NAME}/${CALLER_SESSION_NAME}`;
+const CALLER_USER_ID =
+  `AROA1234567890ABCD:${CALLER_SESSION_NAME}`;
+const CALLER_BINDING = validateAwsEvidenceCaller(
+  {
+    Account: CALLER_ACCOUNT_ID,
+    Arn: CALLER_ARN,
+    UserId: CALLER_USER_ID
+  },
+  {
+    expectedAccountId: CALLER_ACCOUNT_ID,
+    expectedPrincipalArn: CALLER_ROLE_ARN,
+    expectedCallerArn: CALLER_ARN,
+    expectedCallerUserId: CALLER_USER_ID,
+    bindingContext: {
+      purpose: "authority-race-live-binding-regression",
+      sourceCommit: EXPECTED.sourceCommit
+    }
+  }
+);
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -261,6 +295,49 @@ function proofResponse(options = {}) {
   };
 }
 
+function replayResponse() {
+  const invocation = response("alpha");
+  const body = JSON.parse(Buffer.from(invocation.Payload).toString("utf8"));
+  body.replayKind = "operation_replay";
+  body.invocationRequestId =
+    "88888888-8888-4888-8888-888888888888";
+  body.transaction.databaseStartedAt = "2026-08-01T12:00:03.100Z";
+  body.transaction.databaseCompletedAt = "2026-08-01T12:00:03.200Z";
+  body.commit.databaseNow = "2026-08-01T12:00:03.150Z";
+  invocation.Payload = Buffer.from(JSON.stringify(body));
+  invocation.$metadata.requestId = "aws-invoke-request-replay";
+  return invocation;
+}
+
+function changedInputResponse() {
+  return {
+    StatusCode: 200,
+    ExecutedVersion: "7",
+    Payload: Buffer.from(JSON.stringify({
+      schemaVersion: AUTHORITY_CHANGED_INPUT_RESPONSE_SCHEMA,
+      status: "DENIED_CHANGED_INPUT",
+      code: "OPERATION_DIGEST_MISMATCH",
+      raceId: EXPECTED.raceId,
+      contender: "alpha",
+      operationId: IDS.alpha,
+      changedRequestDigest: "7".repeat(64),
+      functionVersion: "7",
+      invocationRequestId:
+        "99999999-9999-4999-8999-999999999999",
+      authorityTransferred: false,
+      requiresFreshAuthorization: true,
+      modelAccess: false,
+      sourceCommit: EXPECTED.sourceCommit,
+      configDigest: EXPECTED.configDigest,
+      treeDigest: "c".repeat(40),
+      packageLockDigest: "d".repeat(64),
+      authoritySourceDigest: "e".repeat(64),
+      authorityArtifactDigest: "f".repeat(64)
+    })),
+    $metadata: { requestId: "aws-invoke-request-changed-input" }
+  };
+}
+
 test("authority race CLI accepts only an exact numeric proof target", () => {
   assert.deepEqual(
     parseAuthorityRaceArguments([
@@ -275,7 +352,13 @@ test("authority race CLI accepts only an exact numeric proof target", () => {
       "--config-digest",
       EXPECTED.configDigest
     ]),
-    EXPECTED
+    {
+      configDigest: EXPECTED.configDigest,
+      functionArn: EXPECTED.functionArn,
+      raceId: EXPECTED.raceId,
+      runId: EXPECTED.runId,
+      sourceCommit: EXPECTED.sourceCommit
+    }
   );
   for (const argv of [
     [],
@@ -496,37 +579,64 @@ test("authority race errors never publish AWS identity or resource details", () 
 });
 
 test("authority race emits exact contender and proof events without authority fields", () => {
-  assert.deepEqual(authorityRaceEvent(EXPECTED.raceId, "alpha"), {
+  assert.deepEqual(authorityRaceEvent(EXPECTED.raceId, EXPECTED.drill, "alpha"), {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "reserve",
     raceId: EXPECTED.raceId,
+    drill: EXPECTED.drill,
     contender: "alpha"
   });
   assert.throws(
-    () => authorityRaceEvent(EXPECTED.raceId, "third"),
+    () => authorityRaceEvent(EXPECTED.raceId, EXPECTED.drill, "third"),
     /AUTHORITY_RACE_EVENT_REJECTED/
   );
-  assert.deepEqual(authorityProofEvent(EXPECTED.raceId), {
+  assert.deepEqual(authorityProofEvent(EXPECTED.raceId, EXPECTED.drill), {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "proof",
-    raceId: EXPECTED.raceId
+    raceId: EXPECTED.raceId,
+    drill: EXPECTED.drill
   });
+  assert.deepEqual(
+    authorityChangedInputEvent(
+      EXPECTED.raceId,
+      EXPECTED.drill,
+      "alpha"
+    ),
+    {
+      schemaVersion: AUTHORITY_REQUEST_SCHEMA,
+      mode: "changed_input",
+      raceId: EXPECTED.raceId,
+      drill: EXPECTED.drill,
+      contender: "alpha"
+    }
+  );
 });
 
 test("authority race requires one overlapping winner and one durable denial", async () => {
   const invoked = [];
+  let alphaInvocations = 0;
   const receipt = await runAuthorityRace({
     ...EXPECTED,
     callerBinding: CALLER_BINDING,
     invoke: async (functionArn, event) => {
       invoked.push({ functionArn, event });
-      return event.mode === "proof"
-        ? proofResponse()
-        : response(event.contender);
+      if (event.mode === "proof") {
+        return proofResponse();
+      }
+      if (event.mode === "changed_input") {
+        return changedInputResponse();
+      }
+      if (event.contender === "alpha") {
+        alphaInvocations += 1;
+        return alphaInvocations === 1
+          ? response("alpha")
+          : replayResponse();
+      }
+      return response(event.contender);
     }
   });
 
-  assert.equal(invoked.length, 3);
+  assert.equal(invoked.length, 5);
   assert.equal(
     invoked.every(
       ({ functionArn }) => functionArn === EXPECTED.functionArn
@@ -563,9 +673,50 @@ test("authority race requires one overlapping winner and one durable denial", as
     receipt.winner.fencingToken
   );
   assert.equal(receipt.protectedEffectExecuted, false);
+  assert.equal(receipt.replay.replayKind, "operation_replay");
+  assert.equal(receipt.replay.exactDecisionReturned, true);
+  assert.equal(receipt.changedInputDenial.denied, true);
+  assert.equal(
+    receipt.changedInputDenial.code,
+    "OPERATION_DIGEST_MISMATCH"
+  );
   assert.equal(receipt.authorityTransferredByModel, false);
   assert.deepEqual(receipt.callerBinding, CALLER_BINDING);
+  assert.match(receipt.callerBinding.principalIdDigest, /^[0-9a-f]{64}$/);
   assert.equal("functionArn" in receipt, false);
+  assert.equal("providerOperations" in receipt, false);
+});
+
+test("authority race accepts the live seven-field STS binding and rejects a stripped principal identity", () => {
+  const observation = validateAuthorityRaceInvocations(
+    {
+      alpha: response("alpha"),
+      bravo: response("bravo")
+    },
+    EXPECTED
+  );
+  assert.doesNotThrow(() =>
+    validateAuthorityRaceProof(
+      proofResponse(),
+      observation,
+      EXPECTED,
+      CALLER_BINDING
+    )
+  );
+  const {
+    principalIdDigest: _principalIdDigest,
+    ...strippedCallerBinding
+  } = CALLER_BINDING;
+  assert.throws(
+    () =>
+      validateAuthorityRaceProof(
+        proofResponse(),
+        observation,
+        EXPECTED,
+        strippedCallerBinding
+      ),
+    /AUTHORITY_RACE_CALLER_BINDING_REJECTED/
+  );
 });
 
 test("authority race rejects non-overlap, numeric-version drift, and outcome drift", () => {
@@ -648,7 +799,7 @@ test("authority race rejects non-overlap, numeric-version drift, and outcome dri
           },
           EXPECTED
         ),
-      /AUTHORITY_RACE_RESULT_REJECTED/
+      /AUTHORITY_RACE_RESPONSE_REJECTED/
     );
   }
 });

@@ -1,27 +1,29 @@
 # Full high-water drill evidence contract
 
-Status: **provider-backed batch pending**.
+Status: **one exact-release integrated provider drill pending**.
 
-The frozen project goal requires 100 full drills. Existing receipts prove
-important components independently—100 fifty-contender CockroachDB races,
-100 ambiguity injections at each COMMIT boundary, isolated Distributed Vector
-Index mechanics, and one Managed MCP recovery run—but they do not share one
-drill identity. They cannot be added together or relabeled as 100 end-to-end
-drills.
+Brian approved a 100+1 acceptance target on 2026-08-06: one already completed
+batch of 100 deterministic offline specification runs plus exactly one fresh,
+exact-release provider-backed integrated live drill. Existing historical
+receipts prove important components independently—100 fifty-contender
+CockroachDB races, 100 ambiguity injections at each COMMIT boundary, isolated
+Distributed Vector Index mechanics, and one Managed MCP recovery run—but they
+do not share one drill identity and cannot substitute for the +1 drill.
 
 ## Non-interchangeable evidence classes
 
-A local specification batch may repeat the in-memory three-act scenario 100
-times to detect deterministic invariant regressions. Its receipt must identify
-itself as local and synthetic. It cannot satisfy, substitute for, or unlock the
+A local specification batch repeats the in-memory three-act scenario exactly
+100 times to detect deterministic invariant regressions. Its receipt must
+identify itself as local and synthetic. It satisfies only the offline half of
+the 100+1 target and cannot satisfy, substitute for, or unlock the +1
 provider-backed claim.
 
 ## Deterministic offline harness
 
-Use `npm run --silent full-drill:local` for canonical file generation. The
-command executes the exact local scenario 100 times and emits one canonical
-`tideproof.highwater-drill-local-batch.v1` receipt to standard output; redirect
-that output when refreshing the checked-in receipt at
+Use `npm run --silent full-drill:local -- --output evidence/local-full-drill-100-2026-08-04.json`
+for canonical file generation. The command executes the exact local scenario
+100 times and writes one canonical `tideproof.highwater-drill-local-batch.v1`
+receipt only to the allowlisted checked-in path at
 [`evidence/local-full-drill-100-2026-08-04.json`](../evidence/local-full-drill-100-2026-08-04.json).
 `npm run full-drill:local:verify -- evidence/local-full-drill-100-2026-08-04.json`
 recomputes all 100 scenarios through the same `buildLocalFullDrillReceipt` and
@@ -60,11 +62,42 @@ mutation between source reads,
 scenario execution, validation, or later receipt use remains a TOCTOU residual.
 The receipt remains a local regression control only.
 
-The accepted release artifact must be a fresh
-`tideproof.highwater-drill-live-batch.v1` receipt from the exact clean release
-commit and exact deployed configuration. It must contain exactly 100 unique,
-ordered, consecutive drill bindings. A partial, resumed, skipped, ambiguous,
-99-run, or 101-run batch fails closed.
+The accepted +1 artifact must be one fresh
+`tideproof.highwater-drill-live.v1` receipt from the exact clean release commit
+and exact deployed configuration. A partial, resumed, mixed-release,
+component-only, or second selected provider run fails closed; one independently
+accepted integrated receipt is the complete provider target.
+
+The current source runner emits only a
+`tideproof.highwater-drill-live-candidate.v2` receipt with status
+`INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
+After release verification and before the first provider component, the runner
+creates a source-local owner-only journal and durably publishes a run-intent
+digest. It then writes create-only, fsynced hash-chain entries for each observed
+component, the private bundle receipt, and post-release verification. Before
+candidate composition, a source-local helper writes the canonical raw
+component bundle through an owner-only temporary file in a canonical mode-0700
+directory outside the Git checkout, links the final run-specific name, syncs
+the directory entry, and rereads the mode-0600 file byte-for-byte. The final
+clean-release check runs after that write. The public candidate carries only
+the bundle and source-control-receipt digests. Because that receipt is unkeyed
+and reconstructible from current bytes, neither the journal nor bundle receipt
+independently proves the historical write protocol, durable retention, or crash
+continuity. The
+candidate remains blocked until a separate reviewed finalizer validates a
+signed pre/post deployment-attestation pair around the drill, independently
+attests and recomputes the private evidence, and proves crash-safe recovery
+without a second Managed MCP read for the same canonical attempt.
+
+The live runner requires
+`TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH` to be one canonical
+absolute path named `<run-id>.private-evidence.json` whose parent exactly
+matches `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT`. That
+precreated, canonical, process-owned mode-0700 root must be outside the Git
+checkout. It also requires `TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH` to
+be the sibling canonical absolute path `<run-id>.journal`. Neither final path
+may already exist. The runner never passes these paths or their private bytes
+to a component child and never includes a path in the public candidate.
 
 ## Per-drill binding
 
@@ -85,28 +118,53 @@ acts:
 3. Recovery selects the exact winning receipt by tenant, run, incident,
    evidence, DVI proposal and selected-evidence digests, resource, operation,
    request digest, and outcome—not by recency.
-   One fixed-query Managed MCP read follows a committed pre-read audit; a
-   result-bound terminal audit commits before sanitized context is released.
-   No operational capability is returned, an unbound principal is denied
-   before MCP, exact replay returns the original decision, and changed inputs
-   under the operation ID are rejected.
+   The tenant, caller, durable source digest, and committed source time derive
+   one canonical recovery attempt and signed bundle identity. One fixed-query
+   Managed MCP read follows a committed pre-read audit within one continuously
+   negotiated session; canonical request, response, and result digests bind
+   every RPC through session close. A result-bound terminal audit commits
+   before sanitized context is released. No operational capability is
+   returned, an unbound principal is denied before MCP, exact replay returns
+   the original decision and signed bundle, and changed inputs under the
+   operation ID are rejected. These controls do not turn local receipt fields
+   into an independent provider signature.
 
 The snapshot is retired after each run without deleting evidence or authority
 receipts. An uncertain authority attempt is reconciled and never blindly
 replayed.
 
-## Batch acceptance
+## Integrated-live acceptance
 
 Acceptance additionally requires:
 
+- one signed pre/post deployment-attestation pair whose exact expectation
+  binds the source commit, tree, configuration, Authority numeric-version ARN,
+  code hash, execution role, revisions, and alias target around the drill;
+- an atomic mode-restricted private evidence bundle that is reread before
+  acceptance and lets an independent reviewer recompute every component digest;
+- crash/failpoint evidence that retry after pre-read audit, Managed MCP response,
+  terminal-audit COMMIT dispatch/ACK loss, or receipt-publication loss reconciles
+  the same canonical recovery attempt without issuing a second MCP read;
 - exact clean public `main`, tree, lockfile, artifacts, configuration, caller
   binding, primary cluster, and recovery cluster digests;
-- exactly 100 unique passing run digests and zero invariant violations;
+- exactly one passing integrated run digest, all enumerated invariants true,
+  and zero invariant violations;
+- one source-derived canonical recovery attempt whose replay returns the same
+  signed bundle, plus one continuous Managed MCP session with canonical
+  request, response, and result digests through a successful close;
 - a fresh `EXPLAIN (VERBOSE)` receipt naming
   `g1_vector_candidates_embedding_idx`, `vector search`, and exact
   tenant/retrieval prefix spans;
 - current cost controls and the exact AWS account, CloudFormation-managed role,
   and observed STS caller triple validated before any Lambda invocation;
+- an exact top-level operation ledger for one STS identity read, one
+  CloudFormation role-resource read, five Lambda invokes, one DVI component
+  run, one authority-race component run, one recovery-broker component run,
+  and the Managed MCP initialize, initialized notification, tool call, and
+  close requests. This ledger does not enumerate every database statement or
+  provider-internal request and therefore does not prove pricing, billing,
+  spend authorization, or compliance with an operator-declared dollar cap;
+  those remain separate fail-closed evidence gates;
 - private raw provider evidence retained, while public receipts contain only
   bounded facts and digests—never credentials, account IDs, ARNs, caller IDs,
   endpoints, or MCP keys; and
@@ -114,7 +172,7 @@ Acceptance additionally requires:
   an explicit historical-only boundary.
 
 The 100 × 50 race and COMMIT-ambiguity receipts remain separate controls. They
-may be referenced by digest, but they are not counted as full drills.
+may be referenced by digest, but they are not the +1 integrated live drill.
 
 ## Present release boundary
 
@@ -124,23 +182,31 @@ its selected top-ranked evidence to one exact synthetic drill run. The source
 path now consumes database-authorized DVI proposal identities and the exact
 selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
-recomputing receipt validator now exist, but the provider-backed batch harness,
-bounded multi-race deployment shape, and live receipt do not. The exact
+recomputing receipt validator now exist. The source now also contains a
+single-run integrated orchestrator, owner-restricted external private-evidence
+source control, current-byte reread verifier, and strict sanitized candidate composer,
+but the provider-backed execution and accepted live receipt do not. The
+candidate explicitly records that deployment attestation, independently
+attested private-evidence retention/recomputation, pre-provider crash journaling,
+crash-safe recovery, and provider
+pricing/billing are unproven. The exact
 cross-act recovery lookup now has a locally tested source control, but no
 provider-backed receipt. Public claims and final release readiness must
 therefore remain partial and blocked.
 
-The sanitized `tideproof.aws-authority-race-receipt.v6` source contract carries
+The sanitized `tideproof.aws-authority-race-receipt.v7` source contract carries
 the exact configured active-run UUID and validates each contender's configured
 proposal identity and selected-evidence digest against the committed database
 response. Both durable contender results must now carry the same selected
 evidence identity and the same non-reversible
 `authorityEvidenceBindingSha256`; the sanitized receipt publishes that shared
 DVI binding plus a digest of the selected evidence identity. Its durable proof
-rejects a database observation for any other run. This closes source-level
-prerequisites for joining the authority race to one per-drill DVI snapshot. It
-does not prove the live authorizer, exact retrieval prefixes, provider
-concurrency, the 100-run harness, or any live evidence.
+rejects a database observation for any other run.
+This closes source-level prerequisites for joining the authority race to one
+per-drill DVI snapshot. The race lane also requires an exact operation replay
+and a changed-input denial before its v7 receipt can pass. It does not prove the
+live authorizer, exact retrieval prefixes, provider concurrency, or any live
+evidence.
 
 ### Race receipt omitted the shared DVI snapshot identity
 
@@ -194,8 +260,94 @@ identifiers in the public receipt.
 
 This is a source-level prerequisite only. It does not prove a Managed MCP
 call, a live database row, the exact 100-run batch, AWS behavior, or final
-release readiness until a fresh provider-backed receipt binds it to the exact
+  release readiness until the +1 provider-backed receipt binds it to the exact
 official release.
+
+### Raw integrated component evidence disappeared after composition
+
+- Root cause: the runner held DVI, authority-race, and recovery receipts only in
+  process memory and emitted a sanitized digest summary without first creating
+  a durable private source for independent recomputation.
+- Why it was missed: component and privacy tests correctly rejected raw public
+  identifiers, but did not require a separate private evidence lifecycle before
+  sanitization.
+- Earliest detection point: terminate the runner after candidate composition
+  and require another process to recompute all three component digests from one
+  immutable, mode-restricted bundle.
+- Repair: candidate v2 is unreachable until the canonical raw bundle is written
+  through a mode-0600 source-local temporary file in an approved canonical
+  mode-0700 owner directory outside the Git checkout, directory-synced, and
+  reread byte-for-byte. Candidate composition rereads it again and binds the
+  current bundle plus source-control-receipt digests without exposing its path
+  or raw identifiers. The final clean-release check now follows persistence.
+- Regression/preventive control: focused tests reject permissive or
+  non-canonical parents, preexisting destinations, post-write byte drift,
+  component drift, and any candidate path that lacks the verified private
+  file.
+- Verification: the focused suite and exact-source release gates must pass on
+  the repaired head; no provider execution is implied.
+- Residual risk and claim impact: the unkeyed receipt is forgeable from current
+  bytes and therefore proves neither historical atomic operations nor off-host
+  retention. The source-local journal described below now preserves a durable
+  pre-provider intent and chained current-state result digests, but it is also
+  unkeyed. Independent journal attestation, reviewer recomputation, signed
+  deployment identity, and crash-safe Managed MCP recovery remain required.
+  The public claim remains a non-accepting component candidate.
+
+### Provider actions began before a durable run intent existed
+
+- Root cause: the integrated runner verified source bytes and then immediately
+  invoked the DVI component, leaving no durable record of the intended run or
+  the last completed boundary if the process died before final evidence
+  persistence.
+- Why it was missed: the first private-evidence repair protected completed raw
+  component bytes, while its tests began only after all provider components had
+  returned.
+- Earliest detection point: inspect the evidence root from inside the first
+  component callback and require a create-only, fsynced intent entry before the
+  callback can observe control.
+- Repair: after exact-release verification and before the first component call,
+  the runner creates an owner-only journal outside the Git checkout and writes
+  a mode-0600 intent entry through a same-filesystem temporary inode, hard-link
+  publication, file fsync, and directory fsync. It then adds create-only,
+  canonical entries for DVI, authority race, recovery, private-evidence, and
+  post-release digests. Every entry binds the exact release/run identity and
+  the preceding entry digest.
+- Regression/preventive control: focused tests require the intent to be the
+  only journal entry visible before the first provider component, reject phase
+  reordering and reuse, and detect entry-byte tampering. Candidate composition
+  rereads all six entries and verifies the complete hash chain and expected
+  payload digests.
+- Verification: the focused integrated-drill suite plus the release security,
+  privacy, claims, proof, and exact-source gates must pass on the exact head.
+  No provider execution is implied.
+- Residual risk and claim impact: the journal is source-local and unkeyed, so
+  current bytes do not independently prove when or by whom entries were
+  created, off-host retention, or successful recovery across a real crash.
+  Independent pre/post attestation, an external evidence finalizer, and the
+  provider-backed crash drill remain mandatory. The candidate stays
+  non-accepting.
+
+### Unattested components were accepted as an exact-release receipt
+
+- Root cause: the integrated composer trusted self-reported source/configuration
+  digests and an observed numeric Lambda version without consuming the existing
+  signed pre/post deployment-attestation contract.
+- Why it was missed: tests mocked valid DVI, race, and recovery outputs and
+  asserted `PASS`; none required an attestation expectation or pair.
+- Earliest detection point: omit deployment attestation from an otherwise valid
+  component set and require that the accepted schema and `PASS` remain
+  unreachable.
+- Repair: the current runner now emits only a non-accepting candidate, removes
+  exact-release invariants, and publishes explicit acceptance blockers.
+- Regression/preventive control: focused tests and the release-security verifier
+  bind the candidate schema, incomplete status, and blocker fields.
+- Verification: source tests and release gates must pass on the exact repaired
+  head; provider execution remains prohibited and pending.
+- Residual risk and claim impact: a reviewed attestation-aware finalizer,
+  independent retention/recomputation of the private evidence, and crash-safe
+  recovery repair are still required. Until then, ProofToAct may claim only a
+  source-level component candidate, not an accepted exact-release +1 drill.
 
 ### Recovery binding stopped before the DVI proposal
 
@@ -566,9 +718,10 @@ attempted only after an exact direct or read-reconciled prepare receipt has
 validated the snapshot identity; an uncommitted or unresolved prepare never
 deletes by the caller-supplied retrieval ID. A cleanup failure is preserved
 alongside the primary failure. Pool shutdown must also succeed before the
-`PASS` receipt is emitted. A `PASS` remains subject to independent acceptance
-review and does not prove that AWS consumed the binding or satisfy the
-100-drill, authorization, production-safety, or final-release gates by itself.
+receipt is emitted.
+`PASS` remains subject to independent acceptance review and does not prove that
+AWS consumed the binding or satisfy the +1 integrated, authorization,
+production-safety, or final-release gates by itself.
 
 No provider-backed receipt from this lane exists yet.
 
@@ -603,7 +756,7 @@ No provider-backed receipt from this lane exists yet.
   path and ACK-loss preparation reconciliation. Provider-backed CockroachDB
   v26.2 execution remains pending.
 - Residual risk: the persisted source contract does not prove a live DVI plan,
-  the actual provider authorizer, AWS consumption, the 100-drill batch, or
+  the actual provider authorizer, AWS consumption, the +1 integrated drill, or
   cluster-wide inherited-capability exclusion.
 - Claim impact: source can claim persisted snapshot-bound exclusion reasons;
   live and release claims remain blocked until the fresh provider receipt and

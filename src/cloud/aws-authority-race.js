@@ -1,13 +1,15 @@
 import crypto from "node:crypto";
 
 export const AUTHORITY_REQUEST_SCHEMA =
-  "tideproof.aws-authority-request.v2";
+  "tideproof.aws-authority-request.v3";
 export const AUTHORITY_RESPONSE_SCHEMA =
   "tideproof.aws-authority-boundary.v3";
 export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
+export const AUTHORITY_CHANGED_INPUT_RESPONSE_SCHEMA =
+  "tideproof.aws-authority-changed-input-denial.v1";
 export const AUTHORITY_RACE_RECEIPT_SCHEMA =
-  "tideproof.aws-authority-race-receipt.v6";
+  "tideproof.aws-authority-race-receipt.v7";
 const AUTHORITY_RACE_OBSERVATION_SCHEMA =
   "tideproof.aws-authority-race-observation.v4";
 
@@ -56,6 +58,7 @@ function validatedCallerBinding(value) {
       "contextDigest",
       "expectedIdentityDigest",
       "expectedPrincipalDigest",
+      "principalIdDigest",
       "principalType"
     ]) ||
     !SHA256_PATTERN.test(value.bindingDigest) ||
@@ -63,6 +66,7 @@ function validatedCallerBinding(value) {
     !SHA256_PATTERN.test(value.contextDigest) ||
     value.expectedIdentityDigest !== value.callerIdentityDigest ||
     !SHA256_PATTERN.test(value.expectedPrincipalDigest) ||
+    !SHA256_PATTERN.test(value.principalIdDigest) ||
     value.principalType !== "assumed-role"
   ) {
     throw new Error("AUTHORITY_RACE_CALLER_BINDING_REJECTED");
@@ -126,7 +130,37 @@ export function parseAuthorityRaceArguments(argv) {
   };
 }
 
-export function authorityRaceEvent(raceId, contender) {
+export function parseAuthorityDrillBinding(value) {
+  if (
+    !exactKeys(value, [
+      "alphaLogicalActionDigest",
+      "alphaProposalDigest",
+      "authorityEvidenceBindingSha256",
+      "bravoLogicalActionDigest",
+      "bravoProposalDigest",
+      "runId",
+      "selectedEvidenceDigest",
+      "selectedEvidenceId"
+    ]) ||
+    !UUID_PATTERN.test(value.runId ?? "") ||
+    !UUID_PATTERN.test(value.selectedEvidenceId ?? "") ||
+    ![
+      value.alphaLogicalActionDigest,
+      value.alphaProposalDigest,
+      value.authorityEvidenceBindingSha256,
+      value.bravoLogicalActionDigest,
+      value.bravoProposalDigest,
+      value.selectedEvidenceDigest
+    ].every((entry) => SHA256_PATTERN.test(entry ?? "")) ||
+    value.alphaProposalDigest === value.bravoProposalDigest ||
+    value.alphaLogicalActionDigest === value.bravoLogicalActionDigest
+  ) {
+    throw new Error("AUTHORITY_RACE_DRILL_BINDING_REJECTED");
+  }
+  return Object.freeze({ ...value });
+}
+
+export function authorityRaceEvent(raceId, drill, contender) {
   if (!UUID_PATTERN.test(raceId) || !CONTENDERS.includes(contender)) {
     throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
   }
@@ -134,18 +168,33 @@ export function authorityRaceEvent(raceId, contender) {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "reserve",
     raceId,
+    drill: parseAuthorityDrillBinding(drill),
     contender
   };
 }
 
-export function authorityProofEvent(raceId) {
+export function authorityProofEvent(raceId, drill) {
   if (!UUID_PATTERN.test(raceId)) {
     throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
   }
   return {
     schemaVersion: AUTHORITY_REQUEST_SCHEMA,
     mode: "proof",
-    raceId
+    raceId,
+    drill: parseAuthorityDrillBinding(drill)
+  };
+}
+
+export function authorityChangedInputEvent(raceId, drill, contender) {
+  if (!UUID_PATTERN.test(raceId) || !CONTENDERS.includes(contender)) {
+    throw new Error("AUTHORITY_RACE_EVENT_REJECTED");
+  }
+  return {
+    schemaVersion: AUTHORITY_REQUEST_SCHEMA,
+    mode: "changed_input",
+    raceId,
+    drill: parseAuthorityDrillBinding(drill),
+    contender
   };
 }
 
@@ -183,8 +232,18 @@ function invocationBody(value) {
 function validateCommittedResponse(
   value,
   contender,
-  expected
+  expected,
+  expectedReplayKind = null
 ) {
+  const expectedDrill = parseAuthorityDrillBinding(expected?.drill);
+  const expectedProposalDigest =
+    contender === "alpha"
+      ? expectedDrill.alphaProposalDigest
+      : expectedDrill.bravoProposalDigest;
+  const expectedLogicalActionDigest =
+    contender === "alpha"
+      ? expectedDrill.alphaLogicalActionDigest
+      : expectedDrill.bravoLogicalActionDigest;
   const allowedKeys = [
     "authorityArtifactDigest",
     "authorityCurrent",
@@ -240,6 +299,17 @@ function validateCommittedResponse(
     value.committedOperationId !== value.operationId ||
     !SHA256_PATTERN.test(value.requestDigest) ||
     value.committedRequestDigest !== value.requestDigest ||
+    value.proposalDigest !== expectedProposalDigest ||
+    value.committedProposalDigest !== expectedProposalDigest ||
+    value.logicalActionDigest !== expectedLogicalActionDigest ||
+    value.committedAuthorityEvidenceBindingSha256 !==
+      expectedDrill.authorityEvidenceBindingSha256 ||
+    value.committedSelectedEvidenceId !==
+      expectedDrill.selectedEvidenceId ||
+    value.selectedEvidenceDigest !==
+      expectedDrill.selectedEvidenceDigest ||
+    value.committedSelectedEvidenceDigest !==
+      expectedDrill.selectedEvidenceDigest ||
     !Number.isSafeInteger(value.authorizationEpoch) ||
     value.authorizationEpoch < 1 ||
     !SHA256_PATTERN.test(value.logicalAuthorityKeySha256) ||
@@ -265,7 +335,7 @@ function validateCommittedResponse(
     !["resource_reserved", "resource_held_denied"].includes(
       value.outcome
     ) ||
-    value.replayKind !== null
+    value.replayKind !== expectedReplayKind
   ) {
     throw new Error("AUTHORITY_RACE_RESPONSE_REJECTED");
   }
@@ -285,7 +355,9 @@ function validateCommittedResponse(
     value.commit.status !== "COMMITTED" ||
     value.commit.operation !== "authority" ||
     value.commit.operationDigest !== value.committedRequestDigest ||
-    value.commit.observation !== "direct_ack" ||
+    !["direct_ack", "read_reconciled"].includes(
+      value.commit.observation
+    ) ||
     value.commit.outcome !== value.outcome ||
     value.commit.reason !== value.reason ||
     !exactKeys(value.commit.authority, [
@@ -388,6 +460,126 @@ function validateCommittedResponse(
   };
 }
 
+export function validateAuthorityReplayInvocation(
+  invocation,
+  observation,
+  expected
+) {
+  const decoded = invocationBody(invocation);
+  const contender = observation?.winner?.contender;
+  if (!CONTENDERS.includes(contender)) {
+    throw new Error("AUTHORITY_RACE_REPLAY_REJECTED");
+  }
+  let replay;
+  try {
+    replay = validateCommittedResponse(
+      decoded.body,
+      contender,
+      expected,
+      "operation_replay"
+    ).value;
+  } catch {
+    throw new Error("AUTHORITY_RACE_REPLAY_REJECTED");
+  }
+  if (
+    decoded.executedVersion !== replay.functionVersion ||
+    replay.operationId !== observation.winner.operationId ||
+    replay.requestDigest !== observation.winner.requestDigest ||
+    replay.outcome !== "resource_reserved" ||
+    replay.fencingToken !== observation.winner.fencingToken ||
+    replay.committedAuthorityEvidenceBindingSha256 !==
+      observation.dvi.authorityEvidenceBindingSha256 ||
+    sha256Hex(canonicalJson({
+      evidenceId: replay.committedSelectedEvidenceId,
+      evidenceDigest: replay.committedSelectedEvidenceDigest
+    })) !== observation.dvi.selectedEvidenceBindingSha256
+  ) {
+    throw new Error("AUTHORITY_RACE_REPLAY_REJECTED");
+  }
+  return {
+    receipt: {
+      contender,
+      operationId: replay.operationId,
+      requestDigest: replay.requestDigest,
+      outcome: replay.outcome,
+      fencingToken: replay.fencingToken,
+      replayKind: replay.replayKind,
+      exactDecisionReturned: true
+    },
+    invocationRequestDigest: sha256Hex(replay.invocationRequestId),
+    awsInvokeRequestDigest: decoded.invokeRequestDigest
+  };
+}
+
+export function validateAuthorityChangedInputDenial(
+  invocation,
+  observation,
+  expected
+) {
+  const decoded = invocationBody(invocation);
+  const value = decoded.body;
+  const contender = observation?.winner?.contender;
+  if (
+    !CONTENDERS.includes(contender) ||
+    !exactKeys(value, [
+      "authorityArtifactDigest",
+      "authoritySourceDigest",
+      "authorityTransferred",
+      "changedRequestDigest",
+      "code",
+      "configDigest",
+      "contender",
+      "functionVersion",
+      "invocationRequestId",
+      "modelAccess",
+      "operationId",
+      "packageLockDigest",
+      "raceId",
+      "requiresFreshAuthorization",
+      "schemaVersion",
+      "sourceCommit",
+      "status",
+      "treeDigest"
+    ]) ||
+    value.schemaVersion !== AUTHORITY_CHANGED_INPUT_RESPONSE_SCHEMA ||
+    value.status !== "DENIED_CHANGED_INPUT" ||
+    value.code !== "OPERATION_DIGEST_MISMATCH" ||
+    value.raceId !== expected.raceId ||
+    value.contender !== contender ||
+    value.operationId !== observation.winner.operationId ||
+    !SHA256_PATTERN.test(value.changedRequestDigest) ||
+    value.changedRequestDigest === observation.winner.requestDigest ||
+    value.sourceCommit !== expected.sourceCommit ||
+    value.configDigest !== expected.configDigest ||
+    value.treeDigest !== observation.treeDigest ||
+    value.packageLockDigest !== observation.packageLockDigest ||
+    value.authoritySourceDigest !== observation.authoritySourceDigest ||
+    value.authorityArtifactDigest !==
+      observation.authorityArtifactDigest ||
+    value.functionVersion !== observation.functionVersion ||
+    decoded.executedVersion !== value.functionVersion ||
+    typeof value.invocationRequestId !== "string" ||
+    value.invocationRequestId.length < 8 ||
+    value.invocationRequestId.length > 160 ||
+    value.authorityTransferred !== false ||
+    value.requiresFreshAuthorization !== true ||
+    value.modelAccess !== false
+  ) {
+    throw new Error("AUTHORITY_RACE_CHANGED_INPUT_REJECTED");
+  }
+  return {
+    receipt: {
+      contender,
+      operationId: value.operationId,
+      changedRequestDigest: value.changedRequestDigest,
+      code: value.code,
+      denied: true
+    },
+    invocationRequestDigest: sha256Hex(value.invocationRequestId),
+    awsInvokeRequestDigest: decoded.invokeRequestDigest
+  };
+}
+
 export function validateAuthorityRaceInvocations(
   invocations,
   expected
@@ -396,12 +588,17 @@ export function validateAuthorityRaceInvocations(
     !exactKeys(invocations, CONTENDERS) ||
     !exactKeys(expected, [
       "configDigest",
+      "drill",
       "functionArn",
       "raceId",
       "runId",
       "sourceCommit"
     ])
   ) {
+    throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
+  }
+  const expectedDrill = parseAuthorityDrillBinding(expected.drill);
+  if (expectedDrill.runId !== expected.runId) {
     throw new Error("AUTHORITY_RACE_RESULT_REJECTED");
   }
   const decoded = Object.fromEntries(
@@ -578,12 +775,14 @@ export function validateAuthorityRaceProof(
   callerBinding
 ) {
   const acceptedCallerBinding = validatedCallerBinding(callerBinding);
+  const expectedDrill = parseAuthorityDrillBinding(expected?.drill);
   const observationBinding = validatedObservationBindings.get(observation);
   if (
     !observationBinding ||
     observationBinding.digest !== sha256Hex(JSON.stringify(observation)) ||
     !exactKeys(expected, [
       "configDigest",
+      "drill",
       "functionArn",
       "raceId",
       "runId",
@@ -624,6 +823,7 @@ export function validateAuthorityRaceProof(
     observation.configDigest !== expected.configDigest ||
     observation.raceId !== expected.raceId ||
     observation.runId !== expected.runId ||
+    expectedDrill.runId !== expected.runId ||
     !exactKeys(observation.dvi, [
       "authorityEvidenceBindingSha256",
       "selectedEvidenceBindingSha256"
@@ -634,6 +834,13 @@ export function validateAuthorityRaceProof(
     !SHA256_PATTERN.test(
       observation.dvi.selectedEvidenceBindingSha256
     ) ||
+    observation.dvi.authorityEvidenceBindingSha256 !==
+      expectedDrill.authorityEvidenceBindingSha256 ||
+    observation.dvi.selectedEvidenceBindingSha256 !==
+      sha256Hex(canonicalJson({
+        evidenceId: expectedDrill.selectedEvidenceId,
+        evidenceDigest: expectedDrill.selectedEvidenceDigest
+      })) ||
     observation.functionArnDigest !== sha256Hex(expected.functionArn)
     || observation.distinctLogicalActions !== true
     || observation.distinctProposals !== true
@@ -823,6 +1030,7 @@ export async function runAuthorityRace({
   raceId,
   runId,
   sourceCommit,
+  drill,
   callerBinding,
   invoke
 }) {
@@ -831,6 +1039,7 @@ export async function runAuthorityRace({
   }
   const expected = {
     configDigest,
+    drill: parseAuthorityDrillBinding(drill),
     functionArn,
     raceId,
     runId,
@@ -842,7 +1051,7 @@ export async function runAuthorityRace({
       contender,
       await invoke(
         functionArn,
-        authorityRaceEvent(raceId, contender)
+        authorityRaceEvent(raceId, drill, contender)
       )
     ])
   );
@@ -850,14 +1059,53 @@ export async function runAuthorityRace({
     Object.fromEntries(responses),
     expected
   );
+  const replay = validateAuthorityReplayInvocation(
+    await invoke(
+      functionArn,
+      authorityRaceEvent(
+        raceId,
+        drill,
+        observation.winner.contender
+      )
+    ),
+    observation,
+    expected
+  );
+  const changedInput = validateAuthorityChangedInputDenial(
+    await invoke(
+      functionArn,
+      authorityChangedInputEvent(
+        raceId,
+        drill,
+        observation.winner.contender
+      )
+    ),
+    observation,
+    expected
+  );
   const proof = await invoke(
     functionArn,
-    authorityProofEvent(raceId)
+    authorityProofEvent(raceId, drill)
   );
-  return validateAuthorityRaceProof(
+  const receipt = validateAuthorityRaceProof(
     proof,
     observation,
     expected,
     acceptedCallerBinding
   );
+  return {
+    ...receipt,
+    replay: replay.receipt,
+    changedInputDenial: changedInput.receipt,
+    invocationRequestDigests: {
+      ...receipt.invocationRequestDigests,
+      replay: replay.invocationRequestDigest,
+      changedInput: changedInput.invocationRequestDigest
+    },
+    awsInvokeRequestDigests: {
+      ...receipt.awsInvokeRequestDigests,
+      replay: replay.awsInvokeRequestDigest,
+      changedInput: changedInput.awsInvokeRequestDigest
+    }
+  };
 }

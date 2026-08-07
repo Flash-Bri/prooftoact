@@ -451,16 +451,8 @@ function configurationFixture(functions, configDigestPlaceholder = "0".repeat(64
         `arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:prooftoact/authorizer-AbCd12`,
       databaseSecretVersionId: "a".repeat(32),
       tenantId: "11111111-1111-4111-8111-111111111111",
-      runId: "22222222-2222-4222-8222-222222222222",
       incidentId: "33333333-3333-4333-8333-333333333333",
-      evidenceId: "44444444-4444-4444-8444-444444444444",
-      raceId: "55555555-5555-4555-8555-555555555555",
-      resourceId: "synthetic-rescue-unit-aws-proof",
-      alphaProposalDigest: "1".repeat(64),
-      bravoProposalDigest: "2".repeat(64),
-      alphaLogicalActionDigest: "3".repeat(64),
-      bravoLogicalActionDigest: "4".repeat(64),
-      selectedEvidenceDigest: "5".repeat(64)
+      resourceId: "synthetic-rescue-unit-aws-proof"
     },
     bedrockModelId: "amazon.nova-micro-v1:0",
     budgetUsd: 15,
@@ -527,7 +519,7 @@ function fixture() {
       configurationSha256: CONFIGURATION_SHA256,
       providerDependencyTreeDigest: PROVIDER_DEPENDENCY_TREE_DIGEST,
       providerRuntimeSha256: PROVIDER_RUNTIME_SHA256,
-      stackParameterCount: 53,
+      stackParameterCount: 45,
       stackParametersDigest: __test.sha256(
         deploymentStackParameterBindings(configuration)
       )
@@ -1124,7 +1116,7 @@ test("attestation runners accept only exact private-evidence modes", () => {
     )
   };
   assert.deepEqual(runnerTest.stackParameterCensus(stack, expectedParameters), {
-    parameterCount: 53,
+    parameterCount: 45,
     parametersDigest: value.expectation.basis.stackParametersDigest
   });
   stack.Parameters.find(

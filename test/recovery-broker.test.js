@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canonicalRecoveryAttempt,
   DeterministicRecoveryBroker,
   principalBindingHash
 } from "../src/cloud/recovery-broker.js";
@@ -13,6 +14,38 @@ const PRIMARY_CLUSTER_ID = "33333333-3333-4333-8333-333333333333";
 const RECOVERY_CLUSTER_ID = "44444444-4444-4444-8444-444444444444";
 const PRINCIPAL = "principal://synthetic-successor-a";
 const BUILD_IDENTITY = "synthetic-test-build-identity";
+
+test("canonical recovery identity is stable and source-bound", () => {
+  const input = {
+    tenantId: TENANT_ID,
+    subjectBindingHash: principalBindingHash(PRINCIPAL),
+    sourceDigest: "a".repeat(64),
+    sourceCommitTs: "2026-08-06T12:00:00.123Z"
+  };
+  const left = canonicalRecoveryAttempt(input);
+  const right = canonicalRecoveryAttempt({ ...input });
+  assert.deepEqual(left, right);
+  assert.match(
+    left.recoverySessionId,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+  );
+  assert.equal(left.snapshotVersion, Date.parse(input.sourceCommitTs));
+  assert.equal(left.expiresAt, "2026-08-06T12:30:00.123Z");
+  assert.notEqual(
+    canonicalRecoveryAttempt({
+      ...input,
+      sourceDigest: "b".repeat(64)
+    }).recoverySessionId,
+    left.recoverySessionId
+  );
+  assert.throws(
+    () => canonicalRecoveryAttempt({
+      ...input,
+      sourceCommitTs: "2026-08-06T12:00:00Z"
+    }),
+    /canonical timestamp/
+  );
+});
 
 function fixture() {
   const signer = createSyntheticRecoverySigner();
