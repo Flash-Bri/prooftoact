@@ -18,7 +18,7 @@
       "id": "actions-checkout-normalizer-tests",
       "path": "test/release-rights.test.js",
       "role": "GITHUB_ACTIONS_CHECKOUT_NORMALIZATION_VERIFICATION",
-      "sha256": "05ec2009f15688b39cc0ab4a557b2d411de9a6ba5f0502a37b9bc6a3a8f5ae63"
+      "sha256": "69fb2ce6d88f24fbc778d584748b7d4ceaaf920f1ac5bdbd7365671be55a5289"
     },
     {
       "id": "actions-ci-workflow",

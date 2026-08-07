@@ -51,6 +51,8 @@ function copyFixture() {
   const rootDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "tideproof-release-rights-")
   );
+  fs.chownSync(rootDir, process.geteuid(), process.getegid());
+  fs.chmodSync(rootDir, 0o700);
   for (const relativePath of FIXTURE_FILES) {
     const destination = path.join(rootDir, relativePath);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
