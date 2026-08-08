@@ -270,6 +270,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/integrated-live-drill.test.js",
     role: "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION"
   }),
+  "recovery-bundle-persistence-tests": Object.freeze({
+    path: "test/recovery-bundle-persistence.test.js",
+    role: "RESTART_STABLE_SIGNED_BUNDLE_SOURCE_VERIFICATION"
+  }),
   "local-full-drill-harness": Object.freeze({
     path: "src/local-full-drill.js",
     role: "LOCAL_FULL_DRILL_EVIDENCE_CONTRACT"
@@ -1441,6 +1445,11 @@ const SOURCE_MARKERS = Object.freeze({
     "startIntegratedLiveDrillJournal",
     "appendIntegratedLiveDrillJournal",
     "verifyIntegratedLiveDrillJournal",
+    "persistOrReuseIntegratedLiveDrillRecoveryBundle",
+    "INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_RECEIPT_SCHEMA",
+    "canonicalJson(parsed.signedBundle) !== canonicalJson(persistedBundle)",
+    "creationProtocolObserved",
+    "fileDataSynced",
     "PRE_PROVIDER_INTENT",
     "fs.constants.O_NOFOLLOW",
     "fs.linkSync(temporaryPath, destinationPath)",
@@ -1452,6 +1461,7 @@ const SOURCE_MARKERS = Object.freeze({
     "privateEvidencePersisted: false",
     "preProviderJournalCurrentBytesBound: true",
     "privateEvidenceCurrentBytesBound: true",
+    "signedRecoveryBundleCurrentBytesBound: true",
     "crashSafeRecoveryProven: false",
     "restartStableSignedBundleReuseProven: false",
     "RESTART_STABLE_SIGNED_BUNDLE_REUSE_NOT_PROVEN",
@@ -1468,6 +1478,7 @@ const SOURCE_MARKERS = Object.freeze({
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH",
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH",
     "startIntegratedLiveDrillJournal",
     "appendIntegratedLiveDrillJournal",
     "persistIntegratedLiveDrillPrivateEvidence",
@@ -1485,6 +1496,12 @@ const SOURCE_MARKERS = Object.freeze({
     "unattested provider components remain a non-accepting candidate",
     "integrated receipt fails closed on every cross-act boundary",
     "orchestrator executes exactly DVI, race, then exact-winner recovery"
+  ]),
+  "recovery-bundle-persistence-tests": Object.freeze([
+    "signed recovery bundle survives restart with the exact first signature bytes",
+    "persisted signed recovery bundle rejects tamper and changed canonical input",
+    "pre-existing exact bytes attest only current reuse durability",
+    "reuse rejects a pathname replaced while its original inode is read"
   ]),
   "local-full-drill-harness": Object.freeze([
     "LOCAL_FULL_DRILL_CLAIM_BOUNDARY",
@@ -1778,6 +1795,8 @@ const SOURCE_MARKERS = Object.freeze({
     "selectedEvidenceBindingSha256",
     "RECOVERY_AUTHORITY_INVARIANT_VIOLATION",
     "RECOVERY_SIGNATURE_INVALID",
+    "bytes.toString(\"base64\") !== text",
+    "verifyRecoveryBundleSourceSignature",
     "mcp_private.recovery_bundles_v2",
     "databaseClientMustBeDiscarded(error)",
     "read_reconciled",

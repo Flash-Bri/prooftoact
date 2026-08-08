@@ -343,7 +343,16 @@ export async function runIntegratedLiveDrill({
       race.dvi?.authorityEvidenceBindingSha256,
     RECOVERY_SOURCE_SELECTED_EVIDENCE_BINDING_SHA256:
       race.dvi?.selectedEvidenceBindingSha256,
-    SOURCE_BUILD_IDENTITY: spec.sourceBuildIdentity
+    SOURCE_BUILD_IDENTITY: spec.sourceBuildIdentity,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT:
+      forbiddenPrivateEvidenceRootPath,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT:
+      privateEvidenceRootPath,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH: path.join(
+      privateEvidenceRootPath,
+      `${spec.runId}.signed-recovery-bundle.json`
+    ),
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: canonicalJson(spec)
   });
   const recovery = await runComponent(
     path.join(rootDir, "scripts/gate1-recovery-broker.js"),

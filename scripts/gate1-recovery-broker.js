@@ -18,6 +18,10 @@ import {
 import { CockroachManagedMcpRecoveryClient } from "../src/cloud/managed-mcp-client.js";
 import { RecoveryPublisher } from "../src/cloud/recovery-security.js";
 import {
+  parseIntegratedLiveDrillSpec,
+  persistOrReuseIntegratedLiveDrillRecoveryBundle
+} from "../src/cloud/integrated-live-drill.js";
+import {
   recoveryQueryTemplateDigest,
   recoverySourceBindingDigestFor
 } from "../src/cloud/recovery-store.js";
@@ -25,6 +29,12 @@ import { loadCommittedRecoveryPublisherSigner } from "./lib/recovery-publisher-k
 
 const SYNTHETIC_PRINCIPAL = "principal://tideproof-demo-successor";
 const UNAUTHORIZED_PRINCIPAL = "principal://tideproof-demo-unbound";
+const INTEGRATED_PERSISTENCE_ENVIRONMENT = Object.freeze([
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT"
+]);
 
 function requiredEnvironment(name) {
   const value = process.env[name];
@@ -32,6 +42,26 @@ function requiredEnvironment(name) {
     throw new Error(`${name} is required`);
   }
   return value;
+}
+
+export function integratedPersistenceEnvironment(environment = process.env) {
+  const present = INTEGRATED_PERSISTENCE_ENVIRONMENT.filter(
+    (name) =>
+      typeof environment[name] === "string" && environment[name].length > 0
+  );
+  if (present.length === 0) {
+    return null;
+  }
+  if (present.length !== INTEGRATED_PERSISTENCE_ENVIRONMENT.length) {
+    throw new Error(
+      "integrated live drill persistence inputs must be supplied together"
+    );
+  }
+  return Object.freeze(
+    Object.fromEntries(
+      INTEGRATED_PERSISTENCE_ENVIRONMENT.map((name) => [name, environment[name]])
+    )
+  );
 }
 
 function assert(condition, message) {
@@ -108,6 +138,18 @@ export async function main() {
   const recoveryClusterId = requiredEnvironment("RECOVERY_CLUSTER_ID");
   const mcpApiKey = requiredEnvironment("MCP_API_KEY");
   const sourceBuildIdentity = requiredEnvironment("SOURCE_BUILD_IDENTITY");
+  const integratedEnvironment = integratedPersistenceEnvironment();
+  const integratedLiveDrillSpec = integratedEnvironment
+    ? parseIntegratedLiveDrillSpec(JSON.parse(
+        integratedEnvironment.TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC
+      ))
+    : null;
+  if (integratedLiveDrillSpec) {
+    assert(
+      integratedLiveDrillSpec.sourceBuildIdentity === sourceBuildIdentity,
+      "integrated drill source identity did not match the recovery runner"
+    );
+  }
 
   const endpointSeparation = assertSeparatedDatabaseEndpoints({
     primaryConnectionString: primarySourceUrl,
@@ -182,7 +224,7 @@ export async function main() {
       trustRootCommitment: signer.trustRootCommitment,
       publisherKeySetDigest
     });
-  const bundle = signer.sign({
+  const candidateBundle = signer.sign({
     tenantId: receipt.tenant_id,
     recoverySessionId,
     subjectBindingHash,
@@ -215,6 +257,22 @@ export async function main() {
     },
     expiresAt: canonicalAttempt.expiresAt
   });
+  const signedBundlePersistence = integratedEnvironment
+    ? persistOrReuseIntegratedLiveDrillRecoveryBundle({
+        destinationPath:
+          integratedEnvironment
+            .TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH,
+        evidenceRootPath:
+          integratedEnvironment
+            .TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT,
+        forbiddenRootPath:
+          integratedEnvironment.TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT,
+        spec: integratedLiveDrillSpec,
+        signedBundle: candidateBundle,
+        trustedPublisherKeys: signer.trustedPublisherKeys
+      })
+    : null;
+  const bundle = signedBundlePersistence?.bundle ?? candidateBundle;
 
   const publisher = new RecoveryPublisher({
     connectionString: recoveryPublisherUrl
@@ -437,6 +495,9 @@ export async function main() {
         unauthorizedStatus: unauthorized.status,
         sourceDigest: recovered.sourceDigest,
         bundleDigest: recovered.bundleDigest,
+        ...(signedBundlePersistence
+          ? { signedBundlePersistence: signedBundlePersistence.receipt }
+          : {}),
         canonicalRecovery: {
           ...canonicalAttempt,
           bundleDigest: recovered.bundleDigest,

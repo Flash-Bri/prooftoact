@@ -380,8 +380,7 @@ function requireBase64(value, name) {
   const bytes = Buffer.from(text, "base64");
   if (
     bytes.length === 0 ||
-    bytes.toString("base64").replace(/=+$/u, "") !==
-      text.replace(/=+$/u, "")
+    bytes.toString("base64") !== text
   ) {
     throw new TypeError(`${name} must be canonical base64`);
   }
@@ -546,6 +545,34 @@ export function recoverySignaturePayloadFor(input) {
   return `tideproof-recovery-bundle-v2\n${bundleDigestFor(input)}`;
 }
 
+function assertRecoveryBundleSourceSignature(
+  normalized,
+  trustedPublisherKeys
+) {
+  const publicKey = publisherPublicKeyFor(
+    trustedPublisherKeys,
+    normalized.publisherKeyId
+  );
+  const signatureValid = verify(
+    "sha256",
+    Buffer.from(recoverySignaturePayloadFor(normalized), "utf8"),
+    publicKey,
+    Buffer.from(normalized.sourceSignatureBase64, "base64")
+  );
+  if (!signatureValid) {
+    throw new Error("RECOVERY_SIGNATURE_INVALID");
+  }
+}
+
+export function verifyRecoveryBundleSourceSignature(
+  input,
+  trustedPublisherKeys
+) {
+  const normalized = normalizeBundle(input);
+  assertRecoveryBundleSourceSignature(normalized, trustedPublisherKeys);
+  return normalized;
+}
+
 export function recoveryQueryTemplateDigest() {
   return sha256(RECOVERY_QUERY_TEMPLATE);
 }
@@ -667,19 +694,7 @@ export function validateRecoveryRow(
     signatureDigest: row.signature_digest
   });
   validateBundleFreshness(normalized, now);
-  const publicKey = publisherPublicKeyFor(
-    trustedPublisherKeys,
-    normalized.publisherKeyId
-  );
-  const signatureValid = verify(
-    "sha256",
-    Buffer.from(recoverySignaturePayloadFor(normalized), "utf8"),
-    publicKey,
-    Buffer.from(normalized.sourceSignatureBase64, "base64")
-  );
-  if (!signatureValid) {
-    throw new Error("RECOVERY_SIGNATURE_INVALID");
-  }
+  assertRecoveryBundleSourceSignature(normalized, trustedPublisherKeys);
   return {
     status: "RECOVERED_CONTEXT_ONLY",
     recoverySessionId: expectedSession,

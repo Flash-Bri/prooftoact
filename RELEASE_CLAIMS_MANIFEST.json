@@ -42,7 +42,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "dfaac18f6bc0823d8e6e2664465f8932e63625da5fb577c0523ef288f1c2a537"
+      "sha256": "b5f66918189e8f3497a12b5e5b57efedbc4b898987658bd822847001d8683667"
     },
     {
       "id": "contest-matrix",
@@ -60,7 +60,7 @@
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
       "role": "EVIDENCE_BOUNDARY",
-      "sha256": "7ff6f3eca08868832daae6b106b0e9325bb98f66bd81fc9d61a4cf3dee5d65c4"
+      "sha256": "3c15d7a0a9696b1e01b3514a509b838e5eef88854a17faff2145c76a5b2f5542"
     },
     {
       "id": "public-demo-runtime",
