@@ -277,6 +277,9 @@ function successfulClient(request, options = {}) {
     ended: false,
     async connect() {
       queries.push("CONNECT");
+      if (options.connectError) {
+        throw options.connectError;
+      }
     },
     async query(sql) {
       queries.push(sql);
@@ -304,6 +307,19 @@ function successfulClient(request, options = {}) {
             { completed_at: "2026-08-01T12:00:01.000Z" }
           ]
         };
+      }
+      if (sql === authority.RESOLVE_SQL) {
+        if (!options.resolveRequest) {
+          return { rowCount: 0, rows: [] };
+        }
+        return resolvedClient(
+          options.resolveRequest,
+          "resource_reserved",
+          {
+            rowCount: options.resolveRowCount,
+            rowChanges: options.resolveRowChanges
+          }
+        ).query(sql);
       }
       if (sql === authority.SPEND_SQL) {
         if (options.spendError) {
@@ -1089,6 +1105,7 @@ test("authority commits one strict SERIALIZABLE decision without returning the s
   assert.equal(result.operationId, request.operationId);
   assert.equal(client.ended, true);
   assert.ok(client.queries.includes(authority.SPEND_SQL));
+  assert.equal(client.queries.includes(authority.RESOLVE_SQL), false);
   assert.equal(JSON.stringify(result).includes(CONNECTION_STRING), false);
   assert.equal("effectKey" in result, false);
 });
@@ -1110,7 +1127,10 @@ test("provider negative probe denies changed input under the committed operation
   const error = Object.assign(new Error("operation digest mismatch"), {
     code: "22000"
   });
-  const client = successfulClient(changed, { spendError: error });
+  const client = successfulClient(changed, {
+    resolveRequest: original,
+    spendError: error
+  });
   const result = await authority.runAuthority({
     event: changedInputEvent(),
     context: {
@@ -1127,10 +1147,132 @@ test("provider negative probe denies changed input under the committed operation
   assert.equal(result.status, "DENIED_CHANGED_INPUT");
   assert.equal(result.code, "OPERATION_DIGEST_MISMATCH");
   assert.equal(result.operationId, original.operationId);
+  assert.equal(result.originalRequestDigest, original.requestDigest);
   assert.equal(result.changedRequestDigest, changed.requestDigest);
+  assert.equal(result.sameOperationId, true);
+  assert.equal(result.requestDigestChanged, true);
+  assert.equal(result.databaseRejected, true);
+  assert.equal(result.durableReceiptCreated, false);
   assert.equal(result.authorityTransferred, false);
   assert.equal(result.requiresFreshAuthorization, true);
   assert.equal(client.queries.includes("ROLLBACK"), true);
+  assert.equal(client.queries.includes("COMMIT"), false);
+  assert.ok(
+    client.queries.indexOf(authority.RESOLVE_SQL) <
+      client.queries.indexOf(authority.SPEND_SQL)
+  );
+});
+
+test("changed-input probe requires the exact original durable receipt", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const changed = authority.changedInputRequestFor(
+    changedInputEvent(),
+    config
+  );
+  const client = successfulClient(changed, {
+    spendError: Object.assign(new Error("operation digest mismatch"), {
+      code: "22000"
+    })
+  });
+  const result = await authority.runAuthority({
+    event: changedInputEvent(),
+    context: {},
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => client,
+    now: () => 1_000
+  });
+
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.code, "AUTHORITY_PROBE_PRECONDITION_REJECTED");
+  assert.equal(client.queries.includes(authority.RESOLVE_SQL), true);
+  assert.equal(client.queries.includes(authority.SPEND_SQL), false);
+  assert.equal(client.queries.includes("COMMIT"), false);
+  assert.equal(client.queries.includes("ROLLBACK"), true);
+});
+
+test("changed-input probe rejects a drifted original receipt", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const original = authority.authorityRequestFor(validEvent(), config);
+  const changed = authority.changedInputRequestFor(
+    changedInputEvent(),
+    config
+  );
+  const client = successfulClient(changed, {
+    resolveRequest: original,
+    resolveRowChanges: { request_digest: "f".repeat(64) },
+    spendError: Object.assign(new Error("operation digest mismatch"), {
+      code: "22000"
+    })
+  });
+  const result = await authority.runAuthority({
+    event: changedInputEvent(),
+    context: {},
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => client,
+    now: () => 1_000
+  });
+
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.code, "AUTHORITY_PROBE_PRECONDITION_REJECTED");
+  assert.equal(client.queries.includes(authority.SPEND_SQL), false);
+  assert.equal(client.queries.includes("COMMIT"), false);
+});
+
+test("changed-input denial is emitted only for a mismatch from the spend call", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const original = authority.authorityRequestFor(validEvent(), config);
+  const changed = authority.changedInputRequestFor(
+    changedInputEvent(),
+    config
+  );
+  const client = successfulClient(changed, {
+    connectError: Object.assign(new Error("operation digest mismatch"), {
+      code: "22000"
+    }),
+    resolveRequest: original
+  });
+  const result = await authority.runAuthority({
+    event: changedInputEvent(),
+    context: {},
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => client,
+    now: () => 1_000
+  });
+
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.code, "AUTHORITY_UNAVAILABLE");
+  assert.equal(result.status === "DENIED_CHANGED_INPUT", false);
+  assert.equal(client.queries.includes(authority.RESOLVE_SQL), false);
+  assert.equal(client.queries.includes(authority.SPEND_SQL), false);
+});
+
+test("changed-input probe rolls back an unexpected database return before commit", async () => {
+  configureEnvironment();
+  const config = authority.configuration();
+  const original = authority.authorityRequestFor(validEvent(), config);
+  const changed = authority.changedInputRequestFor(
+    changedInputEvent(),
+    config
+  );
+  const client = successfulClient(changed, {
+    resolveRequest: original
+  });
+  const result = await authority.runAuthority({
+    event: changedInputEvent(),
+    context: {},
+    getConnectionString: async () => CONNECTION_STRING,
+    createClient: () => client,
+    now: () => 1_000
+  });
+
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.code, "AUTHORITY_PROBE_UNEXPECTED_RETURN");
+  assert.equal(client.queries.includes(authority.SPEND_SQL), true);
+  assert.equal(client.queries.includes("ROLLBACK"), true);
+  assert.equal(client.queries.includes("COMMIT"), false);
 });
 
 test("authority retries only a pre-commit serialization failure", async () => {

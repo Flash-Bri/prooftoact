@@ -213,9 +213,14 @@ DVI binding plus a digest of the selected evidence identity. Its durable proof
 rejects a database observation for any other run.
 This closes source-level prerequisites for joining the authority race to one
 per-drill DVI snapshot. The race lane also requires an exact operation replay
-and a changed-input denial before its v7 receipt can pass. It does not prove the
-live authorizer, exact retrieval prefixes, provider concurrency, or any live
-evidence.
+and a changed-input denial before its v7 receipt can pass. The changed-input
+probe first resolves and normalizes the exact original durable receipt inside
+the same serializable transaction, treats only the spend call's typed digest
+mismatch as the expected denial, and rolls back before commit if the probe
+unexpectedly returns. The receipt requires five distinct Lambda invocation IDs
+and five distinct AWS Invoke request IDs across the contenders, replay, changed
+input, and proof. It does not prove the live authorizer, exact retrieval
+prefixes, provider concurrency, or any live evidence.
 
 ### Race receipt omitted the shared DVI snapshot identity
 

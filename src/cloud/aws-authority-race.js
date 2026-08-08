@@ -3,11 +3,11 @@ import crypto from "node:crypto";
 export const AUTHORITY_REQUEST_SCHEMA =
   "tideproof.aws-authority-request.v3";
 export const AUTHORITY_RESPONSE_SCHEMA =
-  "tideproof.aws-authority-boundary.v3";
+  "tideproof.aws-authority-boundary.v4";
 export const AUTHORITY_PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
 export const AUTHORITY_CHANGED_INPUT_RESPONSE_SCHEMA =
-  "tideproof.aws-authority-changed-input-denial.v1";
+  "tideproof.aws-authority-changed-input-denial.v2";
 export const AUTHORITY_RACE_RECEIPT_SCHEMA =
   "tideproof.aws-authority-race-receipt.v7";
 const AUTHORITY_RACE_OBSERVATION_SCHEMA =
@@ -27,6 +27,22 @@ function exactKeys(value, allowed) {
     typeof value === "object" &&
     !Array.isArray(value) &&
     Object.keys(value).sort().join("\n") === [...allowed].sort().join("\n")
+  );
+}
+
+function distinctInvocationDigests(value) {
+  const names = [
+    "alpha",
+    "bravo",
+    "changedInput",
+    "proof",
+    "replay"
+  ];
+  const digests = value && names.map((name) => value[name]);
+  return (
+    exactKeys(value, names) &&
+    digests.every((digest) => SHA256_PATTERN.test(digest)) &&
+    new Set(digests).size === names.length
   );
 }
 
@@ -529,13 +545,18 @@ export function validateAuthorityChangedInputDenial(
       "code",
       "configDigest",
       "contender",
+      "databaseRejected",
+      "durableReceiptCreated",
       "functionVersion",
       "invocationRequestId",
       "modelAccess",
       "operationId",
+      "originalRequestDigest",
       "packageLockDigest",
       "raceId",
+      "requestDigestChanged",
       "requiresFreshAuthorization",
+      "sameOperationId",
       "schemaVersion",
       "sourceCommit",
       "status",
@@ -547,8 +568,13 @@ export function validateAuthorityChangedInputDenial(
     value.raceId !== expected.raceId ||
     value.contender !== contender ||
     value.operationId !== observation.winner.operationId ||
+    value.originalRequestDigest !== observation.winner.requestDigest ||
     !SHA256_PATTERN.test(value.changedRequestDigest) ||
     value.changedRequestDigest === observation.winner.requestDigest ||
+    value.sameOperationId !== true ||
+    value.requestDigestChanged !== true ||
+    value.databaseRejected !== true ||
+    value.durableReceiptCreated !== false ||
     value.sourceCommit !== expected.sourceCommit ||
     value.configDigest !== expected.configDigest ||
     value.treeDigest !== observation.treeDigest ||
@@ -1093,19 +1119,27 @@ export async function runAuthorityRace({
     expected,
     acceptedCallerBinding
   );
+  const invocationRequestDigests = {
+    ...receipt.invocationRequestDigests,
+    replay: replay.invocationRequestDigest,
+    changedInput: changedInput.invocationRequestDigest
+  };
+  const awsInvokeRequestDigests = {
+    ...receipt.awsInvokeRequestDigests,
+    replay: replay.awsInvokeRequestDigest,
+    changedInput: changedInput.awsInvokeRequestDigest
+  };
+  if (
+    !distinctInvocationDigests(invocationRequestDigests) ||
+    !distinctInvocationDigests(awsInvokeRequestDigests)
+  ) {
+    throw new Error("AUTHORITY_RACE_PROOF_REJECTED");
+  }
   return {
     ...receipt,
     replay: replay.receipt,
     changedInputDenial: changedInput.receipt,
-    invocationRequestDigests: {
-      ...receipt.invocationRequestDigests,
-      replay: replay.invocationRequestDigest,
-      changedInput: changedInput.invocationRequestDigest
-    },
-    awsInvokeRequestDigests: {
-      ...receipt.awsInvokeRequestDigests,
-      replay: replay.awsInvokeRequestDigest,
-      changedInput: changedInput.awsInvokeRequestDigest
-    }
+    invocationRequestDigests,
+    awsInvokeRequestDigests
   };
 }

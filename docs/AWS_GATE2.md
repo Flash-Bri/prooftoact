@@ -920,9 +920,15 @@ evidence only and must not be used to deploy the repaired candidate.
     binding; publish only the reviewed sanitized
     `tideproof.aws-authority-race-receipt.v7`. Before the durable proof, invoke
     the winning contender once more and require an exact `operation_replay`,
-    then invoke the dedicated changed-input probe under that same operation ID
-    and require SQLSTATE `22000` to become the sanitized
-    `OPERATION_DIGEST_MISMATCH` denial. Any wrong-run, cross-DVI, sequential,
+    then invoke the dedicated changed-input probe under that same operation ID.
+    In one `SERIALIZABLE` transaction, the probe must first resolve and
+    normalize the exact original durable receipt, then require only the spend
+    call's SQLSTATE `22000` digest mismatch to become the sanitized
+    `OPERATION_DIGEST_MISMATCH` denial. A missing or drifted original receipt
+    fails before spend; an unexpected spend return rolls back before commit.
+    Require five distinct Lambda request IDs and five distinct AWS Invoke
+    request IDs across both contenders, replay, changed input, and proof. Any
+    wrong-run, cross-DVI, sequential,
     ambiguous, replay-drifted, changed-input-accepted, expanded, stale, extra,
     or unresolved result is not evidence.
 14. From a signed-out browser, request only the ten enumerated public `GET`
