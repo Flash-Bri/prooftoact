@@ -3,11 +3,11 @@
 const crypto = require("node:crypto");
 
 const REQUEST_SCHEMA = "tideproof.aws-authority-request.v3";
-const RESPONSE_SCHEMA = "tideproof.aws-authority-boundary.v3";
+const RESPONSE_SCHEMA = "tideproof.aws-authority-boundary.v4";
 const PROOF_RESPONSE_SCHEMA =
   "tideproof.aws-authority-durable-proof.v1";
 const CHANGED_INPUT_RESPONSE_SCHEMA =
-  "tideproof.aws-authority-changed-input-denial.v1";
+  "tideproof.aws-authority-changed-input-denial.v2";
 const POLICY_VERSION = "gate1-policy-v2";
 const LEASE_MS = 300_000;
 const MAX_TRANSACTION_RETRIES = 6;
@@ -30,6 +30,13 @@ const AMBIGUOUS_TRANSACTION_CODES = new Set([
   "57P02",
   "57P03"
 ]);
+
+class OperationDigestMismatchError extends Error {
+  constructor(cause) {
+    super("AUTHORITY_OPERATION_DIGEST_MISMATCH", { cause });
+    this.name = "OperationDigestMismatchError";
+  }
+}
 
 const SPEND_SQL = `
   SELECT *
@@ -1386,6 +1393,7 @@ async function spendAuthority({
   connectionString,
   request,
   createClient,
+  probeOriginalRequest = null,
   now = () => Date.now()
 }) {
   const startedAtMs = now();
@@ -1403,7 +1411,55 @@ async function spendAuthority({
       const backend = await client.query(
         "SELECT pg_backend_pid()::STRING AS backend_id, clock_timestamp() AS started_at"
       );
-      const result = await client.query(SPEND_SQL, spendValues(request));
+      if (probeOriginalRequest !== null) {
+        if (
+          probeOriginalRequest.operationId !== request.operationId ||
+          probeOriginalRequest.requestDigest === request.requestDigest
+        ) {
+          throw new Error("AUTHORITY_PROBE_PRECONDITION_REJECTED");
+        }
+        const precondition = await client.query(RESOLVE_SQL, [
+          probeOriginalRequest.tenantId,
+          probeOriginalRequest.operationId,
+          probeOriginalRequest.requestDigest,
+          probeOriginalRequest.logicalActionDigest
+        ]);
+        if (
+          precondition.rowCount !== 1 ||
+          precondition.rows.length !== 1 ||
+          precondition.rows[0]?.operation_id !==
+            probeOriginalRequest.operationId ||
+          precondition.rows[0]?.request_digest !==
+            probeOriginalRequest.requestDigest ||
+          precondition.rows[0]?.replay_kind !== "operation_replay"
+        ) {
+          throw new Error("AUTHORITY_PROBE_PRECONDITION_REJECTED");
+        }
+        try {
+          normalizeResolvedRow(
+            precondition.rows[0],
+            probeOriginalRequest
+          );
+        } catch {
+          throw new Error("AUTHORITY_PROBE_PRECONDITION_REJECTED");
+        }
+      }
+      let result;
+      try {
+        result = await client.query(SPEND_SQL, spendValues(request));
+      } catch (error) {
+        if (
+          probeOriginalRequest !== null &&
+          error?.code === "22000" &&
+          error?.message === "operation digest mismatch"
+        ) {
+          throw new OperationDigestMismatchError(error);
+        }
+        throw error;
+      }
+      if (probeOriginalRequest !== null) {
+        throw new Error("AUTHORITY_PROBE_UNEXPECTED_RETURN");
+      }
       const completion = await client.query(
         "SELECT clock_timestamp() AS completed_at"
       );
@@ -1521,11 +1577,17 @@ function failClosed(code, config = null, parsed = null, request = null) {
   };
 }
 
+function operationDigestMismatch(error) {
+  return error instanceof OperationDigestMismatchError;
+}
+
 function safeCode(error) {
   if (
     [
       "AUTHORITY_CONFIGURATION_REJECTED",
       "AUTHORITY_DATABASE_RESPONSE_REJECTED",
+      "AUTHORITY_PROBE_PRECONDITION_REJECTED",
+      "AUTHORITY_PROBE_UNEXPECTED_RETURN",
       "AUTHORITY_PROOF_REJECTED",
       "AUTHORITY_RECONCILIATION_REJECTED",
       "AUTHORITY_REQUEST_REJECTED",
@@ -1652,6 +1714,10 @@ async function runAuthority({
     }
     if (event?.mode === "changed_input") {
       parsed = parseChangedInputEvent(event, config);
+      const originalRequest = authorityRequestFor(
+        { ...event, mode: "reserve" },
+        config
+      );
       request = changedInputRequestFor(event, config);
       const connectionString = await getConnectionString(config);
       const clientFactory =
@@ -1671,13 +1737,11 @@ async function runAuthority({
           connectionString,
           request,
           createClient: clientFactory,
+          probeOriginalRequest: originalRequest,
           now
         });
       } catch (error) {
-        if (
-          error?.code === "22000" &&
-          error?.message === "operation digest mismatch"
-        ) {
+        if (operationDigestMismatch(error)) {
           denial = error;
         } else {
           throw error;
@@ -1693,7 +1757,14 @@ async function runAuthority({
         raceId: parsed.raceId,
         contender: parsed.contender,
         operationId: request.operationId,
+        originalRequestDigest: originalRequest.requestDigest,
         changedRequestDigest: request.requestDigest,
+        sameOperationId:
+          originalRequest.operationId === request.operationId,
+        requestDigestChanged:
+          originalRequest.requestDigest !== request.requestDigest,
+        databaseRejected: true,
+        durableReceiptCreated: false,
         functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION,
         invocationRequestId:
           typeof context?.awsRequestId === "string"
@@ -1840,6 +1911,7 @@ exports.__test = {
   normalizeProofRow,
   normalizeSpendRow,
   observeAuthorityRace,
+  operationDigestMismatch,
   parseProofEvent,
   parseChangedInputEvent,
   parseReserveEvent,

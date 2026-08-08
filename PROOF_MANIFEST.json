@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-06",
+  "reviewedOn": "2026-08-08",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -109,7 +109,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "331bc5942e4fb4a24a4ed1eebd43ff032de4ef5c9fd7b0218d427431bdce2503",
+      "sha256": "545dbebbbf64e88566454f1cf1981bb272d4c0ea360f402f70683f55f4112c7c",
       "kind": "boundary-ledger"
     },
     {
@@ -199,7 +199,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "b5f66918189e8f3497a12b5e5b57efedbc4b898987658bd822847001d8683667",
+      "sha256": "447972d8e3b0d93050a1c2522940e77be4a5562f3a5521175cdb3e1c3714c876",
       "kind": "boundary-ledger"
     },
     {
@@ -283,7 +283,7 @@
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "3c15d7a0a9696b1e01b3514a509b838e5eef88854a17faff2145c76a5b2f5542",
+      "sha256": "f96d4deacb689b450122bd71208bcec048164b8c44f823e35a0d852bcbccd579",
       "kind": "boundary-ledger"
     },
     {
@@ -317,6 +317,18 @@
       "kind": "verification-code"
     },
     {
+      "id": "gate2-authority-lambda-runtime",
+      "path": "infra/aws/lambda/authority.cjs",
+      "sha256": "df3cbaa328040091fb1178961a2f15e7f91c071259a36ae9b33b49a742d05b7f",
+      "kind": "verification-code"
+    },
+    {
+      "id": "gate2-authority-lambda-tests",
+      "path": "test/aws-authority-lambda.test.js",
+      "sha256": "3eb0dfe17f370dd1e2929d1da18ca1a43e35630805bf484dd64bc160ca7a4b7d",
+      "kind": "verification-code"
+    },
+    {
       "id": "gate2-authority-local-validation",
       "path": "evidence/gate2-authority-local-validation-79476df-2026-07-31.md",
       "sha256": "2f6fa495ec54e36bb858477c264f8100358bbc772f43c49a93c37daf7e83ad8b",
@@ -325,13 +337,13 @@
     {
       "id": "gate2-authority-race-tests",
       "path": "test/aws-authority-race.test.js",
-      "sha256": "0c5634be4509ad0a42e80eaf2d525fa1acd0263a035c2d24e3e85de3bc749ebd",
+      "sha256": "84d68b79653769053b6e4a2a15f554d55b058aa31300a96b094495c4b230e47f",
       "kind": "verification-code"
     },
     {
       "id": "gate2-authority-race-validator",
       "path": "src/cloud/aws-authority-race.js",
-      "sha256": "b959eb76be9d34a154512d15ba4d201154d587d2485038e0c369639d5dd0b94c",
+      "sha256": "43df85b5419c536ccf88163aad93ae05678076e2f9b6fc7ff9b0189e572290a6",
       "kind": "verification-code"
     },
     {
@@ -379,7 +391,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "34bfd46cba5c0072024fc2f191bea87b8a0a1283bf04859e9dadd1e3e1985d17",
+      "sha256": "0319c9356272d5b6e1761e9c1232c242b092e0bf63a1e1505558de6165309d42",
       "kind": "verification-code"
     },
     {
@@ -427,7 +439,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "0f599ad99212c4632ec897b3d12de812ab277eecf2b51167c15f7d785b39be65",
+      "sha256": "f2e71bc8bb119cfa5972093d92fc2d83aaf7adbfa9cd06160f46f2a4e7c52f35",
       "kind": "verification-code"
     },
     {
@@ -463,7 +475,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "e1f39f95676f8c6a8bcca31a3a816872a66890700f9bb91d191f9be9577b1071",
+      "sha256": "a98a0d23c97a1dd22bdeca52975a76b17afe6c679ad7e25c27c32cb9577bb3db",
       "kind": "boundary-ledger"
     },
     {
@@ -487,7 +499,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "00d76c064aeda9a5701c65a8d0ec8f0d71f17c91b5559fbf86348b908106a6a8",
+      "sha256": "943c6a8393ce00f718e9aa9c5fb41fc8915a6e0c5ba1d3633b3f8f7e02e3170e",
       "kind": "boundary-ledger"
     },
     {
@@ -547,7 +559,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "10def44cebb99325cf3218f983544376fe1ab5b0a5b5344ad2a78b0000fed1ee",
+      "sha256": "aca9fecd76c893ef02d3ca59a196f1ac4cebd656c009ea19257925a221b11f25",
       "kind": "boundary-ledger"
     },
     {
@@ -601,7 +613,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "268af3a0bdaa3151ba67387135e767f3adad2b37f5934d99a6a9d3dd6702bf0e",
+      "sha256": "e6ab5e3f2cc450e5e59c5d246ee7c26d05dae8316ab1547eb724e0944d6459d0",
       "kind": "boundary-ledger"
     },
     {
@@ -613,7 +625,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "18fd60d2e0c2c73fa83a8cfeb83ff7334602c839612f8651bf2c2231094b3289",
+      "sha256": "b15536bbe42e60ba1a501012eba5fb2e5a8ba54326a9db1f55b8ae057d489193",
       "kind": "verification-code"
     },
     {
@@ -625,7 +637,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "2076c4750e1301ceca015743aaaded88caa4eb4e055d3cadb7f1c753f47cdc80",
+      "sha256": "d76744e4a84a89cdc1aa1325b13153442a21a5ddac74c893c475473bdfa89305",
       "kind": "boundary-ledger"
     },
     {
@@ -811,16 +823,18 @@
       "id": "aws-lambda-authority-race",
       "claim": "Two AWS Lambda contenders can overlap while CockroachDB commits one fresh authority winner.",
       "currentStatus": "Local handler, IAM, transaction, exact-caller evidence binding, replay/changed-input negatives, durable-proof, and verifier candidate tested; no live AWS/DB race claim",
-      "claimsLedgerRowSha256": "46616542025e4594ef1ba6b512b0f29764f180fb9925937cd0138b5f3d8b2c45",
+      "claimsLedgerRowSha256": "c1ada596b67e393258b544553b7cba0cf560e558706f90d1d0a386cb6bef59ec",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
+        "gate2-authority-lambda-runtime",
+        "gate2-authority-lambda-tests",
         "gate2-authority-local-validation",
         "gate2-authority-race-tests",
         "gate2-authority-race-validator",
         "gate2-local-validation"
       ],
-      "acceptanceBoundary": "Local code and adversarial tests require positive-duration serializable transactions with a positive overlap interval, an initial fence of one, a canonical lease that remains active through the exact bound durable observation, and the expected terminal-state shape. They do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
+      "acceptanceBoundary": "Local code and adversarial tests require positive-duration serializable transactions with a positive overlap interval, an initial fence of one, a canonical lease that remains active through the exact bound durable observation, and the expected terminal-state shape. The changed-input probe revalidates the exact original durable receipt inside the same serializable transaction, accepts only the typed SPEND-query digest-mismatch path, rolls back any unexpected SPEND return before COMMIT, and requires five distinct Lambda and AWS invocation identities across race, replay, changed-input, and proof calls. They do not prove Lambda concurrency, Secrets Manager, IAM, CockroachDB reachability, or live durable state.",
       "remainingRequirements": [
         "Accepted private invocation and CockroachDB receipts plus a sanitized tideproof.aws-authority-race-receipt.v7 receipt proving positive overlap, two terminal receipts, one fresh winner at fence one, winner-aware denial, exact operation replay, changed-input denial, one outbox, an unexpired lease at the later observation, no pending receipt, and zero protected effects."
       ]

@@ -320,7 +320,12 @@ function changedInputResponse() {
       raceId: EXPECTED.raceId,
       contender: "alpha",
       operationId: IDS.alpha,
+      originalRequestDigest: "1".repeat(64),
       changedRequestDigest: "7".repeat(64),
+      sameOperationId: true,
+      requestDigestChanged: true,
+      databaseRejected: true,
+      durableReceiptCreated: false,
       functionVersion: "7",
       invocationRequestId:
         "99999999-9999-4999-8999-999999999999",
@@ -685,6 +690,89 @@ test("authority race requires one overlapping winner and one durable denial", as
   assert.match(receipt.callerBinding.principalIdDigest, /^[0-9a-f]{64}$/);
   assert.equal("functionArn" in receipt, false);
   assert.equal("providerOperations" in receipt, false);
+});
+
+test("authority race requires five distinct Lambda and AWS invocation identities", async () => {
+  const invokeWithDuplicate = (duplicateKind) => {
+    let alphaInvocations = 0;
+    return async (_functionArn, event) => {
+      if (event.mode === "proof") {
+        return proofResponse();
+      }
+      if (event.mode === "changed_input") {
+        const invocation = changedInputResponse();
+        if (duplicateKind === "lambda") {
+          const body = JSON.parse(
+            Buffer.from(invocation.Payload).toString("utf8")
+          );
+          body.invocationRequestId =
+            "88888888-8888-4888-8888-888888888888";
+          invocation.Payload = Buffer.from(JSON.stringify(body));
+        } else {
+          invocation.$metadata.requestId = "aws-invoke-request-replay";
+        }
+        return invocation;
+      }
+      if (event.contender === "alpha") {
+        alphaInvocations += 1;
+        return alphaInvocations === 1
+          ? response("alpha")
+          : replayResponse();
+      }
+      return response(event.contender);
+    };
+  };
+
+  for (const duplicateKind of ["lambda", "aws"]) {
+    await assert.rejects(
+      () => runAuthorityRace({
+        ...EXPECTED,
+        callerBinding: CALLER_BINDING,
+        invoke: invokeWithDuplicate(duplicateKind)
+      }),
+      /AUTHORITY_RACE_PROOF_REJECTED/u
+    );
+  }
+});
+
+test("authority race rejects unproven changed-input denial semantics", async () => {
+  for (const mutate of [
+    (body) => { body.originalRequestDigest = "0".repeat(64); },
+    (body) => { body.sameOperationId = false; },
+    (body) => { body.requestDigestChanged = false; },
+    (body) => { body.databaseRejected = false; },
+    (body) => { body.durableReceiptCreated = true; }
+  ]) {
+    let alphaInvocations = 0;
+    await assert.rejects(
+      () => runAuthorityRace({
+        ...EXPECTED,
+        callerBinding: CALLER_BINDING,
+        invoke: async (_functionArn, event) => {
+          if (event.mode === "proof") {
+            return proofResponse();
+          }
+          if (event.mode === "changed_input") {
+            const invocation = changedInputResponse();
+            const body = JSON.parse(
+              Buffer.from(invocation.Payload).toString("utf8")
+            );
+            mutate(body);
+            invocation.Payload = Buffer.from(JSON.stringify(body));
+            return invocation;
+          }
+          if (event.contender === "alpha") {
+            alphaInvocations += 1;
+            return alphaInvocations === 1
+              ? response("alpha")
+              : replayResponse();
+          }
+          return response(event.contender);
+        }
+      }),
+      /AUTHORITY_RACE_CHANGED_INPUT_REJECTED/u
+    );
+  }
 });
 
 test("authority race accepts the live seven-field STS binding and rejects a stripped principal identity", () => {

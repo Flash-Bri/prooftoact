@@ -641,6 +641,14 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
     (value) => { value.race.overlappingDatabaseIntervals = false; },
     (value) => { value.race.replay.exactDecisionReturned = false; },
     (value) => { value.race.changedInputDenial.denied = false; },
+    (value) => {
+      value.race.invocationRequestDigests.changedInput =
+        value.race.invocationRequestDigests.replay;
+    },
+    (value) => {
+      value.race.awsInvokeRequestDigests.changedInput =
+        value.race.awsInvokeRequestDigests.replay;
+    },
     (value) => { value.race.providerOperations.stsGetCallerIdentityRequests = 2; },
     (value) => { value.recovery.mcpCallCount = 2; },
     (value) => { value.recovery.terminalAuditCommitted = false; },
