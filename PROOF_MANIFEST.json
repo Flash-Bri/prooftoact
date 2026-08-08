@@ -445,7 +445,7 @@
     {
       "id": "recovery-bundle-persistence-tests",
       "path": "test/recovery-bundle-persistence.test.js",
-      "sha256": "11b1b33b7dfe04052bf68f1dc2b8e88daae90b1c1ead8293f9a51d126031c3b6",
+      "sha256": "016fb9ba1b0e13cf5e41517a9a9293a3d8aff11a57bf51703838aee65fbdbbd1",
       "kind": "verification-code"
     },
     {
@@ -601,7 +601,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "d0dd920611453f981c7b3bf063049769e1b1bd02361fc18cf1004c237edeae0d",
+      "sha256": "268af3a0bdaa3151ba67387135e767f3adad2b37f5934d99a6a9d3dd6702bf0e",
       "kind": "boundary-ledger"
     },
     {

@@ -384,7 +384,7 @@
       "id": "recovery-bundle-persistence-tests",
       "path": "test/recovery-bundle-persistence.test.js",
       "role": "RESTART_STABLE_SIGNED_BUNDLE_SOURCE_VERIFICATION",
-      "sha256": "11b1b33b7dfe04052bf68f1dc2b8e88daae90b1c1ead8293f9a51d126031c3b6"
+      "sha256": "016fb9ba1b0e13cf5e41517a9a9293a3d8aff11a57bf51703838aee65fbdbbd1"
     },
     {
       "id": "local-full-drill-harness",
@@ -504,7 +504,7 @@
       "id": "recovery-broker-runner",
       "path": "scripts/gate1-recovery-broker.js",
       "role": "RECOVERY_BROKER_EVIDENCE_RUNNER",
-      "sha256": "172f5fa31d8781176b3ee8adec7c8b24d8cc852df6bf1a887e1f534c054537a5"
+      "sha256": "ad5e571aed3b28bafbdc19967a07cc1a4bac5d44e47f89efe5ce106e9c15bde5"
     },
     {
       "id": "recovery-evidence-runner",

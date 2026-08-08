@@ -15,6 +15,8 @@ import { normalizedRecoveryBundleFor } from
   "../src/cloud/recovery-store.js";
 import { createSyntheticRecoverySigner } from
   "../scripts/lib/synthetic-recovery-signer.js";
+import { integratedPersistenceEnvironment } from
+  "../scripts/gate1-recovery-broker.js";
 
 const runId = "11111111-1111-4111-8111-111111111111";
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -74,6 +76,26 @@ function privateDirectory() {
   fs.chmodSync(directory, 0o700);
   return fs.realpathSync(directory);
 }
+
+test("standalone recovery broker does not require integrated persistence inputs", () => {
+  assert.equal(integratedPersistenceEnvironment({}), null);
+  assert.throws(
+    () => integratedPersistenceEnvironment({
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec)
+    }),
+    /persistence inputs must be supplied together/
+  );
+  const environment = {
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec),
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH: "/private/bundle",
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT: "/private",
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT: "/checkout"
+  };
+  assert.deepEqual(
+    integratedPersistenceEnvironment(environment),
+    environment
+  );
+});
 
 test("signed recovery bundle accepts only the exact recovery-child path", () => {
   const directory = privateDirectory();
