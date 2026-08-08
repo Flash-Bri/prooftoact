@@ -109,13 +109,49 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "545dbebbbf64e88566454f1cf1981bb272d4c0ea360f402f70683f55f4112c7c",
+      "sha256": "3ff2557b2f5928b69549263bbff189d642b22de2dce04bfd2a75796b48fbe6c6",
       "kind": "boundary-ledger"
+    },
+    {
+      "id": "aws-oidc-read-only-ledger",
+      "path": "docs/AWS_OIDC_PREFLIGHT.md",
+      "sha256": "43a1ffc4474da8c4d150336bad4a057d93abfdf44ab657ef0d3d9a41b5c52a59",
+      "kind": "boundary-ledger"
+    },
+    {
+      "id": "aws-oidc-read-only-role-template",
+      "path": "infra/aws/oidc-read-only-preflight-role-template.json",
+      "sha256": "5c15942a102d7d84998500d22dab734668f527f202b169076b8337e51c126a53",
+      "kind": "verification-code"
+    },
+    {
+      "id": "aws-oidc-read-only-runner",
+      "path": "scripts/run-aws-oidc-read-only-preflight.sh",
+      "sha256": "005d4cf14abd119bbdacfeaa0889cf1d0d50aadd954289cc01e97011e40d32ec",
+      "kind": "verification-code"
+    },
+    {
+      "id": "aws-oidc-read-only-source-tests",
+      "path": "test/aws-oidc-source-lane.test.js",
+      "sha256": "e79301d15552cd18796af5e701f98882e2afe9c1eaa9e15b7f22b51af81f9346",
+      "kind": "verification-code"
+    },
+    {
+      "id": "aws-oidc-read-only-source-verifier",
+      "path": "scripts/verify-aws-oidc-preflight-source.js",
+      "sha256": "16fdb2b7c117333ab16255d0118f210a135b9f956b0e38df8262e0c67512a771",
+      "kind": "verification-code"
+    },
+    {
+      "id": "aws-oidc-read-only-workflow",
+      "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
+      "sha256": "2bbb08d5916db231d83085185dcd44aa464efe9d6924258238f6799be3d6b522",
+      "kind": "verification-code"
     },
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
-      "sha256": "5fcee7ed44031388850719eb5d202e3cddef8ed283d111f99c6c8675784472a8",
+      "sha256": "c43f5c9fdad89084b3fa4fcac4ac37ef3a2d045599cf7045d029087716b2ef87",
       "kind": "verification-code"
     },
     {
@@ -439,7 +475,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "f2e71bc8bb119cfa5972093d92fc2d83aaf7adbfa9cd06160f46f2a4e7c52f35",
+      "sha256": "9abf12a22c32e1893e968a83d056f10356804cde3684c63d4f4fb811c95c5045",
       "kind": "verification-code"
     },
     {
@@ -475,7 +511,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "a98a0d23c97a1dd22bdeca52975a76b17afe6c679ad7e25c27c32cb9577bb3db",
+      "sha256": "861c09cc08e221171c7f0aa6d642fdda60aa5bfcd1d3e774f0db0f4984c62330",
       "kind": "boundary-ledger"
     },
     {
@@ -493,25 +529,25 @@
     {
       "id": "release-cost-ledger",
       "path": "docs/RELEASE_COST.md",
-      "sha256": "8b0c4826c0300e4018a12ef24de67f32b72ece08acebba3259387be2660956d0",
+      "sha256": "d42113a9cb92fc6cbc42826f1252be30ac7286674f0c4209eebab045dbb379e6",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "943c6a8393ce00f718e9aa9c5fb41fc8915a6e0c5ba1d3633b3f8f7e02e3170e",
+      "sha256": "d8f87f3386a370fc26b35681bf4125b148980bf7cd8b0d1871be9ab42b84c50c",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-tests",
       "path": "test/release-cost.test.js",
-      "sha256": "f7e5f742e79a242a959171a8df64a48b71084666093d262dbb60458f0d661bed",
+      "sha256": "b9a881a8db95d5071cd869b931f51d9769399875add13d897a1f05a3aec8c47d",
       "kind": "verification-code"
     },
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "d12ae266506355025eb93a9f465293fe689c7a761752f8b74234558438b32166",
+      "sha256": "aa1e6eaabff783dff6a6b90a884b668c3ee9be973ab06116a2cb66352a288cdd",
       "kind": "verification-code"
     },
     {
@@ -607,25 +643,25 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "17f4f77077b68f3db7aaf4ca9de13f8e4a76d05a6c674db5590b75773434da0f",
+      "sha256": "34df4eb12fd3dc955d89565d3f69d6bf02f99a517582a1ac57b6fff00fe1127b",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "e6ab5e3f2cc450e5e59c5d246ee7c26d05dae8316ab1547eb724e0944d6459d0",
+      "sha256": "67e8ea7ecc27c2624149fe86cd8965637c71756d8071ce831b5ddda4d2792035",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "9f3109d8fbc5055783243c32b585f59e0340deb6927968f7ab7fa402d0fc733d",
+      "sha256": "d8368f18c3bd0955e01d6ff8b872381e9779f145977a329d483451fe7c940e63",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "b15536bbe42e60ba1a501012eba5fb2e5a8ba54326a9db1f55b8ae057d489193",
+      "sha256": "7d9d33e3fa17d4f4a334ab913e000b877ebe3e737d7e08240389520075fe9de8",
       "kind": "verification-code"
     },
     {
@@ -637,7 +673,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "d76744e4a84a89cdc1aa1325b13153442a21a5ddac74c893c475473bdfa89305",
+      "sha256": "497b8fdd793b0301361535dcf19d5e7d9e86034f8e4314a0f76a86ba56559d99",
       "kind": "boundary-ledger"
     },
     {
@@ -949,7 +985,7 @@
         "release-cost-tests",
         "release-cost-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds ten cost surfaces; validates the 25 USD total envelope, 11.86 USD recorded non-AWS spend, 13.14 USD effective AWS ceiling, 15 USD account-wide monthly budget, four required alerts, conservative preflight comparisons, absent main stack, forbidden fixed-charge resource types, bounded Lambda and log settings, explicit owner-input limitations, and the read-only stop receipt; and returns CURRENT_COST_GUARDS_PASS with finalReleaseReady false. It does not assert current AWS spend, independently verify registrar evidence, authorize cloud or DNS mutation, prove final cost, or approve publication or submission.",
+      "boundary": "The exact current-source verifier hash-binds sixteen cost surfaces; validates the 25 USD total envelope, 11.86 USD recorded non-AWS spend, 13.14 USD effective AWS ceiling, 15 USD account-wide monthly budget, four required alerts, conservative preflight comparisons, absent main stack, forbidden fixed-charge resource types, bounded Lambda and log settings, explicit owner-input limitations, the read-only stop receipt, and the CloudShell-optional OIDC preflight source lane's 0.02 USD cap and no-spend-authority boundary; and returns CURRENT_COST_GUARDS_PASS with finalReleaseReady false. It does not assert current AWS spend or provider execution, independently verify registrar evidence, authorize cloud or DNS mutation, prove final cost, or approve publication or submission.",
       "remainingRequirements": [
         "Bind a machine-verifiable exact-checkout AWS preflight PASS and current-spend receipt under 13.14 USD, the exact-release price and forecast review, protected registrar and auto-renew evidence review, and the final spend plus teardown or approved keep-alive receipt."
       ]
@@ -1085,6 +1121,12 @@
         "aws-deployment-attestation-runner",
         "aws-deployment-attestation-tests",
         "aws-deployment-attestation-validator",
+        "aws-oidc-read-only-ledger",
+        "aws-oidc-read-only-role-template",
+        "aws-oidc-read-only-runner",
+        "aws-oidc-read-only-source-tests",
+        "aws-oidc-read-only-source-verifier",
+        "aws-oidc-read-only-workflow",
         "aws-preflight-tests",
         "aws-provider-bundle-entry",
         "aws-provider-clients-tests",
@@ -1104,7 +1146,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the GitHub-hosted-only pre-verification checkout normalizer, its workflow placement and hostile-residue tests, the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the GitHub-hosted-only pre-verification checkout normalizer, its workflow placement and hostile-residue tests, the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers. It also binds the source-only CloudShell-optional OIDC identity and read-only preflight lanes, their exact protected subjects, least-privilege read list and explicit deny, bounded temporary sessions, exact-main source checks, encrypted sanitized receipt boundary, and adversarial verifier tests while keeping provider setup and execution explicitly pending; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

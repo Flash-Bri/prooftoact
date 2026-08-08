@@ -300,7 +300,9 @@ function commandJson(args, code) {
     cwd: root,
     encoding: "utf8",
     env: awsPreflightAwsEnvironment(process.env),
-    maxBuffer: 10 * 1024 * 1024
+    killSignal: "SIGKILL",
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000
   });
   if (result.error || result.status !== 0) {
     throw new Error(code);
@@ -412,6 +414,10 @@ function awsJson(region, service, operation, args = []) {
       region,
       "--output",
       "json",
+      "--cli-connect-timeout",
+      "10",
+      "--cli-read-timeout",
+      "20",
       "--no-cli-pager"
     ],
     `AWS_${service.toUpperCase()}_${operation

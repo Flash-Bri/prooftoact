@@ -401,7 +401,9 @@ short-lived identity bootstrap for the protected `aws-preflight` environment.
 It checks out no repository code, requests a GitHub OIDC token directly,
 requires the exact `Flash-Bri/prooftoact` repository, protected-environment
 subject, `refs/heads/main`, manual event, workflow reference, and GitHub-hosted
-runner claims before STS. The decoded OIDC header and payload stay in `0600`
+runner claims before STS. The human-supplied exact official-main commit must
+also equal the GitHub event SHA and both OIDC source-SHA claims. The runner must
+be non-root. The decoded OIDC header and payload stay in `0600`
 temporary files and are validated locally without logging the token. The
 configured account secret must match the independently stored protected
 environment variable `AWS_APPROVED_ACCOUNT_ID_SHA256`; this separates the
@@ -422,6 +424,27 @@ are never intended for logs or artifacts. This workflow proves only that the
 configured GitHub environment can obtain the expected temporary identity; it
 does not run the account-safety preflight, call paid AWS services, upload a
 deployment artifact, or authorize deployment.
+
+The separate source-only OIDC account-preflight lane is specified in
+`docs/AWS_OIDC_PREFLIGHT.md`. It uses a different protected environment,
+`aws-read-only-preflight`, and the exact pathless
+`ProofToActReadOnlyPreflight/read-only-preflight` identity. Its role template
+allows only the existing preflight reads plus bounded region and Bedrock
+service-quota metadata checks, then explicitly denies every other AWS action.
+The workflow rechecks the account digest, non-root runner, 900-second temporary
+credentials, exact official-main commit and clean tree, `us-east-1`, cost
+limits, stack absence, encrypted sanitized evidence, and bounded timeouts. It
+does not create the OIDC provider or role, configure GitHub, mutate AWS, deploy,
+invoke a model, or grant deployment authority. Provider setup and execution
+remain separate human gates, and the still-missing protected environment value
+`AWS_APPROVED_ACCOUNT_ID_SHA256` must not be embedded in source.
+
+CloudShell is therefore an optional authenticated operator surface, not a
+release dependency. An accepted CloudShell run or the separately protected
+OIDC read-only run may supply the same underlying account-safety evidence only
+when every identity, account, region, cost, source, privacy, and receipt gate
+passes. Neither surface changes the separate upload/deployment authorization,
+live evidence, rollback, teardown, or final-review requirements.
 
 Do not discover or infer these values inside the preflight. The command first
 rejects a missing, malformed, or internally inconsistent expectation set. It
@@ -810,10 +833,14 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
    account-wide $15 budget and $1/$5/$10 actual plus $15 forecast notifications
    are present before its private, encrypted, versioned artifact bucket is
    accepted.
-5. Run `npm run gate2:aws-readiness` and require the combined
-   `tideproof.gate2.aws-readiness.v1` `PASS`; independently revalidate current
-   Nova Micro pricing. If CloudShell, billing data, the official upstream, or
-   any required read is unavailable, stop without uploading.
+5. Run `npm run gate2:aws-readiness` through either an accepted authenticated
+   operator lane or the separately protected read-only OIDC lane and require
+   the combined `tideproof.gate2.aws-readiness.v1` `PASS`; independently
+   revalidate current Nova Micro pricing. CloudShell availability is optional.
+   If the selected authenticated lane, billing data, the official upstream, or
+   any required read is unavailable, stop without uploading. A read-only OIDC
+   receipt still requires private review and does not authorize step 6 or any
+   later provider mutation.
 6. Prepare one fresh synthetic Gate Two tenant/run/incident/evidence/resource
    tuple through the reviewed CockroachDB owner lane. Create one
    ProofToAct-owned Secrets Manager secret whose JSON has exactly the

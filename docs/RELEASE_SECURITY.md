@@ -18,6 +18,17 @@ contracts, Lambda invoke boundaries, and least-privilege role action sets.
 receipt. It is not a vulnerability-free claim, a penetration test, proof of
 live IAM enforcement, or permission to deploy or publish.
 
+The hash-bound source now includes a CloudShell-independent OIDC preflight
+contract. `docs/AWS_OIDC_PREFLIGHT.md` keeps the existing manual, no-checkout,
+STS-only identity workflow separate from a new protected read-only role and
+workflow. The read-only template grants only the exact STS, account-region,
+CloudFormation, Budgets, Cost Explorer, S3 bucket-control, Bedrock catalog, and
+service-quota metadata reads needed by the gate and explicitly denies every
+other AWS action. No deployment role or workflow is introduced. The source
+verifier cannot prove that the role, environment protections, or still-missing
+`AWS_APPROVED_ACCOUNT_ID_SHA256` value exist, and it does not authorize provider
+setup or execution.
+
 ## Protected assets and trust boundaries
 
 | Asset or boundary | Current protection | Remaining release proof |

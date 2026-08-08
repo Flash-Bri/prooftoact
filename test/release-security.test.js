@@ -86,6 +86,27 @@ test("security manifest binds every AWS provider runtime and template-security c
       "aws-oidc-identity-bootstrap",
       ".github/workflows/aws-oidc-identity-bootstrap.yml"
     ],
+    ["aws-oidc-read-only-ledger", "docs/AWS_OIDC_PREFLIGHT.md"],
+    [
+      "aws-oidc-read-only-role-template",
+      "infra/aws/oidc-read-only-preflight-role-template.json"
+    ],
+    [
+      "aws-oidc-read-only-runner",
+      "scripts/run-aws-oidc-read-only-preflight.sh"
+    ],
+    [
+      "aws-oidc-read-only-source-tests",
+      "test/aws-oidc-source-lane.test.js"
+    ],
+    [
+      "aws-oidc-read-only-source-verifier",
+      "scripts/verify-aws-oidc-preflight-source.js"
+    ],
+    [
+      "aws-oidc-read-only-workflow",
+      ".github/workflows/aws-oidc-read-only-preflight.yml"
+    ],
     ["aws-readiness-tests", "test/aws-gate2-readiness.test.js"],
     [
       "aws-template-security-tests",

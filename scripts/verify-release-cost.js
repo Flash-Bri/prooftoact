@@ -90,6 +90,22 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "infra/aws/gate2-template.json",
     role: "BOUNDED_DEPLOYMENT_CANDIDATE"
   }),
+  "aws-oidc-read-only-ledger": Object.freeze({
+    path: "docs/AWS_OIDC_PREFLIGHT.md",
+    role: "OIDC_PREFLIGHT_COST_AND_AUTHORITY_BOUNDARY"
+  }),
+  "aws-oidc-read-only-role-template": Object.freeze({
+    path: "infra/aws/oidc-read-only-preflight-role-template.json",
+    role: "READ_ONLY_PREFLIGHT_PERMISSION_BOUNDARY"
+  }),
+  "aws-oidc-read-only-runner": Object.freeze({
+    path: "scripts/run-aws-oidc-read-only-preflight.sh",
+    role: "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION"
+  }),
+  "aws-oidc-read-only-workflow": Object.freeze({
+    path: ".github/workflows/aws-oidc-read-only-preflight.yml",
+    role: "MANUAL_TIME_BOUNDED_PREFLIGHT_WORKFLOW"
+  }),
   "aws-preflight-library": Object.freeze({
     path: "src/cloud/aws-gate2-preflight.js",
     role: "FAIL_CLOSED_COST_POLICY"
@@ -606,6 +622,16 @@ function assertPreflightDefaults() {
       budgetCostBasis: "UnblendedCost",
       expectedPreflightRoleName: "ProofToActPreflight",
       expectedPreflightSessionName: "release-proof",
+      approvedPreflightIdentityLanes: [
+        {
+          roleName: "ProofToActPreflight",
+          sessionName: "release-proof"
+        },
+        {
+          roleName: "ProofToActReadOnlyPreflight",
+          sessionName: "read-only-preflight"
+        }
+      ],
       maxCostExplorerRequests: 1,
       approvedPreflightMeteredSpendCapUsd: 0.02,
       minimumBudgetCoverageEnd: "2026-09-16T00:00:00.000Z"
@@ -625,6 +651,65 @@ function assertSourceContracts(sources) {
     sources.get("boundary-semantic-metric-runtime"),
     "boundary",
     "RELEASE_COST_BOUNDARY_METRIC_CARDINALITY"
+  );
+  assertMarkers(
+    sources.get("aws-oidc-read-only-ledger"),
+    [
+      "This lane makes AWS CloudShell optional",
+      "known missing setup gate",
+      "account-wide `$15` budget",
+      "below `$13.14`",
+      "maximum `$0.02` complete-preflight cap",
+      "This source change grants no",
+      "spend authority."
+    ],
+    "RELEASE_COST_OIDC_LEDGER_MARKERS"
+  );
+  const oidcRoleTemplate = sources.get(
+    "aws-oidc-read-only-role-template"
+  );
+  assertMarkers(
+    oidcRoleTemplate,
+    [
+      "Source-only scaffold",
+      "budgets:ViewBudget",
+      "ce:GetCostAndUsage",
+      "DenyEverythingExceptExactPreflightReads",
+      "NotAction"
+    ],
+    "RELEASE_COST_OIDC_ROLE_MARKERS"
+  );
+  assert(
+    EXPECTED_FORBIDDEN_RESOURCE_TYPES.every(
+      (resourceType) => !oidcRoleTemplate.includes(resourceType)
+    ) &&
+      !oidcRoleTemplate.includes("cloudformation:CreateStack") &&
+      !oidcRoleTemplate.includes("s3:PutObject"),
+    "RELEASE_COST_OIDC_ROLE_MUTATION_BOUNDARY"
+  );
+  assertMarkers(
+    sources.get("aws-oidc-read-only-runner"),
+    [
+      "--duration-seconds 900",
+      "--max-results 1",
+      "--no-paginate",
+      "--signal=KILL --kill-after=5s 180s",
+      "scripts/gate2-aws-preflight.js",
+      "readOnlyAccountSafetyPreflight: true",
+      "cannot authorize or prove upload, mutation, deployment"
+    ],
+    "RELEASE_COST_OIDC_RUNNER_MARKERS"
+  );
+  assertMarkers(
+    sources.get("aws-oidc-read-only-workflow"),
+    [
+      "workflow_dispatch:",
+      "official_main_commit:",
+      "environment: aws-read-only-preflight",
+      "timeout-minutes: 10",
+      "retention-days: 1"
+    ],
+    "RELEASE_COST_OIDC_WORKFLOW_MARKERS"
   );
   assertMarkers(
     sources.get("aws-preflight-library"),

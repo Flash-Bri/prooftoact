@@ -76,16 +76,40 @@
       "sha256": "13a2df296d9d5faec2009698523df7da5aab50c70e45e0618bcefd623aeb4798"
     },
     {
+      "id": "aws-oidc-read-only-ledger",
+      "path": "docs/AWS_OIDC_PREFLIGHT.md",
+      "role": "OIDC_PREFLIGHT_COST_AND_AUTHORITY_BOUNDARY",
+      "sha256": "43a1ffc4474da8c4d150336bad4a057d93abfdf44ab657ef0d3d9a41b5c52a59"
+    },
+    {
+      "id": "aws-oidc-read-only-role-template",
+      "path": "infra/aws/oidc-read-only-preflight-role-template.json",
+      "role": "READ_ONLY_PREFLIGHT_PERMISSION_BOUNDARY",
+      "sha256": "5c15942a102d7d84998500d22dab734668f527f202b169076b8337e51c126a53"
+    },
+    {
+      "id": "aws-oidc-read-only-runner",
+      "path": "scripts/run-aws-oidc-read-only-preflight.sh",
+      "role": "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION",
+      "sha256": "005d4cf14abd119bbdacfeaa0889cf1d0d50aadd954289cc01e97011e40d32ec"
+    },
+    {
+      "id": "aws-oidc-read-only-workflow",
+      "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
+      "role": "MANUAL_TIME_BOUNDED_PREFLIGHT_WORKFLOW",
+      "sha256": "2bbb08d5916db231d83085185dcd44aa464efe9d6924258238f6799be3d6b522"
+    },
+    {
       "id": "aws-preflight-library",
       "path": "src/cloud/aws-gate2-preflight.js",
       "role": "FAIL_CLOSED_COST_POLICY",
-      "sha256": "20a77e1e9b994d5a66eac67ced6fb520e910871ac55b4b90ca8b4addf073b15d"
+      "sha256": "f0265658a2538b317d4c8926e8c3ed92fc9accaf6550bc9fcc6d18de67867ab2"
     },
     {
       "id": "aws-preflight-runner",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "0155681d9e89e7e987e255fc77bab29b72d4bdf3d003c3025b8b175bae2d24ea"
+      "sha256": "2b1f711db17fdceac3393d837d7bc3fda9ef88dbce61d94cf800f06ed7e5b1d2"
     },
     {
       "id": "aws-readiness-runner",
@@ -109,7 +133,7 @@
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "8b0c4826c0300e4018a12ef24de67f32b72ece08acebba3259387be2660956d0"
+      "sha256": "d42113a9cb92fc6cbc42826f1252be30ac7286674f0c4209eebab045dbb379e6"
     },
     {
       "id": "cost-guard-receipt",

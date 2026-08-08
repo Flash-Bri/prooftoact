@@ -1,0 +1,171 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Source-only scaffold for the separately protected ProofToAct GitHub OIDC read-only AWS preflight role. Applying this template is a provider mutation and requires separate human authorization.",
+  "Parameters": {
+    "ArtifactBucketName": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+      "Description": "Exact existing private artifact bucket emitted by the preserved tideproof-gate2-artifacts bootstrap stack."
+    }
+  },
+  "Resources": {
+    "ReadOnlyPreflightRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActReadOnlyPreflight",
+        "Path": "/",
+        "MaxSessionDuration": 3600,
+        "Description": "Separately protected 15-minute GitHub OIDC role for source-bound read-only ProofToAct AWS preflight evidence.",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "GitHubProtectedReadOnlyPreflight",
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri/prooftoact:environment:aws-read-only-preflight"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ProofToActReadOnlyPreflightExactReads",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadCallerIdentity",
+                  "Effect": "Allow",
+                  "Action": "sts:GetCallerIdentity",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadBootstrapStack",
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DescribeStacks",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/tideproof-gate2-artifacts/*"
+                  }
+                },
+                {
+                  "Sid": "ReadStackCensus",
+                  "Effect": "Allow",
+                  "Action": "cloudformation:ListStacks",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadAccountBudget",
+                  "Effect": "Allow",
+                  "Action": "budgets:ViewBudget",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/tideproof-gate2-artifacts-account-safety"
+                  }
+                },
+                {
+                  "Sid": "ReadAccountCost",
+                  "Effect": "Allow",
+                  "Action": "ce:GetCostAndUsage",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadArtifactBucketControls",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetBucketOwnershipControls",
+                    "s3:GetBucketPolicy",
+                    "s3:GetBucketPolicyStatus",
+                    "s3:GetBucketPublicAccessBlock",
+                    "s3:GetBucketVersioning",
+                    "s3:GetEncryptionConfiguration"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}"
+                  }
+                },
+                {
+                  "Sid": "ReadFoundationModelMetadata",
+                  "Effect": "Allow",
+                  "Action": "bedrock:GetFoundationModel",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0"
+                  }
+                },
+                {
+                  "Sid": "ReadBedrockQuotaCensus",
+                  "Effect": "Allow",
+                  "Action": "servicequotas:ListServiceQuotas",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadRegionStatus",
+                  "Effect": "Allow",
+                  "Action": "account:GetRegionOptStatus",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyEverythingExceptExactPreflightReads",
+                  "Effect": "Deny",
+                  "NotAction": [
+                    "account:GetRegionOptStatus",
+                    "bedrock:GetFoundationModel",
+                    "budgets:ViewBudget",
+                    "ce:GetCostAndUsage",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:ListStacks",
+                    "s3:GetBucketOwnershipControls",
+                    "s3:GetBucketPolicy",
+                    "s3:GetBucketPolicyStatus",
+                    "s3:GetBucketPublicAccessBlock",
+                    "s3:GetBucketVersioning",
+                    "s3:GetEncryptionConfiguration",
+                    "servicequotas:ListServiceQuotas",
+                    "sts:GetCallerIdentity"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "ReadOnlyPreflight"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ReadOnlyPreflightRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReadOnlyPreflightRole",
+          "Arn"
+        ]
+      }
+    },
+    "ReadOnlyPreflightRoleName": {
+      "Value": {
+        "Ref": "ReadOnlyPreflightRole"
+      }
+    },
+    "RequiredGitHubEnvironment": {
+      "Value": "aws-read-only-preflight"
+    }
+  }
+}

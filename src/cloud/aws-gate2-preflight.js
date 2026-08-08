@@ -15,8 +15,16 @@ const EFFECTIVE_AWS_SPEND_CEILING_USD = Number(
   ).toFixed(2)
 );
 const EXPECTED_BUDGET_COST_BASIS = "UnblendedCost";
-const EXPECTED_PREFLIGHT_ROLE_NAME = "ProofToActPreflight";
-const EXPECTED_PREFLIGHT_SESSION_NAME = "release-proof";
+const APPROVED_PREFLIGHT_IDENTITY_LANES = Object.freeze([
+  Object.freeze({
+    roleName: "ProofToActPreflight",
+    sessionName: "release-proof"
+  }),
+  Object.freeze({
+    roleName: "ProofToActReadOnlyPreflight",
+    sessionName: "read-only-preflight"
+  })
+]);
 const MAX_COST_EXPLORER_REQUESTS = 1;
 const APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD = 0.02;
 const MINIMUM_BUDGET_COVERAGE_END =
@@ -98,20 +106,21 @@ export function validateAwsGate2PreflightIdentityExpectation(
     /^\d{12}$/.test(expectedAccountId ?? ""),
     "AWS_PREFLIGHT_EXPECTED_ACCOUNT"
   );
-  requireCondition(
-    expectation?.expectedPrincipalArn ===
-      `arn:aws:iam::${expectedAccountId}:role/${EXPECTED_PREFLIGHT_ROLE_NAME}`,
-    "AWS_PREFLIGHT_EXPECTED_ROLE"
+  const lane = APPROVED_PREFLIGHT_IDENTITY_LANES.find(
+    ({ roleName }) =>
+      expectation?.expectedPrincipalArn ===
+      `arn:aws:iam::${expectedAccountId}:role/${roleName}`
   );
+  requireCondition(lane, "AWS_PREFLIGHT_EXPECTED_ROLE");
   requireCondition(
     expectation?.expectedCallerArn ===
       `arn:aws:sts::${expectedAccountId}:assumed-role/` +
-        `${EXPECTED_PREFLIGHT_ROLE_NAME}/${EXPECTED_PREFLIGHT_SESSION_NAME}`,
+        `${lane.roleName}/${lane.sessionName}`,
     "AWS_PREFLIGHT_EXPECTED_CALLER_ARN"
   );
   requireCondition(
     new RegExp(
-      `^AROA[A-Z0-9]{12,124}:${EXPECTED_PREFLIGHT_SESSION_NAME}$`
+      `^AROA[A-Z0-9]{12,124}:${lane.sessionName}$`
     ).test(expectation?.expectedCallerUserId ?? ""),
     "AWS_PREFLIGHT_EXPECTED_CALLER_USER_ID"
   );
@@ -724,8 +733,12 @@ export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({
     EFFECTIVE_AWS_SPEND_CEILING_USD,
   projectCostWindowStart: PROJECT_COST_WINDOW_START,
   budgetCostBasis: EXPECTED_BUDGET_COST_BASIS,
-  expectedPreflightRoleName: EXPECTED_PREFLIGHT_ROLE_NAME,
-  expectedPreflightSessionName: EXPECTED_PREFLIGHT_SESSION_NAME,
+  expectedPreflightRoleName:
+    APPROVED_PREFLIGHT_IDENTITY_LANES[0].roleName,
+  expectedPreflightSessionName:
+    APPROVED_PREFLIGHT_IDENTITY_LANES[0].sessionName,
+  approvedPreflightIdentityLanes:
+    APPROVED_PREFLIGHT_IDENTITY_LANES,
   maxCostExplorerRequests: MAX_COST_EXPLORER_REQUESTS,
   approvedPreflightMeteredSpendCapUsd:
     APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD,

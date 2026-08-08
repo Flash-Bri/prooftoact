@@ -58,13 +58,26 @@ stack, and `UNKNOWN_DO_NOT_ACT`. The domain record is owner-reported input;
 the registrar receipt and renewal-state export have not been independently
 inspected.
 
+Blocked CloudShell creation remains historical stop evidence, but CloudShell is
+not itself a cost or release requirement. The source-only lane in
+`docs/AWS_OIDC_PREFLIGHT.md` provides a separately protected read-only route to
+the same account-safety gate. It preserves the exact account digest,
+900-second temporary role session, non-root runner, `us-east-1`, one-request
+Cost Explorer bound, `$0.02` preflight approval cap, sanitized encrypted
+receipt, exact official-main source, and no-upload/no-deployment boundary. Its
+role and workflow remain unconfigured and unrun for release purposes, and the
+required protected `AWS_APPROVED_ACCOUNT_ID_SHA256` value remains a human
+provider-setup gate rather than source data.
+
 Therefore AWS preflight remains `NOT_RUN` for release purposes. No artifact
 upload, change set, main-stack deployment, DNS change, domain purchase,
 renewal, or submission action is authorized by this control.
 
 ## Final release requirements
 
-1. Run the exact clean official checkout in an authenticated AWS lane and
+1. Run the exact clean official checkout in an authenticated AWS lane,
+   including the separately protected OIDC read-only lane if CloudShell remains
+   unavailable, and
    retain a machine-verifiable preflight `PASS` receipt showing current
    account-wide spend below `$13.14` and the main stack absent.
 2. Recheck exact-release AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and

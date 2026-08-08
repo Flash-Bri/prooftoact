@@ -39,13 +39,24 @@ const OIDC_WORKFLOW = fs.readFileSync(
 test("AWS OIDC identity bootstrap is manual, minimal, and encrypted", () => {
   assert.match(
     OIDC_WORKFLOW,
-    /\non:\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  id-token: write\n/
+    /\non:\n  workflow_dispatch:\n    inputs:\n      official_main_commit:[\s\S]*?\npermissions:\n  contents: read\n  id-token: write\n/
   );
   assert.doesNotMatch(
     OIDC_WORKFLOW,
     /\n  (?:push|pull_request|schedule):/
   );
   assert.match(OIDC_WORKFLOW, /environment: aws-preflight/);
+  assert.match(OIDC_WORKFLOW, /official_main_commit:/);
+  assert.match(
+    OIDC_WORKFLOW,
+    /EXPECTED_OFFICIAL_MAIN_COMMIT: \$\{\{ inputs\.official_main_commit \}\}/
+  );
+  assert.match(OIDC_WORKFLOW, /GITHUB_REPOSITORY_ID:-\}" == "1317716765/);
+  assert.match(
+    OIDC_WORKFLOW,
+    /GITHUB_SHA:-\}" == "\$EXPECTED_OFFICIAL_MAIN_COMMIT/
+  );
+  assert.match(OIDC_WORKFLOW, /\$\(\/usr\/bin\/id -u\)" != "0"/);
   assert.doesNotMatch(OIDC_WORKFLOW, /actions\/checkout@/);
   for (const secret of [
     "AWS_ROLE_ARN",
@@ -89,7 +100,12 @@ test("AWS OIDC identity bootstrap is manual, minimal, and encrypted", () => {
   assert.match(OIDC_WORKFLOW, /"\$aws_cli" sts/);
   assert.match(OIDC_WORKFLOW, /\.repository == "Flash-Bri\/prooftoact"/);
   assert.match(OIDC_WORKFLOW, /\.workflow_ref ==/);
+  assert.match(OIDC_WORKFLOW, /\.workflow_sha == \$sha/);
+  assert.match(OIDC_WORKFLOW, /\.sha == \$sha/);
   assert.match(OIDC_WORKFLOW, /\.event_name == "workflow_dispatch"/);
+  assert.match(OIDC_WORKFLOW, /--cli-connect-timeout 10/);
+  assert.match(OIDC_WORKFLOW, /--cli-read-timeout 20/);
+  assert.match(OIDC_WORKFLOW, /\/usr\/bin\/timeout --signal=KILL 30s/);
   assert.match(OIDC_WORKFLOW, /chmod 600/);
   assert.match(OIDC_WORKFLOW, /--symmetric/);
   assert.match(OIDC_WORKFLOW, /--cipher-algo AES256/);

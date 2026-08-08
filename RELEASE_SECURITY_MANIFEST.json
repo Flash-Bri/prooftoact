@@ -114,7 +114,7 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "545dbebbbf64e88566454f1cf1981bb272d4c0ea360f402f70683f55f4112c7c"
+      "sha256": "3ff2557b2f5928b69549263bbff189d642b22de2dce04bfd2a75796b48fbe6c6"
     },
     {
       "id": "aws-deployment-attestation",
@@ -150,7 +150,43 @@
       "id": "aws-oidc-identity-bootstrap",
       "path": ".github/workflows/aws-oidc-identity-bootstrap.yml",
       "role": "MANUAL_SHORT_LIVED_AWS_IDENTITY_BOOTSTRAP",
-      "sha256": "004f190dfde3acd791e922c701794fc4423548e5ef6db1987de75a164e7fbe25"
+      "sha256": "fcc0c508a94e8eee6d402236442902a0628364b5cfdd833f4e58da7da0cb8681"
+    },
+    {
+      "id": "aws-oidc-read-only-ledger",
+      "path": "docs/AWS_OIDC_PREFLIGHT.md",
+      "role": "CLOUDSHELL_OPTIONAL_OIDC_AUTHORITY_BOUNDARY",
+      "sha256": "43a1ffc4474da8c4d150336bad4a057d93abfdf44ab657ef0d3d9a41b5c52a59"
+    },
+    {
+      "id": "aws-oidc-read-only-role-template",
+      "path": "infra/aws/oidc-read-only-preflight-role-template.json",
+      "role": "LEAST_PRIVILEGE_READ_ONLY_OIDC_ROLE_SCAFFOLD",
+      "sha256": "5c15942a102d7d84998500d22dab734668f527f202b169076b8337e51c126a53"
+    },
+    {
+      "id": "aws-oidc-read-only-runner",
+      "path": "scripts/run-aws-oidc-read-only-preflight.sh",
+      "role": "SOURCE_BOUND_READ_ONLY_OIDC_PREFLIGHT_RUNNER",
+      "sha256": "005d4cf14abd119bbdacfeaa0889cf1d0d50aadd954289cc01e97011e40d32ec"
+    },
+    {
+      "id": "aws-oidc-read-only-source-tests",
+      "path": "test/aws-oidc-source-lane.test.js",
+      "role": "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION",
+      "sha256": "e79301d15552cd18796af5e701f98882e2afe9c1eaa9e15b7f22b51af81f9346"
+    },
+    {
+      "id": "aws-oidc-read-only-source-verifier",
+      "path": "scripts/verify-aws-oidc-preflight-source.js",
+      "role": "OIDC_SOURCE_BOUNDARY_VERIFIER",
+      "sha256": "16fdb2b7c117333ab16255d0118f210a135b9f956b0e38df8262e0c67512a771"
+    },
+    {
+      "id": "aws-oidc-read-only-workflow",
+      "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
+      "role": "MANUAL_PROTECTED_READ_ONLY_OIDC_PREFLIGHT",
+      "sha256": "2bbb08d5916db231d83085185dcd44aa464efe9d6924258238f6799be3d6b522"
     },
     {
       "id": "aws-provider-bundle-entry",
@@ -186,19 +222,19 @@
       "id": "aws-preflight",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "0155681d9e89e7e987e255fc77bab29b72d4bdf3d003c3025b8b175bae2d24ea"
+      "sha256": "2b1f711db17fdceac3393d837d7bc3fda9ef88dbce61d94cf800f06ed7e5b1d2"
     },
     {
       "id": "aws-preflight-validator",
       "path": "src/cloud/aws-gate2-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT_VALIDATOR",
-      "sha256": "20a77e1e9b994d5a66eac67ced6fb520e910871ac55b4b90ca8b4addf073b15d"
+      "sha256": "f0265658a2538b317d4c8926e8c3ed92fc9accaf6550bc9fcc6d18de67867ab2"
     },
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
       "role": "READ_ONLY_AWS_PREFLIGHT_VERIFICATION",
-      "sha256": "5fcee7ed44031388850719eb5d202e3cddef8ed283d111f99c6c8675784472a8"
+      "sha256": "c43f5c9fdad89084b3fa4fcac4ac37ef3a2d045599cf7045d029087716b2ef87"
     },
     {
       "id": "aws-readiness",
@@ -438,7 +474,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "f2e71bc8bb119cfa5972093d92fc2d83aaf7adbfa9cd06160f46f2a4e7c52f35"
+      "sha256": "9abf12a22c32e1893e968a83d056f10356804cde3684c63d4f4fb811c95c5045"
     },
     {
       "id": "proof-manifest-verifier",
@@ -546,7 +582,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "17f4f77077b68f3db7aaf4ca9de13f8e4a76d05a6c674db5590b75773434da0f"
+      "sha256": "34df4eb12fd3dc955d89565d3f69d6bf02f99a517582a1ac57b6fff00fe1127b"
     },
     {
       "id": "security-policy",
