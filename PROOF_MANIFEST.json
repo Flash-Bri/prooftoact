@@ -127,19 +127,19 @@
     {
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
-      "sha256": "f5155d7dc178e2aae230381667c7bd414bf2f61ea302215209d0f5f13f9410d2",
+      "sha256": "ee732100d3fc8ee8c3f3362b1c38a951e4b6cb7d0c76c4c4cf7df82275cc2701",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "f3d6a4a5aa5e39608c43142d99c2456fcc248e3933627ab965ee16998ec7f05a",
+      "sha256": "a7f6447c7f4e2b02bdd4798f4ba470c41c2425dbd0772814e0866f676c50747c",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
-      "sha256": "841c9e45eff992617741e5027b936525ab2d3664ca47891120902832e8e5e9c3",
+      "sha256": "97ebd77bb798b47a3f89149cf5d80e14e91b3676c2194a7259bbf6d07e72853f",
       "kind": "verification-code"
     },
     {
@@ -535,7 +535,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "e166565079f5c04dbe784bb60f659521d3bbe34cfecce2fa1ee7e2dd4ce43981",
+      "sha256": "f907bb9611054881b94e0f2d85f7db5ed8f08009a350231fd97d26dead731c73",
       "kind": "boundary-ledger"
     },
     {
@@ -649,7 +649,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "845712db65510b15cc2a6693e2670f24e80ca790edefa703989308b94de8e553",
+      "sha256": "fbe00ae3b15f54ebf456c0ea9381d9ad57b24650f57ca36dd34a113567cdb0dd",
       "kind": "boundary-ledger"
     },
     {

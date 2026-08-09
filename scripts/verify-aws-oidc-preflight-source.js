@@ -202,7 +202,7 @@ const EXPECTED_READ_ONLY_DIAGNOSTIC_INPUT_BLOCK = [
 ].join("\n");
 
 const EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256 =
-  "1e1f54c20295437b1ee687101130598ed8c805044069ad812276c64d1c3dd716";
+  "64c30e541ed2ab14314fe5a51d209bc70ffd21d109ca57f4643bef00514f2632";
 const EXPECTED_READ_ONLY_OUTPUT_COMMAND_SEQUENCE_SHA256 =
   "8d904a81633325a805bc789c40b80dfe4785055b76d00f2004c91f8188903946";
 const EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT = 8;
@@ -846,6 +846,7 @@ export function validateReadOnlyRunner(source) {
       "AWS_CONTAINER_CREDENTIALS_FULL_URI",
       "compgen -A variable AWS_ENDPOINT_URL",
       "/opt/hostedtoolcache/node/22.23.1/x64/bin/node",
+      "/usr/bin/getent passwd 1000",
       "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
       '[[ "$("$node_cli" --version)" == "v22.23.1" ]]',
       "oidc_request_url=\"${ACTIONS_ID_TOKEN_REQUEST_URL:-}\"",

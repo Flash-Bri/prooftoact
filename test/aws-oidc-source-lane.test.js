@@ -517,7 +517,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   assert.match(
     READ_ONLY_RUNNER,
-    /node_uid.*0.*node_uid.*runner_uid/u
+    /runner_uid.*1001.*node_uid.*1000[\s\S]*\/usr\/bin\/getent passwd 1000/u
   );
   assert.doesNotMatch(
     READ_ONLY_RUNNER,
@@ -530,6 +530,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   for (const requiredNodeControl of [
     "/opt/hostedtoolcache/node/22.23.1/x64/bin/node",
+    "/usr/bin/getent passwd 1000",
     "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
     '[[ "$("$node_cli" --version)" == "v22.23.1" ]]'
   ]) {
@@ -757,7 +758,14 @@ node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_probe
 node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_probe
 IFS=':' read -r node_uid node_mode node_type <<<"$node_metadata"
 runner_uid="$(/usr/bin/id -u)" || fail_probe
-[[ "$node_uid" == "0" || "$node_uid" == "$runner_uid" ]] || fail_probe
+node_owner_allowed=false
+if [[ "$node_uid" == "0" || "$node_uid" == "$runner_uid" ]]; then
+  node_owner_allowed=true
+elif [[ "$runner_uid" == "1001" && "$node_uid" == "1000" ]] && \
+  ! /usr/bin/getent passwd 1000 >/dev/null; then
+  node_owner_allowed=true
+fi
+[[ "$node_owner_allowed" == "true" ]] || fail_probe
 [[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_probe
 node_mode_value=$((8#$node_mode))
 (( (node_mode_value & 0111) != 0 )) || fail_probe

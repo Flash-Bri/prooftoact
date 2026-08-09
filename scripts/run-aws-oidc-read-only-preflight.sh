@@ -219,7 +219,14 @@ node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_closed_stage AWS
 node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_METADATA
 IFS=':' read -r node_uid node_mode node_type <<<"$node_metadata"
 runner_uid="$(/usr/bin/id -u)" || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_OWNER
-[[ "$node_uid" == "0" || "$node_uid" == "$runner_uid" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_OWNER
+node_owner_allowed=false
+if [[ "$node_uid" == "0" || "$node_uid" == "$runner_uid" ]]; then
+  node_owner_allowed=true
+elif [[ "$runner_uid" == "1001" && "$node_uid" == "1000" ]] && \
+  ! /usr/bin/getent passwd 1000 >/dev/null; then
+  node_owner_allowed=true
+fi
+[[ "$node_owner_allowed" == "true" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_OWNER
 [[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_METADATA
 node_mode_value=$((8#$node_mode))
 (( (node_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_METADATA
@@ -227,7 +234,7 @@ node_digest="$(/usr/bin/sha256sum "$node_cli")" || fail_closed_stage AWS_READ_ON
 node_digest="${node_digest%% *}"
 [[ "$node_digest" == "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_INTEGRITY
 [[ "$("$node_cli" --version)" == "v22.23.1" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_VERSION
-unset node_candidate node_metadata node_uid node_mode node_type node_mode_value runner_uid node_digest
+unset node_candidate node_metadata node_uid node_mode node_type node_mode_value runner_uid node_owner_allowed node_digest
 
 aws_candidate="/usr/local/bin/aws"
 [[ -L "$aws_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_PATH
