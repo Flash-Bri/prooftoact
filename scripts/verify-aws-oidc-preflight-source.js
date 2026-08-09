@@ -80,6 +80,52 @@ const EXPECTED_IDENTITY_ACTION_PINS = Object.freeze([
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
 ]);
 
+const EXPECTED_IDENTITY_FAILURE_STAGES = Object.freeze([
+  "AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_RECEIPT",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+  "AWS_IDENTITY_STAGE_STS_CALLER_REQUEST",
+  "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
+  "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT",
+  "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
+]);
+
+const EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST = Object.freeze([
+  "AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_RECEIPT",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+  "AWS_IDENTITY_STAGE_STS_CALLER_REQUEST",
+  "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
+  "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
+]);
+
+const EXPECTED_IDENTITY_FAILURE_STAGE_FUNCTION = [
+  "fail_closed_stage() {",
+  'local stage="\${1:-}"',
+  'case "$stage" in',
+  "AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST | \\",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_RECEIPT | \\",
+  "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS | \\",
+  "AWS_IDENTITY_STAGE_STS_CALLER_REQUEST | \\",
+  "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT | \\",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE | \\",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION | \\",
+  "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT) ;;",
+  "*) fail_closed ;;",
+  "esac",
+  'printf \'%s\\n\' "::error::\${stage}" >&2',
+  "exit 1",
+  "}"
+].join("\n");
+
 const EXPECTED_READ_ONLY_ACTION_PINS = Object.freeze([
   "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
@@ -186,6 +232,33 @@ function literalAwsCalls(source) {
       /"\$aws_cli"\s+([a-z0-9-]+)\s+([a-z0-9-]+)/gu
     )
   ].map((match) => `${match[1]}:${match[2]}`);
+}
+
+function identityFailureStages(source) {
+  return [
+    ...source.matchAll(/\bfail_closed_stage (AWS_IDENTITY_STAGE_[A-Z0-9_]+)\b/gu)
+  ].map((match) => match[1]);
+}
+
+function identityFailureStageAllowlist(source) {
+  const block = source.match(
+    /fail_closed_stage\(\) \{\n([\s\S]*?)\n\s*\}\n\n\s*\[\[/u
+  );
+  assert(block, "OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_FUNCTION");
+  return [
+    ...block[1].matchAll(/\bAWS_IDENTITY_STAGE_[A-Z0-9_]+\b/gu)
+  ].map((match) => match[0]);
+}
+
+function normalizedIdentityFailureStageFunction(source) {
+  const block = source.match(
+    /^[ \t]*fail_closed_stage\(\) \{\n[\s\S]*?^[ \t]*\}$/mu
+  );
+  assert(block, "OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_FUNCTION");
+  return block[0]
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .join("\n");
 }
 
 function validateAwsCliReferenceLines(source, expected, code) {
@@ -478,6 +551,8 @@ export function validateIdentityWorkflow(source) {
       EXACT_RECEIPT_SECRET_PATTERN,
       "--symmetric",
       "--cipher-algo AES256",
+      "fail_closed_stage() {",
+      'printf \'%s\\n\' "::error::${stage}" >&2',
       "retention-days: 1"
     ],
     "OIDC_IDENTITY_WORKFLOW_MARKERS"
@@ -492,6 +567,30 @@ export function validateIdentityWorkflow(source) {
       "sts:get-caller-identity"
     ]),
     "OIDC_IDENTITY_WORKFLOW_STS_ONLY"
+  );
+  assert(
+    sameJson(
+      identityFailureStages(source),
+      EXPECTED_IDENTITY_FAILURE_STAGES
+    ),
+    "OIDC_IDENTITY_WORKFLOW_FAILURE_STAGES"
+  );
+  assert(
+    sameJson(
+      identityFailureStageAllowlist(source),
+      EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST
+    ),
+    "OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_ALLOWLIST"
+  );
+  assert(
+    normalizedIdentityFailureStageFunction(source) ===
+      EXPECTED_IDENTITY_FAILURE_STAGE_FUNCTION,
+    "OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_FUNCTION"
+  );
+  assert(
+    (source.match(/\bfail_closed_stage\b/gu) ?? []).length ===
+      EXPECTED_IDENTITY_FAILURE_STAGES.length + 1,
+    "OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_REFERENCES"
   );
   validateAwsCliReferenceLines(
     source,
@@ -830,6 +929,9 @@ export const __test = Object.freeze({
   EXACT_READ_ACTIONS,
   EXACT_RECEIPT_SECRET_PATTERN,
   EXPECTED_IDENTITY_ACTION_PINS,
+  EXPECTED_IDENTITY_FAILURE_STAGES,
+  EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST,
+  EXPECTED_IDENTITY_FAILURE_STAGE_FUNCTION,
   EXPECTED_READ_ONLY_ACTION_PINS,
   EXPECTED_ROLE_STATEMENT_SIDS,
   RECEIPT_SCHEMA,

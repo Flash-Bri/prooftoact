@@ -133,13 +133,13 @@
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "768fc8b856a6fc686c8354929b2a998dc8257d55801b756c1f76b83f048d135d",
+      "sha256": "d16cc062f12eb187fcfe48731aacd9c2da6a3f75ff053e1fdabfe72346c0862d",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
-      "sha256": "1962b2b0895b7f1b892ed110bc20d39e938283b539e224ec6fa962f6d71b0b5e",
+      "sha256": "101ef793590f1772102f2b642cbc72863b0852c1d57eb3e4afaf5f7e61a23ff4",
       "kind": "verification-code"
     },
     {
@@ -595,7 +595,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "5546d021c10aaf001d5d1e33743993ada56eeabbdd60ac92becebcfe365a7f08",
+      "sha256": "aca9fecd76c893ef02d3ca59a196f1ac4cebd656c009ea19257925a221b11f25",
       "kind": "boundary-ledger"
     },
     {
@@ -649,7 +649,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "53a08c4234c72b5b799d861654cc397de0b53a250379b1eb8ab65690e77f2a1a",
+      "sha256": "6ae9b9f7e8bdc940de2e3d54725de1e9000b9bb41819354ef3dd947a0e855f14",
       "kind": "boundary-ledger"
     },
     {

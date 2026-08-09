@@ -74,6 +74,23 @@ jobs:
             exit 1
           }
 
+          fail_closed_stage() {
+            local stage="${1:-}"
+            case "$stage" in
+              AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST | \
+              AWS_IDENTITY_STAGE_STS_ASSUME_RECEIPT | \
+              AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS | \
+              AWS_IDENTITY_STAGE_STS_CALLER_REQUEST | \
+              AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT | \
+              AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE | \
+              AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION | \
+              AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT) ;;
+              *) fail_closed ;;
+            esac
+            printf '%s\n' "::error::${stage}" >&2
+            exit 1
+          }
+
           [[ "$(/usr/bin/id -u)" != "0" ]] || fail_closed
           [[ "${GITHUB_ACTIONS:-}" == "true" ]] || fail_closed
           [[ "${CI:-}" == "true" ]] || fail_closed
@@ -289,7 +306,7 @@ jobs:
             --cli-read-timeout 20 \
             --no-cli-pager \
             >"$sts_response" 2>"$error_file"; then
-            fail_closed
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST
           fi
           if ! /usr/bin/jq -e \
             --arg expected_arn "$expected_caller_arn" \
@@ -306,13 +323,21 @@ jobs:
               type == "string" and
               test("^AROA[A-Z0-9]{12,124}:release-proof$"))' \
             "$sts_response" >/dev/null 2>"$error_file"; then
-            fail_closed
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_ASSUME_RECEIPT
           fi
 
-          assumed_role_id="$(/usr/bin/jq -r '.AssumedRoleUser.AssumedRoleId' "$sts_response")" || fail_closed
-          AWS_ACCESS_KEY_ID="$(/usr/bin/jq -r '.Credentials.AccessKeyId' "$sts_response")" || fail_closed
-          AWS_SECRET_ACCESS_KEY="$(/usr/bin/jq -r '.Credentials.SecretAccessKey' "$sts_response")" || fail_closed
-          AWS_SESSION_TOKEN="$(/usr/bin/jq -r '.Credentials.SessionToken' "$sts_response")" || fail_closed
+          if ! assumed_role_id="$(/usr/bin/jq -r '.AssumedRoleUser.AssumedRoleId' "$sts_response")"; then
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS
+          fi
+          if ! AWS_ACCESS_KEY_ID="$(/usr/bin/jq -r '.Credentials.AccessKeyId' "$sts_response")"; then
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS
+          fi
+          if ! AWS_SECRET_ACCESS_KEY="$(/usr/bin/jq -r '.Credentials.SecretAccessKey' "$sts_response")"; then
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS
+          fi
+          if ! AWS_SESSION_TOKEN="$(/usr/bin/jq -r '.Credentials.SessionToken' "$sts_response")"; then
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS
+          fi
           export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
           unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL oidc_request_url
 
@@ -324,7 +349,7 @@ jobs:
             --cli-read-timeout 20 \
             --no-cli-pager \
             >"$caller_receipt" 2>"$error_file"; then
-            fail_closed
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_CALLER_REQUEST
           fi
           if ! /usr/bin/jq -e \
             --arg account "$AWS_ACCOUNT_ID" \
@@ -338,14 +363,18 @@ jobs:
              (.UserId | type == "string" and
               test("^AROA[A-Z0-9]{12,124}:release-proof$"))' \
             "$caller_receipt" >/dev/null 2>"$error_file"; then
-            fail_closed
+            fail_closed_stage AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT
           fi
 
           unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN assumed_role_id
-          printf '%s' "$RECEIPT_ENCRYPTION_PASSPHRASE" \
-            >"$passphrase_file"
+          if ! printf '%s' "$RECEIPT_ENCRYPTION_PASSPHRASE" \
+            >"$passphrase_file"; then
+            fail_closed_stage AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE
+          fi
           unset RECEIPT_ENCRYPTION_PASSPHRASE
-          /usr/bin/rm -f -- "$encrypted_receipt"
+          if ! /usr/bin/rm -f -- "$encrypted_receipt"; then
+            fail_closed_stage AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE
+          fi
           if ! /usr/bin/timeout --signal=KILL 30s \
             /usr/bin/gpg \
               --no-options \
@@ -358,10 +387,14 @@ jobs:
             --output "$encrypted_receipt" \
             "$caller_receipt" \
             >/dev/null 2>"$error_file"; then
-            fail_closed
+            fail_closed_stage AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION
           fi
-          /usr/bin/chmod 600 "$encrypted_receipt" || fail_closed
-          [[ -s "$encrypted_receipt" ]] || fail_closed
+          if ! /usr/bin/chmod 600 "$encrypted_receipt"; then
+            fail_closed_stage AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT
+          fi
+          if [[ ! -s "$encrypted_receipt" ]]; then
+            fail_closed_stage AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT
+          fi
 
       - name: Upload encrypted caller identity receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
