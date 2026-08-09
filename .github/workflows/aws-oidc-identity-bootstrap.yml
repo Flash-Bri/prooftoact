@@ -17,6 +17,115 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  runner-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Report non-secret runner compatibility
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          BASH_ENV: ""
+          ENV: ""
+          LD_LIBRARY_PATH: ""
+          LD_PRELOAD: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+        run: |
+          set -euo pipefail
+
+          report() {
+            printf 'DIAGNOSTIC %s=%s\n' "$1" "$2"
+          }
+
+          report github_actions "${GITHUB_ACTIONS:-missing}"
+          report ci "${CI:-missing}"
+          report runner_os "${RUNNER_OS:-missing}"
+          report runner_environment "${RUNNER_ENVIRONMENT:-missing}"
+          report github_server_url "${GITHUB_SERVER_URL:-missing}"
+          report github_api_url "${GITHUB_API_URL:-missing}"
+          report github_repository "${GITHUB_REPOSITORY:-missing}"
+          report github_repository_id "${GITHUB_REPOSITORY_ID:-missing}"
+          report github_ref "${GITHUB_REF:-missing}"
+          report github_event_name "${GITHUB_EVENT_NAME:-missing}"
+          report github_workflow "${GITHUB_WORKFLOW:-missing}"
+          report github_workflow_ref "${GITHUB_WORKFLOW_REF:-missing}"
+          report github_job "${GITHUB_JOB:-missing}"
+
+          unsafe_names=()
+          for unsafe_name in \
+            ALL_PROXY \
+            AWS_CA_BUNDLE \
+            AWS_CONFIG_FILE \
+            AWS_CONTAINER_AUTHORIZATION_TOKEN \
+            AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE \
+            AWS_CONTAINER_CREDENTIALS_FULL_URI \
+            AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
+            AWS_DATA_PATH \
+            AWS_DEFAULT_PROFILE \
+            AWS_PROFILE \
+            AWS_ROLE_SESSION_NAME \
+            AWS_SDK_LOAD_CONFIG \
+            AWS_SHARED_CREDENTIALS_FILE \
+            AWS_USE_DUALSTACK_ENDPOINT \
+            AWS_USE_FIPS_ENDPOINT \
+            AWS_WEB_IDENTITY_TOKEN_FILE \
+            BOTO_CONFIG \
+            CURL_CA_BUNDLE \
+            HTTPS_PROXY \
+            HTTP_PROXY \
+            NODE_DEBUG \
+            NODE_TLS_REJECT_UNAUTHORIZED \
+            NODE_V8_COVERAGE \
+            NO_PROXY \
+            REQUESTS_CA_BUNDLE \
+            SSL_CERT_DIR \
+            SSL_CERT_FILE; do
+            if [[ -n "${!unsafe_name:-}" ]]; then
+              unsafe_names+=("$unsafe_name")
+            fi
+          done
+          while IFS= read -r unsafe_name; do
+            if [[ -n "${!unsafe_name:-}" ]]; then
+              unsafe_names+=("$unsafe_name")
+            fi
+          done < <(compgen -A variable AWS_ENDPOINT_URL)
+          if (( ${#unsafe_names[@]} == 0 )); then
+            report unsafe_environment none
+          else
+            unsafe_csv="$(IFS=,; printf '%s' "${unsafe_names[*]}")"
+            report unsafe_environment "$unsafe_csv"
+          fi
+
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          oidc_host="${oidc_url#https://}"
+          oidc_host="${oidc_host%%/*}"
+          report oidc_url_host "${oidc_host:-missing}"
+          if [[ "$oidc_url" == https://pipelines.actions.githubusercontent.com/*\?* ]]; then
+            report oidc_url_shape accepted
+          else
+            report oidc_url_shape rejected
+          fi
+          if [[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            report oidc_request_token present
+          else
+            report oidc_request_token missing
+          fi
+
+          aws_candidate=/usr/local/bin/aws
+          if [[ -L "$aws_candidate" ]]; then
+            report aws_candidate_symlink yes
+          else
+            report aws_candidate_symlink no
+          fi
+          aws_resolved="$(/usr/bin/readlink -f -- "$aws_candidate" 2>/dev/null || true)"
+          report aws_resolved "${aws_resolved:-missing}"
+          if [[ -n "$aws_resolved" && -e "$aws_resolved" ]]; then
+            report aws_metadata "$(/usr/bin/stat -Lc '%u:%a:%F' -- "$aws_resolved")"
+          else
+            report aws_metadata missing
+          fi
+
   identity-bootstrap:
     environment: aws-preflight
     runs-on: ubuntu-latest
