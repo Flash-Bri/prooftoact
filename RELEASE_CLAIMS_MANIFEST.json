@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-claims-manifest.v1",
   "status": "CURRENT_PUBLIC_CLAIMS_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-08",
+  "reviewedOn": "2026-08-09",
   "claimBoundary": "This inventory binds only the current public claim surfaces to reviewed pending-state copy. It does not prove claim truth, authorize deployment or publication, or replace the exact-release private human review.",
   "finalReleaseRequirements": [
     "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
@@ -18,7 +18,7 @@
       "id": "aws-boundary",
       "path": "docs/AWS_GATE2.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "11c17a0a795926f7a1ab69cf6ec225b6d68dd26ba79b0bb66258b8d61cbf37f1"
+      "sha256": "cc061594c69b1be6ab7fb24342c2585179eed5c1b8a644b7e32a2bcb675e5e46"
     },
     {
       "id": "aws-demo-entry",

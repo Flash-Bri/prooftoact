@@ -511,7 +511,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "af8e3f5ea8de6c55d595ea1a631bf181951e88bf10a88d7a6ea854dda764e52e",
+      "sha256": "7c98907967e3920c73cc9e62d8e69905ad92328a92fbe06d5ac9d385925d1c35",
       "kind": "boundary-ledger"
     },
     {
