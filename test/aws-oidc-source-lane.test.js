@@ -65,7 +65,7 @@ function acceptsOidcRequestUrl(pattern, requestUrl) {
       "--noprofile",
       "--norc",
       "-c",
-      '[[ "$1" =~ $2 ]]',
+      '(( ${#1} >= 1 && ${#1} <= 2048 )) && [[ "$1" =~ $2 ]]',
       "oidc-url-guard",
       requestUrl,
       pattern
@@ -195,7 +195,7 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
     () =>
       validateIdentityWorkflow(
         IDENTITY_WORKFLOW.replace(
-          "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.actions\\.githubusercontent\\.com",
+          "(pipelines|run-actions-[0-9]+-[a-z0-9]([a-z0-9-]*[a-z0-9])?)\\.actions\\.githubusercontent\\.com",
           ".*"
         )
       ),
@@ -260,6 +260,8 @@ test("OIDC request URL guards accept GitHub regional hosts and reject authority 
   for (const rejected of [
     "http://pipelines.actions.githubusercontent.com/idtoken?api-version=2.0",
     "https://actions.githubusercontent.com/idtoken?api-version=2.0",
+    "https://foo.actions.githubusercontent.com/idtoken?api-version=2.0",
+    "https://run-actions-2-azure-eastus-.actions.githubusercontent.com/idtoken?api-version=2.0",
     "https://foo.bar.actions.githubusercontent.com/idtoken?api-version=2.0",
     "https://foo.actions.githubusercontent.com.evil.example/idtoken?api-version=2.0",
     "https://foo.actions.githubusercontent.com:443/idtoken?api-version=2.0",
@@ -267,7 +269,8 @@ test("OIDC request URL guards accept GitHub regional hosts and reject authority 
       "@foo.actions.githubusercontent.com/idtoken?api-version=2.0",
     "https://foo.actions.githubusercontent.com/idtoken",
     "https://foo.actions.githubusercontent.com/idtoken?api-version=2.0#fragment",
-    "https://foo.actions.githubusercontent.com/id token?api-version=2.0"
+    "https://foo.actions.githubusercontent.com/id token?api-version=2.0",
+    `https://run-actions-2-azure-eastus.actions.githubusercontent.com/${"x".repeat(2048)}?api-version=2.0`
   ]) {
     assert.equal(acceptsOidcRequestUrl(identityPattern, rejected), false);
   }
@@ -354,7 +357,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
     () =>
       validateReadOnlyRunner(
         READ_ONLY_RUNNER.replace(
-          "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.actions\\.githubusercontent\\.com",
+          "(pipelines|run-actions-[0-9]+-[a-z0-9]([a-z0-9-]*[a-z0-9])?)\\.actions\\.githubusercontent\\.com",
           ".*"
         )
       ),

@@ -73,7 +73,7 @@ test("AWS OIDC identity bootstrap is manual, minimal, and encrypted", () => {
   assert.match(OIDC_WORKFLOW, /ACTIONS_ID_TOKEN_REQUEST_URL/);
   assert.match(
     OIDC_WORKFLOW,
-    /\\\.actions\\\.githubusercontent\\\.com/
+    /\(pipelines\|run-actions-/
   );
   assert.doesNotMatch(
     OIDC_WORKFLOW,

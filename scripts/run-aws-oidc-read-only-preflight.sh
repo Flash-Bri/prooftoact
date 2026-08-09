@@ -123,7 +123,8 @@ expected_role_arn="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ProofToActReadOnlyPreflig
 expected_caller_arn="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/ProofToActReadOnlyPreflight/read-only-preflight"
 [[ "${RECEIPT_ENCRYPTION_PASSPHRASE:-}" =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || fail_closed
 oidc_request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
-oidc_request_url_pattern='^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.actions\.githubusercontent\.com/[^[:space:]?#]+\?[^[:space:]#]+$'
+(( ${#oidc_request_url} >= 1 && ${#oidc_request_url} <= 2048 )) || fail_closed
+oidc_request_url_pattern='^https://(pipelines|run-actions-[0-9]+-[a-z0-9]([a-z0-9-]*[a-z0-9])?)\.actions\.githubusercontent\.com/[^[:space:]?#]+\?[^[:space:]#]+$'
 [[ "$oidc_request_url" =~ $oidc_request_url_pattern ]] || fail_closed
 unset oidc_request_url_pattern
 [[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed
