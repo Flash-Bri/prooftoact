@@ -20,6 +20,8 @@ const EXPECTED_LIMITS = Object.freeze({
   expectedMeteredSpendHighUsd: 12,
   expectedMeteredSpendLowUsd: 3,
   minimumBudgetCoverageEnd: "2026-09-16T00:00:00.000Z",
+  preflightAllowanceReserveUsd: 0.02,
+  preflightObservedAwsRejectAtUsd: 13.12,
   projectCostWindowStart: "2026-07-01",
   recordedNonAwsSpendUsd: 11.86,
   releaseHorizonEnd: "2026-09-15",
@@ -71,7 +73,7 @@ const EXPECTED_UNAPPROVED_PURCHASE_CLASSES = Object.freeze([
 ]);
 
 const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
-  "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with current account-wide AWS spend below 13.14 USD and the main stack absent.",
+  "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with current account-wide AWS spend plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
   "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
   "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",
   "Final complete spend ledger plus teardown or explicitly approved keep-alive receipt after the judged keep-alive window."
@@ -359,6 +361,12 @@ export function validateManifest(manifest) {
           manifest.limits.recordedNonAwsSpendUsd
         ).toFixed(2)
       ) === manifest.limits.effectiveAwsSpendCeilingUsd &&
+      Number(
+        (
+          manifest.limits.effectiveAwsSpendCeilingUsd -
+          manifest.limits.preflightAllowanceReserveUsd
+        ).toFixed(2)
+      ) === manifest.limits.preflightObservedAwsRejectAtUsd &&
       sameJson(manifest.budgetAlerts, EXPECTED_BUDGET_ALERTS) &&
       sameJson(
         manifest.forbiddenResourceTypes,
@@ -658,7 +666,8 @@ function assertSourceContracts(sources) {
       "This lane makes AWS CloudShell optional",
       "known missing setup gate",
       "account-wide `$15` budget",
-      "below `$13.14`",
+      "observed AWS + $0.02 < $13.14",
+      "exactly `$13.12` fails",
       "maximum `$0.02` complete-preflight cap",
       "This source change grants no",
       "spend authority."
@@ -695,6 +704,8 @@ function assertSourceContracts(sources) {
       "--no-paginate",
       "--signal=KILL --kill-after=5s 180s",
       "scripts/gate2-aws-preflight.js",
+      'tideproof.gate2.aws-preflight.v6',
+      "approvedPreflightAllowanceUsd",
       "readOnlyAccountSafetyPreflight: true",
       "cannot authorize or prove upload, mutation, deployment"
     ],
@@ -714,10 +725,14 @@ function assertSourceContracts(sources) {
   assertMarkers(
     sources.get("aws-preflight-library"),
     [
-      "budgetActual < effectiveAwsSpendCeilingUsd",
-      "conservativeActual < effectiveAwsSpendCeilingUsd",
-      "conservativeObservedTotalExposure <",
-      "TOTAL_PROJECT_EXPOSURE_CEILING_USD",
+      "USD_MICROS = 1_000_000",
+      "conservativeReservedAwsExposureMicros <",
+      "effectiveAwsSpendCeilingMicros",
+      "conservativeReservedTotalExposureMicros <",
+      "totalProjectExposureCeilingMicros",
+      "PREFLIGHT_ALLOWANCE_AWS_CEILING",
+      "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING",
+      'schemaVersion: "tideproof.gate2.aws-preflight.v6"',
       "registrarReceiptVerified: false",
       "autoRenewReportedEnabled: false",
       "state: \"ABSENT\"",
@@ -728,6 +743,8 @@ function assertSourceContracts(sources) {
   assertMarkers(
     sources.get("aws-preflight-runner"),
     [
+      "AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY",
+      "runtimeCalls.assertComplete()",
       "get-caller-identity",
       "get-cost-and-usage",
       "describe-budget",
@@ -739,7 +756,9 @@ function assertSourceContracts(sources) {
   assertMarkers(
     sources.get("aws-readiness-runner"),
     [
-      "Number(currentCost.amountUsd) < 13.14",
+      "preflightAllowanceMicros === 20_000n",
+      "reservedAwsExposureMicros < effectiveAwsCeilingMicros",
+      "reservedTotalExposureMicros < ceilingMicros",
       "projectExposure.registrarReceiptVerified === false",
       "controls?.mainGateTwoStack?.state === \"ABSENT\"",
       "awsPreflight: preflight ? \"PASS\" : \"NOT_RUN\"",

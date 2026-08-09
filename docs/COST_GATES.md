@@ -29,8 +29,11 @@ is `evidence/domain-cost-owner-record-2026-07-30.md`; no registrar receipt or
 renewal-state export has been independently inspected. The account-wide $15
 AWS Budget remains a useful alert boundary, but it no longer represents the
 effective amount available to spend. The live preflight must reject observed
-AWS spend at or above **$13.14**, and any later non-AWS expense reduces that
-effective AWS ceiling dollar for dollar.
+AWS spend unless the observation plus the full **$0.02** preflight allowance
+is strictly below **$13.14**. It separately requires the recorded non-AWS spend
+plus observed AWS spend plus that allowance to remain strictly below **$25**.
+An observation at exactly **$13.12** therefore fails, and any later non-AWS
+expense reduces the effective AWS ceiling dollar for dollar.
 
 Price inputs checked on 2026-07-29:
 
@@ -85,7 +88,11 @@ Stop new cloud work and investigate if:
    automatic shutdown.
    Because the domain registration consumed $11.86 of the separate $25 total
    exposure envelope, the preflight applies a stricter **$13.14** ceiling to
-   both budget-reported and Cost Explorer observed AWS spend. Cost Explorer
+   both budget-reported and Cost Explorer observed AWS spend after reserving
+   the complete **$0.02** approved preflight allowance. Both
+   `observed AWS + $0.02 < $13.14` and
+   `$11.86 + observed AWS + $0.02 < $25.00` must hold using conservative
+   micro-dollar arithmetic. Cost Explorer
    is summed account-wide from 2026-07-01 through the current UTC day rather
    than resetting at a month boundary. This is intentionally conservative
    because those AWS reads are account-wide.

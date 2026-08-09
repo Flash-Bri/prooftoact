@@ -109,37 +109,37 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "3ff2557b2f5928b69549263bbff189d642b22de2dce04bfd2a75796b48fbe6c6",
+      "sha256": "70bece8659977a51980ad6744051d2456d5de0477549a26764235241af319717",
       "kind": "boundary-ledger"
     },
     {
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
-      "sha256": "43a1ffc4474da8c4d150336bad4a057d93abfdf44ab657ef0d3d9a41b5c52a59",
+      "sha256": "de65656c1adf707d14c9fffe799cd75f4fa2a0cacac08a0e7df01dd08695b547",
       "kind": "boundary-ledger"
     },
     {
       "id": "aws-oidc-read-only-role-template",
       "path": "infra/aws/oidc-read-only-preflight-role-template.json",
-      "sha256": "5c15942a102d7d84998500d22dab734668f527f202b169076b8337e51c126a53",
+      "sha256": "a6831978e617e67329709aec98ea70fcdc9c9db6c06cfb69364436eb9388f58b",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
-      "sha256": "005d4cf14abd119bbdacfeaa0889cf1d0d50aadd954289cc01e97011e40d32ec",
+      "sha256": "2cb1c29be9a50d839a8266fe954726b140fddc61735228869d5eba19c0a60f99",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "e79301d15552cd18796af5e701f98882e2afe9c1eaa9e15b7f22b51af81f9346",
+      "sha256": "5c2a812572b128e5d812db340237d0b80c3cf8bda1ab93f5f7f873ff9e6193bb",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
-      "sha256": "16fdb2b7c117333ab16255d0118f210a135b9f956b0e38df8262e0c67512a771",
+      "sha256": "f826d0d86cb0f6319f1b0933f7fb39c18d5fd9f09f035a27419c1041393434d4",
       "kind": "verification-code"
     },
     {
@@ -151,7 +151,7 @@
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
-      "sha256": "c43f5c9fdad89084b3fa4fcac4ac37ef3a2d045599cf7045d029087716b2ef87",
+      "sha256": "bb416205141fa9847f1348a0a542474b4f78f02454bc242e289afd45ad095b21",
       "kind": "verification-code"
     },
     {
@@ -403,13 +403,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "3a56694627d423315ee2e3f1f335ec90b8fe6a3a859f70aa198fd08742fc21b2",
+      "sha256": "1cf4c9a04e8544d6465c2c51136de002ddcedd244a688d795f3d491ff783c21f",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "f774a19826f695b0feeb3781d9c278a4dc1e6f4dcc48aacc18b710f6bc6856b7",
+      "sha256": "6fa45402553b2afd479eee593ad2b786fd8b15b55dfffce56b451c385ed62c1f",
       "kind": "verification-code"
     },
     {
@@ -511,7 +511,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "861c09cc08e221171c7f0aa6d642fdda60aa5bfcd1d3e774f0db0f4984c62330",
+      "sha256": "582fd14aef386e2122c920aca5e88529b74be32bfae82719f48f2c11fdd7a264",
       "kind": "boundary-ledger"
     },
     {
@@ -529,13 +529,13 @@
     {
       "id": "release-cost-ledger",
       "path": "docs/RELEASE_COST.md",
-      "sha256": "d42113a9cb92fc6cbc42826f1252be30ac7286674f0c4209eebab045dbb379e6",
+      "sha256": "de8f2acc7a0b8c4f7444130d168b789c597176160b3bde08233aff8b6e1e5ce4",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "d8f87f3386a370fc26b35681bf4125b148980bf7cd8b0d1871be9ab42b84c50c",
+      "sha256": "43696b495038e7b09b6548c20253e05668e0d14dc9e0269512a2d5d6a5a19cbd",
       "kind": "boundary-ledger"
     },
     {
@@ -547,7 +547,7 @@
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "aa1e6eaabff783dff6a6b90a884b668c3ee9be973ab06116a2cb66352a288cdd",
+      "sha256": "b589ad95382fdb3bd9e4a0504201e43577935b6631df993677e88b63d036a011",
       "kind": "verification-code"
     },
     {
@@ -643,13 +643,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "34df4eb12fd3dc955d89565d3f69d6bf02f99a517582a1ac57b6fff00fe1127b",
+      "sha256": "53daa16d51a2e9e2f829db88fb027d787b1b6a48a9fb126e88d079590e13d6cf",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "67e8ea7ecc27c2624149fe86cd8965637c71756d8071ce831b5ddda4d2792035",
+      "sha256": "57ec7f8700460735415a0a68ccef7380d6e1fab69972ba2343b4ba6a6191ad42",
       "kind": "boundary-ledger"
     },
     {
@@ -661,7 +661,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "7d9d33e3fa17d4f4a334ab913e000b877ebe3e737d7e08240389520075fe9de8",
+      "sha256": "bd35a41435e6ff1be792ce9d353b80409e9d9420e4e80f25a7e07bd932d87038",
       "kind": "verification-code"
     },
     {
@@ -673,7 +673,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "497b8fdd793b0301361535dcf19d5e7d9e86034f8e4314a0f76a86ba56559d99",
+      "sha256": "b1f7d15918074fd2b50ef43ca66a2555ddaf20de9ca2a91053932fb7c7a399f9",
       "kind": "boundary-ledger"
     },
     {

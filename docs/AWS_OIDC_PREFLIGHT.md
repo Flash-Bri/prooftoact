@@ -36,6 +36,61 @@ It requires the exact existing artifact-bucket name as a private deployment
 parameter and assumes the account already has the GitHub OIDC provider for
 `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`.
 
+The role trust conditions use only keys documented by AWS for GitHub OIDC:
+`aud`, `sub`, `repository`, immutable `repository_id`, immutable
+`repository_owner_id`, `workflow`, `ref`, and `environment`. The template pins
+all eight to this owner/repository and their IDs, workflow name, `main`, and
+`aws-read-only-preflight`. This support decision was checked against the
+official AWS IAM OIDC condition-key reference and GitHub OIDC guidance on
+2026-08-08:
+
+- https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#condition-keys-wif
+- https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html#idp_oidc_Create_GitHub
+- https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws
+- https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims
+
+GitHub's AWS guide still says customized OIDC claims are unavailable in AWS;
+this template does not customize the subject or invent a claim mapping. It
+uses only the default GitHub token claims that the current AWS IAM reference
+explicitly maps. GitHub documents that repositories created after July 15,
+2026 use an immutable default subject containing both owner and repository
+IDs. The public repository API reported on 2026-08-08 that this repository's
+`created_at` is `2026-07-30T22:07:23Z`, repository ID is `1317716765`, and
+owner ID is `252500266`:
+
+- https://api.github.com/repos/Flash-Bri/prooftoact
+
+The public repository OIDC settings API also reported `use_default: true`,
+`use_immutable_subject: false`, and exact `sub_claim_prefix`
+`repo:Flash-Bri@252500266/prooftoact@1317716765`:
+
+- https://api.github.com/repos/Flash-Bri/prooftoact/actions/oidc/customization/sub
+
+The template therefore pins the exact current read-only subject
+`repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight`.
+The identity workflow validates the corresponding `aws-preflight` subject.
+Public API metadata is corroboration, not a live OIDC token or IAM receipt.
+Before applying the inert read-only template, provider setup must re-fetch
+both metadata responses and inspect an actual protected-environment token to
+confirm the exact committed subject. The existing identity role is outside
+this source template; an authorized human must separately verify or update its
+trust to the immutable `aws-preflight` subject before running that lane. A
+repository transfer, rename, owner/ID change, or OIDC subject customization
+must fail closed until both source and provider trust receive separate review
+and authorization.
+
+AWS documents `job_workflow_ref` only for jobs that call a reusable workflow;
+this direct workflow does not do that. AWS does not document the direct
+`workflow_ref` claim as an IAM condition key. The general
+`sts:RoleSessionName` reference does not unambiguously promise that condition
+key for `AssumeRoleWithWebIdentity`, so the template does not invent either
+condition. The runner still checks the exact token `workflow_ref`, source SHA,
+and resulting `read-only-preflight` session before accepting evidence, but
+those checks do not strengthen IAM before assumption. Required reviewers,
+`main`-only deployment branches, disabled approval bypass, and human review of
+the exact workflow and official commit therefore remain a deliberate
+provider-side gate and residual trust boundary.
+
 For each GitHub environment, a human must independently verify required
 reviewers, deployment-branch restriction to `main`, protection against
 approval bypass, secret access, and the exact workflow binding. Source cannot
@@ -53,9 +108,21 @@ AWS activity.
 The identity environment also requires `AWS_ROLE_ARN`, `AWS_ACCOUNT_ID`, and
 `RECEIPT_ENCRYPTION_PASSPHRASE` secrets. The read-only environment requires
 `AWS_READ_ONLY_PREFLIGHT_ROLE_ARN`, `AWS_ACCOUNT_ID`, and
-`RECEIPT_ENCRYPTION_PASSPHRASE`. The passphrase must be at least 20 characters,
-must remain outside source and logs, and must be delivered separately to the
-private evidence reviewer.
+`RECEIPT_ENCRYPTION_PASSPHRASE`. An authorized human must generate a different
+value independently for each protected environment with a trusted CSPRNG, for
+example:
+
+```sh
+openssl rand -base64 32 | tr -d '=\n' | tr '+/' '-_'
+```
+
+The exact accepted format is canonical unpadded Base64URL for 32 bytes: 43
+characters matching `^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$`. Both workflows
+reject every other length, alphabet, padding, or noncanonical final character.
+The value must remain outside source and logs and must be delivered separately
+to the private evidence reviewer. Source can enforce the exact encoding but
+cannot prove that a human used a CSPRNG or kept the value private; those remain
+setup-review gates.
 
 Every manual dispatch requires an explicit 40-character
 `official_main_commit` input. The workflow, GitHub event, checked-out `HEAD`,
@@ -72,24 +139,37 @@ encrypts the exact validated caller receipt before a one-day artifact upload.
 It does not run the account preflight.
 
 The separate read-only workflow obtains its own 900-second `ASIA` session,
-requires the non-root runner and account digest again, and then performs only:
+requires the non-root runner and account digest again, and makes exactly 20 AWS
+CLI calls on a successful run: three fixed wrapper calls plus the 17-call
+ordered account-safety inventory. The exact calls are:
 
-- STS `GetCallerIdentity` before any account-specific read;
-- Account `GetRegionOptStatus` for `us-east-1`, requiring
+- one STS `AssumeRoleWithWebIdentity`; its returned assumed-role identity is
+  validated before any account-specific read;
+- one Account `GetRegionOptStatus` for `us-east-1`, requiring
   `ENABLED_BY_DEFAULT`;
-- Service Quotas `ListServiceQuotas` for Bedrock with one non-paginated
+- one Service Quotas `ListServiceQuotas` for Bedrock with one non-paginated
   service response, used only to prove bounded quota-metadata readability;
-- CloudFormation `DescribeStacks` for the preserved
-  `tideproof-gate2-artifacts` bootstrap stack and account-wide `ListStacks` to
-  prove both `prooftoact-gate2` and legacy `tideproof-gate2` are absent;
-- Budgets reads for the exact account-wide `$15` budget and its four
-  subscriber-backed alerts;
+- one nested STS `GetCallerIdentity` before the nested account-safety reads;
+- one CloudFormation `DescribeStacks` for the preserved
+  `tideproof-gate2-artifacts` bootstrap stack;
+- one Budgets `DescribeBudget` for the exact account-wide `$15` budget, one
+  `DescribeNotificationsForBudget`, and exactly four
+  `DescribeSubscribersForNotification` calls after the returned notification
+  set is proven to contain exactly the four required alerts;
 - one non-paginated Cost Explorer `GetCostAndUsage` request for the existing
-  project window, with both account-wide spend observations below `$13.14`;
-- the six existing-bucket control reads for versioning, encryption, public
-  access, ownership, policy status, and the exact TLS-only policy; and
-- Bedrock `GetFoundationModel` for
+  project window;
+- exactly six existing-bucket control reads for versioning, encryption, public
+  access, ownership, policy status, and the exact TLS-only policy;
+- one account-wide CloudFormation `ListStacks` proving both `prooftoact-gate2`
+  and legacy `tideproof-gate2` are absent; and
+- one Bedrock `GetFoundationModel` for
   `amazon.nova-micro-v1:0` in `us-east-1`.
+
+The runtime consumes that inventory in order, rejects a wrong service,
+operation, region, missing call, or extra call, and cannot turn an oversized
+notification response into extra subscriber reads. The independent source
+verifier parses the declared inventory and requires the exact 14 operation
+groups and 17 nested calls; the fixed wrapper adds exactly three calls.
 
 All AWS CLI calls use one SDK attempt, 10-second connect and 20-second read
 timeouts, an isolated credential/configuration environment, and an outer
@@ -104,6 +184,20 @@ The Cost Explorer request may be metered. Before any live run, the operator
 must recheck current prices and receive separate authorization under the
 existing maximum `$0.02` complete-preflight cap. This source change grants no
 spend authority.
+
+The full declared `$0.02` allowance is reserved before the receipt can pass or
+any subsequent provider action may proceed. The gate conservatively rounds
+each account-wide spend amount upward to the nearest micro-dollar, takes the
+greater of Budget and Cost Explorer observed spend, and requires both
+`observed AWS + $0.02 < $13.14` and
+`$11.86 + observed AWS + $0.02 < $25.00`. Strict inequality means an observed
+value of exactly `$13.12` fails; `$13.119999` is the highest six-decimal value
+that can pass. Receipt schema `tideproof.gate2.aws-preflight.v6` records the
+allowance, reserved AWS exposure, reserved total exposure, and remaining
+exposure after the allowance. The Cost Explorer request needed to learn the
+observation happens before receipt validation and may itself be metered, which
+is why the prior price recheck and separate maximum `$0.02` run authorization
+remain mandatory; a failed receipt authorizes nothing further.
 
 ## Evidence and release boundary
 

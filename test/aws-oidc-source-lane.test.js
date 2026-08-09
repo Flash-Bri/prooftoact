@@ -8,6 +8,7 @@ import {
   validateReadOnlyRoleTemplate,
   validateReadOnlyRunner,
   validateReadOnlyWorkflow,
+  validateUnderlyingPreflight,
   verifyAwsOidcPreflightSource
 } from "../scripts/verify-aws-oidc-preflight-source.js";
 import {
@@ -38,13 +39,17 @@ const READ_ONLY_WORKFLOW = source(
 const READ_ONLY_RUNNER = source(
   "scripts/run-aws-oidc-read-only-preflight.sh"
 );
+const PREFLIGHT_RUNNER = source("scripts/gate2-aws-preflight.js");
+const PREFLIGHT_VALIDATOR = source(
+  "src/cloud/aws-gate2-preflight.js"
+);
 
 test("OIDC source receipt remains explicitly local and provider-pending", () => {
   const receipt = verifyAwsOidcPreflightSource();
 
   assert.equal(
     receipt.schemaVersion,
-    "prooftoact.aws-oidc-preflight-source-verification.v1"
+    "prooftoact.aws-oidc-preflight-source-verification.v2"
   );
   assert.equal(
     receipt.status,
@@ -60,6 +65,9 @@ test("OIDC source receipt remains explicitly local and provider-pending", () => 
     receipt.exactReadActionCount,
     sourceContract.EXACT_READ_ACTIONS.length
   );
+  assert.equal(receipt.identityWorkflowAwsCallCount, 2);
+  assert.equal(receipt.exactPreflightRuntimeCallCount, 17);
+  assert.equal(receipt.exactReadOnlyWorkflowAwsCallCount, 20);
   assert.equal(receipt.reviewedFiles.length, 7);
   assert.ok(Object.values(receipt.checks).every((value) => value === true));
   assert.match(receipt.claimBoundary, /does not prove GitHub environment/);
@@ -73,9 +81,31 @@ test("read-only role template is exact and rejects expanded trust or authority",
   expandedTrust.Resources.ReadOnlyPreflightRole.Properties
     .AssumeRolePolicyDocument.Statement[0].Condition.StringEquals[
       "token.actions.githubusercontent.com:sub"
-    ] = "repo:Flash-Bri/prooftoact:*";
+    ] = "repo:Flash-Bri@252500266/prooftoact@1317716765:*";
   assert.throws(
     () => validateReadOnlyRoleTemplate(expandedTrust),
+    /OIDC_ROLE_TEMPLATE_TRUST/
+  );
+
+  const wrongOwnerId = clone(roleTemplate());
+  wrongOwnerId.Resources.ReadOnlyPreflightRole.Properties
+    .AssumeRolePolicyDocument.Statement[0].Condition.StringEquals[
+      "token.actions.githubusercontent.com:repository_owner_id"
+    ] = "252500267";
+  assert.throws(
+    () => validateReadOnlyRoleTemplate(wrongOwnerId),
+    /OIDC_ROLE_TEMPLATE_TRUST/
+  );
+
+  const unsupportedWorkflowRef = clone(roleTemplate());
+  unsupportedWorkflowRef.Resources.ReadOnlyPreflightRole.Properties
+    .AssumeRolePolicyDocument.Statement[0].Condition.StringEquals[
+      "token.actions.githubusercontent.com:workflow_ref"
+    ] =
+    "Flash-Bri/prooftoact/.github/workflows/" +
+    "aws-oidc-read-only-preflight.yml@refs/heads/main";
+  assert.throws(
+    () => validateReadOnlyRoleTemplate(unsupportedWorkflowRef),
     /OIDC_ROLE_TEMPLATE_TRUST/
   );
 
@@ -133,6 +163,27 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
       ),
     /OIDC_IDENTITY_WORKFLOW_STS_ONLY/
   );
+  for (const bypass of [
+    'command "${aws_cli}" s3api list-buckets',
+    "/usr/local/bin/aws s3api list-buckets",
+    "/opt/tools/aws s3api list-buckets",
+    "command aws s3api list-buckets"
+  ]) {
+    assert.throws(
+      () => validateIdentityWorkflow(`${IDENTITY_WORKFLOW}\n${bypass}\n`),
+      /OIDC_IDENTITY_AWS_CLI_REFERENCES/
+    );
+  }
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        IDENTITY_WORKFLOW.replace(
+          "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$",
+          "^[A-Za-z0-9_-]{20,}$"
+        )
+      ),
+    /OIDC_IDENTITY_WORKFLOW_MARKERS/
+  );
 });
 
 test("read-only workflow stays separately protected and action-pinned", () => {
@@ -180,6 +231,88 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   assert.throws(
     () => validateReadOnlyRunner(`${READ_ONLY_RUNNER}\nset -x\n`),
     /OIDC_READ_ONLY_RUNNER_MUTATION/
+  );
+  for (const bypass of [
+    'command "${aws_cli}" s3api list-buckets',
+    "/usr/local/bin/aws s3api list-buckets",
+    "/opt/tools/aws s3api list-buckets",
+    "command aws s3api list-buckets"
+  ]) {
+    assert.throws(
+      () => validateReadOnlyRunner(`${READ_ONLY_RUNNER}\n${bypass}\n`),
+      /OIDC_READ_ONLY_AWS_CLI_REFERENCES/
+    );
+  }
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$",
+          "^[A-Za-z0-9_-]{42}$"
+        )
+      ),
+    /OIDC_READ_ONLY_RUNNER_MARKERS/
+  );
+});
+
+test("receipt secret contract is canonical unpadded Base64URL for 32 bytes", () => {
+  const pattern = new RegExp(sourceContract.EXACT_RECEIPT_SECRET_PATTERN);
+  const encoded = Buffer.alloc(32, 0xab).toString("base64url");
+  assert.equal(encoded.length, 43);
+  assert.match(encoded, pattern);
+  assert.equal(Buffer.from(encoded, "base64url").length, 32);
+  for (const rejected of [
+    `${encoded}=`,
+    encoded.slice(1),
+    `${encoded.slice(0, -1)}B`,
+    "x".repeat(43)
+  ]) {
+    assert.doesNotMatch(rejected, pattern);
+  }
+});
+
+test("underlying preflight inventory is exact and cannot bypass its reader", () => {
+  assert.deepEqual(
+    validateUnderlyingPreflight(
+      PREFLIGHT_RUNNER,
+      PREFLIGHT_VALIDATOR
+    ),
+    sourceContract.EXACT_PREFLIGHT_RUNTIME_CALL_INVENTORY
+  );
+  assert.throws(
+    () =>
+      validateUnderlyingPreflight(
+        PREFLIGHT_RUNNER.replace(
+          'Object.freeze(["budgets", "describe-subscribers-for-notification", 4])',
+          'Object.freeze(["budgets", "describe-subscribers-for-notification", 5])'
+        ),
+        PREFLIGHT_VALIDATOR
+      ),
+    /OIDC_UNDERLYING_PREFLIGHT_INVENTORY/
+  );
+  assert.throws(
+    () =>
+      validateUnderlyingPreflight(
+        `${PREFLIGHT_RUNNER}\nreadAwsJson("us-east-1", "s3api", "list-buckets");\n`,
+        PREFLIGHT_VALIDATOR
+      ),
+    /OIDC_UNDERLYING_PREFLIGHT_READER_BYPASS/
+  );
+  assert.throws(
+    () =>
+      validateUnderlyingPreflight(
+        `${PREFLIGHT_RUNNER}\nawsJson("us-east-1", "s3api", "list-buckets");\n`,
+        PREFLIGHT_VALIDATOR
+      ),
+    /OIDC_UNDERLYING_PREFLIGHT_READER_BYPASS/
+  );
+  assert.throws(
+    () =>
+      validateUnderlyingPreflight(
+        `${PREFLIGHT_RUNNER}\nspawnSync(trustedAwsCliExecutable(), ["s3api", "list-buckets"]);\n`,
+        PREFLIGHT_VALIDATOR
+      ),
+    /OIDC_UNDERLYING_PREFLIGHT_READER_BYPASS/
   );
 });
 

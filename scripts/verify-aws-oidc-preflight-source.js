@@ -16,10 +16,12 @@ const PREFLIGHT_RUNNER_PATH = "scripts/gate2-aws-preflight.js";
 const PREFLIGHT_VALIDATOR_PATH = "src/cloud/aws-gate2-preflight.js";
 const LEDGER_PATH = "docs/AWS_OIDC_PREFLIGHT.md";
 const RECEIPT_SCHEMA =
-  "prooftoact.aws-oidc-preflight-source-verification.v1";
+  "prooftoact.aws-oidc-preflight-source-verification.v2";
 const RECEIPT_STATUS =
   "SOURCE_CONTRACT_PASS_PROVIDER_SETUP_AND_EXECUTION_PENDING";
 const HEX_64 = /^[0-9a-f]{64}$/;
+const EXACT_RECEIPT_SECRET_PATTERN =
+  "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$";
 
 const EXACT_READ_ACTIONS = Object.freeze([
   "account:GetRegionOptStatus",
@@ -37,6 +39,29 @@ const EXACT_READ_ACTIONS = Object.freeze([
   "servicequotas:ListServiceQuotas",
   "sts:GetCallerIdentity"
 ]);
+
+const EXACT_PREFLIGHT_RUNTIME_CALL_INVENTORY = Object.freeze([
+  Object.freeze(["sts", "get-caller-identity", 1]),
+  Object.freeze(["cloudformation", "describe-stacks", 1]),
+  Object.freeze(["budgets", "describe-budget", 1]),
+  Object.freeze(["budgets", "describe-notifications-for-budget", 1]),
+  Object.freeze(["budgets", "describe-subscribers-for-notification", 4]),
+  Object.freeze(["ce", "get-cost-and-usage", 1]),
+  Object.freeze(["s3api", "get-bucket-versioning", 1]),
+  Object.freeze(["s3api", "get-bucket-encryption", 1]),
+  Object.freeze(["s3api", "get-public-access-block", 1]),
+  Object.freeze(["s3api", "get-bucket-ownership-controls", 1]),
+  Object.freeze(["s3api", "get-bucket-policy-status", 1]),
+  Object.freeze(["s3api", "get-bucket-policy", 1]),
+  Object.freeze(["cloudformation", "list-stacks", 1]),
+  Object.freeze(["bedrock", "get-foundation-model", 1])
+]);
+
+const EXACT_PREFLIGHT_RUNTIME_CALL_COUNT =
+  EXACT_PREFLIGHT_RUNTIME_CALL_INVENTORY.reduce(
+    (total, entry) => total + entry[2],
+    0
+  );
 
 const EXPECTED_ROLE_STATEMENT_SIDS = Object.freeze([
   "ReadCallerIdentity",
@@ -59,6 +84,28 @@ const EXPECTED_READ_ONLY_ACTION_PINS = Object.freeze([
   "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
   "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+]);
+
+const EXPECTED_IDENTITY_AWS_CLI_REFERENCE_LINES = Object.freeze([
+  'aws_candidate="/usr/local/bin/aws"',
+  '[[ -L "$aws_candidate" ]] || fail_closed',
+  'aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed',
+  String.raw`[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed`,
+  'aws_metadata="$(/usr/bin/stat -Lc \'%u:%a:%F\' -- "$aws_cli")" || fail_closed',
+  '"$aws_cli" sts assume-role-with-web-identity \\',
+  '"$aws_cli" sts get-caller-identity \\'
+]);
+
+const EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES = Object.freeze([
+  'aws_candidate="/usr/local/bin/aws"',
+  '[[ -L "$aws_candidate" ]] || fail_closed',
+  'aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed',
+  String.raw`[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed`,
+  'aws_metadata="$(/usr/bin/stat -Lc \'%u:%a:%F\' -- "$aws_cli")" || fail_closed',
+  "unset aws_candidate aws_metadata aws_uid aws_mode aws_type aws_mode_value",
+  '"$aws_cli" sts assume-role-with-web-identity \\',
+  '"$aws_cli" account get-region-opt-status \\',
+  '"$aws_cli" service-quotas list-service-quotas \\'
 ]);
 
 function assert(condition, code) {
@@ -139,6 +186,46 @@ function literalAwsCalls(source) {
       /"\$aws_cli"\s+([a-z0-9-]+)\s+([a-z0-9-]+)/gu
     )
   ].map((match) => `${match[1]}:${match[2]}`);
+}
+
+function validateAwsCliReferenceLines(source, expected, code) {
+  const references = source
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) =>
+      /\baws_candidate\b|\baws_cli\b|(?:^|\s)(?:command\s+|\/usr\/bin\/env\s+)?aws(?=[\s"'$])|\/(?:[^/\s"'`]+\/)*aws(?=[$"'\s])/u.test(line)
+    );
+  assert(sameJson(references, expected), code);
+  return true;
+}
+
+function runtimeCallInventory(source) {
+  const block = source.match(
+    /export const AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY = Object\.freeze\(\[\n([\s\S]*?)\n\]\);/u
+  );
+  assert(block, "OIDC_UNDERLYING_PREFLIGHT_INVENTORY_BLOCK");
+  const tuplePattern =
+    /^\s*Object\.freeze\(\["([a-z0-9-]+)", "([a-z0-9-]+)", ([1-9]\d*)\]\),?\s*$/gmu;
+  const entries = [...block[1].matchAll(tuplePattern)].map((match) => [
+    match[1],
+    match[2],
+    Number(match[3])
+  ]);
+  assert(
+    block[1].replace(tuplePattern, "").trim() === "",
+    "OIDC_UNDERLYING_PREFLIGHT_INVENTORY_SYNTAX"
+  );
+  return entries;
+}
+
+function validateReceiptSecretContract(source, code) {
+  const occurrences = source.split(EXACT_RECEIPT_SECRET_PATTERN).length - 1;
+  assert(
+    occurrences === 1 &&
+      !source.includes("${#RECEIPT_ENCRYPTION_PASSPHRASE} >= 20"),
+    code
+  );
+  return true;
 }
 
 function assertMarkers(source, markers, code) {
@@ -224,8 +311,20 @@ export function validateReadOnlyRoleTemplate(template) {
             StringEquals: {
               "token.actions.githubusercontent.com:aud":
                 "sts.amazonaws.com",
+              "token.actions.githubusercontent.com:environment":
+                "aws-read-only-preflight",
+              "token.actions.githubusercontent.com:ref":
+                "refs/heads/main",
+              "token.actions.githubusercontent.com:repository":
+                "Flash-Bri/prooftoact",
+              "token.actions.githubusercontent.com:repository_id":
+                "1317716765",
+              "token.actions.githubusercontent.com:repository_owner_id":
+                "252500266",
               "token.actions.githubusercontent.com:sub":
-                "repo:Flash-Bri/prooftoact:environment:aws-read-only-preflight"
+                "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight",
+              "token.actions.githubusercontent.com:workflow":
+                "AWS Read-Only OIDC Preflight"
             }
           }
         }
@@ -359,7 +458,8 @@ export function validateIdentityWorkflow(source) {
       "AWS_CONTAINER_CREDENTIALS_FULL_URI",
       "compgen -A variable AWS_ENDPOINT_URL",
       ".workflow_sha == $sha",
-      "repo:Flash-Bri/prooftoact:environment:aws-preflight",
+      '.repository_owner_id == "252500266"',
+      "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-preflight",
       "role/ProofToActPreflight",
       "--role-session-name release-proof",
       "--duration-seconds 900",
@@ -370,6 +470,7 @@ export function validateIdentityWorkflow(source) {
       "/usr/bin/timeout --signal=KILL 30s",
       "--disable",
       "--no-options",
+      EXACT_RECEIPT_SECRET_PATTERN,
       "--symmetric",
       "--cipher-algo AES256",
       "retention-days: 1"
@@ -387,6 +488,11 @@ export function validateIdentityWorkflow(source) {
     ]),
     "OIDC_IDENTITY_WORKFLOW_STS_ONLY"
   );
+  validateAwsCliReferenceLines(
+    source,
+    EXPECTED_IDENTITY_AWS_CLI_REFERENCE_LINES,
+    "OIDC_IDENTITY_AWS_CLI_REFERENCES"
+  );
   assert(
     !source.includes("actions/checkout@") &&
       !source.includes("actions/setup-node@") &&
@@ -395,6 +501,10 @@ export function validateIdentityWorkflow(source) {
       !/\b(?:cat|tee)\b/u.test(source) &&
       !/^\s*aws\s+/mu.test(source),
     "OIDC_IDENTITY_WORKFLOW_MINIMAL"
+  );
+  validateReceiptSecretContract(
+    source,
+    "OIDC_IDENTITY_RECEIPT_SECRET"
   );
   return source;
 }
@@ -453,7 +563,8 @@ export function validateReadOnlyRunner(source) {
       "AWS_CONTAINER_CREDENTIALS_FULL_URI",
       "compgen -A variable AWS_ENDPOINT_URL",
       "source_commit\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
-      "repo:Flash-Bri/prooftoact:environment:aws-read-only-preflight",
+      '.repository_owner_id == "252500266"',
+      "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight",
       ".workflow_sha == $sha",
       "role/ProofToActReadOnlyPreflight",
       "--role-session-name read-only-preflight",
@@ -469,6 +580,7 @@ export function validateReadOnlyRunner(source) {
       "--cli-read-timeout 20",
       "--disable",
       "--no-options",
+      EXACT_RECEIPT_SECRET_PATTERN,
       "AWS_MAX_ATTEMPTS=1",
       "AWS_EC2_METADATA_DISABLED=true",
       "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true",
@@ -489,15 +601,34 @@ export function validateReadOnlyRunner(source) {
     ]),
     "OIDC_READ_ONLY_RUNNER_DIRECT_CALLS"
   );
+  validateAwsCliReferenceLines(
+    source,
+    EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES,
+    "OIDC_READ_ONLY_AWS_CLI_REFERENCES"
+  );
   assert(
     !/\bset\s+-x\b/u.test(source) &&
       !/\btee\b/u.test(source),
     "OIDC_READ_ONLY_RUNNER_MUTATION"
   );
+  validateReceiptSecretContract(
+    source,
+    "OIDC_READ_ONLY_RECEIPT_SECRET"
+  );
   return source;
 }
 
-function validateUnderlyingPreflight(runnerSource, validatorSource) {
+export function validateUnderlyingPreflight(
+  runnerSource,
+  validatorSource
+) {
+  const inventory = runtimeCallInventory(runnerSource);
+  assert(
+    sameJson(inventory, EXACT_PREFLIGHT_RUNTIME_CALL_INVENTORY) &&
+      inventory.reduce((total, entry) => total + entry[2], 0) ===
+        EXACT_PREFLIGHT_RUNTIME_CALL_COUNT,
+    "OIDC_UNDERLYING_PREFLIGHT_INVENTORY"
+  );
   assertMarkers(
     runnerSource,
     [
@@ -505,22 +636,30 @@ function validateUnderlyingPreflight(runnerSource, validatorSource) {
       "killSignal: \"SIGKILL\"",
       "--cli-connect-timeout",
       "--cli-read-timeout",
-      '"get-caller-identity"',
-      '"describe-stacks"',
-      '"describe-budget"',
-      '"describe-notifications-for-budget"',
-      '"describe-subscribers-for-notification"',
-      '"get-cost-and-usage"',
-      '"get-bucket-versioning"',
-      '"get-bucket-encryption"',
-      '"get-public-access-block"',
-      '"get-bucket-ownership-controls"',
-      '"get-bucket-policy-status"',
-      '"get-bucket-policy"',
-      '"list-stacks"',
-      '"get-foundation-model"'
+      "createAwsPreflightRuntimeCallReader(",
+      "AWS_RUNTIME_CALL_INVENTORY",
+      "AWS_RUNTIME_CALL_CARDINALITY",
+      "exactBudgetNotifications(",
+      "notifications.length !== EXPECTED_BUDGET_NOTIFICATIONS.length",
+      "runtimeCalls.assertComplete()"
     ],
     "OIDC_UNDERLYING_PREFLIGHT_CALLS"
+  );
+  assert(
+    (runnerSource.match(/\breadAwsJson\s*\(/gu) ?? []).length === 1 &&
+      (runnerSource.match(/\bawsJson\s*\(/gu) ?? []).length === 1 &&
+      (runnerSource.match(/\bcommandJson\s*\(/gu) ?? []).length === 2 &&
+      (runnerSource.match(/\bspawnSync\s*\(/gu) ?? []).length === 1 &&
+      (runnerSource.match(/\bspawnSync\b/gu) ?? []).length === 3 &&
+      (runnerSource.match(/from "node:child_process"/gu) ?? []).length ===
+        1 &&
+      runnerSource.includes(
+        'import { spawnSync } from "node:child_process";'
+      ) &&
+      runnerSource.includes(
+        "const result = spawnSync(trustedAwsCliExecutable(), args, {"
+      ),
+    "OIDC_UNDERLYING_PREFLIGHT_READER_BYPASS"
   );
   assertMarkers(
     validatorSource,
@@ -532,11 +671,20 @@ function validateUnderlyingPreflight(runnerSource, validatorSource) {
       "APPROVED_PREFLIGHT_IDENTITY_LANES.find(",
       "AWS_PREFLIGHT_EXPECTED_ROLE",
       "AWS_PREFLIGHT_EXPECTED_CALLER_ARN",
-      "AWS_PREFLIGHT_EXPECTED_CALLER_USER_ID"
+      "AWS_PREFLIGHT_EXPECTED_CALLER_USER_ID",
+      "USD_MICROS = 1_000_000",
+      "APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD",
+      "conservativeReservedAwsExposureMicros <",
+      "effectiveAwsSpendCeilingMicros",
+      "conservativeReservedTotalExposureMicros <",
+      "totalProjectExposureCeilingMicros",
+      "PREFLIGHT_ALLOWANCE_AWS_CEILING",
+      "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING",
+      'schemaVersion: "tideproof.gate2.aws-preflight.v6"'
     ],
     "OIDC_UNDERLYING_PREFLIGHT_IDENTITIES"
   );
-  return true;
+  return inventory;
 }
 
 function validateLedger(source) {
@@ -554,7 +702,20 @@ function validateLedger(source) {
       "900-second",
       "official_main_commit",
       "us-east-1",
-      "`$13.14`",
+      "exactly 20 AWS",
+      "14 operation",
+      "17 nested calls",
+      "canonical unpadded Base64URL for 32 bytes",
+      EXACT_RECEIPT_SECRET_PATTERN,
+      "reference_policies_iam-condition-keys.html#condition-keys-wif",
+      "oidc#immutable-subject-claims",
+      "created_at` is `2026-07-30T22:07:23Z",
+      "use_default: true",
+      "repo:Flash-Bri@252500266/prooftoact@1317716765",
+      "AWS does not document the direct",
+      "provider-side gate and residual trust boundary",
+      "observed AWS + $0.02 < $13.14",
+      "exactly `$13.12` fails",
       "maximum `$0.02` complete-preflight cap",
       "encrypted with AES-256",
       "rollback",
@@ -622,6 +783,11 @@ export function verifyAwsOidcPreflightSource({
     deploymentRoleOrWorkflowAdded: false,
     approvedIdentityLaneCount: 2,
     exactReadActionCount: EXACT_READ_ACTIONS.length,
+    identityWorkflowAwsCallCount: 2,
+    exactPreflightRuntimeCallCount:
+      EXACT_PREFLIGHT_RUNTIME_CALL_COUNT,
+    exactReadOnlyWorkflowAwsCallCount:
+      3 + EXACT_PREFLIGHT_RUNTIME_CALL_COUNT,
     reviewedFiles,
     checks: {
       identityWorkflowManualStsOnly: true,
@@ -630,10 +796,12 @@ export function verifyAwsOidcPreflightSource({
       temporaryNonRootCredentialsRequired: true,
       accountDigestRequiredButNotEmbedded: true,
       readOnlyRoleTrustExact: true,
+      documentedGitHubIamTrustKeysOnly: true,
       readOnlyRoleActionsExact: true,
       providerMutationExplicitlyDenied: true,
       regionAndQuotaMetadataReadsBounded: true,
-      accountSafetyPreflightCallsBounded: true,
+      accountSafetyPreflightCurrentSourceCallsExact: true,
+      receiptSecretExact32ByteBase64url: true,
       encryptedSanitizedReceiptRequired: true,
       cloudShellOptionalWithoutGateWaiver: true,
       deploymentAndRollbackAuthoritySeparate: true,
@@ -645,7 +813,10 @@ export function verifyAwsOidcPreflightSource({
 }
 
 export const __test = Object.freeze({
+  EXACT_PREFLIGHT_RUNTIME_CALL_COUNT,
+  EXACT_PREFLIGHT_RUNTIME_CALL_INVENTORY,
   EXACT_READ_ACTIONS,
+  EXACT_RECEIPT_SECRET_PATTERN,
   EXPECTED_IDENTITY_ACTION_PINS,
   EXPECTED_READ_ONLY_ACTION_PINS,
   EXPECTED_ROLE_STATEMENT_SIDS,

@@ -10,6 +10,7 @@ import {
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
 import {
+  AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY,
   assertAwsPreflightParentEnvironment,
   awsCostExplorerArguments,
   awsPreflightAwsEnvironment,
@@ -17,6 +18,7 @@ import {
   collectSnapshot,
   controlledAwsCliPath,
   controlledGitPath,
+  createAwsPreflightRuntimeCallReader,
   gitPreflightEnvironment,
   trustedAwsCliExecutable,
   trustedGitCheckout,
@@ -73,9 +75,10 @@ test("AWS OIDC identity bootstrap is manual, minimal, and encrypted", () => {
   assert.match(OIDC_WORKFLOW, /audience=sts\.amazonaws\.com/);
   assert.match(OIDC_WORKFLOW, /Flash-Bri\/prooftoact/);
   assert.match(OIDC_WORKFLOW, /refs\/heads\/main/);
+  assert.match(OIDC_WORKFLOW, /\.repository_owner_id == "252500266"/);
   assert.match(
     OIDC_WORKFLOW,
-    /repo:Flash-Bri\/prooftoact:environment:aws-preflight/
+    /repo:Flash-Bri@252500266\/prooftoact@1317716765:environment:aws-preflight/
   );
   assert.match(OIDC_WORKFLOW, /\.environment == "aws-preflight"/);
   assert.match(
@@ -660,6 +663,41 @@ test("AWS preflight stops after STS when the caller misses its expectation", () 
   ]);
 });
 
+test("AWS preflight runtime reader enforces the exact ordered call cardinality", () => {
+  const observed = [];
+  const reader = createAwsPreflightRuntimeCallReader(
+    (region, service, operation, args) => {
+      observed.push({ region, service, operation, args });
+      return {};
+    }
+  );
+  for (const [service, operation, cardinality] of
+    AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY) {
+    for (let index = 0; index < cardinality; index += 1) {
+      reader.read("us-east-1", service, operation, []);
+    }
+  }
+  assert.equal(reader.assertComplete(), 17);
+  assert.equal(observed.length, 17);
+  assert.throws(
+    () => reader.read("us-east-1", "sts", "get-caller-identity"),
+    /AWS_RUNTIME_CALL_INVENTORY/
+  );
+
+  const incomplete = createAwsPreflightRuntimeCallReader(() => ({}));
+  incomplete.read("us-east-1", "sts", "get-caller-identity");
+  assert.throws(
+    () => incomplete.assertComplete(),
+    /AWS_RUNTIME_CALL_CARDINALITY/
+  );
+
+  const wrong = createAwsPreflightRuntimeCallReader(() => ({}));
+  assert.throws(
+    () => wrong.read("us-west-2", "sts", "get-caller-identity"),
+    /AWS_RUNTIME_CALL_INVENTORY/
+  );
+});
+
 function notification(
   notificationType,
   threshold,
@@ -833,13 +871,61 @@ function validSnapshot() {
   };
 }
 
+test("AWS preflight collector completes only the exact 17-call inventory", () => {
+  const fixture = validSnapshot();
+  const responses = [
+    fixture.callerIdentity,
+    { Stacks: [fixture.bootstrapStack] },
+    { Budget: fixture.budget },
+    {
+      Notifications: fixture.notificationSubscribers.map(
+        ({ notification: entry }) => entry
+      )
+    },
+    ...fixture.notificationSubscribers.map(({ subscribers }) => ({
+      Subscribers: subscribers
+    })),
+    fixture.currentCost.response,
+    fixture.artifactBucket.versioning,
+    fixture.artifactBucket.encryption,
+    fixture.artifactBucket.publicAccessBlock,
+    fixture.artifactBucket.ownership,
+    fixture.artifactBucket.policyStatus,
+    { Policy: JSON.stringify(fixture.artifactBucket.policy) },
+    { StackSummaries: fixture.stackSummaries },
+    fixture.foundationModel
+  ];
+  const observedCalls = [];
+  const collected = collectSnapshot(
+    new Date(fixture.observedAt),
+    {
+      environment: expectedPreflightEnvironment(),
+      readGitCheckout: exactCheckout,
+      readAwsJson(region, service, operation, args) {
+        observedCalls.push([region, service, operation, args]);
+        return responses.shift();
+      }
+    }
+  );
+  assert.equal(responses.length, 0);
+  assert.equal(observedCalls.length, 17);
+  assert.deepEqual(
+    observedCalls.map(([, service, operation]) => [service, operation]),
+    AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY.flatMap(
+      ([service, operation, cardinality]) =>
+        Array.from({ length: cardinality }, () => [service, operation])
+    )
+  );
+  assert.equal(validateAwsGate2Preflight(collected).status, "PASS");
+});
+
 test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   const receipt = validateAwsGate2Preflight(validSnapshot());
 
   assert.equal(receipt.status, "PASS");
   assert.equal(
     receipt.schemaVersion,
-    "tideproof.gate2.aws-preflight.v5"
+    "tideproof.gate2.aws-preflight.v6"
   );
   assert.equal(
     receipt.controls.budget.conservativeObservedActualUsd,
@@ -880,6 +966,15 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
     "13.140000"
   );
   assert.equal(
+    receipt.controls.projectExposure.approvedPreflightAllowanceUsd,
+    "0.020000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure
+      .conservativeReservedAwsExposureUsd,
+    "0.270000"
+  );
+  assert.equal(
     receipt.controls.projectExposure
       .conservativeObservedTotalExposureUsd,
     "12.110000"
@@ -887,6 +982,16 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   assert.equal(
     receipt.controls.projectExposure.remainingExposureUsd,
     "12.890000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure
+      .conservativeReservedTotalExposureUsd,
+    "12.130000"
+  );
+  assert.equal(
+    receipt.controls.projectExposure
+      .remainingExposureAfterPreflightAllowanceUsd,
+    "12.870000"
   );
   assert.equal(
     receipt.controls.projectExposure.registrarReceiptVerified,
@@ -1238,7 +1343,7 @@ test("AWS Gate Two preflight rejects missing cost alerts", () => {
   );
   assert.throws(
     () => validateAwsGate2Preflight(snapshot),
-    /BUDGET_NOTIFICATION_FORECASTED_15/
+    /BUDGET_NOTIFICATION_CARDINALITY/
   );
 });
 
@@ -1315,6 +1420,58 @@ test("AWS Gate Two preflight rejects spend at the effective project ceiling", ()
   assert.throws(
     () => validateAwsGate2Preflight(snapshot),
     /CURRENT_COST_CEILING/
+  );
+});
+
+test("AWS Gate Two preflight reserves the full allowance below both ceilings", () => {
+  const justBelow = validSnapshot();
+  justBelow.currentCost.response.ResultsByTime[0]
+    .Total.UnblendedCost.Amount = "13.119999";
+  const receipt = validateAwsGate2Preflight(justBelow);
+  assert.equal(
+    receipt.controls.projectExposure
+      .conservativeReservedAwsExposureUsd,
+    "13.139999"
+  );
+  assert.equal(
+    receipt.controls.projectExposure
+      .conservativeReservedTotalExposureUsd,
+    "24.999999"
+  );
+  assert.equal(
+    receipt.controls.projectExposure
+      .remainingExposureAfterPreflightAllowanceUsd,
+    "0.000001"
+  );
+
+  for (const mutate of [
+    (snapshot) => {
+      snapshot.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Amount = "13.12";
+    },
+    (snapshot) => {
+      snapshot.budget.CalculatedSpend.ActualSpend.Amount = "13.12";
+    },
+    (snapshot) => {
+      snapshot.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Amount = "13.1199991";
+    }
+  ]) {
+    const atOrAboveReservedBoundary = validSnapshot();
+    mutate(atOrAboveReservedBoundary);
+    assert.throws(
+      () => validateAwsGate2Preflight(atOrAboveReservedBoundary),
+      /PREFLIGHT_ALLOWANCE_AWS_CEILING/
+    );
+  }
+});
+
+test("AWS Gate Two preflight rejects extra budget notification reads", () => {
+  const snapshot = validSnapshot();
+  snapshot.notificationSubscribers.push(notification("ACTUAL", 20));
+  assert.throws(
+    () => validateAwsGate2Preflight(snapshot),
+    /BUDGET_NOTIFICATION_CARDINALITY/
   );
 });
 

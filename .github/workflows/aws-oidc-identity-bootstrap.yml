@@ -133,9 +133,7 @@ jobs:
           expected_role_arn="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ProofToActPreflight"
           [[ "${AWS_ROLE_ARN:-}" == "$expected_role_arn" ]] || fail_closed
           expected_caller_arn="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/ProofToActPreflight/release-proof"
-          (( ${#RECEIPT_ENCRYPTION_PASSPHRASE} >= 20 )) || fail_closed
-          [[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\n'* ]] || fail_closed
-          [[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\r'* ]] || fail_closed
+          [[ "${RECEIPT_ENCRYPTION_PASSPHRASE:-}" =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || fail_closed
           [[ "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" == https://pipelines.actions.githubusercontent.com/*\?* ]] || fail_closed
           [[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed
 
@@ -238,10 +236,11 @@ jobs:
              .repository == "Flash-Bri/prooftoact" and
              .repository_id == "1317716765" and
              .repository_owner == "Flash-Bri" and
+             .repository_owner_id == "252500266" and
              .ref == "refs/heads/main" and
              .ref_type == "branch" and
              .environment == "aws-preflight" and
-             .sub == "repo:Flash-Bri/prooftoact:environment:aws-preflight" and
+             .sub == "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-preflight" and
              .workflow == "AWS OIDC Identity Bootstrap" and
              .workflow_ref == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-identity-bootstrap.yml@refs/heads/main" and
              .workflow_sha == $sha and

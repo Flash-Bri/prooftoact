@@ -121,9 +121,7 @@ unset account_digest AWS_APPROVED_ACCOUNT_ID_SHA256
 expected_role_arn="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ProofToActReadOnlyPreflight"
 [[ "${AWS_READ_ONLY_PREFLIGHT_ROLE_ARN:-}" == "$expected_role_arn" ]] || fail_closed
 expected_caller_arn="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/ProofToActReadOnlyPreflight/read-only-preflight"
-(( ${#RECEIPT_ENCRYPTION_PASSPHRASE} >= 20 )) || fail_closed
-[[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\n'* ]] || fail_closed
-[[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\r'* ]] || fail_closed
+[[ "${RECEIPT_ENCRYPTION_PASSPHRASE:-}" =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || fail_closed
 [[ "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" == https://pipelines.actions.githubusercontent.com/*\?* ]] || fail_closed
 [[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed
 
@@ -283,10 +281,11 @@ if ! /usr/bin/jq -e \
    .repository == "Flash-Bri/prooftoact" and
    .repository_id == "1317716765" and
    .repository_owner == "Flash-Bri" and
+   .repository_owner_id == "252500266" and
    .ref == "refs/heads/main" and
    .ref_type == "branch" and
    .environment == "aws-read-only-preflight" and
-   .sub == "repo:Flash-Bri/prooftoact:environment:aws-read-only-preflight" and
+   .sub == "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight" and
    .workflow == "AWS Read-Only OIDC Preflight" and
    .workflow_ref == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-read-only-preflight.yml@refs/heads/main" and
    .workflow_sha == $sha and
@@ -420,12 +419,19 @@ if ! /usr/bin/jq -e \
   --arg source_commit "$source_commit" \
   --arg tree_digest "$tree_digest" \
   'type == "object" and
-   .schemaVersion == "tideproof.gate2.aws-preflight.v5" and
+   .schemaVersion == "tideproof.gate2.aws-preflight.v6" and
    .status == "PASS" and
    .sourceCommit == $source_commit and
    .treeDigest == $tree_digest and
    .region == "us-east-1" and
    .controls.authenticatedAwsCaller == true and
+   .controls.projectExposure.approvedPreflightAllowanceUsd == "0.020000" and
+   (.controls.projectExposure.conservativeReservedAwsExposureUsd |
+    type == "string" and test("^[0-9]+\\.[0-9]{6}$")) and
+   (.controls.projectExposure.conservativeReservedTotalExposureUsd |
+    type == "string" and test("^[0-9]+\\.[0-9]{6}$")) and
+   (.controls.projectExposure.remainingExposureAfterPreflightAllowanceUsd |
+    type == "string" and test("^[0-9]+\\.[0-9]{6}$")) and
    .controls.mainGateTwoStack.state == "ABSENT" and
    .controls.mainGateTwoStack.legacyState == "ABSENT" and
    (.privacy | type == "string" and length > 0) and

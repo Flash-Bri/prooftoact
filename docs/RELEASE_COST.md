@@ -25,9 +25,14 @@ registrar receipt, or approve publication or submission.
 
 The `$15` AWS Budget is an alert boundary, not a hard service cap and not the
 effective remaining project envelope. The read-only preflight must reject
-budget-reported, Cost Explorer, or conservative observed AWS spend at or
-above `$13.14`, and it must reject total conservative exposure at or above
-`$25.00`.
+budget-reported, Cost Explorer, or conservative observed AWS spend unless the
+greater observation plus the full `$0.02` approved preflight allowance remains
+strictly below `$13.14`. It must also require `$11.86 + observed AWS + $0.02`
+to remain strictly below `$25.00`. Thus an observation at exactly `$13.12`
+cannot produce a preflight `PASS`, and no subsequent provider action may
+proceed; arithmetic is conservative to the micro-dollar. The Cost Explorer
+read used to obtain that observation may itself already have occurred under
+the separate price recheck and maximum `$0.02` run authorization.
 
 ## Required alert and architecture bounds
 
@@ -65,6 +70,9 @@ the same account-safety gate. It preserves the exact account digest,
 900-second temporary role session, non-root runner, `us-east-1`, one-request
 Cost Explorer bound, `$0.02` preflight approval cap, sanitized encrypted
 receipt, exact official-main source, and no-upload/no-deployment boundary. Its
+v6 receipt contract records and reserves the full `$0.02` before the receipt
+can pass or any subsequent provider action may proceed, not merely the spend
+already observed. Its
 role and workflow remain unconfigured and unrun for release purposes, and the
 required protected `AWS_APPROVED_ACCOUNT_ID_SHA256` value remains a human
 provider-setup gate rather than source data.
@@ -79,7 +87,9 @@ renewal, or submission action is authorized by this control.
    including the separately protected OIDC read-only lane if CloudShell remains
    unavailable, and
    retain a machine-verifiable preflight `PASS` receipt showing current
-   account-wide spend below `$13.14` and the main stack absent.
+   account-wide spend plus the full `$0.02` allowance strictly below the
+   `$13.14` AWS and `$25.00` total-exposure ceilings, with the main stack
+   absent.
 2. Recheck exact-release AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and
    logging price assumptions and bind the conservative forecast to the final
    architecture and deployed hashes.

@@ -31,7 +31,13 @@
               "Condition": {
                 "StringEquals": {
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri/prooftoact:environment:aws-read-only-preflight"
+                  "token.actions.githubusercontent.com:environment": "aws-read-only-preflight",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight",
+                  "token.actions.githubusercontent.com:workflow": "AWS Read-Only OIDC Preflight"
                 }
               }
             }
