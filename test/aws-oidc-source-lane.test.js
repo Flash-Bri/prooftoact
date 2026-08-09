@@ -748,7 +748,7 @@ test(
   () => {
     const probe = String.raw`set -euo pipefail
 fail_probe() {
-  local stage="\${1:-}"
+  local stage="$1"
   case "$stage" in
     NODE_DISCOVERY | NODE_PATH | NODE_OWNER | NODE_METADATA | NODE_INTEGRITY | NODE_VERSION) ;;
     *) stage=NODE_UNKNOWN ;;
