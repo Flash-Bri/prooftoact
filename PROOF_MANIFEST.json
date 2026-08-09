@@ -133,7 +133,7 @@
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "a7f6447c7f4e2b02bdd4798f4ba470c41c2425dbd0772814e0866f676c50747c",
+      "sha256": "1cd3726f54ce2708d8b0f76cce45f929eca3edcacda256dff4a60b69fe19638a",
       "kind": "verification-code"
     },
     {
@@ -649,7 +649,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "fbe00ae3b15f54ebf456c0ea9381d9ad57b24650f57ca36dd34a113567cdb0dd",
+      "sha256": "c5576da154f893666a1cd618c9f49e91daf603b70ba3af061609ee928c6ccf80",
       "kind": "boundary-ledger"
     },
     {

@@ -748,16 +748,21 @@ test(
   () => {
     const probe = String.raw`set -euo pipefail
 fail_probe() {
-  printf '%s\n' 'NODE_TOOLCHAIN_POLICY_FAIL' >&2
+  local stage="\${1:-}"
+  case "$stage" in
+    NODE_DISCOVERY | NODE_PATH | NODE_OWNER | NODE_METADATA | NODE_INTEGRITY | NODE_VERSION) ;;
+    *) stage=NODE_UNKNOWN ;;
+  esac
+  printf '%s\n' "NODE_TOOLCHAIN_POLICY_FAIL:\${stage}" >&2
   exit 1
 }
-node_candidate="$(command -v node)" || fail_probe
-[[ "$node_candidate" == /* && -x "$node_candidate" ]] || fail_probe
-node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_probe
-[[ "$node_cli" == "/opt/hostedtoolcache/node/22.23.1/x64/bin/node" ]] || fail_probe
-node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_probe
+node_candidate="$(command -v node)" || fail_probe NODE_DISCOVERY
+[[ "$node_candidate" == /* && -x "$node_candidate" ]] || fail_probe NODE_DISCOVERY
+node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_probe NODE_PATH
+[[ "$node_cli" == "/opt/hostedtoolcache/node/22.23.1/x64/bin/node" ]] || fail_probe NODE_PATH
+node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_probe NODE_METADATA
 IFS=':' read -r node_uid node_mode node_type <<<"$node_metadata"
-runner_uid="$(/usr/bin/id -u)" || fail_probe
+runner_uid="$(/usr/bin/id -u)" || fail_probe NODE_OWNER
 node_owner_allowed=false
 if [[ "$node_uid" == "0" || "$node_uid" == "$runner_uid" ]]; then
   node_owner_allowed=true
@@ -765,14 +770,14 @@ elif [[ "$runner_uid" == "1001" && "$node_uid" == "1000" ]] && \
   ! /usr/bin/getent passwd 1000 >/dev/null; then
   node_owner_allowed=true
 fi
-[[ "$node_owner_allowed" == "true" ]] || fail_probe
-[[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_probe
+[[ "$node_owner_allowed" == "true" ]] || fail_probe NODE_OWNER
+[[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_probe NODE_METADATA
 node_mode_value=$((8#$node_mode))
-(( (node_mode_value & 0111) != 0 )) || fail_probe
-node_digest="$(/usr/bin/sha256sum "$node_cli")" || fail_probe
+(( (node_mode_value & 0111) != 0 )) || fail_probe NODE_METADATA
+node_digest="$(/usr/bin/sha256sum "$node_cli")" || fail_probe NODE_INTEGRITY
 node_digest="\${node_digest%% *}"
-[[ "$node_digest" == "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068" ]] || fail_probe
-[[ "$("$node_cli" --version)" == "v22.23.1" ]] || fail_probe
+[[ "$node_digest" == "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068" ]] || fail_probe NODE_INTEGRITY
+[[ "$("$node_cli" --version)" == "v22.23.1" ]] || fail_probe NODE_VERSION
 printf '%s\n' 'NODE_TOOLCHAIN_POLICY_PASS'
 `;
     const result = spawnSync(
@@ -783,7 +788,11 @@ printf '%s\n' 'NODE_TOOLCHAIN_POLICY_PASS'
         env: { PATH: process.env.PATH ?? "" }
       }
     );
-    assert.equal(result.status, 0);
+    assert.equal(
+      result.status,
+      0,
+      result.stderr || "NODE_TOOLCHAIN_POLICY_FAIL"
+    );
     assert.equal(result.stdout, "NODE_TOOLCHAIN_POLICY_PASS\n");
     assert.equal(result.stderr, "");
   }
