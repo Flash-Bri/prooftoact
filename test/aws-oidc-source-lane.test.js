@@ -776,7 +776,11 @@ node_mode_value=$((8#$node_mode))
 (( (node_mode_value & 0111) != 0 )) || fail_probe NODE_METADATA
 node_digest="$(/usr/bin/sha256sum "$node_cli")" || fail_probe NODE_INTEGRITY
 node_digest="\${node_digest%% *}"
-[[ "$node_digest" == "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068" ]] || fail_probe NODE_INTEGRITY
+if [[ "$node_digest" != "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068" ]]; then
+  [[ "$node_digest" =~ ^[0-9a-f]{64}$ ]] || fail_probe NODE_INTEGRITY
+  printf '%s\n' "NODE_TOOLCHAIN_PUBLIC_SHA256:$node_digest" >&2
+  fail_probe NODE_INTEGRITY
+fi
 [[ "$("$node_cli" --version)" == "v22.23.1" ]] || fail_probe NODE_VERSION
 printf '%s\n' 'NODE_TOOLCHAIN_POLICY_PASS'
 `;
