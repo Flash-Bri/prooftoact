@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-08",
+  "reviewedOn": "2026-08-09",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -168,19 +168,19 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "SOURCE_BOUND_READ_ONLY_OIDC_PREFLIGHT_RUNNER",
-      "sha256": "ee732100d3fc8ee8c3f3362b1c38a951e4b6cb7d0c76c4c4cf7df82275cc2701"
+      "sha256": "fccf202c262b6a92d0b26ab6149cf7bd38ba9db3309e1cd589a86aae35c46953"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
       "role": "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION",
-      "sha256": "23f832d5d34aea1acfa5589d89053da9962332f6ff4918cffad5da394c304f87"
+      "sha256": "7382263c11d81faf704898fdc05d2d207ab07cf6b1b3f873b95443c7bcae9b4d"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
       "role": "OIDC_SOURCE_BOUNDARY_VERIFIER",
-      "sha256": "97ebd77bb798b47a3f89149cf5d80e14e91b3676c2194a7259bbf6d07e72853f"
+      "sha256": "2b99226582bebe8c2ce84db60bf4b5ff85e783e327a751e27a28eead9bd7f768"
     },
     {
       "id": "aws-oidc-read-only-workflow",

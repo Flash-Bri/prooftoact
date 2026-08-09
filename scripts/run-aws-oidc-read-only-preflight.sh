@@ -24,6 +24,10 @@ gnupg_home=""
 encrypted_receipt="${RUNNER_TEMP:-}/aws-read-only-preflight-receipt.json.gpg"
 
 cleanup_sensitive_files() {
+  local original_status=$?
+  local cleanup_failed=0
+  trap - EXIT
+  set +e
   unset \
     AWS_ACCESS_KEY_ID \
     AWS_SECRET_ACCESS_KEY \
@@ -35,15 +39,16 @@ cleanup_sensitive_files() {
     ACTIONS_ID_TOKEN_REQUEST_TOKEN \
     ACTIONS_ID_TOKEN_REQUEST_URL \
     RECEIPT_ENCRYPTION_PASSPHRASE
-  if [[ -n "$gnupg_home" &&
-        "$gnupg_home" == "${RUNNER_TEMP:-}"/receipt-gnupg.?????? &&
-        -d "$gnupg_home" && ! -L "$gnupg_home" ]]; then
-    if ! /usr/bin/gpgconf --homedir "$gnupg_home" --kill all \
-      >/dev/null 2>&1; then
-      :
-    fi
-    if ! /usr/bin/rm -rf -- "$gnupg_home"; then
-      :
+  if [[ -n "$gnupg_home" ]]; then
+    if [[ "$gnupg_home" == "${RUNNER_TEMP:-}"/receipt-gnupg.?????? &&
+          -d "$gnupg_home" && ! -L "$gnupg_home" ]]; then
+      /usr/bin/gpgconf --homedir "$gnupg_home" --kill all \
+        >/dev/null 2>&1 || cleanup_failed=1
+      /usr/bin/rm -rf -- "$gnupg_home" \
+        >/dev/null 2>&1 || cleanup_failed=1
+      [[ ! -e "$gnupg_home" && ! -L "$gnupg_home" ]] || cleanup_failed=1
+    else
+      cleanup_failed=1
     fi
   fi
   for file in \
@@ -59,9 +64,18 @@ cleanup_sensitive_files() {
     "$passphrase_file" \
     "$error_file"; do
     if [[ -n "$file" ]]; then
-      /usr/bin/rm -f -- "$file"
+      /usr/bin/rm -f -- "$file" \
+        >/dev/null 2>&1 || cleanup_failed=1
+      [[ ! -e "$file" && ! -L "$file" ]] || cleanup_failed=1
     fi
   done
+  if (( cleanup_failed != 0 )); then
+    printf '%s\n' '::error::AWS_READ_ONLY_STAGE_SENSITIVE_CLEANUP' >&2
+    if (( original_status == 0 )); then
+      exit 1
+    fi
+  fi
+  exit "$original_status"
 }
 trap cleanup_sensitive_files EXIT
 
@@ -91,7 +105,23 @@ fail_closed_stage() {
       AWS_READ_ONLY_STAGE_TEMPORARY_STATE | \
       AWS_READ_ONLY_STAGE_OIDC_REQUEST | \
       AWS_READ_ONLY_STAGE_OIDC_RECEIPT | \
-      AWS_READ_ONLY_STAGE_OIDC_CLAIMS) ;;
+      AWS_READ_ONLY_STAGE_OIDC_CLAIMS | \
+      AWS_READ_ONLY_STAGE_STS_ASSUME_REQUEST | \
+      AWS_READ_ONLY_STAGE_STS_ASSUME_RECEIPT | \
+      AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS | \
+      AWS_READ_ONLY_STAGE_REGION_REQUEST | \
+      AWS_READ_ONLY_STAGE_REGION_RECEIPT | \
+      AWS_READ_ONLY_STAGE_QUOTA_REQUEST | \
+      AWS_READ_ONLY_STAGE_QUOTA_RECEIPT | \
+      AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST | \
+      AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT | \
+      AWS_READ_ONLY_STAGE_SANITIZED_RECEIPT | \
+      AWS_READ_ONLY_STAGE_PRIVACY_REDACTION | \
+      AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_PREPARE | \
+      AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION | \
+      AWS_READ_ONLY_STAGE_ENCRYPTED_RECEIPT | \
+      AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_CLEANUP | \
+      AWS_READ_ONLY_STAGE_SENSITIVE_CLEANUP) ;;
     *) fail_closed ;;
   esac
   printf '%s\n' "::error::${stage}" >&2
@@ -422,7 +452,7 @@ if ! /usr/bin/timeout --signal=KILL 30s \
     --cli-read-timeout 20 \
     --no-cli-pager \
     >"$sts_response" 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_REQUEST
 fi
 if ! /usr/bin/jq -e \
   --arg expected_arn "$expected_caller_arn" \
@@ -437,13 +467,13 @@ if ! /usr/bin/jq -e \
     type == "string" and
     test("^AROA[A-Z0-9]{12,124}:read-only-preflight$"))' \
   "$sts_response" >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_RECEIPT
 fi
 
-assumed_role_id="$(/usr/bin/jq -r '.AssumedRoleUser.AssumedRoleId' "$sts_response")" || fail_closed
-AWS_ACCESS_KEY_ID="$(/usr/bin/jq -r '.Credentials.AccessKeyId' "$sts_response")" || fail_closed
-AWS_SECRET_ACCESS_KEY="$(/usr/bin/jq -r '.Credentials.SecretAccessKey' "$sts_response")" || fail_closed
-AWS_SESSION_TOKEN="$(/usr/bin/jq -r '.Credentials.SessionToken' "$sts_response")" || fail_closed
+assumed_role_id="$(/usr/bin/jq -r '.AssumedRoleUser.AssumedRoleId' "$sts_response" 2>"$error_file")" || fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS
+AWS_ACCESS_KEY_ID="$(/usr/bin/jq -r '.Credentials.AccessKeyId' "$sts_response" 2>"$error_file")" || fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS
+AWS_SECRET_ACCESS_KEY="$(/usr/bin/jq -r '.Credentials.SecretAccessKey' "$sts_response" 2>"$error_file")" || fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS
+AWS_SESSION_TOKEN="$(/usr/bin/jq -r '.Credentials.SessionToken' "$sts_response" 2>"$error_file")" || fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL oidc_request_url
 
@@ -456,7 +486,7 @@ if ! /usr/bin/timeout --signal=KILL 30s \
     --cli-read-timeout 20 \
     --no-cli-pager \
     >"$region_status" 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_REGION_REQUEST
 fi
 if ! /usr/bin/jq -e \
   'type == "object" and
@@ -464,7 +494,7 @@ if ! /usr/bin/jq -e \
    .RegionName == "us-east-1" and
    .RegionOptStatus == "ENABLED_BY_DEFAULT"' \
   "$region_status" >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_REGION_RECEIPT
 fi
 
 if ! /usr/bin/timeout --signal=KILL 30s \
@@ -478,7 +508,7 @@ if ! /usr/bin/timeout --signal=KILL 30s \
     --cli-read-timeout 20 \
     --no-cli-pager \
     >"$quota_status" 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_QUOTA_REQUEST
 fi
 if ! /usr/bin/jq -e \
   'type == "object" and
@@ -488,7 +518,7 @@ if ! /usr/bin/jq -e \
     type == "string" and test("^L-[A-Z0-9]{8}$")) and
    (.Quotas[0].Value | type == "number" and . > 0)' \
   "$quota_status" >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_QUOTA_RECEIPT
 fi
 
 export AWS_EVIDENCE_EXPECTED_ACCOUNT_ID="$AWS_ACCOUNT_ID"
@@ -499,7 +529,7 @@ export AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID="$assumed_role_id"
 if ! /usr/bin/timeout --signal=KILL --kill-after=5s 180s \
   "$node_cli" "$GITHUB_WORKSPACE/scripts/gate2-aws-preflight.js" \
     >"$preflight_receipt" 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST
 fi
 if ! /usr/bin/jq -e \
   --arg source_commit "$source_commit" \
@@ -523,7 +553,7 @@ if ! /usr/bin/jq -e \
    (.privacy | type == "string" and length > 0) and
    (.claimBoundary | type == "string" and length > 0)' \
   "$preflight_receipt" >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT
 fi
 
 if ! /usr/bin/jq -n \
@@ -554,15 +584,32 @@ if ! /usr/bin/jq -n \
     privacy: "The AWS account, role and caller ARNs, STS principal ID, OIDC token, credentials, private bucket name, subscribers, and raw region/quota responses were validated but omitted.",
     claimBoundary: "This encrypted receipt can evidence one source-bound read-only provider observation only after private decryption and review. It cannot authorize or prove upload, mutation, deployment, model invocation, IAM denial, rollback, publication, submission, or final release readiness."
   }' >"$sanitized_receipt" 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_SANITIZED_RECEIPT
 fi
-if /usr/bin/grep -F -q -- "$AWS_ACCOUNT_ID" "$sanitized_receipt" ||
-  /usr/bin/grep -F -q -- "$expected_role_arn" "$sanitized_receipt" ||
-  /usr/bin/grep -F -q -- "$expected_caller_arn" "$sanitized_receipt" ||
-  /usr/bin/grep -F -q -- "$assumed_role_id" "$sanitized_receipt" ||
-  /usr/bin/grep -E -q -- 'AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|arn:aws:(iam|sts|s3)' "$sanitized_receipt"; then
-  fail_closed
+privacy_match=0
+for forbidden_literal in \
+  "$AWS_ACCOUNT_ID" \
+  "$expected_role_arn" \
+  "$expected_caller_arn" \
+  "$assumed_role_id"; do
+  if /usr/bin/grep -F -q -- "$forbidden_literal" "$sanitized_receipt" \
+    2>"$error_file"; then
+    privacy_match=1
+  else
+    grep_status=$?
+    (( grep_status == 1 )) || fail_closed_stage AWS_READ_ONLY_STAGE_PRIVACY_REDACTION
+  fi
+done
+if /usr/bin/grep -E -q -- \
+  'AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|arn:aws:(iam|sts|s3)' \
+  "$sanitized_receipt" 2>"$error_file"; then
+  privacy_match=1
+else
+  grep_status=$?
+  (( grep_status == 1 )) || fail_closed_stage AWS_READ_ONLY_STAGE_PRIVACY_REDACTION
 fi
+(( privacy_match == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_PRIVACY_REDACTION
+unset forbidden_literal grep_status privacy_match
 
 unset \
   AWS_ACCESS_KEY_ID \
@@ -573,9 +620,10 @@ unset \
   AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN \
   AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID \
   assumed_role_id
-printf '%s\n' "$RECEIPT_ENCRYPTION_PASSPHRASE" >"$passphrase_file"
+printf '%s\n' "$RECEIPT_ENCRYPTION_PASSPHRASE" >"$passphrase_file" 2>"$error_file" || fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_PREPARE
 unset RECEIPT_ENCRYPTION_PASSPHRASE
-/usr/bin/rm -f -- "$encrypted_receipt"
+/usr/bin/rm -f -- "$encrypted_receipt" \
+  2>"$error_file" || fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_PREPARE
 if ! /usr/bin/timeout --signal=KILL 30s \
   /usr/bin/gpg \
     --no-options \
@@ -590,15 +638,17 @@ if ! /usr/bin/timeout --signal=KILL 30s \
     --output "$encrypted_receipt" \
     "$sanitized_receipt" \
     >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION
 fi
-/usr/bin/chmod 600 "$encrypted_receipt" || fail_closed
-[[ -s "$encrypted_receipt" ]] || fail_closed
+/usr/bin/chmod 600 "$encrypted_receipt" \
+  2>"$error_file" || fail_closed_stage AWS_READ_ONLY_STAGE_ENCRYPTED_RECEIPT
+[[ -s "$encrypted_receipt" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_ENCRYPTED_RECEIPT
 if ! /usr/bin/gpgconf --homedir "$gnupg_home" --kill all \
   >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_CLEANUP
 fi
-[[ -d "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed
-/usr/bin/rm -rf -- "$gnupg_home" || fail_closed
-[[ ! -e "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed
+[[ -d "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_CLEANUP
+/usr/bin/rm -rf -- "$gnupg_home" \
+  2>"$error_file" || fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_CLEANUP
+[[ ! -e "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_CLEANUP
 gnupg_home=""
