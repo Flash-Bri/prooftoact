@@ -396,8 +396,22 @@ request and the fixed read-only control-plane census before a live run. The
 gate reserves that full allowance and requires observed AWS spend plus `$0.02`
 to remain strictly below both the effective AWS and total-project ceilings;
 exactly `$13.12` observed AWS spend therefore fails. The source contract bounds
-the complete runtime call inventory and Cost Explorer call count but does not freeze or
-independently verify AWS pricing or claim every metadata request is unmetered.
+the complete runtime call inventory and Cost Explorer call count but does not
+freeze or independently verify AWS pricing or claim every metadata request is
+unmetered.
+
+The protected OIDC runner reports only literal source-bound diagnostics. Each
+of the 17 nested AWS request or JSON failures has its own ordinal stage. Fixed
+non-request stages separately cover child environment, exact checkout,
+identity expectations, call inventory, intermediate response shapes, cost
+request preparation, bucket-policy parsing, stack census, snapshot completion,
+the ten final validation domains, argument handling, receipt output, timeout,
+execution, termination, uncaught process failure, and unclassified failure.
+The nested runtime uses typed numeric failures and deliberately discards raw
+causes; the wrapper keeps child and provider stderr in owner-only temporary
+storage and never forwards it. Unknown, missing, reordered, or dynamic stages
+fail source verification. A stage identifies the bounded failing domain only;
+it never proves the provider response or authorizes a retry.
 
 The manual-only `AWS OIDC Identity Bootstrap` workflow provides a separate
 short-lived identity bootstrap for the protected `aws-preflight` environment.
@@ -570,6 +584,46 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
   integrity; exact release provenance remains a main-only gate.
 - Claim impact: the receipt may claim the named regression controls were the
   reviewed bytes, not that source or tests are exhaustive.
+
+### Nested preflight validation failures lost their diagnostic domain
+
+- Root cause: the protected wrapper originally mapped every child exit outside
+  the 17 AWS request ordinals to one generic account-preflight stage. Raw child
+  stderr was correctly quarantined for privacy, but that meant exact-checkout,
+  response-shape, final semantic-validation, runtime, timeout, and output
+  failures could not be distinguished after cleanup destroyed the private
+  error file.
+- Why it was missed: the first diagnostic repair exhaustively classified AWS
+  command failures but treated the child as one opaque process for every
+  non-request failure. Offline tests proved read order and privacy but did not
+  force each setup, intermediate, final-validation, and process boundary to
+  fail independently.
+- Earliest detection: run the exact protected workflow and observe a generic
+  account-preflight stage with no `READ_01` through `READ_17` marker. A longer
+  runtime may suggest nested progress, but timing cannot safely identify which
+  read completed or which validation failed.
+- Repair: preserve the 17 read exits and add fixed typed numeric phases for
+  child environment, source checkout, expected identity, call inventory,
+  intermediate receipts and preparation, snapshot completion, ten contiguous
+  semantic-validation domains, argument handling, receipt output, timeout,
+  execution, termination, uncaught process failure, and unclassified failure.
+  Phase wrappers rethrow read and already-typed failures unchanged. Neither
+  child nor parent inspects or emits `error.message`, raw causes, arbitrary
+  stderr, account identifiers, credentials, or resource names.
+- Regression/preventive control: the source verifier hash-binds the child and
+  validator, parses the exact read/phase/control maps and parent status map,
+  requires production diagnostic mode, and rejects swapped indexes, dynamic
+  stages, swallowed read failures, raw-output insertion, unknown statuses, and
+  map drift. Focused tests prove all ten final control domains map to their
+  fixed exit while ordinary library callers retain their existing detailed
+  local validation errors.
+- Residual risk: a fixed stage narrows the failing domain but does not expose
+  the provider response. A future unclassified stage must stop live retries
+  until an additional fixed offline diagnostic is reviewed. Hosted Linux and
+  deployed provider behavior remain live acceptance gates.
+- Claim impact: source may claim privacy-preserving domain classification and
+  fail-closed retry guidance, not a successful AWS preflight or known live
+  account state.
 
 ### Repository-local Git metadata could falsify source binding
 

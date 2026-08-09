@@ -1174,7 +1174,7 @@ const SOURCE_MARKERS = Object.freeze({
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
   ]),
   "aws-oidc-read-only-ledger": Object.freeze([
-    "SOURCE SCAFFOLD VERIFIED — PROVIDER SETUP, EXECUTION, AND REVIEW PENDING",
+    "SOURCE AND PROVIDER IDENTITY PATH VERIFIED — ACCEPTED PREFLIGHT RECEIPT PENDING",
     "This lane makes AWS CloudShell optional",
     "ProofToActPreflight/release-proof",
     "ProofToActReadOnlyPreflight/read-only-preflight",
@@ -1190,7 +1190,9 @@ const SOURCE_MARKERS = Object.freeze({
     "provider-side gate and residual trust boundary",
     "observed AWS + $0.02 < $13.14",
     "exactly `$13.12` fails",
-    "maximum `$0.02` complete-preflight cap",
+    "maximum remains `$0.02` for each complete preflight",
+    "fixed source-bound failure stages",
+    "unclassified fixed stage",
     "Deployment and evidence",
     "Deliberately absent and pending",
     "A source-verifier `PASS` is not a provider receipt"
@@ -1231,7 +1233,7 @@ const SOURCE_MARKERS = Object.freeze({
     "--cipher-algo AES256"
   ]),
   "aws-oidc-read-only-source-tests": Object.freeze([
-    "OIDC source receipt remains explicitly local and provider-pending",
+    "OIDC source receipt remains source-only with provider acceptance pending",
     "read-only role template is exact and rejects expanded trust or authority",
     "identity workflow stays manual, exact-commit-bound, and STS-only",
     "read-only workflow stays separately protected and action-pinned",
@@ -1242,7 +1244,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "aws-oidc-read-only-source-verifier": Object.freeze([
     "prooftoact.aws-oidc-preflight-source-verification.v2",
-    "SOURCE_CONTRACT_PASS_PROVIDER_SETUP_AND_EXECUTION_PENDING",
+    "SOURCE_CONTRACT_PASS_ACCEPTED_PROVIDER_RECEIPT_PENDING",
     "validateReadOnlyRoleTemplate",
     "validateIdentityWorkflow",
     "validateReadOnlyWorkflow",
@@ -1251,7 +1253,8 @@ const SOURCE_MARKERS = Object.freeze({
     "exactReadOnlyWorkflowAwsCallCount",
     "accountSafetyPreflightCurrentSourceCallsExact",
     "receiptSecretExact32ByteBase64url",
-    "providerExecution: \"NOT_RUN\"",
+    "providerSetup: \"EXTERNAL_STATE_NOT_ATTESTED\"",
+    "providerExecution: \"OUTSIDE_SOURCE_RECEIPT\"",
     "deploymentRoleOrWorkflowAdded: false",
     "providerMutationExplicitlyDenied: true",
     "providerExecutionClaimAbsent: true"

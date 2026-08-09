@@ -109,13 +109,13 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "cc061594c69b1be6ab7fb24342c2585179eed5c1b8a644b7e32a2bcb675e5e46",
+      "sha256": "90207d0ea42a1fc750455110776dc09a1463d596d25382c277af5f886919565a",
       "kind": "boundary-ledger"
     },
     {
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
-      "sha256": "9b8fc00ad41d6a8000140b612b587d7e43809cb65e85567f01e22e9ffbd38bd8",
+      "sha256": "afc595f29f3215bb2ba7d72e95148286f66e7f389587901680e6bcbd2d3bd6f5",
       "kind": "boundary-ledger"
     },
     {
@@ -127,19 +127,19 @@
     {
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
-      "sha256": "7e12d004ab182f6e3a9f438836acc1df66e7e85b9e307915b1ba1d2670478403",
+      "sha256": "df0545371c2dec0f3ab0bfe970dbe368a5251732148681ef82f8ae4833f1eadf",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "c91d5ae50295258f6b9cb038bf82c0796951f4469766db992eb8d41a02116b69",
+      "sha256": "5c928817ef5a74381eb8921d7c436955429a8018215b88fe738354b10219b316",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
-      "sha256": "b7ded87788f6dda699a36eb43e398287a85b14d176b8966c693828f7295035e2",
+      "sha256": "1289e996dd4c8fc421e5327c5c60f0ba56767e4268a0ffbb349edc250009c9b9",
       "kind": "verification-code"
     },
     {
@@ -151,7 +151,7 @@
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
-      "sha256": "f975580b5805f2ede9ad1dd1347e504bf95803135f89e181079f3efca626f1aa",
+      "sha256": "3e06bb4427662755afe6c3da9257dc31f14888770da5fac226d5e9afc60824a3",
       "kind": "verification-code"
     },
     {
@@ -511,7 +511,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "7c98907967e3920c73cc9e62d8e69905ad92328a92fbe06d5ac9d385925d1c35",
+      "sha256": "c7e1a6bb0db9e389a95b6c3abeb474c03c1ada155e1dec087b6bb509276f4a6c",
       "kind": "boundary-ledger"
     },
     {
@@ -535,7 +535,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "5e68e689e4b5bc3b409bcce651b48a42b258252e52ef0d8d3fe0a9ae1ad1d7c9",
+      "sha256": "c4b1ca680ab496418f0ced4466acbc18863bd16dfea87de4574f06de0d0ff8cb",
       "kind": "boundary-ledger"
     },
     {
@@ -547,7 +547,7 @@
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "5a4e07679e4dd449443e87672b32f6f00260410373b3a14511488b9beb253715",
+      "sha256": "d2f3f032651028695ec983a91c07d3bd3163d02a013ea6a94ab57e34a69dba12",
       "kind": "verification-code"
     },
     {
@@ -643,13 +643,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "b81e134f2a71add53ed63e01a89a5575236fba07a64f163336af3dfda48a4897",
+      "sha256": "12f0368baef970203acd6fe169487eaebb644c1772090119951faec5fdf22b7c",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "6b7754ef6f094deca6ebd422a062cde77c6a6d3e24d9dd527cbf2b8125394402",
+      "sha256": "b45bbf8dceb98cddf5de0209caf0f10e18c0d2732e126960025e2d80c3a39395",
       "kind": "boundary-ledger"
     },
     {
@@ -661,7 +661,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "666d1a2b9c94ab0092c0200f53cbc396bb93579e0c7bb2a009ae7641ca2bdbe5",
+      "sha256": "187b7f53846ff183672ba9116fab35efc35e732ae8cf3eb3c5b5cd4f1012fd52",
       "kind": "verification-code"
     },
     {
@@ -673,7 +673,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "fb802571b517b43b244a3361fa305283b77909919c966b4eb976aaa2fc8de153",
+      "sha256": "2da9c0b9a153dd5837b9639c7d365201faad49476501279bee2f88ca6d0cb23a",
       "kind": "boundary-ledger"
     },
     {
@@ -1146,7 +1146,7 @@
         "release-security-tests",
         "release-security-verifier"
       ],
-      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the GitHub-hosted-only pre-verification checkout normalizer, its workflow placement and hostile-residue tests, the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers. It also binds the source-only CloudShell-optional OIDC identity and read-only preflight lanes, their exact protected subjects, least-privilege read list and explicit deny, bounded temporary sessions, exact-main source checks, encrypted sanitized receipt boundary, and adversarial verifier tests while keeping provider setup and execution explicitly pending; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the GitHub-hosted-only pre-verification checkout normalizer, its workflow placement and hostile-residue tests, the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers. It also binds the source-only CloudShell-optional OIDC identity and read-only preflight lanes, their exact protected subjects, least-privilege read list and explicit deny, bounded temporary sessions, exact-main source checks, privacy-preserving fixed domain diagnostics, encrypted sanitized receipt boundary, and adversarial verifier tests while keeping external provider state outside the source receipt and an accepted provider PASS receipt pending; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

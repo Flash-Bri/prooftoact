@@ -70,6 +70,48 @@ const REQUIRED_NOTIFICATIONS = [
   }
 ];
 
+export const AWS_GATE2_PREFLIGHT_CONTROL_FAILURES = Object.freeze([
+  "VALIDATE_SOURCE_IDENTITY",
+  "VALIDATE_BOOTSTRAP",
+  "VALIDATE_BUDGET",
+  "VALIDATE_NOTIFICATIONS",
+  "VALIDATE_STACK_ABSENCE",
+  "VALIDATE_ARTIFACT_BUCKET",
+  "VALIDATE_COST",
+  "VALIDATE_EXPOSURE",
+  "VALIDATE_MODEL",
+  "VALIDATE_RECEIPT_ASSEMBLY"
+]);
+
+export class AwsGate2PreflightControlFailure extends Error {
+  constructor(index) {
+    super("AWS_GATE2_PREFLIGHT_CONTROL_FAILURE");
+    this.name = "AwsGate2PreflightControlFailure";
+    this.index = index;
+  }
+}
+
+function validateControl(index, operation, diagnosticFailureMode) {
+  if (
+    !Number.isSafeInteger(index) ||
+    typeof AWS_GATE2_PREFLIGHT_CONTROL_FAILURES[index] !== "string" ||
+    typeof operation !== "function"
+  ) {
+    throw new AwsGate2PreflightControlFailure(9);
+  }
+  try {
+    return operation();
+  } catch (error) {
+    if (error instanceof AwsGate2PreflightControlFailure) {
+      throw error;
+    }
+    if (diagnosticFailureMode !== true) {
+      throw error;
+    }
+    throw new AwsGate2PreflightControlFailure(index);
+  }
+}
+
 function requireCondition(condition, code) {
   if (!condition) {
     throw new Error(code);
@@ -497,239 +539,296 @@ export function validateAwsGate2Preflight(
     expectedModelId = EXPECTED_MODEL_ID,
     budgetCeilingUsd = EXPECTED_BUDGET_USD,
     minimumBudgetCoverageEnd =
-      MINIMUM_BUDGET_COVERAGE_END
+      MINIMUM_BUDGET_COVERAGE_END,
+    diagnosticFailureMode = false
   } = {}
 ) {
-  requireCondition(
-    Number.isFinite(budgetCeilingUsd) && budgetCeilingUsd > 0,
-    "BUDGET_CEILING_CONFIG"
-  );
-  const effectiveAwsSpendCeilingUsd = Math.min(
-    budgetCeilingUsd,
-    EFFECTIVE_AWS_SPEND_CEILING_USD
-  );
-  const observedAtMilliseconds = Date.parse(snapshot?.observedAt);
-  requireCondition(
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(
-      snapshot?.observedAt
-    ) && Number.isFinite(observedAtMilliseconds),
-    "OBSERVED_AT"
-  );
-  requireCondition(snapshot?.region === expectedRegion, "AWS_REGION");
-  requireCondition(
-    /^[0-9a-f]{40}$/.test(snapshot?.sourceCommit),
-    "SOURCE_COMMIT"
-  );
-  requireCondition(
-    /^[0-9a-f]{40}$/.test(snapshot?.treeDigest),
-    "TREE_DIGEST"
-  );
-  requireCondition(snapshot?.workingTreeClean === true, "WORKING_TREE_DIRTY");
-
-  const caller = snapshot?.callerIdentity;
-  validateAwsGate2PreflightIdentityExpectation({
-    expectedAccountId: snapshot?.expectedAccountId,
-    expectedPrincipalArn: snapshot?.expectedPrincipalArn,
-    expectedCallerArn: snapshot?.expectedCallerArn,
-    expectedCallerUserId: snapshot?.expectedCallerUserId
+  const validate = (index, operation) =>
+    validateControl(index, operation, diagnosticFailureMode);
+  const sourceIdentity = validate(0, () => {
+    requireCondition(
+      Number.isFinite(budgetCeilingUsd) && budgetCeilingUsd > 0,
+      "BUDGET_CEILING_CONFIG"
+    );
+    const effectiveAwsSpendCeilingUsd = Math.min(
+      budgetCeilingUsd,
+      EFFECTIVE_AWS_SPEND_CEILING_USD
+    );
+    const observedAtMilliseconds = Date.parse(snapshot?.observedAt);
+    requireCondition(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(
+        snapshot?.observedAt
+      ) && Number.isFinite(observedAtMilliseconds),
+      "OBSERVED_AT"
+    );
+    requireCondition(snapshot?.region === expectedRegion, "AWS_REGION");
+    requireCondition(
+      /^[0-9a-f]{40}$/.test(snapshot?.sourceCommit),
+      "SOURCE_COMMIT"
+    );
+    requireCondition(
+      /^[0-9a-f]{40}$/.test(snapshot?.treeDigest),
+      "TREE_DIGEST"
+    );
+    requireCondition(
+      snapshot?.workingTreeClean === true,
+      "WORKING_TREE_DIRTY"
+    );
+    validateAwsGate2PreflightIdentityExpectation({
+      expectedAccountId: snapshot?.expectedAccountId,
+      expectedPrincipalArn: snapshot?.expectedPrincipalArn,
+      expectedCallerArn: snapshot?.expectedCallerArn,
+      expectedCallerUserId: snapshot?.expectedCallerUserId
+    });
+    const callerBinding = validateAwsEvidenceCaller(
+      snapshot?.callerIdentity,
+      {
+        expectedAccountId: snapshot?.expectedAccountId,
+        expectedPrincipalArn: snapshot?.expectedPrincipalArn,
+        expectedCallerArn: snapshot?.expectedCallerArn,
+        expectedCallerUserId: snapshot?.expectedCallerUserId,
+        bindingContext: {
+          purpose: "gate2-read-only-preflight",
+          sourceCommit: snapshot?.sourceCommit,
+          treeDigest: snapshot?.treeDigest,
+          region: snapshot?.region,
+          bootstrapStackName: snapshot?.bootstrapStackName
+        }
+      }
+    );
+    requireCondition(
+      callerBinding.principalType === "assumed-role",
+      "AWS_PREFLIGHT_ASSUMED_ROLE_REQUIRED"
+    );
+    return {
+      effectiveAwsSpendCeilingUsd,
+      observedAtMilliseconds,
+      callerBinding
+    };
   });
-  const callerBinding = validateAwsEvidenceCaller(caller, {
-    expectedAccountId: snapshot?.expectedAccountId,
-    expectedPrincipalArn: snapshot?.expectedPrincipalArn,
-    expectedCallerArn: snapshot?.expectedCallerArn,
-    expectedCallerUserId: snapshot?.expectedCallerUserId,
-    bindingContext: {
-      purpose: "gate2-read-only-preflight",
-      sourceCommit: snapshot?.sourceCommit,
-      treeDigest: snapshot?.treeDigest,
-      region: snapshot?.region,
-      bootstrapStackName: snapshot?.bootstrapStackName
-    }
+  const {
+    effectiveAwsSpendCeilingUsd,
+    observedAtMilliseconds,
+    callerBinding
+  } = sourceIdentity;
+
+  const bootstrapState = validate(1, () => {
+    const bootstrap = snapshot?.bootstrapStack;
+    requireCondition(
+      bootstrap?.StackName === snapshot?.bootstrapStackName,
+      "BOOTSTRAP_STACK_NAME"
+    );
+    requireCondition(
+      ["CREATE_COMPLETE", "UPDATE_COMPLETE"].includes(
+        bootstrap?.StackStatus
+      ),
+      "BOOTSTRAP_STACK_STATUS"
+    );
+    const budgetName = exactStackOutput(
+      bootstrap,
+      "AccountBudgetName"
+    );
+    requireCondition(
+      budgetName === `${snapshot.bootstrapStackName}-account-safety`,
+      "BUDGET_NAME_BINDING"
+    );
+    const bucketName = exactStackOutput(
+      bootstrap,
+      "ArtifactBucketName"
+    );
+    return { bootstrap, budgetName, bucketName };
   });
-  requireCondition(
-    callerBinding.principalType === "assumed-role",
-    "AWS_PREFLIGHT_ASSUMED_ROLE_REQUIRED"
-  );
+  const { bootstrap, budgetName, bucketName } = bootstrapState;
 
-  const bootstrap = snapshot?.bootstrapStack;
-  requireCondition(
-    bootstrap?.StackName === snapshot?.bootstrapStackName,
-    "BOOTSTRAP_STACK_NAME"
-  );
-  requireCondition(
-    ["CREATE_COMPLETE", "UPDATE_COMPLETE"].includes(
-      bootstrap?.StackStatus
-    ),
-    "BOOTSTRAP_STACK_STATUS"
-  );
-  const budgetName = exactStackOutput(bootstrap, "AccountBudgetName");
-  requireCondition(
-    budgetName === `${snapshot.bootstrapStackName}-account-safety`,
-    "BUDGET_NAME_BINDING"
-  );
-  const bucketName = exactStackOutput(bootstrap, "ArtifactBucketName");
-
-  const budget = snapshot?.budget;
-  requireCondition(budget?.BudgetName === budgetName, "BUDGET_NAME");
-  requireCondition(budget?.BudgetType === "COST", "BUDGET_TYPE");
-  requireCondition(budget?.TimeUnit === "MONTHLY", "BUDGET_TIME_UNIT");
-  requireCondition(
-    isAbsentOrEmptyObject(budget?.CostFilters),
-    "BUDGET_COST_FILTERS_ACCOUNT_WIDE"
-  );
-  requireCondition(
-    isAbsentOrEmptyObject(budget?.FilterExpression),
-    "BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE"
-  );
-  requireCondition(
-    budget?.BillingViewArn == null,
-    "BUDGET_BILLING_VIEW_ACCOUNT_WIDE"
-  );
-  requireCondition(
-    budget?.AutoAdjustData == null,
-    "BUDGET_AUTO_ADJUST_NOT_FIXED"
-  );
-  requireCondition(
-    isAbsentOrEmptyObject(budget?.PlannedBudgetLimits),
-    "BUDGET_PLANNED_LIMITS_NOT_FIXED"
-  );
-  requireCondition(
-    budget?.Metrics == null,
-    "BUDGET_METRICS_MODEL"
-  );
-  requireCondition(
-    hasExpectedCostTypes(budget?.CostTypes),
-    "BUDGET_COST_TYPES"
-  );
-  const budgetPeriodStart = timestampMilliseconds(
-    budget?.TimePeriod?.Start,
-    "BUDGET_TIME_PERIOD_START"
-  );
-  const budgetPeriodEnd = timestampMilliseconds(
-    budget?.TimePeriod?.End,
-    "BUDGET_TIME_PERIOD_END"
-  );
-  requireCondition(
-    budgetPeriodStart < budgetPeriodEnd,
-    "BUDGET_TIME_PERIOD_ORDER"
-  );
-  requireCondition(
-    observedAtMilliseconds >= budgetPeriodStart,
-    "BUDGET_TIME_PERIOD_NOT_STARTED"
-  );
-  requireCondition(
-    observedAtMilliseconds < budgetPeriodEnd,
-    "BUDGET_TIME_PERIOD_EXPIRED"
-  );
-  requireCondition(
-    budgetPeriodEnd >= timestampMilliseconds(
-      minimumBudgetCoverageEnd,
+  const budgetState = validate(2, () => {
+    const budget = snapshot?.budget;
+    requireCondition(budget?.BudgetName === budgetName, "BUDGET_NAME");
+    requireCondition(budget?.BudgetType === "COST", "BUDGET_TYPE");
+    requireCondition(budget?.TimeUnit === "MONTHLY", "BUDGET_TIME_UNIT");
+    requireCondition(
+      isAbsentOrEmptyObject(budget?.CostFilters),
+      "BUDGET_COST_FILTERS_ACCOUNT_WIDE"
+    );
+    requireCondition(
+      isAbsentOrEmptyObject(budget?.FilterExpression),
+      "BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE"
+    );
+    requireCondition(
+      budget?.BillingViewArn == null,
+      "BUDGET_BILLING_VIEW_ACCOUNT_WIDE"
+    );
+    requireCondition(
+      budget?.AutoAdjustData == null,
+      "BUDGET_AUTO_ADJUST_NOT_FIXED"
+    );
+    requireCondition(
+      isAbsentOrEmptyObject(budget?.PlannedBudgetLimits),
+      "BUDGET_PLANNED_LIMITS_NOT_FIXED"
+    );
+    requireCondition(budget?.Metrics == null, "BUDGET_METRICS_MODEL");
+    requireCondition(
+      hasExpectedCostTypes(budget?.CostTypes),
+      "BUDGET_COST_TYPES"
+    );
+    const budgetPeriodStart = timestampMilliseconds(
+      budget?.TimePeriod?.Start,
+      "BUDGET_TIME_PERIOD_START"
+    );
+    const budgetPeriodEnd = timestampMilliseconds(
+      budget?.TimePeriod?.End,
+      "BUDGET_TIME_PERIOD_END"
+    );
+    requireCondition(
+      budgetPeriodStart < budgetPeriodEnd,
+      "BUDGET_TIME_PERIOD_ORDER"
+    );
+    requireCondition(
+      observedAtMilliseconds >= budgetPeriodStart,
+      "BUDGET_TIME_PERIOD_NOT_STARTED"
+    );
+    requireCondition(
+      observedAtMilliseconds < budgetPeriodEnd,
+      "BUDGET_TIME_PERIOD_EXPIRED"
+    );
+    requireCondition(
+      budgetPeriodEnd >= timestampMilliseconds(
+        minimumBudgetCoverageEnd,
+        "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
+      ),
       "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
-    ),
-    "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
-  );
-  const limit = moneyAmount(budget?.BudgetLimit, "BUDGET_LIMIT");
-  requireCondition(limit === budgetCeilingUsd, "BUDGET_LIMIT_VALUE");
-  const budgetActual = moneyAmount(
-    budget?.CalculatedSpend?.ActualSpend,
-    "BUDGET_ACTUAL"
-  );
-  requireCondition(
-    budgetActual < effectiveAwsSpendCeilingUsd,
-    "BUDGET_ACTUAL_CEILING"
-  );
-  const notifications = validateNotifications(
-    snapshot?.notificationSubscribers
+    );
+    const limit = moneyAmount(budget?.BudgetLimit, "BUDGET_LIMIT");
+    requireCondition(limit === budgetCeilingUsd, "BUDGET_LIMIT_VALUE");
+    const budgetActual = moneyAmount(
+      budget?.CalculatedSpend?.ActualSpend,
+      "BUDGET_ACTUAL"
+    );
+    requireCondition(
+      budgetActual < effectiveAwsSpendCeilingUsd,
+      "BUDGET_ACTUAL_CEILING"
+    );
+    return {
+      budget,
+      budgetPeriodStart,
+      budgetPeriodEnd,
+      limit,
+      budgetActual
+    };
+  });
+  const {
+    budget,
+    budgetPeriodStart,
+    budgetPeriodEnd,
+    limit,
+    budgetActual
+  } = budgetState;
+
+  const notifications = validate(3, () =>
+    validateNotifications(snapshot?.notificationSubscribers)
   );
 
-  requireCondition(
-    snapshot?.mainStackName === EXPECTED_MAIN_STACK_NAME,
-    "MAIN_STACK_NAME"
-  );
-  requireCondition(
-    snapshot?.legacyMainStackName === LEGACY_MAIN_STACK_NAME,
-    "LEGACY_MAIN_STACK_NAME"
-  );
-  const activeStackNames = new Set(
-    asArray(snapshot?.stackSummaries)
-      .filter((stack) => stack?.StackStatus !== "DELETE_COMPLETE")
-      .map((stack) => stack?.StackName)
-  );
-  requireCondition(
-    !activeStackNames.has(snapshot.mainStackName),
-    "MAIN_STACK_ALREADY_PRESENT"
-  );
-  requireCondition(
-    !activeStackNames.has(snapshot.legacyMainStackName),
-    "LEGACY_MAIN_STACK_ALREADY_PRESENT"
-  );
+  validate(4, () => {
+    requireCondition(
+      snapshot?.mainStackName === EXPECTED_MAIN_STACK_NAME,
+      "MAIN_STACK_NAME"
+    );
+    requireCondition(
+      snapshot?.legacyMainStackName === LEGACY_MAIN_STACK_NAME,
+      "LEGACY_MAIN_STACK_NAME"
+    );
+    const activeStackNames = new Set(
+      asArray(snapshot?.stackSummaries)
+        .filter((stack) => stack?.StackStatus !== "DELETE_COMPLETE")
+        .map((stack) => stack?.StackName)
+    );
+    requireCondition(
+      !activeStackNames.has(snapshot.mainStackName),
+      "MAIN_STACK_ALREADY_PRESENT"
+    );
+    requireCondition(
+      !activeStackNames.has(snapshot.legacyMainStackName),
+      "LEGACY_MAIN_STACK_ALREADY_PRESENT"
+    );
+  });
 
-  const artifactBucket = validateArtifactBucket(
-    snapshot?.artifactBucket,
-    bucketName
+  const artifactBucket = validate(5, () =>
+    validateArtifactBucket(snapshot?.artifactBucket, bucketName)
   );
-  const currentCost = validateCost(
-    snapshot?.currentCost,
-    effectiveAwsSpendCeilingUsd,
-    awsCostExplorerPeriod(snapshot.observedAt)
+  const currentCost = validate(6, () =>
+    validateCost(
+      snapshot?.currentCost,
+      effectiveAwsSpendCeilingUsd,
+      awsCostExplorerPeriod(snapshot.observedAt)
+    )
   );
-  const budgetActualMicros = conservativeUsdMicros(
-    budget?.CalculatedSpend?.ActualSpend?.Amount,
-    "BUDGET_ACTUAL"
-  );
-  const currentCostMicros = conservativeUsdMicros(
-    currentCost.amountUsd,
-    "CURRENT_COST_TOTAL"
-  );
-  const conservativeActualMicros = Math.max(
-    budgetActualMicros,
-    currentCostMicros
-  );
-  const effectiveAwsSpendCeilingMicros = usdMicrosForConstant(
-    effectiveAwsSpendCeilingUsd,
-    "EFFECTIVE_AWS_SPEND_CEILING"
-  );
-  const preflightAllowanceMicros = usdMicrosForConstant(
-    APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD,
-    "PREFLIGHT_ALLOWANCE"
-  );
-  const conservativeReservedAwsExposureMicros =
-    conservativeActualMicros + preflightAllowanceMicros;
-  requireCondition(
-    conservativeReservedAwsExposureMicros <
+  const exposure = validate(7, () => {
+    const budgetActualMicros = conservativeUsdMicros(
+      budget?.CalculatedSpend?.ActualSpend?.Amount,
+      "BUDGET_ACTUAL"
+    );
+    const currentCostMicros = conservativeUsdMicros(
+      currentCost.amountUsd,
+      "CURRENT_COST_TOTAL"
+    );
+    const conservativeActualMicros = Math.max(
+      budgetActualMicros,
+      currentCostMicros
+    );
+    const effectiveAwsSpendCeilingMicros = usdMicrosForConstant(
+      effectiveAwsSpendCeilingUsd,
+      "EFFECTIVE_AWS_SPEND_CEILING"
+    );
+    const preflightAllowanceMicros = usdMicrosForConstant(
+      APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD,
+      "PREFLIGHT_ALLOWANCE"
+    );
+    const conservativeReservedAwsExposureMicros =
+      conservativeActualMicros + preflightAllowanceMicros;
+    requireCondition(
+      conservativeReservedAwsExposureMicros <
+        effectiveAwsSpendCeilingMicros,
+      "PREFLIGHT_ALLOWANCE_AWS_CEILING"
+    );
+    const recordedNonAwsSpendMicros = usdMicrosForConstant(
+      RECORDED_NON_AWS_SPEND_USD,
+      "RECORDED_NON_AWS_SPEND"
+    );
+    const totalProjectExposureCeilingMicros = usdMicrosForConstant(
+      TOTAL_PROJECT_EXPOSURE_CEILING_USD,
+      "TOTAL_PROJECT_EXPOSURE_CEILING"
+    );
+    const conservativeObservedTotalExposureMicros =
+      recordedNonAwsSpendMicros + conservativeActualMicros;
+    const conservativeReservedTotalExposureMicros =
+      recordedNonAwsSpendMicros +
+      conservativeReservedAwsExposureMicros;
+    requireCondition(
+      conservativeReservedTotalExposureMicros <
+        totalProjectExposureCeilingMicros,
+      "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING"
+    );
+    return {
+      conservativeActualMicros,
       effectiveAwsSpendCeilingMicros,
-    "PREFLIGHT_ALLOWANCE_AWS_CEILING"
-  );
-  const recordedNonAwsSpendMicros = usdMicrosForConstant(
-    RECORDED_NON_AWS_SPEND_USD,
-    "RECORDED_NON_AWS_SPEND"
-  );
-  const totalProjectExposureCeilingMicros = usdMicrosForConstant(
-    TOTAL_PROJECT_EXPOSURE_CEILING_USD,
-    "TOTAL_PROJECT_EXPOSURE_CEILING"
-  );
-  const conservativeObservedTotalExposureMicros =
-    recordedNonAwsSpendMicros + conservativeActualMicros;
-  const conservativeReservedTotalExposureMicros =
-    recordedNonAwsSpendMicros +
-    conservativeReservedAwsExposureMicros;
-  requireCondition(
-    conservativeReservedTotalExposureMicros <
+      preflightAllowanceMicros,
+      conservativeReservedAwsExposureMicros,
+      recordedNonAwsSpendMicros,
       totalProjectExposureCeilingMicros,
-    "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING"
-  );
-  const remainingExposureMicros =
-    totalProjectExposureCeilingMicros -
-    conservativeObservedTotalExposureMicros;
-  const remainingExposureAfterPreflightAllowanceMicros =
-    totalProjectExposureCeilingMicros -
-    conservativeReservedTotalExposureMicros;
-  const bedrock = validateModel(
-    snapshot?.foundationModel,
-    expectedModelId
+      conservativeObservedTotalExposureMicros,
+      conservativeReservedTotalExposureMicros,
+      remainingExposureMicros:
+        totalProjectExposureCeilingMicros -
+        conservativeObservedTotalExposureMicros,
+      remainingExposureAfterPreflightAllowanceMicros:
+        totalProjectExposureCeilingMicros -
+        conservativeReservedTotalExposureMicros
+    };
+  });
+  const bedrock = validate(8, () =>
+    validateModel(snapshot?.foundationModel, expectedModelId)
   );
 
-  return {
+  return validate(9, () => ({
     schemaVersion: "tideproof.gate2.aws-preflight.v6",
     status: "PASS",
     observedAt: snapshot.observedAt,
@@ -756,7 +855,7 @@ export function validateAwsGate2Preflight(
         coverageEnd: new Date(budgetPeriodEnd).toISOString(),
         budgetReportedActualUsd: budgetActual.toFixed(6),
         conservativeObservedActualUsd:
-          formattedUsdMicros(conservativeActualMicros),
+          formattedUsdMicros(exposure.conservativeActualMicros),
         notifications
       },
       currentCost,
@@ -768,24 +867,24 @@ export function validateAwsGate2Preflight(
         effectiveAwsSpendCeilingUsd:
           effectiveAwsSpendCeilingUsd.toFixed(6),
         approvedPreflightAllowanceUsd:
-          formattedUsdMicros(preflightAllowanceMicros),
+          formattedUsdMicros(exposure.preflightAllowanceMicros),
         conservativeReservedAwsExposureUsd:
           formattedUsdMicros(
-            conservativeReservedAwsExposureMicros
+            exposure.conservativeReservedAwsExposureMicros
           ),
         conservativeObservedTotalExposureUsd:
           formattedUsdMicros(
-            conservativeObservedTotalExposureMicros
+            exposure.conservativeObservedTotalExposureMicros
           ),
         conservativeReservedTotalExposureUsd:
           formattedUsdMicros(
-            conservativeReservedTotalExposureMicros
+            exposure.conservativeReservedTotalExposureMicros
           ),
         remainingExposureUsd:
-          formattedUsdMicros(remainingExposureMicros),
+          formattedUsdMicros(exposure.remainingExposureMicros),
         remainingExposureAfterPreflightAllowanceUsd:
           formattedUsdMicros(
-            remainingExposureAfterPreflightAllowanceMicros
+            exposure.remainingExposureAfterPreflightAllowanceMicros
           ),
         awsCostWindowStart: PROJECT_COST_WINDOW_START,
         recordedSpendBasis:
@@ -806,7 +905,7 @@ export function validateAwsGate2Preflight(
       "AWS account, caller ARN, expected principal ARN, bucket name, and subscriber addresses were validated but omitted; only caller-binding digests are public.",
     claimBoundary:
       "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It rejects both the ProofToAct main stack name and the former working-name main stack before a fresh create. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
-  };
+  }));
 }
 
 export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({

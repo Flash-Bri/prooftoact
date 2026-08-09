@@ -668,9 +668,9 @@ function assertSourceContracts(sources) {
       "account-wide `$15` budget",
       "observed AWS + $0.02 < $13.14",
       "exactly `$13.12` fails",
-      "maximum `$0.02` complete-preflight cap",
-      "This source change grants no",
-      "spend authority."
+      "maximum remains `$0.02` for each complete preflight",
+      "This source change grants",
+      "no spend authority."
     ],
     "RELEASE_COST_OIDC_LEDGER_MARKERS"
   );

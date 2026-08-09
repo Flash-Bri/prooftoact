@@ -1,6 +1,6 @@
 # AWS OIDC read-only preflight source lane
 
-Status: **SOURCE SCAFFOLD VERIFIED — PROVIDER SETUP, EXECUTION, AND REVIEW PENDING**
+Status: **SOURCE AND PROVIDER IDENTITY PATH VERIFIED — ACCEPTED PREFLIGHT RECEIPT PENDING**
 
 This lane makes AWS CloudShell optional. CloudShell availability is not a
 release gate. The AWS identity, account, region, cost, exact-source, evidence,
@@ -16,8 +16,8 @@ receipt.
 
 | Lane | Protected environment | Exact role/session | Permitted work | Current state |
 | --- | --- | --- | --- | --- |
-| Identity-only bootstrap | `aws-preflight` | `ProofToActPreflight/release-proof` | GitHub OIDC `AssumeRoleWithWebIdentity`, then STS `GetCallerIdentity` only; no checkout and no account reads | Existing manual workflow preserved and hardened; provider rerun pending |
-| Read-only account preflight | `aws-read-only-preflight` | `ProofToActReadOnlyPreflight/read-only-preflight` | The exact account, region, cost, bootstrap, bucket, Bedrock catalog, quota-metadata, and main-stack-absence reads below | New source template/workflow; provider setup and run pending |
+| Identity-only bootstrap | `aws-preflight` | `ProofToActPreflight/release-proof` | GitHub OIDC `AssumeRoleWithWebIdentity`, then STS `GetCallerIdentity` only; no checkout and no account reads | Live OIDC identity receipt observed; source and provider parity still require final-release review |
+| Read-only account preflight | `aws-read-only-preflight` | `ProofToActReadOnlyPreflight/read-only-preflight` | The exact account, region, cost, bootstrap, bucket, Bedrock catalog, quota-metadata, and main-stack-absence reads below | Live OIDC assumption plus wrapper region and quota reads observed; nested validation diagnostics are being completed and no accepted `PASS` receipt exists |
 | Deployment and evidence | A different, future protected environment | A different, future deployment/evidence role | Upload, change set, stack create, probes, live drill, attestation, and teardown only after separate authorization | Deliberately absent and pending |
 
 The read-only role cannot be reused as a deployment role. Its template has one
@@ -28,8 +28,10 @@ deployment, or teardown action.
 
 ## Human and provider setup gates
 
-The committed files are inert until an authorized human completes and reviews
-all provider-side setup. Applying
+The committed files do not apply or update provider configuration. A protected
+environment and role now exist and live OIDC role assumption has succeeded,
+but that observation does not prove that the deployed trust and permission
+policies remain byte-for-byte equivalent to this source. Applying or repairing
 `infra/aws/oidc-read-only-preflight-role-template.json` is itself an IAM and
 CloudFormation provider mutation and is not authorized by this source change.
 It requires the exact existing artifact-bucket name as a private deployment
@@ -69,12 +71,12 @@ The public repository OIDC settings API also reported `use_default: true`,
 The template therefore pins the exact current read-only subject
 `repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight`.
 The identity workflow validates the corresponding `aws-preflight` subject.
-Public API metadata is corroboration, not a live OIDC token or IAM receipt.
-Before applying the inert read-only template, provider setup must re-fetch
-both metadata responses and inspect an actual protected-environment token to
-confirm the exact committed subject. The existing identity role is outside
-this source template; an authorized human must separately verify or update its
-trust to the immutable `aws-preflight` subject before running that lane. A
+Public API metadata is corroboration, not proof of current deployed IAM
+parity. Live protected-environment tokens have matched the committed subject
+and successfully assumed the expected roles, while final review must still
+re-fetch both metadata responses and compare the deployed trust and permission
+policies to the exact source. The existing identity role is outside this source
+template and remains a separately reviewed boundary. A
 repository transfer, rename, owner/ID change, or OIDC subject customization
 must fail closed until both source and provider trust receive separate review
 and authorization.
@@ -180,6 +182,21 @@ notification response into extra subscriber reads. The independent source
 verifier parses the declared inventory and requires the exact 14 operation
 groups and 17 nested calls; the fixed wrapper adds exactly three calls.
 
+The protected runner emits only fixed source-bound failure stages. AWS request
+and JSON failures map one-to-one to the ordered nested reads `READ_01` through
+`READ_17`. Non-request child failures map to fixed environment, exact-checkout,
+identity, call-inventory, response-shape, cost-request preparation,
+bucket-policy, stack-census, and snapshot-completion phases. Final semantic
+validation maps to ten fixed control domains covering source/identity,
+bootstrap, budget, notifications, stack absence, artifact-bucket controls,
+cost, exposure, model metadata, and receipt assembly. Argument, receipt-output,
+timeout, execution, termination, uncaught-process, and unclassified statuses
+also have distinct literal stages. Raw provider/child stderr, error messages,
+causes, credentials, account identifiers, resource names, and arbitrary paths
+remain quarantined and are never forwarded. Unknown indexes or statuses fail
+closed to an unclassified fixed stage. These diagnostics identify only the
+failing domain; they do not disclose or prove the provider response.
+
 All AWS CLI calls use one SDK attempt, 10-second connect and 20-second read
 timeouts, an isolated credential/configuration environment, and an outer
 process timeout. The complete credentialed step and GitHub job are separately
@@ -190,9 +207,10 @@ inputs fail closed.
 The Bedrock catalog and service-quota reads do not prove model invocation
 access, quota sufficiency for a live drill, availability, or current price.
 The Cost Explorer request may be metered. Before any live run, the operator
-must recheck current prices and receive separate authorization under the
-existing maximum `$0.02` complete-preflight cap. This source change grants no
-spend authority.
+must recheck current prices and hold separate operational authorization—either
+for that run or under an explicit aggregate ceiling—while the source-enforced
+maximum remains `$0.02` for each complete preflight. This source change grants
+no spend authority.
 
 The full declared `$0.02` allowance is reserved before the receipt can pass or
 any subsequent provider action may proceed. The gate conservatively rounds
@@ -205,8 +223,8 @@ that can pass. Receipt schema `tideproof.gate2.aws-preflight.v6` records the
 allowance, reserved AWS exposure, reserved total exposure, and remaining
 exposure after the allowance. The Cost Explorer request needed to learn the
 observation happens before receipt validation and may itself be metered, which
-is why the prior price recheck and separate maximum `$0.02` run authorization
-remain mandatory; a failed receipt authorizes nothing further.
+is why the prior price recheck and separate operational spend boundary remain
+mandatory; a failed receipt authorizes nothing further.
 
 ## Evidence and release boundary
 
