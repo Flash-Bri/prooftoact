@@ -386,19 +386,20 @@ and have no group/world write bits. The Linux lane requires the corresponding
 root-owned `/usr/local/aws-cli` package target. This is an owner, mode, and
 location control, not a byte hash or independent package-signature attestation.
 
-The Cost Explorer census is bounded to exactly one CLI request: automatic CLI
-pagination is disabled, SDK retries are capped at one total attempt, and the
-response is rejected if a `NextPageToken` property is present, including an
-empty one. The explicitly priced Cost Explorer portion is therefore bounded to
-one `GetCostAndUsage` request. The operational approval cap for the complete
-preflight is at most `$0.02`; operators must reconfirm current pricing for that
-request and the fixed read-only control-plane census before a live run. The
-gate reserves that full allowance and requires observed AWS spend plus `$0.02`
-to remain strictly below both the effective AWS and total-project ceilings;
-exactly `$13.12` observed AWS spend therefore fails. The source contract bounds
-the complete runtime call inventory and Cost Explorer call count but does not
-freeze or independently verify AWS pricing or claim every metadata request is
-unmetered.
+The Cost Explorer census is bounded to exactly one CLI request, grouped by
+`DIMENSION/RECORD_TYPE`: automatic CLI pagination is disabled, SDK retries are
+capped at one total attempt, and the response is rejected if a
+`NextPageToken` property is present, including an empty one. The explicitly
+priced Cost Explorer portion is therefore bounded to one `GetCostAndUsage`
+request. The operational approval cap for the complete preflight is at most
+`$0.02`; operators must reconfirm current pricing for that request and the
+fixed read-only control-plane census before a live run. The gate reserves that
+full allowance and requires the greater of budget spend and conservative
+positive record-type exposure plus `$0.02` to remain strictly below both the
+effective AWS and total-project ceilings; exactly `$13.12` therefore fails.
+The source contract bounds the complete runtime call inventory and Cost
+Explorer call count but does not freeze or independently verify AWS pricing or
+claim every metadata request is unmetered.
 
 The protected OIDC runner reports only literal source-bound diagnostics. Each
 of the 17 nested AWS request or JSON failures has its own ordinal stage. Fixed
@@ -412,8 +413,9 @@ covering identity, account-wide scope, fixed-model fields, cost basis,
 coverage period, limit shape/value, and actual-spend shape/ceiling. Those
 stages reveal only which invariant failed, never its observed value. The Cost
 Explorer validation domain is likewise divided into 16 literal predicates
-covering its observation window, request period, unpaginated response and row
-shape, USD amount format and range, accumulated range, and effective ceiling.
+covering its observation window, request period, grouped unpaginated response,
+row and record-type shape, signed USD amount format and range, positive
+record-type accumulation, and effective ceiling.
 The broad budget and cost stages remain fail-closed fallbacks for unexpected
 exceptions.
 The nested runtime uses typed numeric failures and deliberately discards raw
@@ -498,12 +500,13 @@ name, and alert addresses from its output, and accepts only:
 - a budget period active at observation time and extending through
   September 15, 2026, plus `$1`/`$5`/`$10` actual alerts, a `$15` forecast
   alert, and at least one email subscriber per alert;
-- both the budget-reported actual spend and Cost Explorer's cumulative
-  account-wide unblended cost from 2026-07-01 through the current UTC day
-  whose greater value plus the full `$0.02` preflight allowance remains
-  strictly below the `$13.14` effective AWS ceiling, while the recorded
-  `$11.86` domain expense plus observed AWS plus that allowance remains
-  strictly below the `$25` total-project cap;
+- both the budget-reported actual spend and Cost Explorer's conservative
+  account-wide positive record-type `UnblendedCost` exposure from
+  2026-07-01 through the current UTC day, whose greater value plus the full
+  `$0.02` preflight allowance remains strictly below the `$13.14`
+  effective AWS ceiling, while the recorded `$11.86` domain expense plus
+  observed AWS plus that allowance remains strictly below the `$25`
+  total-project cap;
 - an encrypted, versioned, bucket-owner-enforced private artifact bucket with
   all public-access blocks and exactly the reviewed TLS-only deny policy,
   with no additional delegated bucket-policy statements; and
@@ -511,11 +514,18 @@ name, and alert addresses from its output, and accepts only:
   `tideproof-gate2` main stack. The dual absence check prevents a rename from
   creating two independent authority deployments.
 
-A `PASS` receipt is necessary but deliberately insufficient. The catalog call
-does not prove model invocation access or current Nova pricing, Cost Explorer
-data may be estimated and delayed, and the command does not upload, deploy,
-invoke, sign, or prove IAM denial. Recheck official Nova pricing separately
-and keep the receipt private until its release redaction is reviewed.
+A `PASS` receipt is necessary but deliberately insufficient. The single Cost
+Explorer request groups `UnblendedCost` by `RECORD_TYPE`, validates an exact
+monthly grouped response, and sums only positive record-type aggregates.
+Credits, refunds, discounts, and Savings Plan negations may be observed as
+negative groups but can never subtract from exposure or create spending
+headroom. This is a conservative record-type aggregate, not an invoice,
+realized net bill, or line-item gross-spend proof; Cost Explorer data may be
+estimated, delayed, and internally netted within a record type. The catalog
+call also does not prove model invocation access or current Nova pricing, and
+the command does not upload, deploy, invoke, sign, or prove IAM denial.
+Recheck official Nova pricing separately and keep the receipt private until
+its release redaction is reviewed.
 The total-exposure calculation relies on the owner-reported domain-cost and
 auto-renew state recorded in
 `evidence/domain-cost-owner-record-2026-07-30.md`; it does not independently
@@ -529,7 +539,7 @@ preflight accepts `Metrics` only when it is omitted or the exact one-element
 array `["UnblendedCost"]`; empty, multi-value, differently cased, aliased, or
 other metric representations fail. It independently accepts `CostTypes` only
 when omitted or equal to the exact complete default object, whose nonblended,
-nonamortized settings agree with the `UnblendedCost` basis. The v6 receipt's
+nonamortized settings agree with the `UnblendedCost` basis. The v7 receipt's
 `costBasis` is this normalized validated semantic basis, and
 `defaultCostTypes` records that `CostTypes` were absent or exact defaults;
 neither field claims which provider wire representation was returned. Any
@@ -693,6 +703,34 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 - Claim impact: source may claim exact privacy-preserving Cost Explorer
   predicate diagnosis, not successful cost acceptance, a provider value, or
   current account state.
+
+### Signed Cost Explorer totals could hide positive exposure
+
+- Root cause: the original single Cost Explorer request returned one signed
+  monthly `Total.UnblendedCost`. AWS may include negative credits, refunds,
+  discounts, or negations in that aggregate. Rejecting every negative total
+  was stale, but accepting or clamping it could hide positive usage behind a
+  larger negative offset.
+- Earliest detection: the protected fixed diagnostic
+  `VALIDATE_COST_UNBLENDED_NONNEGATIVE` proved that at least one monthly
+  aggregate was negative without exposing the month, amount, or adjustment.
+- Repair: keep exactly one `GetCostAndUsage` request but group it by
+  `DIMENSION/RECORD_TYPE`. Require exact group definitions, monthly periods,
+  empty row totals, allowlisted unique record types, USD
+  `UnblendedCost`, canonical signed decimals, sign-consistent groups, no
+  pagination, and bounded arithmetic. Sum only positive record-type
+  aggregates; negative groups never reduce exposure.
+- Regression/preventive control: tests cover positive usage hidden by larger
+  credits, grouped-response drift, unknown and duplicate record types, sign
+  confusion, malformed signed decimals, conservative micro-dollar rounding,
+  no-pagination, and the unchanged one-request/17-read inventory.
+- Residual risk: Cost Explorer can be delayed or estimated, and values can
+  still net within one record type. Receipt v7 therefore calls the result
+  `positiveRecordTypeExposureUsd` and does not claim invoice-final gross or
+  net cost.
+- Claim impact: source may claim a conservative positive record-type exposure
+  calculation only. Provider acceptance and current live account state remain
+  pending until an encrypted receipt passes private review.
 
 ### Repository-local Git metadata could falsify source binding
 

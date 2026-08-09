@@ -997,6 +997,9 @@ function validSnapshot() {
       periodStart: "2026-07-01",
       periodEndExclusive: "2026-07-31",
       response: {
+        GroupDefinitions: [
+          { Type: "DIMENSION", Key: "RECORD_TYPE" }
+        ],
         ResultsByTime: [
           {
             TimePeriod: {
@@ -1004,9 +1007,15 @@ function validSnapshot() {
               End: "2026-07-31"
             },
             Estimated: true,
-            Total: {
-              UnblendedCost: { Amount: "0.20", Unit: "USD" }
-            }
+            Total: {},
+            Groups: [
+              {
+                Keys: ["Usage"],
+                Metrics: {
+                  UnblendedCost: { Amount: "0.20", Unit: "USD" }
+                }
+              }
+            ]
           }
         ]
       }
@@ -1391,7 +1400,7 @@ test("AWS preflight cost diagnostics identify all fixed semantic predicates", ()
     ["CURRENT_COST_PERIOD_END", (s) => {
       s.currentCost.periodEndExclusive = "2026-07-30";
     }],
-    ["CURRENT_COST_NEXT_PAGE_TOKEN", (s) => {
+    ["CURRENT_COST_GROUPED_RESPONSE", (s) => {
       s.currentCost.response.NextPageToken = "";
     }],
     ["CURRENT_COST_ROWS", (s) => {
@@ -1401,43 +1410,59 @@ test("AWS preflight cost diagnostics identify all fixed semantic predicates", ()
       s.currentCost.response.ResultsByTime[0].TimePeriod.End =
         "2026-07-30";
     }],
-    ["CURRENT_COST_UNBLENDED_UNIT", (s) => {
-      s.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Unit = "EUR";
+    ["CURRENT_COST_RECORD_TYPE_GROUPS", (s) => {
+      s.currentCost.response.ResultsByTime[0].Total = {
+        UnblendedCost: { Amount: "0.20", Unit: "USD" }
+      };
     }],
-    ["CURRENT_COST_UNBLENDED_AMOUNT", (s) => {
-      s.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Amount = "invalid";
+    ["CURRENT_COST_RECORD_TYPE_SEMANTICS", (s) => {
+      s.currentCost.response.ResultsByTime[0].Groups[0].Keys = [
+        "UnknownChargeType"
+      ];
     }],
-    ["CURRENT_COST_UNBLENDED_NEGATIVE", (s) => {
+    ["CURRENT_COST_RECORD_TYPE_UNBLENDED_UNIT", (s) => {
       s.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Amount = "-1";
+        .Groups[0].Metrics.UnblendedCost.Unit = "EUR";
     }],
-    ["CURRENT_COST_UNBLENDED_DECIMAL", (s) => {
+    ["CURRENT_COST_RECORD_TYPE_UNBLENDED_DECIMAL", (s) => {
       s.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Amount = "1e-7";
+        .Groups[0].Metrics.UnblendedCost.Amount = "invalid";
     }],
-    ["CURRENT_COST_UNBLENDED_RANGE", (s) => {
+    ["CURRENT_COST_RECORD_TYPE_UNBLENDED_RANGE", (s) => {
       s.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Amount = "9007199255";
+        .Groups[0].Metrics.UnblendedCost.Amount = "9007199255";
     }],
-    ["CURRENT_COST_UNBLENDED_TOTAL_RANGE", (s) => {
+    ["CURRENT_COST_POSITIVE_RECORD_TYPE_TOTAL_RANGE", (s) => {
       s.observedAt = "2026-08-31T12:00:00.000Z";
       s.currentCost.periodEndExclusive = "2026-09-01";
       s.currentCost.response.ResultsByTime = [
         {
           TimePeriod: { Start: "2026-07-01", End: "2026-08-01" },
           Estimated: false,
-          Total: {
-            UnblendedCost: { Amount: "9007199254", Unit: "USD" }
-          }
+          Total: {},
+          Groups: [{
+            Keys: ["Usage"],
+            Metrics: {
+              UnblendedCost: {
+                Amount: "9007199254",
+                Unit: "USD"
+              }
+            }
+          }]
         },
         {
           TimePeriod: { Start: "2026-08-01", End: "2026-09-01" },
           Estimated: true,
-          Total: {
-            UnblendedCost: { Amount: "9007199254", Unit: "USD" }
-          }
+          Total: {},
+          Groups: [{
+            Keys: ["Usage"],
+            Metrics: {
+              UnblendedCost: {
+                Amount: "9007199254",
+                Unit: "USD"
+              }
+            }
+          }]
         }
       ];
     }],
@@ -1447,7 +1472,7 @@ test("AWS preflight cost diagnostics identify all fixed semantic predicates", ()
       replaceNumberToFixed("9007199255")],
     ["CURRENT_COST_CEILING", (s) => {
       s.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Amount = "13.14";
+        .Groups[0].Metrics.UnblendedCost.Amount = "13.14";
     }]
   ];
 
@@ -1521,7 +1546,7 @@ test("AWS preflight cost diagnostics identify all fixed semantic predicates", ()
 test("AWS preflight cost diagnostics reject forgery, replay, and cross-domain injection", () => {
   const snapshot = validSnapshot();
   snapshot.currentCost.response.ResultsByTime[0]
-    .Total.UnblendedCost.Amount = "1e-7";
+    .Groups[0].Metrics.UnblendedCost.Amount = "1e-7";
   const diagnosticContext = createAwsGate2PreflightDiagnosticContext();
   let original;
   try {
@@ -1872,10 +1897,11 @@ test("AWS Gate Two preflight accepts exact read-only safety controls", () => {
   assert.equal(receipt.status, "PASS");
   assert.equal(
     receipt.schemaVersion,
-    "tideproof.gate2.aws-preflight.v6"
+    "tideproof.gate2.aws-preflight.v7"
   );
   assert.equal(
-    receipt.controls.budget.conservativeObservedActualUsd,
+    receipt.controls.projectExposure
+      .conservativeObservedAwsExposureUsd,
     "0.250000"
   );
   assert.equal(receipt.controls.mainGateTwoStack.state, "ABSENT");
@@ -2043,6 +2069,8 @@ test("AWS Gate Two preflight binds Cost Explorer through today", () => {
       "MONTHLY",
       "--metrics",
       "UnblendedCost",
+      "--group-by",
+      "Type=DIMENSION,Key=RECORD_TYPE",
       "--no-paginate"
     ]
   );
@@ -2073,7 +2101,7 @@ test("AWS Gate Two preflight accepts only exact UnblendedCost metric representat
   );
   assert.equal(
     omittedMetricsReceipt.schemaVersion,
-    "tideproof.gate2.aws-preflight.v6"
+    "tideproof.gate2.aws-preflight.v7"
   );
   const assertByteIdenticalReceipt = (snapshot) => {
     const receipt = validateAwsGate2Preflight(snapshot);
@@ -2316,7 +2344,181 @@ test("AWS Gate Two preflight rejects every Cost Explorer pagination token", () =
     snapshot.currentCost.response.NextPageToken = token;
     assert.throws(
       () => validateAwsGate2Preflight(snapshot),
-      /CURRENT_COST_NEXT_PAGE_TOKEN/
+      /CURRENT_COST_GROUPED_RESPONSE/
+    );
+  }
+});
+
+test("AWS Gate Two preflight requires the exact RECORD_TYPE grouped response contract", () => {
+  for (const mutate of [
+    (snapshot) => {
+      delete snapshot.currentCost.response.GroupDefinitions;
+    },
+    (snapshot) => {
+      snapshot.currentCost.response.GroupDefinitions = [];
+    },
+    (snapshot) => {
+      snapshot.currentCost.response.GroupDefinitions.push({
+        Type: "DIMENSION",
+        Key: "SERVICE"
+      });
+    },
+    (snapshot) => {
+      snapshot.currentCost.response.GroupDefinitions[0].Key =
+        "SERVICE";
+    },
+    (snapshot) => {
+      snapshot.currentCost.response.GroupDefinitions[0].Type = "TAG";
+    },
+    (snapshot) => {
+      snapshot.currentCost.response.GroupDefinitions[0].extra = true;
+    }
+  ]) {
+    const snapshot = validSnapshot();
+    mutate(snapshot);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      /CURRENT_COST_GROUPED_RESPONSE/
+    );
+  }
+});
+
+test("AWS Gate Two preflight requires exact grouped monthly row shapes", () => {
+  for (const mutate of [
+    (row) => {
+      row.Total = {
+        UnblendedCost: { Amount: "0.20", Unit: "USD" }
+      };
+    },
+    (row) => {
+      row.Groups = {};
+    },
+    (row) => {
+      delete row.Estimated;
+    },
+    (row) => {
+      row.Estimated = "false";
+    },
+    (row) => {
+      row.extra = true;
+    },
+    (row) => {
+      row.TimePeriod.extra = true;
+    }
+  ]) {
+    const snapshot = validSnapshot();
+    mutate(snapshot.currentCost.response.ResultsByTime[0]);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      /CURRENT_COST_(?:ROW_PERIOD|RECORD_TYPE_GROUPS)/
+    );
+  }
+});
+
+test("AWS Gate Two preflight rejects unknown, duplicate, or sign-confused record types", () => {
+  const cases = [
+    [(groups) => {
+      groups[0].Keys = ["UnknownChargeType"];
+    }, "SEMANTICS"],
+    [(groups) => {
+      groups.push(structuredClone(groups[0]));
+    }, "SEMANTICS"],
+    [(groups) => {
+      groups[0].Keys = ["Usage", "Credit"];
+    }, "SEMANTICS"],
+    [(groups) => {
+      groups[0].extra = true;
+    }, "SEMANTICS"],
+    [(groups) => {
+      groups[0].Keys = ["Credit"];
+      groups[0].Metrics.UnblendedCost.Amount = "0.20";
+    }, "SIGN"],
+    [(groups) => {
+      groups[0].Keys = ["Usage"];
+      groups[0].Metrics.UnblendedCost.Amount = "-0.20";
+    }, "SIGN"]
+  ];
+  for (const [mutate, expectedCode] of cases) {
+    const snapshot = validSnapshot();
+    mutate(snapshot.currentCost.response.ResultsByTime[0].Groups);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      new RegExp(`CURRENT_COST_RECORD_TYPE_${expectedCode}`)
+    );
+  }
+});
+
+test("AWS Gate Two preflight accepts empty grouped months without inventing exposure", () => {
+  const snapshot = validSnapshot();
+  snapshot.currentCost.response.ResultsByTime[0].Groups = [];
+  const receipt = validateAwsGate2Preflight(snapshot);
+  assert.equal(
+    receipt.controls.currentCost.positiveRecordTypeExposureUsd,
+    "0.000000"
+  );
+});
+
+test("AWS Gate Two preflight parses signed grouped decimals conservatively", () => {
+  const snapshot = validSnapshot();
+  snapshot.currentCost.response.ResultsByTime[0].Groups = [
+    {
+      Keys: ["Usage"],
+      Metrics: {
+        UnblendedCost: { Amount: "0.0000001", Unit: "USD" }
+      }
+    },
+    {
+      Keys: ["Credit"],
+      Metrics: {
+        UnblendedCost: { Amount: "-0.9999999", Unit: "USD" }
+      }
+    }
+  ];
+  const receipt = validateAwsGate2Preflight(snapshot);
+  assert.equal(
+    receipt.controls.currentCost.positiveRecordTypeExposureUsd,
+    "0.000001"
+  );
+  const serialized = JSON.stringify(receipt);
+  assert.equal(serialized.includes("Credit"), false);
+  assert.equal(serialized.includes("-0.9999999"), false);
+
+  for (const amount of [
+    0.2,
+    {},
+    "+1",
+    "01",
+    "1.",
+    ".1",
+    "1e-7",
+    "-0",
+    "-0.000000",
+    "",
+    "NaN"
+  ]) {
+    const invalid = validSnapshot();
+    invalid.currentCost.response.ResultsByTime[0]
+      .Groups[0].Metrics.UnblendedCost.Amount = amount;
+    assert.throws(
+      () => validateAwsGate2Preflight(invalid),
+      /CURRENT_COST_RECORD_TYPE_UNBLENDED_(?:TYPE|DECIMAL|NEGATIVE_ZERO)/
+    );
+  }
+
+  for (const [recordType, amount] of [
+    ["Usage", "-0.0000001"],
+    ["Tax", "-0.0000001"]
+  ]) {
+    const invalid = validSnapshot();
+    invalid.currentCost.response.ResultsByTime[0].Groups[0] = {
+      Keys: [recordType],
+      Metrics: {
+        UnblendedCost: { Amount: amount, Unit: "USD" }
+      }
+    };
+    assert.throws(
+      () => validateAwsGate2Preflight(invalid),
+      /CURRENT_COST_RECORD_TYPE_SIGN/
     );
   }
 });
@@ -2332,9 +2534,21 @@ test("AWS Gate Two preflight totals every month in the project window", () => {
         End: "2026-08-01"
       },
       Estimated: false,
-      Total: {
-        UnblendedCost: { Amount: "0.20", Unit: "USD" }
-      }
+      Total: {},
+      Groups: [
+        {
+          Keys: ["Usage"],
+          Metrics: {
+            UnblendedCost: { Amount: "0.20", Unit: "USD" }
+          }
+        },
+        {
+          Keys: ["Credit"],
+          Metrics: {
+            UnblendedCost: { Amount: "-1.50", Unit: "USD" }
+          }
+        }
+      ]
     },
     {
       TimePeriod: {
@@ -2342,22 +2556,86 @@ test("AWS Gate Two preflight totals every month in the project window", () => {
         End: "2026-09-01"
       },
       Estimated: true,
-      Total: {
-        UnblendedCost: { Amount: "0.30", Unit: "USD" }
-      }
+      Total: {},
+      Groups: [
+        {
+          Keys: ["Usage"],
+          Metrics: {
+            UnblendedCost: { Amount: "0.30", Unit: "USD" }
+          }
+        },
+        {
+          Keys: ["Refund"],
+          Metrics: {
+            UnblendedCost: { Amount: "-0.10", Unit: "USD" }
+          }
+        }
+      ]
     }
   ];
 
   const receipt = validateAwsGate2Preflight(snapshot);
-  assert.equal(receipt.controls.currentCost.amountUsd, "0.500000");
+  assert.equal(
+    receipt.controls.currentCost.positiveRecordTypeExposureUsd,
+    "0.500000"
+  );
   assert.equal(
     receipt.controls.currentCost.scope,
-    "ACCOUNT_WIDE_PROJECT_WINDOW_TO_DATE"
+    "ACCOUNT_WIDE_PROJECT_WINDOW_POSITIVE_RECORD_TYPE_EXPOSURE"
+  );
+  assert.equal(receipt.controls.currentCost.groupedBy, "RECORD_TYPE");
+  assert.equal(
+    receipt.controls.currentCost.negativeOffsetsAppliedToExposure,
+    false
   );
   assert.equal(
     receipt.controls.projectExposure
       .conservativeObservedTotalExposureUsd,
     "12.360000"
+  );
+});
+
+test("AWS Gate Two preflight never lets credits mask positive record-type exposure", () => {
+  const snapshot = validSnapshot();
+  snapshot.observedAt = "2026-08-31T12:00:00.000Z";
+  snapshot.currentCost.periodEndExclusive = "2026-09-01";
+  snapshot.currentCost.response.ResultsByTime = [
+    {
+      TimePeriod: { Start: "2026-07-01", End: "2026-08-01" },
+      Estimated: false,
+      Total: {},
+      Groups: [
+        {
+          Keys: ["Usage"],
+          Metrics: {
+            UnblendedCost: { Amount: "12.00", Unit: "USD" }
+          }
+        },
+        {
+          Keys: ["Credit"],
+          Metrics: {
+            UnblendedCost: { Amount: "-20.00", Unit: "USD" }
+          }
+        }
+      ]
+    },
+    {
+      TimePeriod: { Start: "2026-08-01", End: "2026-09-01" },
+      Estimated: true,
+      Total: {},
+      Groups: [
+        {
+          Keys: ["Usage"],
+          Metrics: {
+            UnblendedCost: { Amount: "12.00", Unit: "USD" }
+          }
+        }
+      ]
+    }
+  ];
+  assert.throws(
+    () => validateAwsGate2Preflight(snapshot),
+    /CURRENT_COST_CEILING/
   );
 });
 
@@ -2451,7 +2729,7 @@ test("AWS Gate Two preflight rejects a legacy working-name main stack", () => {
 test("AWS Gate Two preflight rejects spend at the effective project ceiling", () => {
   const snapshot = validSnapshot();
   snapshot.currentCost.response.ResultsByTime[0]
-    .Total.UnblendedCost.Amount = "13.14";
+    .Groups[0].Metrics.UnblendedCost.Amount = "13.14";
   assert.throws(
     () => validateAwsGate2Preflight(snapshot),
     /CURRENT_COST_CEILING/
@@ -2461,7 +2739,7 @@ test("AWS Gate Two preflight rejects spend at the effective project ceiling", ()
 test("AWS Gate Two preflight reserves the full allowance below both ceilings", () => {
   const justBelow = validSnapshot();
   justBelow.currentCost.response.ResultsByTime[0]
-    .Total.UnblendedCost.Amount = "13.119999";
+    .Groups[0].Metrics.UnblendedCost.Amount = "13.119999";
   const receipt = validateAwsGate2Preflight(justBelow);
   assert.equal(
     receipt.controls.projectExposure
@@ -2482,14 +2760,14 @@ test("AWS Gate Two preflight reserves the full allowance below both ceilings", (
   for (const mutate of [
     (snapshot) => {
       snapshot.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Amount = "13.12";
+        .Groups[0].Metrics.UnblendedCost.Amount = "13.12";
     },
     (snapshot) => {
       snapshot.budget.CalculatedSpend.ActualSpend.Amount = "13.12";
     },
     (snapshot) => {
       snapshot.currentCost.response.ResultsByTime[0]
-        .Total.UnblendedCost.Amount = "13.1199991";
+        .Groups[0].Metrics.UnblendedCost.Amount = "13.1199991";
     }
   ]) {
     const atOrAboveReservedBoundary = validSnapshot();

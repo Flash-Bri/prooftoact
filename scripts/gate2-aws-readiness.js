@@ -1533,10 +1533,12 @@ export function validatePreflightReceipt(
   const budgetReportedActualMicros = usdMicros(
     budget?.budgetReportedActualUsd
   );
-  const conservativeObservedActualMicros = usdMicros(
-    budget?.conservativeObservedActualUsd
+  const conservativeObservedAwsExposureMicros = usdMicros(
+    projectExposure?.conservativeObservedAwsExposureUsd
   );
-  const currentCostMicros = usdMicros(currentCost?.amountUsd);
+  const currentCostMicros = usdMicros(
+    currentCost?.positiveRecordTypeExposureUsd
+  );
   const ceilingMicros = usdMicros(projectExposure?.ceilingUsd);
   const nonAwsSpendMicros = usdMicros(
     projectExposure?.recordedNonAwsSpendUsd
@@ -1606,7 +1608,6 @@ export function validatePreflightReceipt(
       ]) &&
       exactKeys(budget, [
         "budgetReportedActualUsd",
-        "conservativeObservedActualUsd",
         "costBasis",
         "coverageEnd",
         "coverageStart",
@@ -1620,10 +1621,12 @@ export function validatePreflightReceipt(
         "type"
       ]) &&
       exactKeys(currentCost, [
-        "amountUsd",
         "estimated",
+        "groupedBy",
+        "negativeOffsetsAppliedToExposure",
         "periodEndExclusive",
         "periodStart",
+        "positiveRecordTypeExposureUsd",
         "scope"
       ]) &&
       exactKeys(projectExposure, [
@@ -1631,6 +1634,7 @@ export function validatePreflightReceipt(
         "autoRenewReportedEnabled",
         "awsCostWindowStart",
         "ceilingUsd",
+        "conservativeObservedAwsExposureUsd",
         "conservativeObservedTotalExposureUsd",
         "conservativeReservedAwsExposureUsd",
         "conservativeReservedTotalExposureUsd",
@@ -1663,7 +1667,7 @@ export function validatePreflightReceipt(
         "textOutput"
       ]) &&
       receipt?.schemaVersion ===
-      "tideproof.gate2.aws-preflight.v6" &&
+      "tideproof.gate2.aws-preflight.v7" &&
       receipt.status === "PASS" &&
       receipt.sourceCommit === sourceCommit &&
       receipt.treeDigest === treeDigest &&
@@ -1740,16 +1744,20 @@ export function validatePreflightReceipt(
       budget.fixedLimit === true &&
       Number(budget.limitUsd) === 15 &&
       currentCost.scope ===
-        "ACCOUNT_WIDE_PROJECT_WINDOW_TO_DATE" &&
-      Number.isFinite(Number(currentCost.amountUsd)) &&
-      Number(currentCost.amountUsd) >= 0 &&
-      Number(currentCost.amountUsd) < 13.14 &&
+        "ACCOUNT_WIDE_PROJECT_WINDOW_POSITIVE_RECORD_TYPE_EXPOSURE" &&
+      currentCost.groupedBy === "RECORD_TYPE" &&
+      currentCost.negativeOffsetsAppliedToExposure === false &&
+      Number.isFinite(
+        Number(currentCost.positiveRecordTypeExposureUsd)
+      ) &&
+      Number(currentCost.positiveRecordTypeExposureUsd) >= 0 &&
+      Number(currentCost.positiveRecordTypeExposureUsd) < 13.14 &&
       budgetReportedActualMicros !== null &&
-      conservativeObservedActualMicros !== null &&
+      conservativeObservedAwsExposureMicros !== null &&
       currentCostMicros !== null &&
       budgetReportedActualMicros <=
-        conservativeObservedActualMicros &&
-      currentCostMicros <= conservativeObservedActualMicros &&
+        conservativeObservedAwsExposureMicros &&
+      currentCostMicros <= conservativeObservedAwsExposureMicros &&
       projectExposure.scope ===
         "TIDEPROOF_TOTAL_APPROVED_EXPOSURE" &&
       ceilingMicros === 25_000_000n &&
@@ -1757,11 +1765,11 @@ export function validatePreflightReceipt(
       effectiveAwsCeilingMicros === 13_140_000n &&
       preflightAllowanceMicros === 20_000n &&
       reservedAwsExposureMicros ===
-        conservativeObservedActualMicros +
+        conservativeObservedAwsExposureMicros +
           preflightAllowanceMicros &&
       reservedAwsExposureMicros < effectiveAwsCeilingMicros &&
       observedTotalExposureMicros ===
-        nonAwsSpendMicros + conservativeObservedActualMicros &&
+        nonAwsSpendMicros + conservativeObservedAwsExposureMicros &&
       reservedTotalExposureMicros ===
         nonAwsSpendMicros + reservedAwsExposureMicros &&
       reservedTotalExposureMicros < ceilingMicros &&

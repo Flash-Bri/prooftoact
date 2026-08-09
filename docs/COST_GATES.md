@@ -88,14 +88,18 @@ Stop new cloud work and investigate if:
    automatic shutdown.
    Because the domain registration consumed $11.86 of the separate $25 total
    exposure envelope, the preflight applies a stricter **$13.14** ceiling to
-   both budget-reported and Cost Explorer observed AWS spend after reserving
-   the complete **$0.02** approved preflight allowance. Both
+   both budget-reported spend and Cost Explorer's conservative positive
+   record-type `UnblendedCost` exposure after reserving the complete
+   **$0.02** approved preflight allowance. Both
    `observed AWS + $0.02 < $13.14` and
    `$11.86 + observed AWS + $0.02 < $25.00` must hold using conservative
-   micro-dollar arithmetic. Cost Explorer
-   is summed account-wide from 2026-07-01 through the current UTC day rather
-   than resetting at a month boundary. This is intentionally conservative
-   because those AWS reads are account-wide.
+   micro-dollar arithmetic. Cost Explorer is grouped by `RECORD_TYPE` and
+   summed account-wide from 2026-07-01 through the current UTC day rather than
+   resetting at a month boundary. Only positive record-type aggregates count;
+   negative credits, refunds, discounts, and negations never create headroom.
+   The result is conservative exposure, not invoice-final gross or net cost,
+   because Cost Explorer can be delayed, estimated, and internally netted
+   within one record type.
    The live bootstrap verification is recorded in
    `evidence/gate2-cost-guard-2026-07-30.json`; it intentionally makes no AWS
    spend claim while first-use cost data is still maturing. It cannot evidence

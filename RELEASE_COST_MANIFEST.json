@@ -81,7 +81,7 @@
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
       "role": "OIDC_PREFLIGHT_COST_AND_AUTHORITY_BOUNDARY",
-      "sha256": "0a81df1f72503a8c584d8d92cb8aebb5c8d0f055d9f2b05730ffce1e1c58a7d2"
+      "sha256": "ea0d3c45d190ad95893a00af72cf178b96772a5ff29fa86b5bfaa4c44f2e5876"
     },
     {
       "id": "aws-oidc-read-only-role-template",
@@ -93,7 +93,7 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION",
-      "sha256": "8c5e1bde5c4104819500c0429f5028b367d61e27a4b04e9e2eb0d4aba1f64fc3"
+      "sha256": "bff47afcf1648534a1f78db0c0830ca9d3b2c42e72bf2015d23ae437536cdb0d"
     },
     {
       "id": "aws-oidc-read-only-workflow",
@@ -105,19 +105,19 @@
       "id": "aws-preflight-library",
       "path": "src/cloud/aws-gate2-preflight.js",
       "role": "FAIL_CLOSED_COST_POLICY",
-      "sha256": "533ca59499be1ec7d13cbfcb601e2740e0ddcb86f65a9b70d46b965e4ff08695"
+      "sha256": "c0068e1a63279bab81179e052860a8b39717e29fe012a7c18d9df6da9b4b9985"
     },
     {
       "id": "aws-preflight-runner",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "93409cfd6f553da0e6fbeceab4e7f29a7b273ed82a591692dce79e32b2724336"
+      "sha256": "0cce8c26a6fd5fb1dff65261403d881fc3fb92b493ea39488252afdd572a7d4f"
     },
     {
       "id": "aws-readiness-runner",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
-      "sha256": "6fa45402553b2afd479eee593ad2b786fd8b15b55dfffce56b451c385ed62c1f"
+      "sha256": "257a547d476f99872d7a59a7ebf2a725da3a22353f2e8b7c51dd351a5ad5872f"
     },
     {
       "id": "boundary-semantic-metric-runtime",
@@ -129,13 +129,13 @@
       "id": "cost-boundary-ledger",
       "path": "docs/COST_GATES.md",
       "role": "COST_AND_RESOURCE_BOUNDARY",
-      "sha256": "8bbe962d485b3e9eb325fbec6a897c4e13d8f8140ba1c961be2c82441461e680"
+      "sha256": "fa9e580e4f9467a5a84eb23cb0690157a821aed490273d82201a32e0ff6ca65b"
     },
     {
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "eccb6451f9b91a4ae5dac39541ab8b73eeb2d9ef6cd304ec5bb7aa7e30f031bd"
+      "sha256": "12b44eb9f9cd2b498d4de40b885c295da1c25f8d1c48a451fe2734c3d79dfff3"
     },
     {
       "id": "cost-guard-receipt",
@@ -157,7 +157,7 @@
     }
   ],
   "finalReleaseRequirements": [
-    "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with current account-wide AWS spend plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
+    "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with the greater of budget-reported spend and conservative account-wide positive record-type exposure plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
     "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
     "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",
     "Final complete spend ledger plus teardown or explicitly approved keep-alive receipt after the judged keep-alive window."

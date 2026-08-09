@@ -601,15 +601,15 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_OBSERVED_AT_WINDOW",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_PERIOD_START",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_PERIOD_END",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_RESPONSE_UNPAGINATED",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_RESPONSE_GROUPED_UNPAGINATED",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_ROWS",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_ROW_PERIOD",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_UNBLENDED_UNIT",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_UNBLENDED_AMOUNT_FORMAT",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_UNBLENDED_NONNEGATIVE",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_UNBLENDED_DECIMAL_FORMAT",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_UNBLENDED_RANGE",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_UNBLENDED_TOTAL_RANGE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_RECORD_TYPE_GROUPS",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_RECORD_TYPE_SEMANTICS",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_RECORD_TYPE_UNBLENDED_UNIT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_RECORD_TYPE_SIGNED_DECIMAL_FORMAT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_RECORD_TYPE_SIGNED_RANGE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_POSITIVE_RECORD_TYPE_TOTAL_RANGE",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_CEILING_DECIMAL_FORMAT",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_CEILING_RANGE",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST_CEILING",
@@ -1338,6 +1338,14 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
     PREFLIGHT_RUNNER.replace(
       "writeAwsPreflightRuntimeFailure(error, diagnosticContext);",
       "writeAwsPreflightRuntimeFailure(error);"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      '    "--group-by",\n    "Type=DIMENSION,Key=RECORD_TYPE",\n',
+      ""
+    ),
+    PREFLIGHT_RUNNER.replace(
+      '"Type=DIMENSION,Key=RECORD_TYPE"',
+      '"Type=DIMENSION,Key=SERVICE"'
     )
   ];
   for (const mutatedRunner of diagnosticContractMutations) {
@@ -1425,6 +1433,26 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
     PREFLIGHT_VALIDATOR.replace(
       "hasExpectedCostTypes(budget?.CostTypes)",
       "true"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "COST_RECORD_TYPES.includes(group.Keys[0])",
+      "true"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      'typeof value === "string",',
+      "true,"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "signedAmount.zero ||",
+      "true ||"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "if (signedAmount.micros > 0) {",
+      "if (true) {"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "negativeOffsetsAppliedToExposure: false",
+      "negativeOffsetsAppliedToExposure: true"
     )
   ];
   for (const mutatedValidator of diagnosticValidatorMutations) {

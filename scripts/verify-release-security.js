@@ -1226,7 +1226,7 @@ const SOURCE_MARKERS = Object.freeze({
     "account get-region-opt-status",
     "service-quotas list-service-quotas",
     "scripts/gate2-aws-preflight.js",
-    "tideproof.gate2.aws-preflight.v6",
+    "tideproof.gate2.aws-preflight.v7",
     "approvedPreflightAllowanceUsd",
     "prooftoact.aws-oidc-read-only-preflight-receipt.v1",
     "arn:aws:(iam|sts|s3)",
@@ -1296,6 +1296,8 @@ const SOURCE_MARKERS = Object.freeze({
     "--cli-read-timeout",
     "describe-stacks",
     "get-cost-and-usage",
+    '"--group-by"',
+    '"Type=DIMENSION,Key=RECORD_TYPE"',
     "get-foundation-model"
   ]),
   "aws-preflight-validator": Object.freeze([
@@ -1311,7 +1313,10 @@ const SOURCE_MARKERS = Object.freeze({
     "USD_MICROS = 1_000_000",
     "PREFLIGHT_ALLOWANCE_AWS_CEILING",
     "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING",
-    "tideproof.gate2.aws-preflight.v6"
+    "COST_RECORD_TYPES.includes(group.Keys[0])",
+    "positiveRecordTypeExposureUsd",
+    "negativeOffsetsAppliedToExposure: false",
+    "tideproof.gate2.aws-preflight.v7"
   ]),
   "aws-preflight-tests": Object.freeze([
     "AWS preflight rejects every non-lane identity expectation before STS",

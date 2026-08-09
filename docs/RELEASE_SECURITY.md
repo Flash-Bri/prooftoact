@@ -50,10 +50,10 @@ setup, intermediate response, final semantic-validation, output, timeout,
 execution, termination, and unclassified domain with literal source-bound
 stages. Its budget domain additionally maps all 24 existing semantic
 predicates to fixed stages without exposing observed account or billing
-values. Its cost domain similarly maps 16 observation-window, response, row,
-amount, range, and ceiling predicates. The broad budget and cost stages remain
-unclassified fallbacks. Invocation-bound failures preserve read ordinals and
-predicate provenance while discarding raw causes;
+values. Its cost domain similarly maps 16 observation-window, grouped-response,
+record-type, signed amount, range, and ceiling predicates. The broad budget
+and cost stages remain unclassified fallbacks. Invocation-bound failures
+preserve read ordinals and predicate provenance while discarding raw causes;
 child/provider stderr remains quarantined and is never forwarded. The source
 verifier binds both the child and validator implementations, their phase maps
 and order, the parent status map, and adversarial privacy tests. These stages
@@ -64,8 +64,19 @@ Budget cost-basis validation permits only an omitted `Metrics` field or the
 exact singleton `["UnblendedCost"]`; empty, multiple, aliased, case-normalized,
 or other metrics fail closed. This modern representation cannot bypass the
 separate account-wide filter, billing-view, or absent/exact-default
-`CostTypes` checks. Receipt v6 records the normalized validated semantic basis,
+`CostTypes` checks. Receipt v7 records the normalized validated semantic basis,
 not the provider's wire representation.
+
+The single Cost Explorer call is grouped exactly by
+`DIMENSION/RECORD_TYPE`. The validator rejects pagination, malformed or
+duplicate groups, unknown record types, sign-confused groups, non-USD or
+noncanonical signed decimals, and unsafe arithmetic. Only positive
+record-type `UnblendedCost` aggregates count toward exposure; negative
+credits, refunds, discounts, and negations are never used as headroom. The
+receipt intentionally calls this conservative positive record-type exposure,
+not invoice-final gross charges, net billed cost, or line-item proof. Delayed,
+estimated, or within-record-type-netted Cost Explorer data remains a release
+residual.
 
 ## Protected assets and trust boundaries
 

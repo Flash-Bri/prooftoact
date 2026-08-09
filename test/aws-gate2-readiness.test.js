@@ -729,7 +729,7 @@ function releaseProvenanceReceipt() {
 
 function preflightReceipt() {
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v6",
+    schemaVersion: "tideproof.gate2.aws-preflight.v7",
     status: "PASS",
     observedAt: "2026-07-31T05:30:00.000Z",
     sourceCommit: SOURCE_COMMIT,
@@ -762,7 +762,6 @@ function preflightReceipt() {
         coverageStart: "2026-07-01T00:00:00.000Z",
         coverageEnd: "2087-06-15T00:00:00.000Z",
         budgetReportedActualUsd: "0.250000",
-        conservativeObservedActualUsd: "0.250000",
         notifications: [
           ["ACTUAL", 1],
           ["ACTUAL", 5],
@@ -777,10 +776,13 @@ function preflightReceipt() {
         }))
       },
       currentCost: {
-        scope: "ACCOUNT_WIDE_PROJECT_WINDOW_TO_DATE",
+        scope:
+          "ACCOUNT_WIDE_PROJECT_WINDOW_POSITIVE_RECORD_TYPE_EXPOSURE",
+        groupedBy: "RECORD_TYPE",
         periodStart: "2026-07-01",
         periodEndExclusive: "2026-08-01",
-        amountUsd: "0.200000",
+        positiveRecordTypeExposureUsd: "0.200000",
+        negativeOffsetsAppliedToExposure: false,
         estimated: true
       },
       projectExposure: {
@@ -788,6 +790,7 @@ function preflightReceipt() {
         ceilingUsd: "25.000000",
         recordedNonAwsSpendUsd: "11.860000",
         effectiveAwsSpendCeilingUsd: "13.140000",
+        conservativeObservedAwsExposureUsd: "0.250000",
         approvedPreflightAllowanceUsd: "0.020000",
         conservativeReservedAwsExposureUsd: "0.270000",
         conservativeObservedTotalExposureUsd: "12.110000",

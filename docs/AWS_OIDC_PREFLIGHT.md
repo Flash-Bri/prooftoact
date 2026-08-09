@@ -168,7 +168,7 @@ ordered account-safety inventory. The exact calls are:
   `DescribeSubscribersForNotification` calls after the returned notification
   set is proven to contain exactly the four required alerts;
 - one non-paginated Cost Explorer `GetCostAndUsage` request for the existing
-  project window;
+  project window, grouped exactly by `DIMENSION/RECORD_TYPE`;
 - exactly six existing-bucket control reads for versioning, encryption, public
   access, ownership, policy status, and the exact TLS-only policy;
 - one account-wide CloudFormation `ListStacks` proving both `prooftoact-gate2`
@@ -185,9 +185,23 @@ groups and 17 nested calls; the fixed wrapper adds exactly three calls.
 The budget validator accepts the modern `Metrics` field only when omitted or
 the exact singleton `["UnblendedCost"]`. It does not case-fold, search a
 multi-value list, accept aliases, or let that field bypass the account-wide
-filter, billing-view, or exact-default `CostTypes` controls. The v6 receipt
+filter, billing-view, or exact-default `CostTypes` controls. The v7 receipt
 continues to report the normalized validated `UnblendedCost` semantic basis;
 it does not claim whether AWS used the modern or legacy wire representation.
+
+The Cost Explorer validator requires the exact one-dimensional
+`RECORD_TYPE` grouped response, exact monthly periods, empty row totals,
+unique allowlisted record types, exact `UnblendedCost`-only metrics in USD,
+canonical signed decimals, sign-consistent groups, bounded arithmetic, and no
+pagination. It rounds positive fractional micro-dollars upward and sums only
+positive record-type aggregates. Negative credits, refunds, discounts, and
+Savings Plan negations are never subtracted and never create authority.
+Receipt v7 records `positiveRecordTypeExposureUsd`,
+`groupedBy: RECORD_TYPE`, and
+`negativeOffsetsAppliedToExposure: false`. This is a conservative
+record-type exposure, not invoice-final gross charges, realized net bill, or
+line-item proof; Cost Explorer may be delayed or estimated and may still net
+values within one record type.
 
 The protected runner emits only fixed source-bound failure stages. AWS request
 and JSON failures map one-to-one to the ordered nested reads `READ_01` through
@@ -203,9 +217,10 @@ subdomains that identify its exact name, type, time unit, account-wide scope,
 fixed-model, cost-basis, coverage-period, limit, or actual-spend predicate
 without emitting the observed value. The broad budget stage remains the
 fail-closed fallback for an unclassified budget exception. The cost control
-has 16 fixed subdomains covering observation-window, period, response, row,
-amount, range, and ceiling predicates, with the broad cost stage retained for
-unclassified exceptions. Raw provider/child stderr, error messages,
+has 16 fixed subdomains covering observation-window, period, grouped-response,
+record-type semantics, signed amount, range, and ceiling predicates, with the
+broad cost stage retained for unclassified exceptions. Raw provider/child
+stderr, error messages,
 causes, credentials, account identifiers, resource names, and arbitrary paths
 remain quarantined and are never forwarded. Unknown indexes or statuses fail
 closed to an unclassified fixed stage. These diagnostics identify only the
@@ -228,12 +243,13 @@ no spend authority.
 
 The full declared `$0.02` allowance is reserved before the receipt can pass or
 any subsequent provider action may proceed. The gate conservatively rounds
-each account-wide spend amount upward to the nearest micro-dollar, takes the
-greater of Budget and Cost Explorer observed spend, and requires both
+each positive account-wide spend amount upward to the nearest micro-dollar,
+takes the greater of Budget spend and Cost Explorer positive record-type
+exposure, and requires both
 `observed AWS + $0.02 < $13.14` and
 `$11.86 + observed AWS + $0.02 < $25.00`. Strict inequality means an observed
 value of exactly `$13.12` fails; `$13.119999` is the highest six-decimal value
-that can pass. Receipt schema `tideproof.gate2.aws-preflight.v6` records the
+that can pass. Receipt schema `tideproof.gate2.aws-preflight.v7` records the
 allowance, reserved AWS exposure, reserved total exposure, and remaining
 exposure after the allowance. The Cost Explorer request needed to learn the
 observation happens before receipt validation and may itself be metered, which

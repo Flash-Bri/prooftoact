@@ -21,18 +21,28 @@ registrar receipt, or approve publication or submission.
 - Stop new cloud work if daily cost exceeds **$5 USD** or unexplained spend
   exceeds **$3 USD**.
 - Cost Explorer is accumulated account-wide from **2026-07-01** through the
-  current UTC day. It does not reset at a month boundary for this gate.
+  current UTC day, grouped by `RECORD_TYPE`, with only positive
+  `UnblendedCost` record-type aggregates counted toward exposure. Negative
+  offsets never create headroom. The gate does not reset at a month boundary.
 
 The `$15` AWS Budget is an alert boundary, not a hard service cap and not the
 effective remaining project envelope. The read-only preflight must reject
-budget-reported, Cost Explorer, or conservative observed AWS spend unless the
-greater observation plus the full `$0.02` approved preflight allowance remains
-strictly below `$13.14`. It must also require `$11.86 + observed AWS + $0.02`
-to remain strictly below `$25.00`. Thus an observation at exactly `$13.12`
-cannot produce a preflight `PASS`, and no subsequent provider action may
-proceed; arithmetic is conservative to the micro-dollar. The Cost Explorer
-read used to obtain that observation may itself already have occurred under
-the separate price recheck and maximum `$0.02` run authorization.
+unless the greater of its current budget-reported actual spend and
+conservative positive record-type Cost Explorer exposure, plus the full
+`$0.02` allowance for that run, remains strictly below `$13.14`. It must
+also require `$11.86 + provider-observed AWS exposure + $0.02` to remain
+strictly below `$25.00`. Thus a current provider observation at exactly
+`$13.12` cannot produce a
+preflight `PASS`, and no subsequent provider action may proceed; positive
+amounts round upward to the micro-dollar, while negative groups are excluded
+rather than used as credits. This grouped aggregate is not an invoice,
+realized net bill, or line-item gross-spend proof. The Cost Explorer read used
+to obtain it may itself already have occurred under the separate price
+recheck and maximum `$0.02` run authorization. This v7 receipt does not
+reconcile pending or previous preflight attempts, delayed provider charges,
+or the separate `$5.00` aggregate preflight authorization. The operator's
+conservative attempt ledger remains an additional pre-dispatch gate and may
+never be used to create headroom.
 
 ## Required alert and architecture bounds
 
@@ -70,7 +80,7 @@ the same account-safety gate. It preserves the exact account digest,
 900-second temporary role session, non-root runner, `us-east-1`, one-request
 Cost Explorer bound, `$0.02` preflight approval cap, sanitized encrypted
 receipt, exact official-main source, and no-upload/no-deployment boundary. Its
-v6 receipt contract records and reserves the full `$0.02` before the receipt
+v7 receipt contract records and reserves the full `$0.02` before the receipt
 can pass or any subsequent provider action may proceed, not merely the spend
 already observed. Its provider configuration and execution remain external
 evidence gates that this source cannot attest, and the required protected
@@ -87,10 +97,11 @@ renewal, or submission action is authorized by this control.
 1. Run the exact clean official checkout in an authenticated AWS lane,
    including the separately protected OIDC read-only lane if CloudShell remains
    unavailable, and
-   retain a machine-verifiable preflight `PASS` receipt showing current
-   account-wide spend plus the full `$0.02` allowance strictly below the
-   `$13.14` AWS and `$25.00` total-exposure ceilings, with the main stack
-   absent.
+   retain a machine-verifiable preflight `PASS` receipt showing that the
+   greater of budget-reported spend and conservative account-wide positive
+   record-type exposure, plus the full `$0.02` allowance, remains strictly
+   below the `$13.14` AWS and `$25.00` total-exposure ceilings, with the main
+   stack absent.
 2. Recheck exact-release AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and
    logging price assumptions and bind the conservative forecast to the final
    architecture and deployed hashes.

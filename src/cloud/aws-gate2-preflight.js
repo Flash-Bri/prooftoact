@@ -115,18 +115,41 @@ export const AWS_GATE2_PREFLIGHT_COST_FAILURES = Object.freeze([
   "VALIDATE_COST_OBSERVED_AT_WINDOW",
   "VALIDATE_COST_PERIOD_START",
   "VALIDATE_COST_PERIOD_END",
-  "VALIDATE_COST_RESPONSE_UNPAGINATED",
+  "VALIDATE_COST_RESPONSE_GROUPED_UNPAGINATED",
   "VALIDATE_COST_ROWS",
   "VALIDATE_COST_ROW_PERIOD",
-  "VALIDATE_COST_UNBLENDED_UNIT",
-  "VALIDATE_COST_UNBLENDED_AMOUNT_FORMAT",
-  "VALIDATE_COST_UNBLENDED_NONNEGATIVE",
-  "VALIDATE_COST_UNBLENDED_DECIMAL_FORMAT",
-  "VALIDATE_COST_UNBLENDED_RANGE",
-  "VALIDATE_COST_UNBLENDED_TOTAL_RANGE",
+  "VALIDATE_COST_RECORD_TYPE_GROUPS",
+  "VALIDATE_COST_RECORD_TYPE_SEMANTICS",
+  "VALIDATE_COST_RECORD_TYPE_UNBLENDED_UNIT",
+  "VALIDATE_COST_RECORD_TYPE_SIGNED_DECIMAL_FORMAT",
+  "VALIDATE_COST_RECORD_TYPE_SIGNED_RANGE",
+  "VALIDATE_COST_POSITIVE_RECORD_TYPE_TOTAL_RANGE",
   "VALIDATE_COST_CEILING_DECIMAL_FORMAT",
   "VALIDATE_COST_CEILING_RANGE",
   "VALIDATE_COST_CEILING"
+]);
+
+const NEGATIVE_COST_RECORD_TYPES = Object.freeze([
+  "BundledDiscount",
+  "Credit",
+  "Discount",
+  "Refund",
+  "SavingsPlanNegation"
+]);
+const NONNEGATIVE_COST_RECORD_TYPES = Object.freeze([
+  "DiscountedUsage",
+  "Fee",
+  "FlatRateSubscription",
+  "RIFee",
+  "SavingsPlanCoveredUsage",
+  "SavingsPlanRecurringFee",
+  "SavingsPlanUpfrontFee",
+  "Tax",
+  "Usage"
+]);
+const COST_RECORD_TYPES = Object.freeze([
+  ...NEGATIVE_COST_RECORD_TYPES,
+  ...NONNEGATIVE_COST_RECORD_TYPES
 ]);
 
 export class AwsGate2PreflightControlFailure extends Error {
@@ -715,6 +738,53 @@ function costDecimalMicros(
   return Number(micros);
 }
 
+function signedCostDecimalMicros(
+  value,
+  code,
+  check,
+  decimalIndex,
+  rangeIndex
+) {
+  const match = check(decimalIndex, () => {
+    requireCondition(
+      typeof value === "string",
+      `${code}_TYPE`
+    );
+    const text = value;
+    const parsed = /^(-?)((?:0|[1-9]\d*))(?:\.(\d+))?$/.exec(text);
+    requireCondition(parsed, `${code}_DECIMAL`);
+    requireCondition(
+      !(
+        parsed[1] === "-" &&
+        /^0+(?:\.0+)?$/.test(text.slice(1))
+      ),
+      `${code}_NEGATIVE_ZERO`
+    );
+    return parsed;
+  });
+  const text = value;
+  const negative = match[1] === "-";
+  const fraction = match[3] ?? "";
+  const zero = match[2] === "0" && !/[1-9]/.test(fraction);
+  let magnitudeMicros =
+    (BigInt(match[2]) * BigInt(USD_MICROS)) +
+    BigInt(`${fraction}000000`.slice(0, 6));
+  if (!negative && /[1-9]/.test(fraction.slice(6))) {
+    magnitudeMicros += 1n;
+  }
+  check(rangeIndex, () =>
+    requireCondition(
+      magnitudeMicros <= BigInt(Number.MAX_SAFE_INTEGER),
+      `${code}_RANGE`
+    )
+  );
+  return {
+    micros: Number(negative ? -magnitudeMicros : magnitudeMicros),
+    negative,
+    zero
+  };
+}
+
 function validateCost(
   cost,
   ceilingUsd,
@@ -754,8 +824,16 @@ function validateCost(
         !Object.prototype.hasOwnProperty.call(
           cost.response,
           "NextPageToken"
-        ),
-      "CURRENT_COST_NEXT_PAGE_TOKEN"
+        ) &&
+        Array.isArray(cost.response.GroupDefinitions) &&
+        cost.response.GroupDefinitions.length === 1 &&
+        hasExactObjectKeys(
+          cost.response.GroupDefinitions[0],
+          ["Key", "Type"]
+        ) &&
+        cost.response.GroupDefinitions[0]?.Type === "DIMENSION" &&
+        cost.response.GroupDefinitions[0]?.Key === "RECORD_TYPE",
+      "CURRENT_COST_GROUPED_RESPONSE"
     )
   );
   const rows = asArray(cost?.response?.ResultsByTime);
@@ -784,52 +862,101 @@ function validateCost(
     )
   );
 
-  let totalMicros = 0;
+  let positiveRecordTypeMicros = 0;
   let estimated = false;
   for (const [index, row] of rows.entries()) {
     check(6, () =>
       requireCondition(
-        row?.TimePeriod?.Start ===
+        hasExactObjectKeys(row?.TimePeriod, ["End", "Start"]) &&
+          row.TimePeriod.Start ===
           expectedRows[index].periodStart &&
-          row?.TimePeriod?.End ===
+          row.TimePeriod.End ===
             expectedRows[index].periodEndExclusive,
         "CURRENT_COST_ROW_PERIOD"
       )
     );
-    const unblendedCost = row?.Total?.UnblendedCost;
     check(7, () =>
       requireCondition(
-        unblendedCost?.Unit === "USD",
-        "CURRENT_COST_UNBLENDED_UNIT"
+        row &&
+          typeof row === "object" &&
+          !Array.isArray(row) &&
+          hasExactObjectKeys(row, [
+            "Estimated",
+            "Groups",
+            "TimePeriod",
+            "Total"
+          ]) &&
+          typeof row.Estimated === "boolean" &&
+          Array.isArray(row.Groups) &&
+          hasExactObjectKeys(row.Total, []),
+        "CURRENT_COST_RECORD_TYPE_GROUPS"
       )
     );
-    const amount = check(8, () => {
-      const parsed = Number(unblendedCost?.Amount);
-      requireCondition(
-        Number.isFinite(parsed),
-        "CURRENT_COST_UNBLENDED_AMOUNT"
+    const seenRecordTypes = new Set();
+    for (const group of row.Groups) {
+      const recordType = check(8, () => {
+        requireCondition(
+          group &&
+            typeof group === "object" &&
+            !Array.isArray(group) &&
+            hasExactObjectKeys(group, ["Keys", "Metrics"]) &&
+            Array.isArray(group.Keys) &&
+            group.Keys.length === 1 &&
+            typeof group.Keys[0] === "string" &&
+            COST_RECORD_TYPES.includes(group.Keys[0]) &&
+            !seenRecordTypes.has(group.Keys[0]),
+          "CURRENT_COST_RECORD_TYPE_SEMANTICS"
+        );
+        seenRecordTypes.add(group.Keys[0]);
+        return group.Keys[0];
+      });
+      const metrics = group.Metrics;
+      const unblendedCost = metrics?.UnblendedCost;
+      check(9, () =>
+        requireCondition(
+          metrics &&
+            typeof metrics === "object" &&
+            !Array.isArray(metrics) &&
+            hasExactObjectKeys(metrics, ["UnblendedCost"]) &&
+            unblendedCost &&
+            typeof unblendedCost === "object" &&
+            !Array.isArray(unblendedCost) &&
+            hasExactObjectKeys(unblendedCost, ["Amount", "Unit"]) &&
+            unblendedCost.Unit === "USD",
+          "CURRENT_COST_RECORD_TYPE_UNBLENDED_UNIT"
+        )
       );
-      return parsed;
-    });
-    check(9, () =>
-      requireCondition(
-        amount >= 0,
-        "CURRENT_COST_UNBLENDED_NEGATIVE"
-      )
-    );
-    totalMicros += costDecimalMicros(
-      unblendedCost?.Amount,
-      "CURRENT_COST_UNBLENDED",
-      check,
-      10,
-      11
-    );
-    check(12, () =>
-      requireCondition(
-        Number.isSafeInteger(totalMicros),
-        "CURRENT_COST_UNBLENDED_TOTAL_RANGE"
-      )
-    );
+      const signedAmount = signedCostDecimalMicros(
+        unblendedCost.Amount,
+        "CURRENT_COST_RECORD_TYPE_UNBLENDED",
+        check,
+        10,
+        11
+      );
+      check(8, () =>
+        requireCondition(
+          signedAmount.zero ||
+            (
+              signedAmount.negative &&
+              NEGATIVE_COST_RECORD_TYPES.includes(recordType)
+            ) ||
+            (
+              !signedAmount.negative &&
+              NONNEGATIVE_COST_RECORD_TYPES.includes(recordType)
+            ),
+          "CURRENT_COST_RECORD_TYPE_SIGN"
+        )
+      );
+      if (signedAmount.micros > 0) {
+        positiveRecordTypeMicros += signedAmount.micros;
+      }
+      check(12, () =>
+        requireCondition(
+          Number.isSafeInteger(positiveRecordTypeMicros),
+          "CURRENT_COST_POSITIVE_RECORD_TYPE_TOTAL_RANGE"
+        )
+      );
+    }
     estimated ||= row?.Estimated === true;
   }
   const ceilingMicros = costDecimalMicros(
@@ -841,16 +968,20 @@ function validateCost(
   );
   check(15, () =>
     requireCondition(
-      totalMicros < ceilingMicros,
+      positiveRecordTypeMicros < ceilingMicros,
       "CURRENT_COST_CEILING"
     )
   );
 
   return {
-    scope: "ACCOUNT_WIDE_PROJECT_WINDOW_TO_DATE",
+    scope:
+      "ACCOUNT_WIDE_PROJECT_WINDOW_POSITIVE_RECORD_TYPE_EXPOSURE",
+    groupedBy: "RECORD_TYPE",
     periodStart: cost.periodStart,
     periodEndExclusive: cost.periodEndExclusive,
-    amountUsd: formattedUsdMicros(totalMicros),
+    positiveRecordTypeExposureUsd:
+      formattedUsdMicros(positiveRecordTypeMicros),
+    negativeOffsetsAppliedToExposure: false,
     estimated
   };
 }
@@ -1205,10 +1336,10 @@ export function validateAwsGate2Preflight(
       "BUDGET_ACTUAL"
     );
     const currentCostMicros = conservativeUsdMicros(
-      currentCost.amountUsd,
-      "CURRENT_COST_TOTAL"
+      currentCost.positiveRecordTypeExposureUsd,
+      "CURRENT_COST_POSITIVE_RECORD_TYPE_TOTAL"
     );
-    const conservativeActualMicros = Math.max(
+    const conservativeAwsExposureMicros = Math.max(
       budgetActualMicros,
       currentCostMicros
     );
@@ -1221,7 +1352,7 @@ export function validateAwsGate2Preflight(
       "PREFLIGHT_ALLOWANCE"
     );
     const conservativeReservedAwsExposureMicros =
-      conservativeActualMicros + preflightAllowanceMicros;
+      conservativeAwsExposureMicros + preflightAllowanceMicros;
     requireCondition(
       conservativeReservedAwsExposureMicros <
         effectiveAwsSpendCeilingMicros,
@@ -1236,7 +1367,7 @@ export function validateAwsGate2Preflight(
       "TOTAL_PROJECT_EXPOSURE_CEILING"
     );
     const conservativeObservedTotalExposureMicros =
-      recordedNonAwsSpendMicros + conservativeActualMicros;
+      recordedNonAwsSpendMicros + conservativeAwsExposureMicros;
     const conservativeReservedTotalExposureMicros =
       recordedNonAwsSpendMicros +
       conservativeReservedAwsExposureMicros;
@@ -1246,7 +1377,7 @@ export function validateAwsGate2Preflight(
       "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING"
     );
     return {
-      conservativeActualMicros,
+      conservativeAwsExposureMicros,
       effectiveAwsSpendCeilingMicros,
       preflightAllowanceMicros,
       conservativeReservedAwsExposureMicros,
@@ -1267,7 +1398,7 @@ export function validateAwsGate2Preflight(
   );
 
     return validate(9, () => ({
-    schemaVersion: "tideproof.gate2.aws-preflight.v6",
+    schemaVersion: "tideproof.gate2.aws-preflight.v7",
     status: "PASS",
     observedAt: snapshot.observedAt,
     sourceCommit: snapshot.sourceCommit,
@@ -1292,8 +1423,6 @@ export function validateAwsGate2Preflight(
         coverageStart: new Date(budgetPeriodStart).toISOString(),
         coverageEnd: new Date(budgetPeriodEnd).toISOString(),
         budgetReportedActualUsd: budgetActual.toFixed(6),
-        conservativeObservedActualUsd:
-          formattedUsdMicros(exposure.conservativeActualMicros),
         notifications
       },
       currentCost,
@@ -1304,6 +1433,10 @@ export function validateAwsGate2Preflight(
           RECORDED_NON_AWS_SPEND_USD.toFixed(6),
         effectiveAwsSpendCeilingUsd:
           effectiveAwsSpendCeilingUsd.toFixed(6),
+        conservativeObservedAwsExposureUsd:
+          formattedUsdMicros(
+            exposure.conservativeAwsExposureMicros
+          ),
         approvedPreflightAllowanceUsd:
           formattedUsdMicros(exposure.preflightAllowanceMicros),
         conservativeReservedAwsExposureUsd:
@@ -1342,7 +1475,7 @@ export function validateAwsGate2Preflight(
     privacy:
       "AWS account, caller ARN, expected principal ARN, bucket name, and subscriber addresses were validated but omitted; only caller-binding digests are public.",
     claimBoundary:
-      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It rejects both the ProofToAct main stack name and the former working-name main stack before a fresh create. Its budget costBasis is the normalized validated UnblendedCost semantic basis, and defaultCostTypes means CostTypes were absent or exactly the documented defaults; neither field claims the provider's wire representation. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
+      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It rejects both the ProofToAct main stack name and the former working-name main stack before a fresh create. Its budget costBasis is the normalized validated UnblendedCost semantic basis, and defaultCostTypes means CostTypes were absent or exactly the documented defaults; neither field claims the provider's wire representation. Cost Explorer is grouped by record type, and only positive record-type UnblendedCost amounts count toward conservative exposure; negative credits, refunds, discounts, or negations never create spending headroom. This grouped aggregate is not an invoice or line-item gross-spend proof. The receipt covers current provider observations plus only this run's $0.02 allowance; it does not reconcile pending or previous attempts, delayed charges, or the separate $5.00 aggregate preflight authorization, which remain operator-ledger pre-dispatch gates. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
     }));
   } finally {
     if (diagnosticInvocationToken !== null) {
