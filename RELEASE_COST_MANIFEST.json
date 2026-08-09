@@ -99,7 +99,7 @@
       "id": "aws-oidc-read-only-workflow",
       "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
       "role": "MANUAL_TIME_BOUNDED_PREFLIGHT_WORKFLOW",
-      "sha256": "d6fb0a92a44aced83503a1dd3a89b7c018ed24f4f8f8923299a72f64d59d8578"
+      "sha256": "808345d893310a12220d7ad0dbb847e79d23dfedf9ccd07dae7a61ae2d55c0c6"
     },
     {
       "id": "aws-preflight-library",

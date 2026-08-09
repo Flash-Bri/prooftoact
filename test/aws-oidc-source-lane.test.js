@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   __test as sourceContract,
   validateIdentityWorkflow,
+  validateActionsCheckoutNormalizer,
   validateReadOnlyRoleTemplate,
   validateReadOnlyRunner,
   validateReadOnlyWorkflow,
@@ -41,6 +42,9 @@ const READ_ONLY_WORKFLOW = source(
 );
 const READ_ONLY_RUNNER = source(
   "scripts/run-aws-oidc-read-only-preflight.sh"
+);
+const ACTIONS_CHECKOUT_NORMALIZER = source(
+  "scripts/normalize-actions-checkout.js"
 );
 const PREFLIGHT_RUNNER = source("scripts/gate2-aws-preflight.js");
 const PREFLIGHT_VALIDATOR = source(
@@ -102,10 +106,43 @@ test("OIDC source receipt remains explicitly local and provider-pending", () => 
   assert.equal(receipt.identityWorkflowAwsCallCount, 2);
   assert.equal(receipt.exactPreflightRuntimeCallCount, 17);
   assert.equal(receipt.exactReadOnlyWorkflowAwsCallCount, 20);
-  assert.equal(receipt.reviewedFiles.length, 7);
+  assert.equal(receipt.reviewedFiles.length, 8);
+  assert(
+    receipt.reviewedFiles.some(
+      (entry) => entry.path === "scripts/normalize-actions-checkout.js"
+    )
+  );
   assert.ok(Object.values(receipt.checks).every((value) => value === true));
   assert.match(receipt.claimBoundary, /does not prove GitHub environment/);
   assert.match(receipt.claimBoundary, /grants no provider authority/);
+});
+
+test("OIDC source contract binds the exact protected checkout normalizer", () => {
+  assert.equal(
+    validateActionsCheckoutNormalizer(ACTIONS_CHECKOUT_NORMALIZER),
+    ACTIONS_CHECKOUT_NORMALIZER
+  );
+  for (const mutation of [
+    ACTIONS_CHECKOUT_NORMALIZER.replace(
+      'environment?.GITHUB_JOB === "read-only-preflight"',
+      'environment?.GITHUB_JOB === "verify"'
+    ),
+    ACTIONS_CHECKOUT_NORMALIZER.replace(
+      'environment?.GITHUB_EVENT_NAME === "workflow_dispatch"',
+      'environment?.GITHUB_EVENT_NAME === "push"'
+    ),
+    ACTIONS_CHECKOUT_NORMALIZER.replace(
+      "environment?.EXPECTED_OFFICIAL_MAIN_COMMIT ===\n      environment?.GITHUB_SHA",
+      "true"
+    ),
+    `${ACTIONS_CHECKOUT_NORMALIZER}\n// expanded context\n`
+  ]) {
+    assert.notEqual(mutation, ACTIONS_CHECKOUT_NORMALIZER);
+    assert.throws(
+      () => validateActionsCheckoutNormalizer(mutation),
+      /OIDC_ACTIONS_CHECKOUT_NORMALIZER_(?:MARKERS|SHA256)/
+    );
+  }
 });
 
 test("read-only role template is exact and rejects expanded trust or authority", () => {

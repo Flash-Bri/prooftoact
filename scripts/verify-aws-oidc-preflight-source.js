@@ -10,6 +10,8 @@ const READ_ONLY_WORKFLOW_PATH =
   ".github/workflows/aws-oidc-read-only-preflight.yml";
 const READ_ONLY_RUNNER_PATH =
   "scripts/run-aws-oidc-read-only-preflight.sh";
+const ACTIONS_CHECKOUT_NORMALIZER_PATH =
+  "scripts/normalize-actions-checkout.js";
 const ROLE_TEMPLATE_PATH =
   "infra/aws/oidc-read-only-preflight-role-template.json";
 const PREFLIGHT_RUNNER_PATH = "scripts/gate2-aws-preflight.js";
@@ -76,6 +78,8 @@ const EXACT_PREFLIGHT_RUNTIME_FAILURES = Object.freeze(
 
 const EXPECTED_UNDERLYING_PREFLIGHT_RUNNER_SHA256 =
   "084c7a193170c1007643c0260d3288006dbb042a818e2cb4c148c4955b1df909";
+const EXPECTED_ACTIONS_CHECKOUT_NORMALIZER_SHA256 =
+  "fbe8c57b9aa166c70d16a558160d1e47373de30b8e1bda9fd537c6fbe57c8ad6";
 
 const EXPECTED_ROLE_STATEMENT_SIDS = Object.freeze([
   "ReadCallerIdentity",
@@ -299,6 +303,7 @@ const EXPECTED_READ_ONLY_PREFLIGHT_EXIT_STAGE_MAP = Object.freeze(
 );
 
 const EXPECTED_READ_ONLY_WORKFLOW_RUN_COMMANDS = Object.freeze([
+  "node scripts/normalize-actions-checkout.js",
   "/usr/bin/bash scripts/run-aws-oidc-read-only-preflight.sh",
   '/usr/bin/rm -f -- "${RUNNER_TEMP}/aws-read-only-preflight-receipt.json.gpg"'
 ]);
@@ -898,6 +903,9 @@ export function validateReadOnlyWorkflow(source) {
       "fetch-depth: 0",
       "persist-credentials: false",
       "node-version: 22.23.1",
+      "name: Normalize exact GitHub Actions checkout",
+      "GIT_OPTIONAL_LOCKS: \"0\"",
+      "node scripts/normalize-actions-checkout.js",
       "EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}",
       "PREFLIGHT_DIAGNOSTIC_ONLY: ${{ inputs.diagnostic_only }}",
       "AWS_READ_ONLY_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_READ_ONLY_PREFLIGHT_ROLE_ARN }}",
@@ -927,6 +935,29 @@ export function validateReadOnlyWorkflow(source) {
     ),
     "OIDC_READ_ONLY_WORKFLOW_RUN_COMMANDS"
   );
+  const orderedMarkers = [
+    "uses: actions/checkout@",
+    "uses: actions/setup-node@",
+    "name: Normalize exact GitHub Actions checkout",
+    "run: node scripts/normalize-actions-checkout.js",
+    "name: Capture encrypted sanitized read-only preflight receipt"
+  ];
+  let priorIndex = -1;
+  for (const marker of orderedMarkers) {
+    const markerIndex = source.indexOf(marker);
+    assert(
+      markerIndex > priorIndex,
+      "OIDC_READ_ONLY_WORKFLOW_NORMALIZER_ORDER"
+    );
+    priorIndex = markerIndex;
+  }
+  assert(
+    (source.match(/node scripts\/normalize-actions-checkout\.js/gu) ?? [])
+      .length === 1 &&
+      (source.match(/EXPECTED_OFFICIAL_MAIN_COMMIT:/gu) ?? []).length ===
+        2,
+    "OIDC_READ_ONLY_WORKFLOW_NORMALIZER_CARDINALITY"
+  );
   assert(
     !/^\s*(?:push|pull_request|schedule):/mu.test(source) &&
       !/^\s*aws\s+/mu.test(source) &&
@@ -935,6 +966,30 @@ export function validateReadOnlyWorkflow(source) {
       !source.includes("vars.AWS_APPROVED_ACCOUNT_ID_SHA256") &&
       !/\bset\s+-x\b/u.test(source),
     "OIDC_READ_ONLY_WORKFLOW_BOUNDARY"
+  );
+  return source;
+}
+
+export function validateActionsCheckoutNormalizer(source) {
+  assertMarkers(
+    source,
+    [
+      'const CI_WORKFLOW_NAME = "CI"',
+      'const READ_ONLY_PREFLIGHT_WORKFLOW_NAME =',
+      '"AWS Read-Only OIDC Preflight"',
+      '".github/workflows/aws-oidc-read-only-preflight.yml"',
+      'environment?.GITHUB_JOB === "read-only-preflight"',
+      'environment?.GITHUB_EVENT_NAME === "workflow_dispatch"',
+      'ref === "refs/heads/main"',
+      'environment?.EXPECTED_OFFICIAL_MAIN_COMMIT ===',
+      'environment?.GITHUB_SHA',
+      'removedPath: ".git/config.worktree"'
+    ],
+    "OIDC_ACTIONS_CHECKOUT_NORMALIZER_MARKERS"
+  );
+  assert(
+    sha256(source) === EXPECTED_ACTIONS_CHECKOUT_NORMALIZER_SHA256,
+    "OIDC_ACTIONS_CHECKOUT_NORMALIZER_SHA256"
   );
   return source;
 }
@@ -1288,6 +1343,7 @@ export function verifyAwsOidcPreflightSource({
       IDENTITY_WORKFLOW_PATH,
       READ_ONLY_WORKFLOW_PATH,
       READ_ONLY_RUNNER_PATH,
+      ACTIONS_CHECKOUT_NORMALIZER_PATH,
       ROLE_TEMPLATE_PATH,
       PREFLIGHT_RUNNER_PATH,
       PREFLIGHT_VALIDATOR_PATH,
@@ -1300,6 +1356,8 @@ export function verifyAwsOidcPreflightSource({
   const identityWorkflow = files[IDENTITY_WORKFLOW_PATH].toString("utf8");
   const readOnlyWorkflow = files[READ_ONLY_WORKFLOW_PATH].toString("utf8");
   const readOnlyRunner = files[READ_ONLY_RUNNER_PATH].toString("utf8");
+  const actionsCheckoutNormalizer =
+    files[ACTIONS_CHECKOUT_NORMALIZER_PATH].toString("utf8");
   const preflightRunner = files[PREFLIGHT_RUNNER_PATH].toString("utf8");
   const preflightValidator = files[PREFLIGHT_VALIDATOR_PATH].toString("utf8");
   const ledger = files[LEDGER_PATH].toString("utf8");
@@ -1310,6 +1368,7 @@ export function verifyAwsOidcPreflightSource({
 
   validateIdentityWorkflow(identityWorkflow);
   validateReadOnlyWorkflow(readOnlyWorkflow);
+  validateActionsCheckoutNormalizer(actionsCheckoutNormalizer);
   validateReadOnlyRunner(readOnlyRunner);
   validateReadOnlyRoleTemplate(roleTemplate);
   validateUnderlyingPreflight(preflightRunner, preflightValidator);
@@ -1370,6 +1429,7 @@ export const __test = Object.freeze({
   EXACT_READ_ACTIONS,
   EXACT_RECEIPT_SECRET_PATTERN,
   EXPECTED_IDENTITY_ACTION_PINS,
+  EXPECTED_ACTIONS_CHECKOUT_NORMALIZER_SHA256,
   EXPECTED_IDENTITY_FAILURE_STAGES,
   EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST,
   EXPECTED_IDENTITY_FAILURE_STAGE_FUNCTION,

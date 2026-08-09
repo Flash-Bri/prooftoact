@@ -621,14 +621,20 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
   credential, header, proxy, and TLS options. Credential, `includeIf`, proxy,
   header, URL-rewrite, and every other local configuration remain rejected.
   Default brand, proof, rights, privacy, exact-source, readiness, preflight, and
-  build validation all reject every `.git/config.worktree`. A single dedicated
-  GitHub-hosted Linux CI step runs directly through Node after pinned Node setup
-  and before dependency installation or any verifier. It requires the exact
-  repository ID, repository name, official server/API URLs, CI workflow/job,
-  PR-merge or main-push ref, real workspace, and `GITHUB_SHA == HEAD`, while
-  clearing and rejecting Node preload/search-path inputs and disabling optional
-  Git locks. If the checkout is already strict, the step performs no mutation
-  and still proves a clean exact checkout. Otherwise it accepts only the exact
+  build validation all reject every `.git/config.worktree`. Exactly two
+  dedicated GitHub-hosted Linux workflow steps run the same normalizer directly
+  through Node after pinned Node setup: CI runs it before dependency
+  installation or any verifier, and the protected read-only OIDC preflight runs
+  it before receipt capture, token exchange, or any AWS call. Both require the
+  exact repository ID, repository name, official server/API URLs, real
+  workspace, and `GITHUB_SHA == HEAD`. The CI context additionally requires the
+  exact CI workflow and verify job with a PR-merge or main-push ref. The
+  preflight context instead requires the exact AWS Read-Only OIDC Preflight
+  workflow and read-only-preflight job, `workflow_dispatch`, `refs/heads/main`,
+  and a canonical `official_main_commit` input equal to `GITHUB_SHA`. Both clear
+  and reject Node preload/search-path inputs and disable optional Git locks. If
+  a checkout is already strict, the step performs no mutation and still proves
+  a clean exact checkout. Otherwise it accepts only the exact
   observed LF-terminated Git 2.54 bytes for the three false-valued settings in
   an effective-UID/effective-GID-owned, one-link, non-symlink `0600` or `0644`
   regular file. The repository root and `.git` directory must have that same
@@ -651,9 +657,10 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
   proof, cost, claims, and security controls hash-bind the implementation and
   adversarial tests; readiness repeats both exact checkout verification and the
   explicit official fetch before accepting its final receipt. The compatibility
-  parser appears at one production call site, the pre-verification normalizer;
-  no release, build, readiness, preflight, brand, proof, or provider caller can
-  opt into it.
+  parser appears at one production code call site inside the pre-verification
+  normalizer, which is invoked by only the two exact workflow contexts above;
+  no release, build, readiness, brand, proof, provider, or other preflight
+  caller can opt into it.
 - Verification: focused tests cover both accepted official origin spellings;
   accept only `gc.auto=0` while rejecting alternate or duplicate garbage-
   collection settings; reject credentialed, rewritten, and near-miss origins;
@@ -662,14 +669,16 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
   arguments. Dedicated residue tests reject every missing field, duplicates,
   true or other wrong values, extras, includes, symlinks, an active extension,
   and an active sparse-checkout file while preserving every rejected target's
-  path identity and bytes. PR and main-push context tests cover mutation and
-  strict no-op paths; wrong repository, job, ref, SHA, runner, mode, link, and
-  Node environment inputs fail before deletion, and a pathname replacement is
+  path identity and bytes. PR, main-push, and protected manual-preflight context
+  tests cover mutation and strict no-op paths; wrong repository, workflow, job,
+  event, ref, expected official-main input, SHA, runner, mode, link, and Node
+  environment inputs fail before deletion, and a pathname replacement is
   detected by the device/inode recheck. Deterministic pre-unlink tests mutate a
   tracked byte, index flag, staged index, `HEAD`/ref/tree, and common config;
   every case fails before deletion with the candidate inode, bytes, and path
-  preserved. Workflow tests require the exact order
-  checkout, Node setup, normalization, dependency install, then proof, with no
+  preserved. Workflow tests require CI's exact order of checkout, Node setup,
+  normalization, dependency install, then proof, and preflight's exact order of
+  checkout, Node setup, normalization, then protected receipt capture, with no
   continue-on-error and no other production opt-in. Diagnostic tests retain one valid bounded
   brand code and one valid bounded exact-Git code while proving an AWS-shaped
   uppercase identifier, arbitrary uppercase-and-underscore text, forty `A`
