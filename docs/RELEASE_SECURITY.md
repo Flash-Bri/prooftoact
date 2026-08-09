@@ -50,8 +50,10 @@ setup, intermediate response, final semantic-validation, output, timeout,
 execution, termination, and unclassified domain with literal source-bound
 stages. Its budget domain additionally maps all 24 existing semantic
 predicates to fixed stages without exposing observed account or billing
-values; the broad budget stage remains an unclassified fallback. Typed
-failures preserve read ordinals while discarding raw causes;
+values. Its cost domain similarly maps 16 observation-window, response, row,
+amount, range, and ceiling predicates. The broad budget and cost stages remain
+unclassified fallbacks. Invocation-bound failures preserve read ordinals and
+predicate provenance while discarding raw causes;
 child/provider stderr remains quarantined and is never forwarded. The source
 verifier binds both the child and validator implementations, their phase maps
 and order, the parent status map, and adversarial privacy tests. These stages

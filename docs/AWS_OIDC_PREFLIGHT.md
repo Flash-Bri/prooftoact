@@ -202,8 +202,10 @@ also have distinct literal stages. The budget control has 24 additional fixed
 subdomains that identify its exact name, type, time unit, account-wide scope,
 fixed-model, cost-basis, coverage-period, limit, or actual-spend predicate
 without emitting the observed value. The broad budget stage remains the
-fail-closed fallback for an unclassified budget exception. Raw provider/child
-stderr, error messages,
+fail-closed fallback for an unclassified budget exception. The cost control
+has 16 fixed subdomains covering observation-window, period, response, row,
+amount, range, and ceiling predicates, with the broad cost stage retained for
+unclassified exceptions. Raw provider/child stderr, error messages,
 causes, credentials, account identifiers, resource names, and arbitrary paths
 remain quarantined and are never forwarded. Unknown indexes or statuses fail
 closed to an unclassified fixed stage. These diagnostics identify only the
