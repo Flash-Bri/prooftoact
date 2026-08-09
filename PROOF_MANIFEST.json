@@ -133,13 +133,13 @@
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "71a4c7127929b75d3d1ebe2affb5376bab7dde83f19ce2b922de69335fc43be7",
+      "sha256": "8925a2e6e67283ceaebd105871a1f93cb000f23367600811e35b688a184b0598",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
-      "sha256": "e22951f09a9361ad1b27c9df9824ef4de054d6d096e36c297f46a4f9b166822b",
+      "sha256": "7cffeca569c340ed8942bf404375d7e72a6c702b27ed4e3bc14a82506692f08d",
       "kind": "verification-code"
     },
     {
@@ -649,7 +649,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "afa9fe16be106c03a7422cabe817715db1bf5feda5cab5f1831e6083f95bd4a7",
+      "sha256": "099776b72f18e0b12d80d87339bdeaa498bf2a5a8d5eea90869bbf96d21d0778",
       "kind": "boundary-ledger"
     },
     {

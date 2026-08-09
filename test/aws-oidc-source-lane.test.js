@@ -185,6 +185,16 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
     () =>
       validateIdentityWorkflow(
         IDENTITY_WORKFLOW.replace(
+          '[[ "$oidc_request_url" =~ $oidc_request_url_pattern ]] || fail_closed',
+          "true"
+        )
+      ),
+    /OIDC_IDENTITY_WORKFLOW_MARKERS/
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        IDENTITY_WORKFLOW.replace(
           "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.actions\\.githubusercontent\\.com",
           ".*"
         )
@@ -253,7 +263,8 @@ test("OIDC request URL guards accept GitHub regional hosts and reject authority 
     "https://foo.bar.actions.githubusercontent.com/idtoken?api-version=2.0",
     "https://foo.actions.githubusercontent.com.evil.example/idtoken?api-version=2.0",
     "https://foo.actions.githubusercontent.com:443/idtoken?api-version=2.0",
-    "https://user@foo.actions.githubusercontent.com/idtoken?api-version=2.0",
+    "https://user" +
+      "@foo.actions.githubusercontent.com/idtoken?api-version=2.0",
     "https://foo.actions.githubusercontent.com/idtoken",
     "https://foo.actions.githubusercontent.com/idtoken?api-version=2.0#fragment",
     "https://foo.actions.githubusercontent.com/id token?api-version=2.0"
@@ -325,6 +336,16 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
         READ_ONLY_RUNNER.replace(
           "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$",
           "^[A-Za-z0-9_-]{42}$"
+        )
+      ),
+    /OIDC_READ_ONLY_RUNNER_MARKERS/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          '[[ "$oidc_request_url" =~ $oidc_request_url_pattern ]] || fail_closed',
+          "true"
         )
       ),
     /OIDC_READ_ONLY_RUNNER_MARKERS/
