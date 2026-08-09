@@ -573,6 +573,30 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_EXPOSURE",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_MODEL",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_RECEIPT_ASSEMBLY",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_NAME",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_TYPE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_TIME_UNIT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_SCOPE_COST_FILTERS",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_SCOPE_FILTER_EXPRESSION",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_SCOPE_BILLING_VIEW",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_FIXED_AUTO_ADJUST",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_FIXED_PLANNED_LIMITS",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_METRICS_BASIS",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_COST_TYPES_BASIS",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_PERIOD_START",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_PERIOD_END",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_PERIOD_ORDER",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_PERIOD_NOT_STARTED",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_PERIOD_EXPIRED",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_PERIOD_RELEASE_HORIZON",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_LIMIT_UNIT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_LIMIT_AMOUNT_FORMAT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_LIMIT_NONNEGATIVE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_LIMIT_FIXED",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_ACTUAL_SPEND_UNIT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_ACTUAL_SPEND_AMOUNT_FORMAT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_ACTUAL_SPEND_NONNEGATIVE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET_ACTUAL_SPEND_CEILING",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT_OUTPUT",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_ARGUMENT",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_UNCLASSIFIED_CAUGHT",
@@ -593,7 +617,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT,
-    164
+    188
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_GENERIC_FAILURE_REFERENCE_COUNT,
@@ -624,6 +648,10 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
           ({ stage, exitCode }) =>
             `${exitCode}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_${stage}`
         ),
+      ...sourceContract.EXACT_PREFLIGHT_RUNTIME_BUDGET_FAILURES.map(
+        ({ stage, exitCode }) =>
+          `${exitCode}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_${stage}`
+      ),
       "124:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TIMEOUT",
       "125 | 126 | 127:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXECUTION",
       "137:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TERMINATED",
@@ -1244,6 +1272,10 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
       "AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[0]"
     ),
     PREFLIGHT_RUNNER.replace(
+      "AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[budgetFailureIndex]",
+      "AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[0]"
+    ),
+    PREFLIGHT_RUNNER.replace(
       "throw new AwsPreflightRuntimeReadFailure(failureIndex)",
       "throw new AwsPreflightRuntimeReadFailure(0)"
     ),
@@ -1260,8 +1292,16 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
       "const defaults = phase(1, () => {"
     ),
     PREFLIGHT_RUNNER.replace(
-      "collectSnapshot(undefined, { diagnosticFailureMode: true })",
-      "collectSnapshot(undefined, { diagnosticFailureMode: false })"
+      "createAwsGate2PreflightDiagnosticContext();",
+      "Object.freeze({});"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      "consumeAwsGate2PreflightBudgetFailure(error, diagnosticContext)",
+      "consumeAwsGate2PreflightBudgetFailure(error, null)"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      "writeAwsPreflightRuntimeFailure(error, diagnosticContext);",
+      "writeAwsPreflightRuntimeFailure(error);"
     )
   ];
   for (const mutatedRunner of diagnosticContractMutations) {
@@ -1285,13 +1325,49 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
     PREFLIGHT_VALIDATOR.replace(
       "throw new AwsGate2PreflightControlFailure(index);",
       "throw error;"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "throw createAwsGate2PreflightBudgetFailure(\n      index,\n      invocationToken\n    );",
+      "throw error;"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "budgetCheck(8, () =>",
+      "budgetCheck(9, () =>"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "state.invocationToken !== diagnosticContext ||",
+      "false ||"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      ') !== "settled" ||',
+      ') !== "fresh" ||'
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "Object.freeze({ ...state, consumed: true })",
+      "Object.freeze({ ...state, consumed: false })"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "return Object.freeze(error);",
+      "return error;"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "function createAwsGate2PreflightBudgetFailure(",
+      "export function createAwsGate2PreflightBudgetFailure("
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "? beginAwsGate2PreflightDiagnosticContext(diagnosticContext)",
+      "? diagnosticContext"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "settleAwsGate2PreflightDiagnosticContext(\n        diagnosticInvocationToken\n      );",
+      "void diagnosticInvocationToken;"
     )
   ];
   for (const mutatedValidator of diagnosticValidatorMutations) {
     assert.notEqual(mutatedValidator, PREFLIGHT_VALIDATOR);
     assert.throws(
       () => validateUnderlyingPreflight(PREFLIGHT_RUNNER, mutatedValidator),
-      /OIDC_UNDERLYING_PREFLIGHT_(?:IDENTITIES|VALIDATOR_SHA256)/
+      /OIDC_UNDERLYING_PREFLIGHT_(?:IDENTITIES|BUDGET_PROVENANCE|VALIDATOR_SHA256)/
     );
   }
 });

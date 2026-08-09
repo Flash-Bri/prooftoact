@@ -3,11 +3,14 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  AWS_GATE2_PREFLIGHT_BUDGET_FAILURES,
   AWS_GATE2_PREFLIGHT_CONTROL_FAILURES,
   AWS_GATE2_PREFLIGHT_DEFAULTS,
   AwsGate2PreflightControlFailure,
   awsBudgetDescribeArguments,
   awsCostExplorerPeriod,
+  consumeAwsGate2PreflightBudgetFailure,
+  createAwsGate2PreflightDiagnosticContext,
   validateAwsGate2PreflightIdentityExpectation,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
@@ -201,6 +204,96 @@ export const AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES = Object.freeze([
   Object.freeze({ stage: "VALIDATE_RECEIPT_ASSEMBLY", exitCode: 82 })
 ]);
 
+export const AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES = Object.freeze([
+  Object.freeze({ stage: "VALIDATE_BUDGET_NAME", exitCode: 86 }),
+  Object.freeze({ stage: "VALIDATE_BUDGET_TYPE", exitCode: 87 }),
+  Object.freeze({ stage: "VALIDATE_BUDGET_TIME_UNIT", exitCode: 88 }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_SCOPE_COST_FILTERS",
+    exitCode: 89
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_SCOPE_FILTER_EXPRESSION",
+    exitCode: 90
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_SCOPE_BILLING_VIEW",
+    exitCode: 91
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_FIXED_AUTO_ADJUST",
+    exitCode: 92
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_FIXED_PLANNED_LIMITS",
+    exitCode: 93
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_METRICS_BASIS",
+    exitCode: 94
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_COST_TYPES_BASIS",
+    exitCode: 95
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_PERIOD_START",
+    exitCode: 96
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_PERIOD_END",
+    exitCode: 97
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_PERIOD_ORDER",
+    exitCode: 98
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_PERIOD_NOT_STARTED",
+    exitCode: 99
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_PERIOD_EXPIRED",
+    exitCode: 100
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_PERIOD_RELEASE_HORIZON",
+    exitCode: 101
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_LIMIT_UNIT",
+    exitCode: 102
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_LIMIT_AMOUNT_FORMAT",
+    exitCode: 103
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_LIMIT_NONNEGATIVE",
+    exitCode: 104
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_LIMIT_FIXED",
+    exitCode: 105
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_ACTUAL_SPEND_UNIT",
+    exitCode: 106
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_ACTUAL_SPEND_AMOUNT_FORMAT",
+    exitCode: 107
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_ACTUAL_SPEND_NONNEGATIVE",
+    exitCode: 108
+  }),
+  Object.freeze({
+    stage: "VALIDATE_BUDGET_ACTUAL_SPEND_CEILING",
+    exitCode: 109
+  })
+]);
+
 class AwsPreflightRuntimeReadFailure extends Error {
   constructor(index) {
     super("AWS_RUNTIME_READ_FAILURE");
@@ -243,7 +336,23 @@ function runtimePhase(index, operation, diagnosticFailureMode = true) {
   }
 }
 
-export function awsPreflightRuntimeFailureDescriptor(error) {
+export function awsPreflightRuntimeFailureDescriptor(
+  error,
+  diagnosticContext = null
+) {
+  const budgetFailureIndex =
+    consumeAwsGate2PreflightBudgetFailure(error, diagnosticContext);
+  if (budgetFailureIndex !== null) {
+    const descriptor =
+      AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[budgetFailureIndex];
+    if (
+      descriptor?.stage ===
+      AWS_GATE2_PREFLIGHT_BUDGET_FAILURES[budgetFailureIndex]
+    ) {
+      return descriptor;
+    }
+    return AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15];
+  }
   if (error instanceof AwsPreflightRuntimeReadFailure) {
     return (
       AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[error.index] ??
@@ -268,6 +377,20 @@ export function awsPreflightRuntimeFailureDescriptor(error) {
     return AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15];
   }
   return AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15];
+}
+
+function writeAwsPreflightRuntimeFailure(
+  error,
+  diagnosticContext = null
+) {
+  const failure = awsPreflightRuntimeFailureDescriptor(
+    error,
+    diagnosticContext
+  );
+  process.stderr.write(
+    `TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${failure.stage}\n`
+  );
+  process.exitCode = failure.exitCode;
 }
 
 const EXPECTED_BUDGET_NOTIFICATIONS = Object.freeze([
@@ -1099,10 +1222,21 @@ export function main(argv = process.argv.slice(2)) {
       throw new Error("UNEXPECTED_ARGUMENT");
     }
   });
-  const receipt = validateAwsGate2Preflight(
-    collectSnapshot(undefined, { diagnosticFailureMode: true }),
-    { diagnosticFailureMode: true }
-  );
+  const snapshot = collectSnapshot(undefined, {
+    diagnosticFailureMode: true
+  });
+  const diagnosticContext =
+    createAwsGate2PreflightDiagnosticContext();
+  let receipt;
+  try {
+    receipt = validateAwsGate2Preflight(snapshot, {
+      diagnosticFailureMode: true,
+      diagnosticContext
+    });
+  } catch (error) {
+    writeAwsPreflightRuntimeFailure(error, diagnosticContext);
+    return;
+  }
   runtimePhase(13, () => {
     process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
   });
@@ -1116,10 +1250,6 @@ if (startedDirectly) {
   try {
     main();
   } catch (error) {
-    const failure = awsPreflightRuntimeFailureDescriptor(error);
-    process.stderr.write(
-      `TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${failure.stage}\n`
-    );
-    process.exitCode = failure.exitCode;
+    writeAwsPreflightRuntimeFailure(error);
   }
 }

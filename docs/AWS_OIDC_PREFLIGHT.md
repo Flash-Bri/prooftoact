@@ -191,7 +191,12 @@ validation maps to ten fixed control domains covering source/identity,
 bootstrap, budget, notifications, stack absence, artifact-bucket controls,
 cost, exposure, model metadata, and receipt assembly. Argument, receipt-output,
 timeout, execution, termination, uncaught-process, and unclassified statuses
-also have distinct literal stages. Raw provider/child stderr, error messages,
+also have distinct literal stages. The budget control has 24 additional fixed
+subdomains that identify its exact name, type, time unit, account-wide scope,
+fixed-model, cost-basis, coverage-period, limit, or actual-spend predicate
+without emitting the observed value. The broad budget stage remains the
+fail-closed fallback for an unclassified budget exception. Raw provider/child
+stderr, error messages,
 causes, credentials, account identifiers, resource names, and arbitrary paths
 remain quarantined and are never forwarded. Unknown indexes or statuses fail
 closed to an unclassified fixed stage. These diagnostics identify only the
