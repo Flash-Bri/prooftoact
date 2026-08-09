@@ -753,7 +753,7 @@ fail_probe() {
     NODE_DISCOVERY | NODE_PATH | NODE_OWNER | NODE_METADATA | NODE_INTEGRITY | NODE_VERSION) ;;
     *) stage=NODE_UNKNOWN ;;
   esac
-  printf '%s\n' "NODE_TOOLCHAIN_POLICY_FAIL:\${stage}" >&2
+  printf '%s\n' "NODE_TOOLCHAIN_POLICY_FAIL:$stage" >&2
   exit 1
 }
 node_candidate="$(command -v node)" || fail_probe NODE_DISCOVERY

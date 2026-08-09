@@ -174,7 +174,7 @@
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
       "role": "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION",
-      "sha256": "1cd3726f54ce2708d8b0f76cce45f929eca3edcacda256dff4a60b69fe19638a"
+      "sha256": "43b7b8436b4eb592cebbd6ddb844c46f6b4916e16a8eb5de67b105f3bae0d9e7"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
