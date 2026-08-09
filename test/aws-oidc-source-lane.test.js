@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -184,7 +186,11 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
     "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
     "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
     "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT",
-    "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
+    "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT",
+    "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
+    "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
+    "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
+    "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP"
   ]);
   assert.deepEqual(
     sourceContract.EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST,
@@ -196,6 +202,7 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
       "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT",
       "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
       "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
+      "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
       "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
     ]
   );
@@ -307,6 +314,39 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
       ),
     /OIDC_IDENTITY_WORKFLOW_MARKERS/
   );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        IDENTITY_WORKFLOW.replace(
+          'gnupg_home=""',
+          'gnupg_home="/tmp"'
+        )
+      ),
+    /OIDC_IDENTITY_GPG_REFERENCES/
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        `${IDENTITY_WORKFLOW}\ncommand gpg --version\n`
+      ),
+    /OIDC_IDENTITY_GPG_REFERENCES/
+  );
+  for (const requiredGpgControl of [
+    "GNUPGHOME",
+    '--homedir "$gnupg_home"',
+    "--no-symkey-cache",
+    '[[ "$gnupg_mode" == "700" ]] || fail_closed',
+    '/usr/bin/gpgconf --homedir "$gnupg_home" --kill all',
+    '/usr/bin/rm -rf -- "$gnupg_home"'
+  ]) {
+    assert.throws(
+      () =>
+        validateIdentityWorkflow(
+          IDENTITY_WORKFLOW.replace(requiredGpgControl, "")
+        ),
+      /OIDC_IDENTITY_(?:WORKFLOW_MARKERS|GPG_REFERENCES)/
+    );
+  }
 });
 
 test("OIDC request URL guards accept GitHub regional hosts and reject authority confusion", () => {
@@ -434,6 +474,39 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       ),
     /OIDC_READ_ONLY_RUNNER_MUTATION/
   );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          'gnupg_home=""',
+          'gnupg_home="/tmp"'
+        )
+      ),
+    /OIDC_READ_ONLY_GPG_REFERENCES/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        `${READ_ONLY_RUNNER}\ncommand gpg --version\n`
+      ),
+    /OIDC_READ_ONLY_GPG_REFERENCES/
+  );
+  for (const requiredGpgControl of [
+    "GNUPGHOME",
+    '--homedir "$gnupg_home"',
+    "--no-symkey-cache",
+    '[[ "$gnupg_mode" == "700" ]] || fail_closed',
+    '/usr/bin/gpgconf --homedir "$gnupg_home" --kill all',
+    '/usr/bin/rm -rf -- "$gnupg_home"'
+  ]) {
+    assert.throws(
+      () =>
+        validateReadOnlyRunner(
+          READ_ONLY_RUNNER.replace(requiredGpgControl, "")
+        ),
+      /OIDC_READ_ONLY_(?:RUNNER_MARKERS|GPG_REFERENCES)/
+    );
+  }
 });
 
 test("receipt secret contract is canonical unpadded Base64URL for 32 bytes", () => {
@@ -451,6 +524,94 @@ test("receipt secret contract is canonical unpadded Base64URL for 32 bytes", () 
     assert.doesNotMatch(rejected, pattern);
   }
 });
+
+test(
+  "isolated GnuPG home round-trips a synthetic receipt on Linux",
+  { skip: process.platform !== "linux" },
+  () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prooftoact-gpg-roundtrip-")
+    );
+    const home = path.join(root, "home");
+    const passphrase = path.join(root, "passphrase");
+    const input = path.join(root, "receipt.json");
+    const encrypted = path.join(root, "receipt.json.gpg");
+    const decrypted = path.join(root, "receipt.decrypted.json");
+    const fixture = '{"schema":"synthetic.gpg-roundtrip.v1"}\n';
+    let shutdown;
+    try {
+      assert.equal(fs.existsSync("/usr/bin/gpg"), true);
+      assert.equal(fs.existsSync("/usr/bin/gpgconf"), true);
+      fs.mkdirSync(home, { mode: 0o700 });
+      fs.writeFileSync(
+        passphrase,
+        `${Buffer.alloc(32, 0xab).toString("base64url")}\n`,
+        { mode: 0o600 }
+      );
+      fs.writeFileSync(input, fixture, { mode: 0o600 });
+
+      const common = [
+        "--no-options",
+        "--homedir",
+        home,
+        "--batch",
+        "--yes",
+        "--pinentry-mode",
+        "loopback",
+        "--no-symkey-cache",
+        "--passphrase-file",
+        passphrase
+      ];
+      const encrypt = spawnSync(
+        "/usr/bin/timeout",
+        [
+          "--signal=KILL",
+          "30s",
+          "/usr/bin/gpg",
+          ...common,
+          "--symmetric",
+          "--cipher-algo",
+          "AES256",
+          "--output",
+          encrypted,
+          input
+        ],
+        { stdio: "ignore" }
+      );
+      assert.equal(encrypt.signal, null);
+      assert.equal(encrypt.status, 0);
+      assert.ok(fs.statSync(encrypted).size > 0);
+
+      const decrypt = spawnSync(
+        "/usr/bin/timeout",
+        [
+          "--signal=KILL",
+          "30s",
+          "/usr/bin/gpg",
+          ...common,
+          "--output",
+          decrypted,
+          "--decrypt",
+          encrypted
+        ],
+        { stdio: "ignore" }
+      );
+      assert.equal(decrypt.signal, null);
+      assert.equal(decrypt.status, 0);
+      assert.equal(fs.readFileSync(decrypted, "utf8"), fixture);
+    } finally {
+      shutdown = spawnSync(
+        "/usr/bin/gpgconf",
+        ["--homedir", home, "--kill", "all"],
+        { stdio: "ignore" }
+      );
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+    assert.equal(shutdown.signal, null);
+    assert.equal(shutdown.status, 0);
+    assert.equal(fs.existsSync(root), false);
+  }
+);
 
 test("underlying preflight inventory is exact and cannot bypass its reader", () => {
   assert.deepEqual(
