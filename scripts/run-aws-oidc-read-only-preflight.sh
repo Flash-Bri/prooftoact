@@ -20,6 +20,7 @@ preflight_receipt=""
 sanitized_receipt=""
 passphrase_file=""
 error_file=""
+gnupg_home=""
 encrypted_receipt="${RUNNER_TEMP:-}/aws-read-only-preflight-receipt.json.gpg"
 
 cleanup_sensitive_files() {
@@ -34,6 +35,17 @@ cleanup_sensitive_files() {
     ACTIONS_ID_TOKEN_REQUEST_TOKEN \
     ACTIONS_ID_TOKEN_REQUEST_URL \
     RECEIPT_ENCRYPTION_PASSPHRASE
+  if [[ -n "$gnupg_home" &&
+        "$gnupg_home" == "${RUNNER_TEMP:-}"/receipt-gnupg.?????? &&
+        -d "$gnupg_home" && ! -L "$gnupg_home" ]]; then
+    if ! /usr/bin/gpgconf --homedir "$gnupg_home" --kill all \
+      >/dev/null 2>&1; then
+      :
+    fi
+    if ! /usr/bin/rm -rf -- "$gnupg_home"; then
+      :
+    fi
+  fi
   for file in \
     "$oidc_response" \
     "$oidc_token" \
@@ -97,6 +109,7 @@ for unsafe_name in \
   AWS_WEB_IDENTITY_TOKEN_FILE \
   BOTO_CONFIG \
   CURL_CA_BUNDLE \
+  GNUPGHOME \
   HTTPS_PROXY \
   HTTP_PROXY \
   NODE_DEBUG \
@@ -194,6 +207,18 @@ aws_mode_value=$((8#$aws_mode))
 (( (aws_mode_value & 0022) == 0 )) || fail_closed
 unset aws_candidate aws_metadata aws_uid aws_mode aws_type aws_mode_value
 
+for crypto_cli in /usr/bin/gpg /usr/bin/gpgconf; do
+  crypto_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$crypto_cli")" || fail_closed
+  IFS=':' read -r crypto_uid crypto_mode crypto_type <<<"$crypto_metadata"
+  [[ "$crypto_uid" == "0" ]] || fail_closed
+  [[ "$crypto_mode" =~ ^[0-7]{3,4}$ ]] || fail_closed
+  [[ "$crypto_type" == "regular file" ]] || fail_closed
+  crypto_mode_value=$((8#$crypto_mode))
+  (( (crypto_mode_value & 0111) != 0 )) || fail_closed
+  (( (crypto_mode_value & 0022) == 0 )) || fail_closed
+done
+unset crypto_cli crypto_metadata crypto_uid crypto_mode crypto_type crypto_mode_value
+
 oidc_response="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-response.XXXXXX")" || fail_closed
 oidc_token="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-token.XXXXXX")" || fail_closed
 oidc_header="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-header.XXXXXX")" || fail_closed
@@ -205,6 +230,8 @@ preflight_receipt="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-receipt.XXXXXX")"
 sanitized_receipt="$(/usr/bin/mktemp "${RUNNER_TEMP}/sanitized-receipt.XXXXXX")" || fail_closed
 passphrase_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/receipt-passphrase.XXXXXX")" || fail_closed
 error_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-error.XXXXXX")" || fail_closed
+gnupg_home="$(/usr/bin/mktemp -d "${RUNNER_TEMP}/receipt-gnupg.XXXXXX")" || fail_closed
+[[ "$gnupg_home" == "${RUNNER_TEMP}"/receipt-gnupg.?????? ]] || fail_closed
 /usr/bin/chmod 600 \
   "$oidc_response" \
   "$oidc_token" \
@@ -217,6 +244,14 @@ error_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-error.XXXXXX")" || fail_
   "$sanitized_receipt" \
   "$passphrase_file" \
   "$error_file" || fail_closed
+/usr/bin/chmod 700 "$gnupg_home" || fail_closed
+[[ -d "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed
+gnupg_metadata="$(/usr/bin/stat -c '%u:%a:%F' -- "$gnupg_home")" || fail_closed
+IFS=':' read -r gnupg_uid gnupg_mode gnupg_type <<<"$gnupg_metadata"
+[[ "$gnupg_uid" == "$(/usr/bin/id -u)" ]] || fail_closed
+[[ "$gnupg_mode" == "700" ]] || fail_closed
+[[ "$gnupg_type" == "directory" ]] || fail_closed
+unset gnupg_metadata gnupg_uid gnupg_mode gnupg_type
 
 oidc_url="${oidc_request_url}&audience=sts.amazonaws.com"
 if ! /usr/bin/timeout --signal=KILL 30s \
@@ -491,15 +526,17 @@ unset \
   AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_ARN \
   AWS_EVIDENCE_EXPECTED_PREFLIGHT_CALLER_USER_ID \
   assumed_role_id
-printf '%s' "$RECEIPT_ENCRYPTION_PASSPHRASE" >"$passphrase_file"
+printf '%s\n' "$RECEIPT_ENCRYPTION_PASSPHRASE" >"$passphrase_file"
 unset RECEIPT_ENCRYPTION_PASSPHRASE
 /usr/bin/rm -f -- "$encrypted_receipt"
 if ! /usr/bin/timeout --signal=KILL 30s \
   /usr/bin/gpg \
     --no-options \
+    --homedir "$gnupg_home" \
     --batch \
     --yes \
     --pinentry-mode loopback \
+    --no-symkey-cache \
     --passphrase-file "$passphrase_file" \
     --symmetric \
     --cipher-algo AES256 \
@@ -510,3 +547,11 @@ if ! /usr/bin/timeout --signal=KILL 30s \
 fi
 /usr/bin/chmod 600 "$encrypted_receipt" || fail_closed
 [[ -s "$encrypted_receipt" ]] || fail_closed
+if ! /usr/bin/gpgconf --homedir "$gnupg_home" --kill all \
+  >/dev/null 2>"$error_file"; then
+  fail_closed
+fi
+[[ -d "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed
+/usr/bin/rm -rf -- "$gnupg_home" || fail_closed
+[[ ! -e "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed
+gnupg_home=""

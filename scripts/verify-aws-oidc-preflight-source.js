@@ -93,7 +93,11 @@ const EXPECTED_IDENTITY_FAILURE_STAGES = Object.freeze([
   "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
   "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
   "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT",
-  "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
+  "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP"
 ]);
 
 const EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST = Object.freeze([
@@ -104,6 +108,7 @@ const EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST = Object.freeze([
   "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT",
   "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
   "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
   "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
 ]);
 
@@ -118,6 +123,7 @@ const EXPECTED_IDENTITY_FAILURE_STAGE_FUNCTION = [
   "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT | \\",
   "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE | \\",
   "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION | \\",
+  "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_CLEANUP | \\",
   "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT) ;;",
   "*) fail_closed ;;",
   "esac",
@@ -153,6 +159,11 @@ const EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES = Object.freeze([
   '"$aws_cli" account get-region-opt-status \\',
   '"$aws_cli" service-quotas list-service-quotas \\'
 ]);
+
+const EXPECTED_IDENTITY_GPG_REFERENCE_SHA256 =
+  "1d79a393539e67b435fd0fe7a75ac318e44950724484cb9418cbe421698f7949";
+const EXPECTED_READ_ONLY_GPG_REFERENCE_SHA256 =
+  "80759db1df6b63d49408b7aab9ba8a64e078665baf92917c67bc83d67c5dc740";
 
 function assert(condition, code) {
   if (!condition) {
@@ -269,6 +280,25 @@ function validateAwsCliReferenceLines(source, expected, code) {
       /\baws_candidate\b|\baws_cli\b|(?:^|\s)(?:command\s+|\/usr\/bin\/env\s+)?aws(?=[\s"'$])|\/(?:[^/\s"'`]+\/)*aws(?=[$"'\s])/u.test(line)
     );
   assert(sameJson(references, expected), code);
+  return true;
+}
+
+function gpgReferenceLines(source) {
+  return source
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) =>
+      /\bgnupg_[a-z_]+\b|\bcrypto_(?:cli|metadata|uid|mode|type|mode_value)\b|\bGNUPGHOME\b|--no-symkey-cache|\/usr\/bin\/gpg(?:conf)?\b|(?:^|\s)(?:command\s+)?gpg(?:conf)?(?=\s)/u.test(line)
+    )
+    .join("\n");
+}
+
+function validateGpgReferenceLines(source, expectedSha256, code) {
+  assert(
+    sha256(Buffer.from(gpgReferenceLines(source), "utf8")) ===
+      expectedSha256,
+    code
+  );
   return true;
 }
 
@@ -548,6 +578,14 @@ export function validateIdentityWorkflow(source) {
       "/usr/bin/timeout --signal=KILL 30s",
       "--disable",
       "--no-options",
+      "GNUPGHOME",
+      "for crypto_cli in /usr/bin/gpg /usr/bin/gpgconf; do",
+      "receipt-gnupg.XXXXXX",
+      '[[ "$gnupg_mode" == "700" ]] || fail_closed',
+      '--homedir "$gnupg_home"',
+      "--no-symkey-cache",
+      '/usr/bin/gpgconf --homedir "$gnupg_home" --kill all',
+      '/usr/bin/rm -rf -- "$gnupg_home"',
       EXACT_RECEIPT_SECRET_PATTERN,
       "--symmetric",
       "--cipher-algo AES256",
@@ -596,6 +634,11 @@ export function validateIdentityWorkflow(source) {
     source,
     EXPECTED_IDENTITY_AWS_CLI_REFERENCE_LINES,
     "OIDC_IDENTITY_AWS_CLI_REFERENCES"
+  );
+  validateGpgReferenceLines(
+    source,
+    EXPECTED_IDENTITY_GPG_REFERENCE_SHA256,
+    "OIDC_IDENTITY_GPG_REFERENCES"
   );
   assert(
     !source.includes("actions/checkout@") &&
@@ -690,6 +733,14 @@ export function validateReadOnlyRunner(source) {
       "--cli-read-timeout 20",
       "--disable",
       "--no-options",
+      "GNUPGHOME",
+      "for crypto_cli in /usr/bin/gpg /usr/bin/gpgconf; do",
+      "receipt-gnupg.XXXXXX",
+      '[[ "$gnupg_mode" == "700" ]] || fail_closed',
+      '--homedir "$gnupg_home"',
+      "--no-symkey-cache",
+      '/usr/bin/gpgconf --homedir "$gnupg_home" --kill all',
+      '/usr/bin/rm -rf -- "$gnupg_home"',
       EXACT_RECEIPT_SECRET_PATTERN,
       "AWS_MAX_ATTEMPTS=1",
       "AWS_EC2_METADATA_DISABLED=true",
@@ -715,6 +766,11 @@ export function validateReadOnlyRunner(source) {
     source,
     EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES,
     "OIDC_READ_ONLY_AWS_CLI_REFERENCES"
+  );
+  validateGpgReferenceLines(
+    source,
+    EXPECTED_READ_ONLY_GPG_REFERENCE_SHA256,
+    "OIDC_READ_ONLY_GPG_REFERENCES"
   );
   assert(
     !/\bset\s+-x\b/u.test(source) &&
