@@ -168,19 +168,19 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "SOURCE_BOUND_READ_ONLY_OIDC_PREFLIGHT_RUNNER",
-      "sha256": "fccf202c262b6a92d0b26ab6149cf7bd38ba9db3309e1cd589a86aae35c46953"
+      "sha256": "7e12d004ab182f6e3a9f438836acc1df66e7e85b9e307915b1ba1d2670478403"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
       "role": "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION",
-      "sha256": "7382263c11d81faf704898fdc05d2d207ab07cf6b1b3f873b95443c7bcae9b4d"
+      "sha256": "33788c2c2ff70ff0281ee11577515056b50d32d3b0e1f9841b6dbb17f822382d"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
       "role": "OIDC_SOURCE_BOUNDARY_VERIFIER",
-      "sha256": "2b99226582bebe8c2ce84db60bf4b5ff85e783e327a751e27a28eead9bd7f768"
+      "sha256": "e6f2dc40c88d251f9e4f34cbc6e3a9995542a25c05b9fb7e3cc5cac4deac7042"
     },
     {
       "id": "aws-oidc-read-only-workflow",
@@ -222,7 +222,7 @@
       "id": "aws-preflight",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "5508975e7fde2c110aa8991b2115348d6d0f74a47817fa80d99b6973a3ef0cc5"
+      "sha256": "084c7a193170c1007643c0260d3288006dbb042a818e2cb4c148c4955b1df909"
     },
     {
       "id": "aws-preflight-validator",
@@ -234,7 +234,7 @@
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
       "role": "READ_ONLY_AWS_PREFLIGHT_VERIFICATION",
-      "sha256": "a00fafdf3b5ca842ed3173faba08d7bed82aaf408573aa56f68443b9baf37d6f"
+      "sha256": "f975580b5805f2ede9ad1dd1347e504bf95803135f89e181079f3efca626f1aa"
     },
     {
       "id": "aws-readiness",

@@ -93,7 +93,7 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION",
-      "sha256": "fccf202c262b6a92d0b26ab6149cf7bd38ba9db3309e1cd589a86aae35c46953"
+      "sha256": "7e12d004ab182f6e3a9f438836acc1df66e7e85b9e307915b1ba1d2670478403"
     },
     {
       "id": "aws-oidc-read-only-workflow",
@@ -111,7 +111,7 @@
       "id": "aws-preflight-runner",
       "path": "scripts/gate2-aws-preflight.js",
       "role": "READ_ONLY_AWS_PREFLIGHT",
-      "sha256": "5508975e7fde2c110aa8991b2115348d6d0f74a47817fa80d99b6973a3ef0cc5"
+      "sha256": "084c7a193170c1007643c0260d3288006dbb042a818e2cb4c148c4955b1df909"
     },
     {
       "id": "aws-readiness-runner",

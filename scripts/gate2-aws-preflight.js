@@ -96,6 +96,100 @@ const EXPANDED_AWS_GATE2_PREFLIGHT_RUNTIME_CALLS = Object.freeze(
   )
 );
 
+export const AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES = Object.freeze([
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_01",
+    exitCode: 40
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_02",
+    exitCode: 41
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_03",
+    exitCode: 42
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_04",
+    exitCode: 43
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_05",
+    exitCode: 44
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_06",
+    exitCode: 45
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_07",
+    exitCode: 46
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_08",
+    exitCode: 47
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_09",
+    exitCode: 48
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_10",
+    exitCode: 49
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_11",
+    exitCode: 50
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_12",
+    exitCode: 51
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_13",
+    exitCode: 52
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_14",
+    exitCode: 53
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_15",
+    exitCode: 54
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_16",
+    exitCode: 55
+  }),
+  Object.freeze({
+    stage: "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_17",
+    exitCode: 56
+  })
+]);
+
+const UNKNOWN_RUNTIME_FAILURE = Object.freeze({
+  stage: "UNKNOWN_FAILURE",
+  exitCode: 1
+});
+
+class AwsPreflightRuntimeReadFailure extends Error {
+  constructor(index) {
+    super("AWS_RUNTIME_READ_FAILURE");
+    this.name = "AwsPreflightRuntimeReadFailure";
+    this.index = index;
+  }
+}
+
+export function awsPreflightRuntimeFailureDescriptor(error) {
+  if (!(error instanceof AwsPreflightRuntimeReadFailure)) {
+    return UNKNOWN_RUNTIME_FAILURE;
+  }
+  return (
+    AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[error.index] ??
+    UNKNOWN_RUNTIME_FAILURE
+  );
+}
+
 const EXPECTED_BUDGET_NOTIFICATIONS = Object.freeze([
   Object.freeze({
     NotificationType: "ACTUAL",
@@ -132,15 +226,24 @@ export function createAwsPreflightRuntimeCallReader(readAwsJson) {
     read(region, service, operation, args = []) {
       const expected =
         EXPANDED_AWS_GATE2_PREFLIGHT_RUNTIME_CALLS[callIndex];
+      const failure =
+        AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[callIndex];
       if (
         region !== AWS_GATE2_PREFLIGHT_DEFAULTS.region ||
         expected?.[0] !== service ||
-        expected?.[1] !== operation
+        expected?.[1] !== operation ||
+        typeof failure?.stage !== "string" ||
+        !Number.isSafeInteger(failure?.exitCode)
       ) {
         throw new Error("AWS_RUNTIME_CALL_INVENTORY");
       }
+      const failureIndex = callIndex;
       callIndex += 1;
-      return readAwsJson(region, service, operation, args);
+      try {
+        return readAwsJson(region, service, operation, args);
+      } catch {
+        throw new AwsPreflightRuntimeReadFailure(failureIndex);
+      }
     },
     assertComplete() {
       if (
@@ -866,15 +969,10 @@ if (startedDirectly) {
   try {
     main();
   } catch (error) {
-    const candidate = String(error?.message ?? "");
-    const code = /^(?:AWS|GIT|WORKING_TREE|UNEXPECTED)_[A-Z0-9_]{1,120}$/.test(
-      candidate
-    )
-      ? candidate
-      : "UNKNOWN_FAILURE";
+    const failure = awsPreflightRuntimeFailureDescriptor(error);
     process.stderr.write(
-      `TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${code}\n`
+      `TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${failure.stage}\n`
     );
-    process.exitCode = 1;
+    process.exitCode = failure.exitCode;
   }
 }
