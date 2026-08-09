@@ -182,6 +182,13 @@ notification response into extra subscriber reads. The independent source
 verifier parses the declared inventory and requires the exact 14 operation
 groups and 17 nested calls; the fixed wrapper adds exactly three calls.
 
+The budget validator accepts the modern `Metrics` field only when omitted or
+the exact singleton `["UnblendedCost"]`. It does not case-fold, search a
+multi-value list, accept aliases, or let that field bypass the account-wide
+filter, billing-view, or exact-default `CostTypes` controls. The v6 receipt
+continues to report the normalized validated `UnblendedCost` semantic basis;
+it does not claim whether AWS used the modern or legacy wire representation.
+
 The protected runner emits only fixed source-bound failure stages. AWS request
 and JSON failures map one-to-one to the ordered nested reads `READ_01` through
 `READ_17`. Non-request child failures map to fixed environment, exact-checkout,

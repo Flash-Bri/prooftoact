@@ -58,6 +58,13 @@ and order, the parent status map, and adversarial privacy tests. These stages
 narrow diagnosis without disclosing account context or claiming a successful
 provider receipt.
 
+Budget cost-basis validation permits only an omitted `Metrics` field or the
+exact singleton `["UnblendedCost"]`; empty, multiple, aliased, case-normalized,
+or other metrics fail closed. This modern representation cannot bypass the
+separate account-wide filter, billing-view, or absent/exact-default
+`CostTypes` checks. Receipt v6 records the normalized validated semantic basis,
+not the provider's wire representation.
+
 ## Protected assets and trust boundaries
 
 | Asset or boundary | Current protection | Remaining release proof |

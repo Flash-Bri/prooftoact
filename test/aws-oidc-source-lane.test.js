@@ -1361,6 +1361,22 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
     PREFLIGHT_VALIDATOR.replace(
       "settleAwsGate2PreflightDiagnosticContext(\n        diagnosticInvocationToken\n      );",
       "void diagnosticInvocationToken;"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "value.length === 1",
+      "value.length >= 1"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "value[0] === EXPECTED_BUDGET_COST_BASIS",
+      "value.includes(EXPECTED_BUDGET_COST_BASIS)"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "hasExpectedBudgetMetrics(budget?.Metrics)",
+      "true"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "hasExpectedCostTypes(budget?.CostTypes)",
+      "true"
     )
   ];
   for (const mutatedValidator of diagnosticValidatorMutations) {

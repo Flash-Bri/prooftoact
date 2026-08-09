@@ -475,6 +475,17 @@ function hasExpectedCostTypes(value) {
   );
 }
 
+function hasExpectedBudgetMetrics(value) {
+  return (
+    value == null ||
+    (
+      Array.isArray(value) &&
+      value.length === 1 &&
+      value[0] === EXPECTED_BUDGET_COST_BASIS
+    )
+  );
+}
+
 function hasExactTlsOnlyDenyPolicy(policy, bucketName) {
   const expectedResources = new Set([
     `arn:aws:s3:::${bucketName}`,
@@ -850,7 +861,10 @@ export function validateAwsGate2Preflight(
       )
     );
     budgetCheck(8, () =>
-      requireCondition(budget?.Metrics == null, "BUDGET_METRICS_MODEL")
+      requireCondition(
+        hasExpectedBudgetMetrics(budget?.Metrics),
+        "BUDGET_METRICS_MODEL"
+      )
     );
     budgetCheck(9, () =>
       requireCondition(
@@ -1132,7 +1146,7 @@ export function validateAwsGate2Preflight(
     privacy:
       "AWS account, caller ARN, expected principal ARN, bucket name, and subscriber addresses were validated but omitted; only caller-binding digests are public.",
     claimBoundary:
-      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It rejects both the ProofToAct main stack name and the former working-name main stack before a fresh create. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
+      "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It rejects both the ProofToAct main stack name and the former working-name main stack before a fresh create. Its budget costBasis is the normalized validated UnblendedCost semantic basis, and defaultCostTypes means CostTypes were absent or exactly the documented defaults; neither field claims the provider's wire representation. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
     }));
   } finally {
     if (diagnosticInvocationToken !== null) {
