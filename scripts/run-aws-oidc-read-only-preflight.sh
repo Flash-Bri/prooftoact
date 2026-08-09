@@ -79,7 +79,15 @@ fail_closed_stage() {
       AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY | \
       AWS_READ_ONLY_STAGE_OIDC_ENDPOINT | \
       AWS_READ_ONLY_STAGE_SOURCE_BINDING | \
-      AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN | \
+      AWS_READ_ONLY_STAGE_NODE_DISCOVERY | \
+      AWS_READ_ONLY_STAGE_NODE_PATH | \
+      AWS_READ_ONLY_STAGE_NODE_OWNER | \
+      AWS_READ_ONLY_STAGE_NODE_METADATA | \
+      AWS_READ_ONLY_STAGE_NODE_INTEGRITY | \
+      AWS_READ_ONLY_STAGE_NODE_VERSION | \
+      AWS_READ_ONLY_STAGE_AWS_PATH | \
+      AWS_READ_ONLY_STAGE_AWS_METADATA | \
+      AWS_READ_ONLY_STAGE_GPG_METADATA | \
       AWS_READ_ONLY_STAGE_TEMPORARY_STATE | \
       AWS_READ_ONLY_STAGE_OIDC_REQUEST | \
       AWS_READ_ONLY_STAGE_OIDC_RECEIPT | \
@@ -200,42 +208,49 @@ source_status="$(
 [[ -z "$source_status" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_SOURCE_BINDING
 unset source_status
 
-node_candidate="$(command -v node)" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-[[ "$node_candidate" == /* && -x "$node_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-[[ "$node_cli" =~ ^/opt/hostedtoolcache/node/22\.[0-9]+\.[0-9]+/x64/bin/node$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+# GitHub's hosted image intentionally makes /opt writable. Bind Node by exact
+# version and official binary digest, then retain the expected ephemeral owner,
+# regular-file, numeric-mode, and executable checks without treating write bits
+# as an integrity boundary.
+node_candidate="$(command -v node)" || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_DISCOVERY
+[[ "$node_candidate" == /* && -x "$node_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_DISCOVERY
+node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_PATH
+[[ "$node_cli" == "/opt/hostedtoolcache/node/22.23.1/x64/bin/node" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_PATH
+node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_METADATA
 IFS=':' read -r node_uid node_mode node_type <<<"$node_metadata"
-[[ "$node_uid" == "0" || "$node_uid" == "$(/usr/bin/id -u)" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-[[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+runner_uid="$(/usr/bin/id -u)" || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_OWNER
+[[ "$node_uid" == "0" || "$node_uid" == "$runner_uid" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_OWNER
+[[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_METADATA
 node_mode_value=$((8#$node_mode))
-(( (node_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-(( (node_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-[[ "$("$node_cli" --version)" =~ ^v22\.[0-9]+\.[0-9]+$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-unset node_candidate node_metadata node_uid node_mode node_type node_mode_value
+(( (node_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_METADATA
+node_digest="$(/usr/bin/sha256sum "$node_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_INTEGRITY
+node_digest="${node_digest%% *}"
+[[ "$node_digest" == "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_INTEGRITY
+[[ "$("$node_cli" --version)" == "v22.23.1" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_NODE_VERSION
+unset node_candidate node_metadata node_uid node_mode node_type node_mode_value runner_uid node_digest
 
 aws_candidate="/usr/local/bin/aws"
-[[ -L "$aws_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-aws_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$aws_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ -L "$aws_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_PATH
+aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_PATH
+[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_PATH
+aws_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$aws_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_METADATA
 IFS=':' read -r aws_uid aws_mode aws_type <<<"$aws_metadata"
-[[ "$aws_uid" == "0" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-[[ "$aws_mode" =~ ^[0-7]{3,4}$ && "$aws_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ "$aws_uid" == "0" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_METADATA
+[[ "$aws_mode" =~ ^[0-7]{3,4}$ && "$aws_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_METADATA
 aws_mode_value=$((8#$aws_mode))
-(( (aws_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-(( (aws_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+(( (aws_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_METADATA
+(( (aws_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_METADATA
 unset aws_candidate aws_metadata aws_uid aws_mode aws_type aws_mode_value
 
 for crypto_cli in /usr/bin/gpg /usr/bin/gpgconf; do
-  crypto_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$crypto_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+  crypto_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$crypto_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_GPG_METADATA
   IFS=':' read -r crypto_uid crypto_mode crypto_type <<<"$crypto_metadata"
-  [[ "$crypto_uid" == "0" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-  [[ "$crypto_mode" =~ ^[0-7]{3,4}$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-  [[ "$crypto_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+  [[ "$crypto_uid" == "0" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_GPG_METADATA
+  [[ "$crypto_mode" =~ ^[0-7]{3,4}$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_GPG_METADATA
+  [[ "$crypto_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_GPG_METADATA
   crypto_mode_value=$((8#$crypto_mode))
-  (( (crypto_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
-  (( (crypto_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+  (( (crypto_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_GPG_METADATA
+  (( (crypto_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_GPG_METADATA
 done
 unset crypto_cli crypto_metadata crypto_uid crypto_mode crypto_type crypto_mode_value
 

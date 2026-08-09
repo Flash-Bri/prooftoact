@@ -81,7 +81,7 @@
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
       "role": "OIDC_PREFLIGHT_COST_AND_AUTHORITY_BOUNDARY",
-      "sha256": "573c400d80b2a1026b094882287d73b9ee8b683b1cb6a64fa7531f819cd33008"
+      "sha256": "9b8fc00ad41d6a8000140b612b587d7e43809cb65e85567f01e22e9ffbd38bd8"
     },
     {
       "id": "aws-oidc-read-only-role-template",
@@ -93,13 +93,13 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION",
-      "sha256": "4823a44d788c1b8c47dfe30baeb1b9aa6b22e4827a936b2c91843185ecc65acb"
+      "sha256": "f5155d7dc178e2aae230381667c7bd414bf2f61ea302215209d0f5f13f9410d2"
     },
     {
       "id": "aws-oidc-read-only-workflow",
       "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
       "role": "MANUAL_TIME_BOUNDED_PREFLIGHT_WORKFLOW",
-      "sha256": "669e7b6cd5ab405fb25c5913012f12ce893a9b63bbb5a0e3c8e41af402c4402b"
+      "sha256": "d6fb0a92a44aced83503a1dd3a89b7c018ed24f4f8f8923299a72f64d59d8578"
     },
     {
       "id": "aws-preflight-library",

@@ -138,7 +138,15 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_ALLOWLIST = Object.freeze([
   "AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY",
   "AWS_READ_ONLY_STAGE_OIDC_ENDPOINT",
   "AWS_READ_ONLY_STAGE_SOURCE_BINDING",
-  "AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN",
+  "AWS_READ_ONLY_STAGE_NODE_DISCOVERY",
+  "AWS_READ_ONLY_STAGE_NODE_PATH",
+  "AWS_READ_ONLY_STAGE_NODE_OWNER",
+  "AWS_READ_ONLY_STAGE_NODE_METADATA",
+  "AWS_READ_ONLY_STAGE_NODE_INTEGRITY",
+  "AWS_READ_ONLY_STAGE_NODE_VERSION",
+  "AWS_READ_ONLY_STAGE_AWS_PATH",
+  "AWS_READ_ONLY_STAGE_AWS_METADATA",
+  "AWS_READ_ONLY_STAGE_GPG_METADATA",
   "AWS_READ_ONLY_STAGE_TEMPORARY_STATE",
   "AWS_READ_ONLY_STAGE_OIDC_REQUEST",
   "AWS_READ_ONLY_STAGE_OIDC_RECEIPT",
@@ -154,7 +162,15 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION = [
   "AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY | \\",
   "AWS_READ_ONLY_STAGE_OIDC_ENDPOINT | \\",
   "AWS_READ_ONLY_STAGE_SOURCE_BINDING | \\",
-  "AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN | \\",
+  "AWS_READ_ONLY_STAGE_NODE_DISCOVERY | \\",
+  "AWS_READ_ONLY_STAGE_NODE_PATH | \\",
+  "AWS_READ_ONLY_STAGE_NODE_OWNER | \\",
+  "AWS_READ_ONLY_STAGE_NODE_METADATA | \\",
+  "AWS_READ_ONLY_STAGE_NODE_INTEGRITY | \\",
+  "AWS_READ_ONLY_STAGE_NODE_VERSION | \\",
+  "AWS_READ_ONLY_STAGE_AWS_PATH | \\",
+  "AWS_READ_ONLY_STAGE_AWS_METADATA | \\",
+  "AWS_READ_ONLY_STAGE_GPG_METADATA | \\",
   "AWS_READ_ONLY_STAGE_TEMPORARY_STATE | \\",
   "AWS_READ_ONLY_STAGE_OIDC_REQUEST | \\",
   "AWS_READ_ONLY_STAGE_OIDC_RECEIPT | \\",
@@ -167,8 +183,8 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION = [
 ].join("\n");
 
 const EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256 =
-  "4251f77cdc2a17a46a1808971b44d8b8e0b87fed2aa1398e7edbe94752c1e2c5";
-const EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT = 90;
+  "9857fc8d1376e809a3485d961cc74e5414baf0558abd8bb36ef052c5ce032a51";
+const EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT = 92;
 
 const EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK = [
   'if [[ "$PREFLIGHT_DIAGNOSTIC_ONLY" == "true" ]]; then',
@@ -186,7 +202,7 @@ const EXPECTED_READ_ONLY_DIAGNOSTIC_INPUT_BLOCK = [
 ].join("\n");
 
 const EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256 =
-  "cf1eeeaa5737a4ef9db69c03303e10f5e28247f4ec5e5ee2819f5b191de3a67b";
+  "1e1f54c20295437b1ee687101130598ed8c805044069ad812276c64d1c3dd716";
 const EXPECTED_READ_ONLY_OUTPUT_COMMAND_SEQUENCE_SHA256 =
   "8d904a81633325a805bc789c40b80dfe4785055b76d00f2004c91f8188903946";
 const EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT = 8;
@@ -214,10 +230,10 @@ const EXPECTED_IDENTITY_AWS_CLI_REFERENCE_LINES = Object.freeze([
 
 const EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES = Object.freeze([
   'aws_candidate="/usr/local/bin/aws"',
-  '[[ -L "$aws_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN',
-  'aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN',
-  String.raw`[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN`,
-  'aws_metadata="$(/usr/bin/stat -Lc \'%u:%a:%F\' -- "$aws_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN',
+  '[[ -L "$aws_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_PATH',
+  'aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_PATH',
+  String.raw`[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_PATH`,
+  'aws_metadata="$(/usr/bin/stat -Lc \'%u:%a:%F\' -- "$aws_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_AWS_METADATA',
   "unset aws_candidate aws_metadata aws_uid aws_mode aws_type aws_mode_value",
   '"$aws_cli" sts assume-role-with-web-identity \\',
   '"$aws_cli" account get-region-opt-status \\',
@@ -227,7 +243,7 @@ const EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES = Object.freeze([
 const EXPECTED_IDENTITY_GPG_REFERENCE_SHA256 =
   "1d79a393539e67b435fd0fe7a75ac318e44950724484cb9418cbe421698f7949";
 const EXPECTED_READ_ONLY_GPG_REFERENCE_SHA256 =
-  "8686e2df7c5bfc697eaf03588f1dd2a7f1c6bb49c0345c6f5700aef57718d24c";
+  "307f188cb9b549e27d4aa74212da3eda8f3eb4dd82ba46e3d9b001d105d462f6";
 
 function assert(condition, code) {
   if (!condition) {
@@ -772,7 +788,7 @@ export function validateReadOnlyWorkflow(source) {
       "ref: ${{ github.sha }}",
       "fetch-depth: 0",
       "persist-credentials: false",
-      "node-version: 22",
+      "node-version: 22.23.1",
       "EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}",
       "PREFLIGHT_DIAGNOSTIC_ONLY: ${{ inputs.diagnostic_only }}",
       "AWS_READ_ONLY_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_READ_ONLY_PREFLIGHT_ROLE_ARN }}",
@@ -829,6 +845,9 @@ export function validateReadOnlyRunner(source) {
       "GITHUB_SHA:-}\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
       "AWS_CONTAINER_CREDENTIALS_FULL_URI",
       "compgen -A variable AWS_ENDPOINT_URL",
+      "/opt/hostedtoolcache/node/22.23.1/x64/bin/node",
+      "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
+      '[[ "$("$node_cli" --version)" == "v22.23.1" ]]',
       "oidc_request_url=\"${ACTIONS_ID_TOKEN_REQUEST_URL:-}\"",
       "${#oidc_request_url} <= 2048",
       "(pipelines|run-actions-[0-9]+-[a-z0-9]([a-z0-9-]*[a-z0-9])?)\\.actions\\.githubusercontent\\.com",

@@ -28,7 +28,7 @@
       "id": "ci-workflow",
       "path": ".github/workflows/ci.yml",
       "role": "REQUIRED_CHECK_SOURCE",
-      "sha256": "df81495e8dd15a38afe25f25eaf55142533ec36459e95603f99c0ae31ade9512"
+      "sha256": "3aa1021b973a81cb5ef8aec45550dd126fc48c6892cabc773cacb06225236b36"
     },
     {
       "id": "governance-ledger",

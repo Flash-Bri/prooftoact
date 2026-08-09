@@ -476,7 +476,15 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       "AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY",
       "AWS_READ_ONLY_STAGE_OIDC_ENDPOINT",
       "AWS_READ_ONLY_STAGE_SOURCE_BINDING",
-      "AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN",
+      "AWS_READ_ONLY_STAGE_NODE_DISCOVERY",
+      "AWS_READ_ONLY_STAGE_NODE_PATH",
+      "AWS_READ_ONLY_STAGE_NODE_OWNER",
+      "AWS_READ_ONLY_STAGE_NODE_METADATA",
+      "AWS_READ_ONLY_STAGE_NODE_INTEGRITY",
+      "AWS_READ_ONLY_STAGE_NODE_VERSION",
+      "AWS_READ_ONLY_STAGE_AWS_PATH",
+      "AWS_READ_ONLY_STAGE_AWS_METADATA",
+      "AWS_READ_ONLY_STAGE_GPG_METADATA",
       "AWS_READ_ONLY_STAGE_TEMPORARY_STATE",
       "AWS_READ_ONLY_STAGE_OIDC_REQUEST",
       "AWS_READ_ONLY_STAGE_OIDC_RECEIPT",
@@ -485,7 +493,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT,
-    90
+    92
   );
   assert.match(
     sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256,
@@ -503,6 +511,36 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
     sourceContract.EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256,
     /^[0-9a-f]{64}$/u
   );
+  assert.match(
+    READ_ONLY_RUNNER,
+    /93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068/u
+  );
+  assert.match(
+    READ_ONLY_RUNNER,
+    /node_uid.*0.*node_uid.*runner_uid/u
+  );
+  assert.doesNotMatch(
+    READ_ONLY_RUNNER,
+    /node_mode_value & 0022/u
+  );
+  assert.equal(
+    (READ_ONLY_RUNNER.match(/(?:aws|crypto)_mode_value & 0022/gu) ?? [])
+      .length,
+    2
+  );
+  for (const requiredNodeControl of [
+    "/opt/hostedtoolcache/node/22.23.1/x64/bin/node",
+    "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
+    '[[ "$("$node_cli" --version)" == "v22.23.1" ]]'
+  ]) {
+    assert.throws(
+      () =>
+        validateReadOnlyRunner(
+          READ_ONLY_RUNNER.replace(requiredNodeControl, "")
+        ),
+      /OIDC_READ_ONLY_(?:RUNNER_MARKERS|RUNNER_DIAGNOSTIC_BOUNDARY)/
+    );
+  }
 
   assert.throws(
     () =>
@@ -702,6 +740,46 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
     );
   }
 });
+
+test(
+  "hosted Node toolchain satisfies the pinned read-only policy on Linux",
+  { skip: process.platform !== "linux" },
+  () => {
+    const probe = String.raw`set -euo pipefail
+fail_probe() {
+  printf '%s\n' 'NODE_TOOLCHAIN_POLICY_FAIL' >&2
+  exit 1
+}
+node_candidate="$(command -v node)" || fail_probe
+[[ "$node_candidate" == /* && -x "$node_candidate" ]] || fail_probe
+node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_probe
+[[ "$node_cli" == "/opt/hostedtoolcache/node/22.23.1/x64/bin/node" ]] || fail_probe
+node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_probe
+IFS=':' read -r node_uid node_mode node_type <<<"$node_metadata"
+runner_uid="$(/usr/bin/id -u)" || fail_probe
+[[ "$node_uid" == "0" || "$node_uid" == "$runner_uid" ]] || fail_probe
+[[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_probe
+node_mode_value=$((8#$node_mode))
+(( (node_mode_value & 0111) != 0 )) || fail_probe
+node_digest="$(/usr/bin/sha256sum "$node_cli")" || fail_probe
+node_digest="\${node_digest%% *}"
+[[ "$node_digest" == "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068" ]] || fail_probe
+[[ "$("$node_cli" --version)" == "v22.23.1" ]] || fail_probe
+printf '%s\n' 'NODE_TOOLCHAIN_POLICY_PASS'
+`;
+    const result = spawnSync(
+      "/usr/bin/bash",
+      ["--noprofile", "--norc", "-c", probe],
+      {
+        encoding: "utf8",
+        env: { PATH: process.env.PATH ?? "" }
+      }
+    );
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "NODE_TOOLCHAIN_POLICY_PASS\n");
+    assert.equal(result.stderr, "");
+  }
+);
 
 test("receipt secret contract is canonical unpadded Base64URL for 32 bytes", () => {
   const pattern = new RegExp(sourceContract.EXACT_RECEIPT_SECRET_PATTERN);

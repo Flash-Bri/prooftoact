@@ -24,7 +24,7 @@
       "id": "actions-ci-workflow",
       "path": ".github/workflows/ci.yml",
       "role": "GITHUB_ACTIONS_RELEASE_VERIFICATION_WORKFLOW",
-      "sha256": "df81495e8dd15a38afe25f25eaf55142533ec36459e95603f99c0ae31ade9512"
+      "sha256": "3aa1021b973a81cb5ef8aec45550dd126fc48c6892cabc773cacb06225236b36"
     },
     {
       "id": "admissible-vector-retrieval",
@@ -156,7 +156,7 @@
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
       "role": "CLOUDSHELL_OPTIONAL_OIDC_AUTHORITY_BOUNDARY",
-      "sha256": "573c400d80b2a1026b094882287d73b9ee8b683b1cb6a64fa7531f819cd33008"
+      "sha256": "9b8fc00ad41d6a8000140b612b587d7e43809cb65e85567f01e22e9ffbd38bd8"
     },
     {
       "id": "aws-oidc-read-only-role-template",
@@ -168,25 +168,25 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "SOURCE_BOUND_READ_ONLY_OIDC_PREFLIGHT_RUNNER",
-      "sha256": "4823a44d788c1b8c47dfe30baeb1b9aa6b22e4827a936b2c91843185ecc65acb"
+      "sha256": "f5155d7dc178e2aae230381667c7bd414bf2f61ea302215209d0f5f13f9410d2"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
       "role": "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION",
-      "sha256": "27fb4b430fae524b14eab21c85d9f4c13f8c505532d32dee9d92749887d17fde"
+      "sha256": "f3d6a4a5aa5e39608c43142d99c2456fcc248e3933627ab965ee16998ec7f05a"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
       "role": "OIDC_SOURCE_BOUNDARY_VERIFIER",
-      "sha256": "f03918567ef89d0d544a4aa9c782ffa4f540580cf3d169d49d5356feee64851d"
+      "sha256": "841c9e45eff992617741e5027b936525ab2d3664ca47891120902832e8e5e9c3"
     },
     {
       "id": "aws-oidc-read-only-workflow",
       "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
       "role": "MANUAL_PROTECTED_READ_ONLY_OIDC_PREFLIGHT",
-      "sha256": "669e7b6cd5ab405fb25c5913012f12ce893a9b63bbb5a0e3c8e41af402c4402b"
+      "sha256": "d6fb0a92a44aced83503a1dd3a89b7c018ed24f4f8f8923299a72f64d59d8578"
     },
     {
       "id": "aws-provider-bundle-entry",
