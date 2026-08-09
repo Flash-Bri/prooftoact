@@ -16,6 +16,12 @@ const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const RECEIPT_SCHEMA = "tideproof.actions-checkout-normalization.v1";
 const OFFICIAL_REPOSITORY = "Flash-Bri/prooftoact";
 const OFFICIAL_REPOSITORY_ID = "1317716765";
+const CI_WORKFLOW_NAME = "CI";
+const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+const READ_ONLY_PREFLIGHT_WORKFLOW_NAME =
+  "AWS Read-Only OIDC Preflight";
+const READ_ONLY_PREFLIGHT_WORKFLOW_PATH =
+  ".github/workflows/aws-oidc-read-only-preflight.yml";
 const EXPECTED_WORKTREE_CONFIG_BYTES = Buffer.from(
   [
     "[core]",
@@ -87,7 +93,30 @@ function gitValue(rootDir, args, code) {
 }
 
 function resolveActionsContext({ rootDir, environment, platform }) {
-  const expectedWorkflowRef = `${OFFICIAL_REPOSITORY}/.github/workflows/ci.yml@${environment?.GITHUB_REF ?? ""}`;
+  const ref = environment?.GITHUB_REF ?? "";
+  const ciWorkflowRef =
+    `${OFFICIAL_REPOSITORY}/${CI_WORKFLOW_PATH}@${ref}`;
+  const readOnlyPreflightWorkflowRef =
+    `${OFFICIAL_REPOSITORY}/${READ_ONLY_PREFLIGHT_WORKFLOW_PATH}@refs/heads/main`;
+  const ciContext =
+    environment?.GITHUB_WORKFLOW === CI_WORKFLOW_NAME &&
+    environment?.GITHUB_WORKFLOW_REF === ciWorkflowRef &&
+    environment?.GITHUB_JOB === "verify" &&
+    ((environment?.GITHUB_EVENT_NAME === "pull_request" &&
+      PULL_REQUEST_REF.test(ref)) ||
+      (environment?.GITHUB_EVENT_NAME === "push" &&
+        ref === "refs/heads/main"));
+  const readOnlyPreflightContext =
+    environment?.GITHUB_WORKFLOW ===
+      READ_ONLY_PREFLIGHT_WORKFLOW_NAME &&
+    environment?.GITHUB_WORKFLOW_REF ===
+      readOnlyPreflightWorkflowRef &&
+    environment?.GITHUB_JOB === "read-only-preflight" &&
+    environment?.GITHUB_EVENT_NAME === "workflow_dispatch" &&
+    ref === "refs/heads/main" &&
+    HEX_40.test(environment?.EXPECTED_OFFICIAL_MAIN_COMMIT ?? "") &&
+    environment?.EXPECTED_OFFICIAL_MAIN_COMMIT ===
+      environment?.GITHUB_SHA;
   assert(
     environment &&
       typeof environment === "object" &&
@@ -101,9 +130,7 @@ function resolveActionsContext({ rootDir, environment, platform }) {
       environment.GITHUB_GRAPHQL_URL === "https://api.github.com/graphql" &&
       environment.GITHUB_REPOSITORY === OFFICIAL_REPOSITORY &&
       environment.GITHUB_REPOSITORY_ID === OFFICIAL_REPOSITORY_ID &&
-      environment.GITHUB_WORKFLOW === "CI" &&
-      environment.GITHUB_WORKFLOW_REF === expectedWorkflowRef &&
-      environment.GITHUB_JOB === "verify" &&
+      (ciContext || readOnlyPreflightContext) &&
       [
         "NODE_COMPILE_CACHE",
         "NODE_EXTRA_CA_CERTS",
@@ -120,14 +147,6 @@ function resolveActionsContext({ rootDir, environment, platform }) {
       environment.GITHUB_WORKSPACE.length > 0,
     "ACTIONS_CHECKOUT_NORMALIZATION_CONTEXT"
   );
-  assert(
-    (environment.GITHUB_EVENT_NAME === "pull_request" &&
-      PULL_REQUEST_REF.test(environment.GITHUB_REF ?? "")) ||
-      (environment.GITHUB_EVENT_NAME === "push" &&
-        environment.GITHUB_REF === "refs/heads/main"),
-    "ACTIONS_CHECKOUT_NORMALIZATION_CONTEXT"
-  );
-
   let resolvedRoot;
   let workspaceRealpath;
   let rootStat;

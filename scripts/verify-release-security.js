@@ -666,9 +666,16 @@ const REQUIRED_DENY_ACTIONS = Object.freeze({
 const SOURCE_MARKERS = Object.freeze({
   "actions-checkout-normalizer": Object.freeze([
     "const OFFICIAL_REPOSITORY_ID = \"1317716765\"",
+    "const CI_WORKFLOW_NAME = \"CI\"",
+    "const READ_ONLY_PREFLIGHT_WORKFLOW_NAME =",
+    "AWS Read-Only OIDC Preflight",
+    ".github/workflows/aws-oidc-read-only-preflight.yml",
     "GIT_OPTIONAL_LOCKS: \"0\"",
-    "environment.GITHUB_JOB === \"verify\"",
-    "environment.GITHUB_WORKFLOW_REF === expectedWorkflowRef",
+    "environment?.GITHUB_JOB === \"verify\"",
+    "environment?.GITHUB_JOB === \"read-only-preflight\"",
+    "environment?.GITHUB_EVENT_NAME === \"workflow_dispatch\"",
+    "environment?.EXPECTED_OFFICIAL_MAIN_COMMIT ===",
+    "environment?.GITHUB_SHA",
     "fs.constants.O_NOFOLLOW",
     "descriptorStat.size === EXPECTED_WORKTREE_CONFIG_BYTES.length",
     "[0o600, 0o644].includes(descriptorStat.mode & 0o7777)",
@@ -688,7 +695,9 @@ const SOURCE_MARKERS = Object.freeze({
     "Actions normalization rejects hostile residue without changing its path identity",
     "Actions normalization rejects wrong context and pathname replacement before unlink",
     "Actions normalization preserves residue when pre-unlink checkout state drifts",
-    "CI orders one fail-closed normalizer before install and every verifier",
+    "protected read-only preflight normalization removes only exact inert residue",
+    "protected read-only preflight normalization rejects context drift",
+    "CI and read-only preflight order one fail-closed normalizer before strict verification",
     "scripts/normalize-actions-checkout.js"
   ]),
   "actions-ci-workflow": Object.freeze([

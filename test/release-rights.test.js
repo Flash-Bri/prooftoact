@@ -184,6 +184,27 @@ function actionsEnvironment(
   };
 }
 
+function readOnlyPreflightActionsEnvironment(
+  rootDir,
+  { sourceCommit } = {}
+) {
+  const environment = actionsEnvironment(rootDir, {
+    eventName: "push",
+    sourceCommit
+  });
+  return {
+    ...environment,
+    EXPECTED_OFFICIAL_MAIN_COMMIT: environment.GITHUB_SHA,
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    GITHUB_JOB: "read-only-preflight",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_WORKFLOW: "AWS Read-Only OIDC Preflight",
+    GITHUB_WORKFLOW_REF:
+      "Flash-Bri/prooftoact/.github/workflows/" +
+      "aws-oidc-read-only-preflight.yml@refs/heads/main"
+  };
+}
+
 function worktreeConfigPath(rootDir) {
   return path.join(rootDir, ".git", "config.worktree");
 }
@@ -323,6 +344,68 @@ test("Actions main-push normalization is a strict no-op without residue", () => 
       verifyReleaseRights({ rootDir: fixture.rootDir }).status,
       "CURRENT_SURFACES_PASS"
     );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("protected read-only preflight normalization removes only exact inert residue", () => {
+  const fixture = copyFixture();
+  try {
+    initializeExactRepository(fixture.rootDir);
+    const candidate = writeExactActionsResidue(fixture.rootDir);
+    const environment = readOnlyPreflightActionsEnvironment(
+      fixture.rootDir
+    );
+    const receipt = normalizeFixture(fixture.rootDir, environment);
+
+    assert.equal(receipt.status, "NORMALIZED_INACTIVE_ACTIONS_RESIDUE");
+    assert.equal(receipt.eventName, "workflow_dispatch");
+    assert.equal(receipt.ref, "refs/heads/main");
+    assert.equal(receipt.sourceCommit, environment.GITHUB_SHA);
+    assert.equal(receipt.removedPath, ".git/config.worktree");
+    assert.equal(fs.existsSync(candidate), false);
+    assert.equal(
+      verifyReleaseRights({ rootDir: fixture.rootDir }).status,
+      "CURRENT_SURFACES_PASS"
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("protected read-only preflight normalization rejects context drift", () => {
+  const fixture = copyFixture();
+  try {
+    initializeExactRepository(fixture.rootDir);
+    const candidate = writeExactActionsResidue(fixture.rootDir);
+    const environment = readOnlyPreflightActionsEnvironment(
+      fixture.rootDir
+    );
+    const contextMutations = [
+      { EXPECTED_OFFICIAL_MAIN_COMMIT: "0".repeat(40) },
+      { GITHUB_EVENT_NAME: "push" },
+      { GITHUB_JOB: "verify" },
+      { GITHUB_REF: "refs/heads/feature" },
+      { GITHUB_WORKFLOW: "CI" },
+      {
+        GITHUB_WORKFLOW_REF:
+          "Flash-Bri/prooftoact/.github/workflows/ci.yml@refs/heads/main"
+      }
+    ];
+
+    for (const mutation of contextMutations) {
+      const before = candidateIdentity(candidate);
+      assert.throws(
+        () =>
+          normalizeFixture(fixture.rootDir, {
+            ...environment,
+            ...mutation
+          }),
+        /ACTIONS_CHECKOUT_NORMALIZATION_CONTEXT/
+      );
+      assert.deepEqual(candidateIdentity(candidate), before);
+    }
   } finally {
     fixture.cleanup();
   }
@@ -656,7 +739,7 @@ test("Actions normalization rejects dirty and hidden index state before unlink",
   }
 });
 
-test("CI orders one fail-closed normalizer before install and every verifier", () => {
+test("CI and read-only preflight order one fail-closed normalizer before strict verification", () => {
   const workflow = fs.readFileSync(
     path.join(ROOT, ".github", "workflows", "ci.yml"),
     "utf8"
@@ -692,6 +775,48 @@ test("CI orders one fail-closed normalizer before install and every verifier", (
     assert(workflow.includes(marker), marker);
   }
   assert.equal(workflow.includes("continue-on-error"), false);
+
+  const readOnlyWorkflow = fs.readFileSync(
+    path.join(
+      ROOT,
+      ".github",
+      "workflows",
+      "aws-oidc-read-only-preflight.yml"
+    ),
+    "utf8"
+  );
+  const readOnlyOrderedMarkers = [
+    "uses: actions/checkout@",
+    "uses: actions/setup-node@",
+    "name: Normalize exact GitHub Actions checkout",
+    "run: node scripts/normalize-actions-checkout.js",
+    "name: Capture encrypted sanitized read-only preflight receipt"
+  ];
+  prior = -1;
+  for (const marker of readOnlyOrderedMarkers) {
+    const index = readOnlyWorkflow.indexOf(marker);
+    assert(index > prior, marker);
+    prior = index;
+  }
+  assert.equal(
+    readOnlyWorkflow.match(
+      /node scripts\/normalize-actions-checkout\.js/g
+    )?.length,
+    1
+  );
+  for (const marker of [
+    "EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}",
+    'GIT_OPTIONAL_LOCKS: "0"',
+    'NODE_COMPILE_CACHE: ""',
+    'NODE_EXTRA_CA_CERTS: ""',
+    'NODE_OPTIONS: ""',
+    'NODE_PATH: ""',
+    'NODE_REPL_EXTERNAL_MODULE: ""',
+    'NODE_V8_COVERAGE: ""'
+  ]) {
+    assert(readOnlyWorkflow.includes(marker), marker);
+  }
+  assert.equal(readOnlyWorkflow.includes("continue-on-error"), false);
 
   const normalizer = fs.readFileSync(
     path.join(ROOT, "scripts", "normalize-actions-checkout.js"),

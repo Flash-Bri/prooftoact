@@ -45,6 +45,18 @@ jobs:
           check-latest: false
           node-version: 22.23.1
 
+      - name: Normalize exact GitHub Actions checkout
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: node scripts/normalize-actions-checkout.js
+
       - name: Capture encrypted sanitized read-only preflight receipt
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
