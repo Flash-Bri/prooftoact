@@ -150,7 +150,7 @@
       "id": "aws-oidc-identity-bootstrap",
       "path": ".github/workflows/aws-oidc-identity-bootstrap.yml",
       "role": "MANUAL_SHORT_LIVED_AWS_IDENTITY_BOOTSTRAP",
-      "sha256": "6151518a822c4d5bd706fe45da3046370c8b1ffc450a91b0099372a1724039de"
+      "sha256": "f40ba7bb3375e2e03bb9c1186c27867745ab89f6b51ba18819271d4af770f8aa"
     },
     {
       "id": "aws-oidc-read-only-ledger",
@@ -168,19 +168,19 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "SOURCE_BOUND_READ_ONLY_OIDC_PREFLIGHT_RUNNER",
-      "sha256": "2cb1c29be9a50d839a8266fe954726b140fddc61735228869d5eba19c0a60f99"
+      "sha256": "e612839f1c445dc8a35754da9df54ad1c45c0aefc3b5d690ed721dc4d8f761fc"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
       "role": "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION",
-      "sha256": "5c2a812572b128e5d812db340237d0b80c3cf8bda1ab93f5f7f873ff9e6193bb"
+      "sha256": "71a4c7127929b75d3d1ebe2affb5376bab7dde83f19ce2b922de69335fc43be7"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
       "role": "OIDC_SOURCE_BOUNDARY_VERIFIER",
-      "sha256": "f826d0d86cb0f6319f1b0933f7fb39c18d5fd9f09f035a27419c1041393434d4"
+      "sha256": "e22951f09a9361ad1b27c9df9824ef4de054d6d096e36c297f46a4f9b166822b"
     },
     {
       "id": "aws-oidc-read-only-workflow",
@@ -234,7 +234,7 @@
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
       "role": "READ_ONLY_AWS_PREFLIGHT_VERIFICATION",
-      "sha256": "bb416205141fa9847f1348a0a542474b4f78f02454bc242e289afd45ad095b21"
+      "sha256": "eb13a7ecbc44239ec98eda72ee51aae16b10855ded8ddaf93d6b3a0752106610"
     },
     {
       "id": "aws-readiness",

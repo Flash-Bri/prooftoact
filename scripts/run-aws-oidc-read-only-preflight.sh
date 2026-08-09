@@ -122,7 +122,10 @@ expected_role_arn="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ProofToActReadOnlyPreflig
 [[ "${AWS_READ_ONLY_PREFLIGHT_ROLE_ARN:-}" == "$expected_role_arn" ]] || fail_closed
 expected_caller_arn="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/ProofToActReadOnlyPreflight/read-only-preflight"
 [[ "${RECEIPT_ENCRYPTION_PASSPHRASE:-}" =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || fail_closed
-[[ "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" == https://pipelines.actions.githubusercontent.com/*\?* ]] || fail_closed
+oidc_request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+oidc_request_url_pattern='^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.actions\.githubusercontent\.com/[^[:space:]?#]+\?[^[:space:]#]+$'
+[[ "$oidc_request_url" =~ $oidc_request_url_pattern ]] || fail_closed
+unset oidc_request_url_pattern
 [[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed
 
 git_environment=(
@@ -214,7 +217,7 @@ error_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-error.XXXXXX")" || fail_
   "$passphrase_file" \
   "$error_file" || fail_closed
 
-oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com"
+oidc_url="${oidc_request_url}&audience=sts.amazonaws.com"
 if ! /usr/bin/timeout --signal=KILL 30s \
   /usr/bin/curl \
     --disable \
@@ -359,7 +362,7 @@ AWS_ACCESS_KEY_ID="$(/usr/bin/jq -r '.Credentials.AccessKeyId' "$sts_response")"
 AWS_SECRET_ACCESS_KEY="$(/usr/bin/jq -r '.Credentials.SecretAccessKey' "$sts_response")" || fail_closed
 AWS_SESSION_TOKEN="$(/usr/bin/jq -r '.Credentials.SessionToken' "$sts_response")" || fail_closed
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL oidc_request_url
 
 if ! /usr/bin/timeout --signal=KILL 30s \
   "$aws_cli" account get-region-opt-status \

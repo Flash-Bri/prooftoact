@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import test from "node:test";
 
@@ -43,6 +44,37 @@ const PREFLIGHT_RUNNER = source("scripts/gate2-aws-preflight.js");
 const PREFLIGHT_VALIDATOR = source(
   "src/cloud/aws-gate2-preflight.js"
 );
+
+function oidcRequestUrlPattern(sourceText) {
+  const match = sourceText.match(
+    /^\s*oidc_request_url_pattern='([^'\n]+)'$/mu
+  );
+  assert.ok(match, "OIDC request URL pattern must be present exactly");
+  assert.equal(
+    sourceText.match(/^\s*oidc_request_url_pattern=/gmu)?.length,
+    1,
+    "OIDC request URL pattern must have one definition"
+  );
+  return match[1];
+}
+
+function acceptsOidcRequestUrl(pattern, requestUrl) {
+  const result = spawnSync(
+    "/bin/bash",
+    [
+      "--noprofile",
+      "--norc",
+      "-c",
+      '[[ "$1" =~ $2 ]]',
+      "oidc-url-guard",
+      requestUrl,
+      pattern
+    ],
+    { encoding: "utf8" }
+  );
+  assert.equal(result.signal, null);
+  return result.status === 0;
+}
 
 test("OIDC source receipt remains explicitly local and provider-pending", () => {
   const receipt = verifyAwsOidcPreflightSource();
@@ -152,6 +184,23 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
   assert.throws(
     () =>
       validateIdentityWorkflow(
+        IDENTITY_WORKFLOW.replace(
+          "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.actions\\.githubusercontent\\.com",
+          ".*"
+        )
+      ),
+    /OIDC_IDENTITY_WORKFLOW_MARKERS/
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        `${IDENTITY_WORKFLOW}\nhttps://pipelines.actions.githubusercontent.com/\n`
+      ),
+    /OIDC_IDENTITY_WORKFLOW_MINIMAL/
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
         `${IDENTITY_WORKFLOW}\n      - uses: actions/checkout@main\n`
       ),
     /OIDC_IDENTITY_WORKFLOW_MINIMAL/
@@ -184,6 +233,33 @@ test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
       ),
     /OIDC_IDENTITY_WORKFLOW_MARKERS/
   );
+});
+
+test("OIDC request URL guards accept GitHub regional hosts and reject authority confusion", () => {
+  const identityPattern = oidcRequestUrlPattern(IDENTITY_WORKFLOW);
+  const readOnlyPattern = oidcRequestUrlPattern(READ_ONLY_RUNNER);
+  assert.equal(identityPattern, readOnlyPattern);
+
+  for (const accepted of [
+    "https://pipelines.actions.githubusercontent.com/_apis/distributedtask/hubs/build/plans/1/jobs/2/idtoken?api-version=2.0",
+    "https://run-actions-2-azure-eastus.actions.githubusercontent.com/_apis/distributedtask/hubs/build/plans/1/jobs/2/idtoken?api-version=2.0"
+  ]) {
+    assert.equal(acceptsOidcRequestUrl(identityPattern, accepted), true);
+  }
+
+  for (const rejected of [
+    "http://pipelines.actions.githubusercontent.com/idtoken?api-version=2.0",
+    "https://actions.githubusercontent.com/idtoken?api-version=2.0",
+    "https://foo.bar.actions.githubusercontent.com/idtoken?api-version=2.0",
+    "https://foo.actions.githubusercontent.com.evil.example/idtoken?api-version=2.0",
+    "https://foo.actions.githubusercontent.com:443/idtoken?api-version=2.0",
+    "https://user@foo.actions.githubusercontent.com/idtoken?api-version=2.0",
+    "https://foo.actions.githubusercontent.com/idtoken",
+    "https://foo.actions.githubusercontent.com/idtoken?api-version=2.0#fragment",
+    "https://foo.actions.githubusercontent.com/id token?api-version=2.0"
+  ]) {
+    assert.equal(acceptsOidcRequestUrl(identityPattern, rejected), false);
+  }
 });
 
 test("read-only workflow stays separately protected and action-pinned", () => {
@@ -252,6 +328,23 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
         )
       ),
     /OIDC_READ_ONLY_RUNNER_MARKERS/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.actions\\.githubusercontent\\.com",
+          ".*"
+        )
+      ),
+    /OIDC_READ_ONLY_RUNNER_MARKERS/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        `${READ_ONLY_RUNNER}\nhttps://pipelines.actions.githubusercontent.com/\n`
+      ),
+    /OIDC_READ_ONLY_RUNNER_MUTATION/
   );
 });
 

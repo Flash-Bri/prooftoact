@@ -127,19 +127,19 @@
     {
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
-      "sha256": "2cb1c29be9a50d839a8266fe954726b140fddc61735228869d5eba19c0a60f99",
+      "sha256": "e612839f1c445dc8a35754da9df54ad1c45c0aefc3b5d690ed721dc4d8f761fc",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "5c2a812572b128e5d812db340237d0b80c3cf8bda1ab93f5f7f873ff9e6193bb",
+      "sha256": "71a4c7127929b75d3d1ebe2affb5376bab7dde83f19ce2b922de69335fc43be7",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
-      "sha256": "f826d0d86cb0f6319f1b0933f7fb39c18d5fd9f09f035a27419c1041393434d4",
+      "sha256": "e22951f09a9361ad1b27c9df9824ef4de054d6d096e36c297f46a4f9b166822b",
       "kind": "verification-code"
     },
     {
@@ -151,7 +151,7 @@
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
-      "sha256": "bb416205141fa9847f1348a0a542474b4f78f02454bc242e289afd45ad095b21",
+      "sha256": "eb13a7ecbc44239ec98eda72ee51aae16b10855ded8ddaf93d6b3a0752106610",
       "kind": "verification-code"
     },
     {
@@ -535,7 +535,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "43696b495038e7b09b6548c20253e05668e0d14dc9e0269512a2d5d6a5a19cbd",
+      "sha256": "07fa29a8d3549b70aaac0e63bc480ea4fc24da6027265784f369d21439d5ccff",
       "kind": "boundary-ledger"
     },
     {
@@ -649,7 +649,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "57ec7f8700460735415a0a68ccef7380d6e1fab69972ba2343b4ba6a6191ad42",
+      "sha256": "afa9fe16be106c03a7422cabe817715db1bf5feda5cab5f1831e6083f95bd4a7",
       "kind": "boundary-ledger"
     },
     {
@@ -661,7 +661,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "bd35a41435e6ff1be792ce9d353b80409e9d9420e4e80f25a7e07bd932d87038",
+      "sha256": "5aa7f06b84413963077be3bddc164bc274324e62c531e9c646b9cb213da043a1",
       "kind": "verification-code"
     },
     {

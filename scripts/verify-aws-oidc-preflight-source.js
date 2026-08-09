@@ -457,6 +457,9 @@ export function validateIdentityWorkflow(source) {
       "GITHUB_SHA:-}\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
       "AWS_CONTAINER_CREDENTIALS_FULL_URI",
       "compgen -A variable AWS_ENDPOINT_URL",
+      "oidc_request_url=\"${ACTIONS_ID_TOKEN_REQUEST_URL:-}\"",
+      "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.actions\\.githubusercontent\\.com",
+      "oidc_url=\"${oidc_request_url}&audience=sts.amazonaws.com\"",
       ".workflow_sha == $sha",
       '.repository_owner_id == "252500266"',
       "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-preflight",
@@ -496,6 +499,7 @@ export function validateIdentityWorkflow(source) {
   assert(
     !source.includes("actions/checkout@") &&
       !source.includes("actions/setup-node@") &&
+      !source.includes("https://pipelines.actions.githubusercontent.com/") &&
       !/^\s*(?:push|pull_request|schedule):/mu.test(source) &&
       !/\bset\s+-x\b/u.test(source) &&
       !/\b(?:cat|tee)\b/u.test(source) &&
@@ -562,6 +566,9 @@ export function validateReadOnlyRunner(source) {
       "GITHUB_SHA:-}\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
       "AWS_CONTAINER_CREDENTIALS_FULL_URI",
       "compgen -A variable AWS_ENDPOINT_URL",
+      "oidc_request_url=\"${ACTIONS_ID_TOKEN_REQUEST_URL:-}\"",
+      "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.actions\\.githubusercontent\\.com",
+      "oidc_url=\"${oidc_request_url}&audience=sts.amazonaws.com\"",
       "source_commit\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
       '.repository_owner_id == "252500266"',
       "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight",
@@ -608,6 +615,7 @@ export function validateReadOnlyRunner(source) {
   );
   assert(
     !/\bset\s+-x\b/u.test(source) &&
+      !source.includes("https://pipelines.actions.githubusercontent.com/") &&
       !/\btee\b/u.test(source),
     "OIDC_READ_ONLY_RUNNER_MUTATION"
   );
