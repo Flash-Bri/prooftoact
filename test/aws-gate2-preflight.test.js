@@ -4,15 +4,18 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  AWS_GATE2_PREFLIGHT_BUDGET_FAILURES,
   AWS_GATE2_PREFLIGHT_CONTROL_FAILURES,
   AWS_GATE2_PREFLIGHT_DEFAULTS,
   AwsGate2PreflightControlFailure,
   awsBudgetDescribeArguments,
   awsCostExplorerPeriod,
+  createAwsGate2PreflightDiagnosticContext,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
 import {
   AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY,
+  AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES,
   AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES,
   AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES,
   AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES,
@@ -1084,9 +1087,14 @@ test("AWS preflight validation diagnostics identify every fixed control domain",
     },
     {
       index: 2,
-      rawCode: "BUDGET_TYPE",
+      rawCode: "SECRET_BUDGET_CONTROL_FAILURE",
       mutate(snapshot) {
-        snapshot.budget.BudgetType = "USAGE";
+        Object.defineProperty(snapshot, "budget", {
+          configurable: true,
+          get() {
+            throw new Error("SECRET_BUDGET_CONTROL_FAILURE");
+          }
+        });
       }
     },
     {
@@ -1147,10 +1155,13 @@ test("AWS preflight validation diagnostics identify every fixed control domain",
 
     const diagnosticSnapshot = validSnapshot();
     mutate(diagnosticSnapshot);
+    const diagnosticContext =
+      createAwsGate2PreflightDiagnosticContext();
     let diagnosticFailure;
     try {
       validateAwsGate2Preflight(diagnosticSnapshot, {
-        diagnosticFailureMode: true
+        diagnosticFailureMode: true,
+        diagnosticContext
       });
     } catch (error) {
       diagnosticFailure = error;
@@ -1163,7 +1174,10 @@ test("AWS preflight validation diagnostics identify every fixed control domain",
       "AWS_GATE2_PREFLIGHT_CONTROL_FAILURE"
     );
     assert.deepEqual(
-      awsPreflightRuntimeFailureDescriptor(diagnosticFailure),
+      awsPreflightRuntimeFailureDescriptor(
+        diagnosticFailure,
+        diagnosticContext
+      ),
       AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES[index]
     );
     assert.doesNotMatch(String(diagnosticFailure), new RegExp(rawCode));
@@ -1183,20 +1197,361 @@ test("AWS preflight validation diagnostics identify every fixed control domain",
       return observedAt;
     }
   });
+  const receiptFailureContext =
+    createAwsGate2PreflightDiagnosticContext();
   let receiptFailure;
   try {
     validateAwsGate2Preflight(receiptFailureSnapshot, {
-      diagnosticFailureMode: true
+      diagnosticFailureMode: true,
+      diagnosticContext: receiptFailureContext
     });
   } catch (error) {
     receiptFailure = error;
   }
   assert(receiptFailure instanceof AwsGate2PreflightControlFailure);
   assert.deepEqual(
-    awsPreflightRuntimeFailureDescriptor(receiptFailure),
+    awsPreflightRuntimeFailureDescriptor(
+      receiptFailure,
+      receiptFailureContext
+    ),
     AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES[9]
   );
   assert.doesNotMatch(String(receiptFailure), /SECRET_RECEIPT/u);
+});
+
+test("AWS preflight budget diagnostics identify all fixed semantic predicates", () => {
+  const cases = [
+    ["BUDGET_NAME", (s) => { s.budget.BudgetName = "wrong"; }],
+    ["BUDGET_TYPE", (s) => { s.budget.BudgetType = "USAGE"; }],
+    ["BUDGET_TIME_UNIT", (s) => { s.budget.TimeUnit = "DAILY"; }],
+    ["BUDGET_COST_FILTERS_ACCOUNT_WIDE", (s) => {
+      s.budget.CostFilters = { Service: ["private"] };
+    }],
+    ["BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE", (s) => {
+      s.budget.FilterExpression = { Not: {} };
+    }],
+    ["BUDGET_BILLING_VIEW_ACCOUNT_WIDE", (s) => {
+      s.budget.BillingViewArn = "private";
+    }],
+    ["BUDGET_AUTO_ADJUST_NOT_FIXED", (s) => {
+      s.budget.AutoAdjustData = {};
+    }],
+    ["BUDGET_PLANNED_LIMITS_NOT_FIXED", (s) => {
+      s.budget.PlannedBudgetLimits = { "1": {} };
+    }],
+    ["BUDGET_METRICS_MODEL", (s) => {
+      s.budget.Metrics = ["UnblendedCost"];
+    }],
+    ["BUDGET_COST_TYPES", (s) => {
+      s.budget.CostTypes.UseBlended = true;
+    }],
+    ["BUDGET_TIME_PERIOD_START", (s) => {
+      s.budget.TimePeriod.Start = "invalid";
+    }],
+    ["BUDGET_TIME_PERIOD_END", (s) => {
+      s.budget.TimePeriod.End = "invalid";
+    }],
+    ["BUDGET_TIME_PERIOD_ORDER", (s) => {
+      s.budget.TimePeriod.Start = "2088-01-01T00:00:00.000Z";
+    }],
+    ["BUDGET_TIME_PERIOD_NOT_STARTED", (s) => {
+      s.budget.TimePeriod.Start = "2026-08-01T00:00:00.000Z";
+    }],
+    ["BUDGET_TIME_PERIOD_EXPIRED", (s) => {
+      s.budget.TimePeriod.End = "2026-07-15T00:00:00.000Z";
+    }],
+    ["BUDGET_TIME_PERIOD_RELEASE_HORIZON", (s) => {
+      s.budget.TimePeriod.End = "2026-08-31T00:00:00.000Z";
+    }],
+    ["BUDGET_LIMIT_UNIT", (s) => {
+      s.budget.BudgetLimit.Unit = "EUR";
+    }],
+    ["BUDGET_LIMIT_AMOUNT", (s) => {
+      s.budget.BudgetLimit.Amount = "invalid";
+    }],
+    ["BUDGET_LIMIT_NEGATIVE", (s) => {
+      s.budget.BudgetLimit.Amount = "-1";
+    }],
+    ["BUDGET_LIMIT_VALUE", (s) => {
+      s.budget.BudgetLimit.Amount = "16";
+    }],
+    ["BUDGET_ACTUAL_UNIT", (s) => {
+      s.budget.CalculatedSpend.ActualSpend.Unit = "EUR";
+    }],
+    ["BUDGET_ACTUAL_AMOUNT", (s) => {
+      s.budget.CalculatedSpend.ActualSpend.Amount = "invalid";
+    }],
+    ["BUDGET_ACTUAL_NEGATIVE", (s) => {
+      s.budget.CalculatedSpend.ActualSpend.Amount = "-1";
+    }],
+    ["BUDGET_ACTUAL_CEILING", (s) => {
+      s.budget.CalculatedSpend.ActualSpend.Amount = "13.14";
+    }]
+  ];
+
+  assert.equal(cases.length, AWS_GATE2_PREFLIGHT_BUDGET_FAILURES.length);
+  assert.equal(
+    cases.length,
+    AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES.length
+  );
+  for (const [index, [rawCode, mutate]] of cases.entries()) {
+    const rawSnapshot = validSnapshot();
+    mutate(rawSnapshot);
+    let rawFailure;
+    try {
+      validateAwsGate2Preflight(rawSnapshot);
+    } catch (error) {
+      rawFailure = error;
+    }
+    assert(rawFailure instanceof Error);
+    assert.equal(rawFailure.name, "Error");
+    assert.equal(rawFailure.message, rawCode);
+
+    const diagnosticSnapshot = validSnapshot();
+    mutate(diagnosticSnapshot);
+    const diagnosticContext =
+      createAwsGate2PreflightDiagnosticContext();
+    let failure;
+    try {
+      validateAwsGate2Preflight(diagnosticSnapshot, {
+        diagnosticFailureMode: true,
+        diagnosticContext
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert(failure instanceof Error);
+    assert.equal(failure.name, "AwsGate2PreflightBudgetFailure");
+    assert.equal(failure.message, "AWS_GATE2_PREFLIGHT_BUDGET_FAILURE");
+    assert.equal(Object.isFrozen(failure), true);
+    assert.equal(Object.hasOwn(failure, "index"), false);
+    assert.equal(
+      AWS_GATE2_PREFLIGHT_BUDGET_FAILURES[index],
+      AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[index].stage
+    );
+    assert.deepEqual(
+      awsPreflightRuntimeFailureDescriptor(failure, diagnosticContext),
+      AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[index]
+    );
+    assert.deepEqual(
+      awsPreflightRuntimeFailureDescriptor(failure, diagnosticContext),
+      { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+    );
+    assert.doesNotMatch(String(failure), new RegExp(rawCode));
+    assert.doesNotMatch(
+      String(failure),
+      /private|UnblendedCost|13\.14|2088/u
+    );
+  }
+});
+
+test("AWS preflight budget diagnostics reject forgery, replay, and cross-invocation injection", () => {
+  const captureBudgetFailure = (mutate) => {
+    const snapshot = validSnapshot();
+    mutate(snapshot);
+    const diagnosticContext =
+      createAwsGate2PreflightDiagnosticContext();
+    let error;
+    try {
+      validateAwsGate2Preflight(snapshot, {
+        diagnosticFailureMode: true,
+        diagnosticContext
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    assert(error instanceof Error);
+    return { diagnosticContext, error };
+  };
+
+  const original = captureBudgetFailure((snapshot) => {
+    snapshot.budget.Metrics = ["UnblendedCost"];
+  });
+  let runtimePhaseFailure;
+  try {
+    collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
+      diagnosticFailureMode: true,
+      environment: expectedPreflightEnvironment(),
+      readGitCheckout() {
+        throw original.error;
+      },
+      readAwsJson() {
+        throw new Error("AWS_CALL_MUST_NOT_OCCUR");
+      }
+    });
+  } catch (error) {
+    runtimePhaseFailure = error;
+  }
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(runtimePhaseFailure),
+    { stage: "SOURCE_CHECKOUT", exitCode: 61 }
+  );
+  assert.equal(Object.isFrozen(original.error), true);
+  assert.equal(Object.hasOwn(original.error, "index"), false);
+  assert.throws(
+    () => Object.defineProperty(original.error, "index", { value: 23 }),
+    TypeError
+  );
+  const LeakedErrorConstructor = original.error.constructor;
+  const constructorForgery = new LeakedErrorConstructor(
+    23,
+    original.diagnosticContext
+  );
+  if (Object.isExtensible(constructorForgery)) {
+    Object.assign(constructorForgery, {
+      name: "AwsGate2PreflightBudgetFailure",
+      index: 23
+    });
+  }
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      constructorForgery,
+      original.diagnosticContext
+    ),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+
+  const forgedContext = createAwsGate2PreflightDiagnosticContext();
+  assert.equal(
+    validateAwsGate2Preflight(validSnapshot(), {
+      diagnosticFailureMode: true,
+      diagnosticContext: forgedContext
+    }).status,
+    "PASS"
+  );
+  const forged = Object.assign(new Error("PRIVATE_FORGED_FAILURE"), {
+    name: "AwsGate2PreflightBudgetFailure",
+    index: 23
+  });
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(forged, forgedContext),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+
+  const constructorInjectionContext =
+    createAwsGate2PreflightDiagnosticContext();
+  const constructorInjectionSnapshot = validSnapshot();
+  Object.defineProperty(
+    constructorInjectionSnapshot.budget,
+    "BudgetType",
+    {
+      configurable: true,
+      get() {
+        throw new LeakedErrorConstructor(
+          23,
+          constructorInjectionContext
+        );
+      }
+    }
+  );
+  let constructorInjectionFailure;
+  try {
+    validateAwsGate2Preflight(constructorInjectionSnapshot, {
+      diagnosticFailureMode: true,
+      diagnosticContext: constructorInjectionContext
+    });
+  } catch (error) {
+    constructorInjectionFailure = error;
+  }
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      constructorInjectionFailure,
+      constructorInjectionContext
+    ),
+    AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[1]
+  );
+
+  const injectedSnapshot = validSnapshot();
+  Object.defineProperty(injectedSnapshot.budget, "BudgetType", {
+    configurable: true,
+    get() {
+      throw original.error;
+    }
+  });
+  const injectedContext = createAwsGate2PreflightDiagnosticContext();
+  let injectedFailure;
+  try {
+    validateAwsGate2Preflight(injectedSnapshot, {
+      diagnosticFailureMode: true,
+      diagnosticContext: injectedContext
+    });
+  } catch (error) {
+    injectedFailure = error;
+  }
+  assert(injectedFailure instanceof Error);
+  assert.notEqual(injectedFailure, original.error);
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      original.error,
+      injectedContext
+    ),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      injectedFailure,
+      injectedContext
+    ),
+    AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[1]
+  );
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      original.error,
+      original.diagnosticContext
+    ),
+    AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[8]
+  );
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      original.error,
+      original.diagnosticContext
+    ),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+
+  assert.throws(
+    () =>
+      validateAwsGate2Preflight(validSnapshot(), {
+        diagnosticFailureMode: true,
+        diagnosticContext: forgedContext
+      }),
+    (error) =>
+      error instanceof AwsGate2PreflightControlFailure &&
+      error.index === 9
+  );
+  assert.throws(
+    () =>
+      validateAwsGate2Preflight(validSnapshot(), {
+        diagnosticFailureMode: true,
+        diagnosticContext: Object.freeze({})
+      }),
+    (error) =>
+      error instanceof AwsGate2PreflightControlFailure &&
+      error.index === 9
+  );
+});
+
+test("AWS preflight diagnostic context preserves the exact valid receipt", () => {
+  const legacyReceipt = validateAwsGate2Preflight(validSnapshot());
+  const diagnosticContext = createAwsGate2PreflightDiagnosticContext();
+  const diagnosticReceipt = validateAwsGate2Preflight(validSnapshot(), {
+    diagnosticFailureMode: true,
+    diagnosticContext
+  });
+  assert.equal(
+    `${JSON.stringify(diagnosticReceipt, null, 2)}\n`,
+    `${JSON.stringify(legacyReceipt, null, 2)}\n`
+  );
+  assert.throws(
+    () =>
+      validateAwsGate2Preflight(validSnapshot(), {
+        diagnosticFailureMode: true,
+        diagnosticContext
+      }),
+    (error) =>
+      error instanceof AwsGate2PreflightControlFailure &&
+      error.index === 9
+  );
 });
 
 test("AWS Gate Two preflight accepts exact read-only safety controls", () => {

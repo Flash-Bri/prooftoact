@@ -407,6 +407,11 @@ identity expectations, call inventory, intermediate response shapes, cost
 request preparation, bucket-policy parsing, stack census, snapshot completion,
 the ten final validation domains, argument handling, receipt output, timeout,
 execution, termination, uncaught process failure, and unclassified failure.
+The budget validation domain is further divided into 24 literal predicates
+covering identity, account-wide scope, fixed-model fields, cost basis,
+coverage period, limit shape/value, and actual-spend shape/ceiling. Those
+stages reveal only which invariant failed, never its observed value. The
+broad budget stage remains a fail-closed fallback for unexpected exceptions.
 The nested runtime uses typed numeric failures and deliberately discards raw
 causes; the wrapper keeps child and provider stderr in owner-only temporary
 storage and never forwards it. Unknown, missing, reordered, or dynamic stages
@@ -624,6 +629,30 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 - Claim impact: source may claim privacy-preserving domain classification and
   fail-closed retry guidance, not a successful AWS preflight or known live
   account state.
+
+### Budget semantic failures lost their exact predicate
+
+- Root cause: the first final-validation diagnostic map correctly identified
+  the budget control domain, but all 24 budget predicates still shared one
+  fixed stage. With raw provider data deliberately destroyed after failure,
+  the exact rejected predicate could not be recovered.
+- Earliest detection: a protected run completes the exact 17-read inventory
+  and returns the broad `VALIDATE_BUDGET` stage without an accepted receipt.
+- Repair: preserve the broad stage as a fallback and add one fixed numeric
+  failure for each existing budget predicate. The child maps those failures
+  to literal stages; the parent maps only their fixed exits and never reads or
+  forwards provider values, messages, causes, or stderr.
+- Regression/preventive control: focused tests force all 24 predicates in
+  detailed local mode and privacy-preserving production mode. The source
+  verifier binds the predicate order, private ordinary-error factory,
+  issued-context lifecycle, child descriptor, parent exit map, fallback
+  behavior, and adversarial mutations.
+- Residual risk: the stage proves only which source invariant rejected the
+  live response. It does not prove whether AWS drifted or the invariant is
+  stale. Any functional acceptance change still requires a separate narrow
+  source repair, independent review, and exact-main CI.
+- Claim impact: source may claim exact privacy-preserving budget predicate
+  diagnosis, not successful budget acceptance or current account state.
 
 ### Repository-local Git metadata could falsify source binding
 

@@ -83,6 +83,33 @@ export const AWS_GATE2_PREFLIGHT_CONTROL_FAILURES = Object.freeze([
   "VALIDATE_RECEIPT_ASSEMBLY"
 ]);
 
+export const AWS_GATE2_PREFLIGHT_BUDGET_FAILURES = Object.freeze([
+  "VALIDATE_BUDGET_NAME",
+  "VALIDATE_BUDGET_TYPE",
+  "VALIDATE_BUDGET_TIME_UNIT",
+  "VALIDATE_BUDGET_SCOPE_COST_FILTERS",
+  "VALIDATE_BUDGET_SCOPE_FILTER_EXPRESSION",
+  "VALIDATE_BUDGET_SCOPE_BILLING_VIEW",
+  "VALIDATE_BUDGET_FIXED_AUTO_ADJUST",
+  "VALIDATE_BUDGET_FIXED_PLANNED_LIMITS",
+  "VALIDATE_BUDGET_METRICS_BASIS",
+  "VALIDATE_BUDGET_COST_TYPES_BASIS",
+  "VALIDATE_BUDGET_PERIOD_START",
+  "VALIDATE_BUDGET_PERIOD_END",
+  "VALIDATE_BUDGET_PERIOD_ORDER",
+  "VALIDATE_BUDGET_PERIOD_NOT_STARTED",
+  "VALIDATE_BUDGET_PERIOD_EXPIRED",
+  "VALIDATE_BUDGET_PERIOD_RELEASE_HORIZON",
+  "VALIDATE_BUDGET_LIMIT_UNIT",
+  "VALIDATE_BUDGET_LIMIT_AMOUNT_FORMAT",
+  "VALIDATE_BUDGET_LIMIT_NONNEGATIVE",
+  "VALIDATE_BUDGET_LIMIT_FIXED",
+  "VALIDATE_BUDGET_ACTUAL_SPEND_UNIT",
+  "VALIDATE_BUDGET_ACTUAL_SPEND_AMOUNT_FORMAT",
+  "VALIDATE_BUDGET_ACTUAL_SPEND_NONNEGATIVE",
+  "VALIDATE_BUDGET_ACTUAL_SPEND_CEILING"
+]);
+
 export class AwsGate2PreflightControlFailure extends Error {
   constructor(index) {
     super("AWS_GATE2_PREFLIGHT_CONTROL_FAILURE");
@@ -91,7 +118,95 @@ export class AwsGate2PreflightControlFailure extends Error {
   }
 }
 
-function validateControl(index, operation, diagnosticFailureMode) {
+const AWS_GATE2_PREFLIGHT_BUDGET_FAILURE_STATE = new WeakMap();
+const AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE = new WeakMap();
+
+export function createAwsGate2PreflightDiagnosticContext() {
+  const diagnosticContext = Object.freeze({});
+  AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.set(
+    diagnosticContext,
+    "fresh"
+  );
+  return diagnosticContext;
+}
+
+function beginAwsGate2PreflightDiagnosticContext(diagnosticContext) {
+  if (
+    AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.get(
+      diagnosticContext
+    ) !== "fresh"
+  ) {
+    throw new AwsGate2PreflightControlFailure(9);
+  }
+  AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.set(
+    diagnosticContext,
+    "active"
+  );
+  return diagnosticContext;
+}
+
+function settleAwsGate2PreflightDiagnosticContext(diagnosticContext) {
+  if (
+    AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.get(
+      diagnosticContext
+    ) === "active"
+  ) {
+    AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.set(
+      diagnosticContext,
+      "settled"
+    );
+  }
+}
+
+function createAwsGate2PreflightBudgetFailure(index, invocationToken) {
+  const error = new Error("AWS_GATE2_PREFLIGHT_BUDGET_FAILURE");
+  error.name = "AwsGate2PreflightBudgetFailure";
+  AWS_GATE2_PREFLIGHT_BUDGET_FAILURE_STATE.set(
+    error,
+    Object.freeze({ index, invocationToken, consumed: false })
+  );
+  return Object.freeze(error);
+}
+
+function budgetFailureMatches(error, invocationToken) {
+  const state = AWS_GATE2_PREFLIGHT_BUDGET_FAILURE_STATE.get(error);
+  return state?.invocationToken === invocationToken && !state.consumed;
+}
+
+export function consumeAwsGate2PreflightBudgetFailure(
+  error,
+  diagnosticContext
+) {
+  const state = AWS_GATE2_PREFLIGHT_BUDGET_FAILURE_STATE.get(error);
+  if (
+    AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.get(
+      diagnosticContext
+    ) !== "settled" ||
+    !state ||
+    state.consumed ||
+    state.invocationToken !== diagnosticContext ||
+    !Number.isSafeInteger(state.index) ||
+    typeof AWS_GATE2_PREFLIGHT_BUDGET_FAILURES[state.index] !== "string"
+  ) {
+    return null;
+  }
+  AWS_GATE2_PREFLIGHT_BUDGET_FAILURE_STATE.set(
+    error,
+    Object.freeze({ ...state, consumed: true })
+  );
+  AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.set(
+    diagnosticContext,
+    "consumed"
+  );
+  return state.index;
+}
+
+function validateControl(
+  index,
+  operation,
+  diagnosticFailureMode,
+  invocationToken
+) {
   if (
     !Number.isSafeInteger(index) ||
     typeof AWS_GATE2_PREFLIGHT_CONTROL_FAILURES[index] !== "string" ||
@@ -102,13 +217,45 @@ function validateControl(index, operation, diagnosticFailureMode) {
   try {
     return operation();
   } catch (error) {
-    if (error instanceof AwsGate2PreflightControlFailure) {
+    if (
+      error instanceof AwsGate2PreflightControlFailure ||
+      budgetFailureMatches(error, invocationToken)
+    ) {
       throw error;
     }
     if (diagnosticFailureMode !== true) {
       throw error;
     }
     throw new AwsGate2PreflightControlFailure(index);
+  }
+}
+
+function validateBudget(
+  index,
+  operation,
+  diagnosticFailureMode,
+  invocationToken
+) {
+  if (
+    !Number.isSafeInteger(index) ||
+    typeof AWS_GATE2_PREFLIGHT_BUDGET_FAILURES[index] !== "string" ||
+    typeof operation !== "function"
+  ) {
+    throw new AwsGate2PreflightControlFailure(2);
+  }
+  try {
+    return operation();
+  } catch (error) {
+    if (budgetFailureMatches(error, invocationToken)) {
+      throw error;
+    }
+    if (diagnosticFailureMode !== true) {
+      throw error;
+    }
+    throw createAwsGate2PreflightBudgetFailure(
+      index,
+      invocationToken
+    );
   }
 }
 
@@ -540,11 +687,22 @@ export function validateAwsGate2Preflight(
     budgetCeilingUsd = EXPECTED_BUDGET_USD,
     minimumBudgetCoverageEnd =
       MINIMUM_BUDGET_COVERAGE_END,
-    diagnosticFailureMode = false
+    diagnosticFailureMode = false,
+    diagnosticContext = null
   } = {}
 ) {
-  const validate = (index, operation) =>
-    validateControl(index, operation, diagnosticFailureMode);
+  const diagnosticInvocationToken =
+    diagnosticFailureMode === true
+      ? beginAwsGate2PreflightDiagnosticContext(diagnosticContext)
+      : null;
+  try {
+    const validate = (index, operation) =>
+      validateControl(
+        index,
+        operation,
+        diagnosticFailureMode,
+        diagnosticInvocationToken
+      );
   const sourceIdentity = validate(0, () => {
     requireCondition(
       Number.isFinite(budgetCeilingUsd) && budgetCeilingUsd > 0,
@@ -642,70 +800,140 @@ export function validateAwsGate2Preflight(
 
   const budgetState = validate(2, () => {
     const budget = snapshot?.budget;
-    requireCondition(budget?.BudgetName === budgetName, "BUDGET_NAME");
-    requireCondition(budget?.BudgetType === "COST", "BUDGET_TYPE");
-    requireCondition(budget?.TimeUnit === "MONTHLY", "BUDGET_TIME_UNIT");
-    requireCondition(
-      isAbsentOrEmptyObject(budget?.CostFilters),
-      "BUDGET_COST_FILTERS_ACCOUNT_WIDE"
+    const budgetCheck = (index, operation) =>
+      validateBudget(
+        index,
+        operation,
+        diagnosticFailureMode,
+        diagnosticInvocationToken
+      );
+    budgetCheck(0, () =>
+      requireCondition(budget?.BudgetName === budgetName, "BUDGET_NAME")
     );
-    requireCondition(
-      isAbsentOrEmptyObject(budget?.FilterExpression),
-      "BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE"
+    budgetCheck(1, () =>
+      requireCondition(budget?.BudgetType === "COST", "BUDGET_TYPE")
     );
-    requireCondition(
-      budget?.BillingViewArn == null,
-      "BUDGET_BILLING_VIEW_ACCOUNT_WIDE"
+    budgetCheck(2, () =>
+      requireCondition(
+        budget?.TimeUnit === "MONTHLY",
+        "BUDGET_TIME_UNIT"
+      )
     );
-    requireCondition(
-      budget?.AutoAdjustData == null,
-      "BUDGET_AUTO_ADJUST_NOT_FIXED"
+    budgetCheck(3, () =>
+      requireCondition(
+        isAbsentOrEmptyObject(budget?.CostFilters),
+        "BUDGET_COST_FILTERS_ACCOUNT_WIDE"
+      )
     );
-    requireCondition(
-      isAbsentOrEmptyObject(budget?.PlannedBudgetLimits),
-      "BUDGET_PLANNED_LIMITS_NOT_FIXED"
+    budgetCheck(4, () =>
+      requireCondition(
+        isAbsentOrEmptyObject(budget?.FilterExpression),
+        "BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE"
+      )
     );
-    requireCondition(budget?.Metrics == null, "BUDGET_METRICS_MODEL");
-    requireCondition(
-      hasExpectedCostTypes(budget?.CostTypes),
-      "BUDGET_COST_TYPES"
+    budgetCheck(5, () =>
+      requireCondition(
+        budget?.BillingViewArn == null,
+        "BUDGET_BILLING_VIEW_ACCOUNT_WIDE"
+      )
     );
-    const budgetPeriodStart = timestampMilliseconds(
-      budget?.TimePeriod?.Start,
-      "BUDGET_TIME_PERIOD_START"
+    budgetCheck(6, () =>
+      requireCondition(
+        budget?.AutoAdjustData == null,
+        "BUDGET_AUTO_ADJUST_NOT_FIXED"
+      )
     );
-    const budgetPeriodEnd = timestampMilliseconds(
-      budget?.TimePeriod?.End,
-      "BUDGET_TIME_PERIOD_END"
+    budgetCheck(7, () =>
+      requireCondition(
+        isAbsentOrEmptyObject(budget?.PlannedBudgetLimits),
+        "BUDGET_PLANNED_LIMITS_NOT_FIXED"
+      )
     );
-    requireCondition(
-      budgetPeriodStart < budgetPeriodEnd,
-      "BUDGET_TIME_PERIOD_ORDER"
+    budgetCheck(8, () =>
+      requireCondition(budget?.Metrics == null, "BUDGET_METRICS_MODEL")
     );
-    requireCondition(
-      observedAtMilliseconds >= budgetPeriodStart,
-      "BUDGET_TIME_PERIOD_NOT_STARTED"
+    budgetCheck(9, () =>
+      requireCondition(
+        hasExpectedCostTypes(budget?.CostTypes),
+        "BUDGET_COST_TYPES"
+      )
     );
-    requireCondition(
-      observedAtMilliseconds < budgetPeriodEnd,
-      "BUDGET_TIME_PERIOD_EXPIRED"
+    const budgetPeriodStart = budgetCheck(10, () =>
+      timestampMilliseconds(
+        budget?.TimePeriod?.Start,
+        "BUDGET_TIME_PERIOD_START"
+      )
     );
-    requireCondition(
-      budgetPeriodEnd >= timestampMilliseconds(
-        minimumBudgetCoverageEnd,
+    const budgetPeriodEnd = budgetCheck(11, () =>
+      timestampMilliseconds(
+        budget?.TimePeriod?.End,
+        "BUDGET_TIME_PERIOD_END"
+      )
+    );
+    budgetCheck(12, () =>
+      requireCondition(
+        budgetPeriodStart < budgetPeriodEnd,
+        "BUDGET_TIME_PERIOD_ORDER"
+      )
+    );
+    budgetCheck(13, () =>
+      requireCondition(
+        observedAtMilliseconds >= budgetPeriodStart,
+        "BUDGET_TIME_PERIOD_NOT_STARTED"
+      )
+    );
+    budgetCheck(14, () =>
+      requireCondition(
+        observedAtMilliseconds < budgetPeriodEnd,
+        "BUDGET_TIME_PERIOD_EXPIRED"
+      )
+    );
+    budgetCheck(15, () =>
+      requireCondition(
+        budgetPeriodEnd >= timestampMilliseconds(
+          minimumBudgetCoverageEnd,
+          "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
+        ),
         "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
-      ),
-      "BUDGET_TIME_PERIOD_RELEASE_HORIZON"
+      )
     );
-    const limit = moneyAmount(budget?.BudgetLimit, "BUDGET_LIMIT");
-    requireCondition(limit === budgetCeilingUsd, "BUDGET_LIMIT_VALUE");
-    const budgetActual = moneyAmount(
-      budget?.CalculatedSpend?.ActualSpend,
-      "BUDGET_ACTUAL"
+    budgetCheck(16, () =>
+      requireCondition(
+        budget?.BudgetLimit?.Unit === "USD",
+        "BUDGET_LIMIT_UNIT"
+      )
     );
-    requireCondition(
-      budgetActual < effectiveAwsSpendCeilingUsd,
-      "BUDGET_ACTUAL_CEILING"
+    const limit = budgetCheck(17, () => {
+      const amount = Number(budget?.BudgetLimit?.Amount);
+      requireCondition(Number.isFinite(amount), "BUDGET_LIMIT_AMOUNT");
+      return amount;
+    });
+    budgetCheck(18, () =>
+      requireCondition(limit >= 0, "BUDGET_LIMIT_NEGATIVE")
+    );
+    budgetCheck(19, () =>
+      requireCondition(limit === budgetCeilingUsd, "BUDGET_LIMIT_VALUE")
+    );
+    const actualSpend = budget?.CalculatedSpend?.ActualSpend;
+    budgetCheck(20, () =>
+      requireCondition(
+        actualSpend?.Unit === "USD",
+        "BUDGET_ACTUAL_UNIT"
+      )
+    );
+    const budgetActual = budgetCheck(21, () => {
+      const amount = Number(actualSpend?.Amount);
+      requireCondition(Number.isFinite(amount), "BUDGET_ACTUAL_AMOUNT");
+      return amount;
+    });
+    budgetCheck(22, () =>
+      requireCondition(budgetActual >= 0, "BUDGET_ACTUAL_NEGATIVE")
+    );
+    budgetCheck(23, () =>
+      requireCondition(
+        budgetActual < effectiveAwsSpendCeilingUsd,
+        "BUDGET_ACTUAL_CEILING"
+      )
     );
     return {
       budget,
@@ -828,7 +1056,7 @@ export function validateAwsGate2Preflight(
     validateModel(snapshot?.foundationModel, expectedModelId)
   );
 
-  return validate(9, () => ({
+    return validate(9, () => ({
     schemaVersion: "tideproof.gate2.aws-preflight.v6",
     status: "PASS",
     observedAt: snapshot.observedAt,
@@ -905,7 +1133,14 @@ export function validateAwsGate2Preflight(
       "AWS account, caller ARN, expected principal ARN, bucket name, and subscriber addresses were validated but omitted; only caller-binding digests are public.",
     claimBoundary:
       "This read-only preflight validates account safety inputs and Bedrock catalog metadata only. It rejects both the ProofToAct main stack name and the former working-name main stack before a fresh create. Its total-exposure calculation treats the $11.86 tideproof.net registration and disabled auto-renew as owner-reported inputs; it does not verify a registrar receipt or renewal state. It does not validate current Nova pricing, model invocation access, artifact upload, CloudFormation deployment, IAM denials, KMS signing, API traversal, or application behavior."
-  }));
+    }));
+  } finally {
+    if (diagnosticInvocationToken !== null) {
+      settleAwsGate2PreflightDiagnosticContext(
+        diagnosticInvocationToken
+      );
+    }
+  }
 }
 
 export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({
