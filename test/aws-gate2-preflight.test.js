@@ -4,14 +4,18 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  AWS_GATE2_PREFLIGHT_CONTROL_FAILURES,
   AWS_GATE2_PREFLIGHT_DEFAULTS,
+  AwsGate2PreflightControlFailure,
   awsBudgetDescribeArguments,
   awsCostExplorerPeriod,
   validateAwsGate2Preflight
 } from "../src/cloud/aws-gate2-preflight.js";
 import {
   AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY,
+  AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES,
   AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES,
+  AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES,
   assertAwsPreflightParentEnvironment,
   awsCostExplorerArguments,
   awsPreflightRuntimeFailureDescriptor,
@@ -759,8 +763,86 @@ test("AWS preflight reader converts all raw failures to fixed ordinal diagnostic
     awsPreflightRuntimeFailureDescriptor(
       new Error("SECRET_RAW_PROVIDER_FAILURE")
     ),
-    { stage: "UNKNOWN_FAILURE", exitCode: 1 }
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
   );
+});
+
+test("AWS preflight non-read diagnostics use the exact fixed phase and control maps", () => {
+  assert.deepEqual(
+    AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES,
+    [
+      ["CHILD_ENVIRONMENT", 60],
+      ["SOURCE_CHECKOUT", 61],
+      ["EXPECTED_IDENTITY", 62],
+      ["CALL_INVENTORY", 63],
+      ["CALLER_RECEIPT", 64],
+      ["BOOTSTRAP_RECEIPT", 65],
+      ["BUDGET_RECEIPT", 66],
+      ["NOTIFICATION_RECEIPT", 67],
+      ["SUBSCRIBER_RECEIPT", 68],
+      ["COST_REQUEST_PREPARE", 69],
+      ["BUCKET_POLICY_RECEIPT", 70],
+      ["STACK_CENSUS_RECEIPT", 71],
+      ["SNAPSHOT_COMPLETE", 72],
+      ["RECEIPT_OUTPUT", 83],
+      ["ARGUMENT", 84],
+      ["UNCLASSIFIED_CAUGHT", 85]
+    ].map(([stage, exitCode]) => ({ stage, exitCode }))
+  );
+  assert.deepEqual(
+    AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES,
+    AWS_GATE2_PREFLIGHT_CONTROL_FAILURES.map((stage, index) => ({
+      stage,
+      exitCode: 73 + index
+    }))
+  );
+});
+
+test("AWS preflight phase diagnostics discard raw causes and preserve read ordinals", () => {
+  const rawSecret = "SECRET_RAW_CHILD_FAILURE_7f4d";
+  let phaseFailure;
+  try {
+    collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
+      diagnosticFailureMode: true,
+      environment: expectedPreflightEnvironment({
+        NODE_OPTIONS: `--require=${rawSecret}`
+      }),
+      readGitCheckout: exactCheckout,
+      readAwsJson() {
+        throw new Error("AWS_CALL_MUST_NOT_OCCUR");
+      }
+    });
+  } catch (error) {
+    phaseFailure = error;
+  }
+  assert(phaseFailure instanceof Error);
+  assert.equal(phaseFailure.message, "AWS_RUNTIME_PHASE_FAILURE");
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(phaseFailure),
+    { stage: "CHILD_ENVIRONMENT", exitCode: 60 }
+  );
+  assert.doesNotMatch(String(phaseFailure), new RegExp(rawSecret));
+
+  let readFailure;
+  try {
+    collectSnapshot(new Date("2026-08-04T23:08:00.000Z"), {
+      diagnosticFailureMode: true,
+      environment: expectedPreflightEnvironment(),
+      readGitCheckout: exactCheckout,
+      readAwsJson() {
+        throw new Error(rawSecret);
+      }
+    });
+  } catch (error) {
+    readFailure = error;
+  }
+  assert(readFailure instanceof Error);
+  assert.equal(readFailure.message, "AWS_RUNTIME_READ_FAILURE");
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(readFailure),
+    AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[0]
+  );
+  assert.doesNotMatch(String(readFailure), new RegExp(rawSecret));
 });
 
 function notification(
@@ -982,6 +1064,139 @@ test("AWS preflight collector completes only the exact 17-call inventory", () =>
     )
   );
   assert.equal(validateAwsGate2Preflight(collected).status, "PASS");
+});
+
+test("AWS preflight validation diagnostics identify every fixed control domain", () => {
+  const cases = [
+    {
+      index: 0,
+      rawCode: "AWS_REGION",
+      mutate(snapshot) {
+        snapshot.region = "us-west-2";
+      }
+    },
+    {
+      index: 1,
+      rawCode: "BOOTSTRAP_STACK_STATUS",
+      mutate(snapshot) {
+        snapshot.bootstrapStack.StackStatus = "ROLLBACK_COMPLETE";
+      }
+    },
+    {
+      index: 2,
+      rawCode: "BUDGET_TYPE",
+      mutate(snapshot) {
+        snapshot.budget.BudgetType = "USAGE";
+      }
+    },
+    {
+      index: 3,
+      rawCode: "BUDGET_NOTIFICATION_CARDINALITY",
+      mutate(snapshot) {
+        snapshot.notificationSubscribers = [];
+      }
+    },
+    {
+      index: 4,
+      rawCode: "MAIN_STACK_ALREADY_PRESENT",
+      mutate(snapshot) {
+        snapshot.stackSummaries.push({
+          StackName: snapshot.mainStackName,
+          StackStatus: "CREATE_COMPLETE"
+        });
+      }
+    },
+    {
+      index: 5,
+      rawCode: "ARTIFACT_BUCKET_VERSIONING",
+      mutate(snapshot) {
+        snapshot.artifactBucket.versioning.Status = "Suspended";
+      }
+    },
+    {
+      index: 6,
+      rawCode: "CURRENT_COST_PERIOD_START",
+      mutate(snapshot) {
+        snapshot.currentCost.periodStart = "2026-06-01";
+      }
+    },
+    {
+      index: 7,
+      rawCode: "PREFLIGHT_ALLOWANCE_AWS_CEILING",
+      mutate(snapshot) {
+        snapshot.budget.CalculatedSpend.ActualSpend.Amount = "13.12";
+      }
+    },
+    {
+      index: 8,
+      rawCode: "BEDROCK_MODEL_LIFECYCLE",
+      mutate(snapshot) {
+        snapshot.foundationModel.modelDetails.modelLifecycle.status =
+          "LEGACY";
+      }
+    }
+  ];
+
+  for (const { index, rawCode, mutate } of cases) {
+    const rawSnapshot = validSnapshot();
+    mutate(rawSnapshot);
+    assert.throws(
+      () => validateAwsGate2Preflight(rawSnapshot),
+      new RegExp(rawCode)
+    );
+
+    const diagnosticSnapshot = validSnapshot();
+    mutate(diagnosticSnapshot);
+    let diagnosticFailure;
+    try {
+      validateAwsGate2Preflight(diagnosticSnapshot, {
+        diagnosticFailureMode: true
+      });
+    } catch (error) {
+      diagnosticFailure = error;
+    }
+    assert(
+      diagnosticFailure instanceof AwsGate2PreflightControlFailure
+    );
+    assert.equal(
+      diagnosticFailure.message,
+      "AWS_GATE2_PREFLIGHT_CONTROL_FAILURE"
+    );
+    assert.deepEqual(
+      awsPreflightRuntimeFailureDescriptor(diagnosticFailure),
+      AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES[index]
+    );
+    assert.doesNotMatch(String(diagnosticFailure), new RegExp(rawCode));
+  }
+
+  const receiptFailureCode = "SECRET_RECEIPT_ASSEMBLY_FAILURE";
+  const receiptFailureSnapshot = validSnapshot();
+  const observedAt = receiptFailureSnapshot.observedAt;
+  let observedAtReads = 0;
+  Object.defineProperty(receiptFailureSnapshot, "observedAt", {
+    configurable: true,
+    get() {
+      observedAtReads += 1;
+      if (observedAtReads === 4) {
+        throw new Error(receiptFailureCode);
+      }
+      return observedAt;
+    }
+  });
+  let receiptFailure;
+  try {
+    validateAwsGate2Preflight(receiptFailureSnapshot, {
+      diagnosticFailureMode: true
+    });
+  } catch (error) {
+    receiptFailure = error;
+  }
+  assert(receiptFailure instanceof AwsGate2PreflightControlFailure);
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(receiptFailure),
+    AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES[9]
+  );
+  assert.doesNotMatch(String(receiptFailure), /SECRET_RECEIPT/u);
 });
 
 test("AWS Gate Two preflight accepts exact read-only safety controls", () => {

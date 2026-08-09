@@ -82,7 +82,7 @@ function acceptsOidcRequestUrl(pattern, requestUrl) {
   return result.status === 0;
 }
 
-test("OIDC source receipt remains explicitly local and provider-pending", () => {
+test("OIDC source receipt remains source-only with provider acceptance pending", () => {
   const receipt = verifyAwsOidcPreflightSource();
 
   assert.equal(
@@ -91,11 +91,11 @@ test("OIDC source receipt remains explicitly local and provider-pending", () => 
   );
   assert.equal(
     receipt.status,
-    "SOURCE_CONTRACT_PASS_PROVIDER_SETUP_AND_EXECUTION_PENDING"
+    "SOURCE_CONTRACT_PASS_ACCEPTED_PROVIDER_RECEIPT_PENDING"
   );
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.providerSetup, "PENDING_HUMAN_AUTHORIZATION");
-  assert.equal(receipt.providerExecution, "NOT_RUN");
+  assert.equal(receipt.providerSetup, "EXTERNAL_STATE_NOT_ATTESTED");
+  assert.equal(receipt.providerExecution, "OUTSIDE_SOURCE_RECEIPT");
   assert.equal(receipt.cloudShellRequired, false);
   assert.equal(receipt.deploymentRoleOrWorkflowAdded, false);
   assert.equal(receipt.approvedIdentityLaneCount, 2);
@@ -533,7 +533,6 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       "AWS_READ_ONLY_STAGE_REGION_RECEIPT",
       "AWS_READ_ONLY_STAGE_QUOTA_REQUEST",
       "AWS_READ_ONLY_STAGE_QUOTA_RECEIPT",
-      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_01",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_02",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_03",
@@ -551,6 +550,37 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_15",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_16",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_17",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CHILD_ENVIRONMENT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SOURCE_CHECKOUT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXPECTED_IDENTITY",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CALL_INVENTORY",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CALLER_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BOOTSTRAP_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BUDGET_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_NOTIFICATION_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SUBSCRIBER_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_COST_REQUEST_PREPARE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BUCKET_POLICY_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_STACK_CENSUS_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SNAPSHOT_COMPLETE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_SOURCE_IDENTITY",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BOOTSTRAP",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_NOTIFICATIONS",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_STACK_ABSENCE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_ARTIFACT_BUCKET",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_EXPOSURE",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_MODEL",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_RECEIPT_ASSEMBLY",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT_OUTPUT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_ARGUMENT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_UNCLASSIFIED_CAUGHT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCAUGHT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TIMEOUT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXECUTION",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TERMINATED",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCLASSIFIED",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT",
       "AWS_READ_ONLY_STAGE_SANITIZED_RECEIPT",
       "AWS_READ_ONLY_STAGE_PRIVACY_REDACTION",
@@ -563,7 +593,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT,
-    134
+    164
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_GENERIC_FAILURE_REFERENCE_COUNT,
@@ -571,11 +601,34 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   assert.deepEqual(
     sourceContract.EXPECTED_READ_ONLY_PREFLIGHT_EXIT_STAGE_MAP,
-    Array.from({ length: 17 }, (_, index) =>
-      `${40 + index}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_${String(
-        index + 1
-      ).padStart(2, "0")}`
-    )
+    [
+      "1:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCAUGHT",
+      ...Array.from({ length: 17 }, (_, index) =>
+        `${40 + index}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_${String(
+          index + 1
+        ).padStart(2, "0")}`
+      ),
+      ...sourceContract.EXACT_PREFLIGHT_RUNTIME_PHASE_FAILURES
+        .slice(0, 13)
+        .map(
+          ({ stage, exitCode }) =>
+            `${exitCode}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_${stage}`
+        ),
+      ...sourceContract.EXACT_PREFLIGHT_RUNTIME_CONTROL_FAILURES.map(
+        ({ stage, exitCode }) =>
+          `${exitCode}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_${stage}`
+      ),
+      ...sourceContract.EXACT_PREFLIGHT_RUNTIME_PHASE_FAILURES
+        .slice(13)
+        .map(
+          ({ stage, exitCode }) =>
+            `${exitCode}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_${stage}`
+        ),
+      "124:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TIMEOUT",
+      "125 | 126 | 127:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXECUTION",
+      "137:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TERMINATED",
+      "*:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCLASSIFIED"
+    ]
   );
   assert.match(
     sourceContract.EXPECTED_READ_ONLY_SENSITIVE_CLEANUP_FUNCTION_SHA256,
@@ -675,6 +728,26 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
     () => validateReadOnlyRunner(`${READ_ONLY_RUNNER}\nfalse || fail_closed\n`),
     /OIDC_READ_ONLY_RUNNER_GENERIC_FAILURE_REFERENCES/
   );
+  for (const mutatedExitMap of [
+    READ_ONLY_RUNNER.replace(
+      "40) fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_01 ;;",
+      "40) fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_02 ;;"
+    ),
+    READ_ONLY_RUNNER.replace(
+      "124) fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TIMEOUT ;;",
+      "124 | 125) fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TIMEOUT ;;"
+    ),
+    READ_ONLY_RUNNER.replace(
+      "*) fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCLASSIFIED ;;",
+      "*) fail_closed_stage \"$preflight_status\" ;;"
+    )
+  ]) {
+    assert.notEqual(mutatedExitMap, READ_ONLY_RUNNER);
+    assert.throws(
+      () => validateReadOnlyRunner(mutatedExitMap),
+      /OIDC_READ_ONLY_RUNNER_(?:FAILURE_STAGES|PREFLIGHT_EXIT_STAGE_MAP|POST_DIAGNOSTIC_EXECUTION_SUFFIX)/
+    );
+  }
   assert.throws(
     () =>
       validateReadOnlyRunner(
@@ -1122,12 +1195,12 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
     () =>
       validateUnderlyingPreflight(
         PREFLIGHT_RUNNER.replace(
-          "if (!(error instanceof AwsPreflightRuntimeReadFailure))",
+          "if (error instanceof AwsPreflightRuntimeReadFailure) {",
           "if (false)"
         ),
         PREFLIGHT_VALIDATOR
       ),
-    /OIDC_UNDERLYING_PREFLIGHT_CALLS/
+    /OIDC_UNDERLYING_PREFLIGHT_(?:CALLS|SOURCE_SHA256)/
   );
   assert.throws(
     () =>
@@ -1175,12 +1248,20 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
       "throw new AwsPreflightRuntimeReadFailure(0)"
     ),
     PREFLIGHT_RUNNER.replace(
-      "if (!(error instanceof AwsPreflightRuntimeReadFailure)) {\n    return UNKNOWN_RUNTIME_FAILURE;\n  }",
-      "if (!(error instanceof AwsPreflightRuntimeReadFailure)) {\n    return { stage: error.message, exitCode: 1 };\n  }"
+      "return AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15];",
+      "return { stage: error.message, exitCode: 85 };"
     ),
     PREFLIGHT_RUNNER.replace(
-      'stage: "UNKNOWN_FAILURE",\n  exitCode: 1',
-      'stage: "UNKNOWN_FAILURE",\n  exitCode: 0'
+      'Object.freeze({ stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 })',
+      'Object.freeze({ stage: "UNCLASSIFIED_CAUGHT", exitCode: 0 })'
+    ),
+    PREFLIGHT_RUNNER.replace(
+      "const defaults = phase(0, () => {",
+      "const defaults = phase(1, () => {"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      "collectSnapshot(undefined, { diagnosticFailureMode: true })",
+      "collectSnapshot(undefined, { diagnosticFailureMode: false })"
     )
   ];
   for (const mutatedRunner of diagnosticContractMutations) {
@@ -1188,7 +1269,29 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
     assert.throws(
       () =>
         validateUnderlyingPreflight(mutatedRunner, PREFLIGHT_VALIDATOR),
-      /OIDC_UNDERLYING_PREFLIGHT_(?:CALLS|SOURCE_SHA256)/
+      /OIDC_UNDERLYING_PREFLIGHT_(?:CALLS|FAILURE_MAP|SOURCE_SHA256)/
+    );
+  }
+
+  const diagnosticValidatorMutations = [
+    PREFLIGHT_VALIDATOR.replace(
+      "const sourceIdentity = validate(0, () => {",
+      "const sourceIdentity = validate(1, () => {"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "const exposure = validate(7, () => {",
+      "const exposure = validate(6, () => {"
+    ),
+    PREFLIGHT_VALIDATOR.replace(
+      "throw new AwsGate2PreflightControlFailure(index);",
+      "throw error;"
+    )
+  ];
+  for (const mutatedValidator of diagnosticValidatorMutations) {
+    assert.notEqual(mutatedValidator, PREFLIGHT_VALIDATOR);
+    assert.throws(
+      () => validateUnderlyingPreflight(PREFLIGHT_RUNNER, mutatedValidator),
+      /OIDC_UNDERLYING_PREFLIGHT_(?:IDENTITIES|VALIDATOR_SHA256)/
     );
   }
 });

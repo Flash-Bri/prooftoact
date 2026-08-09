@@ -3,7 +3,9 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  AWS_GATE2_PREFLIGHT_CONTROL_FAILURES,
   AWS_GATE2_PREFLIGHT_DEFAULTS,
+  AwsGate2PreflightControlFailure,
   awsBudgetDescribeArguments,
   awsCostExplorerPeriod,
   validateAwsGate2PreflightIdentityExpectation,
@@ -167,10 +169,37 @@ export const AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES = Object.freeze([
   })
 ]);
 
-const UNKNOWN_RUNTIME_FAILURE = Object.freeze({
-  stage: "UNKNOWN_FAILURE",
-  exitCode: 1
-});
+export const AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES = Object.freeze([
+  Object.freeze({ stage: "CHILD_ENVIRONMENT", exitCode: 60 }),
+  Object.freeze({ stage: "SOURCE_CHECKOUT", exitCode: 61 }),
+  Object.freeze({ stage: "EXPECTED_IDENTITY", exitCode: 62 }),
+  Object.freeze({ stage: "CALL_INVENTORY", exitCode: 63 }),
+  Object.freeze({ stage: "CALLER_RECEIPT", exitCode: 64 }),
+  Object.freeze({ stage: "BOOTSTRAP_RECEIPT", exitCode: 65 }),
+  Object.freeze({ stage: "BUDGET_RECEIPT", exitCode: 66 }),
+  Object.freeze({ stage: "NOTIFICATION_RECEIPT", exitCode: 67 }),
+  Object.freeze({ stage: "SUBSCRIBER_RECEIPT", exitCode: 68 }),
+  Object.freeze({ stage: "COST_REQUEST_PREPARE", exitCode: 69 }),
+  Object.freeze({ stage: "BUCKET_POLICY_RECEIPT", exitCode: 70 }),
+  Object.freeze({ stage: "STACK_CENSUS_RECEIPT", exitCode: 71 }),
+  Object.freeze({ stage: "SNAPSHOT_COMPLETE", exitCode: 72 }),
+  Object.freeze({ stage: "RECEIPT_OUTPUT", exitCode: 83 }),
+  Object.freeze({ stage: "ARGUMENT", exitCode: 84 }),
+  Object.freeze({ stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 })
+]);
+
+export const AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES = Object.freeze([
+  Object.freeze({ stage: "VALIDATE_SOURCE_IDENTITY", exitCode: 73 }),
+  Object.freeze({ stage: "VALIDATE_BOOTSTRAP", exitCode: 74 }),
+  Object.freeze({ stage: "VALIDATE_BUDGET", exitCode: 75 }),
+  Object.freeze({ stage: "VALIDATE_NOTIFICATIONS", exitCode: 76 }),
+  Object.freeze({ stage: "VALIDATE_STACK_ABSENCE", exitCode: 77 }),
+  Object.freeze({ stage: "VALIDATE_ARTIFACT_BUCKET", exitCode: 78 }),
+  Object.freeze({ stage: "VALIDATE_COST", exitCode: 79 }),
+  Object.freeze({ stage: "VALIDATE_EXPOSURE", exitCode: 80 }),
+  Object.freeze({ stage: "VALIDATE_MODEL", exitCode: 81 }),
+  Object.freeze({ stage: "VALIDATE_RECEIPT_ASSEMBLY", exitCode: 82 })
+]);
 
 class AwsPreflightRuntimeReadFailure extends Error {
   constructor(index) {
@@ -180,14 +209,65 @@ class AwsPreflightRuntimeReadFailure extends Error {
   }
 }
 
-export function awsPreflightRuntimeFailureDescriptor(error) {
-  if (!(error instanceof AwsPreflightRuntimeReadFailure)) {
-    return UNKNOWN_RUNTIME_FAILURE;
+class AwsPreflightRuntimePhaseFailure extends Error {
+  constructor(index) {
+    super("AWS_RUNTIME_PHASE_FAILURE");
+    this.name = "AwsPreflightRuntimePhaseFailure";
+    this.index = index;
   }
-  return (
-    AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[error.index] ??
-    UNKNOWN_RUNTIME_FAILURE
-  );
+}
+
+function runtimePhase(index, operation, diagnosticFailureMode = true) {
+  if (
+    !Number.isSafeInteger(index) ||
+    typeof AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[index]?.stage !==
+      "string" ||
+    typeof operation !== "function"
+  ) {
+    throw new AwsPreflightRuntimePhaseFailure(15);
+  }
+  try {
+    return operation();
+  } catch (error) {
+    if (
+      error instanceof AwsPreflightRuntimeReadFailure ||
+      error instanceof AwsPreflightRuntimePhaseFailure ||
+      error instanceof AwsGate2PreflightControlFailure
+    ) {
+      throw error;
+    }
+    if (diagnosticFailureMode !== true) {
+      throw error;
+    }
+    throw new AwsPreflightRuntimePhaseFailure(index);
+  }
+}
+
+export function awsPreflightRuntimeFailureDescriptor(error) {
+  if (error instanceof AwsPreflightRuntimeReadFailure) {
+    return (
+      AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[error.index] ??
+      AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15]
+    );
+  }
+  if (error instanceof AwsPreflightRuntimePhaseFailure) {
+    return (
+      AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[error.index] ??
+      AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15]
+    );
+  }
+  if (error instanceof AwsGate2PreflightControlFailure) {
+    const descriptor =
+      AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES[error.index];
+    if (
+      descriptor?.stage ===
+      AWS_GATE2_PREFLIGHT_CONTROL_FAILURES[error.index]
+    ) {
+      return descriptor;
+    }
+    return AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15];
+  }
+  return AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15];
 }
 
 const EXPECTED_BUDGET_NOTIFICATIONS = Object.freeze([
@@ -765,29 +845,47 @@ export function collectSnapshot(
   {
     environment = process.env,
     readGitCheckout = trustedGitCheckout,
-    readAwsJson = awsJson
+    readAwsJson = awsJson,
+    diagnosticFailureMode = false
   } = {}
 ) {
-  assertAwsPreflightParentEnvironment(environment);
-  const runtimeCalls = createAwsPreflightRuntimeCallReader(
-    readAwsJson
-  );
-  const readBoundedAwsJson = runtimeCalls.read;
+  const phase = (index, operation) =>
+    runtimePhase(index, operation, diagnosticFailureMode);
+  const defaults = phase(0, () => {
+    assertAwsPreflightParentEnvironment(environment);
+    const {
+      region,
+      modelId,
+      bootstrapStackName,
+      mainStackName,
+      legacyMainStackName
+    } = AWS_GATE2_PREFLIGHT_DEFAULTS;
+    return {
+      region,
+      modelId,
+      bootstrapStackName,
+      mainStackName,
+      legacyMainStackName
+    };
+  });
   const {
     region,
     modelId,
     bootstrapStackName,
     mainStackName,
     legacyMainStackName
-  } = AWS_GATE2_PREFLIGHT_DEFAULTS;
-  const checkout = readGitCheckout();
-  if (
-    !HEX_40.test(checkout?.sourceCommit) ||
-    !HEX_40.test(checkout?.treeDigest) ||
-    checkout?.workingTreeClean !== true
-  ) {
-    throw new Error("GIT_CHECKOUT_VERIFICATION");
-  }
+  } = defaults;
+  const checkout = phase(1, () => {
+    const candidate = readGitCheckout();
+    if (
+      !HEX_40.test(candidate?.sourceCommit) ||
+      !HEX_40.test(candidate?.treeDigest) ||
+      candidate?.workingTreeClean !== true
+    ) {
+      throw new Error("GIT_CHECKOUT_VERIFICATION");
+    }
+    return candidate;
+  });
   const { sourceCommit, treeDigest, workingTreeClean } = checkout;
 
   const bindingContext = {
@@ -795,9 +893,8 @@ export function collectSnapshot(
     sourceCommit,
     treeDigest
   };
-  const expectation = awsPreflightIdentityExpectation(
-    environment,
-    bindingContext
+  const expectation = phase(2, () =>
+    awsPreflightIdentityExpectation(environment, bindingContext)
   );
   const {
     expectedAccountId,
@@ -805,57 +902,80 @@ export function collectSnapshot(
     expectedCallerArn,
     expectedCallerUserId
   } = expectation;
+  const runtimeCalls = phase(3, () =>
+    createAwsPreflightRuntimeCallReader(readAwsJson)
+  );
+  const readBoundedAwsJson = runtimeCalls.read;
 
   const callerIdentity = readBoundedAwsJson(
     region,
     "sts",
     "get-caller-identity"
   );
-  validateAwsEvidenceCaller(callerIdentity, {
-    ...expectation,
-    bindingContext
+  phase(4, () => {
+    validateAwsEvidenceCaller(callerIdentity, {
+      ...expectation,
+      bindingContext
+    });
   });
-  const bootstrapStack = exactSingleStack(
-    readBoundedAwsJson(
-      region,
-      "cloudformation",
-      "describe-stacks",
-      ["--stack-name", bootstrapStackName]
-    ),
-    bootstrapStackName
+  const bootstrapResponse = readBoundedAwsJson(
+    region,
+    "cloudformation",
+    "describe-stacks",
+    ["--stack-name", bootstrapStackName]
   );
-  const budgetName = stackOutput(
-    bootstrapStack,
-    "AccountBudgetName"
-  );
-  const bucketName = stackOutput(
-    bootstrapStack,
-    "ArtifactBucketName"
-  );
+  const bootstrapReceipt = phase(5, () => {
+    const bootstrapStack = exactSingleStack(
+      bootstrapResponse,
+      bootstrapStackName
+    );
+    return {
+      bootstrapStack,
+      budgetName: stackOutput(
+        bootstrapStack,
+        "AccountBudgetName"
+      ),
+      bucketName: stackOutput(
+        bootstrapStack,
+        "ArtifactBucketName"
+      )
+    };
+  });
+  const { bootstrapStack, budgetName, bucketName } = bootstrapReceipt;
   const accountId = callerIdentity.Account;
-  const budget = readBoundedAwsJson(
+  const budgetResponse = readBoundedAwsJson(
     region,
     "budgets",
     "describe-budget",
     awsBudgetDescribeArguments(accountId, budgetName)
-  ).Budget;
-  const notifications = exactBudgetNotifications(
-    readBoundedAwsJson(
-      region,
-      "budgets",
-      "describe-notifications-for-budget",
-      [
-        "--account-id",
-        accountId,
-        "--budget-name",
-        budgetName
-      ]
-    ).Notifications
   );
-  const notificationSubscribers = notifications.map((notification) => ({
-    notification,
-    subscribers:
-      readBoundedAwsJson(
+  const budget = phase(6, () => {
+    if (
+      !budgetResponse?.Budget ||
+      typeof budgetResponse.Budget !== "object" ||
+      Array.isArray(budgetResponse.Budget)
+    ) {
+      throw new Error("AWS_BUDGET_RECEIPT");
+    }
+    return budgetResponse.Budget;
+  });
+  const notificationResponse = readBoundedAwsJson(
+    region,
+    "budgets",
+    "describe-notifications-for-budget",
+    [
+      "--account-id",
+      accountId,
+      "--budget-name",
+      budgetName
+    ]
+  );
+  const notifications = phase(7, () =>
+    exactBudgetNotifications(notificationResponse?.Notifications)
+  );
+  const notificationSubscribers = phase(8, () =>
+    notifications.map((notification) => {
+      const response = readBoundedAwsJson(
         region,
         "budgets",
         "describe-subscribers-for-notification",
@@ -867,98 +987,125 @@ export function collectSnapshot(
           "--notification",
           JSON.stringify(notificationInput(notification))
         ]
-      ).Subscribers ?? []
-  }));
+      );
+      if (!Array.isArray(response?.Subscribers)) {
+        throw new Error("AWS_BUDGET_SUBSCRIBER_RECEIPT");
+      }
+      return {
+        notification,
+        subscribers: response.Subscribers
+      };
+    })
+  );
 
-  const period = awsCostExplorerPeriod(now);
+  const costRequest = phase(9, () => {
+    const period = awsCostExplorerPeriod(now);
+    return {
+      period,
+      args: awsCostExplorerArguments(period)
+    };
+  });
   const currentCostResponse = readBoundedAwsJson(
     region,
     "ce",
     "get-cost-and-usage",
-    awsCostExplorerArguments(period)
+    costRequest.args
   );
-
-  const snapshot = {
-    observedAt: now.toISOString(),
-    sourceCommit,
-    treeDigest,
-    workingTreeClean,
-    region,
-    expectedAccountId,
-    expectedPrincipalArn,
-    expectedCallerArn,
-    expectedCallerUserId,
-    callerIdentity,
-    bootstrapStackName,
-    bootstrapStack,
-    budget,
-    notificationSubscribers,
-    artifactBucket: {
-      versioning: readBoundedAwsJson(
-        region,
-        "s3api",
-        "get-bucket-versioning",
-        ["--bucket", bucketName]
-      ),
-      encryption: readBoundedAwsJson(
-        region,
-        "s3api",
-        "get-bucket-encryption",
-        ["--bucket", bucketName]
-      ),
-      publicAccessBlock: readBoundedAwsJson(
-        region,
-        "s3api",
-        "get-public-access-block",
-        ["--bucket", bucketName]
-      ),
-      ownership: readBoundedAwsJson(
-        region,
-        "s3api",
-        "get-bucket-ownership-controls",
-        ["--bucket", bucketName]
-      ),
-      policyStatus: readBoundedAwsJson(
-        region,
-        "s3api",
-        "get-bucket-policy-status",
-        ["--bucket", bucketName]
-      ),
-      policy: readBucketPolicy(
-        region,
-        bucketName,
-        readBoundedAwsJson
-      )
-    },
-    mainStackName,
-    legacyMainStackName,
-    stackSummaries:
-      readBoundedAwsJson(
-        region,
-        "cloudformation",
-        "list-stacks"
-      ).StackSummaries ?? [],
-    currentCost: {
-      ...period,
-      response: currentCostResponse
-    },
-    foundationModel: readBoundedAwsJson(
+  const artifactBucket = {
+    versioning: readBoundedAwsJson(
       region,
-      "bedrock",
-      "get-foundation-model",
-      ["--model-identifier", modelId]
+      "s3api",
+      "get-bucket-versioning",
+      ["--bucket", bucketName]
+    ),
+    encryption: readBoundedAwsJson(
+      region,
+      "s3api",
+      "get-bucket-encryption",
+      ["--bucket", bucketName]
+    ),
+    publicAccessBlock: readBoundedAwsJson(
+      region,
+      "s3api",
+      "get-public-access-block",
+      ["--bucket", bucketName]
+    ),
+    ownership: readBoundedAwsJson(
+      region,
+      "s3api",
+      "get-bucket-ownership-controls",
+      ["--bucket", bucketName]
+    ),
+    policyStatus: readBoundedAwsJson(
+      region,
+      "s3api",
+      "get-bucket-policy-status",
+      ["--bucket", bucketName]
+    ),
+    policy: phase(10, () =>
+      readBucketPolicy(region, bucketName, readBoundedAwsJson)
     )
   };
-  runtimeCalls.assertComplete();
-  return snapshot;
+  const stackResponse = readBoundedAwsJson(
+    region,
+    "cloudformation",
+    "list-stacks"
+  );
+  const stackSummaries = phase(11, () => {
+    if (!Array.isArray(stackResponse?.StackSummaries)) {
+      throw new Error("AWS_STACK_CENSUS_RECEIPT");
+    }
+    return stackResponse.StackSummaries;
+  });
+  const foundationModel = readBoundedAwsJson(
+    region,
+    "bedrock",
+    "get-foundation-model",
+    ["--model-identifier", modelId]
+  );
+  return phase(12, () => {
+    runtimeCalls.assertComplete();
+    return {
+      observedAt: now.toISOString(),
+      sourceCommit,
+      treeDigest,
+      workingTreeClean,
+      region,
+      expectedAccountId,
+      expectedPrincipalArn,
+      expectedCallerArn,
+      expectedCallerUserId,
+      callerIdentity,
+      bootstrapStackName,
+      bootstrapStack,
+      budget,
+      notificationSubscribers,
+      artifactBucket,
+      mainStackName,
+      legacyMainStackName,
+      stackSummaries,
+      currentCost: {
+        ...costRequest.period,
+        response: currentCostResponse
+      },
+      foundationModel
+    };
+  });
 }
 
 export function main(argv = process.argv.slice(2)) {
-  if (argv.length !== 0) {
-    throw new Error("UNEXPECTED_ARGUMENT");
-  }
-  const receipt = validateAwsGate2Preflight(collectSnapshot());
-  process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+  runtimePhase(14, () => {
+    if (argv.length !== 0) {
+      throw new Error("UNEXPECTED_ARGUMENT");
+    }
+  });
+  const receipt = validateAwsGate2Preflight(
+    collectSnapshot(undefined, { diagnosticFailureMode: true }),
+    { diagnosticFailureMode: true }
+  );
+  runtimePhase(13, () => {
+    process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+  });
 }
 
 const startedDirectly =

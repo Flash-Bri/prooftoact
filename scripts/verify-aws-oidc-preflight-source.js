@@ -20,7 +20,7 @@ const LEDGER_PATH = "docs/AWS_OIDC_PREFLIGHT.md";
 const RECEIPT_SCHEMA =
   "prooftoact.aws-oidc-preflight-source-verification.v2";
 const RECEIPT_STATUS =
-  "SOURCE_CONTRACT_PASS_PROVIDER_SETUP_AND_EXECUTION_PENDING";
+  "SOURCE_CONTRACT_PASS_ACCEPTED_PROVIDER_RECEIPT_PENDING";
 const HEX_64 = /^[0-9a-f]{64}$/;
 const EXACT_RECEIPT_SECRET_PATTERN =
   "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$";
@@ -76,8 +76,50 @@ const EXACT_PREFLIGHT_RUNTIME_FAILURES = Object.freeze(
   )
 );
 
+const EXACT_PREFLIGHT_RUNTIME_PHASE_FAILURES = Object.freeze([
+  Object.freeze({ stage: "CHILD_ENVIRONMENT", exitCode: 60 }),
+  Object.freeze({ stage: "SOURCE_CHECKOUT", exitCode: 61 }),
+  Object.freeze({ stage: "EXPECTED_IDENTITY", exitCode: 62 }),
+  Object.freeze({ stage: "CALL_INVENTORY", exitCode: 63 }),
+  Object.freeze({ stage: "CALLER_RECEIPT", exitCode: 64 }),
+  Object.freeze({ stage: "BOOTSTRAP_RECEIPT", exitCode: 65 }),
+  Object.freeze({ stage: "BUDGET_RECEIPT", exitCode: 66 }),
+  Object.freeze({ stage: "NOTIFICATION_RECEIPT", exitCode: 67 }),
+  Object.freeze({ stage: "SUBSCRIBER_RECEIPT", exitCode: 68 }),
+  Object.freeze({ stage: "COST_REQUEST_PREPARE", exitCode: 69 }),
+  Object.freeze({ stage: "BUCKET_POLICY_RECEIPT", exitCode: 70 }),
+  Object.freeze({ stage: "STACK_CENSUS_RECEIPT", exitCode: 71 }),
+  Object.freeze({ stage: "SNAPSHOT_COMPLETE", exitCode: 72 }),
+  Object.freeze({ stage: "RECEIPT_OUTPUT", exitCode: 83 }),
+  Object.freeze({ stage: "ARGUMENT", exitCode: 84 }),
+  Object.freeze({ stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 })
+]);
+
+const EXACT_PREFLIGHT_RUNTIME_CONTROL_FAILURES = Object.freeze([
+  Object.freeze({ stage: "VALIDATE_SOURCE_IDENTITY", exitCode: 73 }),
+  Object.freeze({ stage: "VALIDATE_BOOTSTRAP", exitCode: 74 }),
+  Object.freeze({ stage: "VALIDATE_BUDGET", exitCode: 75 }),
+  Object.freeze({ stage: "VALIDATE_NOTIFICATIONS", exitCode: 76 }),
+  Object.freeze({ stage: "VALIDATE_STACK_ABSENCE", exitCode: 77 }),
+  Object.freeze({ stage: "VALIDATE_ARTIFACT_BUCKET", exitCode: 78 }),
+  Object.freeze({ stage: "VALIDATE_COST", exitCode: 79 }),
+  Object.freeze({ stage: "VALIDATE_EXPOSURE", exitCode: 80 }),
+  Object.freeze({ stage: "VALIDATE_MODEL", exitCode: 81 }),
+  Object.freeze({ stage: "VALIDATE_RECEIPT_ASSEMBLY", exitCode: 82 })
+]);
+
+const EXACT_PREFLIGHT_PROCESS_FAILURES = Object.freeze([
+  Object.freeze({ stage: "PROCESS_UNCAUGHT", exitCode: 1 }),
+  Object.freeze({ stage: "TIMEOUT", exitCode: 124 }),
+  Object.freeze({ stage: "EXECUTION", exitCode: "125 | 126 | 127" }),
+  Object.freeze({ stage: "TERMINATED", exitCode: 137 }),
+  Object.freeze({ stage: "PROCESS_UNCLASSIFIED", exitCode: "*" })
+]);
+
 const EXPECTED_UNDERLYING_PREFLIGHT_RUNNER_SHA256 =
-  "084c7a193170c1007643c0260d3288006dbb042a818e2cb4c148c4955b1df909";
+  "010794beae992f4e125de1e1c8ec21c8b89d2c99af74a7080bfd41a151630118";
+const EXPECTED_UNDERLYING_PREFLIGHT_VALIDATOR_SHA256 =
+  "cccaac82598da6d31ab3d4cac582ff3ddc9b4ee6d86cd17ab938656ef48c6306";
 const EXPECTED_ACTIONS_CHECKOUT_NORMALIZER_SHA256 =
   "fbe8c57b9aa166c70d16a558160d1e47373de30b8e1bda9fd537c6fbe57c8ad6";
 
@@ -176,7 +218,6 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_ALLOWLIST = Object.freeze([
   "AWS_READ_ONLY_STAGE_REGION_RECEIPT",
   "AWS_READ_ONLY_STAGE_QUOTA_REQUEST",
   "AWS_READ_ONLY_STAGE_QUOTA_RECEIPT",
-  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_01",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_02",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_03",
@@ -194,6 +235,37 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_ALLOWLIST = Object.freeze([
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_15",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_16",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_17",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CHILD_ENVIRONMENT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SOURCE_CHECKOUT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXPECTED_IDENTITY",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CALL_INVENTORY",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CALLER_RECEIPT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BOOTSTRAP_RECEIPT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BUDGET_RECEIPT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_NOTIFICATION_RECEIPT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SUBSCRIBER_RECEIPT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_COST_REQUEST_PREPARE",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BUCKET_POLICY_RECEIPT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_STACK_CENSUS_RECEIPT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SNAPSHOT_COMPLETE",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_SOURCE_IDENTITY",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BOOTSTRAP",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_NOTIFICATIONS",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_STACK_ABSENCE",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_ARTIFACT_BUCKET",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_EXPOSURE",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_MODEL",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_RECEIPT_ASSEMBLY",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT_OUTPUT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_ARGUMENT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_UNCLASSIFIED_CAUGHT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCAUGHT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TIMEOUT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXECUTION",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TERMINATED",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCLASSIFIED",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT",
   "AWS_READ_ONLY_STAGE_SANITIZED_RECEIPT",
   "AWS_READ_ONLY_STAGE_PRIVACY_REDACTION",
@@ -233,7 +305,6 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION = [
   "AWS_READ_ONLY_STAGE_REGION_RECEIPT | \\",
   "AWS_READ_ONLY_STAGE_QUOTA_REQUEST | \\",
   "AWS_READ_ONLY_STAGE_QUOTA_RECEIPT | \\",
-  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST | \\",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_01 | \\",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_02 | \\",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_03 | \\",
@@ -251,6 +322,37 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION = [
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_15 | \\",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_16 | \\",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_17 | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CHILD_ENVIRONMENT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SOURCE_CHECKOUT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXPECTED_IDENTITY | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CALL_INVENTORY | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_CALLER_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BOOTSTRAP_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BUDGET_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_NOTIFICATION_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SUBSCRIBER_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_COST_REQUEST_PREPARE | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_BUCKET_POLICY_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_STACK_CENSUS_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_SNAPSHOT_COMPLETE | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_SOURCE_IDENTITY | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BOOTSTRAP | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_BUDGET | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_NOTIFICATIONS | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_STACK_ABSENCE | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_ARTIFACT_BUCKET | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_COST | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_EXPOSURE | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_MODEL | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_VALIDATE_RECEIPT_ASSEMBLY | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT_OUTPUT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_ARGUMENT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_UNCLASSIFIED_CAUGHT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCAUGHT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TIMEOUT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_EXECUTION | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_TERMINATED | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_PROCESS_UNCLASSIFIED | \\",
   "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT | \\",
   "AWS_READ_ONLY_STAGE_SANITIZED_RECEIPT | \\",
   "AWS_READ_ONLY_STAGE_PRIVACY_REDACTION | \\",
@@ -267,13 +369,13 @@ const EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION = [
 ].join("\n");
 
 const EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256 =
-  "0ea15f80ccadd6c5f5f888ac0c820392133b50440447e58aa86e0f0eabde6d29";
-const EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT = 134;
+  "43ff5ea8a3aa57412e2e4fbe654b41581cb479b59db42162b213df98dcbd1fc6";
+const EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT = 164;
 const EXPECTED_READ_ONLY_GENERIC_FAILURE_REFERENCE_COUNT = 2;
 const EXPECTED_READ_ONLY_SENSITIVE_CLEANUP_FUNCTION_SHA256 =
   "bf66b314bc79bb898df17625f016d5fcbb0efe4a71e3b17650b95815ae4c1e62";
 const EXPECTED_READ_ONLY_POST_DIAGNOSTIC_EXECUTION_SUFFIX_SHA256 =
-  "856274ecd8a4ed7f5ffa1db25835265c4681c9e8c7cfc9fe78b28d8d9505d8e3";
+  "89e638aa9de3367bf91a9a156345a9dce19ca5b4be3f5a79bec674f8ee9bdff7";
 
 const EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK = [
   'if [[ "$PREFLIGHT_DIAGNOSTIC_ONLY" == "true" ]]; then',
@@ -291,14 +393,25 @@ const EXPECTED_READ_ONLY_DIAGNOSTIC_INPUT_BLOCK = [
 ].join("\n");
 
 const EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256 =
-  "a1eca8f5879229c2d77289a3c8115445b532631524d5933e970606be5be5c791";
+  "58e0cce72997fde97c9b68126cfe90e22acc9b26054d8ee22e3b1427f26e4af2";
 const EXPECTED_READ_ONLY_OUTPUT_COMMAND_SEQUENCE_SHA256 =
   "721843e539642f87e9f6a6f974ba7632906453f30c379baaeed088079c213c3c";
 const EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT = 9;
 
 const EXPECTED_READ_ONLY_PREFLIGHT_EXIT_STAGE_MAP = Object.freeze(
-  EXACT_PREFLIGHT_RUNTIME_FAILURES.map(
-    ({ stage, exitCode }) => `${exitCode}:${stage}`
+  [
+    EXACT_PREFLIGHT_PROCESS_FAILURES[0],
+    ...EXACT_PREFLIGHT_RUNTIME_FAILURES.map(({ stage, exitCode }) => ({
+      stage: stage.replace("AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_", ""),
+      exitCode
+    })),
+    ...EXACT_PREFLIGHT_RUNTIME_PHASE_FAILURES.slice(0, 13),
+    ...EXACT_PREFLIGHT_RUNTIME_CONTROL_FAILURES,
+    ...EXACT_PREFLIGHT_RUNTIME_PHASE_FAILURES.slice(13),
+    ...EXACT_PREFLIGHT_PROCESS_FAILURES.slice(1)
+  ].map(
+    ({ stage, exitCode }) =>
+      `${exitCode}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_${stage}`
   )
 );
 
@@ -1181,17 +1294,14 @@ export function validateReadOnlyRunner(source) {
   );
   const preflightExitStageMap = [
     ...source.matchAll(
-      /^\s{2}(\d+)\) fail_closed_stage (AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_\d{2}) ;;/gmu
+      /^\s{2}([^\n)]+)\) fail_closed_stage (AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_[A-Z0-9_]+) ;;/gmu
     )
-  ].map((match) => `${match[1]}:${match[2]}`);
+  ].map((match) => `${match[1].trim()}:${match[2]}`);
   assert(
     sameJson(
       preflightExitStageMap,
       EXPECTED_READ_ONLY_PREFLIGHT_EXIT_STAGE_MAP
-    ) &&
-      source.includes(
-        "*) fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST ;;"
-      ),
+    ),
     "OIDC_READ_ONLY_RUNNER_PREFLIGHT_EXIT_STAGE_MAP"
   );
   return source;
@@ -1204,7 +1314,7 @@ export function validateUnderlyingPreflight(
   const inventory = runtimeCallInventory(runnerSource);
   const runtimeFailures = [
     ...runnerSource.matchAll(
-      /stage: "(AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_\d{2})",\s+exitCode: (\d+)/gu
+      /stage: "([A-Z0-9_]+)",\s+exitCode: (\d+)/gu
     )
   ].map((match) => ({
     stage: match[1],
@@ -1217,7 +1327,11 @@ export function validateUnderlyingPreflight(
     "OIDC_UNDERLYING_PREFLIGHT_INVENTORY"
   );
   assert(
-    sameJson(runtimeFailures, EXACT_PREFLIGHT_RUNTIME_FAILURES),
+    sameJson(runtimeFailures, [
+      ...EXACT_PREFLIGHT_RUNTIME_FAILURES,
+      ...EXACT_PREFLIGHT_RUNTIME_PHASE_FAILURES,
+      ...EXACT_PREFLIGHT_RUNTIME_CONTROL_FAILURES
+    ]),
     "OIDC_UNDERLYING_PREFLIGHT_FAILURE_MAP"
   );
   assertMarkers(
@@ -1231,10 +1345,16 @@ export function validateUnderlyingPreflight(
       "AWS_RUNTIME_CALL_INVENTORY",
       "AWS_RUNTIME_CALL_CARDINALITY",
       "class AwsPreflightRuntimeReadFailure extends Error",
-      "if (!(error instanceof AwsPreflightRuntimeReadFailure))",
+      "class AwsPreflightRuntimePhaseFailure extends Error",
+      "error instanceof AwsPreflightRuntimeReadFailure",
+      "error instanceof AwsPreflightRuntimePhaseFailure",
+      "error instanceof AwsGate2PreflightControlFailure",
       "throw new AwsPreflightRuntimeReadFailure(failureIndex)",
+      "throw new AwsPreflightRuntimePhaseFailure(index)",
       "awsPreflightRuntimeFailureDescriptor(error)",
       "process.exitCode = failure.exitCode",
+      "collectSnapshot(undefined, { diagnosticFailureMode: true })",
+      "{ diagnosticFailureMode: true }",
       "exactBudgetNotifications(",
       "notifications.length !== EXPECTED_BUDGET_NOTIFICATIONS.length",
       "runtimeCalls.assertComplete()"
@@ -1266,6 +1386,11 @@ export function validateUnderlyingPreflight(
   assertMarkers(
     validatorSource,
     [
+      "AWS_GATE2_PREFLIGHT_CONTROL_FAILURES",
+      "class AwsGate2PreflightControlFailure extends Error",
+      "throw new AwsGate2PreflightControlFailure(index)",
+      "validateControl(index, operation, diagnosticFailureMode)",
+      "diagnosticFailureMode = false",
       'roleName: "ProofToActPreflight"',
       'sessionName: "release-proof"',
       'roleName: "ProofToActReadOnlyPreflight"',
@@ -1290,6 +1415,11 @@ export function validateUnderlyingPreflight(
     sha256(runnerSource) === EXPECTED_UNDERLYING_PREFLIGHT_RUNNER_SHA256,
     "OIDC_UNDERLYING_PREFLIGHT_SOURCE_SHA256"
   );
+  assert(
+    sha256(validatorSource) ===
+      EXPECTED_UNDERLYING_PREFLIGHT_VALIDATOR_SHA256,
+    "OIDC_UNDERLYING_PREFLIGHT_VALIDATOR_SHA256"
+  );
   return inventory;
 }
 
@@ -1297,7 +1427,7 @@ function validateLedger(source) {
   assertMarkers(
     source,
     [
-      "SOURCE SCAFFOLD VERIFIED — PROVIDER SETUP, EXECUTION, AND REVIEW PENDING",
+      "SOURCE AND PROVIDER IDENTITY PATH VERIFIED — ACCEPTED PREFLIGHT RECEIPT PENDING",
       "This lane makes AWS CloudShell optional",
       "ProofToActPreflight/release-proof",
       "ProofToActReadOnlyPreflight/read-only-preflight",
@@ -1322,10 +1452,13 @@ function validateLedger(source) {
       "provider-side gate and residual trust boundary",
       "observed AWS + $0.02 < $13.14",
       "exactly `$13.12` fails",
-      "maximum `$0.02` complete-preflight cap",
+      "maximum remains `$0.02` for each complete preflight",
+      "fixed source-bound failure stages",
+      "unclassified fixed stage",
+      "Live protected-environment tokens",
       "encrypted with AES-256",
       "rollback",
-      "separate authorization",
+      "separate operational authorization",
       "Deployment and evidence",
       "Deliberately absent and pending",
       "A source-verifier `PASS` is not a provider"
@@ -1387,8 +1520,8 @@ export function verifyAwsOidcPreflightSource({
     schemaVersion: RECEIPT_SCHEMA,
     status: RECEIPT_STATUS,
     finalReleaseReady: false,
-    providerSetup: "PENDING_HUMAN_AUTHORIZATION",
-    providerExecution: "NOT_RUN",
+    providerSetup: "EXTERNAL_STATE_NOT_ATTESTED",
+    providerExecution: "OUTSIDE_SOURCE_RECEIPT",
     cloudShellRequired: false,
     deploymentRoleOrWorkflowAdded: false,
     approvedIdentityLaneCount: 2,
@@ -1426,6 +1559,8 @@ export const __test = Object.freeze({
   EXACT_PREFLIGHT_RUNTIME_CALL_COUNT,
   EXACT_PREFLIGHT_RUNTIME_CALL_INVENTORY,
   EXACT_PREFLIGHT_RUNTIME_FAILURES,
+  EXACT_PREFLIGHT_RUNTIME_PHASE_FAILURES,
+  EXACT_PREFLIGHT_RUNTIME_CONTROL_FAILURES,
   EXACT_READ_ACTIONS,
   EXACT_RECEIPT_SECRET_PATTERN,
   EXPECTED_IDENTITY_ACTION_PINS,

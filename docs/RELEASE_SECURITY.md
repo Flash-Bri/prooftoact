@@ -30,7 +30,9 @@ other AWS action. Its IAM trust uses only the AWS-documented GitHub `aud`,
 documented post-July-15-2026 default and current public repository/OIDC
 metadata bind the committed subject prefix to
 `repo:Flash-Bri@252500266/prooftoact@1317716765`; a live token and provider
-trust review remain pending. The direct workflow's path claim and requested
+role assumption have matched that source, while exact deployed trust and
+permission-policy parity still require private provider review. The direct
+workflow's path claim and requested
 session remain runner checks because AWS does not document `workflow_ref` for
 this direct job or unambiguously document `sts:RoleSessionName` for
 web-identity assumption; protected-environment human review remains a
@@ -42,6 +44,16 @@ workflow is introduced. The source verifier cannot prove that the role,
 environment protections, secret generation/custody, or required
 `AWS_APPROVED_ACCOUNT_ID_SHA256` secret exist, and it does not authorize provider
 setup or execution.
+
+The read-only lane classifies every ordered AWS request plus each fixed child
+setup, intermediate response, final semantic-validation, output, timeout,
+execution, termination, and unclassified domain with literal source-bound
+stages. Typed failures preserve read ordinals while discarding raw causes;
+child/provider stderr remains quarantined and is never forwarded. The source
+verifier binds both the child and validator implementations, their phase maps
+and order, the parent status map, and adversarial privacy tests. These stages
+narrow diagnosis without disclosing account context or claiming a successful
+provider receipt.
 
 ## Protected assets and trust boundaries
 
