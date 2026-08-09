@@ -131,6 +131,14 @@ and OIDC `sha` and `workflow_sha` claims must all match that same commit at
 `refs/heads/main` in repository ID `1317716765`. A branch SHA, moving ref,
 dirty tree, or different workflow/environment subject fails closed.
 
+The read-only workflow pins Node.js `22.23.1` and the SHA-256 of its official
+Linux x64 binary. GitHub's hosted Ubuntu image intentionally makes `/opt`
+writable, so the runner does not mistake Node's write bits for an integrity
+boundary. It instead requires the exact hosted-toolcache path, version, binary
+digest, expected ephemeral owner shape, regular-file type, numeric mode, and
+executable bits. The AWS CLI and GnuPG binaries remain separately restricted to
+root ownership with no group/world write permission.
+
 ## Exact read-only call boundary
 
 The identity-only workflow checks out no source and makes exactly two STS
