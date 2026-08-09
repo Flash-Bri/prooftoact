@@ -786,7 +786,9 @@ printf '%s\n' 'NODE_TOOLCHAIN_POLICY_PASS'
       ["--noprofile", "--norc", "-c", probe],
       {
         encoding: "utf8",
-        env: { PATH: process.env.PATH ?? "" }
+        env: {
+          PATH: path.dirname(process.execPath)
+        }
       }
     );
     assert.equal(
