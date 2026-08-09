@@ -11,8 +11,10 @@ import {
 } from "../src/cloud/aws-gate2-preflight.js";
 import {
   AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY,
+  AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES,
   assertAwsPreflightParentEnvironment,
   awsCostExplorerArguments,
+  awsPreflightRuntimeFailureDescriptor,
   awsPreflightAwsEnvironment,
   awsPreflightIdentityExpectation,
   collectSnapshot,
@@ -703,6 +705,61 @@ test("AWS preflight runtime reader enforces the exact ordered call cardinality",
   assert.throws(
     () => wrong.read("us-west-2", "sts", "get-caller-identity"),
     /AWS_RUNTIME_CALL_INVENTORY/
+  );
+});
+
+test("AWS preflight reader converts all raw failures to fixed ordinal diagnostics", () => {
+  const calls = AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY.flatMap(
+    ([service, operation, cardinality]) =>
+      Array.from({ length: cardinality }, () => [service, operation])
+  );
+  assert.equal(calls.length, 17);
+  assert.deepEqual(
+    AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES,
+    Array.from({ length: 17 }, (_, index) => ({
+      stage: `AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_${String(
+        index + 1
+      ).padStart(2, "0")}`,
+      exitCode: 40 + index
+    }))
+  );
+
+  for (let target = 0; target < calls.length; target += 1) {
+    let callIndex = 0;
+    const reader = createAwsPreflightRuntimeCallReader(() => {
+      const observed = callIndex;
+      callIndex += 1;
+      if (observed === target) {
+        throw new Error(`SECRET_RAW_PROVIDER_FAILURE_${target}`);
+      }
+      return {};
+    });
+    let caught;
+    for (let index = 0; index <= target; index += 1) {
+      const [service, operation] = calls[index];
+      try {
+        reader.read("us-east-1", service, operation, []);
+      } catch (error) {
+        caught = error;
+      }
+    }
+    assert(caught instanceof Error);
+    assert.equal(caught.message, "AWS_RUNTIME_READ_FAILURE");
+    assert.deepEqual(
+      awsPreflightRuntimeFailureDescriptor(caught),
+      AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[target]
+    );
+    assert.doesNotMatch(
+      caught.message,
+      /SECRET_RAW_PROVIDER_FAILURE/u
+    );
+  }
+
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      new Error("SECRET_RAW_PROVIDER_FAILURE")
+    ),
+    { stage: "UNKNOWN_FAILURE", exitCode: 1 }
   );
 });
 

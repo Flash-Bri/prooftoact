@@ -497,6 +497,23 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       "AWS_READ_ONLY_STAGE_QUOTA_REQUEST",
       "AWS_READ_ONLY_STAGE_QUOTA_RECEIPT",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_01",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_02",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_03",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_04",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_05",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_06",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_07",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_08",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_09",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_10",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_11",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_12",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_13",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_14",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_15",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_16",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_17",
       "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT",
       "AWS_READ_ONLY_STAGE_SANITIZED_RECEIPT",
       "AWS_READ_ONLY_STAGE_PRIVACY_REDACTION",
@@ -509,11 +526,19 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT,
-    117
+    134
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_GENERIC_FAILURE_REFERENCE_COUNT,
     2
+  );
+  assert.deepEqual(
+    sourceContract.EXPECTED_READ_ONLY_PREFLIGHT_EXIT_STAGE_MAP,
+    Array.from({ length: 17 }, (_, index) =>
+      `${40 + index}:AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_READ_${String(
+        index + 1
+      ).padStart(2, "0")}`
+    )
   );
   assert.match(
     sourceContract.EXPECTED_READ_ONLY_SENSITIVE_CLEANUP_FUNCTION_SHA256,
@@ -623,6 +648,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   for (const weakenedStderrRoute of [
     '"$sts_response" 2>"$error_file")" || fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS',
     '/usr/bin/rm -f -- "$encrypted_receipt" \\\n  2>"$error_file" || fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_PREPARE',
+    '>"$preflight_receipt" 2>"$error_file"; then',
     '"$sanitized_receipt" 2>"$error_file"; then'
   ]) {
     assert.throws(
@@ -1050,6 +1076,33 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
   assert.throws(
     () =>
       validateUnderlyingPreflight(
+        PREFLIGHT_RUNNER.replace("exitCode: 40", "exitCode: 56"),
+        PREFLIGHT_VALIDATOR
+      ),
+    /OIDC_UNDERLYING_PREFLIGHT_FAILURE_MAP/
+  );
+  assert.throws(
+    () =>
+      validateUnderlyingPreflight(
+        PREFLIGHT_RUNNER.replace(
+          "if (!(error instanceof AwsPreflightRuntimeReadFailure))",
+          "if (false)"
+        ),
+        PREFLIGHT_VALIDATOR
+      ),
+    /OIDC_UNDERLYING_PREFLIGHT_CALLS/
+  );
+  assert.throws(
+    () =>
+      validateUnderlyingPreflight(
+        `${PREFLIGHT_RUNNER}\nprocess.stderr.write(result.stderr);\n`,
+        PREFLIGHT_VALIDATOR
+      ),
+    /OIDC_UNDERLYING_PREFLIGHT_RAW_FAILURE_OUTPUT/
+  );
+  assert.throws(
+    () =>
+      validateUnderlyingPreflight(
         `${PREFLIGHT_RUNNER}\nreadAwsJson("us-east-1", "s3api", "list-buckets");\n`,
         PREFLIGHT_VALIDATOR
       ),
@@ -1071,6 +1124,36 @@ test("underlying preflight inventory is exact and cannot bypass its reader", () 
       ),
     /OIDC_UNDERLYING_PREFLIGHT_READER_BYPASS/
   );
+  const diagnosticContractMutations = [
+    PREFLIGHT_RUNNER.replace(
+      "`TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${failure.stage}\\n`",
+      "`TIDEPROOF_GATE2_AWS_PREFLIGHT_FAILED:${error.message}\\n`"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      "AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[error.index]",
+      "AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES[0]"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      "throw new AwsPreflightRuntimeReadFailure(failureIndex)",
+      "throw new AwsPreflightRuntimeReadFailure(0)"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      "if (!(error instanceof AwsPreflightRuntimeReadFailure)) {\n    return UNKNOWN_RUNTIME_FAILURE;\n  }",
+      "if (!(error instanceof AwsPreflightRuntimeReadFailure)) {\n    return { stage: error.message, exitCode: 1 };\n  }"
+    ),
+    PREFLIGHT_RUNNER.replace(
+      'stage: "UNKNOWN_FAILURE",\n  exitCode: 1',
+      'stage: "UNKNOWN_FAILURE",\n  exitCode: 0'
+    )
+  ];
+  for (const mutatedRunner of diagnosticContractMutations) {
+    assert.notEqual(mutatedRunner, PREFLIGHT_RUNNER);
+    assert.throws(
+      () =>
+        validateUnderlyingPreflight(mutatedRunner, PREFLIGHT_VALIDATOR),
+      /OIDC_UNDERLYING_PREFLIGHT_(?:CALLS|SOURCE_SHA256)/
+    );
+  }
 });
 
 test("preflight identity accepts only the two exact role/session pairings", () => {
