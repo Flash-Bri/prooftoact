@@ -1169,7 +1169,7 @@ const SOURCE_MARKERS = Object.freeze({
     "This lane makes AWS CloudShell optional",
     "ProofToActPreflight/release-proof",
     "ProofToActReadOnlyPreflight/read-only-preflight",
-    "known missing setup gate",
+    "external setup gate that source cannot prove",
     "Do not embed an AWS account ID or its digest",
     "canonical unpadded Base64URL for 32 bytes",
     "exactly 20 AWS",

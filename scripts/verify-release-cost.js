@@ -664,7 +664,7 @@ function assertSourceContracts(sources) {
     sources.get("aws-oidc-read-only-ledger"),
     [
       "This lane makes AWS CloudShell optional",
-      "known missing setup gate",
+      "external setup gate that source cannot prove",
       "account-wide `$15` budget",
       "observed AWS + $0.02 < $13.14",
       "exactly `$13.12` fails",
@@ -799,7 +799,7 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
     [
       "CURRENT COST GUARDS PASS — LIVE SPEND AND FINAL REVIEW PENDING",
       "CURRENT_COST_GUARDS_PASS",
-      "AWS preflight remains `NOT_RUN`",
+      "no accepted AWS read-only preflight receipt exists",
       "main-stack deployment, DNS change",
       "semantic-failure alarms",
       "stack/service custom"

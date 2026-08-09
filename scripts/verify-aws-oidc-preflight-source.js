@@ -132,6 +132,70 @@ const EXPECTED_IDENTITY_FAILURE_STAGE_FUNCTION = [
   "}"
 ].join("\n");
 
+const EXPECTED_READ_ONLY_FAILURE_STAGE_ALLOWLIST = Object.freeze([
+  "AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT",
+  "AWS_READ_ONLY_STAGE_INHERITED_ENVIRONMENT",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY",
+  "AWS_READ_ONLY_STAGE_OIDC_ENDPOINT",
+  "AWS_READ_ONLY_STAGE_SOURCE_BINDING",
+  "AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN",
+  "AWS_READ_ONLY_STAGE_TEMPORARY_STATE",
+  "AWS_READ_ONLY_STAGE_OIDC_REQUEST",
+  "AWS_READ_ONLY_STAGE_OIDC_RECEIPT",
+  "AWS_READ_ONLY_STAGE_OIDC_CLAIMS"
+]);
+
+const EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION = [
+  "fail_closed_stage() {",
+  'local stage="\${1:-}"',
+  'case "$stage" in',
+  "AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT | \\",
+  "AWS_READ_ONLY_STAGE_INHERITED_ENVIRONMENT | \\",
+  "AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY | \\",
+  "AWS_READ_ONLY_STAGE_OIDC_ENDPOINT | \\",
+  "AWS_READ_ONLY_STAGE_SOURCE_BINDING | \\",
+  "AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN | \\",
+  "AWS_READ_ONLY_STAGE_TEMPORARY_STATE | \\",
+  "AWS_READ_ONLY_STAGE_OIDC_REQUEST | \\",
+  "AWS_READ_ONLY_STAGE_OIDC_RECEIPT | \\",
+  "AWS_READ_ONLY_STAGE_OIDC_CLAIMS) ;;",
+  "*) fail_closed ;;",
+  "esac",
+  'printf \'%s\\n\' "::error::\${stage}" >&2',
+  "exit 1",
+  "}"
+].join("\n");
+
+const EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256 =
+  "4251f77cdc2a17a46a1808971b44d8b8e0b87fed2aa1398e7edbe94752c1e2c5";
+const EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT = 90;
+
+const EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK = [
+  'if [[ "$PREFLIGHT_DIAGNOSTIC_ONLY" == "true" ]]; then',
+  "  printf '%s\\n' '::notice::AWS_READ_ONLY_DIAGNOSTIC_PASS'",
+  "  exit 0",
+  "fi"
+].join("\n");
+
+const EXPECTED_READ_ONLY_DIAGNOSTIC_INPUT_BLOCK = [
+  "      diagnostic_only:",
+  "        description: Validate the protected pre-AWS runtime contract and stop before token exchange",
+  "        required: true",
+  "        default: true",
+  "        type: boolean"
+].join("\n");
+
+const EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256 =
+  "cf1eeeaa5737a4ef9db69c03303e10f5e28247f4ec5e5ee2819f5b191de3a67b";
+const EXPECTED_READ_ONLY_OUTPUT_COMMAND_SEQUENCE_SHA256 =
+  "8d904a81633325a805bc789c40b80dfe4785055b76d00f2004c91f8188903946";
+const EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT = 8;
+
+const EXPECTED_READ_ONLY_WORKFLOW_RUN_COMMANDS = Object.freeze([
+  "/usr/bin/bash scripts/run-aws-oidc-read-only-preflight.sh",
+  '/usr/bin/rm -f -- "${RUNNER_TEMP}/aws-read-only-preflight-receipt.json.gpg"'
+]);
+
 const EXPECTED_READ_ONLY_ACTION_PINS = Object.freeze([
   "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
@@ -150,10 +214,10 @@ const EXPECTED_IDENTITY_AWS_CLI_REFERENCE_LINES = Object.freeze([
 
 const EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES = Object.freeze([
   'aws_candidate="/usr/local/bin/aws"',
-  '[[ -L "$aws_candidate" ]] || fail_closed',
-  'aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed',
-  String.raw`[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed`,
-  'aws_metadata="$(/usr/bin/stat -Lc \'%u:%a:%F\' -- "$aws_cli")" || fail_closed',
+  '[[ -L "$aws_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN',
+  'aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN',
+  String.raw`[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN`,
+  'aws_metadata="$(/usr/bin/stat -Lc \'%u:%a:%F\' -- "$aws_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN',
   "unset aws_candidate aws_metadata aws_uid aws_mode aws_type aws_mode_value",
   '"$aws_cli" sts assume-role-with-web-identity \\',
   '"$aws_cli" account get-region-opt-status \\',
@@ -163,7 +227,7 @@ const EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES = Object.freeze([
 const EXPECTED_IDENTITY_GPG_REFERENCE_SHA256 =
   "1d79a393539e67b435fd0fe7a75ac318e44950724484cb9418cbe421698f7949";
 const EXPECTED_READ_ONLY_GPG_REFERENCE_SHA256 =
-  "80759db1df6b63d49408b7aab9ba8a64e078665baf92917c67bc83d67c5dc740";
+  "8686e2df7c5bfc697eaf03588f1dd2a7f1c6bb49c0345c6f5700aef57718d24c";
 
 function assert(condition, code) {
   if (!condition) {
@@ -237,6 +301,12 @@ function actionsPins(source) {
   );
 }
 
+function workflowRunCommands(source) {
+  return [...source.matchAll(/^\s*run:\s*(.+?)\s*$/gmu)].map(
+    (match) => match[1]
+  );
+}
+
 function literalAwsCalls(source) {
   return [
     ...source.matchAll(
@@ -266,6 +336,35 @@ function normalizedIdentityFailureStageFunction(source) {
     /^[ \t]*fail_closed_stage\(\) \{\n[\s\S]*?^[ \t]*\}$/mu
   );
   assert(block, "OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_FUNCTION");
+  return block[0]
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .join("\n");
+}
+
+function readOnlyFailureStages(source) {
+  return [
+    ...source.matchAll(
+      /\bfail_closed_stage (AWS_READ_ONLY_STAGE_[A-Z0-9_]+)\b/gu
+    )
+  ].map((match) => match[1]);
+}
+
+function readOnlyFailureStageAllowlist(source) {
+  const block = source.match(
+    /fail_closed_stage\(\) \{\n([\s\S]*?)\n\}\n\n\[\[/u
+  );
+  assert(block, "OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_FUNCTION");
+  return [
+    ...block[1].matchAll(/\bAWS_READ_ONLY_STAGE_[A-Z0-9_]+\b/gu)
+  ].map((match) => match[0]);
+}
+
+function normalizedReadOnlyFailureStageFunction(source) {
+  const block = source.match(
+    /^fail_closed_stage\(\) \{\n[\s\S]*?^\}$/mu
+  );
+  assert(block, "OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_FUNCTION");
   return block[0]
     .split(/\r?\n/u)
     .map((line) => line.trim())
@@ -554,7 +653,7 @@ export function validateIdentityWorkflow(source) {
       "timeout-minutes: 5",
       "shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}",
       "EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}",
-      "AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ vars.AWS_APPROVED_ACCOUNT_ID_SHA256 }}",
+      "AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ secrets.AWS_APPROVED_ACCOUNT_ID_SHA256 }}",
       "$(/usr/bin/id -u)",
       "GITHUB_REPOSITORY_ID:-}\" == \"1317716765",
       "GITHUB_SHA:-}\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
@@ -643,6 +742,7 @@ export function validateIdentityWorkflow(source) {
   assert(
     !source.includes("actions/checkout@") &&
       !source.includes("actions/setup-node@") &&
+      !source.includes("vars.AWS_APPROVED_ACCOUNT_ID_SHA256") &&
       !source.includes("https://pipelines.actions.githubusercontent.com/") &&
       !/^\s*(?:push|pull_request|schedule):/mu.test(source) &&
       !/\bset\s+-x\b/u.test(source) &&
@@ -664,6 +764,7 @@ export function validateReadOnlyWorkflow(source) {
       "name: AWS Read-Only OIDC Preflight",
       "workflow_dispatch:",
       "official_main_commit:",
+      "diagnostic_only:",
       "permissions:\n  contents: read\n  id-token: write",
       "environment: aws-read-only-preflight",
       "timeout-minutes: 10",
@@ -673,11 +774,14 @@ export function validateReadOnlyWorkflow(source) {
       "persist-credentials: false",
       "node-version: 22",
       "EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}",
+      "PREFLIGHT_DIAGNOSTIC_ONLY: ${{ inputs.diagnostic_only }}",
       "AWS_READ_ONLY_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_READ_ONLY_PREFLIGHT_ROLE_ARN }}",
-      "AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ vars.AWS_APPROVED_ACCOUNT_ID_SHA256 }}",
+      "AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ secrets.AWS_APPROVED_ACCOUNT_ID_SHA256 }}",
       "LD_PRELOAD: \"\"",
       "NODE_OPTIONS: \"\"",
       "/usr/bin/bash scripts/run-aws-oidc-read-only-preflight.sh",
+      "if: ${{ !inputs.diagnostic_only }}",
+      "if: ${{ always() && !inputs.diagnostic_only }}",
       "aws-read-only-preflight-receipt.json.gpg",
       "retention-days: 1"
     ],
@@ -688,10 +792,22 @@ export function validateReadOnlyWorkflow(source) {
     "OIDC_READ_ONLY_WORKFLOW_ACTION_PINS"
   );
   assert(
+    source.split(EXPECTED_READ_ONLY_DIAGNOSTIC_INPUT_BLOCK).length === 2,
+    "OIDC_READ_ONLY_WORKFLOW_DIAGNOSTIC_INPUT"
+  );
+  assert(
+    sameJson(
+      workflowRunCommands(source),
+      EXPECTED_READ_ONLY_WORKFLOW_RUN_COMMANDS
+    ),
+    "OIDC_READ_ONLY_WORKFLOW_RUN_COMMANDS"
+  );
+  assert(
     !/^\s*(?:push|pull_request|schedule):/mu.test(source) &&
       !/^\s*aws\s+/mu.test(source) &&
       !source.includes("configure-aws-credentials") &&
       !source.includes("AWS_ROLE_ARN:") &&
+      !source.includes("vars.AWS_APPROVED_ACCOUNT_ID_SHA256") &&
       !/\bset\s+-x\b/u.test(source),
     "OIDC_READ_ONLY_WORKFLOW_BOUNDARY"
   );
@@ -705,6 +821,9 @@ export function validateReadOnlyRunner(source) {
       "set -euo pipefail",
       "set +x",
       "umask 077",
+      "fail_closed_stage() {",
+      'printf \'%s\\n\' "::error::${stage}" >&2',
+      "AWS_READ_ONLY_DIAGNOSTIC_PASS",
       "$(/usr/bin/id -u)",
       "GITHUB_REPOSITORY_ID:-}\" == \"1317716765",
       "GITHUB_SHA:-}\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
@@ -762,6 +881,51 @@ export function validateReadOnlyRunner(source) {
     ]),
     "OIDC_READ_ONLY_RUNNER_DIRECT_CALLS"
   );
+  const failureStages = readOnlyFailureStages(source);
+  assert(
+    failureStages.length ===
+        EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT &&
+      sha256(JSON.stringify(failureStages)) ===
+        EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256,
+    "OIDC_READ_ONLY_RUNNER_FAILURE_STAGES"
+  );
+  assert(
+    sameJson(
+      readOnlyFailureStageAllowlist(source),
+      EXPECTED_READ_ONLY_FAILURE_STAGE_ALLOWLIST
+    ),
+    "OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_ALLOWLIST"
+  );
+  assert(
+    normalizedReadOnlyFailureStageFunction(source) ===
+      EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION,
+    "OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_FUNCTION"
+  );
+  assert(
+    (source.match(/\bfail_closed_stage\b/gu) ?? []).length ===
+      EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT + 1,
+    "OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_REFERENCES"
+  );
+  const sensitivePrintfLines = source
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        /\b(?:printf|echo|cat|tee|printenv)\b/u.test(line) &&
+        /\b(?:AWS_ACCOUNT_ID|AWS_APPROVED_ACCOUNT_ID_SHA256|AWS_READ_ONLY_PREFLIGHT_ROLE_ARN|RECEIPT_ENCRYPTION_PASSPHRASE|ACTIONS_ID_TOKEN_REQUEST_(?:TOKEN|URL)|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|account_digest|expected_(?:role|caller)_arn|assumed_role_id|oidc_(?:request_url|url|token|header|payload))\b/u.test(
+          line
+        )
+    );
+  assert(
+    sameJson(sensitivePrintfLines, [
+      'account_digest="$(printf \'%s\' "$AWS_ACCOUNT_ID" | /usr/bin/sha256sum)" || fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY',
+      'printf \'%s\\n\' "$RECEIPT_ENCRYPTION_PASSPHRASE" >"$passphrase_file"'
+    ]) &&
+      !/(?:echo|cat|tee|printenv)[^\n]*(?:AWS_ACCOUNT_ID|AWS_APPROVED_ACCOUNT_ID_SHA256|AWS_READ_ONLY_PREFLIGHT_ROLE_ARN|RECEIPT_ENCRYPTION_PASSPHRASE|ACTIONS_ID_TOKEN_REQUEST_(?:TOKEN|URL))/u.test(
+        source
+      ),
+    "OIDC_READ_ONLY_RUNNER_AUTHORITY_LOGGING"
+  );
   validateAwsCliReferenceLines(
     source,
     EXPECTED_READ_ONLY_AWS_CLI_REFERENCE_LINES,
@@ -773,14 +937,46 @@ export function validateReadOnlyRunner(source) {
     "OIDC_READ_ONLY_GPG_REFERENCES"
   );
   assert(
-    !/\bset\s+-x\b/u.test(source) &&
+      !/\bset\s+-x\b/u.test(source) &&
       !source.includes("https://pipelines.actions.githubusercontent.com/") &&
-      !/\btee\b/u.test(source),
+      !/\btee\b/u.test(source) &&
+      !/(?:^|\n)\s*(?:env|printenv|declare\s+-p)(?:\s|$)/u.test(source),
     "OIDC_READ_ONLY_RUNNER_MUTATION"
   );
   validateReceiptSecretContract(
     source,
     "OIDC_READ_ONLY_RECEIPT_SECRET"
+  );
+  const diagnosticBlocks = source.split(EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK);
+  const diagnosticIndex = source.indexOf(EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK);
+  const providerExecutionMarkers = [
+    "/usr/bin/curl \\",
+    '"$aws_cli" sts assume-role-with-web-identity \\',
+    '"$aws_cli" account get-region-opt-status \\',
+    '"$aws_cli" service-quotas list-service-quotas \\',
+    '"$node_cli" "$GITHUB_WORKSPACE/scripts/gate2-aws-preflight.js" \\'
+  ];
+  assert(
+    diagnosticBlocks.length === 2 &&
+      diagnosticIndex >= 0 &&
+      sha256(source.slice(0, diagnosticIndex)) ===
+        EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256 &&
+      (source.match(/\/usr\/bin\/curl\b/gu) ?? []).length === 1 &&
+      providerExecutionMarkers.every((marker) => {
+        const markerIndex = source.indexOf(marker);
+        return markerIndex > diagnosticIndex;
+      }),
+    "OIDC_READ_ONLY_RUNNER_DIAGNOSTIC_BOUNDARY"
+  );
+  const outputCommandLines = source
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => /\b(?:printf|echo|cat|tee|printenv)\b/u.test(line));
+  assert(
+    outputCommandLines.length === EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT &&
+      sha256(JSON.stringify(outputCommandLines)) ===
+        EXPECTED_READ_ONLY_OUTPUT_COMMAND_SEQUENCE_SHA256,
+    "OIDC_READ_ONLY_RUNNER_OUTPUT_COMMANDS"
   );
   return source;
 }
@@ -863,7 +1059,7 @@ function validateLedger(source) {
       "ProofToActPreflight/release-proof",
       "ProofToActReadOnlyPreflight/read-only-preflight",
       "AWS_APPROVED_ACCOUNT_ID_SHA256",
-      "known missing setup gate",
+      "external setup gate that source cannot prove",
       "Do not embed an AWS account ID or its digest",
       "non-root",
       "900-second",
@@ -989,6 +1185,16 @@ export const __test = Object.freeze({
   EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST,
   EXPECTED_IDENTITY_FAILURE_STAGE_FUNCTION,
   EXPECTED_READ_ONLY_ACTION_PINS,
+  EXPECTED_READ_ONLY_FAILURE_STAGE_ALLOWLIST,
+  EXPECTED_READ_ONLY_FAILURE_STAGE_FUNCTION,
+  EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT,
+  EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256,
+  EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK,
+  EXPECTED_READ_ONLY_DIAGNOSTIC_INPUT_BLOCK,
+  EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT,
+  EXPECTED_READ_ONLY_OUTPUT_COMMAND_SEQUENCE_SHA256,
+  EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256,
+  EXPECTED_READ_ONLY_WORKFLOW_RUN_COMMANDS,
   EXPECTED_ROLE_STATEMENT_SIDS,
   RECEIPT_SCHEMA,
   RECEIPT_STATUS

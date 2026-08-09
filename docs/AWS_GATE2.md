@@ -409,9 +409,9 @@ also equal the GitHub event SHA and both OIDC source-SHA claims. The runner must
 be non-root. The decoded OIDC header and payload stay in `0600`
 temporary files and are validated locally without logging the token. The
 configured account secret must match the independently stored protected
-environment variable `AWS_APPROVED_ACCOUNT_ID_SHA256`; this separates the
+environment secret `AWS_APPROVED_ACCOUNT_ID_SHA256`; this separates the
 approved account binding from the role/account secret pair, although an
-environment administrator can still change that variable. The role is exactly
+environment administrator can still change that secret. The role is exactly
 the pathless `ProofToActPreflight` role and the 900-second session is exactly
 `release-proof`.
 
@@ -444,7 +444,7 @@ credentials, exact official-main commit and clean tree, `us-east-1`, cost
 limits, stack absence, encrypted sanitized evidence, and bounded timeouts. It
 does not create the OIDC provider or role, configure GitHub, mutate AWS, deploy,
 invoke a model, or grant deployment authority. Provider setup and execution
-remain separate human gates, and the still-missing protected environment value
+remain separate human gates, and the required protected environment secret
 `AWS_APPROVED_ACCOUNT_ID_SHA256` must not be embedded in source.
 
 CloudShell is therefore an optional authenticated operator surface, not a

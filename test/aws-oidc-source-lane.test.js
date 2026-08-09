@@ -172,6 +172,14 @@ test("read-only role template is exact and rejects expanded trust or authority",
 
 test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
   assert.doesNotThrow(() => validateIdentityWorkflow(IDENTITY_WORKFLOW));
+  assert.match(
+    IDENTITY_WORKFLOW,
+    /AWS_APPROVED_ACCOUNT_ID_SHA256: \$\{\{ secrets\.AWS_APPROVED_ACCOUNT_ID_SHA256 \}\}/u
+  );
+  assert.doesNotMatch(
+    IDENTITY_WORKFLOW,
+    /vars\.AWS_APPROVED_ACCOUNT_ID_SHA256/u
+  );
 
   assert.deepEqual(sourceContract.EXPECTED_IDENTITY_FAILURE_STAGES, [
     "AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST",
@@ -383,6 +391,20 @@ test("OIDC request URL guards accept GitHub regional hosts and reject authority 
 test("read-only workflow stays separately protected and action-pinned", () => {
   assert.doesNotThrow(() => validateReadOnlyWorkflow(READ_ONLY_WORKFLOW));
 
+  assert.match(
+    READ_ONLY_WORKFLOW,
+    /diagnostic_only:\n\s+description: Validate the protected pre-AWS runtime contract and stop before token exchange\n\s+required: true\n\s+default: true\n\s+type: boolean/u
+  );
+
+  assert.match(
+    READ_ONLY_WORKFLOW,
+    /AWS_APPROVED_ACCOUNT_ID_SHA256: \$\{\{ secrets\.AWS_APPROVED_ACCOUNT_ID_SHA256 \}\}/u
+  );
+  assert.doesNotMatch(
+    READ_ONLY_WORKFLOW,
+    /vars\.AWS_APPROVED_ACCOUNT_ID_SHA256/u
+  );
+
   assert.throws(
     () =>
       validateReadOnlyWorkflow(
@@ -410,10 +432,77 @@ test("read-only workflow stays separately protected and action-pinned", () => {
       ),
     /OIDC_READ_ONLY_WORKFLOW_ACTION_PINS/
   );
+  assert.throws(
+    () =>
+      validateReadOnlyWorkflow(
+        READ_ONLY_WORKFLOW.replace(
+          "secrets.AWS_APPROVED_ACCOUNT_ID_SHA256",
+          "vars.AWS_APPROVED_ACCOUNT_ID_SHA256"
+        )
+      ),
+    /OIDC_READ_ONLY_WORKFLOW_(?:MARKERS|BOUNDARY)/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyWorkflow(
+        READ_ONLY_WORKFLOW.replace("diagnostic_only:", "diagnostics:")
+      ),
+    /OIDC_READ_ONLY_WORKFLOW_MARKERS/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyWorkflow(
+        READ_ONLY_WORKFLOW.replace("default: true", "default: false")
+      ),
+    /OIDC_READ_ONLY_WORKFLOW_DIAGNOSTIC_INPUT/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyWorkflow(
+        `${READ_ONLY_WORKFLOW}\nrun: /usr/bin/curl https://example.invalid\n`
+      ),
+    /OIDC_READ_ONLY_WORKFLOW_RUN_COMMANDS/
+  );
 });
 
 test("read-only runner rejects direct mutation calls and shell tracing", () => {
   assert.doesNotThrow(() => validateReadOnlyRunner(READ_ONLY_RUNNER));
+
+  assert.deepEqual(
+    sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_ALLOWLIST,
+    [
+      "AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT",
+      "AWS_READ_ONLY_STAGE_INHERITED_ENVIRONMENT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY",
+      "AWS_READ_ONLY_STAGE_OIDC_ENDPOINT",
+      "AWS_READ_ONLY_STAGE_SOURCE_BINDING",
+      "AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN",
+      "AWS_READ_ONLY_STAGE_TEMPORARY_STATE",
+      "AWS_READ_ONLY_STAGE_OIDC_REQUEST",
+      "AWS_READ_ONLY_STAGE_OIDC_RECEIPT",
+      "AWS_READ_ONLY_STAGE_OIDC_CLAIMS"
+    ]
+  );
+  assert.equal(
+    sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT,
+    90
+  );
+  assert.match(
+    sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256,
+    /^[0-9a-f]{64}$/u
+  );
+  assert.match(
+    sourceContract.EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK,
+    /AWS_READ_ONLY_DIAGNOSTIC_PASS/u
+  );
+  assert.equal(
+    sourceContract.EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT,
+    8
+  );
+  assert.match(
+    sourceContract.EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256,
+    /^[0-9a-f]{64}$/u
+  );
 
   assert.throws(
     () =>
@@ -425,6 +514,111 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   assert.throws(
     () => validateReadOnlyRunner(`${READ_ONLY_RUNNER}\nset -x\n`),
     /OIDC_READ_ONLY_RUNNER_MUTATION/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          "fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY",
+          "fail_closed_stage AWS_READ_ONLY_STAGE_UNREVIEWED"
+        )
+      ),
+    /OIDC_READ_ONLY_RUNNER_FAILURE_STAGES/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          "AWS_READ_ONLY_STAGE_OIDC_CLAIMS) ;;",
+          "AWS_READ_ONLY_STAGE_OIDC_CLAIMS | \\\n+      AWS_READ_ONLY_STAGE_UNREVIEWED) ;;"
+        )
+      ),
+    /OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_ALLOWLIST/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace("*) fail_closed ;;", "*) ;;" )
+      ),
+    /OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_FUNCTION/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        `${READ_ONLY_RUNNER}\nfail_closed_stage "$AWS_ACCOUNT_ID"\n`
+      ),
+    /OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_REFERENCES/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        `${READ_ONLY_RUNNER}\necho "$AWS_ACCOUNT_ID"\n`
+      ),
+    /OIDC_READ_ONLY_RUNNER_AUTHORITY_LOGGING/
+  );
+  for (const secretName of [
+    "AWS_APPROVED_ACCOUNT_ID_SHA256",
+    "AWS_READ_ONLY_PREFLIGHT_ROLE_ARN",
+    "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+    "ACTIONS_ID_TOKEN_REQUEST_URL"
+  ]) {
+    assert.throws(
+      () =>
+        validateReadOnlyRunner(
+          `${READ_ONLY_RUNNER}\nprintf '%s\\n' "$${secretName}"\n`
+        ),
+      /OIDC_READ_ONLY_RUNNER_AUTHORITY_LOGGING/
+    );
+  }
+  const diagnosticBlock =
+    sourceContract.EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK;
+  const movedDiagnostic = READ_ONLY_RUNNER.replace(
+    `${diagnosticBlock}\n\n`,
+    ""
+  ).replace("unset oidc_now\n", `unset oidc_now\n\n${diagnosticBlock}\n`);
+  assert.throws(
+    () => validateReadOnlyRunner(movedDiagnostic),
+    /OIDC_READ_ONLY_RUNNER_DIAGNOSTIC_BOUNDARY/
+  );
+  const earlyDiagnostic = READ_ONLY_RUNNER.replace(
+    `${diagnosticBlock}\n\n`,
+    ""
+  ).replace("umask 077\n", `umask 077\n\n${diagnosticBlock}\n`);
+  assert.throws(
+    () => validateReadOnlyRunner(earlyDiagnostic),
+    /OIDC_READ_ONLY_RUNNER_DIAGNOSTIC_BOUNDARY/
+  );
+  for (const unreviewedNetworkCommand of [
+    `"$node_cli" -e 'fetch("https://example.invalid")'`,
+    `/usr/bin/python3 -c 'import urllib.request; urllib.request.urlopen("https://example.invalid")'`
+  ]) {
+    assert.throws(
+      () =>
+        validateReadOnlyRunner(
+          READ_ONLY_RUNNER.replace(
+            diagnosticBlock,
+            `${unreviewedNetworkCommand}\n${diagnosticBlock}`
+          )
+        ),
+      /OIDC_READ_ONLY_RUNNER_DIAGNOSTIC_BOUNDARY/
+    );
+  }
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        `${READ_ONLY_RUNNER}\nleak="$ACTIONS_ID_TOKEN_REQUEST_TOKEN"\nprintf '%s\\n' "$leak"\n`
+      ),
+    /OIDC_READ_ONLY_RUNNER_OUTPUT_COMMANDS/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          diagnosticBlock,
+          `/usr/bin/curl https://example.invalid\n${diagnosticBlock}`
+        )
+      ),
+    /OIDC_READ_ONLY_RUNNER_DIAGNOSTIC_BOUNDARY/
   );
   for (const bypass of [
     'command "${aws_cli}" s3api list-buckets',
