@@ -29,7 +29,7 @@ jobs:
           EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}
           AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ vars.AWS_APPROVED_ACCOUNT_ID_SHA256 }}
+          AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ secrets.AWS_APPROVED_ACCOUNT_ID_SHA256 }}
           RECEIPT_ENCRYPTION_PASSPHRASE: ${{ secrets.RECEIPT_ENCRYPTION_PASSPHRASE }}
           BASH_ENV: ""
           ENV: ""

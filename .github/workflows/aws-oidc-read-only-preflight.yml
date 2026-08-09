@@ -7,6 +7,11 @@ on:
         description: Exact 40-character official main commit expected for this run
         required: true
         type: string
+      diagnostic_only:
+        description: Validate the protected pre-AWS runtime contract and stop before token exchange
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -44,9 +49,10 @@ jobs:
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
           EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}
+          PREFLIGHT_DIAGNOSTIC_ONLY: ${{ inputs.diagnostic_only }}
           AWS_READ_ONLY_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_READ_ONLY_PREFLIGHT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ vars.AWS_APPROVED_ACCOUNT_ID_SHA256 }}
+          AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ secrets.AWS_APPROVED_ACCOUNT_ID_SHA256 }}
           RECEIPT_ENCRYPTION_PASSPHRASE: ${{ secrets.RECEIPT_ENCRYPTION_PASSPHRASE }}
           BASH_ENV: ""
           ENV: ""
@@ -61,6 +67,7 @@ jobs:
         run: /usr/bin/bash scripts/run-aws-oidc-read-only-preflight.sh
 
       - name: Upload encrypted sanitized preflight receipt
+        if: ${{ !inputs.diagnostic_only }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: aws-read-only-preflight-receipt-${{ github.run_id }}-${{ github.run_attempt }}
@@ -71,7 +78,7 @@ jobs:
           include-hidden-files: false
 
       - name: Remove encrypted receipt from runner
-        if: always()
+        if: ${{ always() && !inputs.diagnostic_only }}
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
           BASH_ENV: ""

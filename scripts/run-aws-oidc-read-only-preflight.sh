@@ -71,24 +71,44 @@ fail_closed() {
   exit 1
 }
 
-[[ "$(/usr/bin/id -u)" != "0" ]] || fail_closed
-[[ "${GITHUB_ACTIONS:-}" == "true" ]] || fail_closed
-[[ "${CI:-}" == "true" ]] || fail_closed
-[[ "${RUNNER_OS:-}" == "Linux" ]] || fail_closed
-[[ "${RUNNER_ENVIRONMENT:-}" == "github-hosted" ]] || fail_closed
-[[ "${GITHUB_SERVER_URL:-}" == "https://github.com" ]] || fail_closed
-[[ "${GITHUB_API_URL:-}" == "https://api.github.com" ]] || fail_closed
-[[ "${GITHUB_REPOSITORY:-}" == "Flash-Bri/prooftoact" ]] || fail_closed
-[[ "${GITHUB_REPOSITORY_ID:-}" == "1317716765" ]] || fail_closed
-[[ "${GITHUB_REF:-}" == "refs/heads/main" ]] || fail_closed
-[[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]] || fail_closed
-[[ "${GITHUB_WORKFLOW:-}" == "AWS Read-Only OIDC Preflight" ]] || fail_closed
-[[ "${GITHUB_WORKFLOW_REF:-}" == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-read-only-preflight.yml@refs/heads/main" ]] || fail_closed
-[[ "${GITHUB_JOB:-}" == "read-only-preflight" ]] || fail_closed
-[[ "${EXPECTED_OFFICIAL_MAIN_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail_closed
-[[ "${GITHUB_SHA:-}" == "$EXPECTED_OFFICIAL_MAIN_COMMIT" ]] || fail_closed
-[[ -n "${GITHUB_WORKSPACE:-}" && -d "$GITHUB_WORKSPACE" ]] || fail_closed
-[[ "${RUNNER_TEMP:-}" == /* && -d "$RUNNER_TEMP" ]] || fail_closed
+fail_closed_stage() {
+  local stage="${1:-}"
+  case "$stage" in
+    AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT | \
+      AWS_READ_ONLY_STAGE_INHERITED_ENVIRONMENT | \
+      AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY | \
+      AWS_READ_ONLY_STAGE_OIDC_ENDPOINT | \
+      AWS_READ_ONLY_STAGE_SOURCE_BINDING | \
+      AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN | \
+      AWS_READ_ONLY_STAGE_TEMPORARY_STATE | \
+      AWS_READ_ONLY_STAGE_OIDC_REQUEST | \
+      AWS_READ_ONLY_STAGE_OIDC_RECEIPT | \
+      AWS_READ_ONLY_STAGE_OIDC_CLAIMS) ;;
+    *) fail_closed ;;
+  esac
+  printf '%s\n' "::error::${stage}" >&2
+  exit 1
+}
+
+[[ "$(/usr/bin/id -u)" != "0" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_ACTIONS:-}" == "true" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${CI:-}" == "true" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${RUNNER_OS:-}" == "Linux" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${RUNNER_ENVIRONMENT:-}" == "github-hosted" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_SERVER_URL:-}" == "https://github.com" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_API_URL:-}" == "https://api.github.com" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_REPOSITORY:-}" == "Flash-Bri/prooftoact" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_REPOSITORY_ID:-}" == "1317716765" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_REF:-}" == "refs/heads/main" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_WORKFLOW:-}" == "AWS Read-Only OIDC Preflight" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_WORKFLOW_REF:-}" == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-read-only-preflight.yml@refs/heads/main" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_JOB:-}" == "read-only-preflight" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${EXPECTED_OFFICIAL_MAIN_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${GITHUB_SHA:-}" == "$EXPECTED_OFFICIAL_MAIN_COMMIT" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${PREFLIGHT_DIAGNOSTIC_ONLY:-}" == "true" || "${PREFLIGHT_DIAGNOSTIC_ONLY:-}" == "false" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ -n "${GITHUB_WORKSPACE:-}" && -d "$GITHUB_WORKSPACE" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
+[[ "${RUNNER_TEMP:-}" == /* && -d "$RUNNER_TEMP" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_RUNTIME_CONTEXT
 for unsafe_name in \
   ALL_PROXY \
   AWS_CA_BUNDLE \
@@ -119,28 +139,28 @@ for unsafe_name in \
   REQUESTS_CA_BUNDLE \
   SSL_CERT_DIR \
   SSL_CERT_FILE; do
-  [[ -z "${!unsafe_name:-}" ]] || fail_closed
+  [[ -z "${!unsafe_name:-}" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_INHERITED_ENVIRONMENT
 done
 while IFS= read -r unsafe_name; do
-  [[ -z "${!unsafe_name:-}" ]] || fail_closed
+  [[ -z "${!unsafe_name:-}" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_INHERITED_ENVIRONMENT
 done < <(compgen -A variable AWS_ENDPOINT_URL)
 unset unsafe_name
-[[ "${AWS_ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || fail_closed
-[[ "${AWS_APPROVED_ACCOUNT_ID_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || fail_closed
-account_digest="$(printf '%s' "$AWS_ACCOUNT_ID" | /usr/bin/sha256sum)" || fail_closed
+[[ "${AWS_ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY
+[[ "${AWS_APPROVED_ACCOUNT_ID_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY
+account_digest="$(printf '%s' "$AWS_ACCOUNT_ID" | /usr/bin/sha256sum)" || fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY
 account_digest="${account_digest%% *}"
-[[ "$account_digest" == "$AWS_APPROVED_ACCOUNT_ID_SHA256" ]] || fail_closed
+[[ "$account_digest" == "$AWS_APPROVED_ACCOUNT_ID_SHA256" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY
 unset account_digest AWS_APPROVED_ACCOUNT_ID_SHA256
 expected_role_arn="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ProofToActReadOnlyPreflight"
-[[ "${AWS_READ_ONLY_PREFLIGHT_ROLE_ARN:-}" == "$expected_role_arn" ]] || fail_closed
+[[ "${AWS_READ_ONLY_PREFLIGHT_ROLE_ARN:-}" == "$expected_role_arn" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY
 expected_caller_arn="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/ProofToActReadOnlyPreflight/read-only-preflight"
-[[ "${RECEIPT_ENCRYPTION_PASSPHRASE:-}" =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || fail_closed
+[[ "${RECEIPT_ENCRYPTION_PASSPHRASE:-}" =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_ACCOUNT_AUTHORITY
 oidc_request_url="${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
-(( ${#oidc_request_url} >= 1 && ${#oidc_request_url} <= 2048 )) || fail_closed
+(( ${#oidc_request_url} >= 1 && ${#oidc_request_url} <= 2048 )) || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_ENDPOINT
 oidc_request_url_pattern='^https://(pipelines|run-actions-[0-9]+-[a-z0-9]([a-z0-9-]*[a-z0-9])?)\.actions\.githubusercontent\.com/[^[:space:]?#]+\?[^[:space:]#]+$'
-[[ "$oidc_request_url" =~ $oidc_request_url_pattern ]] || fail_closed
+[[ "$oidc_request_url" =~ $oidc_request_url_pattern ]] || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_ENDPOINT
 unset oidc_request_url_pattern
-[[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed
+[[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_ENDPOINT
 
 git_environment=(
   /usr/bin/env -i
@@ -159,79 +179,79 @@ source_commit="$(
     -c core.hooksPath=/dev/null \
     -c credential.helper= \
     -c protocol.file.allow=never \
-    -C "$GITHUB_WORKSPACE" rev-parse HEAD
-)" || fail_closed
+  -C "$GITHUB_WORKSPACE" rev-parse HEAD
+)" || fail_closed_stage AWS_READ_ONLY_STAGE_SOURCE_BINDING
 tree_digest="$(
   "${git_environment[@]}" /usr/bin/git \
     -c core.hooksPath=/dev/null \
     -c credential.helper= \
     -c protocol.file.allow=never \
-    -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}'
-)" || fail_closed
+  -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}'
+)" || fail_closed_stage AWS_READ_ONLY_STAGE_SOURCE_BINDING
 source_status="$(
   "${git_environment[@]}" /usr/bin/git \
     -c core.hooksPath=/dev/null \
     -c credential.helper= \
     -c protocol.file.allow=never \
-    -C "$GITHUB_WORKSPACE" status --porcelain=v1 --untracked-files=all
-)" || fail_closed
-[[ "$source_commit" == "$EXPECTED_OFFICIAL_MAIN_COMMIT" ]] || fail_closed
-[[ "$tree_digest" =~ ^[0-9a-f]{40}$ ]] || fail_closed
-[[ -z "$source_status" ]] || fail_closed
+  -C "$GITHUB_WORKSPACE" status --porcelain=v1 --untracked-files=all
+)" || fail_closed_stage AWS_READ_ONLY_STAGE_SOURCE_BINDING
+[[ "$source_commit" == "$EXPECTED_OFFICIAL_MAIN_COMMIT" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_SOURCE_BINDING
+[[ "$tree_digest" =~ ^[0-9a-f]{40}$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_SOURCE_BINDING
+[[ -z "$source_status" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_SOURCE_BINDING
 unset source_status
 
-node_candidate="$(command -v node)" || fail_closed
-[[ "$node_candidate" == /* && -x "$node_candidate" ]] || fail_closed
-node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_closed
-[[ "$node_cli" =~ ^/opt/hostedtoolcache/node/22\.[0-9]+\.[0-9]+/x64/bin/node$ ]] || fail_closed
-node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_closed
+node_candidate="$(command -v node)" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ "$node_candidate" == /* && -x "$node_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+node_cli="$(/usr/bin/readlink -f -- "$node_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ "$node_cli" =~ ^/opt/hostedtoolcache/node/22\.[0-9]+\.[0-9]+/x64/bin/node$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+node_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$node_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
 IFS=':' read -r node_uid node_mode node_type <<<"$node_metadata"
-[[ "$node_uid" == "0" || "$node_uid" == "$(/usr/bin/id -u)" ]] || fail_closed
-[[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_closed
+[[ "$node_uid" == "0" || "$node_uid" == "$(/usr/bin/id -u)" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ "$node_mode" =~ ^[0-7]{3,4}$ && "$node_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
 node_mode_value=$((8#$node_mode))
-(( (node_mode_value & 0111) != 0 )) || fail_closed
-(( (node_mode_value & 0022) == 0 )) || fail_closed
-[[ "$("$node_cli" --version)" =~ ^v22\.[0-9]+\.[0-9]+$ ]] || fail_closed
+(( (node_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+(( (node_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ "$("$node_cli" --version)" =~ ^v22\.[0-9]+\.[0-9]+$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
 unset node_candidate node_metadata node_uid node_mode node_type node_mode_value
 
 aws_candidate="/usr/local/bin/aws"
-[[ -L "$aws_candidate" ]] || fail_closed
-aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed
-[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed
-aws_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$aws_cli")" || fail_closed
+[[ -L "$aws_candidate" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+aws_cli="$(/usr/bin/readlink -f -- "$aws_candidate")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ "$aws_cli" =~ ^/usr/local/aws-cli/v2/[0-9]+\.[0-9]+\.[0-9]+/dist/aws$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+aws_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$aws_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
 IFS=':' read -r aws_uid aws_mode aws_type <<<"$aws_metadata"
-[[ "$aws_uid" == "0" ]] || fail_closed
-[[ "$aws_mode" =~ ^[0-7]{3,4}$ && "$aws_type" == "regular file" ]] || fail_closed
+[[ "$aws_uid" == "0" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+[[ "$aws_mode" =~ ^[0-7]{3,4}$ && "$aws_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
 aws_mode_value=$((8#$aws_mode))
-(( (aws_mode_value & 0111) != 0 )) || fail_closed
-(( (aws_mode_value & 0022) == 0 )) || fail_closed
+(( (aws_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+(( (aws_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
 unset aws_candidate aws_metadata aws_uid aws_mode aws_type aws_mode_value
 
 for crypto_cli in /usr/bin/gpg /usr/bin/gpgconf; do
-  crypto_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$crypto_cli")" || fail_closed
+  crypto_metadata="$(/usr/bin/stat -Lc '%u:%a:%F' -- "$crypto_cli")" || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
   IFS=':' read -r crypto_uid crypto_mode crypto_type <<<"$crypto_metadata"
-  [[ "$crypto_uid" == "0" ]] || fail_closed
-  [[ "$crypto_mode" =~ ^[0-7]{3,4}$ ]] || fail_closed
-  [[ "$crypto_type" == "regular file" ]] || fail_closed
+  [[ "$crypto_uid" == "0" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+  [[ "$crypto_mode" =~ ^[0-7]{3,4}$ ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+  [[ "$crypto_type" == "regular file" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
   crypto_mode_value=$((8#$crypto_mode))
-  (( (crypto_mode_value & 0111) != 0 )) || fail_closed
-  (( (crypto_mode_value & 0022) == 0 )) || fail_closed
+  (( (crypto_mode_value & 0111) != 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
+  (( (crypto_mode_value & 0022) == 0 )) || fail_closed_stage AWS_READ_ONLY_STAGE_LOCAL_TOOLCHAIN
 done
 unset crypto_cli crypto_metadata crypto_uid crypto_mode crypto_type crypto_mode_value
 
-oidc_response="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-response.XXXXXX")" || fail_closed
-oidc_token="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-token.XXXXXX")" || fail_closed
-oidc_header="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-header.XXXXXX")" || fail_closed
-oidc_payload="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-payload.XXXXXX")" || fail_closed
-sts_response="$(/usr/bin/mktemp "${RUNNER_TEMP}/sts-response.XXXXXX")" || fail_closed
-region_status="$(/usr/bin/mktemp "${RUNNER_TEMP}/region-status.XXXXXX")" || fail_closed
-quota_status="$(/usr/bin/mktemp "${RUNNER_TEMP}/quota-status.XXXXXX")" || fail_closed
-preflight_receipt="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-receipt.XXXXXX")" || fail_closed
-sanitized_receipt="$(/usr/bin/mktemp "${RUNNER_TEMP}/sanitized-receipt.XXXXXX")" || fail_closed
-passphrase_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/receipt-passphrase.XXXXXX")" || fail_closed
-error_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-error.XXXXXX")" || fail_closed
-gnupg_home="$(/usr/bin/mktemp -d "${RUNNER_TEMP}/receipt-gnupg.XXXXXX")" || fail_closed
-[[ "$gnupg_home" == "${RUNNER_TEMP}"/receipt-gnupg.?????? ]] || fail_closed
+oidc_response="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-response.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+oidc_token="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-token.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+oidc_header="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-header.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+oidc_payload="$(/usr/bin/mktemp "${RUNNER_TEMP}/oidc-payload.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+sts_response="$(/usr/bin/mktemp "${RUNNER_TEMP}/sts-response.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+region_status="$(/usr/bin/mktemp "${RUNNER_TEMP}/region-status.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+quota_status="$(/usr/bin/mktemp "${RUNNER_TEMP}/quota-status.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+preflight_receipt="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-receipt.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+sanitized_receipt="$(/usr/bin/mktemp "${RUNNER_TEMP}/sanitized-receipt.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+passphrase_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/receipt-passphrase.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+error_file="$(/usr/bin/mktemp "${RUNNER_TEMP}/preflight-error.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+gnupg_home="$(/usr/bin/mktemp -d "${RUNNER_TEMP}/receipt-gnupg.XXXXXX")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+[[ "$gnupg_home" == "${RUNNER_TEMP}"/receipt-gnupg.?????? ]] || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
 /usr/bin/chmod 600 \
   "$oidc_response" \
   "$oidc_token" \
@@ -243,15 +263,20 @@ gnupg_home="$(/usr/bin/mktemp -d "${RUNNER_TEMP}/receipt-gnupg.XXXXXX")" || fail
   "$preflight_receipt" \
   "$sanitized_receipt" \
   "$passphrase_file" \
-  "$error_file" || fail_closed
-/usr/bin/chmod 700 "$gnupg_home" || fail_closed
-[[ -d "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed
-gnupg_metadata="$(/usr/bin/stat -c '%u:%a:%F' -- "$gnupg_home")" || fail_closed
+  "$error_file" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+/usr/bin/chmod 700 "$gnupg_home" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+[[ -d "$gnupg_home" && ! -L "$gnupg_home" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+gnupg_metadata="$(/usr/bin/stat -c '%u:%a:%F' -- "$gnupg_home")" || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
 IFS=':' read -r gnupg_uid gnupg_mode gnupg_type <<<"$gnupg_metadata"
-[[ "$gnupg_uid" == "$(/usr/bin/id -u)" ]] || fail_closed
-[[ "$gnupg_mode" == "700" ]] || fail_closed
-[[ "$gnupg_type" == "directory" ]] || fail_closed
+[[ "$gnupg_uid" == "$(/usr/bin/id -u)" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+[[ "$gnupg_mode" == "700" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
+[[ "$gnupg_type" == "directory" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_TEMPORARY_STATE
 unset gnupg_metadata gnupg_uid gnupg_mode gnupg_type
+
+if [[ "$PREFLIGHT_DIAGNOSTIC_ONLY" == "true" ]]; then
+  printf '%s\n' '::notice::AWS_READ_ONLY_DIAGNOSTIC_PASS'
+  exit 0
+fi
 
 oidc_url="${oidc_request_url}&audience=sts.amazonaws.com"
 if ! /usr/bin/timeout --signal=KILL 30s \
@@ -266,7 +291,7 @@ if ! /usr/bin/timeout --signal=KILL 30s \
     --show-error \
     --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
     "$oidc_url" >"$oidc_response" 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_REQUEST
 fi
 if ! /usr/bin/jq -e \
   'type == "object" and
@@ -274,17 +299,17 @@ if ! /usr/bin/jq -e \
    (.value | type == "string" and
     test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"))' \
   "$oidc_response" >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_RECEIPT
 fi
 if ! /usr/bin/jq -j '.value' "$oidc_response" \
   >"$oidc_token" 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_RECEIPT
 fi
-[[ -s "$oidc_token" ]] || fail_closed
+[[ -s "$oidc_token" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_RECEIPT
 
 token_value="$(<"$oidc_token")"
 IFS='.' read -r jwt_header jwt_payload jwt_signature jwt_extra <<<"$token_value"
-[[ -n "$jwt_header" && -n "$jwt_payload" && -n "$jwt_signature" && -z "$jwt_extra" ]] || fail_closed
+[[ -n "$jwt_header" && -n "$jwt_payload" && -n "$jwt_signature" && -z "$jwt_extra" ]] || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_CLAIMS
 decode_base64url() {
   local encoded="$1"
   local destination="$2"
@@ -299,8 +324,8 @@ decode_base64url() {
   printf '%s' "$normalized" | /usr/bin/base64 --decode \
     >"$destination" 2>"$error_file"
 }
-decode_base64url "$jwt_header" "$oidc_header" || fail_closed
-decode_base64url "$jwt_payload" "$oidc_payload" || fail_closed
+decode_base64url "$jwt_header" "$oidc_header" || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_CLAIMS
+decode_base64url "$jwt_payload" "$oidc_payload" || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_CLAIMS
 unset token_value jwt_header jwt_payload jwt_signature jwt_extra
 if ! /usr/bin/jq -e \
   'type == "object" and
@@ -308,9 +333,9 @@ if ! /usr/bin/jq -e \
    .typ == "JWT" and
    (.kid | type == "string" and length > 0)' \
   "$oidc_header" >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_CLAIMS
 fi
-oidc_now="$(/usr/bin/date +%s)" || fail_closed
+oidc_now="$(/usr/bin/date +%s)" || fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_CLAIMS
 if ! /usr/bin/jq -e \
   --arg sha "$EXPECTED_OFFICIAL_MAIN_COMMIT" \
   --argjson now "$oidc_now" \
@@ -337,7 +362,7 @@ if ! /usr/bin/jq -e \
    (.exp | type == "number" and . > $now and . <= ($now + 600)) and
    (.exp > .iat)' \
   "$oidc_payload" >/dev/null 2>"$error_file"; then
-  fail_closed
+  fail_closed_stage AWS_READ_ONLY_STAGE_OIDC_CLAIMS
 fi
 unset oidc_now
 

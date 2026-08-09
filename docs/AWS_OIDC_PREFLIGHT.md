@@ -96,14 +96,15 @@ reviewers, deployment-branch restriction to `main`, protection against
 approval bypass, secret access, and the exact workflow binding. Source cannot
 prove those settings exist or remain unchanged.
 
-The protected environment value `AWS_APPROVED_ACCOUNT_ID_SHA256` is still a
-known missing setup gate. Do not embed an AWS account ID or its digest in the
+The protected environment secret `AWS_APPROVED_ACCOUNT_ID_SHA256` remains an
+external setup gate that source cannot prove. Do not embed an AWS account ID or its digest in the
 repository. An authorized human must compute the SHA-256 of the exact
 12-digit approved account ID in a private lane, place only the lowercase
-64-character digest in each applicable protected environment, and independently
+64-character digest in each applicable protected environment secret, and independently
 review it against the separately stored `AWS_ACCOUNT_ID` secret. Until that
-value exists and is reviewed, both workflows must fail closed before OIDC or
-AWS activity.
+secret exists and is reviewed, both workflows must fail closed before OIDC or
+AWS activity. The workflow must reference the secret context so GitHub masks
+the digest in step environment output.
 
 The identity environment also requires `AWS_ROLE_ARN`, `AWS_ACCOUNT_ID`, and
 `RECEIPT_ENCRYPTION_PASSPHRASE` secrets. The read-only environment requires

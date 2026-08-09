@@ -91,7 +91,7 @@ test("AWS OIDC identity bootstrap is manual, minimal, and encrypted", () => {
   assert.match(OIDC_WORKFLOW, /\.environment == "aws-preflight"/);
   assert.match(
     OIDC_WORKFLOW,
-    /AWS_APPROVED_ACCOUNT_ID_SHA256: \$\{\{ vars\.AWS_APPROVED_ACCOUNT_ID_SHA256 \}\}/
+    /AWS_APPROVED_ACCOUNT_ID_SHA256: \$\{\{ secrets\.AWS_APPROVED_ACCOUNT_ID_SHA256 \}\}/
   );
   assert.match(
     OIDC_WORKFLOW,

@@ -81,7 +81,7 @@
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
       "role": "OIDC_PREFLIGHT_COST_AND_AUTHORITY_BOUNDARY",
-      "sha256": "de65656c1adf707d14c9fffe799cd75f4fa2a0cacac08a0e7df01dd08695b547"
+      "sha256": "573c400d80b2a1026b094882287d73b9ee8b683b1cb6a64fa7531f819cd33008"
     },
     {
       "id": "aws-oidc-read-only-role-template",
@@ -93,13 +93,13 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION",
-      "sha256": "1918c98f06bb918e7fd4199660c063ebde4de0d69dd9c2d3e5b4f0ff3b621551"
+      "sha256": "4823a44d788c1b8c47dfe30baeb1b9aa6b22e4827a936b2c91843185ecc65acb"
     },
     {
       "id": "aws-oidc-read-only-workflow",
       "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
       "role": "MANUAL_TIME_BOUNDED_PREFLIGHT_WORKFLOW",
-      "sha256": "2bbb08d5916db231d83085185dcd44aa464efe9d6924258238f6799be3d6b522"
+      "sha256": "669e7b6cd5ab405fb25c5913012f12ce893a9b63bbb5a0e3c8e41af402c4402b"
     },
     {
       "id": "aws-preflight-library",
@@ -135,7 +135,7 @@
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "de8f2acc7a0b8c4f7444130d168b789c597176160b3bde08233aff8b6e1e5ce4"
+      "sha256": "eccb6451f9b91a4ae5dac39541ab8b73eeb2d9ef6cd304ec5bb7aa7e30f031bd"
     },
     {
       "id": "cost-guard-receipt",

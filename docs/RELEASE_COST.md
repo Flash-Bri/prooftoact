@@ -72,12 +72,13 @@ Cost Explorer bound, `$0.02` preflight approval cap, sanitized encrypted
 receipt, exact official-main source, and no-upload/no-deployment boundary. Its
 v6 receipt contract records and reserves the full `$0.02` before the receipt
 can pass or any subsequent provider action may proceed, not merely the spend
-already observed. Its
-role and workflow remain unconfigured and unrun for release purposes, and the
-required protected `AWS_APPROVED_ACCOUNT_ID_SHA256` value remains a human
-provider-setup gate rather than source data.
+already observed. Its provider configuration and execution remain external
+evidence gates that this source cannot attest, and the required protected
+`AWS_APPROVED_ACCOUNT_ID_SHA256` secret remains human-reviewed provider state
+rather than source data.
 
-Therefore AWS preflight remains `NOT_RUN` for release purposes. No artifact
+Therefore no accepted AWS read-only preflight receipt exists for release
+purposes. No artifact
 upload, change set, main-stack deployment, DNS change, domain purchase,
 renewal, or submission action is authorized by this control.
 

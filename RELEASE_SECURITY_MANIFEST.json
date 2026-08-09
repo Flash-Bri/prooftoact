@@ -114,7 +114,7 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "70bece8659977a51980ad6744051d2456d5de0477549a26764235241af319717"
+      "sha256": "11c17a0a795926f7a1ab69cf6ec225b6d68dd26ba79b0bb66258b8d61cbf37f1"
     },
     {
       "id": "aws-deployment-attestation",
@@ -150,13 +150,13 @@
       "id": "aws-oidc-identity-bootstrap",
       "path": ".github/workflows/aws-oidc-identity-bootstrap.yml",
       "role": "MANUAL_SHORT_LIVED_AWS_IDENTITY_BOOTSTRAP",
-      "sha256": "4ef5d16241214fb693554903f2def11877e8e4dc5b10a6162d1099962be10dd4"
+      "sha256": "05f612d398bdefd393c31278f9210683887829181442b50b642fbed886760dcc"
     },
     {
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
       "role": "CLOUDSHELL_OPTIONAL_OIDC_AUTHORITY_BOUNDARY",
-      "sha256": "de65656c1adf707d14c9fffe799cd75f4fa2a0cacac08a0e7df01dd08695b547"
+      "sha256": "573c400d80b2a1026b094882287d73b9ee8b683b1cb6a64fa7531f819cd33008"
     },
     {
       "id": "aws-oidc-read-only-role-template",
@@ -168,25 +168,25 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "SOURCE_BOUND_READ_ONLY_OIDC_PREFLIGHT_RUNNER",
-      "sha256": "1918c98f06bb918e7fd4199660c063ebde4de0d69dd9c2d3e5b4f0ff3b621551"
+      "sha256": "4823a44d788c1b8c47dfe30baeb1b9aa6b22e4827a936b2c91843185ecc65acb"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
       "role": "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION",
-      "sha256": "3dee4c975069dcfe50d00513c15c18613ecedbbba062f26444a0629b37d21a13"
+      "sha256": "27fb4b430fae524b14eab21c85d9f4c13f8c505532d32dee9d92749887d17fde"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
       "role": "OIDC_SOURCE_BOUNDARY_VERIFIER",
-      "sha256": "a8bbc5619c0d27b30e5c69fbef3ce698602e7c130cf48aa6be322e9aa1e4e5a7"
+      "sha256": "f03918567ef89d0d544a4aa9c782ffa4f540580cf3d169d49d5356feee64851d"
     },
     {
       "id": "aws-oidc-read-only-workflow",
       "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
       "role": "MANUAL_PROTECTED_READ_ONLY_OIDC_PREFLIGHT",
-      "sha256": "2bbb08d5916db231d83085185dcd44aa464efe9d6924258238f6799be3d6b522"
+      "sha256": "669e7b6cd5ab405fb25c5913012f12ce893a9b63bbb5a0e3c8e41af402c4402b"
     },
     {
       "id": "aws-provider-bundle-entry",
@@ -234,7 +234,7 @@
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
       "role": "READ_ONLY_AWS_PREFLIGHT_VERIFICATION",
-      "sha256": "2ecf2be95dcb5a4ba7f4196b4f4f8b392c26266daa9177c9759316b78438bffb"
+      "sha256": "a00fafdf3b5ca842ed3173faba08d7bed82aaf408573aa56f68443b9baf37d6f"
     },
     {
       "id": "aws-readiness",
@@ -582,7 +582,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "53daa16d51a2e9e2f829db88fb027d787b1b6a48a9fb126e88d079590e13d6cf"
+      "sha256": "6940add2c1527e946ec36f10c9dd74bb7affaec3c11c56669fa924f5e7900665"
     },
     {
       "id": "security-policy",
