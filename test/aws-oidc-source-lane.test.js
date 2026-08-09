@@ -171,6 +171,70 @@ test("read-only role template is exact and rejects expanded trust or authority",
 test("identity workflow stays manual, exact-commit-bound, and STS-only", () => {
   assert.doesNotThrow(() => validateIdentityWorkflow(IDENTITY_WORKFLOW));
 
+  assert.deepEqual(sourceContract.EXPECTED_IDENTITY_FAILURE_STAGES, [
+    "AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST",
+    "AWS_IDENTITY_STAGE_STS_ASSUME_RECEIPT",
+    "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+    "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+    "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+    "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+    "AWS_IDENTITY_STAGE_STS_CALLER_REQUEST",
+    "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT",
+    "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
+    "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
+    "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
+    "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT",
+    "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
+  ]);
+  assert.deepEqual(
+    sourceContract.EXPECTED_IDENTITY_FAILURE_STAGE_ALLOWLIST,
+    [
+      "AWS_IDENTITY_STAGE_STS_ASSUME_REQUEST",
+      "AWS_IDENTITY_STAGE_STS_ASSUME_RECEIPT",
+      "AWS_IDENTITY_STAGE_STS_ASSUME_FIELDS",
+      "AWS_IDENTITY_STAGE_STS_CALLER_REQUEST",
+      "AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT",
+      "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
+      "AWS_IDENTITY_STAGE_RECEIPT_ENCRYPTION",
+      "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT"
+    ]
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        IDENTITY_WORKFLOW.replace(
+          "fail_closed_stage AWS_IDENTITY_STAGE_STS_CALLER_RECEIPT",
+          "fail_closed_stage AWS_IDENTITY_STAGE_UNREVIEWED"
+        )
+      ),
+    /OIDC_IDENTITY_WORKFLOW_FAILURE_STAGES/
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        IDENTITY_WORKFLOW.replace(
+          "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT) ;;",
+          "AWS_IDENTITY_STAGE_ENCRYPTED_RECEIPT | \\\n              AWS_IDENTITY_STAGE_UNREVIEWED) ;;"
+        )
+      ),
+    /OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_ALLOWLIST/
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        IDENTITY_WORKFLOW.replace("*) fail_closed ;;", "*) ;;")
+      ),
+    /OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_FUNCTION/
+  );
+  assert.throws(
+    () =>
+      validateIdentityWorkflow(
+        IDENTITY_WORKFLOW +
+          '\nfail_closed_stage "$AWS_ACCOUNT_ID"\n'
+      ),
+    /OIDC_IDENTITY_WORKFLOW_FAILURE_STAGE_REFERENCES/
+  );
+
   assert.throws(
     () =>
       validateIdentityWorkflow(
