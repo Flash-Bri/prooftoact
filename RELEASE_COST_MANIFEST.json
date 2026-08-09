@@ -93,7 +93,7 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION",
-      "sha256": "2cb1c29be9a50d839a8266fe954726b140fddc61735228869d5eba19c0a60f99"
+      "sha256": "ab8cbc83d48b18e11f775ba2ca141708edd9a9f4f4a7fd415a2bd0597fc12469"
     },
     {
       "id": "aws-oidc-read-only-workflow",

@@ -1138,6 +1138,7 @@ const SOURCE_MARKERS = Object.freeze({
     "environment: aws-preflight",
     "shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}",
     "ACTIONS_ID_TOKEN_REQUEST_URL",
+    "(pipelines|run-actions-",
     "AWS_APPROVED_ACCOUNT_ID_SHA256",
     "GITHUB_REPOSITORY_ID:-}\" == \"1317716765",
     "GITHUB_SHA:-}\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
