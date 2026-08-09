@@ -1524,6 +1524,44 @@ export function validatePreflightReceipt(
   const projectExposure = controls?.projectExposure;
   const artifactBucket = controls?.artifactBucket;
   const bedrock = controls?.bedrock;
+  const usdMicros = (value) => {
+    if (!/^\d+\.\d{6}$/.test(value ?? "")) {
+      return null;
+    }
+    return BigInt(value.replace(".", ""));
+  };
+  const budgetReportedActualMicros = usdMicros(
+    budget?.budgetReportedActualUsd
+  );
+  const conservativeObservedActualMicros = usdMicros(
+    budget?.conservativeObservedActualUsd
+  );
+  const currentCostMicros = usdMicros(currentCost?.amountUsd);
+  const ceilingMicros = usdMicros(projectExposure?.ceilingUsd);
+  const nonAwsSpendMicros = usdMicros(
+    projectExposure?.recordedNonAwsSpendUsd
+  );
+  const effectiveAwsCeilingMicros = usdMicros(
+    projectExposure?.effectiveAwsSpendCeilingUsd
+  );
+  const preflightAllowanceMicros = usdMicros(
+    projectExposure?.approvedPreflightAllowanceUsd
+  );
+  const reservedAwsExposureMicros = usdMicros(
+    projectExposure?.conservativeReservedAwsExposureUsd
+  );
+  const observedTotalExposureMicros = usdMicros(
+    projectExposure?.conservativeObservedTotalExposureUsd
+  );
+  const reservedTotalExposureMicros = usdMicros(
+    projectExposure?.conservativeReservedTotalExposureUsd
+  );
+  const remainingExposureMicros = usdMicros(
+    projectExposure?.remainingExposureUsd
+  );
+  const remainingAfterAllowanceMicros = usdMicros(
+    projectExposure?.remainingExposureAfterPreflightAllowanceUsd
+  );
   const notificationSet = Array.isArray(budget?.notifications)
     ? budget.notifications
         .map(
@@ -1589,14 +1627,18 @@ export function validatePreflightReceipt(
         "scope"
       ]) &&
       exactKeys(projectExposure, [
+        "approvedPreflightAllowanceUsd",
         "autoRenewReportedEnabled",
         "awsCostWindowStart",
         "ceilingUsd",
         "conservativeObservedTotalExposureUsd",
+        "conservativeReservedAwsExposureUsd",
+        "conservativeReservedTotalExposureUsd",
         "effectiveAwsSpendCeilingUsd",
         "recordedNonAwsSpendUsd",
         "recordedSpendBasis",
         "registrarReceiptVerified",
+        "remainingExposureAfterPreflightAllowanceUsd",
         "remainingExposureUsd",
         "scope"
       ]) &&
@@ -1621,7 +1663,7 @@ export function validatePreflightReceipt(
         "textOutput"
       ]) &&
       receipt?.schemaVersion ===
-      "tideproof.gate2.aws-preflight.v5" &&
+      "tideproof.gate2.aws-preflight.v6" &&
       receipt.status === "PASS" &&
       receipt.sourceCommit === sourceCommit &&
       receipt.treeDigest === treeDigest &&
@@ -1702,20 +1744,31 @@ export function validatePreflightReceipt(
       Number.isFinite(Number(currentCost.amountUsd)) &&
       Number(currentCost.amountUsd) >= 0 &&
       Number(currentCost.amountUsd) < 13.14 &&
+      budgetReportedActualMicros !== null &&
+      conservativeObservedActualMicros !== null &&
+      currentCostMicros !== null &&
+      budgetReportedActualMicros <=
+        conservativeObservedActualMicros &&
+      currentCostMicros <= conservativeObservedActualMicros &&
       projectExposure.scope ===
         "TIDEPROOF_TOTAL_APPROVED_EXPOSURE" &&
-      Number(
-        projectExposure.ceilingUsd
-      ) === 25 &&
-      Number(
-        projectExposure.recordedNonAwsSpendUsd
-      ) === 11.86 &&
-      Number(
-        projectExposure.effectiveAwsSpendCeilingUsd
-      ) === 13.14 &&
-      Number(
-        projectExposure.conservativeObservedTotalExposureUsd
-      ) < 25 &&
+      ceilingMicros === 25_000_000n &&
+      nonAwsSpendMicros === 11_860_000n &&
+      effectiveAwsCeilingMicros === 13_140_000n &&
+      preflightAllowanceMicros === 20_000n &&
+      reservedAwsExposureMicros ===
+        conservativeObservedActualMicros +
+          preflightAllowanceMicros &&
+      reservedAwsExposureMicros < effectiveAwsCeilingMicros &&
+      observedTotalExposureMicros ===
+        nonAwsSpendMicros + conservativeObservedActualMicros &&
+      reservedTotalExposureMicros ===
+        nonAwsSpendMicros + reservedAwsExposureMicros &&
+      reservedTotalExposureMicros < ceilingMicros &&
+      remainingExposureMicros ===
+        ceilingMicros - observedTotalExposureMicros &&
+      remainingAfterAllowanceMicros ===
+        ceilingMicros - reservedTotalExposureMicros &&
       projectExposure.registrarReceiptVerified === false &&
       projectExposure.autoRenewReportedEnabled === false &&
       controls.mainGateTwoStack.name === "prooftoact-gate2" &&

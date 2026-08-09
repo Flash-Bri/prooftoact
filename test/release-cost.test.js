@@ -53,7 +53,7 @@ test("current source cost guards match the reviewed non-final boundary", () => {
   const receipt = verifyReleaseCost({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_COST_GUARDS_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 12);
+  assert.equal(receipt.surfaceCount, 16);
   assert.equal(receipt.budgetAlertCount, 4);
   assert.equal(receipt.forbiddenResourceTypeCount, 5);
   assert.equal(receipt.unapprovedPurchaseClassCount, 5);
@@ -63,6 +63,27 @@ test("current source cost guards match the reviewed non-final boundary", () => {
     Object.values(receipt.checks).every((value) => value === true),
     true
   );
+});
+
+test("cost manifest binds the bounded OIDC preflight lane", () => {
+  const surfaces = __test.EXPECTED_SURFACES;
+  for (const [id, path] of [
+    ["aws-oidc-read-only-ledger", "docs/AWS_OIDC_PREFLIGHT.md"],
+    [
+      "aws-oidc-read-only-role-template",
+      "infra/aws/oidc-read-only-preflight-role-template.json"
+    ],
+    [
+      "aws-oidc-read-only-runner",
+      "scripts/run-aws-oidc-read-only-preflight.sh"
+    ],
+    [
+      "aws-oidc-read-only-workflow",
+      ".github/workflows/aws-oidc-read-only-preflight.yml"
+    ]
+  ]) {
+    assert.equal(surfaces[id]?.path, path);
+  }
 });
 
 test("cost receipt contract is shared and rejects stale surface counts", () => {

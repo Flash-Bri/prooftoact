@@ -729,7 +729,7 @@ function releaseProvenanceReceipt() {
 
 function preflightReceipt() {
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v5",
+    schemaVersion: "tideproof.gate2.aws-preflight.v6",
     status: "PASS",
     observedAt: "2026-07-31T05:30:00.000Z",
     sourceCommit: SOURCE_COMMIT,
@@ -788,8 +788,12 @@ function preflightReceipt() {
         ceilingUsd: "25.000000",
         recordedNonAwsSpendUsd: "11.860000",
         effectiveAwsSpendCeilingUsd: "13.140000",
+        approvedPreflightAllowanceUsd: "0.020000",
+        conservativeReservedAwsExposureUsd: "0.270000",
         conservativeObservedTotalExposureUsd: "12.110000",
+        conservativeReservedTotalExposureUsd: "12.130000",
         remainingExposureUsd: "12.890000",
+        remainingExposureAfterPreflightAllowanceUsd: "12.870000",
         awsCostWindowStart: "2026-07-01",
         recordedSpendBasis:
           "OWNER_REPORTED_TIDEPROOF_NET_REGISTRATION",
@@ -1086,6 +1090,18 @@ test("AWS readiness binds the preflight to the exact checkout", () => {
   assert.throws(
     () =>
       validatePreflightReceipt(iamUserReceipt, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_PREFLIGHT/
+  );
+
+  const unreservedAllowance = structuredClone(receipt);
+  unreservedAllowance.controls.projectExposure
+    .conservativeReservedAwsExposureUsd = "0.250000";
+  assert.throws(
+    () =>
+      validatePreflightReceipt(unreservedAllowance, {
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST
       }),

@@ -70,6 +70,90 @@ const ALLOWED_GIT_REQUESTS = new Set([
   ])
 ]);
 
+export const AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY = Object.freeze([
+  Object.freeze(["sts", "get-caller-identity", 1]),
+  Object.freeze(["cloudformation", "describe-stacks", 1]),
+  Object.freeze(["budgets", "describe-budget", 1]),
+  Object.freeze(["budgets", "describe-notifications-for-budget", 1]),
+  Object.freeze(["budgets", "describe-subscribers-for-notification", 4]),
+  Object.freeze(["ce", "get-cost-and-usage", 1]),
+  Object.freeze(["s3api", "get-bucket-versioning", 1]),
+  Object.freeze(["s3api", "get-bucket-encryption", 1]),
+  Object.freeze(["s3api", "get-public-access-block", 1]),
+  Object.freeze(["s3api", "get-bucket-ownership-controls", 1]),
+  Object.freeze(["s3api", "get-bucket-policy-status", 1]),
+  Object.freeze(["s3api", "get-bucket-policy", 1]),
+  Object.freeze(["cloudformation", "list-stacks", 1]),
+  Object.freeze(["bedrock", "get-foundation-model", 1])
+]);
+
+const EXPANDED_AWS_GATE2_PREFLIGHT_RUNTIME_CALLS = Object.freeze(
+  AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY.flatMap(
+    ([service, operation, cardinality]) =>
+      Array.from({ length: cardinality }, () =>
+        Object.freeze([service, operation])
+      )
+  )
+);
+
+const EXPECTED_BUDGET_NOTIFICATIONS = Object.freeze([
+  Object.freeze({
+    NotificationType: "ACTUAL",
+    ComparisonOperator: "GREATER_THAN",
+    Threshold: 1,
+    ThresholdType: "ABSOLUTE_VALUE"
+  }),
+  Object.freeze({
+    NotificationType: "ACTUAL",
+    ComparisonOperator: "GREATER_THAN",
+    Threshold: 5,
+    ThresholdType: "ABSOLUTE_VALUE"
+  }),
+  Object.freeze({
+    NotificationType: "ACTUAL",
+    ComparisonOperator: "GREATER_THAN",
+    Threshold: 10,
+    ThresholdType: "ABSOLUTE_VALUE"
+  }),
+  Object.freeze({
+    NotificationType: "FORECASTED",
+    ComparisonOperator: "GREATER_THAN",
+    Threshold: 15,
+    ThresholdType: "ABSOLUTE_VALUE"
+  })
+]);
+
+export function createAwsPreflightRuntimeCallReader(readAwsJson) {
+  if (typeof readAwsJson !== "function") {
+    throw new Error("AWS_RUNTIME_CALL_READER");
+  }
+  let callIndex = 0;
+  return Object.freeze({
+    read(region, service, operation, args = []) {
+      const expected =
+        EXPANDED_AWS_GATE2_PREFLIGHT_RUNTIME_CALLS[callIndex];
+      if (
+        region !== AWS_GATE2_PREFLIGHT_DEFAULTS.region ||
+        expected?.[0] !== service ||
+        expected?.[1] !== operation
+      ) {
+        throw new Error("AWS_RUNTIME_CALL_INVENTORY");
+      }
+      callIndex += 1;
+      return readAwsJson(region, service, operation, args);
+    },
+    assertComplete() {
+      if (
+        callIndex !==
+        EXPANDED_AWS_GATE2_PREFLIGHT_RUNTIME_CALLS.length
+      ) {
+        throw new Error("AWS_RUNTIME_CALL_CARDINALITY");
+      }
+      return callIndex;
+    }
+  });
+}
+
 function trustedAwsCliPolicy(platform) {
   const policy = TRUSTED_AWS_CLI_POLICY[platform];
   if (!policy) {
@@ -300,7 +384,9 @@ function commandJson(args, code) {
     cwd: root,
     encoding: "utf8",
     env: awsPreflightAwsEnvironment(process.env),
-    maxBuffer: 10 * 1024 * 1024
+    killSignal: "SIGKILL",
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000
   });
   if (result.error || result.status !== 0) {
     throw new Error(code);
@@ -412,6 +498,10 @@ function awsJson(region, service, operation, args = []) {
       region,
       "--output",
       "json",
+      "--cli-connect-timeout",
+      "10",
+      "--cli-read-timeout",
+      "20",
       "--no-cli-pager"
     ],
     `AWS_${service.toUpperCase()}_${operation
@@ -450,8 +540,8 @@ function exactSingleStack(response, expectedName) {
   return stacks[0];
 }
 
-function readBucketPolicy(region, bucketName, readAwsJson = awsJson) {
-  const response = readAwsJson(
+function readBucketPolicy(region, bucketName, readBoundedAwsJson) {
+  const response = readBoundedAwsJson(
     region,
     "s3api",
     "get-bucket-policy",
@@ -462,6 +552,26 @@ function readBucketPolicy(region, bucketName, readAwsJson = awsJson) {
   } catch {
     throw new Error("ARTIFACT_BUCKET_POLICY_JSON");
   }
+}
+
+function exactBudgetNotifications(notifications) {
+  if (
+    !Array.isArray(notifications) ||
+    notifications.length !== EXPECTED_BUDGET_NOTIFICATIONS.length
+  ) {
+    throw new Error("AWS_BUDGET_NOTIFICATION_CARDINALITY");
+  }
+  return EXPECTED_BUDGET_NOTIFICATIONS.map((expected) => {
+    const matches = notifications.filter(
+      (notification) =>
+        JSON.stringify(notificationInput(notification)) ===
+        JSON.stringify(expected)
+    );
+    if (matches.length !== 1) {
+      throw new Error("AWS_BUDGET_NOTIFICATION_INVENTORY");
+    }
+    return matches[0];
+  });
 }
 
 export function assertAwsPreflightParentEnvironment(environment) {
@@ -556,6 +666,10 @@ export function collectSnapshot(
   } = {}
 ) {
   assertAwsPreflightParentEnvironment(environment);
+  const runtimeCalls = createAwsPreflightRuntimeCallReader(
+    readAwsJson
+  );
+  const readBoundedAwsJson = runtimeCalls.read;
   const {
     region,
     modelId,
@@ -589,7 +703,7 @@ export function collectSnapshot(
     expectedCallerUserId
   } = expectation;
 
-  const callerIdentity = readAwsJson(
+  const callerIdentity = readBoundedAwsJson(
     region,
     "sts",
     "get-caller-identity"
@@ -599,7 +713,7 @@ export function collectSnapshot(
     bindingContext
   });
   const bootstrapStack = exactSingleStack(
-    readAwsJson(
+    readBoundedAwsJson(
       region,
       "cloudformation",
       "describe-stacks",
@@ -616,27 +730,29 @@ export function collectSnapshot(
     "ArtifactBucketName"
   );
   const accountId = callerIdentity.Account;
-  const budget = readAwsJson(
+  const budget = readBoundedAwsJson(
     region,
     "budgets",
     "describe-budget",
     awsBudgetDescribeArguments(accountId, budgetName)
   ).Budget;
-  const notifications = readAwsJson(
-    region,
-    "budgets",
-    "describe-notifications-for-budget",
-    [
-      "--account-id",
-      accountId,
-      "--budget-name",
-      budgetName
-    ]
-  ).Notifications ?? [];
+  const notifications = exactBudgetNotifications(
+    readBoundedAwsJson(
+      region,
+      "budgets",
+      "describe-notifications-for-budget",
+      [
+        "--account-id",
+        accountId,
+        "--budget-name",
+        budgetName
+      ]
+    ).Notifications
+  );
   const notificationSubscribers = notifications.map((notification) => ({
     notification,
     subscribers:
-      readAwsJson(
+      readBoundedAwsJson(
         region,
         "budgets",
         "describe-subscribers-for-notification",
@@ -652,14 +768,14 @@ export function collectSnapshot(
   }));
 
   const period = awsCostExplorerPeriod(now);
-  const currentCostResponse = readAwsJson(
+  const currentCostResponse = readBoundedAwsJson(
     region,
     "ce",
     "get-cost-and-usage",
     awsCostExplorerArguments(period)
   );
 
-  return {
+  const snapshot = {
     observedAt: now.toISOString(),
     sourceCommit,
     treeDigest,
@@ -675,42 +791,46 @@ export function collectSnapshot(
     budget,
     notificationSubscribers,
     artifactBucket: {
-      versioning: readAwsJson(
+      versioning: readBoundedAwsJson(
         region,
         "s3api",
         "get-bucket-versioning",
         ["--bucket", bucketName]
       ),
-      encryption: readAwsJson(
+      encryption: readBoundedAwsJson(
         region,
         "s3api",
         "get-bucket-encryption",
         ["--bucket", bucketName]
       ),
-      publicAccessBlock: readAwsJson(
+      publicAccessBlock: readBoundedAwsJson(
         region,
         "s3api",
         "get-public-access-block",
         ["--bucket", bucketName]
       ),
-      ownership: readAwsJson(
+      ownership: readBoundedAwsJson(
         region,
         "s3api",
         "get-bucket-ownership-controls",
         ["--bucket", bucketName]
       ),
-      policyStatus: readAwsJson(
+      policyStatus: readBoundedAwsJson(
         region,
         "s3api",
         "get-bucket-policy-status",
         ["--bucket", bucketName]
       ),
-      policy: readBucketPolicy(region, bucketName, readAwsJson)
+      policy: readBucketPolicy(
+        region,
+        bucketName,
+        readBoundedAwsJson
+      )
     },
     mainStackName,
     legacyMainStackName,
     stackSummaries:
-      readAwsJson(
+      readBoundedAwsJson(
         region,
         "cloudformation",
         "list-stacks"
@@ -719,13 +839,15 @@ export function collectSnapshot(
       ...period,
       response: currentCostResponse
     },
-    foundationModel: readAwsJson(
+    foundationModel: readBoundedAwsJson(
       region,
       "bedrock",
       "get-foundation-model",
       ["--model-identifier", modelId]
     )
   };
+  runtimeCalls.assertComplete();
+  return snapshot;
 }
 
 export function main(argv = process.argv.slice(2)) {

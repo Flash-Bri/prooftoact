@@ -2,6 +2,11 @@ name: AWS OIDC Identity Bootstrap
 
 on:
   workflow_dispatch:
+    inputs:
+      official_main_commit:
+        description: Exact 40-character official main commit expected for this run
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,12 +24,19 @@ jobs:
 
     steps:
       - name: Capture encrypted assumed-role identity receipt
-        shell: bash
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}
           AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ vars.AWS_APPROVED_ACCOUNT_ID_SHA256 }}
           RECEIPT_ENCRYPTION_PASSPHRASE: ${{ secrets.RECEIPT_ENCRYPTION_PASSPHRASE }}
+          BASH_ENV: ""
+          ENV: ""
+          LD_LIBRARY_PATH: ""
+          LD_PRELOAD: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
         run: |
           set -euo pipefail
           umask 077
@@ -62,12 +74,56 @@ jobs:
             exit 1
           }
 
+          [[ "$(/usr/bin/id -u)" != "0" ]] || fail_closed
+          [[ "${GITHUB_ACTIONS:-}" == "true" ]] || fail_closed
+          [[ "${CI:-}" == "true" ]] || fail_closed
+          [[ "${RUNNER_OS:-}" == "Linux" ]] || fail_closed
+          [[ "${GITHUB_SERVER_URL:-}" == "https://github.com" ]] || fail_closed
+          [[ "${GITHUB_API_URL:-}" == "https://api.github.com" ]] || fail_closed
           [[ "${GITHUB_REPOSITORY:-}" == "Flash-Bri/prooftoact" ]] || fail_closed
+          [[ "${GITHUB_REPOSITORY_ID:-}" == "1317716765" ]] || fail_closed
           [[ "${GITHUB_REF:-}" == "refs/heads/main" ]] || fail_closed
           [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]] || fail_closed
+          [[ "${GITHUB_WORKFLOW:-}" == "AWS OIDC Identity Bootstrap" ]] || fail_closed
           [[ "${GITHUB_WORKFLOW_REF:-}" == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-identity-bootstrap.yml@refs/heads/main" ]] || fail_closed
-          [[ "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          [[ "${GITHUB_JOB:-}" == "identity-bootstrap" ]] || fail_closed
+          [[ "${EXPECTED_OFFICIAL_MAIN_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          [[ "${GITHUB_SHA:-}" == "$EXPECTED_OFFICIAL_MAIN_COMMIT" ]] || fail_closed
           [[ "${RUNNER_ENVIRONMENT:-}" == "github-hosted" ]] || fail_closed
+          for unsafe_name in \
+            ALL_PROXY \
+            AWS_CA_BUNDLE \
+            AWS_CONFIG_FILE \
+            AWS_CONTAINER_AUTHORIZATION_TOKEN \
+            AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE \
+            AWS_CONTAINER_CREDENTIALS_FULL_URI \
+            AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
+            AWS_DATA_PATH \
+            AWS_DEFAULT_PROFILE \
+            AWS_PROFILE \
+            AWS_ROLE_SESSION_NAME \
+            AWS_SDK_LOAD_CONFIG \
+            AWS_SHARED_CREDENTIALS_FILE \
+            AWS_USE_DUALSTACK_ENDPOINT \
+            AWS_USE_FIPS_ENDPOINT \
+            AWS_WEB_IDENTITY_TOKEN_FILE \
+            BOTO_CONFIG \
+            CURL_CA_BUNDLE \
+            HTTPS_PROXY \
+            HTTP_PROXY \
+            NODE_DEBUG \
+            NODE_TLS_REJECT_UNAUTHORIZED \
+            NODE_V8_COVERAGE \
+            NO_PROXY \
+            REQUESTS_CA_BUNDLE \
+            SSL_CERT_DIR \
+            SSL_CERT_FILE; do
+            [[ -z "${!unsafe_name:-}" ]] || fail_closed
+          done
+          while IFS= read -r unsafe_name; do
+            [[ -z "${!unsafe_name:-}" ]] || fail_closed
+          done < <(compgen -A variable AWS_ENDPOINT_URL)
+          unset unsafe_name
           [[ "${AWS_ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || fail_closed
           [[ "${AWS_APPROVED_ACCOUNT_ID_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || fail_closed
           account_digest="$(printf '%s' "$AWS_ACCOUNT_ID" | /usr/bin/sha256sum)" || fail_closed
@@ -77,9 +133,7 @@ jobs:
           expected_role_arn="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ProofToActPreflight"
           [[ "${AWS_ROLE_ARN:-}" == "$expected_role_arn" ]] || fail_closed
           expected_caller_arn="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/ProofToActPreflight/release-proof"
-          (( ${#RECEIPT_ENCRYPTION_PASSPHRASE} >= 20 )) || fail_closed
-          [[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\n'* ]] || fail_closed
-          [[ "$RECEIPT_ENCRYPTION_PASSPHRASE" != *$'\r'* ]] || fail_closed
+          [[ "${RECEIPT_ENCRYPTION_PASSPHRASE:-}" =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || fail_closed
           [[ "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" == https://pipelines.actions.githubusercontent.com/*\?* ]] || fail_closed
           [[ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]] || fail_closed
 
@@ -116,9 +170,13 @@ jobs:
             "$error_file" || fail_closed
 
           oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com"
-          if ! /usr/bin/curl \
-            --proto '=https' \
+          if ! /usr/bin/timeout --signal=KILL 30s \
+            /usr/bin/curl \
+              --disable \
+              --proto '=https' \
             --tlsv1.2 \
+            --connect-timeout 10 \
+            --max-time 20 \
             --fail \
             --silent \
             --show-error \
@@ -170,19 +228,22 @@ jobs:
           fi
           oidc_now="$(/usr/bin/date +%s)" || fail_closed
           if ! /usr/bin/jq -e \
-            --arg sha "$GITHUB_SHA" \
+            --arg sha "$EXPECTED_OFFICIAL_MAIN_COMMIT" \
             --argjson now "$oidc_now" \
             'type == "object" and
              .iss == "https://token.actions.githubusercontent.com" and
              .aud == "sts.amazonaws.com" and
              .repository == "Flash-Bri/prooftoact" and
+             .repository_id == "1317716765" and
              .repository_owner == "Flash-Bri" and
+             .repository_owner_id == "252500266" and
              .ref == "refs/heads/main" and
              .ref_type == "branch" and
              .environment == "aws-preflight" and
-             .sub == "repo:Flash-Bri/prooftoact:environment:aws-preflight" and
+             .sub == "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-preflight" and
              .workflow == "AWS OIDC Identity Bootstrap" and
              .workflow_ref == "Flash-Bri/prooftoact/.github/workflows/aws-oidc-identity-bootstrap.yml@refs/heads/main" and
+             .workflow_sha == $sha and
              .event_name == "workflow_dispatch" and
              .runner_environment == "github-hosted" and
              .sha == $sha and
@@ -212,13 +273,16 @@ jobs:
           export AWS_PAGER=""
           export AWS_REGION=us-east-1
 
-          if ! "$aws_cli" sts assume-role-with-web-identity \
+          if ! /usr/bin/timeout --signal=KILL 30s \
+            "$aws_cli" sts assume-role-with-web-identity \
             --role-arn "$expected_role_arn" \
             --role-session-name release-proof \
             --duration-seconds 900 \
             --web-identity-token "file://${oidc_token}" \
             --region us-east-1 \
             --output json \
+            --cli-connect-timeout 10 \
+            --cli-read-timeout 20 \
             --no-cli-pager \
             >"$sts_response" 2>"$error_file"; then
             fail_closed
@@ -248,9 +312,12 @@ jobs:
           export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
           unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
 
-          if ! "$aws_cli" sts get-caller-identity \
+          if ! /usr/bin/timeout --signal=KILL 30s \
+            "$aws_cli" sts get-caller-identity \
             --region us-east-1 \
             --output json \
+            --cli-connect-timeout 10 \
+            --cli-read-timeout 20 \
             --no-cli-pager \
             >"$caller_receipt" 2>"$error_file"; then
             fail_closed
@@ -275,8 +342,10 @@ jobs:
             >"$passphrase_file"
           unset RECEIPT_ENCRYPTION_PASSPHRASE
           /usr/bin/rm -f -- "$encrypted_receipt"
-          if ! /usr/bin/gpg \
-            --batch \
+          if ! /usr/bin/timeout --signal=KILL 30s \
+            /usr/bin/gpg \
+              --no-options \
+              --batch \
             --yes \
             --pinentry-mode loopback \
             --passphrase-file "$passphrase_file" \
@@ -302,5 +371,10 @@ jobs:
 
       - name: Remove encrypted receipt from runner
         if: always()
-        shell: bash
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          BASH_ENV: ""
+          ENV: ""
+          LD_LIBRARY_PATH: ""
+          LD_PRELOAD: ""
         run: /usr/bin/rm -f -- "${RUNNER_TEMP}/aws-preflight-caller-receipt.json.gpg"

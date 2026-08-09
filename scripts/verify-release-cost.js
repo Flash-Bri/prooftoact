@@ -20,6 +20,8 @@ const EXPECTED_LIMITS = Object.freeze({
   expectedMeteredSpendHighUsd: 12,
   expectedMeteredSpendLowUsd: 3,
   minimumBudgetCoverageEnd: "2026-09-16T00:00:00.000Z",
+  preflightAllowanceReserveUsd: 0.02,
+  preflightObservedAwsRejectAtUsd: 13.12,
   projectCostWindowStart: "2026-07-01",
   recordedNonAwsSpendUsd: 11.86,
   releaseHorizonEnd: "2026-09-15",
@@ -71,7 +73,7 @@ const EXPECTED_UNAPPROVED_PURCHASE_CLASSES = Object.freeze([
 ]);
 
 const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
-  "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with current account-wide AWS spend below 13.14 USD and the main stack absent.",
+  "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with current account-wide AWS spend plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
   "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
   "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",
   "Final complete spend ledger plus teardown or explicitly approved keep-alive receipt after the judged keep-alive window."
@@ -89,6 +91,22 @@ const EXPECTED_SURFACES = Object.freeze({
   "aws-gate2-template": Object.freeze({
     path: "infra/aws/gate2-template.json",
     role: "BOUNDED_DEPLOYMENT_CANDIDATE"
+  }),
+  "aws-oidc-read-only-ledger": Object.freeze({
+    path: "docs/AWS_OIDC_PREFLIGHT.md",
+    role: "OIDC_PREFLIGHT_COST_AND_AUTHORITY_BOUNDARY"
+  }),
+  "aws-oidc-read-only-role-template": Object.freeze({
+    path: "infra/aws/oidc-read-only-preflight-role-template.json",
+    role: "READ_ONLY_PREFLIGHT_PERMISSION_BOUNDARY"
+  }),
+  "aws-oidc-read-only-runner": Object.freeze({
+    path: "scripts/run-aws-oidc-read-only-preflight.sh",
+    role: "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION"
+  }),
+  "aws-oidc-read-only-workflow": Object.freeze({
+    path: ".github/workflows/aws-oidc-read-only-preflight.yml",
+    role: "MANUAL_TIME_BOUNDED_PREFLIGHT_WORKFLOW"
   }),
   "aws-preflight-library": Object.freeze({
     path: "src/cloud/aws-gate2-preflight.js",
@@ -343,6 +361,12 @@ export function validateManifest(manifest) {
           manifest.limits.recordedNonAwsSpendUsd
         ).toFixed(2)
       ) === manifest.limits.effectiveAwsSpendCeilingUsd &&
+      Number(
+        (
+          manifest.limits.effectiveAwsSpendCeilingUsd -
+          manifest.limits.preflightAllowanceReserveUsd
+        ).toFixed(2)
+      ) === manifest.limits.preflightObservedAwsRejectAtUsd &&
       sameJson(manifest.budgetAlerts, EXPECTED_BUDGET_ALERTS) &&
       sameJson(
         manifest.forbiddenResourceTypes,
@@ -606,6 +630,16 @@ function assertPreflightDefaults() {
       budgetCostBasis: "UnblendedCost",
       expectedPreflightRoleName: "ProofToActPreflight",
       expectedPreflightSessionName: "release-proof",
+      approvedPreflightIdentityLanes: [
+        {
+          roleName: "ProofToActPreflight",
+          sessionName: "release-proof"
+        },
+        {
+          roleName: "ProofToActReadOnlyPreflight",
+          sessionName: "read-only-preflight"
+        }
+      ],
       maxCostExplorerRequests: 1,
       approvedPreflightMeteredSpendCapUsd: 0.02,
       minimumBudgetCoverageEnd: "2026-09-16T00:00:00.000Z"
@@ -627,12 +661,78 @@ function assertSourceContracts(sources) {
     "RELEASE_COST_BOUNDARY_METRIC_CARDINALITY"
   );
   assertMarkers(
+    sources.get("aws-oidc-read-only-ledger"),
+    [
+      "This lane makes AWS CloudShell optional",
+      "known missing setup gate",
+      "account-wide `$15` budget",
+      "observed AWS + $0.02 < $13.14",
+      "exactly `$13.12` fails",
+      "maximum `$0.02` complete-preflight cap",
+      "This source change grants no",
+      "spend authority."
+    ],
+    "RELEASE_COST_OIDC_LEDGER_MARKERS"
+  );
+  const oidcRoleTemplate = sources.get(
+    "aws-oidc-read-only-role-template"
+  );
+  assertMarkers(
+    oidcRoleTemplate,
+    [
+      "Source-only scaffold",
+      "budgets:ViewBudget",
+      "ce:GetCostAndUsage",
+      "DenyEverythingExceptExactPreflightReads",
+      "NotAction"
+    ],
+    "RELEASE_COST_OIDC_ROLE_MARKERS"
+  );
+  assert(
+    EXPECTED_FORBIDDEN_RESOURCE_TYPES.every(
+      (resourceType) => !oidcRoleTemplate.includes(resourceType)
+    ) &&
+      !oidcRoleTemplate.includes("cloudformation:CreateStack") &&
+      !oidcRoleTemplate.includes("s3:PutObject"),
+    "RELEASE_COST_OIDC_ROLE_MUTATION_BOUNDARY"
+  );
+  assertMarkers(
+    sources.get("aws-oidc-read-only-runner"),
+    [
+      "--duration-seconds 900",
+      "--max-results 1",
+      "--no-paginate",
+      "--signal=KILL --kill-after=5s 180s",
+      "scripts/gate2-aws-preflight.js",
+      'tideproof.gate2.aws-preflight.v6',
+      "approvedPreflightAllowanceUsd",
+      "readOnlyAccountSafetyPreflight: true",
+      "cannot authorize or prove upload, mutation, deployment"
+    ],
+    "RELEASE_COST_OIDC_RUNNER_MARKERS"
+  );
+  assertMarkers(
+    sources.get("aws-oidc-read-only-workflow"),
+    [
+      "workflow_dispatch:",
+      "official_main_commit:",
+      "environment: aws-read-only-preflight",
+      "timeout-minutes: 10",
+      "retention-days: 1"
+    ],
+    "RELEASE_COST_OIDC_WORKFLOW_MARKERS"
+  );
+  assertMarkers(
     sources.get("aws-preflight-library"),
     [
-      "budgetActual < effectiveAwsSpendCeilingUsd",
-      "conservativeActual < effectiveAwsSpendCeilingUsd",
-      "conservativeObservedTotalExposure <",
-      "TOTAL_PROJECT_EXPOSURE_CEILING_USD",
+      "USD_MICROS = 1_000_000",
+      "conservativeReservedAwsExposureMicros <",
+      "effectiveAwsSpendCeilingMicros",
+      "conservativeReservedTotalExposureMicros <",
+      "totalProjectExposureCeilingMicros",
+      "PREFLIGHT_ALLOWANCE_AWS_CEILING",
+      "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING",
+      'schemaVersion: "tideproof.gate2.aws-preflight.v6"',
       "registrarReceiptVerified: false",
       "autoRenewReportedEnabled: false",
       "state: \"ABSENT\"",
@@ -643,6 +743,8 @@ function assertSourceContracts(sources) {
   assertMarkers(
     sources.get("aws-preflight-runner"),
     [
+      "AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY",
+      "runtimeCalls.assertComplete()",
       "get-caller-identity",
       "get-cost-and-usage",
       "describe-budget",
@@ -654,7 +756,9 @@ function assertSourceContracts(sources) {
   assertMarkers(
     sources.get("aws-readiness-runner"),
     [
-      "Number(currentCost.amountUsd) < 13.14",
+      "preflightAllowanceMicros === 20_000n",
+      "reservedAwsExposureMicros < effectiveAwsCeilingMicros",
+      "reservedTotalExposureMicros < ceilingMicros",
       "projectExposure.registrarReceiptVerified === false",
       "controls?.mainGateTwoStack?.state === \"ABSENT\"",
       "awsPreflight: preflight ? \"PASS\" : \"NOT_RUN\"",

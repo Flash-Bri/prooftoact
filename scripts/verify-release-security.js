@@ -118,6 +118,30 @@ const EXPECTED_SURFACES = Object.freeze({
     path: ".github/workflows/aws-oidc-identity-bootstrap.yml",
     role: "MANUAL_SHORT_LIVED_AWS_IDENTITY_BOOTSTRAP"
   }),
+  "aws-oidc-read-only-ledger": Object.freeze({
+    path: "docs/AWS_OIDC_PREFLIGHT.md",
+    role: "CLOUDSHELL_OPTIONAL_OIDC_AUTHORITY_BOUNDARY"
+  }),
+  "aws-oidc-read-only-role-template": Object.freeze({
+    path: "infra/aws/oidc-read-only-preflight-role-template.json",
+    role: "LEAST_PRIVILEGE_READ_ONLY_OIDC_ROLE_SCAFFOLD"
+  }),
+  "aws-oidc-read-only-runner": Object.freeze({
+    path: "scripts/run-aws-oidc-read-only-preflight.sh",
+    role: "SOURCE_BOUND_READ_ONLY_OIDC_PREFLIGHT_RUNNER"
+  }),
+  "aws-oidc-read-only-source-tests": Object.freeze({
+    path: "test/aws-oidc-source-lane.test.js",
+    role: "OIDC_SOURCE_BOUNDARY_ADVERSARIAL_VERIFICATION"
+  }),
+  "aws-oidc-read-only-source-verifier": Object.freeze({
+    path: "scripts/verify-aws-oidc-preflight-source.js",
+    role: "OIDC_SOURCE_BOUNDARY_VERIFIER"
+  }),
+  "aws-oidc-read-only-workflow": Object.freeze({
+    path: ".github/workflows/aws-oidc-read-only-preflight.yml",
+    role: "MANUAL_PROTECTED_READ_ONLY_OIDC_PREFLIGHT"
+  }),
   "aws-provider-bundle-entry": Object.freeze({
     path: "scripts/lib/aws-provider-bundle-entry.js",
     role: "AWS_ATTESTATION_PROVIDER_BUNDLE_ENTRY"
@@ -1109,11 +1133,18 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "aws-oidc-identity-bootstrap": Object.freeze([
     "workflow_dispatch:",
+    "official_main_commit:",
     "id-token: write",
     "environment: aws-preflight",
+    "shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}",
     "ACTIONS_ID_TOKEN_REQUEST_URL",
     "AWS_APPROVED_ACCOUNT_ID_SHA256",
-    "repo:Flash-Bri/prooftoact:environment:aws-preflight",
+    "GITHUB_REPOSITORY_ID:-}\" == \"1317716765",
+    "GITHUB_SHA:-}\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "compgen -A variable AWS_ENDPOINT_URL",
+    '.repository_owner_id == "252500266"',
+    "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-preflight",
     "refs/heads/main",
     "role/ProofToActPreflight",
     "/usr/local/aws-cli/v2/",
@@ -1123,9 +1154,112 @@ const SOURCE_MARKERS = Object.freeze({
     "--duration-seconds 900",
     "^ASIA[A-Z0-9]{16}$",
     ".UserId == $assumed_role_id",
+    "--cli-connect-timeout 10",
+    "--cli-read-timeout 20",
+    "--disable",
+    "--no-options",
+    "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$",
     "--symmetric",
     "retention-days: 1",
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+  ]),
+  "aws-oidc-read-only-ledger": Object.freeze([
+    "SOURCE SCAFFOLD VERIFIED — PROVIDER SETUP, EXECUTION, AND REVIEW PENDING",
+    "This lane makes AWS CloudShell optional",
+    "ProofToActPreflight/release-proof",
+    "ProofToActReadOnlyPreflight/read-only-preflight",
+    "known missing setup gate",
+    "Do not embed an AWS account ID or its digest",
+    "canonical unpadded Base64URL for 32 bytes",
+    "exactly 20 AWS",
+    "17 nested calls",
+    "oidc#immutable-subject-claims",
+    "created_at` is `2026-07-30T22:07:23Z",
+    "use_default: true",
+    "repo:Flash-Bri@252500266/prooftoact@1317716765",
+    "provider-side gate and residual trust boundary",
+    "observed AWS + $0.02 < $13.14",
+    "exactly `$13.12` fails",
+    "maximum `$0.02` complete-preflight cap",
+    "Deployment and evidence",
+    "Deliberately absent and pending",
+    "A source-verifier `PASS` is not a provider receipt"
+  ]),
+  "aws-oidc-read-only-role-template": Object.freeze([
+    "Source-only scaffold",
+    "separate human authorization",
+    "ProofToActReadOnlyPreflight",
+    "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight",
+    "token.actions.githubusercontent.com:repository_id",
+    "token.actions.githubusercontent.com:repository_owner_id",
+    "token.actions.githubusercontent.com:workflow",
+    "token.actions.githubusercontent.com:ref",
+    "ProofToActReadOnlyPreflightExactReads",
+    "budgets:ViewBudget",
+    "ce:GetCostAndUsage",
+    "servicequotas:ListServiceQuotas",
+    "DenyEverythingExceptExactPreflightReads",
+    "NotAction"
+  ]),
+  "aws-oidc-read-only-runner": Object.freeze([
+    "set +x",
+    "GITHUB_REPOSITORY_ID:-}\" == \"1317716765",
+    "source_commit\" == \"$EXPECTED_OFFICIAL_MAIN_COMMIT",
+    "compgen -A variable AWS_ENDPOINT_URL",
+    '.repository_owner_id == "252500266"',
+    "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-read-only-preflight",
+    "--role-session-name read-only-preflight",
+    "--duration-seconds 900",
+    "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$",
+    "account get-region-opt-status",
+    "service-quotas list-service-quotas",
+    "scripts/gate2-aws-preflight.js",
+    "tideproof.gate2.aws-preflight.v6",
+    "approvedPreflightAllowanceUsd",
+    "prooftoact.aws-oidc-read-only-preflight-receipt.v1",
+    "arn:aws:(iam|sts|s3)",
+    "--cipher-algo AES256"
+  ]),
+  "aws-oidc-read-only-source-tests": Object.freeze([
+    "OIDC source receipt remains explicitly local and provider-pending",
+    "read-only role template is exact and rejects expanded trust or authority",
+    "identity workflow stays manual, exact-commit-bound, and STS-only",
+    "read-only workflow stays separately protected and action-pinned",
+    "read-only runner rejects direct mutation calls and shell tracing",
+    "receipt secret contract is canonical unpadded Base64URL for 32 bytes",
+    "underlying preflight inventory is exact and cannot bypass its reader",
+    "preflight identity accepts only the two exact role/session pairings"
+  ]),
+  "aws-oidc-read-only-source-verifier": Object.freeze([
+    "prooftoact.aws-oidc-preflight-source-verification.v2",
+    "SOURCE_CONTRACT_PASS_PROVIDER_SETUP_AND_EXECUTION_PENDING",
+    "validateReadOnlyRoleTemplate",
+    "validateIdentityWorkflow",
+    "validateReadOnlyWorkflow",
+    "validateReadOnlyRunner",
+    "validateUnderlyingPreflight",
+    "exactReadOnlyWorkflowAwsCallCount",
+    "accountSafetyPreflightCurrentSourceCallsExact",
+    "receiptSecretExact32ByteBase64url",
+    "providerExecution: \"NOT_RUN\"",
+    "deploymentRoleOrWorkflowAdded: false",
+    "providerMutationExplicitlyDenied: true",
+    "providerExecutionClaimAbsent: true"
+  ]),
+  "aws-oidc-read-only-workflow": Object.freeze([
+    "workflow_dispatch:",
+    "official_main_commit:",
+    "id-token: write",
+    "environment: aws-read-only-preflight",
+    "ref: ${{ github.sha }}",
+    "persist-credentials: false",
+    "AWS_APPROVED_ACCOUNT_ID_SHA256",
+    "LD_PRELOAD: \"\"",
+    "/usr/bin/bash scripts/run-aws-oidc-read-only-preflight.sh",
+    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "retention-days: 1"
   ]),
   "aws-preflight": Object.freeze([
     "awsPreflightIdentityExpectation(",
@@ -1140,6 +1274,13 @@ const SOURCE_MARKERS = Object.freeze({
     "get-caller-identity",
     "validateAwsEvidenceCaller(callerIdentity",
     "readAwsJson(",
+    "AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY",
+    "createAwsPreflightRuntimeCallReader(",
+    "runtimeCalls.assertComplete()",
+    "timeout: 30_000",
+    "killSignal: \"SIGKILL\"",
+    "--cli-connect-timeout",
+    "--cli-read-timeout",
     "describe-stacks",
     "get-cost-and-usage",
     "get-foundation-model"
@@ -1148,14 +1289,23 @@ const SOURCE_MARKERS = Object.freeze({
     "validateAwsGate2PreflightIdentityExpectation(",
     "ProofToActPreflight",
     "release-proof",
+    "ProofToActReadOnlyPreflight",
+    "read-only-preflight",
+    "APPROVED_PREFLIGHT_IDENTITY_LANES.find(",
     "NextPageToken",
     "MAX_COST_EXPLORER_REQUESTS = 1",
-    "APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD = 0.02"
+    "APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD = 0.02",
+    "USD_MICROS = 1_000_000",
+    "PREFLIGHT_ALLOWANCE_AWS_CEILING",
+    "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING",
+    "tideproof.gate2.aws-preflight.v6"
   ]),
   "aws-preflight-tests": Object.freeze([
     "AWS preflight rejects every non-lane identity expectation before STS",
     "AWS preflight stops after STS when the caller misses its expectation",
     "AWS Gate Two preflight rejects every Cost Explorer pagination token",
+    "AWS preflight runtime reader enforces the exact ordered call cardinality",
+    "AWS Gate Two preflight reserves the full allowance below both ceilings",
     "standalone preflight ignores caller Git PATH and configuration",
     "trusted Git rejects unapproved paths, owners, and writable modes"
   ]),
@@ -1880,6 +2030,28 @@ const SOURCE_MARKERS = Object.freeze({
 const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
   "aws-oidc-identity-bootstrap": Object.freeze([
     "actions/checkout@",
+    "pull_request:",
+    "schedule:",
+    "set -x"
+  ]),
+  "aws-oidc-read-only-role-template": Object.freeze([
+    "AWS::IAM::OIDCProvider",
+    "bedrock:InvokeModel",
+    "cloudformation:CreateStack",
+    "iam:PassRole",
+    "s3:PutObject"
+  ]),
+  "aws-oidc-read-only-runner": Object.freeze([
+    "create-stack",
+    "delete-stack",
+    "invoke-model",
+    "put-object",
+    "set -x",
+    "tee"
+  ]),
+  "aws-oidc-read-only-workflow": Object.freeze([
+    "AWS_ROLE_ARN:",
+    "configure-aws-credentials",
     "pull_request:",
     "schedule:"
   ]),

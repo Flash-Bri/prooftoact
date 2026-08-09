@@ -1,0 +1,81 @@
+name: AWS Read-Only OIDC Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      official_main_commit:
+        description: Exact 40-character official main commit expected for this run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-oidc-read-only-preflight
+  cancel-in-progress: false
+
+jobs:
+  read-only-preflight:
+    environment: aws-read-only-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out exact official source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          show-progress: false
+          submodules: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          check-latest: false
+          node-version: 22
+
+      - name: Capture encrypted sanitized read-only preflight receipt
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.official_main_commit }}
+          AWS_READ_ONLY_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_READ_ONLY_PREFLIGHT_ROLE_ARN }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_APPROVED_ACCOUNT_ID_SHA256: ${{ vars.AWS_APPROVED_ACCOUNT_ID_SHA256 }}
+          RECEIPT_ENCRYPTION_PASSPHRASE: ${{ secrets.RECEIPT_ENCRYPTION_PASSPHRASE }}
+          BASH_ENV: ""
+          ENV: ""
+          LD_LIBRARY_PATH: ""
+          LD_PRELOAD: ""
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: /usr/bin/bash scripts/run-aws-oidc-read-only-preflight.sh
+
+      - name: Upload encrypted sanitized preflight receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aws-read-only-preflight-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/aws-read-only-preflight-receipt.json.gpg
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          include-hidden-files: false
+
+      - name: Remove encrypted receipt from runner
+        if: always()
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          BASH_ENV: ""
+          ENV: ""
+          LD_LIBRARY_PATH: ""
+          LD_PRELOAD: ""
+        run: /usr/bin/rm -f -- "${RUNNER_TEMP}/aws-read-only-preflight-receipt.json.gpg"

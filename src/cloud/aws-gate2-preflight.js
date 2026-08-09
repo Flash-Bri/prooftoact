@@ -15,10 +15,19 @@ const EFFECTIVE_AWS_SPEND_CEILING_USD = Number(
   ).toFixed(2)
 );
 const EXPECTED_BUDGET_COST_BASIS = "UnblendedCost";
-const EXPECTED_PREFLIGHT_ROLE_NAME = "ProofToActPreflight";
-const EXPECTED_PREFLIGHT_SESSION_NAME = "release-proof";
+const APPROVED_PREFLIGHT_IDENTITY_LANES = Object.freeze([
+  Object.freeze({
+    roleName: "ProofToActPreflight",
+    sessionName: "release-proof"
+  }),
+  Object.freeze({
+    roleName: "ProofToActReadOnlyPreflight",
+    sessionName: "read-only-preflight"
+  })
+]);
 const MAX_COST_EXPLORER_REQUESTS = 1;
 const APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD = 0.02;
+const USD_MICROS = 1_000_000;
 const MINIMUM_BUDGET_COVERAGE_END =
   "2026-09-16T00:00:00.000Z";
 const EXPECTED_COST_TYPES = Object.freeze({
@@ -79,6 +88,32 @@ function moneyAmount(value, code) {
   return amount;
 }
 
+function conservativeUsdMicros(value, code) {
+  const text = typeof value === "string" ? value : String(value);
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(text);
+  requireCondition(match, `${code}_DECIMAL`);
+  const fraction = match[2] ?? "";
+  let micros =
+    (BigInt(match[1]) * BigInt(USD_MICROS)) +
+    BigInt(`${fraction}000000`.slice(0, 6));
+  if (/[1-9]/.test(fraction.slice(6))) {
+    micros += 1n;
+  }
+  requireCondition(
+    micros <= BigInt(Number.MAX_SAFE_INTEGER),
+    `${code}_RANGE`
+  );
+  return Number(micros);
+}
+
+function usdMicrosForConstant(value, code) {
+  return conservativeUsdMicros(value.toFixed(6), code);
+}
+
+function formattedUsdMicros(value) {
+  return (value / USD_MICROS).toFixed(6);
+}
+
 function isAbsentOrEmptyObject(value) {
   return (
     value == null ||
@@ -98,20 +133,21 @@ export function validateAwsGate2PreflightIdentityExpectation(
     /^\d{12}$/.test(expectedAccountId ?? ""),
     "AWS_PREFLIGHT_EXPECTED_ACCOUNT"
   );
-  requireCondition(
-    expectation?.expectedPrincipalArn ===
-      `arn:aws:iam::${expectedAccountId}:role/${EXPECTED_PREFLIGHT_ROLE_NAME}`,
-    "AWS_PREFLIGHT_EXPECTED_ROLE"
+  const lane = APPROVED_PREFLIGHT_IDENTITY_LANES.find(
+    ({ roleName }) =>
+      expectation?.expectedPrincipalArn ===
+      `arn:aws:iam::${expectedAccountId}:role/${roleName}`
   );
+  requireCondition(lane, "AWS_PREFLIGHT_EXPECTED_ROLE");
   requireCondition(
     expectation?.expectedCallerArn ===
       `arn:aws:sts::${expectedAccountId}:assumed-role/` +
-        `${EXPECTED_PREFLIGHT_ROLE_NAME}/${EXPECTED_PREFLIGHT_SESSION_NAME}`,
+        `${lane.roleName}/${lane.sessionName}`,
     "AWS_PREFLIGHT_EXPECTED_CALLER_ARN"
   );
   requireCondition(
     new RegExp(
-      `^AROA[A-Z0-9]{12,124}:${EXPECTED_PREFLIGHT_SESSION_NAME}$`
+      `^AROA[A-Z0-9]{12,124}:${lane.sessionName}$`
     ).test(expectation?.expectedCallerUserId ?? ""),
     "AWS_PREFLIGHT_EXPECTED_CALLER_USER_ID"
   );
@@ -190,6 +226,10 @@ function notificationMatches(actual, expected) {
 
 function validateNotifications(entries) {
   const notificationEntries = asArray(entries);
+  requireCondition(
+    notificationEntries.length === REQUIRED_NOTIFICATIONS.length,
+    "BUDGET_NOTIFICATION_CARDINALITY"
+  );
   const accepted = [];
 
   for (const required of REQUIRED_NOTIFICATIONS) {
@@ -385,7 +425,7 @@ function validateCost(cost, ceilingUsd, expectedPeriod) {
     "CURRENT_COST_ROWS"
   );
 
-  let total = 0;
+  let totalMicros = 0;
   let estimated = false;
   for (const [index, row] of rows.entries()) {
     requireCondition(
@@ -395,19 +435,28 @@ function validateCost(cost, ceilingUsd, expectedPeriod) {
           expectedRows[index].periodEndExclusive,
       "CURRENT_COST_ROW_PERIOD"
     );
-    total += moneyAmount(
-      row?.Total?.UnblendedCost,
+    const unblendedCost = row?.Total?.UnblendedCost;
+    moneyAmount(unblendedCost, "CURRENT_COST_UNBLENDED");
+    totalMicros += conservativeUsdMicros(
+      unblendedCost?.Amount,
       "CURRENT_COST_UNBLENDED"
+    );
+    requireCondition(
+      Number.isSafeInteger(totalMicros),
+      "CURRENT_COST_UNBLENDED_TOTAL_RANGE"
     );
     estimated ||= row?.Estimated === true;
   }
-  requireCondition(total < ceilingUsd, "CURRENT_COST_CEILING");
+  requireCondition(
+    totalMicros < usdMicrosForConstant(ceilingUsd, "CURRENT_COST_CEILING"),
+    "CURRENT_COST_CEILING"
+  );
 
   return {
     scope: "ACCOUNT_WIDE_PROJECT_WINDOW_TO_DATE",
     periodStart: cost.periodStart,
     periodEndExclusive: cost.periodEndExclusive,
-    amountUsd: total.toFixed(6),
+    amountUsd: formattedUsdMicros(totalMicros),
     estimated
   };
 }
@@ -624,31 +673,64 @@ export function validateAwsGate2Preflight(
     effectiveAwsSpendCeilingUsd,
     awsCostExplorerPeriod(snapshot.observedAt)
   );
-  const conservativeActual = Math.max(
-    budgetActual,
-    Number(currentCost.amountUsd)
+  const budgetActualMicros = conservativeUsdMicros(
+    budget?.CalculatedSpend?.ActualSpend?.Amount,
+    "BUDGET_ACTUAL"
   );
-  requireCondition(
-    conservativeActual < effectiveAwsSpendCeilingUsd,
-    "CONSERVATIVE_COST_CEILING"
+  const currentCostMicros = conservativeUsdMicros(
+    currentCost.amountUsd,
+    "CURRENT_COST_TOTAL"
   );
-  const conservativeObservedTotalExposure =
-    RECORDED_NON_AWS_SPEND_USD + conservativeActual;
+  const conservativeActualMicros = Math.max(
+    budgetActualMicros,
+    currentCostMicros
+  );
+  const effectiveAwsSpendCeilingMicros = usdMicrosForConstant(
+    effectiveAwsSpendCeilingUsd,
+    "EFFECTIVE_AWS_SPEND_CEILING"
+  );
+  const preflightAllowanceMicros = usdMicrosForConstant(
+    APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD,
+    "PREFLIGHT_ALLOWANCE"
+  );
+  const conservativeReservedAwsExposureMicros =
+    conservativeActualMicros + preflightAllowanceMicros;
   requireCondition(
-    conservativeObservedTotalExposure <
-      TOTAL_PROJECT_EXPOSURE_CEILING_USD,
+    conservativeReservedAwsExposureMicros <
+      effectiveAwsSpendCeilingMicros,
+    "PREFLIGHT_ALLOWANCE_AWS_CEILING"
+  );
+  const recordedNonAwsSpendMicros = usdMicrosForConstant(
+    RECORDED_NON_AWS_SPEND_USD,
+    "RECORDED_NON_AWS_SPEND"
+  );
+  const totalProjectExposureCeilingMicros = usdMicrosForConstant(
+    TOTAL_PROJECT_EXPOSURE_CEILING_USD,
     "TOTAL_PROJECT_EXPOSURE_CEILING"
   );
-  const remainingExposure =
-    TOTAL_PROJECT_EXPOSURE_CEILING_USD -
-    conservativeObservedTotalExposure;
+  const conservativeObservedTotalExposureMicros =
+    recordedNonAwsSpendMicros + conservativeActualMicros;
+  const conservativeReservedTotalExposureMicros =
+    recordedNonAwsSpendMicros +
+    conservativeReservedAwsExposureMicros;
+  requireCondition(
+    conservativeReservedTotalExposureMicros <
+      totalProjectExposureCeilingMicros,
+    "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING"
+  );
+  const remainingExposureMicros =
+    totalProjectExposureCeilingMicros -
+    conservativeObservedTotalExposureMicros;
+  const remainingExposureAfterPreflightAllowanceMicros =
+    totalProjectExposureCeilingMicros -
+    conservativeReservedTotalExposureMicros;
   const bedrock = validateModel(
     snapshot?.foundationModel,
     expectedModelId
   );
 
   return {
-    schemaVersion: "tideproof.gate2.aws-preflight.v5",
+    schemaVersion: "tideproof.gate2.aws-preflight.v6",
     status: "PASS",
     observedAt: snapshot.observedAt,
     sourceCommit: snapshot.sourceCommit,
@@ -674,7 +756,7 @@ export function validateAwsGate2Preflight(
         coverageEnd: new Date(budgetPeriodEnd).toISOString(),
         budgetReportedActualUsd: budgetActual.toFixed(6),
         conservativeObservedActualUsd:
-          conservativeActual.toFixed(6),
+          formattedUsdMicros(conservativeActualMicros),
         notifications
       },
       currentCost,
@@ -685,9 +767,26 @@ export function validateAwsGate2Preflight(
           RECORDED_NON_AWS_SPEND_USD.toFixed(6),
         effectiveAwsSpendCeilingUsd:
           effectiveAwsSpendCeilingUsd.toFixed(6),
+        approvedPreflightAllowanceUsd:
+          formattedUsdMicros(preflightAllowanceMicros),
+        conservativeReservedAwsExposureUsd:
+          formattedUsdMicros(
+            conservativeReservedAwsExposureMicros
+          ),
         conservativeObservedTotalExposureUsd:
-          conservativeObservedTotalExposure.toFixed(6),
-        remainingExposureUsd: remainingExposure.toFixed(6),
+          formattedUsdMicros(
+            conservativeObservedTotalExposureMicros
+          ),
+        conservativeReservedTotalExposureUsd:
+          formattedUsdMicros(
+            conservativeReservedTotalExposureMicros
+          ),
+        remainingExposureUsd:
+          formattedUsdMicros(remainingExposureMicros),
+        remainingExposureAfterPreflightAllowanceUsd:
+          formattedUsdMicros(
+            remainingExposureAfterPreflightAllowanceMicros
+          ),
         awsCostWindowStart: PROJECT_COST_WINDOW_START,
         recordedSpendBasis:
           "OWNER_REPORTED_TIDEPROOF_NET_REGISTRATION",
@@ -724,8 +823,12 @@ export const AWS_GATE2_PREFLIGHT_DEFAULTS = Object.freeze({
     EFFECTIVE_AWS_SPEND_CEILING_USD,
   projectCostWindowStart: PROJECT_COST_WINDOW_START,
   budgetCostBasis: EXPECTED_BUDGET_COST_BASIS,
-  expectedPreflightRoleName: EXPECTED_PREFLIGHT_ROLE_NAME,
-  expectedPreflightSessionName: EXPECTED_PREFLIGHT_SESSION_NAME,
+  expectedPreflightRoleName:
+    APPROVED_PREFLIGHT_IDENTITY_LANES[0].roleName,
+  expectedPreflightSessionName:
+    APPROVED_PREFLIGHT_IDENTITY_LANES[0].sessionName,
+  approvedPreflightIdentityLanes:
+    APPROVED_PREFLIGHT_IDENTITY_LANES,
   maxCostExplorerRequests: MAX_COST_EXPLORER_REQUESTS,
   approvedPreflightMeteredSpendCapUsd:
     APPROVED_PREFLIGHT_METERED_SPEND_CAP_USD,
