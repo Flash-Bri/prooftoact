@@ -1240,7 +1240,7 @@ test("AWS preflight budget diagnostics identify all fixed semantic predicates", 
       s.budget.PlannedBudgetLimits = { "1": {} };
     }],
     ["BUDGET_METRICS_MODEL", (s) => {
-      s.budget.Metrics = ["UnblendedCost"];
+      s.budget.Metrics = ["AmortizedCost"];
     }],
     ["BUDGET_COST_TYPES", (s) => {
       s.budget.CostTypes.UseBlended = true;
@@ -1340,7 +1340,7 @@ test("AWS preflight budget diagnostics identify all fixed semantic predicates", 
     assert.doesNotMatch(String(failure), new RegExp(rawCode));
     assert.doesNotMatch(
       String(failure),
-      /private|UnblendedCost|13\.14|2088/u
+      /private|AmortizedCost|UnblendedCost|13\.14|2088/u
     );
   }
 });
@@ -1365,7 +1365,7 @@ test("AWS preflight budget diagnostics reject forgery, replay, and cross-invocat
   };
 
   const original = captureBudgetFailure((snapshot) => {
-    snapshot.budget.Metrics = ["UnblendedCost"];
+    snapshot.budget.Metrics = ["AmortizedCost"];
   });
   let runtimePhaseFailure;
   try {
@@ -1752,6 +1752,94 @@ test("AWS Gate Two preflight accepts explicit empty filter maps", () => {
 
   delete snapshot.budget.CostTypes;
   assert.equal(validateAwsGate2Preflight(snapshot).status, "PASS");
+});
+
+test("AWS Gate Two preflight accepts only exact UnblendedCost metric representations", () => {
+  const omittedMetricsSnapshot = validSnapshot();
+  const omittedMetricsReceipt = validateAwsGate2Preflight(
+    omittedMetricsSnapshot
+  );
+  assert.equal(
+    omittedMetricsReceipt.schemaVersion,
+    "tideproof.gate2.aws-preflight.v6"
+  );
+  const assertByteIdenticalReceipt = (snapshot) => {
+    const receipt = validateAwsGate2Preflight(snapshot);
+    assert.deepEqual(receipt, omittedMetricsReceipt);
+    assert.equal(
+      JSON.stringify(receipt),
+      JSON.stringify(omittedMetricsReceipt)
+    );
+  };
+
+  const nullMetricsSnapshot = validSnapshot();
+  nullMetricsSnapshot.budget.Metrics = null;
+  assertByteIdenticalReceipt(nullMetricsSnapshot);
+
+  const explicitMetricsSnapshot = validSnapshot();
+  explicitMetricsSnapshot.budget.Metrics = ["UnblendedCost"];
+  assertByteIdenticalReceipt(explicitMetricsSnapshot);
+
+  const modernMetricsSnapshot = validSnapshot();
+  modernMetricsSnapshot.budget.Metrics = ["UnblendedCost"];
+  delete modernMetricsSnapshot.budget.CostTypes;
+  assertByteIdenticalReceipt(modernMetricsSnapshot);
+
+  for (const rejectedMetrics of [
+    [],
+    ["AmortizedCost"],
+    ["UnblendedCost", "AmortizedCost"],
+    ["UnblendedCost", "UnblendedCost"],
+    ["unblendedcost"],
+    ["UNBLENDED_COST"],
+    [null],
+    "UnblendedCost",
+    { 0: "UnblendedCost" }
+  ]) {
+    const snapshot = validSnapshot();
+    snapshot.budget.Metrics = rejectedMetrics;
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      /BUDGET_METRICS_MODEL/
+    );
+  }
+});
+
+test("explicit budget Metrics cannot bypass scope or CostTypes controls", () => {
+  for (const [mutate, expectedCode] of [
+    [
+      (snapshot) => {
+        snapshot.budget.CostFilters = { Service: ["private"] };
+      },
+      "BUDGET_COST_FILTERS_ACCOUNT_WIDE"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.FilterExpression = { Not: {} };
+      },
+      "BUDGET_FILTER_EXPRESSION_ACCOUNT_WIDE"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.BillingViewArn = "private";
+      },
+      "BUDGET_BILLING_VIEW_ACCOUNT_WIDE"
+    ],
+    [
+      (snapshot) => {
+        snapshot.budget.CostTypes.UseBlended = true;
+      },
+      "BUDGET_COST_TYPES"
+    ]
+  ]) {
+    const snapshot = validSnapshot();
+    snapshot.budget.Metrics = ["UnblendedCost"];
+    mutate(snapshot);
+    assert.throws(
+      () => validateAwsGate2Preflight(snapshot),
+      new RegExp(expectedCode)
+    );
+  }
 });
 
 test("AWS Gate Two preflight rejects non-account-wide budgets", () => {

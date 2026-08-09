@@ -81,7 +81,7 @@
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
       "role": "OIDC_PREFLIGHT_COST_AND_AUTHORITY_BOUNDARY",
-      "sha256": "d2c89c1dfb02fb15c14a37968d54f48198b489851c6adcef1501485e0893b9a4"
+      "sha256": "a023895664d59e96c638382013d9b7d74029fef085c825208b2009dbf08f90f2"
     },
     {
       "id": "aws-oidc-read-only-role-template",
@@ -105,7 +105,7 @@
       "id": "aws-preflight-library",
       "path": "src/cloud/aws-gate2-preflight.js",
       "role": "FAIL_CLOSED_COST_POLICY",
-      "sha256": "840672cf9622cbe90c0490b4eb2c90bf8d363baabbf8f579cc83b7384ad1fa61"
+      "sha256": "967d0a979164f95ec9f88c1863d36e36f82d4e86ce695575fd92fa73f0c2f915"
     },
     {
       "id": "aws-preflight-runner",

@@ -520,10 +520,16 @@ verify registrar billing or renewal settings.
 The budget read explicitly requests modern `FilterExpression` visibility.
 Absence of that request is not equivalent evidence because AWS can otherwise
 omit modern service, tag, region, or linked-account filters from the response.
-The bootstrap uses AWS's documented account-wide cost-budget defaults; the
-preflight accepts either an omitted `CostTypes` response or the exact complete
-default object, whose nonblended, nonamortized settings bind the
-`UnblendedCost` basis. Any custom cost-type value or partial object fails.
+The bootstrap uses AWS's documented account-wide cost-budget defaults. The
+preflight accepts `Metrics` only when it is omitted or the exact one-element
+array `["UnblendedCost"]`; empty, multi-value, differently cased, aliased, or
+other metric representations fail. It independently accepts `CostTypes` only
+when omitted or equal to the exact complete default object, whose nonblended,
+nonamortized settings agree with the `UnblendedCost` basis. The v6 receipt's
+`costBasis` is this normalized validated semantic basis, and
+`defaultCostTypes` records that `CostTypes` were absent or exact defaults;
+neither field claims which provider wire representation was returned. Any
+custom or partial cost-type value still fails.
 The sanitized manual console observation and its mandatory stop are recorded
 in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 

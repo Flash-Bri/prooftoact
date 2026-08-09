@@ -191,7 +191,7 @@ const EXACT_PREFLIGHT_PROCESS_FAILURES = Object.freeze([
 const EXPECTED_UNDERLYING_PREFLIGHT_RUNNER_SHA256 =
   "394518ba0b4f55061b668042c35eb3c18d2d4cf36915619d3e29be646e76e2b2";
 const EXPECTED_UNDERLYING_PREFLIGHT_VALIDATOR_SHA256 =
-  "840672cf9622cbe90c0490b4eb2c90bf8d363baabbf8f579cc83b7384ad1fa61";
+  "967d0a979164f95ec9f88c1863d36e36f82d4e86ce695575fd92fa73f0c2f915";
 const EXPECTED_ACTIONS_CHECKOUT_NORMALIZER_SHA256 =
   "fbe8c57b9aa166c70d16a558160d1e47373de30b8e1bda9fd537c6fbe57c8ad6";
 
@@ -1513,6 +1513,11 @@ export function validateUnderlyingPreflight(
     [
       "AWS_GATE2_PREFLIGHT_CONTROL_FAILURES",
       "AWS_GATE2_PREFLIGHT_BUDGET_FAILURES",
+      "function hasExpectedBudgetMetrics(value)",
+      "value.length === 1",
+      "value[0] === EXPECTED_BUDGET_COST_BASIS",
+      "hasExpectedBudgetMetrics(budget?.Metrics)",
+      "hasExpectedCostTypes(budget?.CostTypes)",
       "class AwsGate2PreflightControlFailure extends Error",
       "createAwsGate2PreflightBudgetFailure(index, invocationToken)",
       "AWS_GATE2_PREFLIGHT_BUDGET_FAILURE_STATE = new WeakMap()",
