@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   AWS_GATE2_PREFLIGHT_BUDGET_FAILURES,
   AWS_GATE2_PREFLIGHT_CONTROL_FAILURES,
+  AWS_GATE2_PREFLIGHT_COST_FAILURES,
   AWS_GATE2_PREFLIGHT_DEFAULTS,
   AwsGate2PreflightControlFailure,
   awsBudgetDescribeArguments,
@@ -17,6 +18,7 @@ import {
   AWS_GATE2_PREFLIGHT_RUNTIME_CALL_INVENTORY,
   AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES,
   AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES,
+  AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES,
   AWS_GATE2_PREFLIGHT_RUNTIME_FAILURES,
   AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES,
   assertAwsPreflightParentEnvironment,
@@ -1123,9 +1125,14 @@ test("AWS preflight validation diagnostics identify every fixed control domain",
     },
     {
       index: 6,
-      rawCode: "CURRENT_COST_PERIOD_START",
+      rawCode: "SECRET_COST_CONTROL_FAILURE",
       mutate(snapshot) {
-        snapshot.currentCost.periodStart = "2026-06-01";
+        Object.defineProperty(snapshot, "currentCost", {
+          configurable: true,
+          get() {
+            throw new Error("SECRET_COST_CONTROL_FAILURE");
+          }
+        });
       }
     },
     {
@@ -1343,6 +1350,311 @@ test("AWS preflight budget diagnostics identify all fixed semantic predicates", 
       /private|AmortizedCost|UnblendedCost|13\.14|2088/u
     );
   }
+});
+
+test("AWS preflight cost diagnostics identify all fixed semantic predicates", () => {
+  const replaceNumberToFixed = (replacement) => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      Number.prototype,
+      "toFixed"
+    );
+    Object.defineProperty(Number.prototype, "toFixed", {
+      ...descriptor,
+      value() {
+        return replacement;
+      }
+    });
+    return () =>
+      Object.defineProperty(Number.prototype, "toFixed", descriptor);
+  };
+  const replaceObservedAtOnThirdRead = (snapshot, replacement) => {
+    const observedAt = snapshot.observedAt;
+    let reads = 0;
+    Object.defineProperty(snapshot, "observedAt", {
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 3 ? replacement : observedAt;
+      }
+    });
+  };
+  const cases = [
+    ["CURRENT_COST_OBSERVED_AT", (s) => {
+      replaceObservedAtOnThirdRead(s, "invalid");
+    }],
+    ["CURRENT_COST_OBSERVED_AT_WINDOW", (s) => {
+      replaceObservedAtOnThirdRead(s, "2026-06-30T12:00:00.000Z");
+    }],
+    ["CURRENT_COST_PERIOD_START", (s) => {
+      s.currentCost.periodStart = "2026-06-01";
+    }],
+    ["CURRENT_COST_PERIOD_END", (s) => {
+      s.currentCost.periodEndExclusive = "2026-07-30";
+    }],
+    ["CURRENT_COST_NEXT_PAGE_TOKEN", (s) => {
+      s.currentCost.response.NextPageToken = "";
+    }],
+    ["CURRENT_COST_ROWS", (s) => {
+      s.currentCost.response.ResultsByTime = [];
+    }],
+    ["CURRENT_COST_ROW_PERIOD", (s) => {
+      s.currentCost.response.ResultsByTime[0].TimePeriod.End =
+        "2026-07-30";
+    }],
+    ["CURRENT_COST_UNBLENDED_UNIT", (s) => {
+      s.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Unit = "EUR";
+    }],
+    ["CURRENT_COST_UNBLENDED_AMOUNT", (s) => {
+      s.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Amount = "invalid";
+    }],
+    ["CURRENT_COST_UNBLENDED_NEGATIVE", (s) => {
+      s.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Amount = "-1";
+    }],
+    ["CURRENT_COST_UNBLENDED_DECIMAL", (s) => {
+      s.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Amount = "1e-7";
+    }],
+    ["CURRENT_COST_UNBLENDED_RANGE", (s) => {
+      s.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Amount = "9007199255";
+    }],
+    ["CURRENT_COST_UNBLENDED_TOTAL_RANGE", (s) => {
+      s.observedAt = "2026-08-31T12:00:00.000Z";
+      s.currentCost.periodEndExclusive = "2026-09-01";
+      s.currentCost.response.ResultsByTime = [
+        {
+          TimePeriod: { Start: "2026-07-01", End: "2026-08-01" },
+          Estimated: false,
+          Total: {
+            UnblendedCost: { Amount: "9007199254", Unit: "USD" }
+          }
+        },
+        {
+          TimePeriod: { Start: "2026-08-01", End: "2026-09-01" },
+          Estimated: true,
+          Total: {
+            UnblendedCost: { Amount: "9007199254", Unit: "USD" }
+          }
+        }
+      ];
+    }],
+    ["CURRENT_COST_CEILING_DECIMAL", () =>
+      replaceNumberToFixed("invalid")],
+    ["CURRENT_COST_CEILING_RANGE", () =>
+      replaceNumberToFixed("9007199255")],
+    ["CURRENT_COST_CEILING", (s) => {
+      s.currentCost.response.ResultsByTime[0]
+        .Total.UnblendedCost.Amount = "13.14";
+    }]
+  ];
+
+  const capture = (mutate, options = undefined) => {
+    const snapshot = validSnapshot();
+    const cleanup = mutate(snapshot) ?? (() => {});
+    try {
+      validateAwsGate2Preflight(snapshot, options);
+    } catch (error) {
+      return error;
+    } finally {
+      cleanup();
+    }
+    assert.fail("expected cost validation failure");
+  };
+
+  assert.equal(cases.length, AWS_GATE2_PREFLIGHT_COST_FAILURES.length);
+  assert.equal(
+    cases.length,
+    AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES.length
+  );
+  assert.deepEqual(
+    AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES.map(
+      ({ exitCode }) => exitCode
+    ),
+    [57, 58, ...Array.from({ length: 14 }, (_, index) => 110 + index)]
+  );
+  assert.equal(
+    AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES.some(
+      ({ exitCode }) => exitCode >= 124
+    ),
+    false
+  );
+  for (const [index, [rawCode, mutate]] of cases.entries()) {
+    const rawFailure = capture(mutate);
+    assert(rawFailure instanceof Error);
+    assert.equal(rawFailure.name, "Error");
+    assert.equal(rawFailure.message, rawCode);
+
+    const diagnosticContext =
+      createAwsGate2PreflightDiagnosticContext();
+    const failure = capture(mutate, {
+      diagnosticFailureMode: true,
+      diagnosticContext
+    });
+    assert(failure instanceof Error);
+    assert.equal(failure.name, "AwsGate2PreflightCostFailure");
+    assert.equal(failure.message, "AWS_GATE2_PREFLIGHT_COST_FAILURE");
+    assert.equal(Object.isFrozen(failure), true);
+    assert.equal(Object.hasOwn(failure, "index"), false);
+    assert.equal(
+      AWS_GATE2_PREFLIGHT_COST_FAILURES[index],
+      AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES[index].stage
+    );
+    assert.deepEqual(
+      awsPreflightRuntimeFailureDescriptor(failure, diagnosticContext),
+      AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES[index]
+    );
+    assert.deepEqual(
+      awsPreflightRuntimeFailureDescriptor(failure, diagnosticContext),
+      { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+    );
+    assert.doesNotMatch(String(failure), new RegExp(rawCode));
+    assert.doesNotMatch(
+      String(failure),
+      /2026|13\.14|9007199255|EUR|invalid|UnblendedCost/u
+    );
+  }
+});
+
+test("AWS preflight cost diagnostics reject forgery, replay, and cross-domain injection", () => {
+  const snapshot = validSnapshot();
+  snapshot.currentCost.response.ResultsByTime[0]
+    .Total.UnblendedCost.Amount = "1e-7";
+  const diagnosticContext = createAwsGate2PreflightDiagnosticContext();
+  let original;
+  try {
+    validateAwsGate2Preflight(snapshot, {
+      diagnosticFailureMode: true,
+      diagnosticContext
+    });
+  } catch (error) {
+    original = error;
+  }
+  assert(original instanceof Error);
+  assert.equal(Object.isFrozen(original), true);
+  assert.equal(Object.hasOwn(original, "index"), false);
+  assert.throws(
+    () => Object.defineProperty(original, "index", { value: 15 }),
+    TypeError
+  );
+
+  const LeakedErrorConstructor = original.constructor;
+  const constructorForgery = new LeakedErrorConstructor(
+    "AWS_GATE2_PREFLIGHT_COST_FAILURE"
+  );
+  if (Object.isExtensible(constructorForgery)) {
+    Object.assign(constructorForgery, {
+      name: "AwsGate2PreflightCostFailure",
+      index: 15
+    });
+  }
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      constructorForgery,
+      diagnosticContext
+    ),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+
+  const forged = Object.assign(new Error("PRIVATE_FORGED_FAILURE"), {
+    name: "AwsGate2PreflightCostFailure",
+    index: 15
+  });
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(forged, diagnosticContext),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+
+  const injectedSnapshot = validSnapshot();
+  Object.defineProperty(injectedSnapshot, "currentCost", {
+    configurable: true,
+    get() {
+      throw original;
+    }
+  });
+  const injectedContext = createAwsGate2PreflightDiagnosticContext();
+  let injectedFailure;
+  try {
+    validateAwsGate2Preflight(injectedSnapshot, {
+      diagnosticFailureMode: true,
+      diagnosticContext: injectedContext
+    });
+  } catch (error) {
+    injectedFailure = error;
+  }
+  assert(injectedFailure instanceof AwsGate2PreflightControlFailure);
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      injectedFailure,
+      injectedContext
+    ),
+    AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES[6]
+  );
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(original, injectedContext),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(original, diagnosticContext),
+    AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES[10]
+  );
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(original, diagnosticContext),
+    { stage: "UNCLASSIFIED_CAUGHT", exitCode: 85 }
+  );
+
+  const wrongDomainSnapshot = validSnapshot();
+  Object.defineProperty(wrongDomainSnapshot.budget, "BudgetType", {
+    configurable: true,
+    get() {
+      throw original;
+    }
+  });
+  const wrongDomainContext = createAwsGate2PreflightDiagnosticContext();
+  let wrongDomainFailure;
+  try {
+    validateAwsGate2Preflight(wrongDomainSnapshot, {
+      diagnosticFailureMode: true,
+      diagnosticContext: wrongDomainContext
+    });
+  } catch (error) {
+    wrongDomainFailure = error;
+  }
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(
+      wrongDomainFailure,
+      wrongDomainContext
+    ),
+    AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES[1]
+  );
+});
+
+test("AWS preflight cost diagnostics retain the broad unexpected-error fallback", () => {
+  const snapshot = validSnapshot();
+  Object.defineProperty(snapshot.currentCost.response, "ResultsByTime", {
+    configurable: true,
+    get() {
+      throw new Error("SECRET_UNEXPECTED_COST_FAILURE");
+    }
+  });
+  const diagnosticContext = createAwsGate2PreflightDiagnosticContext();
+  let failure;
+  try {
+    validateAwsGate2Preflight(snapshot, {
+      diagnosticFailureMode: true,
+      diagnosticContext
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert(failure instanceof AwsGate2PreflightControlFailure);
+  assert.deepEqual(
+    awsPreflightRuntimeFailureDescriptor(failure, diagnosticContext),
+    AWS_GATE2_PREFLIGHT_RUNTIME_CONTROL_FAILURES[6]
+  );
+  assert.doesNotMatch(String(failure), /SECRET_UNEXPECTED_COST_FAILURE/u);
 });
 
 test("AWS preflight budget diagnostics reject forgery, replay, and cross-invocation injection", () => {

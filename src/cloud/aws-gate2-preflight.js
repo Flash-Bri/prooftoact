@@ -110,6 +110,25 @@ export const AWS_GATE2_PREFLIGHT_BUDGET_FAILURES = Object.freeze([
   "VALIDATE_BUDGET_ACTUAL_SPEND_CEILING"
 ]);
 
+export const AWS_GATE2_PREFLIGHT_COST_FAILURES = Object.freeze([
+  "VALIDATE_COST_OBSERVED_AT",
+  "VALIDATE_COST_OBSERVED_AT_WINDOW",
+  "VALIDATE_COST_PERIOD_START",
+  "VALIDATE_COST_PERIOD_END",
+  "VALIDATE_COST_RESPONSE_UNPAGINATED",
+  "VALIDATE_COST_ROWS",
+  "VALIDATE_COST_ROW_PERIOD",
+  "VALIDATE_COST_UNBLENDED_UNIT",
+  "VALIDATE_COST_UNBLENDED_AMOUNT_FORMAT",
+  "VALIDATE_COST_UNBLENDED_NONNEGATIVE",
+  "VALIDATE_COST_UNBLENDED_DECIMAL_FORMAT",
+  "VALIDATE_COST_UNBLENDED_RANGE",
+  "VALIDATE_COST_UNBLENDED_TOTAL_RANGE",
+  "VALIDATE_COST_CEILING_DECIMAL_FORMAT",
+  "VALIDATE_COST_CEILING_RANGE",
+  "VALIDATE_COST_CEILING"
+]);
+
 export class AwsGate2PreflightControlFailure extends Error {
   constructor(index) {
     super("AWS_GATE2_PREFLIGHT_CONTROL_FAILURE");
@@ -119,6 +138,7 @@ export class AwsGate2PreflightControlFailure extends Error {
 }
 
 const AWS_GATE2_PREFLIGHT_BUDGET_FAILURE_STATE = new WeakMap();
+const AWS_GATE2_PREFLIGHT_COST_FAILURE_STATE = new WeakMap();
 const AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE = new WeakMap();
 
 export function createAwsGate2PreflightDiagnosticContext() {
@@ -173,6 +193,21 @@ function budgetFailureMatches(error, invocationToken) {
   return state?.invocationToken === invocationToken && !state.consumed;
 }
 
+function createAwsGate2PreflightCostFailure(index, invocationToken) {
+  const error = new Error("AWS_GATE2_PREFLIGHT_COST_FAILURE");
+  error.name = "AwsGate2PreflightCostFailure";
+  AWS_GATE2_PREFLIGHT_COST_FAILURE_STATE.set(
+    error,
+    Object.freeze({ index, invocationToken, consumed: false })
+  );
+  return Object.freeze(error);
+}
+
+function costFailureMatches(error, invocationToken) {
+  const state = AWS_GATE2_PREFLIGHT_COST_FAILURE_STATE.get(error);
+  return state?.invocationToken === invocationToken && !state.consumed;
+}
+
 export function consumeAwsGate2PreflightBudgetFailure(
   error,
   diagnosticContext
@@ -201,6 +236,34 @@ export function consumeAwsGate2PreflightBudgetFailure(
   return state.index;
 }
 
+export function consumeAwsGate2PreflightCostFailure(
+  error,
+  diagnosticContext
+) {
+  const state = AWS_GATE2_PREFLIGHT_COST_FAILURE_STATE.get(error);
+  if (
+    AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.get(
+      diagnosticContext
+    ) !== "settled" ||
+    !state ||
+    state.consumed ||
+    state.invocationToken !== diagnosticContext ||
+    !Number.isSafeInteger(state.index) ||
+    typeof AWS_GATE2_PREFLIGHT_COST_FAILURES[state.index] !== "string"
+  ) {
+    return null;
+  }
+  AWS_GATE2_PREFLIGHT_COST_FAILURE_STATE.set(
+    error,
+    Object.freeze({ ...state, consumed: true })
+  );
+  AWS_GATE2_PREFLIGHT_DIAGNOSTIC_CONTEXT_STATE.set(
+    diagnosticContext,
+    "consumed"
+  );
+  return state.index;
+}
+
 function validateControl(
   index,
   operation,
@@ -219,7 +282,8 @@ function validateControl(
   } catch (error) {
     if (
       error instanceof AwsGate2PreflightControlFailure ||
-      budgetFailureMatches(error, invocationToken)
+      budgetFailureMatches(error, invocationToken) ||
+      costFailureMatches(error, invocationToken)
     ) {
       throw error;
     }
@@ -227,6 +291,35 @@ function validateControl(
       throw error;
     }
     throw new AwsGate2PreflightControlFailure(index);
+  }
+}
+
+function validateCostPredicate(
+  index,
+  operation,
+  diagnosticFailureMode,
+  invocationToken
+) {
+  if (
+    !Number.isSafeInteger(index) ||
+    typeof AWS_GATE2_PREFLIGHT_COST_FAILURES[index] !== "string" ||
+    typeof operation !== "function"
+  ) {
+    throw new AwsGate2PreflightControlFailure(6);
+  }
+  try {
+    return operation();
+  } catch (error) {
+    if (costFailureMatches(error, invocationToken)) {
+      throw error;
+    }
+    if (diagnosticFailureMode !== true) {
+      throw error;
+    }
+    throw createAwsGate2PreflightCostFailure(
+      index,
+      invocationToken
+    );
   }
 }
 
@@ -360,25 +453,37 @@ function isoDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
-export function awsCostExplorerPeriod(observedAt) {
-  const now = new Date(observedAt);
-  requireCondition(
-    Number.isFinite(now.getTime()),
-    "CURRENT_COST_OBSERVED_AT"
-  );
+function awsCostExplorerPeriodWithValidation(observedAt, check) {
+  const now = check(0, () => {
+    const parsed = new Date(observedAt);
+    requireCondition(
+      Number.isFinite(parsed.getTime()),
+      "CURRENT_COST_OBSERVED_AT"
+    );
+    return parsed;
+  });
   const end = new Date(Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate() + 1
   ));
-  requireCondition(
-    PROJECT_COST_WINDOW_START < isoDate(end),
-    "CURRENT_COST_OBSERVED_AT_WINDOW"
+  check(1, () =>
+    requireCondition(
+      PROJECT_COST_WINDOW_START < isoDate(end),
+      "CURRENT_COST_OBSERVED_AT_WINDOW"
+    )
   );
   return {
     periodStart: PROJECT_COST_WINDOW_START,
     periodEndExclusive: isoDate(end)
   };
+}
+
+export function awsCostExplorerPeriod(observedAt) {
+  return awsCostExplorerPeriodWithValidation(
+    observedAt,
+    (_index, operation) => operation()
+  );
 }
 
 export function awsBudgetDescribeArguments(accountId, budgetName) {
@@ -581,25 +686,77 @@ function validateArtifactBucket(bucket, bucketName) {
   };
 }
 
-function validateCost(cost, ceilingUsd, expectedPeriod) {
-  requireCondition(
-    cost?.periodStart === expectedPeriod.periodStart,
-    "CURRENT_COST_PERIOD_START"
+function costDecimalMicros(
+  value,
+  code,
+  check,
+  decimalIndex,
+  rangeIndex
+) {
+  const text = typeof value === "string" ? value : String(value);
+  const match = check(decimalIndex, () => {
+    const parsed = /^(\d+)(?:\.(\d+))?$/.exec(text);
+    requireCondition(parsed, `${code}_DECIMAL`);
+    return parsed;
+  });
+  const fraction = match[2] ?? "";
+  let micros =
+    (BigInt(match[1]) * BigInt(USD_MICROS)) +
+    BigInt(`${fraction}000000`.slice(0, 6));
+  if (/[1-9]/.test(fraction.slice(6))) {
+    micros += 1n;
+  }
+  check(rangeIndex, () =>
+    requireCondition(
+      micros <= BigInt(Number.MAX_SAFE_INTEGER),
+      `${code}_RANGE`
+    )
   );
-  requireCondition(
-    cost?.periodEndExclusive ===
-      expectedPeriod.periodEndExclusive,
-    "CURRENT_COST_PERIOD_END"
+  return Number(micros);
+}
+
+function validateCost(
+  cost,
+  ceilingUsd,
+  observedAt,
+  diagnosticFailureMode,
+  invocationToken
+) {
+  const check = (index, operation) =>
+    validateCostPredicate(
+      index,
+      operation,
+      diagnosticFailureMode,
+      invocationToken
+    );
+  const expectedPeriod = awsCostExplorerPeriodWithValidation(
+    observedAt,
+    check
   );
-  requireCondition(
-    cost?.response &&
-      typeof cost.response === "object" &&
-      !Array.isArray(cost.response) &&
-      !Object.prototype.hasOwnProperty.call(
-        cost.response,
-        "NextPageToken"
-      ),
-    "CURRENT_COST_NEXT_PAGE_TOKEN"
+  check(2, () =>
+    requireCondition(
+      cost?.periodStart === expectedPeriod.periodStart,
+      "CURRENT_COST_PERIOD_START"
+    )
+  );
+  check(3, () =>
+    requireCondition(
+      cost?.periodEndExclusive ===
+        expectedPeriod.periodEndExclusive,
+      "CURRENT_COST_PERIOD_END"
+    )
+  );
+  check(4, () =>
+    requireCondition(
+      cost?.response &&
+        typeof cost.response === "object" &&
+        !Array.isArray(cost.response) &&
+        !Object.prototype.hasOwnProperty.call(
+          cost.response,
+          "NextPageToken"
+        ),
+      "CURRENT_COST_NEXT_PAGE_TOKEN"
+    )
   );
   const rows = asArray(cost?.response?.ResultsByTime);
   const expectedRows = [];
@@ -620,36 +777,73 @@ function validateCost(cost, ceilingUsd, expectedPeriod) {
     });
     cursor = rowEnd;
   }
-  requireCondition(
-    rows.length === expectedRows.length,
-    "CURRENT_COST_ROWS"
+  check(5, () =>
+    requireCondition(
+      rows.length === expectedRows.length,
+      "CURRENT_COST_ROWS"
+    )
   );
 
   let totalMicros = 0;
   let estimated = false;
   for (const [index, row] of rows.entries()) {
-    requireCondition(
-      row?.TimePeriod?.Start ===
-        expectedRows[index].periodStart &&
-        row?.TimePeriod?.End ===
-          expectedRows[index].periodEndExclusive,
-      "CURRENT_COST_ROW_PERIOD"
+    check(6, () =>
+      requireCondition(
+        row?.TimePeriod?.Start ===
+          expectedRows[index].periodStart &&
+          row?.TimePeriod?.End ===
+            expectedRows[index].periodEndExclusive,
+        "CURRENT_COST_ROW_PERIOD"
+      )
     );
     const unblendedCost = row?.Total?.UnblendedCost;
-    moneyAmount(unblendedCost, "CURRENT_COST_UNBLENDED");
-    totalMicros += conservativeUsdMicros(
-      unblendedCost?.Amount,
-      "CURRENT_COST_UNBLENDED"
+    check(7, () =>
+      requireCondition(
+        unblendedCost?.Unit === "USD",
+        "CURRENT_COST_UNBLENDED_UNIT"
+      )
     );
-    requireCondition(
-      Number.isSafeInteger(totalMicros),
-      "CURRENT_COST_UNBLENDED_TOTAL_RANGE"
+    const amount = check(8, () => {
+      const parsed = Number(unblendedCost?.Amount);
+      requireCondition(
+        Number.isFinite(parsed),
+        "CURRENT_COST_UNBLENDED_AMOUNT"
+      );
+      return parsed;
+    });
+    check(9, () =>
+      requireCondition(
+        amount >= 0,
+        "CURRENT_COST_UNBLENDED_NEGATIVE"
+      )
+    );
+    totalMicros += costDecimalMicros(
+      unblendedCost?.Amount,
+      "CURRENT_COST_UNBLENDED",
+      check,
+      10,
+      11
+    );
+    check(12, () =>
+      requireCondition(
+        Number.isSafeInteger(totalMicros),
+        "CURRENT_COST_UNBLENDED_TOTAL_RANGE"
+      )
     );
     estimated ||= row?.Estimated === true;
   }
-  requireCondition(
-    totalMicros < usdMicrosForConstant(ceilingUsd, "CURRENT_COST_CEILING"),
-    "CURRENT_COST_CEILING"
+  const ceilingMicros = costDecimalMicros(
+    ceilingUsd.toFixed(6),
+    "CURRENT_COST_CEILING",
+    check,
+    13,
+    14
+  );
+  check(15, () =>
+    requireCondition(
+      totalMicros < ceilingMicros,
+      "CURRENT_COST_CEILING"
+    )
   );
 
   return {
@@ -1000,7 +1194,9 @@ export function validateAwsGate2Preflight(
     validateCost(
       snapshot?.currentCost,
       effectiveAwsSpendCeilingUsd,
-      awsCostExplorerPeriod(snapshot.observedAt)
+      snapshot.observedAt,
+      diagnosticFailureMode,
+      diagnosticInvocationToken
     )
   );
   const exposure = validate(7, () => {

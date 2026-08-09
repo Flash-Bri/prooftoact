@@ -5,11 +5,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   AWS_GATE2_PREFLIGHT_BUDGET_FAILURES,
   AWS_GATE2_PREFLIGHT_CONTROL_FAILURES,
+  AWS_GATE2_PREFLIGHT_COST_FAILURES,
   AWS_GATE2_PREFLIGHT_DEFAULTS,
   AwsGate2PreflightControlFailure,
   awsBudgetDescribeArguments,
   awsCostExplorerPeriod,
   consumeAwsGate2PreflightBudgetFailure,
+  consumeAwsGate2PreflightCostFailure,
   createAwsGate2PreflightDiagnosticContext,
   validateAwsGate2PreflightIdentityExpectation,
   validateAwsGate2Preflight
@@ -294,6 +296,52 @@ export const AWS_GATE2_PREFLIGHT_RUNTIME_BUDGET_FAILURES = Object.freeze([
   })
 ]);
 
+export const AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES = Object.freeze([
+  Object.freeze({ stage: "VALIDATE_COST_OBSERVED_AT", exitCode: 57 }),
+  Object.freeze({
+    stage: "VALIDATE_COST_OBSERVED_AT_WINDOW",
+    exitCode: 58
+  }),
+  Object.freeze({ stage: "VALIDATE_COST_PERIOD_START", exitCode: 110 }),
+  Object.freeze({ stage: "VALIDATE_COST_PERIOD_END", exitCode: 111 }),
+  Object.freeze({
+    stage: "VALIDATE_COST_RESPONSE_UNPAGINATED",
+    exitCode: 112
+  }),
+  Object.freeze({ stage: "VALIDATE_COST_ROWS", exitCode: 113 }),
+  Object.freeze({ stage: "VALIDATE_COST_ROW_PERIOD", exitCode: 114 }),
+  Object.freeze({
+    stage: "VALIDATE_COST_UNBLENDED_UNIT",
+    exitCode: 115
+  }),
+  Object.freeze({
+    stage: "VALIDATE_COST_UNBLENDED_AMOUNT_FORMAT",
+    exitCode: 116
+  }),
+  Object.freeze({
+    stage: "VALIDATE_COST_UNBLENDED_NONNEGATIVE",
+    exitCode: 117
+  }),
+  Object.freeze({
+    stage: "VALIDATE_COST_UNBLENDED_DECIMAL_FORMAT",
+    exitCode: 118
+  }),
+  Object.freeze({
+    stage: "VALIDATE_COST_UNBLENDED_RANGE",
+    exitCode: 119
+  }),
+  Object.freeze({
+    stage: "VALIDATE_COST_UNBLENDED_TOTAL_RANGE",
+    exitCode: 120
+  }),
+  Object.freeze({
+    stage: "VALIDATE_COST_CEILING_DECIMAL_FORMAT",
+    exitCode: 121
+  }),
+  Object.freeze({ stage: "VALIDATE_COST_CEILING_RANGE", exitCode: 122 }),
+  Object.freeze({ stage: "VALIDATE_COST_CEILING", exitCode: 123 })
+]);
+
 class AwsPreflightRuntimeReadFailure extends Error {
   constructor(index) {
     super("AWS_RUNTIME_READ_FAILURE");
@@ -348,6 +396,19 @@ export function awsPreflightRuntimeFailureDescriptor(
     if (
       descriptor?.stage ===
       AWS_GATE2_PREFLIGHT_BUDGET_FAILURES[budgetFailureIndex]
+    ) {
+      return descriptor;
+    }
+    return AWS_GATE2_PREFLIGHT_RUNTIME_PHASE_FAILURES[15];
+  }
+  const costFailureIndex =
+    consumeAwsGate2PreflightCostFailure(error, diagnosticContext);
+  if (costFailureIndex !== null) {
+    const descriptor =
+      AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES[costFailureIndex];
+    if (
+      descriptor?.stage ===
+      AWS_GATE2_PREFLIGHT_COST_FAILURES[costFailureIndex]
     ) {
       return descriptor;
     }

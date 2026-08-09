@@ -109,13 +109,13 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "5351733537001be85d7336f315b0aebf7fdde5f85f0466d798aca477989ad797",
+      "sha256": "139e3cb71074c782e6d96ded23e4fc08131d4568e1e934678ffdcfd9f02d075c",
       "kind": "boundary-ledger"
     },
     {
       "id": "aws-oidc-read-only-ledger",
       "path": "docs/AWS_OIDC_PREFLIGHT.md",
-      "sha256": "a023895664d59e96c638382013d9b7d74029fef085c825208b2009dbf08f90f2",
+      "sha256": "0a81df1f72503a8c584d8d92cb8aebb5c8d0f055d9f2b05730ffce1e1c58a7d2",
       "kind": "boundary-ledger"
     },
     {
@@ -127,19 +127,19 @@
     {
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
-      "sha256": "468944cfaaefd3b2883faa5232f77064198d2273d06cae48b2b296819a6bc23f",
+      "sha256": "8c5e1bde5c4104819500c0429f5028b367d61e27a4b04e9e2eb0d4aba1f64fc3",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-tests",
       "path": "test/aws-oidc-source-lane.test.js",
-      "sha256": "57e5ad3252787ca2bbe285a1e1d1e434d55175c02462bfe4f605a34fcbd5f204",
+      "sha256": "d8ebaf6038be3ef3938bc612927cf3e8b13174d380250166af02cbd8f82ab958",
       "kind": "verification-code"
     },
     {
       "id": "aws-oidc-read-only-source-verifier",
       "path": "scripts/verify-aws-oidc-preflight-source.js",
-      "sha256": "13fb6ae6e7d21d6f7167c8daa6b0a7551bff2286b88381f7dbe54eddf07044c4",
+      "sha256": "8b87e6e72aa1cbb4c003c4a9bf4d128f79d24942ec4a7cd39cc681dbd7c928ce",
       "kind": "verification-code"
     },
     {
@@ -151,7 +151,7 @@
     {
       "id": "aws-preflight-tests",
       "path": "test/aws-gate2-preflight.test.js",
-      "sha256": "edc32220472dcbf9ffcb2bcc5fc9eb5c7b6b321c5eed9aa097a5027ee6788f7e",
+      "sha256": "ca24b900a236fd94570f6455c166a03295b7de9c38abd1dcb2018f9af04a85e6",
       "kind": "verification-code"
     },
     {
@@ -511,7 +511,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "d4da39dbfe9427abdf427d8a6ec89975352f6906366ad6a44d55faf0685663b6",
+      "sha256": "4bbe8b89b80c5eaca0eaa6bac40f7416d595f056f0f75a5e6d2a519c8eefa17b",
       "kind": "boundary-ledger"
     },
     {
@@ -535,7 +535,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "fe84cf4897fdd2a9029901deedd569e2e0539884993155757389c0c6d091bcc1",
+      "sha256": "3b51e62727feb4a000d638fb2d6177a1eee3bc67fbde923aea49f71006a08a8e",
       "kind": "boundary-ledger"
     },
     {
@@ -643,13 +643,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "2eb23db133f73cdb50a6448a88036a1614a1464e586ae090a59ce40f5bc228fa",
+      "sha256": "0580218f20e4aac47963efef74cfc091ee25f192849a3904e72b5bae7584b96f",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "12da69846cd9d6c64474977d85b5b8b970b6365d6934a1c5c835a6117f1ad780",
+      "sha256": "be7f00e7118564e29b264e6d515854f79cd1fb0e0239eaea6f64d6d460da7f60",
       "kind": "boundary-ledger"
     },
     {
@@ -673,7 +673,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "4e576023f4f85a5ff0d544c4483eada68b7cef79e9ac2ea94cd1b35150758599",
+      "sha256": "b6b3d3e30a8aa78a1201087f03a059f0c0f76f6d1407bea15f77d23b64bf69f4",
       "kind": "boundary-ledger"
     },
     {

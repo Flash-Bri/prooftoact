@@ -410,8 +410,12 @@ execution, termination, uncaught process failure, and unclassified failure.
 The budget validation domain is further divided into 24 literal predicates
 covering identity, account-wide scope, fixed-model fields, cost basis,
 coverage period, limit shape/value, and actual-spend shape/ceiling. Those
-stages reveal only which invariant failed, never its observed value. The
-broad budget stage remains a fail-closed fallback for unexpected exceptions.
+stages reveal only which invariant failed, never its observed value. The Cost
+Explorer validation domain is likewise divided into 16 literal predicates
+covering its observation window, request period, unpaginated response and row
+shape, USD amount format and range, accumulated range, and effective ceiling.
+The broad budget and cost stages remain fail-closed fallbacks for unexpected
+exceptions.
 The nested runtime uses typed numeric failures and deliberately discards raw
 causes; the wrapper keeps child and provider stderr in owner-only temporary
 storage and never forwards it. Unknown, missing, reordered, or dynamic stages
@@ -659,6 +663,36 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
   source repair, independent review, and exact-main CI.
 - Claim impact: source may claim exact privacy-preserving budget predicate
   diagnosis, not successful budget acceptance or current account state.
+
+### Cost Explorer semantic failures lost their exact predicate
+
+- Root cause: the final-validation diagnostic map identified the Cost
+  Explorer control domain, but its observation-window, response, row, amount,
+  range, and ceiling predicates still shared one fixed stage. Because raw
+  provider data is deliberately destroyed after failure, the exact rejected
+  predicate could not be recovered.
+- Earliest detection: a protected run completes all 17 ordered reads, passes
+  source, bootstrap, budget, notification, stack-absence, and artifact-bucket
+  validation, then returns the broad `VALIDATE_COST` stage without an accepted
+  receipt.
+- Repair: preserve the broad stage as a fallback and add one invocation-bound
+  fixed failure for each of the 16 existing cost predicates. The child maps
+  those failures to literal non-signal exit codes; the parent never reads or
+  forwards provider values, messages, causes, or stderr.
+- Regression/preventive control: focused tests force all 16 predicates in
+  detailed local mode and privacy-preserving production mode. They also prove
+  single consumption, wrong-context and replay rejection, unchanged valid
+  receipt bytes, and broad fallback behavior. The source verifier binds the
+  maps, private ordinary-error factory, context lifecycle, child descriptor,
+  parent exit map, process-status separation, and adversarial mutations.
+- Residual risk: a predicate stage proves only which source invariant rejected
+  the response. It does not prove whether AWS data drifted or the invariant is
+  stale. Missing rows, sparse totals, signed amounts, or ceiling failures must
+  not be normalized or relaxed until a live fixed stage proves the case and a
+  separate narrow policy repair passes review.
+- Claim impact: source may claim exact privacy-preserving Cost Explorer
+  predicate diagnosis, not successful cost acceptance, a provider value, or
+  current account state.
 
 ### Repository-local Git metadata could falsify source binding
 
