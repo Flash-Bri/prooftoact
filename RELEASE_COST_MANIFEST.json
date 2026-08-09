@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
-  "reviewedOn": "2026-08-08",
+  "reviewedOn": "2026-08-09",
   "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
   "limits": {
     "awsBudgetLimitUsd": 15,
@@ -93,7 +93,7 @@
       "id": "aws-oidc-read-only-runner",
       "path": "scripts/run-aws-oidc-read-only-preflight.sh",
       "role": "BOUNDED_READ_ONLY_PREFLIGHT_EXECUTION",
-      "sha256": "ee732100d3fc8ee8c3f3362b1c38a951e4b6cb7d0c76c4c4cf7df82275cc2701"
+      "sha256": "fccf202c262b6a92d0b26ab6149cf7bd38ba9db3309e1cd589a86aae35c46953"
     },
     {
       "id": "aws-oidc-read-only-workflow",

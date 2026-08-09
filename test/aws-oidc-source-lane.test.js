@@ -488,12 +488,40 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       "AWS_READ_ONLY_STAGE_TEMPORARY_STATE",
       "AWS_READ_ONLY_STAGE_OIDC_REQUEST",
       "AWS_READ_ONLY_STAGE_OIDC_RECEIPT",
-      "AWS_READ_ONLY_STAGE_OIDC_CLAIMS"
+      "AWS_READ_ONLY_STAGE_OIDC_CLAIMS",
+      "AWS_READ_ONLY_STAGE_STS_ASSUME_REQUEST",
+      "AWS_READ_ONLY_STAGE_STS_ASSUME_RECEIPT",
+      "AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS",
+      "AWS_READ_ONLY_STAGE_REGION_REQUEST",
+      "AWS_READ_ONLY_STAGE_REGION_RECEIPT",
+      "AWS_READ_ONLY_STAGE_QUOTA_REQUEST",
+      "AWS_READ_ONLY_STAGE_QUOTA_RECEIPT",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_REQUEST",
+      "AWS_READ_ONLY_STAGE_ACCOUNT_PREFLIGHT_RECEIPT",
+      "AWS_READ_ONLY_STAGE_SANITIZED_RECEIPT",
+      "AWS_READ_ONLY_STAGE_PRIVACY_REDACTION",
+      "AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_PREPARE",
+      "AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION",
+      "AWS_READ_ONLY_STAGE_ENCRYPTED_RECEIPT",
+      "AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_CLEANUP",
+      "AWS_READ_ONLY_STAGE_SENSITIVE_CLEANUP"
     ]
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_REFERENCE_COUNT,
-    92
+    117
+  );
+  assert.equal(
+    sourceContract.EXPECTED_READ_ONLY_GENERIC_FAILURE_REFERENCE_COUNT,
+    2
+  );
+  assert.match(
+    sourceContract.EXPECTED_READ_ONLY_SENSITIVE_CLEANUP_FUNCTION_SHA256,
+    /^[0-9a-f]{64}$/u
+  );
+  assert.match(
+    sourceContract.EXPECTED_READ_ONLY_POST_DIAGNOSTIC_EXECUTION_SUFFIX_SHA256,
+    /^[0-9a-f]{64}$/u
   );
   assert.match(
     sourceContract.EXPECTED_READ_ONLY_FAILURE_STAGE_SEQUENCE_SHA256,
@@ -505,7 +533,7 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   );
   assert.equal(
     sourceContract.EXPECTED_READ_ONLY_OUTPUT_COMMAND_COUNT,
-    8
+    9
   );
   assert.match(
     sourceContract.EXPECTED_READ_ONLY_PRE_DIAGNOSTIC_PREFIX_SHA256,
@@ -568,8 +596,8 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
     () =>
       validateReadOnlyRunner(
         READ_ONLY_RUNNER.replace(
-          "AWS_READ_ONLY_STAGE_OIDC_CLAIMS) ;;",
-          "AWS_READ_ONLY_STAGE_OIDC_CLAIMS | \\\n+      AWS_READ_ONLY_STAGE_UNREVIEWED) ;;"
+          "AWS_READ_ONLY_STAGE_SENSITIVE_CLEANUP) ;;",
+          "AWS_READ_ONLY_STAGE_SENSITIVE_CLEANUP | \\\n      AWS_READ_ONLY_STAGE_UNREVIEWED) ;;"
         )
       ),
     /OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_ALLOWLIST/
@@ -581,6 +609,33 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
       ),
     /OIDC_READ_ONLY_RUNNER_FAILURE_STAGE_FUNCTION/
   );
+  assert.throws(
+    () => validateReadOnlyRunner(`${READ_ONLY_RUNNER}\nfalse || fail_closed\n`),
+    /OIDC_READ_ONLY_RUNNER_GENERIC_FAILURE_REFERENCES/
+  );
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace('/usr/bin/rm -f -- "$file"', "true")
+      ),
+    /OIDC_READ_ONLY_RUNNER_SENSITIVE_CLEANUP_FUNCTION/
+  );
+  for (const weakenedStderrRoute of [
+    '"$sts_response" 2>"$error_file")" || fail_closed_stage AWS_READ_ONLY_STAGE_STS_ASSUME_FIELDS',
+    '/usr/bin/rm -f -- "$encrypted_receipt" \\\n  2>"$error_file" || fail_closed_stage AWS_READ_ONLY_STAGE_RECEIPT_ENCRYPTION_PREPARE',
+    '"$sanitized_receipt" 2>"$error_file"; then'
+  ]) {
+    assert.throws(
+      () =>
+        validateReadOnlyRunner(
+          READ_ONLY_RUNNER.replace(
+            weakenedStderrRoute,
+            weakenedStderrRoute.replace('2>"$error_file"', "")
+          )
+        ),
+      /OIDC_READ_ONLY_RUNNER_POST_DIAGNOSTIC_EXECUTION_SUFFIX/
+    );
+  }
   assert.throws(
     () =>
       validateReadOnlyRunner(
@@ -611,13 +666,27 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
   }
   const diagnosticBlock =
     sourceContract.EXPECTED_READ_ONLY_DIAGNOSTIC_BLOCK;
+  assert.throws(
+    () =>
+      validateReadOnlyRunner(
+        READ_ONLY_RUNNER.replace(
+          `${diagnosticBlock}\n\n`,
+          `${diagnosticBlock}\n\ntrue\n`
+        )
+      ),
+    /OIDC_READ_ONLY_RUNNER_POST_DIAGNOSTIC_EXECUTION_SUFFIX/
+  );
+  assert.throws(
+    () => validateReadOnlyRunner(`${READ_ONLY_RUNNER}\ntrue\n`),
+    /OIDC_READ_ONLY_RUNNER_POST_DIAGNOSTIC_EXECUTION_SUFFIX/
+  );
   const movedDiagnostic = READ_ONLY_RUNNER.replace(
     `${diagnosticBlock}\n\n`,
     ""
   ).replace("unset oidc_now\n", `unset oidc_now\n\n${diagnosticBlock}\n`);
   assert.throws(
     () => validateReadOnlyRunner(movedDiagnostic),
-    /OIDC_READ_ONLY_RUNNER_DIAGNOSTIC_BOUNDARY/
+    /OIDC_READ_ONLY_RUNNER_(?:DIAGNOSTIC_BOUNDARY|POST_DIAGNOSTIC_EXECUTION_SUFFIX)/
   );
   const earlyDiagnostic = READ_ONLY_RUNNER.replace(
     `${diagnosticBlock}\n\n`,
@@ -737,8 +806,62 @@ test("read-only runner rejects direct mutation calls and shell tracing", () => {
         validateReadOnlyRunner(
           READ_ONLY_RUNNER.replace(requiredGpgControl, "")
         ),
-      /OIDC_READ_ONLY_(?:RUNNER_MARKERS|GPG_REFERENCES)/
+      /OIDC_READ_ONLY_(?:RUNNER_MARKERS|GPG_REFERENCES|RUNNER_SENSITIVE_CLEANUP_FUNCTION)/
     );
+  }
+});
+
+test("sensitive cleanup attempts later deletions after an earlier failure", () => {
+  const cleanupBlock = READ_ONLY_RUNNER.match(
+    /^cleanup_sensitive_files\(\) \{\n[\s\S]*?^\}$/mu
+  );
+  assert.ok(cleanupBlock);
+  const temporaryRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "prooftoact-sensitive-cleanup-")
+  );
+  const blockedDirectory = path.join(temporaryRoot, "blocked-directory");
+  const laterSensitiveFile = path.join(temporaryRoot, "later-secret");
+  fs.mkdirSync(blockedDirectory);
+  fs.writeFileSync(laterSensitiveFile, "synthetic-secret", { mode: 0o600 });
+  const shellSource = [
+    "set -euo pipefail",
+    "set +x",
+    `RUNNER_TEMP=${JSON.stringify(temporaryRoot)}`,
+    `oidc_response=${JSON.stringify(blockedDirectory)}`,
+    `oidc_token=${JSON.stringify(laterSensitiveFile)}`,
+    'oidc_header=""',
+    'oidc_payload=""',
+    'sts_response=""',
+    'region_status=""',
+    'quota_status=""',
+    'preflight_receipt=""',
+    'sanitized_receipt=""',
+    'passphrase_file=""',
+    'error_file=""',
+    'gnupg_home=""',
+    cleanupBlock[0].replaceAll(
+      "/usr/bin/rm",
+      process.platform === "linux" ? "/usr/bin/rm" : "/bin/rm"
+    ),
+    "trap cleanup_sensitive_files EXIT",
+    "exit 7"
+  ].join("\n");
+  try {
+    const result = spawnSync(
+      "/bin/bash",
+      ["--noprofile", "--norc", "-c", shellSource],
+      { encoding: "utf8" }
+    );
+    assert.equal(result.status, 7);
+    assert.equal(result.stdout, "");
+    assert.equal(
+      result.stderr,
+      "::error::AWS_READ_ONLY_STAGE_SENSITIVE_CLEANUP\n"
+    );
+    assert.equal(fs.existsSync(laterSensitiveFile), false);
+    assert.equal(fs.existsSync(blockedDirectory), true);
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }
 });
 
