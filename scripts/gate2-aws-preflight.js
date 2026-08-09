@@ -305,33 +305,33 @@ export const AWS_GATE2_PREFLIGHT_RUNTIME_COST_FAILURES = Object.freeze([
   Object.freeze({ stage: "VALIDATE_COST_PERIOD_START", exitCode: 110 }),
   Object.freeze({ stage: "VALIDATE_COST_PERIOD_END", exitCode: 111 }),
   Object.freeze({
-    stage: "VALIDATE_COST_RESPONSE_UNPAGINATED",
+    stage: "VALIDATE_COST_RESPONSE_GROUPED_UNPAGINATED",
     exitCode: 112
   }),
   Object.freeze({ stage: "VALIDATE_COST_ROWS", exitCode: 113 }),
   Object.freeze({ stage: "VALIDATE_COST_ROW_PERIOD", exitCode: 114 }),
   Object.freeze({
-    stage: "VALIDATE_COST_UNBLENDED_UNIT",
+    stage: "VALIDATE_COST_RECORD_TYPE_GROUPS",
     exitCode: 115
   }),
   Object.freeze({
-    stage: "VALIDATE_COST_UNBLENDED_AMOUNT_FORMAT",
+    stage: "VALIDATE_COST_RECORD_TYPE_SEMANTICS",
     exitCode: 116
   }),
   Object.freeze({
-    stage: "VALIDATE_COST_UNBLENDED_NONNEGATIVE",
+    stage: "VALIDATE_COST_RECORD_TYPE_UNBLENDED_UNIT",
     exitCode: 117
   }),
   Object.freeze({
-    stage: "VALIDATE_COST_UNBLENDED_DECIMAL_FORMAT",
+    stage: "VALIDATE_COST_RECORD_TYPE_SIGNED_DECIMAL_FORMAT",
     exitCode: 118
   }),
   Object.freeze({
-    stage: "VALIDATE_COST_UNBLENDED_RANGE",
+    stage: "VALIDATE_COST_RECORD_TYPE_SIGNED_RANGE",
     exitCode: 119
   }),
   Object.freeze({
-    stage: "VALIDATE_COST_UNBLENDED_TOTAL_RANGE",
+    stage: "VALIDATE_COST_POSITIVE_RECORD_TYPE_TOTAL_RANGE",
     exitCode: 120
   }),
   Object.freeze({
@@ -1020,6 +1020,8 @@ export function awsCostExplorerArguments(period) {
     "MONTHLY",
     "--metrics",
     "UnblendedCost",
+    "--group-by",
+    "Type=DIMENSION,Key=RECORD_TYPE",
     "--no-paginate"
   ];
 }

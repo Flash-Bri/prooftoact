@@ -73,7 +73,7 @@ const EXPECTED_UNAPPROVED_PURCHASE_CLASSES = Object.freeze([
 ]);
 
 const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
-  "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with current account-wide AWS spend plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
+  "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with the greater of budget-reported spend and conservative account-wide positive record-type exposure plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
   "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
   "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",
   "Final complete spend ledger plus teardown or explicitly approved keep-alive receipt after the judged keep-alive window."
@@ -669,6 +669,8 @@ function assertSourceContracts(sources) {
       "observed AWS + $0.02 < $13.14",
       "exactly `$13.12` fails",
       "maximum remains `$0.02` for each complete preflight",
+      "grouped exactly by `DIMENSION/RECORD_TYPE`",
+      "negativeOffsetsAppliedToExposure: false",
       "This source change grants",
       "no spend authority."
     ],
@@ -702,9 +704,11 @@ function assertSourceContracts(sources) {
       "--duration-seconds 900",
       "--max-results 1",
       "--no-paginate",
+      "positiveRecordTypeExposureUsd",
+      "negativeOffsetsAppliedToExposure",
       "--signal=KILL --kill-after=5s 180s",
       "scripts/gate2-aws-preflight.js",
-      'tideproof.gate2.aws-preflight.v6',
+      'tideproof.gate2.aws-preflight.v7',
       "approvedPreflightAllowanceUsd",
       "readOnlyAccountSafetyPreflight: true",
       "cannot authorize or prove upload, mutation, deployment"
@@ -732,7 +736,10 @@ function assertSourceContracts(sources) {
       "totalProjectExposureCeilingMicros",
       "PREFLIGHT_ALLOWANCE_AWS_CEILING",
       "PREFLIGHT_ALLOWANCE_TOTAL_EXPOSURE_CEILING",
-      'schemaVersion: "tideproof.gate2.aws-preflight.v6"',
+      "COST_RECORD_TYPES.includes(group.Keys[0])",
+      "positiveRecordTypeExposureUsd",
+      "negativeOffsetsAppliedToExposure: false",
+      'schemaVersion: "tideproof.gate2.aws-preflight.v7"',
       "registrarReceiptVerified: false",
       "autoRenewReportedEnabled: false",
       "state: \"ABSENT\"",
@@ -747,6 +754,8 @@ function assertSourceContracts(sources) {
       "runtimeCalls.assertComplete()",
       "get-caller-identity",
       "get-cost-and-usage",
+      '"--group-by"',
+      '"Type=DIMENSION,Key=RECORD_TYPE"',
       "describe-budget",
       "describe-stacks",
       "validateAwsGate2Preflight"
@@ -759,6 +768,8 @@ function assertSourceContracts(sources) {
       "preflightAllowanceMicros === 20_000n",
       "reservedAwsExposureMicros < effectiveAwsCeilingMicros",
       "reservedTotalExposureMicros < ceilingMicros",
+      'currentCost.groupedBy === "RECORD_TYPE"',
+      "currentCost.negativeOffsetsAppliedToExposure === false",
       "projectExposure.registrarReceiptVerified === false",
       "controls?.mainGateTwoStack?.state === \"ABSENT\"",
       "awsPreflight: preflight ? \"PASS\" : \"NOT_RUN\"",
