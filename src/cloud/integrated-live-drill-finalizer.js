@@ -238,12 +238,9 @@ export function validateIntegratedLiveDrillPacketAFinalization({
   const recoveryContinuityReceipt =
     validateIntegratedLiveDrillRecoveryContinuityJournal({
       authorization,
-      candidateReceipt,
       controlLedgerReceipt: ledger.controlLedgerReceipt,
       forbiddenRootPath,
-      ledgerRootPath,
-      mcpRequestSha256:
-        candidateReceipt.recovery.managedMcpRequestPayloadSha256
+      ledgerRootPath
     }, { allowAbsent: true });
   const evidenceDigests = validateIntegratedLiveDrillEvidenceSet(
     evidenceAttestations,

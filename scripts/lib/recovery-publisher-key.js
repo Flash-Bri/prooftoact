@@ -8,6 +8,7 @@ import {
 import {
   RECOVERY_PUBLISHER_VERSION,
   RECOVERY_SIGNATURE_ALGORITHM,
+  normalizedRecoveryBundleFor,
   recoverySignaturePayloadFor
 } from "../../src/cloud/recovery-store.js";
 import { trustedPublisherKeysDigest } from
@@ -168,18 +169,20 @@ export function createCommittedRecoveryPublisherSigner({
     sign(input) {
       const unsigned = {
         ...input,
+        authorityTransferred: false,
         publisherKeyId: trustRoot.publisherKeyId,
         publisherVersion: RECOVERY_PUBLISHER_VERSION,
+        requiresFreshAuthorization: true,
         signatureAlgorithm: RECOVERY_SIGNATURE_ALGORITHM
       };
-      return {
+      return normalizedRecoveryBundleFor({
         ...unsigned,
         sourceSignatureBase64: sign(
           "sha256",
           Buffer.from(recoverySignaturePayloadFor(unsigned), "utf8"),
           privateKey
         ).toString("base64")
-      };
+      });
     }
   });
 }

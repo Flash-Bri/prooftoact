@@ -77,14 +77,6 @@ import {
   INTEGRATED_LIVE_DRILL_PACKET_B_BLOCKER
 } from "../src/cloud/integrated-live-drill-finalizer.js";
 import {
-  runIntegratedLiveDrillRecoveryContinuityW1,
-  runIntegratedLiveDrillRecoveryContinuityW2,
-  runIntegratedLiveDrillRecoveryContinuityW3,
-  runIntegratedLiveDrillRecoveryContinuityW4,
-  runIntegratedLiveDrillRecoveryContinuityW5
-} from
-  "../src/cloud/integrated-live-drill-recovery-continuity.js";
-import {
   INTEGRATED_LIVE_DRILL_PACKET_A_INPUT_SCHEMA,
   INTEGRATED_LIVE_DRILL_PACKET_A_TRUSTED_CONTEXT_SCHEMA,
   loadIntegratedLiveDrillPacketAFinalizerTrustedContext,
@@ -1286,55 +1278,10 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
     ledger.controlLedgerReceipt.receiptSha256,
     receipt.costControl.authorizationControlLedgerReceiptSha256
   );
-  const recoveryContinuityContext = Object.freeze({
-    authorization,
-    candidateReceipt: receipt,
-    controlLedgerReceipt: ledger.controlLedgerReceipt,
-    forbiddenRootPath: fs.realpathSync(process.cwd()),
-    ledgerRootPath: launch.ledgerRootPath,
-    mcpRequestSha256:
-      receipt.recovery.managedMcpRequestPayloadSha256
-  });
-  let packetBMcpCalls = 0;
-  const packetBNow = Date.parse("2026-08-09T16:26:00.000Z");
-  runIntegratedLiveDrillRecoveryContinuityW1(
-    recoveryContinuityContext,
-    { now: packetBNow }
-  );
-  await runIntegratedLiveDrillRecoveryContinuityW2(
-    recoveryContinuityContext,
-    {
-      now: packetBNow,
-      mcpCall: async ({ mcpRequestSha256 }) => {
-        packetBMcpCalls += 1;
-        assert.equal(
-          mcpRequestSha256,
-          values.recovery.mcpProviderEvidence.rpcCalls[1]
-            .requestPayloadSha256
-        );
-        return Object.freeze({
-          mcpResultSha256: values.recovery.mcpResultSha256,
-          sessionCloseSha256: integratedLiveDrillCanonicalSha256(
-            values.recovery.mcpProviderEvidence.close
-          ),
-          sessionClosed: true
-        });
-      }
-    }
-  );
-  runIntegratedLiveDrillRecoveryContinuityW3(
-    recoveryContinuityContext,
-    { now: packetBNow }
-  );
-  runIntegratedLiveDrillRecoveryContinuityW4(
-    recoveryContinuityContext,
-    { now: packetBNow }
-  );
-  runIntegratedLiveDrillRecoveryContinuityW5(
-    recoveryContinuityContext,
-    { now: packetBNow }
-  );
-  assert.equal(packetBMcpCalls, 1);
+  // Packet B1 continuity is intentionally non-circular and must be created
+  // before the real recovery call. This orchestrator remains the existing
+  // post-call candidate path, so it must not fabricate a local continuity
+  // journal from the completed candidate.
   const deploymentAttestationPair = signedSyntheticDeploymentPair(launch);
   const subjects = integratedLiveDrillTypedEvidenceSubjects({
     authorization,
@@ -1485,23 +1432,23 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
   assert.equal(packetA.finalReleaseReady, false);
   assert.equal(packetA.providerBacked, false);
   assert.equal(packetA.liveProviderBoundW1W5ContinuityProven, false);
-  assert.equal(packetA.localSameHostScaffoldValidated, true);
+  assert.equal(packetA.localSameHostScaffoldValidated, false);
   assert.equal(
     packetA.status,
-    "PACKET_B_LOCAL_SAME_HOST_SCAFFOLD_VALIDATED_NON_ACCEPTING"
+    "PACKET_B_PROVIDER_ACCEPTANCE_PENDING"
   );
   assert.equal(
     packetA.recoveryContinuityDisposition,
-    "LOCAL_SAME_HOST_SCAFFOLD_VALIDATED"
+    "NOT_PROVEN"
   );
-  assert.match(packetA.recoveryContinuityJournalReceiptSha256, /^[0-9a-f]{64}$/u);
+  assert.equal(packetA.recoveryContinuityJournalReceiptSha256, null);
   assert.deepEqual(packetA.packetBBlockers, [
     INTEGRATED_LIVE_DRILL_PACKET_B_BLOCKER
   ]);
-  assert.match(packetA.claimBoundary, /Local same-host scaffold only/u);
+  assert.match(packetA.claimBoundary, /Packet B must independently prove/u);
   assert.match(
     packetA.claimBoundary,
-    /actual provider-bound W1-W5 continuity remains unproven/u
+    /durable exact-one Managed MCP behavior/u
   );
   assert.deepEqual(packetA.packetABoundaryBlockers, [
     "CROSS_HOST_STRONGLY_CONSISTENT_AUTHORIZATION_CLAIM_AUTHORITY_NOT_PROVEN"

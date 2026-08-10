@@ -8,15 +8,37 @@ import {
   INTEGRATED_LIVE_DRILL_RECOVERY_WORKERS,
   integratedLiveDrillAuthorizationAttestationDigest,
   integratedLiveDrillCanonicalSha256,
-  integratedLiveDrillSha256
+  integratedLiveDrillRunnerIdentityDigest,
+  integratedLiveDrillSha256,
+  validateIntegratedLiveDrillRunAuthorization,
+  verifyIntegratedLiveDrillEvidence
 } from "./integrated-live-drill-authorization.js";
+import {
+  validateIntegratedLiveDrillConsumedChildLaunch,
+  validateIntegratedLiveDrillConsumedControlLedger
+} from "./integrated-live-drill-control-ledger.js";
+import {
+  INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_ENVIRONMENT,
+  parseIntegratedLiveDrillChildAuthorization
+} from "./integrated-live-drill-child-authorization.js";
+import {
+  canonicalRecoveryAttempt,
+  normalizedRecoverySourceReceiptForContinuity,
+  recoveryBrokerConfigDigest,
+  recoveryQueryTemplateDigest,
+  recoverySourceBindingDigestFor,
+  renderRecoveryQuery,
+  validatePersistedRecoveryBundleForContinuity
+} from "./recovery-continuity-identity.js";
 
 export const INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_ENTRY_SCHEMA =
-  "tideproof.highwater-drill-recovery-continuity-journal-entry.v1";
+  "tideproof.highwater-drill-recovery-continuity-journal-entry.v2";
 export const INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_RECEIPT_SCHEMA =
-  "tideproof.highwater-drill-recovery-continuity-journal-receipt.v1";
+  "tideproof.highwater-drill-recovery-continuity-journal-receipt.v2";
 export const INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN_SCHEMA =
-  "tideproof.highwater-drill-recovery-continuity-unknown.v1";
+  "tideproof.highwater-drill-recovery-continuity-unknown.v2";
+export const INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_INTENT_SCHEMA =
+  "tideproof.highwater-drill-recovery-continuity-pre-call-intent.v1";
 export const INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE =
   "LOCAL_SAME_HOST_SCAFFOLD_COMPLETED_NO_RETRY";
 export const INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN =
@@ -279,6 +301,10 @@ function unknownFileName(authorizationId) {
   return `${authorizationId}.recovery-continuity-unknown-do-not-act.json`;
 }
 
+function intentFileName(authorizationId) {
+  return `${authorizationId}.recovery-continuity-intent.json`;
+}
+
 function unknownDispositionExists(secure, authorizationId) {
   return fs.existsSync(path.join(
     secure.ledgerRootPath,
@@ -293,43 +319,367 @@ function unknownDoNotAct() {
   });
 }
 
-function bindings(context) {
+function exactIsoMilliseconds(value, code) {
+  const milliseconds = typeof value === "string" ? Date.parse(value) : NaN;
+  requireCondition(
+    Number.isFinite(milliseconds) &&
+      new Date(milliseconds).toISOString() === value,
+    code
+  );
+  return milliseconds;
+}
+
+export function integratedLiveDrillRecoveryContinuityPreCallIntent({
+  authorization,
+  claim,
+  controlLedgerReceipt,
+  managedMcpReservation,
+  consumedManagedMcpLaunch,
+  consumedChildAuthorization,
+  ledgerRootPath,
+  forbiddenRootPath,
+  recoveryEvidenceRootPath,
+  recoverySourceReceipt,
+  signedBundlePersistenceReceipt,
+  recoveryBinding,
+  audit,
+  trustedRunContext,
+  now = Date.now()
+}) {
   const code = "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_BINDING_REJECTED";
-  const {
-    authorization,
-    candidateReceipt,
+  requireCondition(
+    exactKeys(trustedRunContext, [
+      "committedTrustRoot",
+      "expectation",
+      "humanAuthorizationTrustRoot",
+      "recoveryBrokerConfiguration",
+      "runnerIdentity",
+      "spec"
+    ]),
+    code
+  );
+  const trustedAuthorization = validateIntegratedLiveDrillRunAuthorization(
+    authorization?.attestation,
+    {
+      spec: trustedRunContext.spec,
+      expectation: trustedRunContext.expectation,
+      committedTrustRoot: trustedRunContext.committedTrustRoot,
+      humanAuthorizationTrustRoot:
+        trustedRunContext.humanAuthorizationTrustRoot,
+      authorizationLedgerRootPath: ledgerRootPath,
+      now
+    }
+  );
+  requireCondition(
+    canonicalJson(trustedAuthorization) === canonicalJson(authorization) &&
+      trustedAuthorization.payload.authorizationClaimAuthority
+        .runnerIdentitySha256 ===
+          integratedLiveDrillRunnerIdentityDigest(
+            trustedRunContext.runnerIdentity
+          ),
+    code
+  );
+  const ledger = validateIntegratedLiveDrillConsumedControlLedger({
+    authorization: trustedAuthorization,
+    claim,
     controlLedgerReceipt,
-    mcpRequestSha256
-  } = context ?? {};
-  const { receiptSha256: candidateReceiptSha256, ...candidateBody } =
-    candidateReceipt ?? {};
-  const { receiptSha256: controlLedgerReceiptSha256, ...ledgerBody } =
-    controlLedgerReceipt ?? {};
+    ledgerRootPath,
+    forbiddenRootPath
+  });
+  const resolvedControlLedgerReceipt = ledger.controlLedgerReceipt;
+  const resolvedManagedMcpReservation = ledger.reservations[2];
+  requireCondition(
+    canonicalJson(managedMcpReservation) ===
+      canonicalJson(resolvedManagedMcpReservation),
+    code
+  );
+  const resolvedManagedMcpLaunch =
+    validateIntegratedLiveDrillConsumedChildLaunch({
+      authorization: trustedAuthorization,
+      claim: ledger.claim,
+      reservation: resolvedManagedMcpReservation,
+      tokenId: consumedManagedMcpLaunch?.tokenId,
+      launchReceipt: consumedManagedMcpLaunch,
+      ledgerRootPath,
+      forbiddenRootPath
+    });
+  const parsedChildAuthorization = parseIntegratedLiveDrillChildAuthorization(
+    {
+      [INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_ENVIRONMENT]:
+        canonicalJson(consumedChildAuthorization?.attestation)
+    },
+    "MANAGED_MCP_RECOVERY",
+    { now }
+  );
+  const childPayload = verifyIntegratedLiveDrillEvidence(
+    consumedChildAuthorization?.attestation,
+    authorization.payload.childLaunchPublicKey,
+    "tideproof.highwater-drill-child-launch-token.v1",
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_CHILD_AUTHORIZATION_REJECTED"
+  );
+  const childExpiresAt = exactIsoMilliseconds(childPayload?.expiresAt, code);
+  const {
+    receiptSha256: controlLedgerReceiptSha256,
+    ...ledgerBody
+  } = resolvedControlLedgerReceipt;
+  const startedAt = exactIsoMilliseconds(audit?.startedAt, code);
+  const expiresAt = exactIsoMilliseconds(
+    authorization?.payload?.expiresAt,
+    code
+  );
+  const normalizedRecoverySourceReceipt =
+    normalizedRecoverySourceReceiptForContinuity(recoverySourceReceipt);
+  const recoverySourceRecordedAt = Date.parse(
+    normalizedRecoverySourceReceipt.recorded_at
+  );
+  const sourceDigest = recoverySourceBindingDigestFor({
+    tenantId: normalizedRecoverySourceReceipt.tenant_id,
+    runId: normalizedRecoverySourceReceipt.run_id,
+    incidentId: normalizedRecoverySourceReceipt.incident_id,
+    evidenceDigest: normalizedRecoverySourceReceipt.evidence_digest,
+    resourceId: normalizedRecoverySourceReceipt.resource_id,
+    operationId: normalizedRecoverySourceReceipt.operation_id,
+    requestDigest: normalizedRecoverySourceReceipt.request_digest,
+    proposalDigest: normalizedRecoverySourceReceipt.proposal_digest,
+    logicalActionDigest: normalizedRecoverySourceReceipt.logical_action_digest,
+    authorizationEpoch:
+      normalizedRecoverySourceReceipt.authorization_epoch,
+    logicalAuthorityKeySha256:
+      normalizedRecoverySourceReceipt.logical_authority_key_sha256,
+    authorizationBindingSha256:
+      normalizedRecoverySourceReceipt.authorization_binding_sha256,
+    authorityEvidenceBindingSha256:
+      normalizedRecoverySourceReceipt.authority_evidence_binding_sha256,
+    selectedEvidenceBindingSha256:
+      normalizedRecoverySourceReceipt.selected_evidence_binding_sha256,
+    outcome: normalizedRecoverySourceReceipt.outcome
+  });
+  const canonicalAttempt = canonicalRecoveryAttempt({
+    tenantId: normalizedRecoverySourceReceipt.tenant_id,
+    subjectBindingHash: recoveryBinding?.subjectBindingSha256,
+    sourceDigest,
+    sourceCommitTs: normalizedRecoverySourceReceipt.recorded_at
+  });
+  const persistedRecoveryBundle =
+    validatePersistedRecoveryBundleForContinuity({
+      destinationPath: path.join(
+        recoveryEvidenceRootPath,
+        `${trustedRunContext.spec.runId}.signed-recovery-bundle.json`
+      ),
+      evidenceRootPath: recoveryEvidenceRootPath,
+      forbiddenRootPath,
+      spec: trustedRunContext.spec,
+      persistenceReceipt: signedBundlePersistenceReceipt,
+      trustedPublisherKeys:
+        trustedRunContext.committedTrustRoot.trustedPublisherKeys
+    });
+  const acceptedBundle = persistedRecoveryBundle.signedBundle;
+  const trustedRecoveryBrokerConfiguration =
+    trustedRunContext.recoveryBrokerConfiguration;
+  const acceptedExpectedSourceClusterId =
+    typeof trustedRecoveryBrokerConfiguration?.expectedSourceClusterId ===
+      "string"
+      ? trustedRecoveryBrokerConfiguration.expectedSourceClusterId.toLowerCase()
+      : null;
+  const acceptedRecoveryClusterId =
+    typeof trustedRecoveryBrokerConfiguration?.recoveryClusterId === "string"
+      ? trustedRecoveryBrokerConfiguration.recoveryClusterId.toLowerCase()
+      : null;
+  const expectedRecoveryBrokerConfigDigest = recoveryBrokerConfigDigest({
+    recoveryClusterId: acceptedRecoveryClusterId,
+    expectedSourceClusterId: acceptedExpectedSourceClusterId,
+    buildIdentity: trustedRunContext.spec.sourceBuildIdentity,
+    trustedPublisherKeys:
+      trustedRunContext.committedTrustRoot.trustedPublisherKeys
+  });
+  const signedBundlePersistenceReceiptSha256 =
+    persistedRecoveryBundle.persistenceReceipt.receiptSha256;
+  const signedBundleSha256 = persistedRecoveryBundle.signedBundleSha256;
+  const databaseNameSha256 = integratedLiveDrillSha256(
+    "tideproof_recovery"
+  );
+  const toolNameSha256 = integratedLiveDrillSha256("select_query");
+  const queryTemplateSha256 = recoveryQueryTemplateDigest();
+  const renderedQuerySha256 = integratedLiveDrillSha256(renderRecoveryQuery({
+    tenantId: recoveryBinding?.tenantId,
+    recoverySessionId: recoveryBinding?.recoverySessionId,
+    subjectBindingHash: recoveryBinding?.subjectBindingSha256,
+    sourceDigest
+  }));
+  const boundInputSha256 = integratedLiveDrillCanonicalSha256({
+    tenantId: recoveryBinding?.tenantId,
+    recoverySessionId: recoveryBinding?.recoverySessionId,
+    subjectBindingHash: recoveryBinding?.subjectBindingSha256,
+    sourceDigest
+  });
+  const logicalMcpRequest = Object.freeze({
+    schemaVersion:
+      "tideproof.highwater-drill-logical-managed-mcp-request.v1",
+    boundInputSha256,
+    databaseNameSha256,
+    queryTemplateSha256,
+    recoveryClusterId: recoveryBinding?.recoveryClusterId,
+    recoverySessionId: recoveryBinding?.recoverySessionId,
+    renderedQuerySha256,
+    sourceDigest,
+    subjectBindingSha256: recoveryBinding?.subjectBindingSha256,
+    tenantId: recoveryBinding?.tenantId,
+    toolNameSha256
+  });
   requireCondition(
     authorization?.attestation &&
       authorization?.payload &&
       UUID.test(authorization.payload.authorizationId ?? "") &&
+      UUID.test(authorization.payload.runId ?? "") &&
       HEX_40.test(authorization.payload.sourceCommit ?? "") &&
       HEX_40.test(authorization.payload.treeDigest ?? "") &&
       HEX_64.test(authorization.payload.configDigest ?? "") &&
-      HEX_64.test(candidateReceiptSha256 ?? "") &&
-      candidateReceiptSha256 ===
-        integratedLiveDrillCanonicalSha256(candidateBody) &&
-      candidateReceipt.authorizationId === undefined &&
-      candidateReceipt.sourceCommit === authorization.payload.sourceCommit &&
-      candidateReceipt.treeDigest === authorization.payload.treeDigest &&
-      candidateReceipt.configDigest === authorization.payload.configDigest &&
-      candidateReceipt.runId === authorization.payload.runId &&
-      candidateReceipt.providerBacked === false &&
-      candidateReceipt.recovery?.managedMcpCallCount === 1 &&
+      HEX_64.test(authorization.payload.specSha256 ?? "") &&
+      HEX_64.test(authorization.payload.expectationSha256 ?? "") &&
+      HEX_64.test(
+        authorization.payload.authorizationClaimAuthority
+          ?.runnerIdentitySha256 ?? ""
+      ) &&
+      authorization.issuedAt <= startedAt &&
+      startedAt <= expiresAt &&
+      authorization.expiresAt === expiresAt &&
       HEX_64.test(controlLedgerReceiptSha256 ?? "") &&
       controlLedgerReceiptSha256 ===
         integratedLiveDrillCanonicalSha256(ledgerBody) &&
-      controlLedgerReceipt.authorizationId ===
+      resolvedControlLedgerReceipt.authorizationId ===
         authorization.payload.authorizationId &&
-      controlLedgerReceipt.runId === authorization.payload.runId &&
-      HEX_64.test(controlLedgerReceipt.authorizationClaimSha256 ?? "") &&
-      HEX_64.test(mcpRequestSha256 ?? "") &&
+      resolvedControlLedgerReceipt.runId === authorization.payload.runId &&
+      HEX_64.test(
+        resolvedControlLedgerReceipt.authorizationClaimSha256 ?? ""
+      ) &&
+      Array.isArray(resolvedControlLedgerReceipt.reservationDigests) &&
+      resolvedControlLedgerReceipt.reservationDigests.length === 3 &&
+      Array.isArray(resolvedControlLedgerReceipt.childLaunchDigests) &&
+      resolvedControlLedgerReceipt.childLaunchDigests.length === 3 &&
+      resolvedManagedMcpReservation.authorizationId ===
+        authorization.payload.authorizationId &&
+      resolvedManagedMcpReservation.scopeId === "MANAGED_MCP_RECOVERY" &&
+      resolvedManagedMcpReservation.sequence === 3 &&
+      HEX_64.test(resolvedManagedMcpReservation.reservationSha256 ?? "") &&
+      resolvedControlLedgerReceipt.reservationDigests[2] ===
+        resolvedManagedMcpReservation.reservationSha256 &&
+      resolvedManagedMcpLaunch.authorizationId ===
+        authorization.payload.authorizationId &&
+      resolvedManagedMcpLaunch.scopeId === "MANAGED_MCP_RECOVERY" &&
+      resolvedManagedMcpLaunch.sequence === 3 &&
+      resolvedManagedMcpLaunch.reservationSha256 ===
+        resolvedManagedMcpReservation.reservationSha256 &&
+      UUID.test(resolvedManagedMcpLaunch.tokenId ?? "") &&
+      HEX_64.test(resolvedManagedMcpLaunch.childLaunchSha256 ?? "") &&
+      resolvedControlLedgerReceipt.childLaunchDigests[2] ===
+        resolvedManagedMcpLaunch.childLaunchSha256 &&
+      childPayload.authorizationAttestationSha256 ===
+        integratedLiveDrillAuthorizationAttestationDigest(
+          authorization.attestation
+        ) &&
+      childPayload.authorizationId === authorization.payload.authorizationId &&
+      canonicalJson(childPayload) ===
+        canonicalJson(parsedChildAuthorization.value) &&
+      childPayload.runId === authorization.payload.runId &&
+      childPayload.sourceCommit === authorization.payload.sourceCommit &&
+      childPayload.treeDigest === authorization.payload.treeDigest &&
+      childPayload.configDigest === authorization.payload.configDigest &&
+      childPayload.specSha256 === authorization.payload.specSha256 &&
+      childPayload.expectationSha256 ===
+        integratedLiveDrillCanonicalSha256(trustedRunContext.expectation) &&
+      childPayload.runnerIdentitySha256 ===
+        authorization.payload.authorizationClaimAuthority
+          .runnerIdentitySha256 &&
+      childPayload.scope?.scopeId === "MANAGED_MCP_RECOVERY" &&
+      childPayload.scope?.sequence === 3 &&
+      canonicalJson(childPayload.scope) === canonicalJson(
+        authorization.payload.spendAuthorization.scopes[2]
+      ) &&
+      childPayload.claim?.authorizationClaimSha256 ===
+        ledger.claim.authorizationClaimSha256 &&
+      canonicalJson(childPayload.claim) === canonicalJson(ledger.claim) &&
+      childPayload.reservation?.reservationSha256 ===
+        resolvedManagedMcpReservation.reservationSha256 &&
+      canonicalJson(childPayload.reservation) ===
+        canonicalJson(resolvedManagedMcpReservation) &&
+      childPayload.tokenId === resolvedManagedMcpLaunch.tokenId &&
+      childExpiresAt === authorization.expiresAt &&
+      recoverySourceReceipt &&
+      typeof recoverySourceReceipt === "object" &&
+      !Array.isArray(recoverySourceReceipt) &&
+      normalizedRecoverySourceReceipt.tenant_id === recoveryBinding.tenantId &&
+      normalizedRecoverySourceReceipt.run_id === authorization.payload.runId &&
+      recoverySourceRecordedAt <= now + 60 * 1_000 &&
+      now - recoverySourceRecordedAt <=
+        authorization.payload.maximumRecoverySourceAgeSeconds * 1_000 &&
+      HEX_64.test(sourceDigest) &&
+      acceptedBundle &&
+      typeof acceptedBundle === "object" &&
+      !Array.isArray(acceptedBundle) &&
+      acceptedBundle.tenantId === recoveryBinding.tenantId &&
+      acceptedBundle.recoverySessionId === recoveryBinding.recoverySessionId &&
+      acceptedBundle.subjectBindingHash ===
+        recoveryBinding.subjectBindingSha256 &&
+      acceptedBundle.sourceDigest === sourceDigest &&
+      acceptedBundle.sourceClusterId === acceptedExpectedSourceClusterId &&
+      acceptedBundle.sourceCommitTs ===
+        normalizedRecoverySourceReceipt.recorded_at &&
+      acceptedBundle.snapshotVersion === canonicalAttempt.snapshotVersion &&
+      Date.parse(acceptedBundle.expiresAt) > now &&
+      persistedRecoveryBundle.persistenceReceipt.signedBundleSha256 ===
+        signedBundleSha256 &&
+      persistedRecoveryBundle.persistenceReceipt.bundleDigest ===
+        acceptedBundle.bundleDigest &&
+      persistedRecoveryBundle.persistenceReceipt.sourceCommit ===
+        authorization.payload.sourceCommit &&
+      persistedRecoveryBundle.persistenceReceipt.treeDigest ===
+        authorization.payload.treeDigest &&
+      persistedRecoveryBundle.persistenceReceipt.configDigest ===
+        authorization.payload.configDigest &&
+      persistedRecoveryBundle.persistenceReceipt.runId ===
+        authorization.payload.runId &&
+      exactKeys(recoveryBinding, [
+        "recoveryClusterId",
+        "recoverySessionId",
+        "subjectBindingSha256",
+        "tenantId"
+      ]) &&
+      UUID.test(recoveryBinding.tenantId ?? "") &&
+      UUID.test(recoveryBinding.recoverySessionId ?? "") &&
+      UUID.test(recoveryBinding.recoveryClusterId ?? "") &&
+      exactKeys(trustedRecoveryBrokerConfiguration, [
+        "expectedSourceClusterId",
+        "recoveryBrokerConfigDigest",
+        "recoveryClusterId"
+      ]) &&
+      UUID.test(acceptedExpectedSourceClusterId ?? "") &&
+      UUID.test(acceptedRecoveryClusterId ?? "") &&
+      HEX_64.test(
+        trustedRecoveryBrokerConfiguration.recoveryBrokerConfigDigest ?? ""
+      ) &&
+      trustedRecoveryBrokerConfiguration.recoveryBrokerConfigDigest ===
+        expectedRecoveryBrokerConfigDigest &&
+      acceptedRecoveryClusterId === recoveryBinding.recoveryClusterId &&
+      acceptedExpectedSourceClusterId !== acceptedRecoveryClusterId &&
+      recoveryBinding.recoverySessionId ===
+        canonicalAttempt.recoverySessionId &&
+      HEX_64.test(recoveryBinding.subjectBindingSha256 ?? "") &&
+      exactKeys(audit, [
+        "interactionId",
+        "preReadAuditEventId",
+        "startedAt",
+        "terminalAuditEventId"
+      ]) &&
+      UUID.test(audit.interactionId ?? "") &&
+      UUID.test(audit.preReadAuditEventId ?? "") &&
+      UUID.test(audit.terminalAuditEventId ?? "") &&
+      new Set([
+        audit.interactionId,
+        audit.preReadAuditEventId,
+        audit.terminalAuditEventId
+      ]).size === 3 &&
+      audit.preReadAuditEventId !== audit.terminalAuditEventId &&
+      authorization.payload.requiredManagedMcpToolCallCount === 1 &&
       authorization.payload.requiredRecoveryJournalEntryCount ===
         INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN.length &&
       canonicalJson(authorization.payload.requiredRecoveryWorkers) ===
@@ -338,29 +688,376 @@ function bindings(context) {
         canonicalJson(INTEGRATED_LIVE_DRILL_RECOVERY_FAILPOINTS),
     code
   );
-  return Object.freeze({
+  const body = Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_INTENT_SCHEMA,
     authorizationAttestationSha256:
       integratedLiveDrillAuthorizationAttestationDigest(
         authorization.attestation
       ),
     authorizationClaimSha256:
-      controlLedgerReceipt.authorizationClaimSha256,
+      resolvedControlLedgerReceipt.authorizationClaimSha256,
     authorizationId: authorization.payload.authorizationId,
-    candidateReceiptSha256,
+    boundInputSha256,
     configDigest: authorization.payload.configDigest,
+    consumedManagedMcpLaunchSha256:
+      resolvedManagedMcpLaunch.childLaunchSha256,
+    consumedManagedMcpLaunchTokenId: resolvedManagedMcpLaunch.tokenId,
+    consumedChildAuthorizationSha256:
+      integratedLiveDrillCanonicalSha256(
+        consumedChildAuthorization.attestation
+      ),
+    childAuthorizationExpiresAt: new Date(childExpiresAt).toISOString(),
     controlLedgerReceiptSha256,
-    mcpRequestSha256,
+    databaseNameSha256,
+    expectationSha256: authorization.payload.expectationSha256,
+    expiresAt: authorization.payload.expiresAt,
+    expectedSourceClusterId: acceptedExpectedSourceClusterId,
+    logicalMcpRequestSha256:
+      integratedLiveDrillCanonicalSha256(logicalMcpRequest),
+    managedMcpReservationSha256:
+      resolvedManagedMcpReservation.reservationSha256,
+    preReadAuditEventId: audit.preReadAuditEventId,
+    interactionId: audit.interactionId,
+    queryTemplateSha256,
+    recoveryBrokerConfigDigest: expectedRecoveryBrokerConfigDigest,
+    recoveryClusterId: recoveryBinding.recoveryClusterId,
+    recoverySessionId: recoveryBinding.recoverySessionId,
+    recoverySourceReceiptSha256:
+      integratedLiveDrillCanonicalSha256(normalizedRecoverySourceReceipt),
+    recoverySourceOperationId:
+      normalizedRecoverySourceReceipt.operation_id,
+    recoverySourceRequestDigest:
+      normalizedRecoverySourceReceipt.request_digest,
+    renderedQuerySha256,
     runId: authorization.payload.runId,
+    runnerIdentitySha256:
+      authorization.payload.authorizationClaimAuthority.runnerIdentitySha256,
+    signedBundlePersistenceReceiptSha256:
+      signedBundlePersistenceReceiptSha256,
+    signedBundleSha256,
     sourceCommit: authorization.payload.sourceCommit,
+    sourceClusterId: acceptedBundle.sourceClusterId,
+    sourceDigest,
+    specSha256: authorization.payload.specSha256,
+    startedAt: audit.startedAt,
+    subjectBindingSha256: recoveryBinding.subjectBindingSha256,
+    tenantId: recoveryBinding.tenantId,
+    terminalAuditEventId: audit.terminalAuditEventId,
+    toolNameSha256,
     treeDigest: authorization.payload.treeDigest
+  });
+  return Object.freeze({
+    ...body,
+    intentSha256: integratedLiveDrillCanonicalSha256(body)
+  });
+}
+
+export function validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
+  value,
+  { authorization, controlLedgerReceipt }
+) {
+  const code = "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_BINDING_REJECTED";
+  const { intentSha256, ...body } = value ?? {};
+  const { receiptSha256: controlLedgerReceiptSha256, ...ledgerBody } =
+    controlLedgerReceipt ?? {};
+  const startedAt = exactIsoMilliseconds(body.startedAt, code);
+  const expiresAt = exactIsoMilliseconds(body.expiresAt, code);
+  const childExpiresAt = exactIsoMilliseconds(
+    body.childAuthorizationExpiresAt,
+    code
+  );
+  requireCondition(
+    exactKeys(value, [
+      "authorizationAttestationSha256",
+      "authorizationClaimSha256",
+      "authorizationId",
+      "boundInputSha256",
+      "childAuthorizationExpiresAt",
+      "configDigest",
+      "consumedChildAuthorizationSha256",
+      "consumedManagedMcpLaunchSha256",
+      "consumedManagedMcpLaunchTokenId",
+      "controlLedgerReceiptSha256",
+      "databaseNameSha256",
+      "expectationSha256",
+      "expiresAt",
+      "expectedSourceClusterId",
+      "intentSha256",
+      "interactionId",
+      "logicalMcpRequestSha256",
+      "managedMcpReservationSha256",
+      "preReadAuditEventId",
+      "queryTemplateSha256",
+      "recoveryBrokerConfigDigest",
+      "recoveryClusterId",
+      "recoverySessionId",
+      "recoverySourceOperationId",
+      "recoverySourceRequestDigest",
+      "recoverySourceReceiptSha256",
+      "renderedQuerySha256",
+      "runId",
+      "runnerIdentitySha256",
+      "schemaVersion",
+      "signedBundlePersistenceReceiptSha256",
+      "signedBundleSha256",
+      "sourceCommit",
+      "sourceClusterId",
+      "sourceDigest",
+      "specSha256",
+      "startedAt",
+      "subjectBindingSha256",
+      "tenantId",
+      "terminalAuditEventId",
+      "toolNameSha256",
+      "treeDigest"
+    ]) &&
+      body.schemaVersion ===
+        INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_INTENT_SCHEMA &&
+      intentSha256 === integratedLiveDrillCanonicalSha256(body) &&
+      body.authorizationAttestationSha256 ===
+        integratedLiveDrillAuthorizationAttestationDigest(
+          authorization.attestation
+        ) &&
+      body.authorizationClaimSha256 ===
+        controlLedgerReceipt.authorizationClaimSha256 &&
+      body.authorizationId === authorization.payload.authorizationId &&
+      body.configDigest === authorization.payload.configDigest &&
+      body.controlLedgerReceiptSha256 === controlLedgerReceiptSha256 &&
+      controlLedgerReceiptSha256 ===
+        integratedLiveDrillCanonicalSha256(ledgerBody) &&
+      body.expectationSha256 === authorization.payload.expectationSha256 &&
+      body.expiresAt === authorization.payload.expiresAt &&
+      expiresAt === authorization.expiresAt &&
+      childExpiresAt === expiresAt &&
+      startedAt >= authorization.issuedAt &&
+      startedAt <= authorization.expiresAt &&
+      body.runId === authorization.payload.runId &&
+      body.runnerIdentitySha256 ===
+        authorization.payload.authorizationClaimAuthority
+          .runnerIdentitySha256 &&
+      body.sourceCommit === authorization.payload.sourceCommit &&
+      body.specSha256 === authorization.payload.specSha256 &&
+      body.treeDigest === authorization.payload.treeDigest &&
+      UUID.test(body.authorizationId ?? "") &&
+      UUID.test(body.runId ?? "") &&
+      UUID.test(body.preReadAuditEventId ?? "") &&
+      UUID.test(body.terminalAuditEventId ?? "") &&
+      UUID.test(body.interactionId ?? "") &&
+      new Set([
+        body.interactionId,
+        body.preReadAuditEventId,
+        body.terminalAuditEventId
+      ]).size === 3 &&
+      UUID.test(body.tenantId ?? "") &&
+      UUID.test(body.recoverySessionId ?? "") &&
+      UUID.test(body.recoveryClusterId ?? "") &&
+      UUID.test(body.expectedSourceClusterId ?? "") &&
+      UUID.test(body.sourceClusterId ?? "") &&
+      body.expectedSourceClusterId === body.sourceClusterId &&
+      body.expectedSourceClusterId !== body.recoveryClusterId &&
+      HEX_64.test(body.recoveryBrokerConfigDigest ?? "") &&
+      UUID.test(body.recoverySourceOperationId ?? "") &&
+      UUID.test(body.consumedManagedMcpLaunchTokenId ?? "") &&
+      body.databaseNameSha256 ===
+        integratedLiveDrillSha256("tideproof_recovery") &&
+      body.toolNameSha256 === integratedLiveDrillSha256("select_query") &&
+      body.queryTemplateSha256 === recoveryQueryTemplateDigest() &&
+      body.renderedQuerySha256 === integratedLiveDrillSha256(
+        renderRecoveryQuery({
+          tenantId: body.tenantId,
+          recoverySessionId: body.recoverySessionId,
+          subjectBindingHash: body.subjectBindingSha256,
+          sourceDigest: body.sourceDigest
+        })
+      ) &&
+      body.boundInputSha256 === integratedLiveDrillCanonicalSha256({
+        tenantId: body.tenantId,
+        recoverySessionId: body.recoverySessionId,
+        subjectBindingHash: body.subjectBindingSha256,
+        sourceDigest: body.sourceDigest
+      }) &&
+      body.logicalMcpRequestSha256 === integratedLiveDrillCanonicalSha256({
+        schemaVersion:
+          "tideproof.highwater-drill-logical-managed-mcp-request.v1",
+        boundInputSha256: body.boundInputSha256,
+        databaseNameSha256: body.databaseNameSha256,
+        queryTemplateSha256: body.queryTemplateSha256,
+        recoveryClusterId: body.recoveryClusterId,
+        recoverySessionId: body.recoverySessionId,
+        renderedQuerySha256: body.renderedQuerySha256,
+        sourceDigest: body.sourceDigest,
+        subjectBindingSha256: body.subjectBindingSha256,
+        tenantId: body.tenantId,
+        toolNameSha256: body.toolNameSha256
+      }) &&
+      authorization.payload.requiredManagedMcpToolCallCount === 1 &&
+      [
+        body.authorizationAttestationSha256,
+        body.authorizationClaimSha256,
+        body.boundInputSha256,
+        body.configDigest,
+        body.consumedChildAuthorizationSha256,
+        body.consumedManagedMcpLaunchSha256,
+        body.controlLedgerReceiptSha256,
+        body.databaseNameSha256,
+        body.expectationSha256,
+        body.logicalMcpRequestSha256,
+        body.managedMcpReservationSha256,
+        body.queryTemplateSha256,
+        body.recoveryBrokerConfigDigest,
+        body.recoverySourceRequestDigest,
+        body.recoverySourceReceiptSha256,
+        body.sourceDigest,
+        body.renderedQuerySha256,
+        body.runnerIdentitySha256,
+        body.signedBundlePersistenceReceiptSha256,
+        body.signedBundleSha256,
+        body.specSha256,
+        body.subjectBindingSha256,
+        body.toolNameSha256
+      ].every((entry) => HEX_64.test(entry ?? "")) &&
+      controlLedgerReceipt.reservationDigests?.[2] ===
+        body.managedMcpReservationSha256 &&
+      controlLedgerReceipt.childLaunchDigests?.[2] ===
+        body.consumedManagedMcpLaunchSha256,
+    code
+  );
+  return Object.freeze(value);
+}
+
+function readPersistedPreCallIntent(context, secure) {
+  const authorizationId = context.authorization?.payload?.authorizationId;
+  requireCondition(
+    UUID.test(authorizationId ?? ""),
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_BINDING_REJECTED"
+  );
+  const value = parseCanonicalRecord(readLedgerFile(
+    path.join(secure.ledgerRootPath, intentFileName(authorizationId)),
+    secure
+  ));
+  const validated = validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
+    value,
+    context
+  );
+  if (context.preCallIntent !== undefined) {
+    requireCondition(
+      canonicalJson(context.preCallIntent) === canonicalJson(validated),
+      "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_BINDING_REJECTED"
+    );
+  }
+  return validated;
+}
+
+function assemblePreCallIntent(context, now) {
+  const preCallInputKeys = [
+    "audit",
+    "claim",
+    "consumedChildAuthorization",
+    "consumedManagedMcpLaunch",
+    "controlLedgerReceipt",
+    "managedMcpReservation",
+    "recoveryBinding",
+    "recoverySourceReceipt",
+    "signedBundlePersistenceReceipt"
+  ];
+  requireCondition(
+    context.preCallInputs &&
+      typeof context.preCallInputs === "object" &&
+      !Array.isArray(context.preCallInputs) &&
+      exactKeys(context.preCallInputs, preCallInputKeys),
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_BINDING_REJECTED"
+  );
+  return integratedLiveDrillRecoveryContinuityPreCallIntent({
+    ...context.preCallInputs,
+    authorization: context.authorization,
+    ledgerRootPath: context.ledgerRootPath,
+    forbiddenRootPath: context.forbiddenRootPath,
+    recoveryEvidenceRootPath: context.recoveryEvidenceRootPath,
+    trustedRunContext: context.trustedRunContext,
+    now
+  });
+}
+
+function persistPreCallIntent(context, trustedClock) {
+  const secure = secureLedgerRoot(
+    context.ledgerRootPath,
+    context.forbiddenRootPath
+  );
+  const value = assemblePreCallIntent(context, trustedClock());
+  if (context.preCallIntent !== undefined) {
+    requireCondition(
+      canonicalJson(context.preCallIntent) === canonicalJson(value),
+      "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_BINDING_REJECTED"
+    );
+  }
+  validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
+    value,
+    context
+  );
+  const filePath = path.join(
+    secure.ledgerRootPath,
+    intentFileName(value.authorizationId)
+  );
+  try {
+    createDurableFile(filePath, value, secure);
+  } catch (cause) {
+    if (
+      cause?.message !==
+        "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_ALREADY_RECORDED"
+    ) {
+      throw cause;
+    }
+  }
+  return readPersistedPreCallIntent(context, secure);
+}
+
+function assertProviderCapableContextCurrent(context, secure, trustedClock) {
+  requireCondition(
+    typeof trustedClock === "function",
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AUTHORIZATION_EXPIRED"
+  );
+  const now = trustedClock();
+  requireCondition(
+    context.preCallIntent !== undefined &&
+      Number.isSafeInteger(now) &&
+      now >= context.authorization.issuedAt &&
+      now <= context.authorization.expiresAt,
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AUTHORIZATION_EXPIRED"
+  );
+  const assembled = assemblePreCallIntent(context, now);
+  const persisted = readPersistedPreCallIntent(context, secure);
+  const childExpiresAt = Date.parse(assembled.childAuthorizationExpiresAt);
+  requireCondition(
+    canonicalJson(assembled) === canonicalJson(context.preCallIntent) &&
+      canonicalJson(assembled) === canonicalJson(persisted) &&
+      Number.isFinite(childExpiresAt) &&
+      now <= childExpiresAt,
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AUTHORIZATION_EXPIRED"
+  );
+  return assembled;
+}
+
+function bindings(context, secure) {
+  const intent = readPersistedPreCallIntent(context, secure);
+  return Object.freeze({
+    authorizationAttestationSha256: intent.authorizationAttestationSha256,
+    authorizationClaimSha256: intent.authorizationClaimSha256,
+    authorizationId: intent.authorizationId,
+    configDigest: intent.configDigest,
+    controlLedgerReceiptSha256: intent.controlLedgerReceiptSha256,
+    logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
+    preCallIntentSha256: intent.intentSha256,
+    runId: intent.runId,
+    sourceCommit: intent.sourceCommit,
+    treeDigest: intent.treeDigest
   });
 }
 
 function defaultArtifact(step) {
   if (step.event === "W5_STARTED") {
     return Object.freeze({
+      topLevelProviderClientOptionReceived: false,
       providerClientInvoked: false,
-      providerClientReceived: false,
       reconciliation: "CLAIM_AND_COMPLETE_RESULT_PRESENT"
     });
   }
@@ -427,11 +1124,11 @@ function validateEntry(value, expected, previousDigest, bound) {
       "authorizationAttestationSha256",
       "authorizationClaimSha256",
       "authorizationId",
-      "candidateReceiptSha256",
       "configDigest",
       "controlLedgerReceiptSha256",
       "event",
-      "mcpRequestSha256",
+      "logicalMcpRequestSha256",
+      "preCallIntentSha256",
       "previousEntrySha256",
       "recordedAt",
       "runId",
@@ -447,12 +1144,12 @@ function validateEntry(value, expected, previousDigest, bound) {
         bound.authorizationAttestationSha256 &&
       value.authorizationClaimSha256 === bound.authorizationClaimSha256 &&
       value.authorizationId === bound.authorizationId &&
-      value.candidateReceiptSha256 === bound.candidateReceiptSha256 &&
       value.configDigest === bound.configDigest &&
       value.controlLedgerReceiptSha256 ===
         bound.controlLedgerReceiptSha256 &&
       value.event === expected.event &&
-      value.mcpRequestSha256 === bound.mcpRequestSha256 &&
+      value.logicalMcpRequestSha256 === bound.logicalMcpRequestSha256 &&
+      value.preCallIntentSha256 === bound.preCallIntentSha256 &&
       value.previousEntrySha256 === previousDigest &&
       value.runId === bound.runId &&
       value.sequence === expected.sequence &&
@@ -473,7 +1170,10 @@ function validateEntry(value, expected, previousDigest, bound) {
 }
 
 function readEntries(context, secure, { allowPartial = true } = {}) {
-  const bound = bindings(context);
+  const bound = bindings(context, secure);
+  const journalStartedAt = Date.parse(
+    readPersistedPreCallIntent(context, secure).startedAt
+  );
   const names = fs.readdirSync(secure.ledgerRootPath)
     .filter((name) => name.startsWith(journalFilePrefix(bound.authorizationId)))
     .sort();
@@ -484,7 +1184,7 @@ function readEntries(context, secure, { allowPartial = true } = {}) {
   const entries = [];
   const digests = [];
   let previousDigest = null;
-  let previousTime = context.authorization.issuedAt;
+  let previousTime = journalStartedAt;
   for (const [index, name] of names.entries()) {
     const expected = INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN[index];
     requireCondition(
@@ -498,8 +1198,7 @@ function readEntries(context, secure, { allowPartial = true } = {}) {
     const recordedAt = validateEntry(body, expected, previousDigest, bound);
     requireCondition(
       recordedAt >= previousTime &&
-        recordedAt >= context.authorization.issuedAt &&
-        recordedAt <= context.authorization.expiresAt,
+        recordedAt >= journalStartedAt,
       "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AMBIGUOUS"
     );
     const digest = integratedLiveDrillCanonicalSha256(body);
@@ -522,7 +1221,11 @@ function readEntries(context, secure, { allowPartial = true } = {}) {
   });
 }
 
-function readUnknownDisposition(context, secure, bound = bindings(context)) {
+function readUnknownDisposition(
+  context,
+  secure,
+  bound = bindings(context, secure)
+) {
   const filePath = path.join(
     secure.ledgerRootPath,
     unknownFileName(bound.authorizationId)
@@ -535,10 +1238,10 @@ function readUnknownDisposition(context, secure, bound = bindings(context)) {
       "authorizationAttestationSha256",
       "authorizationClaimSha256",
       "authorizationId",
-      "candidateReceiptSha256",
       "controlLedgerReceiptSha256",
+      "logicalMcpRequestSha256",
       "mcpCallClaimEntrySha256",
-      "mcpRequestSha256",
+      "preCallIntentSha256",
       "reason",
       "recordedAt",
       "schemaVersion",
@@ -550,17 +1253,18 @@ function readUnknownDisposition(context, secure, bound = bindings(context)) {
         bound.authorizationAttestationSha256 &&
       body.authorizationClaimSha256 === bound.authorizationClaimSha256 &&
       body.authorizationId === bound.authorizationId &&
-      body.candidateReceiptSha256 === bound.candidateReceiptSha256 &&
       body.controlLedgerReceiptSha256 ===
         bound.controlLedgerReceiptSha256 &&
+      body.logicalMcpRequestSha256 === bound.logicalMcpRequestSha256 &&
       HEX_64.test(body.mcpCallClaimEntrySha256 ?? "") &&
-      body.mcpRequestSha256 === bound.mcpRequestSha256 &&
+      body.preCallIntentSha256 === bound.preCallIntentSha256 &&
       body.reason === "CLAIM_PRESENT_RESULT_ABSENT" &&
       typeof body.recordedAt === "string" &&
       Number.isFinite(recordedAt) &&
       new Date(recordedAt).toISOString() === body.recordedAt &&
-      recordedAt >= context.authorization.issuedAt &&
-      recordedAt <= context.authorization.expiresAt &&
+      recordedAt >= Date.parse(
+        readPersistedPreCallIntent(context, secure).startedAt
+      ) &&
       body.status === INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN,
     "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AMBIGUOUS"
   );
@@ -574,8 +1278,7 @@ function persistUnknownDisposition(context, secure, journal, now) {
     journal.entries.length >= 6 &&
       journal.entries.length < 8 &&
       Number.isSafeInteger(now) &&
-      now >= journal.previousTime &&
-      now <= context.authorization.expiresAt,
+      now >= journal.previousTime,
     "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AMBIGUOUS"
   );
   const body = Object.freeze({
@@ -584,10 +1287,10 @@ function persistUnknownDisposition(context, secure, journal, now) {
       bound.authorizationAttestationSha256,
     authorizationClaimSha256: bound.authorizationClaimSha256,
     authorizationId: bound.authorizationId,
-    candidateReceiptSha256: bound.candidateReceiptSha256,
     controlLedgerReceiptSha256: bound.controlLedgerReceiptSha256,
+    logicalMcpRequestSha256: bound.logicalMcpRequestSha256,
     mcpCallClaimEntrySha256: journal.digests[5],
-    mcpRequestSha256: bound.mcpRequestSha256,
+    preCallIntentSha256: bound.preCallIntentSha256,
     reason: "CLAIM_PRESENT_RESULT_ABSENT",
     recordedAt: new Date(now).toISOString(),
     status: INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN
@@ -638,9 +1341,7 @@ function recordStep(
   requireCondition(
     journal.entries.length === step.sequence - 1 &&
       Number.isSafeInteger(now) &&
-      now >= journal.previousTime &&
-      now >= context.authorization.issuedAt &&
-      now <= context.authorization.expiresAt,
+      now >= journal.previousTime,
     "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_ORDER_REJECTED"
   );
   const bound = journal.bound;
@@ -692,38 +1393,69 @@ function syntheticCrash(event) {
   reject(`INTEGRATED_LIVE_DRILL_SYNTHETIC_CRASH_${event}`);
 }
 
-function nowFor(options, sequence) {
-  const base = options?.now ?? Date.now();
+function journalNow(trustedClock) {
+  const now = trustedClock();
   requireCondition(
-    Number.isSafeInteger(base),
+    Number.isSafeInteger(now),
     "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_TIME_REJECTED"
   );
-  return base + sequence;
+  return now;
+}
+
+function requirePublicWorkerOptions(options, keys) {
+  requireCondition(
+    options &&
+      typeof options === "object" &&
+      !Array.isArray(options) &&
+      Object.keys(options).every((key) => keys.includes(key)),
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_OPTIONS_REJECTED"
+  );
 }
 
 function maybeCrash(options, event) {
   if (options?.crashAfterEvent === event) syntheticCrash(event);
 }
 
-export function runIntegratedLiveDrillRecoveryContinuityW1(
+function runIntegratedLiveDrillRecoveryContinuityW1Internal(
   context,
-  options = {}
+  options,
+  trustedClock
 ) {
+  persistPreCallIntent(context, trustedClock);
+  const secure = secureLedgerRoot(
+    context.ledgerRootPath,
+    context.forbiddenRootPath
+  );
+  assertProviderCapableContextCurrent(context, secure, trustedClock);
   for (const step of INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN.slice(0, 4)) {
-    recordStep(context, step, undefined, nowFor(options, step.sequence));
+    recordStep(context, step, undefined, journalNow(trustedClock));
     maybeCrash(options, step.event);
   }
   return Object.freeze({ status: "W1_COMPLETE" });
 }
 
-export async function runIntegratedLiveDrillRecoveryContinuityW2(
+export function runIntegratedLiveDrillRecoveryContinuityW1(
   context,
-  { mcpCall, ...options } = {}
+  options = {}
+) {
+  requirePublicWorkerOptions(options, ["crashAfterEvent"]);
+  return runIntegratedLiveDrillRecoveryContinuityW1Internal(
+    context,
+    options,
+    () => Date.now()
+  );
+}
+
+async function runIntegratedLiveDrillRecoveryContinuityW2Internal(
+  context,
+  { mcpCall, ...options },
+  trustedClock
 ) {
   const secure = secureLedgerRoot(
     context.ledgerRootPath,
     context.forbiddenRootPath
   );
+  assertProviderCapableContextCurrent(context, secure, trustedClock);
   let journal;
   try {
     journal = readEntries(context, secure);
@@ -758,14 +1490,14 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
       context,
       secure,
       journal,
-      nowFor(options, journal.entries.length + 1)
+      journalNow(trustedClock)
     );
     return unknownDoNotAct();
   }
   if (resultPresent) {
     const result = journal.entries[7].artifact;
     const step = INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN[8];
-    recordStep(context, step, undefined, nowFor(options, step.sequence));
+    recordStep(context, step, undefined, journalNow(trustedClock));
     return Object.freeze({
       status: INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
       retried: false,
@@ -782,7 +1514,7 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
       context,
       startedStep,
       undefined,
-      nowFor(options, startedStep.sequence)
+      journalNow(trustedClock)
     );
   } catch (cause) {
     if (
@@ -799,6 +1531,7 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
     attemptOwnershipToken
   );
   const claimStep = INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN[5];
+  assertProviderCapableContextCurrent(context, secure, trustedClock);
   let claim;
   try {
     claim = recordStep(
@@ -808,7 +1541,7 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
         attemptOwnershipTokenSha256,
         disposition: "CLAIMED_BEFORE_DISPATCH"
       }),
-      nowFor(options, claimStep.sequence),
+      journalNow(trustedClock),
       { acceptExistingArtifact: true }
     );
   } catch (cause) {
@@ -837,13 +1570,14 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
       attemptOwnershipTokenSha256,
       disposition: "DURABLE_BEFORE_LOCAL_SCAFFOLD_CALL"
     }),
-    nowFor(options, dispatchStep.sequence)
+    journalNow(trustedClock)
   );
   maybeCrash(options, dispatchStep.event);
+  assertProviderCapableContextCurrent(context, secure, trustedClock);
   let result;
   try {
     result = await mcpCall(Object.freeze({
-      mcpRequestSha256: bindings(context).mcpRequestSha256
+      logicalMcpRequestSha256: journal.bound.logicalMcpRequestSha256
     }));
   } catch {
     return unknownDoNotAct();
@@ -853,6 +1587,11 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
     sessionCloseSha256: result?.sessionCloseSha256,
     sessionClosed: result?.sessionClosed
   });
+  requireCondition(
+    result?.logicalMcpRequestSha256 ===
+      journal.bound.logicalMcpRequestSha256,
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_LOGICAL_REQUEST_REJECTED"
+  );
   validateArtifact(
     INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN[7],
     resultArtifact
@@ -866,7 +1605,7 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
     context,
     resultStep,
     resultArtifact,
-    nowFor(options, resultStep.sequence)
+    journalNow(trustedClock)
   );
   maybeCrash(options, resultStep.event);
   const completeStep = INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN[8];
@@ -874,7 +1613,7 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
     context,
     completeStep,
     undefined,
-    nowFor(options, completeStep.sequence)
+    journalNow(trustedClock)
   );
   journal = readEntries(context, secure);
   requireCondition(
@@ -888,12 +1627,31 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
   });
 }
 
-function runDeterministicWorker(context, options, start, end, status) {
+export async function runIntegratedLiveDrillRecoveryContinuityW2(
+  context,
+  options = {}
+) {
+  requirePublicWorkerOptions(options, ["crashAfterEvent", "mcpCall"]);
+  return runIntegratedLiveDrillRecoveryContinuityW2Internal(
+    context,
+    options,
+    () => Date.now()
+  );
+}
+
+function runDeterministicWorker(
+  context,
+  options,
+  start,
+  end,
+  status,
+  trustedClock
+) {
   for (const step of INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN.slice(
     start,
     end
   )) {
-    recordStep(context, step, undefined, nowFor(options, step.sequence));
+    recordStep(context, step, undefined, journalNow(trustedClock));
     maybeCrash(options, step.event);
   }
   return Object.freeze({ status });
@@ -903,22 +1661,49 @@ export function runIntegratedLiveDrillRecoveryContinuityW3(
   context,
   options = {}
 ) {
-  return runDeterministicWorker(context, options, 9, 12, "W3_COMPLETE");
+  requirePublicWorkerOptions(options, ["crashAfterEvent"]);
+  return runDeterministicWorker(
+    context,
+    options,
+    9,
+    12,
+    "W3_COMPLETE",
+    () => Date.now()
+  );
 }
 
 export function runIntegratedLiveDrillRecoveryContinuityW4(
   context,
   options = {}
 ) {
-  return runDeterministicWorker(context, options, 12, 15, "W4_COMPLETE");
+  requirePublicWorkerOptions(options, ["crashAfterEvent"]);
+  return runDeterministicWorker(
+    context,
+    options,
+    12,
+    15,
+    "W4_COMPLETE",
+    () => Date.now()
+  );
 }
 
 export function runIntegratedLiveDrillRecoveryContinuityW5(
   context,
-  { providerClient, ...options } = {}
+  options = {}
 ) {
   requireCondition(
-    providerClient === undefined,
+    exactKeys(context, [
+      "authorization",
+      "controlLedgerReceipt",
+      "forbiddenRootPath",
+      "ledgerRootPath"
+    ]) &&
+      options &&
+      typeof options === "object" &&
+      !Array.isArray(options) &&
+      Object.keys(options).every((key) =>
+        ["crashAfterEvent"].includes(key)
+      ),
     "INTEGRATED_LIVE_DRILL_W5_PROVIDER_CLIENT_REJECTED"
   );
   const disposition = inspectIntegratedLiveDrillRecoveryContinuity(context);
@@ -926,7 +1711,14 @@ export function runIntegratedLiveDrillRecoveryContinuityW5(
     disposition.status === INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
     "INTEGRATED_LIVE_DRILL_W5_RECONCILIATION_REJECTED"
   );
-  return runDeterministicWorker(context, options, 15, 17, "W5_COMPLETE");
+  return runDeterministicWorker(
+    context,
+    options,
+    15,
+    17,
+    "W5_COMPLETE",
+    () => Date.now()
+  );
 }
 
 export function inspectIntegratedLiveDrillRecoveryContinuity(context) {
@@ -975,6 +1767,21 @@ export function validateIntegratedLiveDrillRecoveryContinuityJournal(
     context.ledgerRootPath,
     context.forbiddenRootPath
   );
+  if (allowAbsent) {
+    const authorizationId = context.authorization?.payload?.authorizationId;
+    const intentPresent = UUID.test(authorizationId ?? "") && fs.existsSync(
+      path.join(secure.ledgerRootPath, intentFileName(authorizationId))
+    );
+    const journalPresent = UUID.test(authorizationId ?? "") &&
+      fs.readdirSync(secure.ledgerRootPath).some((name) =>
+        name.startsWith(journalFilePrefix(authorizationId))
+      );
+    if (!intentPresent && !journalPresent) return null;
+    requireCondition(
+      intentPresent,
+      "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_BINDING_REJECTED"
+    );
+  }
   const journal = readEntries(context, secure);
   if (allowAbsent && journal.entries.length === 0) return null;
   requireCondition(
@@ -1001,7 +1808,8 @@ export function validateIntegratedLiveDrillRecoveryContinuityJournal(
       claimEntries[0].artifact.attemptOwnershipTokenSha256 ===
         dispatchEntries[0].artifact.attemptOwnershipTokenSha256 &&
       journal.entries[7].event === "MCP_RESULT_AND_CLOSE_DURABLE" &&
-      journal.entries[15].artifact.providerClientReceived === false &&
+      journal.entries[15].artifact.topLevelProviderClientOptionReceived ===
+        false &&
       journal.entries[15].artifact.providerClientInvoked === false &&
       journal.entries[16].artifact.disposition ===
         INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
@@ -1014,7 +1822,6 @@ export function validateIntegratedLiveDrillRecoveryContinuityJournal(
       journal.bound.authorizationAttestationSha256,
     authorizationClaimSha256: journal.bound.authorizationClaimSha256,
     authorizationId: journal.bound.authorizationId,
-    candidateReceiptSha256: journal.bound.candidateReceiptSha256,
     controlLedgerReceiptSha256: journal.bound.controlLedgerReceiptSha256,
     entryCount: journal.entries.length,
     entryDigests: journal.digests,
@@ -1022,13 +1829,15 @@ export function validateIntegratedLiveDrillRecoveryContinuityJournal(
     exactMcpDispatchMarkerCount,
     firstEntrySha256: journal.digests[0],
     lastEntrySha256: journal.digests.at(-1),
-    mcpRequestSha256: journal.bound.mcpRequestSha256,
+    logicalMcpRequestSha256: journal.bound.logicalMcpRequestSha256,
     mcpResultSha256: resultArtifact.mcpResultSha256,
     liveProviderBoundW1W5ContinuityProven: false,
     liveProviderDispatchAuthorizationProven: false,
     localSameHostScaffoldValidated: true,
     providerBacked: false,
     providerCallCountProven: false,
+    providerFreeW5ImportGraphProven: false,
+    preCallIntentSha256: journal.bound.preCallIntentSha256,
     reconciledWithoutRetry: true,
     runId: journal.bound.runId,
     sessionCloseSha256: resultArtifact.sessionCloseSha256,
@@ -1036,7 +1845,7 @@ export function validateIntegratedLiveDrillRecoveryContinuityJournal(
     status: INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
     workerCount: INTEGRATED_LIVE_DRILL_RECOVERY_WORKERS.length,
     claimBoundary:
-      "Local same-host scaffold only; actual provider-bound W1-W5 continuity remains unproven. The journal validates one local claim and one local dispatch marker, not an observed provider call count, provider authorization, provider origin, or crash continuity of the live Managed MCP path. Its unkeyed digest chain detects ordinary isolated mutation but is not independently anchored against same-owner full-chain rewriting."
+      "Local same-host scaffold only; actual provider-bound W1-W5 continuity remains unproven. The journal validates one local claim and one local dispatch marker, not an observed provider call count, provider authorization, provider origin, or crash continuity of the live Managed MCP path. The human authorization and consumed child token do not cryptographically authorize the derived recovery cluster or exact logical request. The W5 statement means only that its exact minimal reconciliation API accepted no top-level provider/client/key option and its local scaffold code path invoked no provider client; a provider-free import graph, nested-data capability absence, process credential isolation, and network isolation remain unproven for B2. The local scaffold records truthful post-dispatch evidence after authority expiry without authorizing a second provider action; provider-bound persistence and crash reconciliation on the live Managed MCP path remain unproven. Its unkeyed digest chain detects ordinary isolated mutation but is not independently anchored against same-owner full-chain rewriting."
   });
   return Object.freeze({
     ...body,
@@ -1047,6 +1856,7 @@ export function validateIntegratedLiveDrillRecoveryContinuityJournal(
 export const __test = Object.freeze({
   bindings,
   fileName,
+  intentFileName,
   journalFilePrefix,
   unknownFileName
 });

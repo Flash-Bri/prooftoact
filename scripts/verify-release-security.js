@@ -326,6 +326,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/integrated-live-drill-recovery-continuity.test.js",
     role: "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_VERIFICATION"
   }),
+  "integrated-live-drill-recovery-continuity-fixture": Object.freeze({
+    path: "test/helpers/integrated-live-drill-recovery-continuity-fixture.js",
+    role: "INTEGRATED_PROVIDER_DRILL_TRUSTED_PRE_CALL_TEST_FIXTURE"
+  }),
   "integrated-live-drill-recovery-continuity-worker": Object.freeze({
     path: "test/helpers/integrated-live-drill-recovery-continuity-worker.js",
     role: "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_SUBPROCESS_FIXTURE"
@@ -421,6 +425,14 @@ const EXPECTED_SURFACES = Object.freeze({
   "recovery-broker": Object.freeze({
     path: "src/cloud/recovery-broker.js",
     role: "RECOVERY_BROKER_RUNTIME"
+  }),
+  "recovery-bundle-signature": Object.freeze({
+    path: "src/cloud/recovery-bundle-signature.js",
+    role: "PROVIDER_FREE_STRICT_RECOVERY_BUNDLE_SIGNATURE_VERIFIER"
+  }),
+  "recovery-continuity-identity": Object.freeze({
+    path: "src/cloud/recovery-continuity-identity.js",
+    role: "PROVIDER_FREE_RECOVERY_PRE_CALL_IDENTITY_AND_BUNDLE_VERIFICATION"
   }),
   "recovery-security-contract": Object.freeze({
     path: "src/cloud/recovery-security-contract.js",
@@ -1789,8 +1801,10 @@ const SOURCE_MARKERS = Object.freeze({
     "integratedLiveDrillChildAuthorizationContext",
     "parseIntegratedLiveDrillChildAuthorization",
     "authorizeIntegratedLiveDrillChildLaunch",
+    "verifyIntegratedLiveDrillConsumedChildLaunch",
     "verifyIntegratedLiveDrillEvidence",
     "consumeIntegratedLiveDrillChildLaunch",
+    "validateIntegratedLiveDrillConsumedChildLaunch",
     "assertIntegratedLiveDrillChildAuthorizationCurrent",
     "INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_TIME_REJECTED"
   ]),
@@ -1858,8 +1872,9 @@ const SOURCE_MARKERS = Object.freeze({
     "--packet"
   ]),
   "integrated-live-drill-recovery-continuity": Object.freeze([
-    "tideproof.highwater-drill-recovery-continuity-journal-entry.v1",
-    "tideproof.highwater-drill-recovery-continuity-journal-receipt.v1",
+    "tideproof.highwater-drill-recovery-continuity-journal-entry.v2",
+    "tideproof.highwater-drill-recovery-continuity-journal-receipt.v2",
+    "tideproof.highwater-drill-recovery-continuity-pre-call-intent.v1",
     "LOCAL_SAME_HOST_SCAFFOLD_COMPLETED_NO_RETRY",
     "UNKNOWN_DO_NOT_ACT",
     "fs.constants.O_EXCL",
@@ -1867,21 +1882,43 @@ const SOURCE_MARKERS = Object.freeze({
     "attemptOwnershipTokenSha256",
     "acceptExistingArtifact",
     "DURABLE_BEFORE_LOCAL_SCAFFOLD_CALL",
-    "providerClientReceived: false",
+    "topLevelProviderClientOptionReceived: false",
     "providerClientInvoked: false",
     "exactMcpCallClaimCount = claimEntries.length",
     "exactMcpDispatchMarkerCount = dispatchEntries.length",
     "Local same-host scaffold only; actual provider-bound W1-W5 continuity remains unproven.",
-    "not independently anchored against same-owner full-chain rewriting"
+    "records truthful post-dispatch evidence after authority expiry",
+    "provider-bound persistence and crash reconciliation on the live Managed MCP path remain unproven",
+    "not independently anchored against same-owner full-chain rewriting",
+    "providerFreeW5ImportGraphProven: false",
+    "recoveryBrokerConfiguration",
+    "recoveryBrokerConfigDigest",
+    "acceptedExpectedSourceClusterId !== acceptedRecoveryClusterId",
+    "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_OPTIONS_REJECTED",
+    "journalStartedAt",
+    "validatePersistedRecoveryBundleForContinuity",
+    "validateIntegratedLiveDrillRunAuthorization"
   ]),
   "integrated-live-drill-recovery-continuity-tests": Object.freeze([
     "five subprocess workers resume four failpoints with exactly one fake MCP call",
     "only the O_EXCL claim creator dispatches across synchronized subprocess races",
     "claimed call without durable completion is permanently unknown and never retried",
     "W5 makes no ambient-credential claim, rejects a provider client, and journals reject tampering",
+    "public W1-W5 reject caller-controlled journal timestamps",
+    "journal rejects future-start and predated first-entry evidence",
+    "post-dispatch workers record truthful post-expiry time",
+    "production and continuity share strict trusted-bundle validation",
     "liveProviderBoundW1W5ContinuityProven",
     "liveProviderDispatchAuthorizationProven",
     "providerCallCountProven"
+  ]),
+  "integrated-live-drill-recovery-continuity-fixture": Object.freeze([
+    "createRecoveryContinuityFixture",
+    "persistOrReuseIntegratedLiveDrillRecoveryBundle",
+    "integratedLiveDrillRecoveryContinuityPreCallIntent",
+    "recoveryBrokerConfiguration",
+    "recoveryBrokerConfigDigest",
+    "consumeIntegratedLiveDrillChildLaunch"
   ]),
   "integrated-live-drill-recovery-continuity-worker": Object.freeze([
     "TEST_RECOVERY_CONTINUITY_BARRIER_TIMEOUT",
@@ -1909,9 +1946,10 @@ const SOURCE_MARKERS = Object.freeze({
     "value.race.invocationRequestDigests.changedInput",
     "value.race.awsInvokeRequestDigests.changedInput",
     "orchestrator executes exactly DVI, race, then exact-winner recovery",
-    "PACKET_B_LOCAL_SAME_HOST_SCAFFOLD_VALIDATED_NON_ACCEPTING",
-    "LOCAL_SAME_HOST_SCAFFOLD_VALIDATED",
-    "actual provider-bound W1-W5 continuity remains unproven",
+    "Packet B1 continuity is intentionally non-circular",
+    "post-call candidate path",
+    "packetA.localSameHostScaffoldValidated, false",
+    "packetA.recoveryContinuityDisposition",
     "runIntegratedLiveDrillPacketAFinalizer"
   ]),
   "recovery-bundle-persistence-tests": Object.freeze([
@@ -2143,6 +2181,34 @@ const SOURCE_MARKERS = Object.freeze({
     "read_reconciled",
     "commitDefinitivelyAborted"
   ]),
+  "recovery-continuity-identity": Object.freeze([
+    "tideproof.highwater-recovery-binding.v3",
+    "RECOVERY_DATABASE_FRESHNESS_SQL",
+    "RECOVERY_QUERY_TEMPLATE",
+    "canonicalRecoveryAttempt",
+    "recoveryBrokerConfigDigest",
+    "tideproof-managed-mcp-client-v1",
+    "tideproof-deterministic-recovery-broker-v3",
+    "normalizedRecoverySourceReceiptForContinuity",
+    "recoverySourceBindingDigestFor",
+    "verifyRecoveryBundleSourceSignature",
+    "canonicalJson(signedBundle) !== canonicalJson(envelope.signedBundle)",
+    "validatePersistedRecoveryBundleForContinuity",
+    "fs.constants.O_NOFOLLOW"
+  ]),
+  "recovery-bundle-signature": Object.freeze([
+    "RECOVERY_MAX_TTL_MS",
+    "RECOVERY_SIGNATURE_ALGORITHM",
+    "RECOVERY_PUBLISHER_VERSION",
+    "checkpointSummary.checkpointVersion",
+    "evidenceSummary.admittedCount",
+    "conflictSummary.unresolvedCount",
+    "receiptSummary.durableIntentPresent",
+    "recovery bundle TTL exceeds",
+    "bytes.toString(\"base64\") !== text",
+    "verifyRecoveryBundleSourceSignature",
+    "RECOVERY_SIGNATURE_INVALID"
+  ]),
   "recovery-security-contract": Object.freeze([
     "PRIMARY_MANAGED_BASE_TABLES",
     "RECOVERY_TRUST_ROOT_WRITE_PROBES",
@@ -2215,12 +2281,10 @@ const SOURCE_MARKERS = Object.freeze({
   "recovery-store": Object.freeze([
     "runtimeDatabaseConfig({",
     "bootstrapDatabaseConfig({",
-    "tideproof.highwater-recovery-binding.v3",
-    "authorityEvidenceBindingSha256",
-    "selectedEvidenceBindingSha256",
+    "recoverySourceBindingDigestFor",
     "RECOVERY_AUTHORITY_INVARIANT_VIOLATION",
-    "RECOVERY_SIGNATURE_INVALID",
-    "bytes.toString(\"base64\") !== text",
+    "from \"./recovery-bundle-signature.js\"",
+    "normalizedRecoveryBundleFor",
     "verifyRecoveryBundleSourceSignature",
     "mcp_private.recovery_bundles_v2",
     "databaseClientMustBeDiscarded(error)",
