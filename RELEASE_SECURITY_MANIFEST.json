@@ -456,7 +456,7 @@
       "id": "integrated-live-drill-recovery-continuity",
       "path": "src/cloud/integrated-live-drill-recovery-continuity.js",
       "role": "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_SCAFFOLD",
-      "sha256": "701a3b11545bfd649cd7178ed0d0d6eeea330f328348be728ea215881e3a5c20"
+      "sha256": "388a6e5f70c2a89d4ae846b2451baaade2264b707604c2c0981340077347891f"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-tests",
