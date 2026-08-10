@@ -10,6 +10,10 @@ import {
 } from "../src/cloud/admissible-vector-retrieval.js";
 import { isolatedEvidenceProcessEnvironment } from "../src/cloud/aws-evidence-identity.js";
 import {
+  assertIntegratedLiveDrillChildAuthorizationCurrent,
+  authorizeIntegratedLiveDrillChildLaunch
+} from "../src/cloud/integrated-live-drill-child-authorization.js";
+import {
   assertExactGitRepositoryLayout,
   gitEnvironment,
   gitInvariantArguments,
@@ -185,6 +189,10 @@ export async function runAdmissibleVector() {
 }
 
 export async function runAdmissibleVectorProof() {
+  const childAuthorization = authorizeIntegratedLiveDrillChildLaunch(
+    process.env,
+    "DVI_PROOF"
+  );
   const { sourceCommit, treeDigest } = sourceBinding({
     officialMain: true
   });
@@ -202,6 +210,7 @@ export async function runAdmissibleVectorProof() {
   let receipt;
   let primaryError = null;
   try {
+    assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
     receipt = await proveAdmissibleVectorSnapshot({
       authorizerPool,
       auditorPool,
@@ -209,6 +218,7 @@ export async function runAdmissibleVectorProof() {
       sourceCommit,
       treeDigest
     });
+    assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
   } catch (error) {
     primaryError = error;
   }

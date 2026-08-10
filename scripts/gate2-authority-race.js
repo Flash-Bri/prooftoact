@@ -12,6 +12,10 @@ import {
   validateAwsEvidenceCaller
 } from "../src/cloud/aws-evidence-identity.js";
 import {
+  assertIntegratedLiveDrillChildAuthorizationCurrent,
+  authorizeIntegratedLiveDrillChildLaunch
+} from "../src/cloud/integrated-live-drill-child-authorization.js";
+import {
   assertCleanExactGitCheckout,
   assertExactGitRepositoryLayout,
   gitEnvironment,
@@ -197,7 +201,7 @@ export function awsEvidenceClientOptions(credentials, requestHandler) {
   };
 }
 
-async function evidenceClients(credentials) {
+async function evidenceClients(credentials, childAuthorization) {
   const {
     CloudFormationClient,
     DescribeStackResourceCommand
@@ -224,6 +228,7 @@ async function evidenceClients(credentials) {
   const cloudFormation = new CloudFormationClient(clientOptions);
   return {
     async callerIdentity() {
+      assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
       const identity = await sts.send(new GetCallerIdentityCommand({}));
       return {
         Account: identity.Account,
@@ -232,6 +237,7 @@ async function evidenceClients(credentials) {
       };
     },
     async authorityRoleResource() {
+      assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
       return cloudFormation.send(
         new DescribeStackResourceCommand({
           StackName: "prooftoact-gate2",
@@ -240,6 +246,7 @@ async function evidenceClients(credentials) {
       );
     },
     async invoke(functionArn, event) {
+      assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
       return lambda.send(
         new InvokeCommand({
           FunctionName: functionArn,
@@ -252,6 +259,10 @@ async function evidenceClients(credentials) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  const childAuthorization = authorizeIntegratedLiveDrillChildLaunch(
+    process.env,
+    "AWS_AUTHORITY_RACE"
+  );
   const options = parseAuthorityRaceArguments(argv);
   const drill = authorityDrillBindingFromEnvironment(process.env);
   if (drill.runId !== options.runId) {
@@ -291,7 +302,7 @@ export async function main(argv = process.argv.slice(2)) {
   ) {
     throw new Error("AUTHORITY_RACE_EXPECTED_ACCOUNT_REJECTED");
   }
-  const clients = await evidenceClients(credentials);
+  const clients = await evidenceClients(credentials, childAuthorization);
   const expectedPrincipalArn = authorityPrincipalFromStackResource(
     expectedAccountId,
     await clients.authorityRoleResource()
@@ -331,6 +342,7 @@ export async function main(argv = process.argv.slice(2)) {
     callerBinding,
     invoke: clients.invoke
   });
+  assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
   const receipt = {
     ...raceReceipt,
     providerOperations: {

@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-privacy-manifest.v1",
   "status": "CURRENT_PUBLIC_HISTORY_REVIEWED_FINAL_RELEASE_PENDING",
-  "reviewedOn": "2026-08-08",
+  "reviewedOn": "2026-08-10",
   "allowedFindings": [
     {
       "rule": "basic-auth-url",
@@ -121,6 +121,12 @@
       "rule": "email-address",
       "path": "test/recovery-publisher-key.test.js",
       "matchSha256": "d1646d6db87d139676e8889763dc6585811701b85d1796f90511250abf986edb",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "pem-private-key",
+      "path": "test/fixtures/integrated-live-drill-pre-attestation.json",
+      "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     }
   ],

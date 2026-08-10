@@ -1,0 +1,181 @@
+{
+  "expectation": {
+    "schemaVersion": "tideproof.gate2.aws-deployment-expectation.v5",
+    "accountId": "111111111111",
+    "alternatePrincipal": {
+      "roleArn": "arn:aws:iam::111111111111:role/prooftoact-gate2-evidence-alternate",
+      "rolePolicyDigest": "d3b646220b8a2128f6be962297f67a32fff7fc39bd17f80939ae946bb9572d9b"
+    },
+    "basis": {
+      "buildReceiptSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "configurationSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "providerDependencyTreeDigest": "9999999999999999999999999999999999999999999999999999999999999999",
+      "providerRuntimeSha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "stackParameterCount": 45,
+      "stackParametersDigest": "8f138563c8be41312b9c064bea428ba1852ce2b3428c6e9bad713708dcd7e6ee"
+    },
+    "configDigest": "4272c1a659cda59b09541a5bb5a0bab685ecc50845c0bdb948c4259b665d7e8f",
+    "evidenceOperator": {
+      "roleArn": "arn:aws:iam::111111111111:role/prooftoact-gate2-evidence",
+      "rolePolicyDigest": "8e112528279b230bcad4271d49751bd0d570064fdf8743562e9a400367397679",
+      "trustedPrincipalArn": "arn:aws:iam::111111111111:role/tideproof-evidence-source"
+    },
+    "functions": {
+      "agent": {
+        "aliasArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-AgentFunction-A1B2C3D4:proof",
+        "codeSha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "configurationDigest": "adf69393a0c342c594302f6fde9eefbb6277a6d6971644d1ddeb68e98cc27a50",
+        "functionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-AgentFunction-A1B2C3D4",
+        "functionName": "prooftoact-gate2-AgentFunction-A1B2C3D4",
+        "numericVersion": "1",
+        "numericVersionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-AgentFunction-A1B2C3D4:1",
+        "provisionedConcurrencyConfigurations": [],
+        "reservedConcurrency": 1,
+        "roleArn": "arn:aws:iam::111111111111:role/prooftoact-gate2-AgentRole-A1B2C3D4",
+        "rolePolicyDigest": "d82e1970ad09f2cb7b94faefd565d8d23c3cdcc20777ef3d555f0085e5db2245",
+        "timeout": 15
+      },
+      "authority": {
+        "aliasArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-AuthorityFunction-A1B2C3D4:proof",
+        "codeSha256": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+        "configurationDigest": "5c90e22f9a3c15c2cba28c28811b683795c07c9aee1930af0f3b9dcfebf1a243",
+        "functionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-AuthorityFunction-A1B2C3D4",
+        "functionName": "prooftoact-gate2-AuthorityFunction-A1B2C3D4",
+        "numericVersion": "2",
+        "numericVersionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-AuthorityFunction-A1B2C3D4:2",
+        "provisionedConcurrencyConfigurations": [],
+        "reservedConcurrency": 2,
+        "roleArn": "arn:aws:iam::111111111111:role/prooftoact-gate2-AuthorityRole-A1B2C3D4",
+        "rolePolicyDigest": "54b643174829f1e35f6fc2202f4594c15dbfca472f8006b69639c39851af89bc",
+        "timeout": 25
+      },
+      "boundary": {
+        "aliasArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-BoundaryFunction-A1B2C3D4:proof",
+        "codeSha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+        "configurationDigest": "c398e0dbb6340243a5d9b9beeff0aa7dfcd00535d591644c921e3b2068c995a8",
+        "functionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-BoundaryFunction-A1B2C3D4",
+        "functionName": "prooftoact-gate2-BoundaryFunction-A1B2C3D4",
+        "numericVersion": "3",
+        "numericVersionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-BoundaryFunction-A1B2C3D4:3",
+        "provisionedConcurrencyConfigurations": [],
+        "reservedConcurrency": 2,
+        "roleArn": "arn:aws:iam::111111111111:role/prooftoact-gate2-BoundaryRole-A1B2C3D4",
+        "rolePolicyDigest": "0f5456493bd97364edc5ae1a19b9d824f46c2ae93b85aac71da2c83b18bee3f7",
+        "timeout": 25
+      },
+      "demo": {
+        "aliasArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-DemoFunction-A1B2C3D4:proof",
+        "codeSha256": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ=",
+        "configurationDigest": "097d39c28491b528a06e8e1ce730e76f0f20e11fae5cab49fdaed8b1302a63f9",
+        "functionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-DemoFunction-A1B2C3D4",
+        "functionName": "prooftoact-gate2-DemoFunction-A1B2C3D4",
+        "numericVersion": "4",
+        "numericVersionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-DemoFunction-A1B2C3D4:4",
+        "provisionedConcurrencyConfigurations": [],
+        "reservedConcurrency": 8,
+        "roleArn": "arn:aws:iam::111111111111:role/prooftoact-gate2-DemoRole-A1B2C3D4",
+        "rolePolicyDigest": "9d80d6c2edfff1e2861cac694b79f8773c68973e0ae1acabb4b4d83adda41c44",
+        "timeout": 5
+      },
+      "signer": {
+        "aliasArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-SignerFunction-A1B2C3D4:proof",
+        "codeSha256": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU=",
+        "configurationDigest": "e3de8d7cff9edfee5c09fd975408db4ce8e88b16f53fad241e7ce558bb924500",
+        "functionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-SignerFunction-A1B2C3D4",
+        "functionName": "prooftoact-gate2-SignerFunction-A1B2C3D4",
+        "numericVersion": "5",
+        "numericVersionArn": "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-gate2-SignerFunction-A1B2C3D4:5",
+        "provisionedConcurrencyConfigurations": [],
+        "reservedConcurrency": 1,
+        "roleArn": "arn:aws:iam::111111111111:role/prooftoact-gate2-SignerRole-A1B2C3D4",
+        "rolePolicyDigest": "3199727c5e3e5d3f63ef2fe1f80e2f518b6a217d527d7d822473dac941e4f43f",
+        "timeout": 8
+      }
+    },
+    "integratedLiveDrillAuthorizationAttestationSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "receiptPublicKeys": {
+      "alternateDenial": "MCowBQYDK2VwAyEAj0VJ/YpU7XEZC4wFnSk7GHJLqoBBbXxk/DiuKy+HIC4=",
+      "post": "MCowBQYDK2VwAyEAd1VYRu4lqpNgUjvfuVIfLNDMJHs97iK9FjwFVlzHZdI=",
+      "pre": "MCowBQYDK2VwAyEA3txcDSD/1hOLvUiqc89a+GZHpspsMaGa3bu8fuqGJRA="
+    },
+    "region": "us-east-1",
+    "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "stackId": "arn:aws:cloudformation:us-east-1:111111111111:stack/prooftoact-gate2/11111111-1111-4111-8111-111111111111",
+    "stackName": "prooftoact-gate2",
+    "templateCanonicalDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "treeDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "preReceipt": {
+    "schemaVersion": "tideproof.gate2.aws-deployment-attestation-snapshot.v6",
+    "status": "PRE_ATTESTATION_PASS",
+    "phase": "pre",
+    "observationStartedAt": "2026-08-09T16:01:59.000Z",
+    "observedAt": "2026-08-09T16:02:00.000Z",
+    "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "treeDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configDigest": "4272c1a659cda59b09541a5bb5a0bab685ecc50845c0bdb948c4259b665d7e8f",
+    "templateCanonicalDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "providerDependencyTreeDigest": "9999999999999999999999999999999999999999999999999999999999999999",
+    "providerRuntimeSha256": "8888888888888888888888888888888888888888888888888888888888888888",
+    "basisDigest": "4ed804cb8138e88836ffdb4f55126a73914d0db45a30d4aed8b07097cdd0c169",
+    "apiGatewayDigest": "40a7840423e05607d5c089665f6e3642657fe9028a141b66a399e3f8d863ba76",
+    "expectationDigest": "f11f9bc3a4a3c49990b1ccc1c8a23280f6855d837e14b27f8ea76ca61da52c4e",
+    "integratedLiveDrillAuthorizationAttestationSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "callerBinding": {
+      "bindingDigest": "60392b12733ed7d8f61ae81d0a2538dfe9d1bccf435767d752edc05e7834b27b",
+      "callerIdentityDigest": "5e42de98965c2a1feb1e1bdd0b3b3ae4a9f6eeffedfbe88f8d3123e951d4b284",
+      "contextDigest": "4f048bc11d5771f46b8ea08edded3bac9ba87616d84e08f850389e12050d54b4",
+      "expectedIdentityDigest": "5e42de98965c2a1feb1e1bdd0b3b3ae4a9f6eeffedfbe88f8d3123e951d4b284",
+      "expectedPrincipalDigest": "3d21223f63e9d460a300d9cac31193ea7d32a3e23dc6f335ce301ce4cd740655",
+      "principalIdDigest": "833ebc685a2c3ec5e38803c78e3a42a54ca0e3bad26f661e15ca58c4c5815b1a",
+      "principalType": "assumed-role"
+    },
+    "evidenceOperator": {
+      "censusDigest": "c5e670bcce2012b2cabc6474ad7754f22fb1aff8895b0b2bb51f08e4c99dead1",
+      "deploymentDigest": "c3ed0380e71ea45a11e6bb1b9eeeb54ab01ae1203a32be0212c2a0ba76b11a5d",
+      "policyDigest": "8e112528279b230bcad4271d49751bd0d570064fdf8743562e9a400367397679",
+      "roleIdDigest": "833ebc685a2c3ec5e38803c78e3a42a54ca0e3bad26f661e15ca58c4c5815b1a",
+      "trustDigest": "c2311fbbd9f7f128f557c0fe9957e2a19629670988574c2808de35de3e784882"
+    },
+    "alternatePrincipal": {
+      "censusDigest": "c5e670bcce2012b2cabc6474ad7754f22fb1aff8895b0b2bb51f08e4c99dead1",
+      "deploymentDigest": "c8817643c716d71243acf9ba7bf990f5e1c38df879acf1c4a708e3b4b5eb97ac",
+      "policyDigest": "d3b646220b8a2128f6be962297f67a32fff7fc39bd17f80939ae946bb9572d9b",
+      "roleIdDigest": "624c0c41440b90ea69078e329ddc9673f9e712f9806e9c4226c827bbef6b28c8",
+      "trustDigest": "0e7ebf79bbf692a8a6f75c30d8b1a4b340a8c182dd0bd1eab22a226df907df06"
+    },
+    "stackDigest": "15c04b7434c62569cedaf6f4e6615ed52fb62529c5d4b95e7b2b09ddd548a177",
+    "observationFenceDigest": "c18c4590d01dfa0c3e67f504a9751fea4e71e77ec11ec10d42c17a751eea45fe",
+    "functions": {
+      "agent": {
+        "numericVersion": "1",
+        "deploymentDigest": "04b1437279aa033c0cc05449f191465ad70042e733c09ab73641ea7cf35c9eef"
+      },
+      "authority": {
+        "numericVersion": "2",
+        "deploymentDigest": "a6622894a72742cb244f42faf9502d24a4dcf20d51cc93e7e98a70afcc5ee917"
+      },
+      "boundary": {
+        "numericVersion": "3",
+        "deploymentDigest": "a813b92c6d4ba87b0cb7fa0176a58116acac6dbb09577220837958740542ef13"
+      },
+      "demo": {
+        "numericVersion": "4",
+        "deploymentDigest": "f7f9cb84661127ba1cc2b7212a31a129370f17a568bdbf3ac89d713c80cb506a"
+      },
+      "signer": {
+        "numericVersion": "5",
+        "deploymentDigest": "736feae68ecdb4227ca6d1d22874cfa25d251b36b4ab8978ed8a277980fc9d2b"
+      }
+    },
+    "finalReleaseReady": false,
+    "claimBoundary": "This signed receipt validates one revision-fenced AWS deployment snapshot for the five primary runtime functions, their shared roles, the two evidence roles, and the exact HTTP API route/integration/stage and explicit active-deployment census against exact build, configuration, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested explicit API deployment, and direct provider observations. It accepts only a never-updated CREATE_COMPLETE stack whose active deployment was created during that stack creation after every declared route; any stack update requires teardown and a fresh create before evidence can pass. Probe resources are required absent. Unmanaged Lambda aliases, function URLs, and event-source mappings are required absent for the five primary functions. Other account resources remain outside this census. It is not a pre/post stability receipt, administrator exclusion, application canary, or release authorization.",
+    "snapshotDigest": "d89c8b5124a35327b94fe9c5244b567a5155b56c088eb0e6014d494dc15f35d9",
+    "signature": {
+      "algorithm": "Ed25519",
+      "keyIdDigest": "770697771873fb558f1188f37dd69698be159c1771d0992d811516494974c88a",
+      "value": "xQLS+9Jkkaw9LXnxeFG0s19th1ZVTTvbGcRU7f06vAMNk/vSlD+P3GokKFHKygtwdZX61YzWY1wtqBhsPC9RDA=="
+    }
+  },
+  "syntheticTestOnlyPrePrivateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIIyi6616hIwHLe9+5Bc698ZiujuEo9eP1Y3t7L5uPfWN\n-----END PRIVATE KEY-----\n"
+}

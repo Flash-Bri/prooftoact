@@ -2,8 +2,12 @@ import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { canonicalJson } from "./canonical-json.js";
+import { INTEGRATED_LIVE_DRILL_CROSS_HOST_CLAIM_BLOCKER } from
+  "./integrated-live-drill-authorization.js";
 import { canonicalRecoveryAttempt } from "./recovery-broker.js";
 import { verifyRecoveryBundleSourceSignature } from "./recovery-store.js";
+import { INTEGRATED_LIVE_DRILL_CONTROL_LEDGER_RECEIPT_SCHEMA } from
+  "./integrated-live-drill-control-ledger.js";
 
 export const INTEGRATED_LIVE_DRILL_SCHEMA =
   "tideproof.highwater-drill-live.v1";
@@ -1619,6 +1623,49 @@ function acceptedPrivateEvidence(receipt, spec, selectedBinding, digests) {
   return receiptSha256 === sha256(canonicalJson(unsigned));
 }
 
+function acceptedControlLedger(receipt, spec) {
+  if (
+    !exactKeys(receipt, [
+      "authorizationAttestationSha256",
+      "authorizationClaimSha256",
+      "authorizationId",
+      "authorizedMaximumCumulativeExposureUsd",
+      "childLaunchDigests",
+      "exactChildLaunchCount",
+      "exactScopeCount",
+      "receiptSha256",
+      "reservationDigests",
+      "reservedCumulativeExposureUsd",
+      "runId",
+      "schemaVersion",
+      "spendAuthorizationSha256"
+    ]) ||
+    receipt.schemaVersion !==
+      INTEGRATED_LIVE_DRILL_CONTROL_LEDGER_RECEIPT_SCHEMA ||
+    receipt.runId !== spec.runId ||
+    receipt.authorizedMaximumCumulativeExposureUsd !== "0.020000" ||
+    receipt.exactChildLaunchCount !== 3 ||
+    receipt.exactScopeCount !== 3 ||
+    !Array.isArray(receipt.childLaunchDigests) ||
+    receipt.childLaunchDigests.length !== 3 ||
+    !Array.isArray(receipt.reservationDigests) ||
+    receipt.reservationDigests.length !== 3 ||
+    ![
+      receipt.authorizationAttestationSha256,
+      receipt.authorizationClaimSha256,
+      receipt.receiptSha256,
+      receipt.spendAuthorizationSha256,
+      ...receipt.childLaunchDigests,
+      ...receipt.reservationDigests
+    ].every((value) => SHA256.test(value ?? "")) ||
+    !/^0\.[0-9]{6}$/u.test(receipt.reservedCumulativeExposureUsd ?? "")
+  ) {
+    return false;
+  }
+  const { receiptSha256, ...unsigned } = receipt;
+  return receiptSha256 === sha256(canonicalJson(unsigned));
+}
+
 export function buildIntegratedLiveDrillCandidateReceipt({
   spec,
   dvi,
@@ -1633,6 +1680,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
   privateEvidenceRootPath,
   forbiddenPrivateEvidenceRootPath,
   privateEvidenceReceipt,
+  controlLedgerReceipt = null,
   authorityEvidenceId,
   authoritySelectedEvidenceDigest
 }) {
@@ -1642,6 +1690,10 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     authoritySelectedEvidenceDigest
   );
   const componentDigests = componentDigestsFor({ dvi, race, recovery });
+  const spendAuthorizationProven = acceptedControlLedger(
+    controlLedgerReceipt,
+    acceptedSpec
+  );
   const verifiedPrivateEvidenceReceipt =
     verifyIntegratedLiveDrillPrivateEvidence({
       destinationPath: privateEvidencePath,
@@ -1787,7 +1839,9 @@ export function buildIntegratedLiveDrillCandidateReceipt({
       completeProviderRequestAccounting: false,
       providerPricingVerified: false,
       actualAwsSpendVerified: false,
-      spendAuthorizationProvenByReceipt: false,
+      spendAuthorizationProvenByReceipt: spendAuthorizationProven,
+      authorizationControlLedgerReceiptSha256:
+        spendAuthorizationProven ? controlLedgerReceipt.receiptSha256 : null,
       actualProviderBillingReceiptRequiredSeparately: true
     },
     acceptance: {
@@ -1802,6 +1856,8 @@ export function buildIntegratedLiveDrillCandidateReceipt({
         "PRIVATE_RAW_EVIDENCE_NOT_INDEPENDENTLY_ATTESTED",
         "RESTART_STABLE_SIGNED_BUNDLE_REUSE_NOT_PROVEN",
         "CRASH_SAFE_RECOVERY_NOT_PROVEN",
+        INTEGRATED_LIVE_DRILL_CROSS_HOST_CLAIM_BLOCKER,
+        "DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN",
         "PROVIDER_PRICING_AND_BILLING_NOT_PROVEN"
       ]
     },
@@ -1810,7 +1866,7 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     invariantViolations: 0,
     providerBacked: false,
     claimBoundary:
-      "This sanitized candidate summarizes one runner-observed integrated synthetic component result whose claimed CockroachDB DVI selection, five claimed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. The candidate does not independently establish that any component receipt came from a provider, so providerBacked remains false. Before publication, the recovery runner create-only persists and rereads an owner-only canonical envelope containing the exact signed recovery bundle; a later invocation with the same unsigned bundle must reuse those first signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, while its receipt marks the original create/link protocol unobserved. The current file bytes are bound, but actual restart reuse and crash continuity are not proven. Before the first component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal, signed-bundle, and private-bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; provider-backed restart-stable signed-bundle reuse and crash-safe single-call recovery are not yet proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, provider execution, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
+      "This sanitized candidate summarizes one runner-observed integrated synthetic component result whose claimed CockroachDB DVI selection, five claimed numeric-version Lambda invocations, overlapping authority race, replay and changed-input controls, and exact-winner canonical-bundle Managed MCP recovery share one binding with zero declared component-invariant violations. The candidate does not independently establish that any component receipt came from a provider, so providerBacked remains false. Before publication, the recovery runner create-only persists and rereads an owner-only canonical envelope containing the exact signed recovery bundle; a later invocation with the same unsigned bundle must reuse those first signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, while its receipt marks the original create/link protocol unobserved. The current file bytes are bound, but actual restart reuse and crash continuity are not proven. Before the first component, a source-local owner-only journal durably records the run-intent digest; later create-only, fsynced entries hash-chain the currently observed component, private-evidence, and post-release digests. A source-local helper also writes a raw private component bundle outside the Git checkout. The candidate binds the currently reread journal, signed-bundle, and private-bundle bytes plus unkeyed source-control receipt digests. Those present-state checks are not independent evidence of the historical write protocol, durable retention, or crash continuity. The authorization ledger and signed one-use child tokens are atomic and restart-durable only on the exact declared authoritative root; cross-host strongly consistent claim authority and protection against an independently copied pre-launch ledger are not proven. This is not the accepted +1 receipt: no signed pre/post deployment attestation binds the invoked numeric version to exact release code, configuration, execution role, revisions, or alias target; independent journal attestation and a private-evidence finalizer remain mandatory; provider-backed restart-stable signed-bundle reuse and crash-safe single-call recovery are not yet proven; durable exact-one Managed MCP reconciliation across crash, restart, and ambiguous provider results is not proven; and provider pricing and billing remain separate fail-closed gates. The Managed MCP receipt binds one continuous negotiated session plus request, response, and result digests, but is not an independent provider signature. This candidate does not prove an exact release, provider execution, a real-world external effect, production suitability, availability, administrator exclusion, or authorize deployment, publication, or submission."
   };
   return Object.freeze({
     ...receipt,

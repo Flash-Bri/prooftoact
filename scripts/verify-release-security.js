@@ -286,6 +286,46 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/integrated-live-drill.js",
     role: "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT"
   }),
+  "integrated-live-drill-authorization": Object.freeze({
+    path: "src/cloud/integrated-live-drill-authorization.js",
+    role: "INTEGRATED_PROVIDER_DRILL_AUTHORIZATION_AND_FINALIZATION_CONTRACT"
+  }),
+  "integrated-live-drill-authorization-tests": Object.freeze({
+    path: "test/integrated-live-drill-authorization.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_SIGNED_CONTRACT_VERIFICATION"
+  }),
+  "integrated-live-drill-child-authorization": Object.freeze({
+    path: "src/cloud/integrated-live-drill-child-authorization.js",
+    role: "INTEGRATED_PROVIDER_DRILL_SIGNED_ONE_USE_CHILD_LAUNCH_AUTHORIZATION"
+  }),
+  "integrated-live-drill-child-authorization-tests": Object.freeze({
+    path: "test/integrated-live-drill-child-authorization.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_CHILD_AUTHORIZATION_VERIFICATION"
+  }),
+  "integrated-live-drill-control-ledger": Object.freeze({
+    path: "src/cloud/integrated-live-drill-control-ledger.js",
+    role: "INTEGRATED_PROVIDER_DRILL_DURABLE_AUTHORIZATION_AND_SPEND_LEDGER"
+  }),
+  "integrated-live-drill-control-ledger-tests": Object.freeze({
+    path: "test/integrated-live-drill-control-ledger.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_DURABLE_CONTROL_LEDGER_VERIFICATION"
+  }),
+  "integrated-live-drill-finalizer": Object.freeze({
+    path: "src/cloud/integrated-live-drill-finalizer.js",
+    role: "INTEGRATED_PROVIDER_DRILL_PACKET_A_FAIL_CLOSED_FINALIZER"
+  }),
+  "integrated-live-drill-finalizer-runner": Object.freeze({
+    path: "scripts/gate2-integrated-live-drill-finalizer.js",
+    role: "INTEGRATED_PROVIDER_DRILL_PACKET_A_OFFLINE_FINALIZER_RUNNER"
+  }),
+  "integrated-live-drill-pre-attestation-fixture": Object.freeze({
+    path: "test/fixtures/integrated-live-drill-pre-attestation.json",
+    role: "INTEGRATED_PROVIDER_DRILL_SIGNED_PRE_ATTESTATION_FIXTURE"
+  }),
+  "integrated-live-drill-synthetic-test-keys": Object.freeze({
+    path: "test/helpers/synthetic-test-signing-keys.js",
+    role: "INTEGRATED_PROVIDER_DRILL_SYNTHETIC_TEST_KEY_ISOLATION"
+  }),
   "integrated-live-drill-runner": Object.freeze({
     path: "scripts/gate2-integrated-live-drill.js",
     role: "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER"
@@ -385,6 +425,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "recovery-publisher-key": Object.freeze({
     path: "scripts/lib/recovery-publisher-key.js",
     role: "RECOVERY_PUBLISHER_TRUST_ROOT_BOUNDARY"
+  }),
+  "recovery-publisher-trust": Object.freeze({
+    path: "src/cloud/recovery-publisher-trust.js",
+    role: "RECOVERY_PUBLISHER_PUBLIC_TRUST_DIGEST_BOUNDARY"
   }),
   "recovery-publisher-key-tests": Object.freeze({
     path: "test/recovery-publisher-key.test.js",
@@ -750,6 +794,9 @@ const SOURCE_MARKERS = Object.freeze({
     "refs/heads/main:refs/remotes/origin/main",
     "TIDEPROOF_AUDITOR_DATABASE_URL",
     "TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC",
+    "authorizeIntegratedLiveDrillChildLaunch",
+    "assertIntegratedLiveDrillChildAuthorizationCurrent",
+    "DVI_PROOF",
     "ADMISSIBLE_VECTOR_POOL_CLOSE_FAILED",
     "--proof",
     "not an accepted DVI plan/exclusion receipt"
@@ -937,6 +984,9 @@ const SOURCE_MARKERS = Object.freeze({
     "DescribeStackResourceCommand",
     "receipt.treeDigest !== checkout.treeDigest",
     "runId: options.runId",
+    "authorizeIntegratedLiveDrillChildLaunch",
+    "assertIntegratedLiveDrillChildAuthorizationCurrent",
+    "AWS_AUTHORITY_RACE",
     "ignoreConfiguredEndpointUrls: true"
   ]),
   "aws-authority-race-validator": Object.freeze([
@@ -985,9 +1035,10 @@ const SOURCE_MARKERS = Object.freeze({
     "exactly two standalone official"
   ]),
   "aws-deployment-attestation": Object.freeze([
-    "tideproof.gate2.aws-deployment-expectation.v4",
-    "tideproof.gate2.aws-deployment-attestation-snapshot.v5",
-    "tideproof.gate2.aws-deployment-attestation.v5",
+    "tideproof.gate2.aws-deployment-expectation.v5",
+    "tideproof.gate2.aws-deployment-attestation-snapshot.v6",
+    "tideproof.gate2.aws-deployment-attestation.v6",
+    "integratedLiveDrillAuthorizationAttestationSha256",
     "signDeploymentAttestationReceipt(",
     "validateDeploymentEvidenceBasis({",
     "validateEvidenceOperatorTrust(",
@@ -1651,6 +1702,7 @@ const SOURCE_MARKERS = Object.freeze({
     "crashSafeRecoveryProven: false",
     "restartStableSignedBundleReuseProven: false",
     "RESTART_STABLE_SIGNED_BUNDLE_REUSE_NOT_PROVEN",
+    "INTEGRATED_LIVE_DRILL_CROSS_HOST_CLAIM_BLOCKER",
     "exactReplayReturnedOriginalDecision: true",
     "changedInputUnderOperationDenied: true",
     "managedMcpCalledExactlyOnce: true",
@@ -1661,19 +1713,143 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "integrated-live-drill-runner": Object.freeze([
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+    "TIDEPROOF_GATE2_DEPLOYMENT_EXPECTATION",
+    "TIDEPROOF_GATE2_PRE_DEPLOYMENT_ATTESTATION",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUN_AUTHORIZATION",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNNER_IDENTITY",
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH",
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH",
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH",
+    "INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_ENVIRONMENT",
     "startIntegratedLiveDrillJournal",
     "appendIntegratedLiveDrillJournal",
     "persistIntegratedLiveDrillPrivateEvidence",
+    "consumeIntegratedLiveDrillRunAuthorization",
+    "reserveIntegratedLiveDrillSpend",
+    "integratedLiveDrillChildAuthorizationContext",
+    "integratedLiveDrillChildCommittedTrustRoot",
+    "finalizeIntegratedLiveDrillControlLedger",
     "gate1-admissible-vector.js",
     "gate2-authority-race.js",
     "gate1-recovery-broker.js",
     "RECOVERY_SOURCE_OPERATION_ID: race.winner?.operationId",
     "RECOVERY_SOURCE_REQUEST_DIGEST: race.winner?.requestDigest",
     "INTEGRATED_LIVE_DRILL_COMPONENT_FAILED"
+  ]),
+  "integrated-live-drill-authorization": Object.freeze([
+    "tideproof.highwater-drill-live-run-authorization.v2",
+    "tideproof.highwater-drill-human-authorization-trust-root.v1",
+    "tideproof.highwater-drill-spend-authorization.v1",
+    "tideproof.highwater-drill-claim-authority.v1",
+    "tideproof.highwater-drill-live-finalization-statement.v1",
+    "tideproof.highwater-drill-human-authorized-deployment-expectation.v1",
+    "DERIVED_FROM_THIS_SIGNED_RUN_AUTHORIZATION_ATTESTATION_SHA256",
+    "expectationSha256",
+    "validateIntegratedLiveDrillCommittedRecoveryTrustRoot",
+    "integratedLiveDrillTypedEvidenceSubjects",
+    "CANDIDATE_RECEIPT_BOUND_NOT_ACCEPTED",
+    "BILLING_PENDING",
+    "RECOVERY_CURRENT_BYTES_BOUND_CRASH_RESTART_PENDING",
+    "INTEGRATED_LIVE_DRILL_AUTHORIZATION_KEY_SEPARATION_REJECTED",
+    "INTEGRATED_LIVE_DRILL_AUTHORIZATION_CHILD_LAUNCH_KEY_REJECTED",
+    "INTEGRATED_LIVE_DRILL_CROSS_HOST_CLAIM_BLOCKER",
+    "validateIntegratedLiveDrillPreAuthorizationBinding",
+    "validateIntegratedLiveDrillTypedEvidenceAttestations",
+    "validateIntegratedLiveDrillEvidenceSet",
+    "validateIntegratedLiveDrillFinalizationStatement"
+  ]),
+  "integrated-live-drill-authorization-tests": Object.freeze([
+    "signed integrated-live authorization binds the exact run and separated evidence keys",
+    "integrated-live authorization rejects signature mutation, expiry, and key reuse",
+    "integrated-live authorization rejects every expectation-to-spec drift",
+    "human authorization binds every deployment trust key and configuration",
+    "authorized expectation projection rejects marker, extra, and missing-field drift",
+    "pre-attestation must start strictly after authorization and finish before expiry",
+    "typed evidence binds every signer and uses the latest safe observation",
+    "PACKET_B_PROVIDER_ACCEPTANCE_PENDING",
+    "signed finalization binds the completed evidence and rejects mutation or premature issue"
+  ]),
+  "integrated-live-drill-child-authorization": Object.freeze([
+    "tideproof.highwater-drill-child-launch-token.v1",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION",
+    "integratedLiveDrillChildAuthorizationContext",
+    "parseIntegratedLiveDrillChildAuthorization",
+    "authorizeIntegratedLiveDrillChildLaunch",
+    "verifyIntegratedLiveDrillEvidence",
+    "consumeIntegratedLiveDrillChildLaunch",
+    "assertIntegratedLiveDrillChildAuthorizationCurrent",
+    "INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_TIME_REJECTED"
+  ]),
+  "integrated-live-drill-child-authorization-tests": Object.freeze([
+    "child context binds one reserved provider scope and authorization deadline",
+    "child context rejects scope substitution, noncanonical input, and expiry"
+  ]),
+  "integrated-live-drill-control-ledger": Object.freeze([
+    "tideproof.highwater-drill-authorization-claim.v1",
+    "tideproof.highwater-drill-spend-reservation.v1",
+    "tideproof.highwater-drill-control-ledger-receipt.v1",
+    "tideproof.highwater-drill-child-launch-consumption.v1",
+    "fs.constants.O_EXCL",
+    "fs.fsyncSync",
+    "readAndValidateReservationFile",
+    "parseCanonicalLedgerRecord",
+    "readAndValidateChildLaunchFile",
+    "consumeIntegratedLiveDrillRunAuthorization",
+    "reserveIntegratedLiveDrillSpend",
+    "consumeIntegratedLiveDrillChildLaunch",
+    "finalizeIntegratedLiveDrillControlLedger",
+    "validateIntegratedLiveDrillConsumedControlLedger",
+    "INTEGRATED_LIVE_DRILL_AUTHORIZATION_ALREADY_CONSUMED",
+    "INTEGRATED_LIVE_DRILL_SPEND_RESERVATION_ORDER_REJECTED",
+    "INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_ALREADY_CONSUMED",
+    "INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_ORDER_REJECTED",
+    "INTEGRATED_LIVE_DRILL_SPEND_CAP_EXCEEDED"
+  ]),
+  "integrated-live-drill-control-ledger-tests": Object.freeze([
+    "authorization consumption is durable one-use across restart and concurrency",
+    "truncated ambiguous claim remains consumed and cannot move spend",
+    "same-length noncanonical claim mutation cannot authorize spend",
+    "fabricated prior reservation cannot unlock a later provider scope",
+    "spend ledger enforces exact order, one reservation, and cumulative cap",
+    "child launches reject reserved-but-unlaunched predecessor scopes",
+    "concurrent later-scope launches cannot bypass an unlaunched first scope"
+  ]),
+  "integrated-live-drill-finalizer": Object.freeze([
+    "tideproof.highwater-drill-packet-a-finalization-validation.v1",
+    "DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN",
+    "INTEGRATED_LIVE_DRILL_CROSS_HOST_CLAIM_BLOCKER",
+    "validateIntegratedLiveDrillEvidenceSet",
+    "validateIntegratedLiveDrillFinalizationStatement",
+    "validateIntegratedLiveDrillRunAuthorization",
+    "validateIntegratedLiveDrillConsumedControlLedger",
+    "integratedLiveDrillRunnerIdentityDigest",
+    "validateIntegratedLiveDrillPacketAFinalization",
+    "PACKET_B_PROVIDER_ACCEPTANCE_PENDING",
+    "accepted: false",
+    "finalReleaseReady: false"
+  ]),
+  "integrated-live-drill-finalizer-runner": Object.freeze([
+    "tideproof.highwater-drill-packet-a-untrusted-finalizer-input.v1",
+    "tideproof.highwater-drill-packet-a-trusted-finalizer-context.v1",
+    "parseIntegratedLiveDrillPacketAFinalizerInput",
+    "parseIntegratedLiveDrillPacketAFinalizerTrustedContext",
+    "loadIntegratedLiveDrillPacketAFinalizerTrustedContext",
+    "loadCommittedRecoveryPublisherTrustRoot",
+    "forbiddenRootPath: MODULE_ROOT",
+    "runIntegratedLiveDrillPacketAFinalizer",
+    "--packet"
+  ]),
+  "integrated-live-drill-pre-attestation-fixture": Object.freeze([
+    "tideproof.gate2.aws-deployment-expectation.v5",
+    "tideproof.gate2.aws-deployment-attestation-snapshot.v6",
+    "BEGIN PRIVATE KEY"
+  ]),
+  "integrated-live-drill-synthetic-test-keys": Object.freeze([
+    "SYNTHETIC TEST-ONLY KEY MATERIAL",
+    "generateSyntheticTestOnlyEd25519Key",
+    "generateSyntheticTestOnlyP256PublicKey"
   ]),
   "integrated-live-drill-tests": Object.freeze([
     "private evidence source control binds current bytes before candidate composition",
@@ -1683,7 +1859,8 @@ const SOURCE_MARKERS = Object.freeze({
     "integrated receipt fails closed on every cross-act boundary",
     "value.race.invocationRequestDigests.changedInput",
     "value.race.awsInvokeRequestDigests.changedInput",
-    "orchestrator executes exactly DVI, race, then exact-winner recovery"
+    "orchestrator executes exactly DVI, race, then exact-winner recovery",
+    "runIntegratedLiveDrillPacketAFinalizer"
   ]),
   "recovery-bundle-persistence-tests": Object.freeze([
     "signed recovery bundle survives restart with the exact first signature bytes",
@@ -1934,6 +2111,9 @@ const SOURCE_MARKERS = Object.freeze({
     "assertRecoveryPublisherTrustRootWriteDenied({",
     "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
     "PRIMARY_AUDIT_DATABASE_URL",
+    "authorizeIntegratedLiveDrillChildLaunch",
+    "assertIntegratedLiveDrillChildAuthorizationCurrent",
+    "MANAGED_MCP_RECOVERY",
     "publisherTrustRootCommitment",
     "operationalCapabilitiesReturned: false"
   ]),
@@ -1959,6 +2139,11 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT_MISMATCH",
     "RECOVERY_PUBLISHER_SIGNING_KEY_MISMATCH",
     "trustedPublisherKeys"
+  ]),
+  "recovery-publisher-trust": Object.freeze([
+    "trustedPublisherKeysDigest",
+    "trustedPublisherKeys must not be empty",
+    "publicKeyDigest"
   ]),
   "recovery-publisher-key-tests": Object.freeze([
     "recovery publisher requires an independently committed matching trust root",

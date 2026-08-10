@@ -14,6 +14,11 @@ import {
   renderRecoveryQuery,
   validateRecoveryRow
 } from "./recovery-store.js";
+import { trustedPublisherKeysDigest } from
+  "./recovery-publisher-trust.js";
+
+export { trustedPublisherKeysDigest } from
+  "./recovery-publisher-trust.js";
 import {
   PRIMARY_MANAGED_BASE_TABLES,
   RECOVERY_TRUST_ROOT_WRITE_PROBES
@@ -596,42 +601,6 @@ export function recoveryBrokerConfigDigest({
       version: "tideproof-deterministic-recovery-broker-v3"
     })
   );
-}
-
-export function trustedPublisherKeysDigest(trustedPublisherKeys) {
-  if (
-    !trustedPublisherKeys ||
-    typeof trustedPublisherKeys !== "object" ||
-    Array.isArray(trustedPublisherKeys)
-  ) {
-    throw new TypeError("trustedPublisherKeys must be an object");
-  }
-  const normalized = Object.entries(trustedPublisherKeys)
-    .map(([keyId, publicKeySpkiBase64]) => {
-      const encoded = requireText(
-        publicKeySpkiBase64,
-        `trustedPublisherKeys.${keyId}`
-      );
-      const bytes = Buffer.from(encoded, "base64");
-      if (
-        bytes.length === 0 ||
-        bytes.toString("base64").replace(/=+$/u, "") !==
-          encoded.replace(/=+$/u, "")
-      ) {
-        throw new TypeError(
-          `trustedPublisherKeys.${keyId} must be canonical base64`
-        );
-      }
-      return {
-        keyId: requireText(keyId, "trustedPublisherKeys keyId"),
-        publicKeyDigest: sha256(bytes)
-      };
-    })
-    .sort(({ keyId: left }, { keyId: right }) => left.localeCompare(right));
-  if (normalized.length === 0) {
-    throw new TypeError("trustedPublisherKeys must not be empty");
-  }
-  return sha256(canonicalJson(normalized));
 }
 
 export function recoveryAuditEventDigest(event) {

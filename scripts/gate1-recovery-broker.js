@@ -22,6 +22,10 @@ import {
   persistOrReuseIntegratedLiveDrillRecoveryBundle
 } from "../src/cloud/integrated-live-drill.js";
 import {
+  assertIntegratedLiveDrillChildAuthorizationCurrent,
+  authorizeIntegratedLiveDrillChildLaunch
+} from "../src/cloud/integrated-live-drill-child-authorization.js";
+import {
   recoveryQueryTemplateDigest,
   recoverySourceBindingDigestFor
 } from "../src/cloud/recovery-store.js";
@@ -127,6 +131,10 @@ async function readAuditEvents({
 }
 
 export async function main() {
+  const childAuthorization = authorizeIntegratedLiveDrillChildLaunch(
+    process.env,
+    "MANAGED_MCP_RECOVERY"
+  );
   const primarySourceUrl = requiredEnvironment(
     "PRIMARY_RECOVERY_SOURCE_DATABASE_URL"
   );
@@ -160,6 +168,7 @@ export async function main() {
     primaryClusterId,
     recoveryClusterId
   });
+  assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
   const [
     sourceTrustRootWrite,
     auditTrustRootWrite,
@@ -183,6 +192,7 @@ export async function main() {
       credentialLabel: "recovery-audit"
     })
   ]);
+  assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
   const receipt = await resolveCommittedRecoverySourceReceipt({
     connectionString: primarySourceUrl,
     binding: exactSourceBinding()
@@ -224,6 +234,7 @@ export async function main() {
       trustRootCommitment: signer.trustRootCommitment,
       publisherKeySetDigest
     });
+  assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
   const candidateBundle = signer.sign({
     tenantId: receipt.tenant_id,
     recoverySessionId,
@@ -279,6 +290,7 @@ export async function main() {
   });
   const appended = await publisher.appendSignedBundle(bundle);
   const replay = await publisher.appendSignedBundle(bundle);
+  assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
   assert(
     ["bundle_appended", "bundle_replay"].includes(appended.outcome),
     "signed recovery bundle did not reach a terminal append outcome"
@@ -293,6 +305,7 @@ export async function main() {
   let capturedMcpResult = null;
   const meteredMcpClient = {
     async selectQuery(input) {
+      assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
       mcpCallCount += 1;
       capturedMcpResult = await rawMcpClient.selectQuery(input);
       return capturedMcpResult;
@@ -375,6 +388,7 @@ export async function main() {
       }
     ]
   });
+  assertIntegratedLiveDrillChildAuthorizationCurrent(childAuthorization);
   const preReadAudit = auditEvents.find(({ phase }) => phase === "pre_read");
   const terminalAudit = auditEvents.find(({ phase }) => phase === "terminal");
   const expectedBrokerDigest = recoveryBrokerConfigDigest({
