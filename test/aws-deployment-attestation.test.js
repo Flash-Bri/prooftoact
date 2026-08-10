@@ -533,6 +533,7 @@ function fixture() {
     functions: Object.fromEntries(
       Object.entries(functions).map(([name, value]) => [name, value.expected])
     ),
+    integratedLiveDrillAuthorizationAttestationSha256: "f".repeat(64),
     receiptPublicKeys: configuration.attestation.receiptPublicKeys,
     region: REGION,
     sourceCommit: SOURCE_COMMIT,

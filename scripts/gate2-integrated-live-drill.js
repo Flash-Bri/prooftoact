@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   appendIntegratedLiveDrillJournal,
   buildIntegratedLiveDrillCandidateReceipt,
@@ -11,6 +11,27 @@ import {
   startIntegratedLiveDrillJournal
 } from "../src/cloud/integrated-live-drill.js";
 import { canonicalJson } from "../src/cloud/canonical-json.js";
+import {
+  integratedLiveDrillAuthorizationAttestationDigest,
+  integratedLiveDrillRunnerIdentityDigest,
+  validateIntegratedLiveDrillPreAuthorizationBinding,
+  validateIntegratedLiveDrillRunAuthorization
+} from "../src/cloud/integrated-live-drill-authorization.js";
+import {
+  consumeIntegratedLiveDrillRunAuthorization,
+  finalizeIntegratedLiveDrillControlLedger,
+  reserveIntegratedLiveDrillSpend
+} from "../src/cloud/integrated-live-drill-control-ledger.js";
+import {
+  INTEGRATED_LIVE_DRILL_CHILD_COMMITTED_TRUST_ROOT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_ENVIRONMENT,
+  integratedLiveDrillChildCommittedTrustRoot,
+  integratedLiveDrillChildAuthorizationContext
+} from "../src/cloud/integrated-live-drill-child-authorization.js";
+import {
+  validateDeploymentExpectation,
+  validateSignedPreDeploymentAttestation
+} from "../src/cloud/aws-deployment-attestation.js";
 import { parseAuthorityDrillBinding } from
   "../src/cloud/aws-authority-race.js";
 import { isolatedEvidenceProcessEnvironment } from
@@ -21,6 +42,13 @@ import {
   fetchOfficialMain
 } from "./gate2-authority-race.js";
 import { runReleaseProvenance } from "./verify-release-provenance.js";
+import { loadCommittedRecoveryPublisherTrustRoot } from
+  "./lib/recovery-publisher-key.js";
+
+const MODULE_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  ".."
+);
 
 const DVI_ENVIRONMENT = Object.freeze([
   "DATABASE_URL",
@@ -85,18 +113,27 @@ function isolatedComponentEnvironment(environment, names, additions = {}) {
   });
 }
 
-export function dviComponentEnvironment(environment) {
-  return isolatedComponentEnvironment(environment, DVI_ENVIRONMENT);
+export function dviComponentEnvironment(environment, additions = {}) {
+  return isolatedComponentEnvironment(
+    environment,
+    DVI_ENVIRONMENT,
+    additions
+  );
 }
 
-export function authorityComponentEnvironment(environment, drill) {
+export function authorityComponentEnvironment(
+  environment,
+  drill,
+  additions = {}
+) {
   return isolatedComponentEnvironment(
     environment,
     AUTHORITY_ENVIRONMENT,
     {
       TIDEPROOF_AUTHORITY_DRILL_BINDING: JSON.stringify(
         parseAuthorityDrillBinding(drill)
-      )
+      ),
+      ...additions
     }
   );
 }
@@ -109,9 +146,9 @@ export function recoveryComponentEnvironment(environment, additions) {
   );
 }
 
-function defaultRunComponent(script, args, environment) {
+function defaultRunComponent(script, args, environment, rootDir) {
   const result = spawnSync(process.execPath, [script, ...args], {
-    cwd: process.cwd(),
+    cwd: rootDir,
     encoding: "utf8",
     env: environment,
     maxBuffer: 8 * 1024 * 1024,
@@ -165,11 +202,16 @@ export function safeIntegratedLiveDrillFailureCode(error) {
 }
 
 export async function runIntegratedLiveDrill({
+  clock = Date.now,
   environment = process.env,
-  rootDir = process.cwd(),
+  rootDir = MODULE_ROOT,
   runComponent = defaultRunComponent,
   verifyRelease = verifyIntegratedRelease
 } = {}) {
+  const verifiedRootDir = fs.realpathSync(rootDir);
+  if (verifiedRootDir !== rootDir) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_REJECTED");
+  }
   const spec = parseIntegratedLiveDrillSpec(
     parseJson(
       requiredEnvironment(
@@ -196,7 +238,90 @@ export async function runIntegratedLiveDrill({
   ) {
     throw new Error("INTEGRATED_LIVE_DRILL_ENVIRONMENT_REJECTED");
   }
-  const preRelease = await verifyRelease(spec, rootDir);
+  const expectation = validateDeploymentExpectation(parseJson(
+    requiredEnvironment(
+      environment,
+      "TIDEPROOF_GATE2_DEPLOYMENT_EXPECTATION",
+      1024 * 1024
+    ),
+    "INTEGRATED_LIVE_DRILL_AUTHORIZATION_REJECTED"
+  ));
+  const preAttestation = parseJson(
+    requiredEnvironment(
+      environment,
+      "TIDEPROOF_GATE2_PRE_DEPLOYMENT_ATTESTATION",
+      8 * 1024 * 1024
+    ),
+    "INTEGRATED_LIVE_DRILL_AUTHORIZATION_REJECTED"
+  );
+  const authorizationAttestation = parseJson(
+    requiredEnvironment(
+      environment,
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUN_AUTHORIZATION",
+      1024 * 1024
+    ),
+    "INTEGRATED_LIVE_DRILL_AUTHORIZATION_REJECTED"
+  );
+  const humanAuthorizationTrustRoot = parseJson(
+    requiredEnvironment(
+      environment,
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_HUMAN_AUTHORIZATION_TRUST_ROOT",
+      16_384
+    ),
+    "INTEGRATED_LIVE_DRILL_HUMAN_TRUST_ROOT_REJECTED"
+  );
+  const authorizationLedgerRootPath = requiredEnvironment(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT",
+    4096
+  );
+  const runnerIdentity = requiredEnvironment(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNNER_IDENTITY",
+    512
+  );
+  const committedTrustRoot = integratedLiveDrillChildCommittedTrustRoot(
+    loadCommittedRecoveryPublisherTrustRoot(environment)
+  );
+  const childLaunchPrivateKeyPkcs8DerBase64 = requiredEnvironment(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64",
+    1024
+  );
+  const validatedPreAttestation = validateSignedPreDeploymentAttestation(
+    preAttestation,
+    expectation
+  );
+  if (typeof clock !== "function") {
+    throw new Error("INTEGRATED_LIVE_DRILL_AUTHORIZATION_TIME_REJECTED");
+  }
+  const validateCurrentLaunchAuthorization = (checkedAt = clock()) => {
+    const currentAuthorization = validateIntegratedLiveDrillRunAuthorization(
+      authorizationAttestation,
+      {
+        spec,
+        expectation,
+        committedTrustRoot,
+        humanAuthorizationTrustRoot,
+        authorizationLedgerRootPath,
+        now: checkedAt
+      }
+    );
+    validateIntegratedLiveDrillPreAuthorizationBinding(
+      currentAuthorization,
+      validatedPreAttestation,
+      { now: checkedAt }
+    );
+    return currentAuthorization;
+  };
+  const authorization = validateCurrentLaunchAuthorization();
+  if (
+    authorization.payload.authorizationClaimAuthority.runnerIdentitySha256 !==
+      integratedLiveDrillRunnerIdentityDigest(runnerIdentity)
+  ) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RUNNER_IDENTITY_REJECTED");
+  }
+  const preRelease = await verifyRelease(spec, verifiedRootDir);
   const privateEvidenceRootPath = requiredEnvironment(
     environment,
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
@@ -207,7 +332,59 @@ export async function runIntegratedLiveDrill({
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH",
     4096
   );
-  const forbiddenPrivateEvidenceRootPath = fs.realpathSync(rootDir);
+  const forbiddenPrivateEvidenceRootPath = verifiedRootDir;
+  const consumedAuthorization = consumeIntegratedLiveDrillRunAuthorization(
+    authorizationAttestation,
+    {
+      spec,
+      expectation,
+      committedTrustRoot,
+      humanAuthorizationTrustRoot,
+      ledgerRootPath: authorizationLedgerRootPath,
+      forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+      now: clock()
+    }
+  );
+  validateIntegratedLiveDrillPreAuthorizationBinding(
+    consumedAuthorization.authorization,
+    validatedPreAttestation,
+    { now: clock() }
+  );
+  const authorizationClaim = consumedAuthorization.claim;
+  const spendReservations = [];
+  const childLaunchEnvironment = (
+    reservation,
+    launchAuthorization,
+    checkedAt
+  ) => {
+    const launchToken = integratedLiveDrillChildAuthorizationContext({
+      authorization: launchAuthorization,
+      claim: authorizationClaim,
+      expectation,
+      privateKeyPkcs8DerBase64: childLaunchPrivateKeyPkcs8DerBase64,
+      reservation,
+      spec,
+      now: checkedAt
+    });
+    return Object.freeze({
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: canonicalJson(spec),
+      TIDEPROOF_GATE2_DEPLOYMENT_EXPECTATION: canonicalJson(expectation),
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_RUN_AUTHORIZATION: canonicalJson(
+        authorizationAttestation
+      ),
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_HUMAN_AUTHORIZATION_TRUST_ROOT:
+        canonicalJson(humanAuthorizationTrustRoot),
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT:
+        authorizationLedgerRootPath,
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNNER_IDENTITY: runnerIdentity,
+      [INTEGRATED_LIVE_DRILL_CHILD_COMMITTED_TRUST_ROOT_ENVIRONMENT]:
+        canonicalJson(
+          integratedLiveDrillChildCommittedTrustRoot(committedTrustRoot)
+        ),
+      [INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_ENVIRONMENT]:
+        canonicalJson(launchToken)
+    });
+  };
   const authorityAlphaProposalDigest = requiredEnvironment(
     environment,
     "AUTHORITY_ALPHA_PROPOSAL_DIGEST",
@@ -274,6 +451,18 @@ export async function runIntegratedLiveDrill({
       environment,
       "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT",
       16_384
+    ),
+    recoveryPublisherKeySetDigest: committedTrustRoot.publisherKeySetDigest,
+    runAuthorizationAttestationSha256:
+      integratedLiveDrillAuthorizationAttestationDigest(
+        authorizationAttestation
+      ),
+    authorizationClaimSha256:
+      authorizationClaim.authorizationClaimSha256,
+    spendAuthorizationSha256:
+      authorizationClaim.spendAuthorizationSha256,
+    preDeploymentAttestationSha256: sha256(
+      canonicalJson(validatedPreAttestation)
     )
   }));
   startIntegratedLiveDrillJournal({
@@ -283,11 +472,30 @@ export async function runIntegratedLiveDrill({
     spec,
     intentBindingSha256: journalIntentBindingSha256
   });
+  const dviCheckedAt = clock();
+  const dviAuthorization = validateCurrentLaunchAuthorization(dviCheckedAt);
+  const dviSpendReservation = reserveIntegratedLiveDrillSpend({
+    authorization: dviAuthorization,
+    claim: authorizationClaim,
+    scopeId: "DVI_PROOF",
+    ledgerRootPath: authorizationLedgerRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    now: dviCheckedAt
+  });
+  spendReservations.push(dviSpendReservation);
   const dvi = await runComponent(
     path.join(rootDir, "scripts/gate1-admissible-vector.js"),
     ["--proof"],
-    dviComponentEnvironment(environment)
+    dviComponentEnvironment(environment, {
+      ...childLaunchEnvironment(
+        dviSpendReservation,
+        dviAuthorization,
+        dviCheckedAt
+      )
+    }),
+    verifiedRootDir
   );
+  validateCurrentLaunchAuthorization();
   appendIntegratedLiveDrillJournal({
     journalPath,
     evidenceRootPath: privateEvidenceRootPath,
@@ -307,6 +515,19 @@ export async function runIntegratedLiveDrill({
     alphaLogicalActionDigest: authorityAlphaLogicalActionDigest,
     bravoLogicalActionDigest: authorityBravoLogicalActionDigest
   });
+  const authorityCheckedAt = clock();
+  const authorityAuthorization = validateCurrentLaunchAuthorization(
+    authorityCheckedAt
+  );
+  const authoritySpendReservation = reserveIntegratedLiveDrillSpend({
+    authorization: authorityAuthorization,
+    claim: authorizationClaim,
+    scopeId: "AWS_AUTHORITY_RACE",
+    ledgerRootPath: authorizationLedgerRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    now: authorityCheckedAt
+  });
+  spendReservations.push(authoritySpendReservation);
   const race = await runComponent(
     path.join(rootDir, "scripts/gate2-authority-race.js"),
     [
@@ -321,8 +542,16 @@ export async function runIntegratedLiveDrill({
       "--source-commit",
       spec.sourceCommit
     ],
-    authorityComponentEnvironment(environment, drill)
+    authorityComponentEnvironment(environment, drill, {
+      ...childLaunchEnvironment(
+        authoritySpendReservation,
+        authorityAuthorization,
+        authorityCheckedAt
+      )
+    }),
+    verifiedRootDir
   );
+  validateCurrentLaunchAuthorization();
   appendIntegratedLiveDrillJournal({
     journalPath,
     evidenceRootPath: privateEvidenceRootPath,
@@ -331,6 +560,19 @@ export async function runIntegratedLiveDrill({
     phase: "AUTHORITY_RACE_RESULT",
     payload: race
   });
+  const recoveryCheckedAt = clock();
+  const recoveryAuthorization = validateCurrentLaunchAuthorization(
+    recoveryCheckedAt
+  );
+  const recoverySpendReservation = reserveIntegratedLiveDrillSpend({
+    authorization: recoveryAuthorization,
+    claim: authorizationClaim,
+    scopeId: "MANAGED_MCP_RECOVERY",
+    ledgerRootPath: authorizationLedgerRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
+    now: recoveryCheckedAt
+  });
+  spendReservations.push(recoverySpendReservation);
   const recoveryEnvironment = recoveryComponentEnvironment(environment, {
     RECOVERY_SOURCE_TENANT_ID: authorityTenantId,
     RECOVERY_SOURCE_RUN_ID: spec.runId,
@@ -352,13 +594,20 @@ export async function runIntegratedLiveDrill({
       privateEvidenceRootPath,
       `${spec.runId}.signed-recovery-bundle.json`
     ),
-    TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: canonicalJson(spec)
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: canonicalJson(spec),
+    ...childLaunchEnvironment(
+      recoverySpendReservation,
+      recoveryAuthorization,
+      recoveryCheckedAt
+    )
   });
   const recovery = await runComponent(
     path.join(rootDir, "scripts/gate1-recovery-broker.js"),
     [],
-    recoveryEnvironment
+    recoveryEnvironment,
+    verifiedRootDir
   );
+  validateCurrentLaunchAuthorization();
   appendIntegratedLiveDrillJournal({
     journalPath,
     evidenceRootPath: privateEvidenceRootPath,
@@ -392,7 +641,7 @@ export async function runIntegratedLiveDrill({
     phase: "PRIVATE_EVIDENCE_RESULT",
     payload: privateEvidenceReceipt
   });
-  const postRelease = await verifyRelease(spec, rootDir);
+  const postRelease = await verifyRelease(spec, verifiedRootDir);
   if (JSON.stringify(postRelease) !== JSON.stringify(preRelease)) {
     throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
   }
@@ -403,6 +652,13 @@ export async function runIntegratedLiveDrill({
     spec,
     phase: "POST_RELEASE_VERIFICATION",
     payload: postRelease
+  });
+  const controlLedgerReceipt = finalizeIntegratedLiveDrillControlLedger({
+    authorization,
+    claim: authorizationClaim,
+    reservations: spendReservations,
+    ledgerRootPath: authorizationLedgerRootPath,
+    forbiddenRootPath: forbiddenPrivateEvidenceRootPath
   });
   return buildIntegratedLiveDrillCandidateReceipt({
     spec,
@@ -418,6 +674,7 @@ export async function runIntegratedLiveDrill({
     privateEvidenceRootPath,
     forbiddenPrivateEvidenceRootPath,
     privateEvidenceReceipt,
+    controlLedgerReceipt,
     authorityEvidenceId,
     authoritySelectedEvidenceDigest
   });

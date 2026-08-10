@@ -43,11 +43,11 @@ export const DEPLOYMENT_API_ROUTE_KEYS = Object.freeze({
 });
 
 const EXPECTATION_SCHEMA =
-  "tideproof.gate2.aws-deployment-expectation.v4";
+  "tideproof.gate2.aws-deployment-expectation.v5";
 const SNAPSHOT_RECEIPT_SCHEMA =
-  "tideproof.gate2.aws-deployment-attestation-snapshot.v5";
+  "tideproof.gate2.aws-deployment-attestation-snapshot.v6";
 const PAIR_RECEIPT_SCHEMA =
-  "tideproof.gate2.aws-deployment-attestation.v5";
+  "tideproof.gate2.aws-deployment-attestation.v6";
 const ALTERNATE_DENIAL_SCHEMA =
   "tideproof.gate2.aws-alternate-principal-denial.v3";
 const HEX_40 = /^[0-9a-f]{40}$/;
@@ -538,6 +538,7 @@ export function validateDeploymentExpectation(expectation) {
       "configDigest",
       "evidenceOperator",
       "functions",
+      "integratedLiveDrillAuthorizationAttestationSha256",
       "receiptPublicKeys",
       "region",
       "schemaVersion",
@@ -555,6 +556,9 @@ export function validateDeploymentExpectation(expectation) {
       HEX_40.test(expectation.treeDigest) &&
       HEX_64.test(expectation.configDigest) &&
       HEX_64.test(expectation.templateCanonicalDigest) &&
+      HEX_64.test(
+        expectation.integratedLiveDrillAuthorizationAttestationSha256
+      ) &&
       exactKeys(expectation.basis, [
         "buildReceiptSha256",
         "configurationSha256",
@@ -1591,6 +1595,8 @@ function snapshotReceiptPayload(receipt) {
     basisDigest: receipt.basisDigest,
     apiGatewayDigest: receipt.apiGatewayDigest,
     expectationDigest: receipt.expectationDigest,
+    integratedLiveDrillAuthorizationAttestationSha256:
+      receipt.integratedLiveDrillAuthorizationAttestationSha256,
     callerBinding: receipt.callerBinding,
     evidenceOperator: receipt.evidenceOperator,
     alternatePrincipal: receipt.alternatePrincipal,
@@ -1617,6 +1623,7 @@ function validateSnapshotReceipt(receipt, expectation, expectedPhase) {
       "expectationDigest",
       "finalReleaseReady",
       "functions",
+      "integratedLiveDrillAuthorizationAttestationSha256",
       "observationFenceDigest",
       "observationStartedAt",
       "observedAt",
@@ -1648,6 +1655,8 @@ function validateSnapshotReceipt(receipt, expectation, expectedPhase) {
       receipt.basisDigest === sha256(expectation.basis) &&
       HEX_64.test(receipt.apiGatewayDigest) &&
       receipt.expectationDigest === sha256(expectation) &&
+      receipt.integratedLiveDrillAuthorizationAttestationSha256 ===
+        expectation.integratedLiveDrillAuthorizationAttestationSha256 &&
       receipt.snapshotDigest === sha256(snapshotReceiptPayload(receipt)),
     "AWS_ATTEST_SNAPSHOT_RECEIPT"
   );
@@ -1915,6 +1924,8 @@ export function validateDeploymentSnapshot(
     basisDigest: sha256(expectation.basis),
     apiGatewayDigest,
     expectationDigest: sha256(expectation),
+    integratedLiveDrillAuthorizationAttestationSha256:
+      expectation.integratedLiveDrillAuthorizationAttestationSha256,
     callerBinding,
     evidenceOperator: {
       censusDigest: evidenceOperator.censusDigest,
@@ -2106,6 +2117,8 @@ export function validateDeploymentAttestationPair({
     templateCanonicalDigest: expectation.templateCanonicalDigest,
     basisDigest: sha256(expectation.basis),
     expectationDigest: sha256(expectation),
+    integratedLiveDrillAuthorizationAttestationSha256:
+      expectation.integratedLiveDrillAuthorizationAttestationSha256,
     preSnapshotDigest: preReceipt.snapshotDigest,
     postSnapshotDigest: postReceipt.snapshotDigest,
     signedPreReceiptDigest: sha256(preReceipt),
@@ -2188,6 +2201,14 @@ export function validateSignedDeploymentAttestationPair(
     "AWS_ATTEST_PAIR_RECEIPT"
   );
   return receipt;
+}
+
+export function validateSignedPreDeploymentAttestation(
+  receipt,
+  expectationInput
+) {
+  const expectation = validateDeploymentExpectation(expectationInput);
+  return validateSnapshotReceipt(receipt, expectation, "pre");
 }
 
 export const __test = Object.freeze({

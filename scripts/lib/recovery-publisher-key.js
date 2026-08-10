@@ -10,6 +10,8 @@ import {
   RECOVERY_SIGNATURE_ALGORITHM,
   recoverySignaturePayloadFor
 } from "../../src/cloud/recovery-store.js";
+import { trustedPublisherKeysDigest } from
+  "../../src/cloud/recovery-publisher-trust.js";
 
 const TRUST_ROOT_SCHEMA = "tideproof.recovery-publisher-trust-root.v1";
 const COMMITMENT_DOMAIN =
@@ -118,16 +120,14 @@ export function createCommittedRecoveryPublisherSigner({
   trustRootCommitment,
   privateKeyPkcs8Base64
 } = {}) {
-  const trustRoot = parseTrustRoot(trustRootJson);
-  if (
-    typeof trustRootCommitment !== "string" ||
-    !SHA256.test(trustRootCommitment)
-  ) {
-    fail("RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT_REQUIRED");
-  }
-  if (commitmentFor(trustRoot.canonical) !== trustRootCommitment) {
-    fail("RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT_MISMATCH");
-  }
+  const committedTrustRoot = createCommittedRecoveryPublisherTrustRoot({
+    trustRootJson,
+    trustRootCommitment
+  });
+  const trustRoot = committedTrustRoot.trustRoot;
+  trustRootCommitment = committedTrustRoot.trustRootCommitment;
+  const trustedPublisherKeys = committedTrustRoot.trustedPublisherKeys;
+  const publisherKeySetDigest = committedTrustRoot.publisherKeySetDigest;
 
   const privateKeyBytes = canonicalBase64(
     privateKeyPkcs8Base64,
@@ -156,15 +156,13 @@ export function createCommittedRecoveryPublisherSigner({
     fail("RECOVERY_PUBLISHER_SIGNING_KEY_MISMATCH");
   }
 
-  const trustedPublisherKeys = Object.freeze({
-    [trustRoot.publisherKeyId]: trustRoot.publicKeySpkiBase64
-  });
   return Object.freeze({
     publisherKeyId: trustRoot.publisherKeyId,
     publisherVersion: RECOVERY_PUBLISHER_VERSION,
     signatureAlgorithm: RECOVERY_SIGNATURE_ALGORITHM,
     publicKeySpkiBase64: trustRoot.publicKeySpkiBase64,
     trustRootCommitment,
+    publisherKeySetDigest,
     trustedPublisherKeys,
 
     sign(input) {
@@ -183,6 +181,42 @@ export function createCommittedRecoveryPublisherSigner({
         ).toString("base64")
       };
     }
+  });
+}
+
+export function createCommittedRecoveryPublisherTrustRoot({
+  trustRootJson,
+  trustRootCommitment
+} = {}) {
+  const trustRoot = parseTrustRoot(trustRootJson);
+  if (
+    typeof trustRootCommitment !== "string" ||
+    !SHA256.test(trustRootCommitment)
+  ) {
+    fail("RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT_REQUIRED");
+  }
+  if (commitmentFor(trustRoot.canonical) !== trustRootCommitment) {
+    fail("RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT_MISMATCH");
+  }
+  const trustedPublisherKeys = Object.freeze({
+    [trustRoot.publisherKeyId]: trustRoot.publicKeySpkiBase64
+  });
+  return Object.freeze({
+    schemaVersion: TRUST_ROOT_SCHEMA,
+    trustRoot: Object.freeze({ ...trustRoot }),
+    trustRootCommitment,
+    publisherKeySetDigest: trustedPublisherKeysDigest(trustedPublisherKeys),
+    trustedPublisherKeys
+  });
+}
+
+export function loadCommittedRecoveryPublisherTrustRoot(
+  environment = process.env
+) {
+  return createCommittedRecoveryPublisherTrustRoot({
+    trustRootJson: environment.TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT,
+    trustRootCommitment:
+      environment.TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT
   });
 }
 

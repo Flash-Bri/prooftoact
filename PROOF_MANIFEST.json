@@ -97,13 +97,13 @@
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
-      "sha256": "66ebb63c5103b95799bad2585f2e8781ada9c6bce8ed0dcb5181727c1d4dc9ae",
+      "sha256": "bce28ebf2a39bb06b23f78de967c42dca40d8c1d2699359846dd2bdbfad6d157",
       "kind": "verification-code"
     },
     {
       "id": "aws-deployment-attestation-validator",
       "path": "src/cloud/aws-deployment-attestation.js",
-      "sha256": "a0a2c387aca4a3fdc98b45709e86a32290ebdb0e55c1d5d6bbfdb701b7da4134",
+      "sha256": "3a452e102ec2ff833a44dc309d3fd7d7460efab133f3c2712f24eea95dd91642",
       "kind": "verification-code"
     },
     {
@@ -413,21 +413,81 @@
       "kind": "verification-code"
     },
     {
+      "id": "integrated-live-drill-authorization",
+      "path": "src/cloud/integrated-live-drill-authorization.js",
+      "sha256": "2c7e4d68d2a42d7c7406ce8a122b4573b7f85015bef06ba597f075b98caad74b",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-authorization-tests",
+      "path": "test/integrated-live-drill-authorization.test.js",
+      "sha256": "649fc9f7b4033eafb5c0eee2e33dbee6f9fec6e418a305089ed7109aa4453228",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-child-authorization",
+      "path": "src/cloud/integrated-live-drill-child-authorization.js",
+      "sha256": "17f30e82c963702f91faa68b69dd6acb8be461b35609cd7378126e504c52df31",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-child-authorization-tests",
+      "path": "test/integrated-live-drill-child-authorization.test.js",
+      "sha256": "1ac4fcc4dce932db2b169acf3c65064cc61f10f27c2d9af7644785b04e5223cb",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-control-ledger",
+      "path": "src/cloud/integrated-live-drill-control-ledger.js",
+      "sha256": "b43e7f67922cae3eee9b32e850a8ee4daa5a4826668e280b031346f81299959d",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-control-ledger-tests",
+      "path": "test/integrated-live-drill-control-ledger.test.js",
+      "sha256": "4df587ea2b1afb7cadcef7cc4991d38f3dd3e0cae2bdfa685e4a21f577175a1f",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-finalizer",
+      "path": "src/cloud/integrated-live-drill-finalizer.js",
+      "sha256": "0c7a621b348c6c08c767c88c916226d50c08d2682d0140e0b3ad8b1737c56e9c",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-finalizer-runner",
+      "path": "scripts/gate2-integrated-live-drill-finalizer.js",
+      "sha256": "94ea9e266ae17c5391f75a78abf0d92d43045042f22b45a44684326447771884",
+      "kind": "verification-code"
+    },
+    {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "3a73cd9a3a476f84953b49aef7093989e3dbd2c8a3a49e78bb62207f6b0f31c7",
+      "sha256": "0ec6f7919f6cfc05caa18301c0bb9c1ca17c214e9b5cabfa72ac46acd2122af1",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-pre-attestation-fixture",
+      "path": "test/fixtures/integrated-live-drill-pre-attestation.json",
+      "sha256": "36da6c320d5ee02865977bead3d8933288f23da91fd1a3c5043e7b0e129a982c",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
-      "sha256": "295a9a85fcd6da7494fbefdc4a02b8f01f2a7e7eba99ba7f7845b8b9ec7d2825",
+      "sha256": "8b1d87587d47bf44cdf9678f438b09da68b1bd69f4e54271c57fbca2e546a91a",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-synthetic-test-keys",
+      "path": "test/helpers/synthetic-test-signing-keys.js",
+      "sha256": "e9366aea25c1adea4a8e79bcb724a4b4b5f73e303c2297c515ad3e0ffc1ac3ac",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "0319c9356272d5b6e1761e9c1232c242b092e0bf63a1e1505558de6165309d42",
+      "sha256": "bc59c59a57d4cb7b65b7152de773d6ed200b7ce4b81ac727081a22839d172d88",
       "kind": "verification-code"
     },
     {
@@ -494,6 +554,12 @@
       "id": "recovery-bundle-persistence-tests",
       "path": "test/recovery-bundle-persistence.test.js",
       "sha256": "016fb9ba1b0e13cf5e41517a9a9293a3d8aff11a57bf51703838aee65fbdbbd1",
+      "kind": "verification-code"
+    },
+    {
+      "id": "recovery-publisher-trust",
+      "path": "src/cloud/recovery-publisher-trust.js",
+      "sha256": "0abb0bd415f9c567018822afecc295e9a3b3ed11f41c7b5c882835eb1aa9724a",
       "kind": "verification-code"
     },
     {
@@ -595,7 +661,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "aca9fecd76c893ef02d3ca59a196f1ac4cebd656c009ea19257925a221b11f25",
+      "sha256": "0c44958232ba5266f550bff8fbd8261d416ad31594559646608b58a6ca651d67",
       "kind": "boundary-ledger"
     },
     {
@@ -649,7 +715,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "d394438ba843f6aeddb9ec6f2541c8c1d6e0c11d4b680a05a649a9f6a33c8867",
+      "sha256": "28c7e61e3df69039967b938291cefae2b744e3baca5f352503d1fa29a9893e6d",
       "kind": "boundary-ledger"
     },
     {
@@ -661,7 +727,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "aae824662a5cb741c1b219128fc7ba59725200a0ea01cb2dcf404818bc17acf0",
+      "sha256": "e9c14d1c1b0bf211a1228d6e55e2e105430a07817e6a1c867cedc2c39efa9890",
       "kind": "verification-code"
     },
     {
@@ -780,7 +846,7 @@
         "local-full-drill-verifier",
         "recovery-bundle-persistence-tests"
       ],
-      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Before publication it create-only persists and verifies an owner-only canonical envelope containing the exact normalized signed recovery bundle; a later invocation with the same unsigned bundle must reuse the first randomized P-256 signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, but explicitly does not claim that invocation observed the original create/link protocol. Current bytes are source-bound, but provider-backed restart reuse and crash continuity remain unproven. One negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in the same canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. The candidate explicitly leaves signed deployment attestation, independent journal/private-evidence retention and recomputation review, provider-backed restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending.",
+      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Before publication it create-only persists and verifies an owner-only canonical envelope containing the exact normalized signed recovery bundle; a later invocation with the same unsigned bundle must reuse the first randomized P-256 signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, but explicitly does not claim that invocation observed the original create/link protocol. Current bytes are source-bound, but provider-backed restart reuse and crash continuity remain unproven. One negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in the same canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Packet A now requires a distinct human-controlled Ed25519 trust root, durable create-only one-use authorization consumption on one exact authoritative owner-only ledger root, exact ordered cumulative spend reservations, a distinct human-bound child-launch signer, per-scope signed launch tokens, exact declared runner identity, atomic one-use child launch consumption, typed signed evidence, and a signed finalization statement. Its finalizer remains non-accepting and carries the hard blockers CROSS_HOST_STRONGLY_CONSISTENT_AUTHORIZATION_CLAIM_AUTHORITY_NOT_PROVEN and DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN. The candidate also leaves signed deployment evidence, independent journal/private-evidence retention and recomputation review, provider-backed restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending.",
       "remainingRequirements": [
         "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, one canonical exact-winner recovery bundle, one continuous digest-bound Managed MCP session, bounded cleanup, and zero invariant violations."
       ]
@@ -1139,6 +1205,17 @@
         "exact-git-source-library",
         "exact-git-source-tests",
         "gate2-exact-build-bootstrap",
+        "integrated-live-drill-authorization",
+        "integrated-live-drill-authorization-tests",
+        "integrated-live-drill-child-authorization",
+        "integrated-live-drill-child-authorization-tests",
+        "integrated-live-drill-control-ledger",
+        "integrated-live-drill-control-ledger-tests",
+        "integrated-live-drill-finalizer",
+        "integrated-live-drill-finalizer-runner",
+        "integrated-live-drill-pre-attestation-fixture",
+        "integrated-live-drill-synthetic-test-keys",
+        "recovery-publisher-trust",
         "release-ci-workflow",
         "release-rights-tests",
         "release-security-ledger",
