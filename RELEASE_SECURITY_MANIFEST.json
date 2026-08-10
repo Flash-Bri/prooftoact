@@ -534,7 +534,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "9abf12a22c32e1893e968a83d056f10356804cde3684c63d4f4fb811c95c5045"
+      "sha256": "029735b6cb25d8e1f7a4050e15e2a16a3979abf759f2e7a6e7ce295141f4100b"
     },
     {
       "id": "proof-manifest-verifier",
