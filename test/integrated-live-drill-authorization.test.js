@@ -291,6 +291,7 @@ function typedEvidenceContext(value, authorization) {
       auditsCommitted: 2,
       exactWinnerBound: true,
       managedMcpCallCount: 1,
+      managedMcpRequestPayloadSha256: "b".repeat(64),
       operationalCapabilitiesReturned: false,
       restartStableSignedBundleReuseProven: false,
       signedBundleCurrentBytesBound: true,

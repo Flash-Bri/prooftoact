@@ -11,12 +11,18 @@ import {
 import { validateIntegratedLiveDrillConsumedControlLedger } from
   "./integrated-live-drill-control-ledger.js";
 import {
+  INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
+  validateIntegratedLiveDrillRecoveryContinuityJournal
+} from "./integrated-live-drill-recovery-continuity.js";
+import {
   INTEGRATED_LIVE_DRILL_CANDIDATE_SCHEMA,
   INTEGRATED_LIVE_DRILL_SCHEMA
 } from "./integrated-live-drill.js";
 
 export const INTEGRATED_LIVE_DRILL_PACKET_A_FINALIZATION_SCHEMA =
   "tideproof.highwater-drill-packet-a-finalization-validation.v1";
+export const INTEGRATED_LIVE_DRILL_PACKET_B_FINALIZATION_SCHEMA =
+  "tideproof.highwater-drill-packet-b-finalization-validation.v1";
 export const INTEGRATED_LIVE_DRILL_PACKET_B_BLOCKER =
   "DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN";
 
@@ -118,7 +124,8 @@ function packetAFinalizationDisposition({
   candidateReceiptSha256,
   controlLedgerReceipt,
   evidenceDigests,
-  finalization
+  finalization,
+  recoveryContinuityReceipt = null
 }) {
   const acceptanceCoreSha256 = integratedLiveDrillCanonicalSha256(
     integratedLiveDrillAcceptanceCore({
@@ -133,11 +140,21 @@ function packetAFinalizationDisposition({
       finalization.payload.acceptanceCoreSha256 === acceptanceCoreSha256,
     "INTEGRATED_LIVE_DRILL_PACKET_A_FINALIZATION_REJECTED"
   );
+  const localScaffoldValidated =
+    recoveryContinuityReceipt?.status ===
+      INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE;
   const body = Object.freeze({
-    schemaVersion: INTEGRATED_LIVE_DRILL_PACKET_A_FINALIZATION_SCHEMA,
-    status: "PACKET_B_PROVIDER_ACCEPTANCE_PENDING",
+    schemaVersion: localScaffoldValidated
+      ? INTEGRATED_LIVE_DRILL_PACKET_B_FINALIZATION_SCHEMA
+      : INTEGRATED_LIVE_DRILL_PACKET_A_FINALIZATION_SCHEMA,
+    status: localScaffoldValidated
+      ? "PACKET_B_LOCAL_SAME_HOST_SCAFFOLD_VALIDATED_NON_ACCEPTING"
+      : "PACKET_B_PROVIDER_ACCEPTANCE_PENDING",
     accepted: false,
     finalReleaseReady: false,
+    liveProviderBoundW1W5ContinuityProven: false,
+    localSameHostScaffoldValidated: localScaffoldValidated,
+    providerBacked: false,
     acceptanceCoreSha256,
     authorizationAttestationSha256:
       integratedLiveDrillAuthorizationAttestationDigest(
@@ -159,11 +176,18 @@ function packetAFinalizationDisposition({
     packetABoundaryBlockers: Object.freeze([
       INTEGRATED_LIVE_DRILL_CROSS_HOST_CLAIM_BLOCKER
     ]),
+    recoveryContinuityDisposition: localScaffoldValidated
+      ? "LOCAL_SAME_HOST_SCAFFOLD_VALIDATED"
+      : "NOT_PROVEN",
+    recoveryContinuityJournalReceiptSha256: localScaffoldValidated
+      ? recoveryContinuityReceipt.receiptSha256
+      : null,
     runId: authorization.payload.runId,
     sourceCommit: authorization.payload.sourceCommit,
     treeDigest: authorization.payload.treeDigest,
-    claimBoundary:
-      "This receipt validates the Packet A candidate, typed signed evidence, signed deployment pair, and signed finalization bindings supplied to this function. It deliberately does not accept the integrated drill or the release. The exact-root authorization ledger is not a strongly consistent cross-host claim authority and remains an explicit Packet A boundary blocker. Packet B must independently prove durable exact-one Managed MCP behavior across crash, restart, and ambiguous provider results before any accepted receipt, release-ready claim, deployment claim, publication, or submission."
+    claimBoundary: localScaffoldValidated
+      ? "Local same-host scaffold only; actual provider-bound W1-W5 continuity remains unproven. This receipt validates the Packet A bindings and one same-host create-only fsynced 17-entry scaffold journal. It does not prove that the live Managed MCP execution path produced those entries, that provider authorization was checked at dispatch, that one provider call occurred, or that provider result ambiguity was reconciled. The named Packet B continuity blocker remains. The candidate and finalizer remain providerBacked:false, accepted:false, finalReleaseReady:false, and do not authorize deployment, publication, or submission."
+      : "This receipt validates the Packet A candidate, typed signed evidence, signed deployment pair, and signed finalization bindings supplied to this function. It deliberately does not accept the integrated drill or the release. The exact-root authorization ledger is not a strongly consistent cross-host claim authority and remains an explicit Packet A boundary blocker. Packet B must independently prove durable exact-one Managed MCP behavior across crash, restart, and ambiguous provider results before any accepted receipt, release-ready claim, deployment claim, publication, or submission."
   });
   return Object.freeze({
     ...body,
@@ -211,6 +235,16 @@ export function validateIntegratedLiveDrillPacketAFinalization({
     candidateReceipt,
     authorization
   );
+  const recoveryContinuityReceipt =
+    validateIntegratedLiveDrillRecoveryContinuityJournal({
+      authorization,
+      candidateReceipt,
+      controlLedgerReceipt: ledger.controlLedgerReceipt,
+      forbiddenRootPath,
+      ledgerRootPath,
+      mcpRequestSha256:
+        candidateReceipt.recovery.managedMcpRequestPayloadSha256
+    }, { allowAbsent: true });
   const evidenceDigests = validateIntegratedLiveDrillEvidenceSet(
     evidenceAttestations,
     deploymentAttestationPair,
@@ -237,7 +271,8 @@ export function validateIntegratedLiveDrillPacketAFinalization({
     candidateReceiptSha256,
     controlLedgerReceipt: ledger.controlLedgerReceipt,
     evidenceDigests,
-    finalization
+    finalization,
+    recoveryContinuityReceipt
   });
 }
 

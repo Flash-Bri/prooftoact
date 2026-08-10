@@ -857,6 +857,7 @@ export function integratedLiveDrillTypedEvidenceSubjects({
         "auditsCommitted",
         "exactWinnerBound",
         "managedMcpCallCount",
+        "managedMcpRequestPayloadSha256",
         "operationalCapabilitiesReturned",
         "restartStableSignedBundleReuseProven",
         "signedBundleCurrentBytesBound",
@@ -865,6 +866,9 @@ export function integratedLiveDrillTypedEvidenceSubjects({
       ]) &&
       candidateReceipt.recovery?.restartStableSignedBundleReuseProven ===
         false &&
+      HEX_64.test(
+        candidateReceipt.recovery.managedMcpRequestPayloadSha256 ?? ""
+      ) &&
       candidateReceipt.recovery.signedBundleCurrentBytesBound === true &&
       HEX_64.test(
         candidateReceipt.recovery
@@ -1025,6 +1029,8 @@ export function integratedLiveDrillTypedEvidenceSubjects({
         candidateRecoverySha256:
           integratedLiveDrillCanonicalSha256(candidateReceipt.recovery),
         managedMcpCallCount: 1,
+        managedMcpRequestPayloadSha256:
+          candidateReceipt.recovery.managedMcpRequestPayloadSha256,
         packetBStatus: "CRASH_RESTART_RECONCILIATION_PENDING",
         restartStableSignedBundleReuseProven: false,
         signedBundleCurrentBytesBound:

@@ -415,13 +415,13 @@
     {
       "id": "integrated-live-drill-authorization",
       "path": "src/cloud/integrated-live-drill-authorization.js",
-      "sha256": "2c7e4d68d2a42d7c7406ce8a122b4573b7f85015bef06ba597f075b98caad74b",
+      "sha256": "2e2a0f2237b3d8f1d1a4fdd3f59937e9ca9b17be129ab43ba6af361e17fd6378",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-authorization-tests",
       "path": "test/integrated-live-drill-authorization.test.js",
-      "sha256": "649fc9f7b4033eafb5c0eee2e33dbee6f9fec6e418a305089ed7109aa4453228",
+      "sha256": "8691ce249059a4883338b568b2b8c22a1cd0a622e9468a5c683c0c8a13f82972",
       "kind": "verification-code"
     },
     {
@@ -451,7 +451,7 @@
     {
       "id": "integrated-live-drill-finalizer",
       "path": "src/cloud/integrated-live-drill-finalizer.js",
-      "sha256": "0c7a621b348c6c08c767c88c916226d50c08d2682d0140e0b3ad8b1737c56e9c",
+      "sha256": "31c1e1fbe1a1c786f0c6861d91fd31ab08747b6d71db4f4432d55182d58f89a3",
       "kind": "verification-code"
     },
     {
@@ -463,13 +463,31 @@
     {
       "id": "integrated-live-drill-harness",
       "path": "src/cloud/integrated-live-drill.js",
-      "sha256": "0ec6f7919f6cfc05caa18301c0bb9c1ca17c214e9b5cabfa72ac46acd2122af1",
+      "sha256": "9e997e95e96829359cce431e68a77155a6e77d40cbd4319f31d6646b884fe6ae",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-pre-attestation-fixture",
       "path": "test/fixtures/integrated-live-drill-pre-attestation.json",
       "sha256": "36da6c320d5ee02865977bead3d8933288f23da91fd1a3c5043e7b0e129a982c",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-recovery-continuity",
+      "path": "src/cloud/integrated-live-drill-recovery-continuity.js",
+      "sha256": "701a3b11545bfd649cd7178ed0d0d6eeea330f328348be728ea215881e3a5c20",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-recovery-continuity-tests",
+      "path": "test/integrated-live-drill-recovery-continuity.test.js",
+      "sha256": "2dee8e73ffb1469fb4d4cc9686c2cec5a00f637cce8b7e1fc0882e892b3be2fb",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-recovery-continuity-worker",
+      "path": "test/helpers/integrated-live-drill-recovery-continuity-worker.js",
+      "sha256": "bdf182b435380c76c3d6aed70167cdc410e05b47003dacd711f6d7bbc4fd976b",
       "kind": "verification-code"
     },
     {
@@ -487,7 +505,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "bc59c59a57d4cb7b65b7152de773d6ed200b7ce4b81ac727081a22839d172d88",
+      "sha256": "65bff000f9eb5f9ebaf1789d2c57f5c9c267cbdc4d14e39faa9b01fb5b74b5d3",
       "kind": "verification-code"
     },
     {
@@ -535,7 +553,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "029735b6cb25d8e1f7a4050e15e2a16a3979abf759f2e7a6e7ce295141f4100b",
+      "sha256": "4dde9b3a2412adc423bc1a9aad78a0999257ff67310ba5467daa7a64bc3bd0db",
       "kind": "verification-code"
     },
     {
@@ -715,19 +733,19 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "efc113c6ee412a8b46d12789ae000a2b2daf1aef8ebc608b76ad35a34652baec",
+      "sha256": "7b8266811371f5af66cc0471d390564c401a17fabda7454b3f7771de8930062b",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "d8368f18c3bd0955e01d6ff8b872381e9779f145977a329d483451fe7c940e63",
+      "sha256": "07db8032fa44a7249ff66fdaf7bfba68ab4cbaeb8bd8e3c6850d8ee645d1c244",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "e9c14d1c1b0bf211a1228d6e55e2e105430a07817e6a1c867cedc2c39efa9890",
+      "sha256": "75142d8e38f54a5897198d206de7e01c52d6c3e9bf58a62dc641ce5c7e2ac5c5",
       "kind": "verification-code"
     },
     {
@@ -837,6 +855,9 @@
       "artifacts": [
         "full-drill-evidence",
         "integrated-live-drill-harness",
+        "integrated-live-drill-recovery-continuity",
+        "integrated-live-drill-recovery-continuity-tests",
+        "integrated-live-drill-recovery-continuity-worker",
         "integrated-live-drill-runner",
         "integrated-live-drill-tests",
         "local-full-drill-harness",
@@ -1214,6 +1235,9 @@
         "integrated-live-drill-finalizer",
         "integrated-live-drill-finalizer-runner",
         "integrated-live-drill-pre-attestation-fixture",
+        "integrated-live-drill-recovery-continuity",
+        "integrated-live-drill-recovery-continuity-tests",
+        "integrated-live-drill-recovery-continuity-worker",
         "integrated-live-drill-synthetic-test-keys",
         "recovery-publisher-trust",
         "release-ci-workflow",
