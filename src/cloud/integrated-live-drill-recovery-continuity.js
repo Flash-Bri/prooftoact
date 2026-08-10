@@ -799,16 +799,27 @@ export async function runIntegratedLiveDrillRecoveryContinuityW2(
     attemptOwnershipToken
   );
   const claimStep = INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN[5];
-  const claim = recordStep(
-    context,
-    claimStep,
-    Object.freeze({
-      attemptOwnershipTokenSha256,
-      disposition: "CLAIMED_BEFORE_DISPATCH"
-    }),
-    nowFor(options, claimStep.sequence),
-    { acceptExistingArtifact: true }
-  );
+  let claim;
+  try {
+    claim = recordStep(
+      context,
+      claimStep,
+      Object.freeze({
+        attemptOwnershipTokenSha256,
+        disposition: "CLAIMED_BEFORE_DISPATCH"
+      }),
+      nowFor(options, claimStep.sequence),
+      { acceptExistingArtifact: true }
+    );
+  } catch (cause) {
+    if (
+      cause?.message ===
+        "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AMBIGUOUS"
+    ) {
+      return unknownDoNotAct();
+    }
+    throw cause;
+  }
   if (!claim.created) {
     return unknownDoNotAct();
   }

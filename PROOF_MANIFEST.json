@@ -475,7 +475,7 @@
     {
       "id": "integrated-live-drill-recovery-continuity",
       "path": "src/cloud/integrated-live-drill-recovery-continuity.js",
-      "sha256": "701a3b11545bfd649cd7178ed0d0d6eeea330f328348be728ea215881e3a5c20",
+      "sha256": "388a6e5f70c2a89d4ae846b2451baaade2264b707604c2c0981340077347891f",
       "kind": "verification-code"
     },
     {
@@ -733,7 +733,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "7b8266811371f5af66cc0471d390564c401a17fabda7454b3f7771de8930062b",
+      "sha256": "f448d2ab9e5ab438cb4dc8df9cdd864668b1f7ca208a02db656539ac31a2c6fc",
       "kind": "boundary-ledger"
     },
     {
