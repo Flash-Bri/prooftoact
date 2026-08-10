@@ -427,7 +427,7 @@
     {
       "id": "integrated-live-drill-child-authorization",
       "path": "src/cloud/integrated-live-drill-child-authorization.js",
-      "sha256": "17f30e82c963702f91faa68b69dd6acb8be461b35609cd7378126e504c52df31",
+      "sha256": "7c5d48218db9bcb32adf18a6038810e362e2cf129e53d05da341cb94aa25b597",
       "kind": "verification-code"
     },
     {
@@ -439,19 +439,19 @@
     {
       "id": "integrated-live-drill-control-ledger",
       "path": "src/cloud/integrated-live-drill-control-ledger.js",
-      "sha256": "b43e7f67922cae3eee9b32e850a8ee4daa5a4826668e280b031346f81299959d",
+      "sha256": "08531ec5cd345df39b928a8ff919861b6aaeeb645c1b75d9a1dc8468bf74ecb5",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-control-ledger-tests",
       "path": "test/integrated-live-drill-control-ledger.test.js",
-      "sha256": "4df587ea2b1afb7cadcef7cc4991d38f3dd3e0cae2bdfa685e4a21f577175a1f",
+      "sha256": "0ba6a9ddc2768acd88bb754f037d145cc6638ea2043f1c2a9a981723d570ffca",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-finalizer",
       "path": "src/cloud/integrated-live-drill-finalizer.js",
-      "sha256": "31c1e1fbe1a1c786f0c6861d91fd31ab08747b6d71db4f4432d55182d58f89a3",
+      "sha256": "7e111f740ae090d47d66f46e433ebebc2131b0b2abb8389db7ce1332bdeca7f6",
       "kind": "verification-code"
     },
     {
@@ -475,19 +475,25 @@
     {
       "id": "integrated-live-drill-recovery-continuity",
       "path": "src/cloud/integrated-live-drill-recovery-continuity.js",
-      "sha256": "388a6e5f70c2a89d4ae846b2451baaade2264b707604c2c0981340077347891f",
+      "sha256": "de8ba0303e3181476098314e4e6e50b2a70b25d392a40249e167c0cdaa80c12d",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-recovery-continuity-fixture",
+      "path": "test/helpers/integrated-live-drill-recovery-continuity-fixture.js",
+      "sha256": "e8abb5eef160e6f9977cf323d98c424582cbd9cf76bdb4be16c99a0f9fccea94",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-tests",
       "path": "test/integrated-live-drill-recovery-continuity.test.js",
-      "sha256": "2dee8e73ffb1469fb4d4cc9686c2cec5a00f637cce8b7e1fc0882e892b3be2fb",
+      "sha256": "6c56962e3b4afb57baeb04d82191a1114be892940149701f0be564001e57de7c",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-worker",
       "path": "test/helpers/integrated-live-drill-recovery-continuity-worker.js",
-      "sha256": "bdf182b435380c76c3d6aed70167cdc410e05b47003dacd711f6d7bbc4fd976b",
+      "sha256": "7b0f6691d538b73d13ea9aae9b4837984166047a835012220c2bc1854380c20e",
       "kind": "verification-code"
     },
     {
@@ -505,7 +511,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "65bff000f9eb5f9ebaf1789d2c57f5c9c267cbdc4d14e39faa9b01fb5b74b5d3",
+      "sha256": "289a8ac707dda459d1f1df00e910a0706f38b36092a1c66371309c596a23a212",
       "kind": "verification-code"
     },
     {
@@ -553,7 +559,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "4dde9b3a2412adc423bc1a9aad78a0999257ff67310ba5467daa7a64bc3bd0db",
+      "sha256": "c733d49a754e55096cf02eb0bfa7d9cd1a020027aff2412eeec2d50633041574",
       "kind": "verification-code"
     },
     {
@@ -572,6 +578,18 @@
       "id": "recovery-bundle-persistence-tests",
       "path": "test/recovery-bundle-persistence.test.js",
       "sha256": "016fb9ba1b0e13cf5e41517a9a9293a3d8aff11a57bf51703838aee65fbdbbd1",
+      "kind": "verification-code"
+    },
+    {
+      "id": "recovery-bundle-signature",
+      "path": "src/cloud/recovery-bundle-signature.js",
+      "sha256": "69b916dde3e81dfdffb64b694cbb58890627f4ab32a36d717c9769fb5c9eeaf7",
+      "kind": "verification-code"
+    },
+    {
+      "id": "recovery-continuity-identity",
+      "path": "src/cloud/recovery-continuity-identity.js",
+      "sha256": "f95fb6bfbb46de941f58791926670f82a14da3bb0c5b48b1ba0bfebd3b3373d2",
       "kind": "verification-code"
     },
     {
@@ -733,7 +751,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "f448d2ab9e5ab438cb4dc8df9cdd864668b1f7ca208a02db656539ac31a2c6fc",
+      "sha256": "cdc15d4a170dd9407328912b2be0d222a0289bd70dfba9fcfe3f9cf55c44252d",
       "kind": "boundary-ledger"
     },
     {
@@ -745,7 +763,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "75142d8e38f54a5897198d206de7e01c52d6c3e9bf58a62dc641ce5c7e2ac5c5",
+      "sha256": "ba8ed4072a270b7fa904f434d62f5ffe4206ab3c3c82e154f18eb048c37becbe",
       "kind": "verification-code"
     },
     {
@@ -856,6 +874,7 @@
         "full-drill-evidence",
         "integrated-live-drill-harness",
         "integrated-live-drill-recovery-continuity",
+        "integrated-live-drill-recovery-continuity-fixture",
         "integrated-live-drill-recovery-continuity-tests",
         "integrated-live-drill-recovery-continuity-worker",
         "integrated-live-drill-runner",
@@ -865,7 +884,9 @@
         "local-full-drill-runner",
         "local-full-drill-tests",
         "local-full-drill-verifier",
-        "recovery-bundle-persistence-tests"
+        "recovery-bundle-persistence-tests",
+        "recovery-bundle-signature",
+        "recovery-continuity-identity"
       ],
       "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Before publication it create-only persists and verifies an owner-only canonical envelope containing the exact normalized signed recovery bundle; a later invocation with the same unsigned bundle must reuse the first randomized P-256 signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, but explicitly does not claim that invocation observed the original create/link protocol. Current bytes are source-bound, but provider-backed restart reuse and crash continuity remain unproven. One negotiated Managed MCP session and canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in the same canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Packet A now requires a distinct human-controlled Ed25519 trust root, durable create-only one-use authorization consumption on one exact authoritative owner-only ledger root, exact ordered cumulative spend reservations, a distinct human-bound child-launch signer, per-scope signed launch tokens, exact declared runner identity, atomic one-use child launch consumption, typed signed evidence, and a signed finalization statement. Its finalizer remains non-accepting and carries the hard blockers CROSS_HOST_STRONGLY_CONSISTENT_AUTHORIZATION_CLAIM_AUTHORITY_NOT_PROVEN and DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN. The candidate also leaves signed deployment evidence, independent journal/private-evidence retention and recomputation review, provider-backed restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending.",
       "remainingRequirements": [
@@ -1236,9 +1257,12 @@
         "integrated-live-drill-finalizer-runner",
         "integrated-live-drill-pre-attestation-fixture",
         "integrated-live-drill-recovery-continuity",
+        "integrated-live-drill-recovery-continuity-fixture",
         "integrated-live-drill-recovery-continuity-tests",
         "integrated-live-drill-recovery-continuity-worker",
         "integrated-live-drill-synthetic-test-keys",
+        "recovery-bundle-signature",
+        "recovery-continuity-identity",
         "recovery-publisher-trust",
         "release-ci-workflow",
         "release-rights-tests",

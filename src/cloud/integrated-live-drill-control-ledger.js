@@ -653,6 +653,86 @@ function readAndValidateChildLaunchFile({
   });
 }
 
+function childLaunchReceiptFromValidated(authorization, validated) {
+  const { body, byteLength = validated.bytes?.length, digest, fileName } =
+    validated;
+  return Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_SCHEMA,
+    authorizationId: authorization.payload.authorizationId,
+    childLaunchSha256: digest,
+    fileByteLength: byteLength,
+    fileNameSha256: integratedLiveDrillSha256(fileName),
+    reservationSha256: body.reservationSha256,
+    scopeId: body.scope.scopeId,
+    sequence: body.scope.sequence,
+    tokenId: body.tokenId
+  });
+}
+
+export function validateIntegratedLiveDrillConsumedChildLaunch({
+  authorization,
+  claim,
+  reservation,
+  tokenId,
+  launchReceipt,
+  ledgerRootPath,
+  forbiddenRootPath
+}) {
+  const secure = secureLedgerRoot(ledgerRootPath, forbiddenRootPath);
+  validateClaimFile(authorization, claim, secure);
+  const spend = validateIntegratedLiveDrillSpendAuthorization(
+    authorization.payload.spendAuthorization,
+    authorization.payload.maximumAwsCostUsd
+  ).value;
+  const scopeIndex = spend.scopes.findIndex(
+    ({ scopeId }) => scopeId === reservation?.scopeId
+  );
+  requireCondition(
+    scopeIndex >= 0 && UUID.test(tokenId ?? ""),
+    "INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_REJECTED"
+  );
+  const scope = spend.scopes[scopeIndex];
+  const validatedReservation = readAndValidateReservationFile({
+    authorization,
+    claim,
+    scope,
+    scopeIndex,
+    spend,
+    secure
+  });
+  validateReservationReceipt({
+    authorization,
+    claim,
+    receipt: reservation,
+    scope,
+    validated: validatedReservation
+  });
+  const validatedLaunch = readAndValidateChildLaunchFile({
+    authorization,
+    claim,
+    reservationSha256: reservation.reservationSha256,
+    scope,
+    secure
+  });
+  const resolved = childLaunchReceiptFromValidated(
+    authorization,
+    validatedLaunch
+  );
+  requireCondition(
+    resolved.tokenId === tokenId &&
+      resolved.scopeId === scope.scopeId &&
+      resolved.sequence === scope.sequence,
+    "INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_RECEIPT_REJECTED"
+  );
+  if (launchReceipt !== undefined) {
+    requireCondition(
+      canonicalJson(launchReceipt) === canonicalJson(resolved),
+      "INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_RECEIPT_REJECTED"
+    );
+  }
+  return resolved;
+}
+
 export function consumeIntegratedLiveDrillChildLaunch({
   authorization,
   claim,
@@ -749,16 +829,11 @@ export function consumeIntegratedLiveDrillChildLaunch({
     secure,
     "INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_ALREADY_CONSUMED"
   );
-  return Object.freeze({
-    schemaVersion: INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_SCHEMA,
-    authorizationId: authorization.payload.authorizationId,
-    childLaunchSha256: integratedLiveDrillCanonicalSha256(body),
-    fileByteLength: persisted.byteLength,
-    fileNameSha256: integratedLiveDrillSha256(fileName),
-    reservationSha256: reservation.reservationSha256,
-    scopeId: scope.scopeId,
-    sequence: scope.sequence,
-    tokenId
+  return childLaunchReceiptFromValidated(authorization, {
+    body,
+    byteLength: persisted.byteLength,
+    digest: integratedLiveDrillCanonicalSha256(body),
+    fileName
   });
 }
 

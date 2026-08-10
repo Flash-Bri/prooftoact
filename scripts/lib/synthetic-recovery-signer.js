@@ -2,6 +2,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import {
   RECOVERY_PUBLISHER_VERSION,
   RECOVERY_SIGNATURE_ALGORITHM,
+  normalizedRecoveryBundleFor,
   recoverySignaturePayloadFor
 } from "../../src/cloud/recovery-store.js";
 
@@ -26,8 +27,10 @@ export function createSyntheticRecoverySigner({
     sign(input) {
       const unsigned = {
         ...input,
+        authorityTransferred: false,
         publisherKeyId,
         publisherVersion: RECOVERY_PUBLISHER_VERSION,
+        requiresFreshAuthorization: true,
         signatureAlgorithm: RECOVERY_SIGNATURE_ALGORITHM
       };
       const sourceSignatureBase64 = sign(
@@ -35,10 +38,10 @@ export function createSyntheticRecoverySigner({
         Buffer.from(recoverySignaturePayloadFor(unsigned), "utf8"),
         privateKey
       ).toString("base64");
-      return {
+      return normalizedRecoveryBundleFor({
         ...unsigned,
         sourceSignatureBase64
-      };
+      });
     }
   };
 }

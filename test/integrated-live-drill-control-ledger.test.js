@@ -10,7 +10,8 @@ import {
   consumeIntegratedLiveDrillChildLaunch,
   consumeIntegratedLiveDrillRunAuthorization,
   finalizeIntegratedLiveDrillControlLedger,
-  reserveIntegratedLiveDrillSpend
+  reserveIntegratedLiveDrillSpend,
+  validateIntegratedLiveDrillConsumedChildLaunch
 } from "../src/cloud/integrated-live-drill-control-ledger.js";
 import { canonicalJson } from "../src/cloud/canonical-json.js";
 import {
@@ -397,6 +398,30 @@ test("spend ledger enforces exact order, one reservation, and cumulative cap", (
   assert.equal(receipt.reservedCumulativeExposureUsd, "0.020000");
   assert.equal(receipt.authorizedMaximumCumulativeExposureUsd, "0.020000");
   assert.match(receipt.receiptSha256, /^[0-9a-f]{64}$/u);
+  const beforeReadOnlyVerification = fs.readdirSync(ledgerRootPath)
+    .sort()
+    .map((name) => [name, fs.readFileSync(path.join(ledgerRootPath, name))]);
+  assert.deepEqual(
+    validateIntegratedLiveDrillConsumedChildLaunch({
+      ...args,
+      reservation: reservations[2],
+      tokenId: launches[2].tokenId,
+      launchReceipt: launches[2]
+    }),
+    launches[2]
+  );
+  const afterReadOnlyVerification = fs.readdirSync(ledgerRootPath)
+    .sort()
+    .map((name) => [name, fs.readFileSync(path.join(ledgerRootPath, name))]);
+  assert.deepEqual(afterReadOnlyVerification, beforeReadOnlyVerification);
+  assert.throws(
+    () => validateIntegratedLiveDrillConsumedChildLaunch({
+      ...args,
+      reservation: reservations[2],
+      tokenId: "00000000-0000-4000-8000-000000000099"
+    }),
+    /INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_RECEIPT_REJECTED/u
+  );
 });
 
 test("child launches reject reserved-but-unlaunched predecessor scopes", (t) => {

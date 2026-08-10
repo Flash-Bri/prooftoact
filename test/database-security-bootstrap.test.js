@@ -12,6 +12,10 @@ const authorityStoreUrl = new URL(
 );
 const recoveryUrl = new URL("../src/cloud/recovery-security.js", import.meta.url);
 const recoveryStoreUrl = new URL("../src/cloud/recovery-store.js", import.meta.url);
+const recoveryContinuityIdentityUrl = new URL(
+  "../src/cloud/recovery-continuity-identity.js",
+  import.meta.url
+);
 const recoveryBrokerUrl = new URL("../src/cloud/recovery-broker.js", import.meta.url);
 const signedIngestUrl = new URL("../src/cloud/signed-ingest.js", import.meta.url);
 const admissibleVectorUrl = new URL(
@@ -209,14 +213,15 @@ test("recovery publication rejects database-stale input before canonical occupan
 });
 
 test("fixed and direct recovery reads share one database-time freshness filter", async () => {
-  const source = await readFile(recoveryStoreUrl, "utf8");
-  const declaration = source.indexOf(
-    "const RECOVERY_DATABASE_FRESHNESS_SQL = `"
+  const identitySource = await readFile(recoveryContinuityIdentityUrl, "utf8");
+  const storeSource = await readFile(recoveryStoreUrl, "utf8");
+  const declaration = identitySource.indexOf(
+    "export const RECOVERY_DATABASE_FRESHNESS_SQL = `"
   );
   assert.notEqual(declaration, -1);
-  const declarationEnd = source.indexOf("`.trim();", declaration);
+  const declarationEnd = identitySource.indexOf("`.trim();", declaration);
   assert.notEqual(declarationEnd, -1);
-  const freshnessSql = source.slice(declaration, declarationEnd);
+  const freshnessSql = identitySource.slice(declaration, declarationEnd);
   for (const predicate of [
     "source_commit_ts >= statement_timestamp() - INTERVAL '1 hour'",
     "source_commit_ts <= statement_timestamp() + INTERVAL '1 minute'",
@@ -226,8 +231,16 @@ test("fixed and direct recovery reads share one database-time freshness filter",
     assert.equal(freshnessSql.includes(predicate), true, predicate);
   }
   assert.equal(
-    source.match(/\$\{RECOVERY_DATABASE_FRESHNESS_SQL\}/gu)?.length,
-    2
+    identitySource.match(/\$\{RECOVERY_DATABASE_FRESHNESS_SQL\}/gu)?.length,
+    1
+  );
+  assert.equal(
+    storeSource.match(/\$\{RECOVERY_DATABASE_FRESHNESS_SQL\}/gu)?.length,
+    1
+  );
+  assert.match(
+    storeSource,
+    /import \{\s*RECOVERY_DATABASE_FRESHNESS_SQL,/u
   );
 });
 

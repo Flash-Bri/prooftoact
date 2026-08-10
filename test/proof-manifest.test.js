@@ -132,7 +132,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 129);
+  assert.equal(receipt.artifactCount, 132);
   assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
@@ -311,6 +311,7 @@ test("release copy matches executable and generated source contracts", () => {
     "full-drill-evidence",
     "integrated-live-drill-harness",
     "integrated-live-drill-recovery-continuity",
+    "integrated-live-drill-recovery-continuity-fixture",
     "integrated-live-drill-recovery-continuity-tests",
     "integrated-live-drill-recovery-continuity-worker",
     "integrated-live-drill-runner",
@@ -321,6 +322,8 @@ test("release copy matches executable and generated source contracts", () => {
     "local-full-drill-tests",
     "local-full-drill-verifier",
     "recovery-bundle-persistence-tests",
+    "recovery-bundle-signature",
+    "recovery-continuity-identity",
   ]);
   const claimRows = claims.split("\n");
   const dviClaimRows = [

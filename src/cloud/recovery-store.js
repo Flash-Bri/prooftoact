@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, verify } from "node:crypto";
+import { createHash } from "node:crypto";
 import { Client, Pool } from "pg";
 import { connectionStringForDatabase } from "./authority-store.js";
 import {
@@ -10,18 +10,40 @@ import {
   committedDatabaseResult,
   databaseTimestampFromDriver
 } from "./database-commit-result.js";
+import {
+  RECOVERY_DATABASE_FRESHNESS_SQL,
+  RECOVERY_QUERY_TEMPLATE,
+  recoveryQueryTemplateDigest,
+  recoverySourceBindingDigestFor,
+  renderRecoveryQuery
+} from "./recovery-continuity-identity.js";
+import {
+  RECOVERY_MAX_TTL_MS,
+  RECOVERY_PUBLISHER_VERSION,
+  RECOVERY_SIGNATURE_ALGORITHM,
+  normalizedRecoveryBundleFor,
+  verifyRecoveryBundleSourceSignature
+} from "./recovery-bundle-signature.js";
+
+export {
+  RECOVERY_QUERY_TEMPLATE,
+  recoveryQueryTemplateDigest,
+  recoverySourceBindingDigestFor,
+  renderRecoveryQuery
+} from "./recovery-continuity-identity.js";
+export {
+  RECOVERY_MAX_TTL_MS,
+  RECOVERY_PUBLISHER_VERSION,
+  RECOVERY_SIGNATURE_ALGORITHM,
+  bundleDigestFor,
+  normalizedRecoveryBundleFor,
+  recoverySignaturePayloadFor,
+  verifyRecoveryBundleSourceSignature
+} from "./recovery-bundle-signature.js";
 
 const DEFAULT_DATABASE = "tideproof_recovery";
-const QUERY_SESSION_TOKEN = "__RECOVERY_SESSION_ID__";
-const QUERY_TENANT_TOKEN = "__TENANT_ID__";
-const QUERY_SUBJECT_TOKEN = "__SUBJECT_BINDING_HASH__";
-const QUERY_SOURCE_TOKEN = "__SOURCE_BINDING_DIGEST__";
-const SAFE_BUNDLE_BYTES = 24_576;
-export const RECOVERY_MAX_TTL_MS = 24 * 60 * 60 * 1_000;
 export const RECOVERY_MAX_SOURCE_AGE_MS = 60 * 60 * 1_000;
 export const RECOVERY_MAX_FUTURE_SKEW_MS = 60 * 1_000;
-export const RECOVERY_SIGNATURE_ALGORITHM = "ecdsa-p256-sha256";
-export const RECOVERY_PUBLISHER_VERSION = "tideproof-recovery-publisher-v2";
 
 const RECOVERY_COLUMNS = [
   "tenant_id",
@@ -47,45 +69,6 @@ const RECOVERY_COLUMNS = [
   "requires_fresh_authorization",
   "expires_at"
 ];
-
-const RECOVERY_DATABASE_FRESHNESS_SQL = `
-AND source_commit_ts >= statement_timestamp() - INTERVAL '1 hour'
-AND source_commit_ts <= statement_timestamp() + INTERVAL '1 minute'
-AND expires_at > statement_timestamp()
-AND expires_at <= statement_timestamp() + INTERVAL '24 hours'
-`.trim();
-
-export const RECOVERY_QUERY_TEMPLATE = `
-SELECT
-  tenant_id,
-  recovery_session_id,
-  subject_binding_hash,
-  schema_version,
-  snapshot_version,
-  source_cluster_id,
-  source_commit_ts,
-  source_digest,
-  bundle_digest,
-  policy_version,
-  publisher_key_id,
-  publisher_version,
-  signature_algorithm,
-  source_signature_base64,
-  signature_digest,
-  checkpoint_summary,
-  evidence_summary,
-  conflict_summary,
-  receipt_summary,
-  authority_transferred,
-  requires_fresh_authorization,
-  expires_at
-FROM mcp_public.recovery_bundle_v2
-WHERE recovery_session_id = '${QUERY_SESSION_TOKEN}'::UUID
-  AND tenant_id = '${QUERY_TENANT_TOKEN}'::UUID
-  AND subject_binding_hash = '${QUERY_SUBJECT_TOKEN}'
-  AND source_digest = '${QUERY_SOURCE_TOKEN}'
-  ${RECOVERY_DATABASE_FRESHNESS_SQL}
-`.trim();
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {
@@ -131,363 +114,6 @@ function requireSha256(value, name) {
   return text;
 }
 
-function requirePositiveInteger(value, name) {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new TypeError(`${name} must be a positive safe integer`);
-  }
-  return value;
-}
-
-function requireNonNegativeInteger(value, name, maximum = Number.MAX_SAFE_INTEGER) {
-  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
-    throw new TypeError(
-      `${name} must be a non-negative safe integer no greater than ${maximum}`
-    );
-  }
-  return value;
-}
-
-function requireBoolean(value, name) {
-  if (typeof value !== "boolean") {
-    throw new TypeError(`${name} must be a boolean`);
-  }
-  return value;
-}
-
-function requireBoundedText(value, name, maximum = 128) {
-  const text = requireText(value, name);
-  if (Buffer.byteLength(text, "utf8") > maximum) {
-    throw new RangeError(`${name} exceeds ${maximum} bytes`);
-  }
-  return text;
-}
-
-function requireNullableBoundedText(value, name, maximum = 128) {
-  if (value === null) {
-    return null;
-  }
-  return requireBoundedText(value, name, maximum);
-}
-
-function requireEnum(value, name, allowed) {
-  const text = requireBoundedText(value, name);
-  if (!allowed.includes(text)) {
-    throw new TypeError(`${name} must be one of ${allowed.join(", ")}`);
-  }
-  return text;
-}
-
-function requireTimestamp(value, name) {
-  const text =
-    value instanceof Date
-      ? value.toISOString()
-      : requireText(value, name);
-  if (!Number.isFinite(Date.parse(text))) {
-    throw new TypeError(`${name} must be an ISO-compatible timestamp`);
-  }
-  return new Date(text).toISOString();
-}
-
-function requireExactKeys(value, name, expectedKeys) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`${name} must be a JSON object`);
-  }
-  const actual = Object.keys(value).sort();
-  const expected = [...expectedKeys].sort();
-  if (canonicalJson(actual) !== canonicalJson(expected)) {
-    throw new TypeError(`${name} has an unexpected shape`);
-  }
-}
-
-export function recoverySourceBindingDigestFor(input) {
-  requireExactKeys(input, "recoverySourceBinding", [
-    "authorizationBindingSha256",
-    "authorizationEpoch",
-    "authorityEvidenceBindingSha256",
-    "evidenceDigest",
-    "incidentId",
-    "logicalActionDigest",
-    "logicalAuthorityKeySha256",
-    "operationId",
-    "outcome",
-    "proposalDigest",
-    "requestDigest",
-    "resourceId",
-    "runId",
-    "selectedEvidenceBindingSha256",
-    "tenantId"
-  ]);
-  return sha256(
-    canonicalJson({
-      schema: "tideproof.highwater-recovery-binding.v3",
-      tenantId: requireUuid(input.tenantId, "recoverySourceBinding.tenantId"),
-      runId: requireUuid(input.runId, "recoverySourceBinding.runId"),
-      incidentId: requireUuid(
-        input.incidentId,
-        "recoverySourceBinding.incidentId"
-      ),
-      evidenceDigest: requireSha256(
-        input.evidenceDigest,
-        "recoverySourceBinding.evidenceDigest"
-      ),
-      resourceId: requireBoundedText(
-        input.resourceId,
-        "recoverySourceBinding.resourceId"
-      ),
-      operationId: requireUuid(
-        input.operationId,
-        "recoverySourceBinding.operationId"
-      ),
-      requestDigest: requireSha256(
-        input.requestDigest,
-        "recoverySourceBinding.requestDigest"
-      ),
-      proposalDigest: requireSha256(
-        input.proposalDigest,
-        "recoverySourceBinding.proposalDigest"
-      ),
-      logicalActionDigest: requireSha256(
-        input.logicalActionDigest,
-        "recoverySourceBinding.logicalActionDigest"
-      ),
-      authorizationEpoch: requirePositiveInteger(
-        input.authorizationEpoch,
-        "recoverySourceBinding.authorizationEpoch"
-      ),
-      logicalAuthorityKeySha256: requireSha256(
-        input.logicalAuthorityKeySha256,
-        "recoverySourceBinding.logicalAuthorityKeySha256"
-      ),
-      authorizationBindingSha256: requireSha256(
-        input.authorizationBindingSha256,
-        "recoverySourceBinding.authorizationBindingSha256"
-      ),
-      authorityEvidenceBindingSha256: requireSha256(
-        input.authorityEvidenceBindingSha256,
-        "recoverySourceBinding.authorityEvidenceBindingSha256"
-      ),
-      selectedEvidenceBindingSha256: requireSha256(
-        input.selectedEvidenceBindingSha256,
-        "recoverySourceBinding.selectedEvidenceBindingSha256"
-      ),
-      outcome: requireEnum(input.outcome, "recoverySourceBinding.outcome", [
-        "resource_reserved",
-        "resource_held_denied",
-        "authorization_denied"
-      ])
-    })
-  );
-}
-
-function requireCheckpointSummary(value) {
-  requireExactKeys(value, "checkpointSummary", [
-    "checkpointVersion",
-    "failedAgent",
-    "phase",
-    "scenario"
-  ]);
-  return {
-    checkpointVersion: requirePositiveInteger(
-      value.checkpointVersion,
-      "checkpointSummary.checkpointVersion"
-    ),
-    failedAgent: requireBoundedText(
-      value.failedAgent,
-      "checkpointSummary.failedAgent"
-    ),
-    phase: requireEnum(value.phase, "checkpointSummary.phase", [
-      "successor-context-recovery"
-    ]),
-    scenario: requireEnum(value.scenario, "checkpointSummary.scenario", [
-      "synthetic-highwater"
-    ])
-  };
-}
-
-function requireEvidenceSummary(value) {
-  requireExactKeys(value, "evidenceSummary", [
-    "admittedCount",
-    "classification",
-    "evidenceDigest"
-  ]);
-  return {
-    admittedCount: requireNonNegativeInteger(
-      value.admittedCount,
-      "evidenceSummary.admittedCount",
-      100
-    ),
-    classification: requireEnum(
-      value.classification,
-      "evidenceSummary.classification",
-      ["synthetic"]
-    ),
-    evidenceDigest: requireSha256(
-      value.evidenceDigest,
-      "evidenceSummary.evidenceDigest"
-    )
-  };
-}
-
-function requireConflictSummary(value) {
-  requireExactKeys(value, "conflictSummary", [
-    "status",
-    "unresolvedCount"
-  ]);
-  return {
-    status: requireEnum(value.status, "conflictSummary.status", [
-      "none",
-      "quarantined",
-      "resolved"
-    ]),
-    unresolvedCount: requireNonNegativeInteger(
-      value.unresolvedCount,
-      "conflictSummary.unresolvedCount",
-      100
-    )
-  };
-}
-
-function requireReceiptSummary(value) {
-  requireExactKeys(value, "receiptSummary", [
-    "durableIntentPresent",
-    "outcome",
-    "reason",
-    "resourceLabel"
-  ]);
-  return {
-    durableIntentPresent: requireBoolean(
-      value.durableIntentPresent,
-      "receiptSummary.durableIntentPresent"
-    ),
-    outcome: requireEnum(value.outcome, "receiptSummary.outcome", [
-      "resource_reserved",
-      "resource_held_denied",
-      "authorization_denied"
-    ]),
-    reason: requireNullableBoundedText(
-      value.reason,
-      "receiptSummary.reason"
-    ),
-    resourceLabel: requireBoundedText(
-      value.resourceLabel,
-      "receiptSummary.resourceLabel"
-    )
-  };
-}
-
-function requireBase64(value, name) {
-  const text = requireText(value, name);
-  const bytes = Buffer.from(text, "base64");
-  if (
-    bytes.length === 0 ||
-    bytes.toString("base64") !== text
-  ) {
-    throw new TypeError(`${name} must be canonical base64`);
-  }
-  return { text, bytes };
-}
-
-function normalizeUnsignedBundle(input) {
-  const normalized = {
-    tenantId: requireUuid(input.tenantId, "tenantId"),
-    recoverySessionId: requireUuid(
-      input.recoverySessionId,
-      "recoverySessionId"
-    ),
-    subjectBindingHash: requireSha256(
-      input.subjectBindingHash,
-      "subjectBindingHash"
-    ),
-    schemaVersion: requirePositiveInteger(
-      input.schemaVersion ?? 2,
-      "schemaVersion"
-    ),
-    snapshotVersion: requirePositiveInteger(
-      input.snapshotVersion,
-      "snapshotVersion"
-    ),
-    sourceClusterId: requireUuid(
-      input.sourceClusterId,
-      "sourceClusterId"
-    ),
-    sourceCommitTs: requireTimestamp(input.sourceCommitTs, "sourceCommitTs"),
-    sourceDigest: requireSha256(input.sourceDigest, "sourceDigest"),
-    policyVersion: requireBoundedText(
-      input.policyVersion,
-      "policyVersion"
-    ),
-    publisherKeyId: requireBoundedText(
-      input.publisherKeyId,
-      "publisherKeyId"
-    ),
-    publisherVersion: requireEnum(
-      input.publisherVersion,
-      "publisherVersion",
-      [RECOVERY_PUBLISHER_VERSION]
-    ),
-    signatureAlgorithm: requireEnum(
-      input.signatureAlgorithm,
-      "signatureAlgorithm",
-      [RECOVERY_SIGNATURE_ALGORITHM]
-    ),
-    checkpointSummary: requireCheckpointSummary(input.checkpointSummary),
-    evidenceSummary: requireEvidenceSummary(input.evidenceSummary),
-    conflictSummary: requireConflictSummary(input.conflictSummary),
-    receiptSummary: requireReceiptSummary(input.receiptSummary),
-    authorityTransferred: false,
-    requiresFreshAuthorization: true,
-    expiresAt: requireTimestamp(input.expiresAt, "expiresAt")
-  };
-  if (normalized.schemaVersion !== 2) {
-    throw new TypeError("schemaVersion must be 2");
-  }
-  const sourceMs = Date.parse(normalized.sourceCommitTs);
-  const expiresMs = Date.parse(normalized.expiresAt);
-  if (
-    expiresMs <= sourceMs
-  ) {
-    throw new RangeError("expiresAt must be later than sourceCommitTs");
-  }
-  if (expiresMs - sourceMs > RECOVERY_MAX_TTL_MS) {
-    throw new RangeError(
-      `recovery bundle TTL exceeds ${RECOVERY_MAX_TTL_MS} milliseconds`
-    );
-  }
-  const encoded = canonicalJson(normalized);
-  if (Buffer.byteLength(encoded, "utf8") > SAFE_BUNDLE_BYTES) {
-    throw new RangeError(`recovery bundle exceeds ${SAFE_BUNDLE_BYTES} bytes`);
-  }
-  return normalized;
-}
-
-function normalizeBundle(input) {
-  const unsigned = normalizeUnsignedBundle(input);
-  const bundleDigest = sha256(canonicalJson(unsigned));
-  if (
-    input.bundleDigest !== undefined &&
-    requireSha256(input.bundleDigest, "bundleDigest") !== bundleDigest
-  ) {
-    throw new Error("RECOVERY_BUNDLE_DIGEST_MISMATCH");
-  }
-  const signature = requireBase64(
-    input.sourceSignatureBase64,
-    "sourceSignatureBase64"
-  );
-  const signatureDigest = sha256(signature.bytes);
-  if (
-    input.signatureDigest !== undefined &&
-    requireSha256(input.signatureDigest, "signatureDigest") !== signatureDigest
-  ) {
-    throw new Error("RECOVERY_SIGNATURE_DIGEST_MISMATCH");
-  }
-  return {
-    ...unsigned,
-    bundleDigest,
-    sourceSignatureBase64: signature.text,
-    signatureDigest
-  };
-}
-
 function validateBundleFreshness(bundle, now = new Date()) {
   const nowMs = now.getTime();
   const sourceMs = Date.parse(bundle.sourceCommitTs);
@@ -507,93 +133,6 @@ function validateBundleFreshness(bundle, now = new Date()) {
   if (expiresMs - nowMs > RECOVERY_MAX_TTL_MS) {
     throw new Error("RECOVERY_EXPIRY_TOO_FAR");
   }
-}
-
-function publisherPublicKeyFor(trustedPublisherKeys, publisherKeyId) {
-  const value =
-    trustedPublisherKeys instanceof Map
-      ? trustedPublisherKeys.get(publisherKeyId)
-      : trustedPublisherKeys?.[publisherKeyId];
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error("RECOVERY_PUBLISHER_KEY_UNKNOWN");
-  }
-  const publicKey = createPublicKey({
-    key: Buffer.from(value, "base64"),
-    format: "der",
-    type: "spki"
-  });
-  if (
-    publicKey.asymmetricKeyType !== "ec" ||
-    !["prime256v1", "P-256"].includes(
-      publicKey.asymmetricKeyDetails?.namedCurve
-    )
-  ) {
-    throw new Error("RECOVERY_PUBLISHER_KEY_INVALID");
-  }
-  return publicKey;
-}
-
-export function bundleDigestFor(input) {
-  return sha256(canonicalJson(normalizeUnsignedBundle(input)));
-}
-
-export function normalizedRecoveryBundleFor(input) {
-  return normalizeBundle(input);
-}
-
-export function recoverySignaturePayloadFor(input) {
-  return `tideproof-recovery-bundle-v2\n${bundleDigestFor(input)}`;
-}
-
-function assertRecoveryBundleSourceSignature(
-  normalized,
-  trustedPublisherKeys
-) {
-  const publicKey = publisherPublicKeyFor(
-    trustedPublisherKeys,
-    normalized.publisherKeyId
-  );
-  const signatureValid = verify(
-    "sha256",
-    Buffer.from(recoverySignaturePayloadFor(normalized), "utf8"),
-    publicKey,
-    Buffer.from(normalized.sourceSignatureBase64, "base64")
-  );
-  if (!signatureValid) {
-    throw new Error("RECOVERY_SIGNATURE_INVALID");
-  }
-}
-
-export function verifyRecoveryBundleSourceSignature(
-  input,
-  trustedPublisherKeys
-) {
-  const normalized = normalizeBundle(input);
-  assertRecoveryBundleSourceSignature(normalized, trustedPublisherKeys);
-  return normalized;
-}
-
-export function recoveryQueryTemplateDigest() {
-  return sha256(RECOVERY_QUERY_TEMPLATE);
-}
-
-export function renderRecoveryQuery({
-  recoverySessionId,
-  tenantId,
-  subjectBindingHash,
-  sourceDigest
-}) {
-  const sessionId = requireUuid(recoverySessionId, "recoverySessionId");
-  const boundTenantId = requireUuid(tenantId, "tenantId");
-  const boundSubjectHash = requireSha256(
-    subjectBindingHash,
-    "subjectBindingHash"
-  );
-  const boundSourceDigest = requireSha256(sourceDigest, "sourceDigest");
-  return RECOVERY_QUERY_TEMPLATE.replace(QUERY_SESSION_TOKEN, sessionId)
-    .replace(QUERY_TENANT_TOKEN, boundTenantId)
-    .replace(QUERY_SUBJECT_TOKEN, boundSubjectHash)
-    .replace(QUERY_SOURCE_TOKEN, boundSourceDigest);
 }
 
 export function recoveryQueryBindingsFor(query) {
@@ -671,7 +210,7 @@ export function validateRecoveryRow(
   ) {
     throw new Error("RECOVERY_AUTHORITY_INVARIANT_VIOLATION");
   }
-  const normalized = normalizeBundle({
+  const normalized = normalizedRecoveryBundleFor({
     tenantId: row.tenant_id,
     recoverySessionId: row.recovery_session_id,
     schemaVersion: Number(row.schema_version),
@@ -688,13 +227,15 @@ export function validateRecoveryRow(
     evidenceSummary: row.evidence_summary,
     conflictSummary: row.conflict_summary,
     receiptSummary: row.receipt_summary,
+    authorityTransferred: row.authority_transferred,
+    requiresFreshAuthorization: row.requires_fresh_authorization,
     expiresAt: row.expires_at,
     bundleDigest: row.bundle_digest,
     sourceSignatureBase64: row.source_signature_base64,
     signatureDigest: row.signature_digest
   });
   validateBundleFreshness(normalized, now);
-  assertRecoveryBundleSourceSignature(normalized, trustedPublisherKeys);
+  verifyRecoveryBundleSourceSignature(normalized, trustedPublisherKeys);
   return {
     status: "RECOVERED_CONTEXT_ONLY",
     recoverySessionId: expectedSession,
@@ -953,7 +494,7 @@ export class RecoveryStore {
   }
 
   async appendBundle(input) {
-    const bundle = normalizeBundle(input);
+    const bundle = normalizedRecoveryBundleFor(input);
     validateBundleFreshness(bundle);
     const client = await this.#pool.connect();
     let releaseError;

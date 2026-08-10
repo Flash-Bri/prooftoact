@@ -114,6 +114,7 @@ function validationBinding(overrides = {}) {
 test("recovery bundle digest binds every typed safe field", () => {
   const first = bundleDigestFor(BUNDLE);
   const reordered = bundleDigestFor({
+    authorityTransferred: BUNDLE.authorityTransferred,
     expiresAt: BUNDLE.expiresAt,
     receiptSummary: BUNDLE.receiptSummary,
     conflictSummary: BUNDLE.conflictSummary,
@@ -130,6 +131,7 @@ test("recovery bundle digest binds every typed safe field", () => {
     schemaVersion: BUNDLE.schemaVersion,
     subjectBindingHash: BUNDLE.subjectBindingHash,
     recoverySessionId: BUNDLE.recoverySessionId,
+    requiresFreshAuthorization: BUNDLE.requiresFreshAuthorization,
     tenantId: BUNDLE.tenantId
   });
   assert.equal(first, reordered);
@@ -344,8 +346,10 @@ test("recovery publisher labels cannot disguise a non-P-256 key", () => {
   });
   const unsigned = {
     ...UNSIGNED_BUNDLE,
+    authorityTransferred: false,
     publisherKeyId: "synthetic-p384-disguised-as-p256",
     publisherVersion: BUNDLE.publisherVersion,
+    requiresFreshAuthorization: true,
     signatureAlgorithm: BUNDLE.signatureAlgorithm
   };
   const sourceSignatureBase64 = sign(

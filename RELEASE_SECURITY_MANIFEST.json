@@ -312,7 +312,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "16e10be2e0d0173726ab712bbb3a404fc4e9ec208f87680eb4ee3c58ed80bf0f"
+      "sha256": "e7b6f386c7141d02b0f4f02801965606f29729b4c252cf9d303d206c04a341a8"
     },
     {
       "id": "database-security-posture",
@@ -420,7 +420,7 @@
       "id": "integrated-live-drill-child-authorization",
       "path": "src/cloud/integrated-live-drill-child-authorization.js",
       "role": "INTEGRATED_PROVIDER_DRILL_SIGNED_ONE_USE_CHILD_LAUNCH_AUTHORIZATION",
-      "sha256": "17f30e82c963702f91faa68b69dd6acb8be461b35609cd7378126e504c52df31"
+      "sha256": "7c5d48218db9bcb32adf18a6038810e362e2cf129e53d05da341cb94aa25b597"
     },
     {
       "id": "integrated-live-drill-child-authorization-tests",
@@ -432,19 +432,19 @@
       "id": "integrated-live-drill-control-ledger",
       "path": "src/cloud/integrated-live-drill-control-ledger.js",
       "role": "INTEGRATED_PROVIDER_DRILL_DURABLE_AUTHORIZATION_AND_SPEND_LEDGER",
-      "sha256": "b43e7f67922cae3eee9b32e850a8ee4daa5a4826668e280b031346f81299959d"
+      "sha256": "08531ec5cd345df39b928a8ff919861b6aaeeb645c1b75d9a1dc8468bf74ecb5"
     },
     {
       "id": "integrated-live-drill-control-ledger-tests",
       "path": "test/integrated-live-drill-control-ledger.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_DURABLE_CONTROL_LEDGER_VERIFICATION",
-      "sha256": "4df587ea2b1afb7cadcef7cc4991d38f3dd3e0cae2bdfa685e4a21f577175a1f"
+      "sha256": "0ba6a9ddc2768acd88bb754f037d145cc6638ea2043f1c2a9a981723d570ffca"
     },
     {
       "id": "integrated-live-drill-finalizer",
       "path": "src/cloud/integrated-live-drill-finalizer.js",
       "role": "INTEGRATED_PROVIDER_DRILL_PACKET_A_FAIL_CLOSED_FINALIZER",
-      "sha256": "31c1e1fbe1a1c786f0c6861d91fd31ab08747b6d71db4f4432d55182d58f89a3"
+      "sha256": "7e111f740ae090d47d66f46e433ebebc2131b0b2abb8389db7ce1332bdeca7f6"
     },
     {
       "id": "integrated-live-drill-finalizer-runner",
@@ -456,19 +456,25 @@
       "id": "integrated-live-drill-recovery-continuity",
       "path": "src/cloud/integrated-live-drill-recovery-continuity.js",
       "role": "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_SCAFFOLD",
-      "sha256": "388a6e5f70c2a89d4ae846b2451baaade2264b707604c2c0981340077347891f"
+      "sha256": "de8ba0303e3181476098314e4e6e50b2a70b25d392a40249e167c0cdaa80c12d"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-tests",
       "path": "test/integrated-live-drill-recovery-continuity.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_VERIFICATION",
-      "sha256": "2dee8e73ffb1469fb4d4cc9686c2cec5a00f637cce8b7e1fc0882e892b3be2fb"
+      "sha256": "6c56962e3b4afb57baeb04d82191a1114be892940149701f0be564001e57de7c"
+    },
+    {
+      "id": "integrated-live-drill-recovery-continuity-fixture",
+      "path": "test/helpers/integrated-live-drill-recovery-continuity-fixture.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_TRUSTED_PRE_CALL_TEST_FIXTURE",
+      "sha256": "e8abb5eef160e6f9977cf323d98c424582cbd9cf76bdb4be16c99a0f9fccea94"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-worker",
       "path": "test/helpers/integrated-live-drill-recovery-continuity-worker.js",
       "role": "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_SUBPROCESS_FIXTURE",
-      "sha256": "bdf182b435380c76c3d6aed70167cdc410e05b47003dacd711f6d7bbc4fd976b"
+      "sha256": "7b0f6691d538b73d13ea9aae9b4837984166047a835012220c2bc1854380c20e"
     },
     {
       "id": "integrated-live-drill-pre-attestation-fixture",
@@ -492,7 +498,7 @@
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "65bff000f9eb5f9ebaf1789d2c57f5c9c267cbdc4d14e39faa9b01fb5b74b5d3"
+      "sha256": "289a8ac707dda459d1f1df00e910a0706f38b36092a1c66371309c596a23a212"
     },
     {
       "id": "recovery-bundle-persistence-tests",
@@ -552,7 +558,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "4dde9b3a2412adc423bc1a9aad78a0999257ff67310ba5467daa7a64bc3bd0db"
+      "sha256": "c733d49a754e55096cf02eb0bfa7d9cd1a020027aff2412eeec2d50633041574"
     },
     {
       "id": "proof-manifest-verifier",
@@ -606,7 +612,19 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "0d9792d11f368c9d4403a920c8d76bc0d7b912e9b7d80779376ab1d3cf78303b"
+      "sha256": "6ddb0205c314e7cc6fa9c9e4d9d0d0edf264d04ba9361a0983cb8b2d14677a7e"
+    },
+    {
+      "id": "recovery-bundle-signature",
+      "path": "src/cloud/recovery-bundle-signature.js",
+      "role": "PROVIDER_FREE_STRICT_RECOVERY_BUNDLE_SIGNATURE_VERIFIER",
+      "sha256": "69b916dde3e81dfdffb64b694cbb58890627f4ab32a36d717c9769fb5c9eeaf7"
+    },
+    {
+      "id": "recovery-continuity-identity",
+      "path": "src/cloud/recovery-continuity-identity.js",
+      "role": "PROVIDER_FREE_RECOVERY_PRE_CALL_IDENTITY_AND_BUNDLE_VERIFICATION",
+      "sha256": "f95fb6bfbb46de941f58791926670f82a14da3bb0c5b48b1ba0bfebd3b3373d2"
     },
     {
       "id": "recovery-security-contract",
@@ -630,7 +648,7 @@
       "id": "recovery-publisher-key",
       "path": "scripts/lib/recovery-publisher-key.js",
       "role": "RECOVERY_PUBLISHER_TRUST_ROOT_BOUNDARY",
-      "sha256": "97a0c16397ebf297bed0f7c86d770b527501659d8440c729b7790ef3a2074654"
+      "sha256": "05ea154f61bcaa6d9f7aab287538d6134dd9aa864a348db37d2f4d552ad7d484"
     },
     {
       "id": "recovery-publisher-trust",
@@ -654,13 +672,13 @@
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "a900d90f6fd9580dd10428c12f032188313edc9cbb7dc16ff4e1a41b248329bf"
+      "sha256": "1bf79dca1df30b0913c3d22c985b9e68c1f7f6694005a0d6b4536f9e0b76362b"
     },
     {
       "id": "recovery-store-tests",
       "path": "test/recovery-store.test.js",
       "role": "RECOVERY_STORE_BINDING_VERIFICATION",
-      "sha256": "2d7dac9c550c35c10d303c63f45b17754c34d03b4cc16b255b5e64f6ae62c1a1"
+      "sha256": "770e57430602244c015c80daf988f7f3ba88b58815177ed4e1033929c60445d8"
     },
     {
       "id": "release-security-ledger",

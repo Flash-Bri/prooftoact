@@ -28,7 +28,6 @@ if (!fixturePath || !worker) {
 
 const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
 const options = {
-  now: fixture.now,
   ...(crashAfterEvent ? { crashAfterEvent } : {})
 };
 
@@ -45,11 +44,11 @@ function waitAtBarrier(directory) {
   }
 }
 
-async function fakeMcpCall({ mcpRequestSha256 }) {
+async function fakeMcpCall({ logicalMcpRequestSha256 }) {
   const names = fs.readdirSync(fixture.context.ledgerRootPath)
     .filter((name) => name.includes(".recovery-continuity."));
   if (
-    mcpRequestSha256 !== fixture.context.mcpRequestSha256 ||
+    logicalMcpRequestSha256 !== fixture.logicalMcpRequestSha256 ||
     !names.some((name) => name.includes("06.mcp-call-claimed")) ||
     !names.some((name) => name.includes("07.mcp-dispatch-marker-durable"))
   ) {
@@ -60,6 +59,7 @@ async function fakeMcpCall({ mcpRequestSha256 }) {
   }
   fs.appendFileSync(fixture.counterPath, "call\n", { mode: 0o600 });
   return {
+    logicalMcpRequestSha256,
     mcpResultSha256: "9".repeat(64),
     sessionCloseSha256: "8".repeat(64),
     sessionClosed: true
@@ -95,7 +95,12 @@ switch (worker) {
     break;
   case "W5":
     result = runIntegratedLiveDrillRecoveryContinuityW5(
-      fixture.context,
+      {
+        authorization: fixture.context.authorization,
+        controlLedgerReceipt: fixture.context.controlLedgerReceipt,
+        forbiddenRootPath: fixture.context.forbiddenRootPath,
+        ledgerRootPath: fixture.context.ledgerRootPath
+      },
       options
     );
     break;

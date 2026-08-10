@@ -17,7 +17,9 @@ import {
 import {
   INTEGRATED_LIVE_DRILL_AUTHORIZATION_CLAIM_SCHEMA,
   INTEGRATED_LIVE_DRILL_SPEND_RESERVATION_SCHEMA,
-  consumeIntegratedLiveDrillChildLaunch
+  consumeIntegratedLiveDrillChildLaunch,
+  validateIntegratedLiveDrillConsumedChildLaunch,
+  validateIntegratedLiveDrillConsumedControlLedger
 } from "./integrated-live-drill-control-ledger.js";
 import { validateDeploymentExpectation } from
   "./aws-deployment-attestation.js";
@@ -340,7 +342,7 @@ export function parseIntegratedLiveDrillChildAuthorization(
   });
 }
 
-export function authorizeIntegratedLiveDrillChildLaunch(
+function validateIntegratedLiveDrillChildLaunchEnvironment(
   environment,
   expectedScopeId,
   {
@@ -437,19 +439,82 @@ export function authorizeIntegratedLiveDrillChildLaunch(
       canonicalJson(payload.scope) === canonicalJson(scope),
     "INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_BINDING_REJECTED"
   );
-  const launchReceipt = consumeIntegratedLiveDrillChildLaunch({
-    authorization,
-    claim: payload.claim,
-    reservation: payload.reservation,
-    tokenId: payload.tokenId,
-    ledgerRootPath,
-    forbiddenRootPath,
-    now
-  });
   return Object.freeze({
     ...context,
     authorization,
+    forbiddenRootPath,
+    ledgerRootPath,
+    payload
+  });
+}
+
+export function authorizeIntegratedLiveDrillChildLaunch(
+  environment,
+  expectedScopeId,
+  options = {}
+) {
+  const validated = validateIntegratedLiveDrillChildLaunchEnvironment(
+    environment,
+    expectedScopeId,
+    options
+  );
+  const launchReceipt = consumeIntegratedLiveDrillChildLaunch({
+    authorization: validated.authorization,
+    claim: validated.payload.claim,
+    reservation: validated.payload.reservation,
+    tokenId: validated.payload.tokenId,
+    ledgerRootPath: validated.ledgerRootPath,
+    forbiddenRootPath: validated.forbiddenRootPath,
+    now: options.now ?? Date.now()
+  });
+  const {
+    forbiddenRootPath: _forbiddenRootPath,
+    ledgerRootPath: _ledgerRootPath,
+    payload: _payload,
+    ...context
+  } = validated;
+  return Object.freeze({
+    ...context,
     launchReceipt
+  });
+}
+
+export function verifyIntegratedLiveDrillConsumedChildLaunch(
+  environment,
+  expectedScopeId,
+  { launchReceipt, ...options } = {}
+) {
+  const validated = validateIntegratedLiveDrillChildLaunchEnvironment(
+    environment,
+    expectedScopeId,
+    options
+  );
+  const resolvedLaunchReceipt = validateIntegratedLiveDrillConsumedChildLaunch({
+    authorization: validated.authorization,
+    claim: validated.payload.claim,
+    reservation: validated.payload.reservation,
+    tokenId: validated.payload.tokenId,
+    launchReceipt,
+    ledgerRootPath: validated.ledgerRootPath,
+    forbiddenRootPath: validated.forbiddenRootPath
+  });
+  const ledger = validateIntegratedLiveDrillConsumedControlLedger({
+    authorization: validated.authorization,
+    claim: validated.payload.claim,
+    ledgerRootPath: validated.ledgerRootPath,
+    forbiddenRootPath: validated.forbiddenRootPath
+  });
+  const {
+    forbiddenRootPath: _forbiddenRootPath,
+    ledgerRootPath: _ledgerRootPath,
+    payload: _payload,
+    ...context
+  } = validated;
+  return Object.freeze({
+    ...context,
+    launchReceipt: resolvedLaunchReceipt,
+    controlLedgerReceipt: ledger.controlLedgerReceipt,
+    reservations: ledger.reservations
   });
 }
 

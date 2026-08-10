@@ -1,106 +1,149 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { canonicalJson } from "../src/cloud/canonical-json.js";
 import {
-  INTEGRATED_LIVE_DRILL_RECOVERY_FAILPOINTS,
-  INTEGRATED_LIVE_DRILL_RECOVERY_WORKERS,
-  integratedLiveDrillCanonicalSha256
+  integratedLiveDrillCanonicalSha256,
+  signIntegratedLiveDrillEvidence
 } from "../src/cloud/integrated-live-drill-authorization.js";
+import { verifyIntegratedLiveDrillConsumedChildLaunch } from
+  "../src/cloud/integrated-live-drill-child-authorization.js";
+import {
+  recoveryBrokerConfigDigest,
+  verifyRecoveryBundleSourceSignature as
+    verifyRecoveryBundleSourceSignatureForContinuity
+} from "../src/cloud/recovery-continuity-identity.js";
+import {
+  RECOVERY_PUBLISHER_VERSION,
+  RECOVERY_SIGNATURE_ALGORITHM,
+  verifyRecoveryBundleSourceSignature as
+    verifyRecoveryBundleSourceSignatureForProduction
+} from "../src/cloud/recovery-store.js";
+import { createSyntheticRecoverySigner } from
+  "../scripts/lib/synthetic-recovery-signer.js";
 import {
   INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
   INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_PLAN,
   INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN,
+  integratedLiveDrillRecoveryContinuityPreCallIntent,
   inspectIntegratedLiveDrillRecoveryContinuity,
+  runIntegratedLiveDrillRecoveryContinuityW1,
+  runIntegratedLiveDrillRecoveryContinuityW2,
+  runIntegratedLiveDrillRecoveryContinuityW3,
+  runIntegratedLiveDrillRecoveryContinuityW4,
   runIntegratedLiveDrillRecoveryContinuityW5,
+  validateIntegratedLiveDrillRecoveryContinuityPreCallIntent,
   validateIntegratedLiveDrillRecoveryContinuityJournal
 } from "../src/cloud/integrated-live-drill-recovery-continuity.js";
+import { createRecoveryContinuityFixture } from
+  "./helpers/integrated-live-drill-recovery-continuity-fixture.js";
 
 const WORKER = new URL(
   "./helpers/integrated-live-drill-recovery-continuity-worker.js",
   import.meta.url
 );
-const BASE_NOW = Date.parse("2026-08-10T12:00:00.000Z");
-const FORBIDDEN_ROOT = fs.realpathSync(process.cwd());
-
-function privateDirectory(prefix) {
-  const directory = fs.mkdtempSync(
-    path.join(fs.realpathSync(os.tmpdir()), prefix)
-  );
-  fs.chmodSync(directory, 0o700);
-  return fs.realpathSync(directory);
+function fixture(t, prefix = "prooftoact-packet-b-", fakeDelayMs = 0) {
+  return createRecoveryContinuityFixture(t, { prefix, fakeDelayMs });
 }
 
-function fixture(t, prefix = "prooftoact-packet-b-", fakeDelayMs = 0) {
-  const ledgerRootPath = privateDirectory(prefix);
-  t.after(() => fs.rmSync(ledgerRootPath, { recursive: true, force: true }));
-  const authorizationId = "11111111-1111-4111-8111-111111111111";
-  const runId = "22222222-2222-4222-8222-222222222222";
-  const authorization = Object.freeze({
-    attestation: Object.freeze({
-      schemaVersion: "synthetic-test-authorization",
-      payload: Object.freeze({ authorizationId, runId }),
-      signature: "synthetic-test-only"
+function createRawAdversarialRecoverySigner() {
+  const publisherKeyId = "adversarial-strict-parity-p256-v1";
+  const { privateKey, publicKey } = generateKeyPairSync("ec", {
+    namedCurve: "P-256"
+  });
+  const publicKeySpkiBase64 = publicKey
+    .export({ type: "spki", format: "der" })
+    .toString("base64");
+  return Object.freeze({
+    publisherKeyId,
+    publicKeySpkiBase64,
+    signRaw(unsignedInput) {
+      const unsigned = {
+        ...unsignedInput,
+        publisherKeyId,
+        publisherVersion: RECOVERY_PUBLISHER_VERSION,
+        signatureAlgorithm: RECOVERY_SIGNATURE_ALGORITHM
+      };
+      const bundleDigest = createHash("sha256")
+        .update(canonicalJson(unsigned))
+        .digest("hex");
+      const signature = sign(
+        "sha256",
+        Buffer.from(`tideproof-recovery-bundle-v2\n${bundleDigest}`, "utf8"),
+        privateKey
+      );
+      return Object.freeze({
+        ...unsigned,
+        bundleDigest,
+        sourceSignatureBase64: signature.toString("base64"),
+        signatureDigest: createHash("sha256").update(signature).digest("hex")
+      });
+    },
+    verifyRaw(bundle, expectedBundleDigest = bundle.bundleDigest) {
+      return verify(
+        "sha256",
+        Buffer.from(
+          `tideproof-recovery-bundle-v2\n${expectedBundleDigest}`,
+          "utf8"
+        ),
+        publicKey,
+        Buffer.from(bundle.sourceSignatureBase64, "base64")
+      );
+    }
+  });
+}
+
+function intentFor(
+  value,
+  preCallInputs = value.context.preCallInputs,
+  trustedRunContext = value.context.trustedRunContext
+) {
+  return integratedLiveDrillRecoveryContinuityPreCallIntent({
+    ...preCallInputs,
+    authorization: value.context.authorization,
+    ledgerRootPath: value.context.ledgerRootPath,
+    forbiddenRootPath: value.context.forbiddenRootPath,
+    recoveryEvidenceRootPath: value.context.recoveryEvidenceRootPath,
+    trustedRunContext,
+    now: value.testOnly.now + 200
+  });
+}
+
+function brokerConfigurationFor(
+  value,
+  {
+    expectedSourceClusterId =
+      value.context.trustedRunContext.recoveryBrokerConfiguration
+        .expectedSourceClusterId,
+    recoveryClusterId =
+      value.context.trustedRunContext.recoveryBrokerConfiguration
+        .recoveryClusterId
+  } = {}
+) {
+  return Object.freeze({
+    expectedSourceClusterId,
+    recoveryBrokerConfigDigest: recoveryBrokerConfigDigest({
+      recoveryClusterId,
+      expectedSourceClusterId,
+      buildIdentity: value.context.trustedRunContext.spec.sourceBuildIdentity,
+      trustedPublisherKeys:
+        value.context.trustedRunContext.committedTrustRoot.trustedPublisherKeys
     }),
-    issuedAt: BASE_NOW,
-    expiresAt: BASE_NOW + 60_000,
-    payload: Object.freeze({
-      authorizationId,
-      configDigest: "c".repeat(64),
-      requiredRecoveryFailpoints: INTEGRATED_LIVE_DRILL_RECOVERY_FAILPOINTS,
-      requiredRecoveryJournalEntryCount: 17,
-      requiredRecoveryWorkers: INTEGRATED_LIVE_DRILL_RECOVERY_WORKERS,
-      runId,
-      sourceCommit: "a".repeat(40),
-      treeDigest: "b".repeat(40)
-    })
+    recoveryClusterId
   });
-  const candidateBody = Object.freeze({
-    configDigest: authorization.payload.configDigest,
-    providerBacked: false,
-    recovery: Object.freeze({
-      managedMcpCallCount: 1,
-      managedMcpRequestPayloadSha256: "7".repeat(64)
-    }),
-    runId,
-    sourceCommit: authorization.payload.sourceCommit,
-    treeDigest: authorization.payload.treeDigest
+}
+
+function minimalW5Context(value) {
+  return Object.freeze({
+    authorization: value.context.authorization,
+    controlLedgerReceipt: value.context.controlLedgerReceipt,
+    forbiddenRootPath: value.context.forbiddenRootPath,
+    ledgerRootPath: value.context.ledgerRootPath
   });
-  const candidateReceipt = Object.freeze({
-    ...candidateBody,
-    receiptSha256: integratedLiveDrillCanonicalSha256(candidateBody)
-  });
-  const ledgerBody = Object.freeze({
-    authorizationClaimSha256: "6".repeat(64),
-    authorizationId,
-    runId,
-    schemaVersion: "synthetic-test-control-ledger"
-  });
-  const controlLedgerReceipt = Object.freeze({
-    ...ledgerBody,
-    receiptSha256: integratedLiveDrillCanonicalSha256(ledgerBody)
-  });
-  const value = Object.freeze({
-    context: Object.freeze({
-      authorization,
-      candidateReceipt,
-      controlLedgerReceipt,
-      forbiddenRootPath: FORBIDDEN_ROOT,
-      ledgerRootPath,
-      mcpRequestSha256:
-        candidateReceipt.recovery.managedMcpRequestPayloadSha256
-    }),
-    counterPath: path.join(ledgerRootPath, "fake-mcp-call-count.txt"),
-    fakeDelayMs,
-    now: BASE_NOW + 1_000
-  });
-  const fixturePath = path.join(ledgerRootPath, "worker-fixture.json");
-  fs.writeFileSync(fixturePath, `${canonicalJson(value)}\n`, { mode: 0o600 });
-  return Object.freeze({ ...value, fixturePath });
 }
 
 function sanitizedEnvironment(extra = {}) {
@@ -248,6 +291,18 @@ test("five subprocess workers resume four failpoints with exactly one fake MCP c
   assert.match(
     receipt.claimBoundary,
     /actual provider-bound W1-W5 continuity remains unproven/u
+  );
+  assert.match(
+    receipt.claimBoundary,
+    /records truthful post-dispatch evidence after authority expiry/u
+  );
+  assert.match(
+    receipt.claimBoundary,
+    /provider-bound persistence and crash reconciliation.*remain unproven/u
+  );
+  assert.doesNotMatch(
+    receipt.claimBoundary,
+    /cannot yet persist post-dispatch evidence after authority expiry/u
   );
   assert.match(
     receipt.claimBoundary,
@@ -422,8 +477,22 @@ test("W5 makes no ambient-credential claim, rejects a provider client, and journ
   );
   assert.throws(
     () => runIntegratedLiveDrillRecoveryContinuityW5(
-      value.context,
-      { now: value.now, providerClient: Object.freeze({}) }
+      minimalW5Context(value),
+      { providerClient: Object.freeze({}) }
+    ),
+    /W5_PROVIDER_CLIENT_REJECTED/u
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW5(
+      { ...minimalW5Context(value), mcpClient: Object.freeze({}) },
+      {}
+    ),
+    /W5_PROVIDER_CLIENT_REJECTED/u
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW5(
+      minimalW5Context(value),
+      { apiKey: "synthetic-test-only" }
     ),
     /W5_PROVIDER_CLIENT_REJECTED/u
   );
@@ -443,4 +512,701 @@ test("W5 makes no ambient-credential claim, rejects a provider client, and journ
     () => validateIntegratedLiveDrillRecoveryContinuityJournal(value.context),
     /RECOVERY_CONTINUITY_AMBIGUOUS/u
   );
+});
+
+test("pre-call intent is non-circular and W1 rejects fabricated or overriding inputs", (t) => {
+  const value = fixture(t, "prooftoact-provider-continuity-intent-");
+  const intent = value.context.preCallIntent;
+  assert.equal("candidateReceiptSha256" in intent, false);
+  assert.equal("mcpRequestSha256" in intent, false);
+  assert.match(intent.logicalMcpRequestSha256, /^[0-9a-f]{64}$/u);
+  assert.equal(
+    intent.expectedSourceClusterId,
+    value.context.trustedRunContext.recoveryBrokerConfiguration
+      .expectedSourceClusterId
+  );
+  assert.equal(intent.sourceClusterId, intent.expectedSourceClusterId);
+  assert.notEqual(intent.sourceClusterId, intent.recoveryClusterId);
+  assert.equal(
+    intent.recoveryBrokerConfigDigest,
+    value.context.trustedRunContext.recoveryBrokerConfiguration
+      .recoveryBrokerConfigDigest
+  );
+  assert.equal(intentFor(value).intentSha256, intent.intentSha256);
+  const beforeReadOnlyChildVerification = fs.readdirSync(
+    value.context.ledgerRootPath
+  ).sort();
+  const verifiedChild = verifyIntegratedLiveDrillConsumedChildLaunch(
+    value.testOnly.childEnvironment,
+    "MANAGED_MCP_RECOVERY",
+    {
+      launchReceipt:
+        value.context.preCallInputs.consumedManagedMcpLaunch,
+      forbiddenRootPath: value.context.forbiddenRootPath,
+      now: value.testOnly.now + 200
+    }
+  );
+  assert.equal(verifiedChild.launchReceipt.sequence, 3);
+  assert.deepEqual(
+    fs.readdirSync(value.context.ledgerRootPath).sort(),
+    beforeReadOnlyChildVerification
+  );
+  assert.equal(
+    validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(intent, {
+      authorization: value.context.authorization,
+      controlLedgerReceipt: value.context.controlLedgerReceipt
+    }),
+    intent
+  );
+
+  const { intentSha256: _intentSha256, ...body } = intent;
+  const fabricatedBody = Object.freeze({
+    ...body,
+    tenantId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+  });
+  const fabricated = Object.freeze({
+    ...fabricatedBody,
+    intentSha256: integratedLiveDrillCanonicalSha256(fabricatedBody)
+  });
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW1({
+      ...value.context,
+      preCallIntent: fabricated
+    }),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  for (const injected of [
+    { authorization: value.context.authorization },
+    { ledgerRootPath: value.context.ledgerRootPath },
+    { forbiddenRootPath: value.context.forbiddenRootPath },
+    { preCallIntent: intent }
+  ]) {
+    assert.throws(
+      () => runIntegratedLiveDrillRecoveryContinuityW1({
+        ...value.context,
+        preCallInputs: {
+          ...value.context.preCallInputs,
+          ...injected
+        }
+      }),
+      /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+    );
+  }
+});
+
+test("production and continuity share strict trusted-bundle validation", (t) => {
+  const value = fixture(t, "prooftoact-provider-continuity-bundle-parity-");
+  const rawSigner = createRawAdversarialRecoverySigner();
+  const trustedPublisherKeys = Object.freeze({
+    [rawSigner.publisherKeyId]: rawSigner.publicKeySpkiBase64
+  });
+  const {
+    bundleDigest: _bundleDigest,
+    signatureDigest: _signatureDigest,
+    sourceSignatureBase64: _sourceSignatureBase64,
+    ...unsigned
+  } = value.persistedBundle.bundle;
+  const valid = rawSigner.signRaw(unsigned);
+  assert.equal(rawSigner.verifyRaw(valid), true);
+  assert.equal(
+    verifyRecoveryBundleSourceSignatureForContinuity,
+    verifyRecoveryBundleSourceSignatureForProduction
+  );
+  assert.deepEqual(
+    verifyRecoveryBundleSourceSignatureForProduction(
+      valid,
+      trustedPublisherKeys
+    ),
+    valid
+  );
+  assert.deepEqual(
+    verifyRecoveryBundleSourceSignatureForContinuity(
+      valid,
+      trustedPublisherKeys
+    ),
+    valid
+  );
+
+  const {
+    schemaVersion: _missingSchemaVersion,
+    ...withoutSchemaVersion
+  } = valid;
+  const {
+    bundleDigest: _missingBundleDigest,
+    ...withoutBundleDigest
+  } = valid;
+  const {
+    signatureDigest: _missingSignatureDigest,
+    ...withoutSignatureDigest
+  } = valid;
+  const {
+    authorityTransferred: _missingAuthorityTransferred,
+    ...withoutAuthorityTransferred
+  } = valid;
+  const {
+    requiresFreshAuthorization: _missingFreshAuthorization,
+    ...withoutFreshAuthorization
+  } = valid;
+  const unchangedSignatureAdversaries = [
+    {
+      name: "non-plain top-level object",
+      value: Object.assign(
+        Object.create({ inheritedByVerifier: "must-reject" }),
+        valid
+      )
+    },
+    {
+      name: "extra top-level field",
+      value: { ...valid, ignoredByNormalizer: "must-reject" }
+    },
+    { name: "missing schemaVersion", value: withoutSchemaVersion },
+    { name: "missing bundleDigest", value: withoutBundleDigest },
+    { name: "missing signatureDigest", value: withoutSignatureDigest },
+    {
+      name: "missing authorityTransferred",
+      value: withoutAuthorityTransferred
+    },
+    {
+      name: "missing requiresFreshAuthorization",
+      value: withoutFreshAuthorization
+    },
+    {
+      name: "authorityTransferred true",
+      value: { ...valid, authorityTransferred: true }
+    },
+    {
+      name: "requiresFreshAuthorization false",
+      value: { ...valid, requiresFreshAuthorization: false }
+    }
+  ];
+  for (const adversary of unchangedSignatureAdversaries) {
+    assert.equal(
+      rawSigner.verifyRaw(adversary.value, valid.bundleDigest),
+      true,
+      `${adversary.name} must retain a valid trusted signature`
+    );
+    const failures = [
+      verifyRecoveryBundleSourceSignatureForProduction,
+      verifyRecoveryBundleSourceSignatureForContinuity
+    ].map((verifier) => {
+      try {
+        verifier(adversary.value, trustedPublisherKeys);
+      } catch (error) {
+        return error;
+      }
+      return null;
+    });
+    assert.equal(
+      failures.every((error) => error instanceof Error),
+      true,
+      `${adversary.name} must fail both verifier imports`
+    );
+    assert.equal(failures[0].constructor, failures[1].constructor);
+    assert.equal(failures[0].message, failures[1].message);
+  }
+
+  const sourceCommitMs = Date.parse(unsigned.sourceCommitTs);
+  const malformedInputs = [
+    {
+      name: "object policyVersion",
+      value: { ...unsigned, policyVersion: { version: "test-only" } }
+    },
+    {
+      name: "object failedAgent",
+      value: {
+        ...unsigned,
+        checkpointSummary: {
+          ...unsigned.checkpointSummary,
+          failedAgent: { name: "test-only" }
+        }
+      }
+    },
+    {
+      name: "excess evidence count",
+      value: {
+        ...unsigned,
+        evidenceSummary: {
+          ...unsigned.evidenceSummary,
+          admittedCount: 101
+        }
+      }
+    },
+    {
+      name: "unsupported evidence classification",
+      value: {
+        ...unsigned,
+        evidenceSummary: {
+          ...unsigned.evidenceSummary,
+          classification: "provider-backed"
+        }
+      }
+    },
+    {
+      name: "excess conflict count",
+      value: {
+        ...unsigned,
+        conflictSummary: {
+          ...unsigned.conflictSummary,
+          unresolvedCount: 101
+        }
+      }
+    },
+    {
+      name: "string durable intent",
+      value: {
+        ...unsigned,
+        receiptSummary: {
+          ...unsigned.receiptSummary,
+          durableIntentPresent: "true"
+        }
+      }
+    },
+    {
+      name: "overlong TTL",
+      value: {
+        ...unsigned,
+        expiresAt: new Date(
+          sourceCommitMs + (24 * 60 * 60 * 1_000) + 1
+        ).toISOString()
+      }
+    }
+  ];
+  for (const adversary of malformedInputs) {
+    const correctlySignedMalformed = rawSigner.signRaw(adversary.value);
+    assert.equal(
+      rawSigner.verifyRaw(correctlySignedMalformed),
+      true,
+      `${adversary.name} must carry a valid trusted raw signature`
+    );
+    const failures = [
+      verifyRecoveryBundleSourceSignatureForProduction,
+      verifyRecoveryBundleSourceSignatureForContinuity
+    ].map((verifier) => {
+      try {
+        verifier(correctlySignedMalformed, trustedPublisherKeys);
+      } catch (error) {
+        return error;
+      }
+      return null;
+    });
+    assert.equal(
+      failures.every((error) => error instanceof Error),
+      true,
+      `${adversary.name} must fail both verifier imports`
+    );
+    assert.equal(failures[0].constructor, failures[1].constructor);
+    assert.equal(failures[0].message, failures[1].message);
+  }
+});
+
+test("trusted roots, source, subject, and persisted bundle cannot be swapped", (t) => {
+  const value = fixture(t, "prooftoact-provider-continuity-swaps-");
+  const replacementPublisher = createSyntheticRecoverySigner({
+    publisherKeyId: value.persistedBundle.bundle.publisherKeyId
+  });
+  assert.throws(
+    () => verifyRecoveryBundleSourceSignatureForContinuity(
+      value.persistedBundle.bundle,
+      {
+        [replacementPublisher.publisherKeyId]:
+          replacementPublisher.publicKeySpkiBase64
+      }
+    ),
+    /RECOVERY_SIGNATURE_INVALID/u
+  );
+  assert.throws(
+    () => integratedLiveDrillRecoveryContinuityPreCallIntent({
+      ...value.context.preCallInputs,
+      authorization: value.context.authorization,
+      ledgerRootPath: value.context.ledgerRootPath,
+      forbiddenRootPath: value.context.forbiddenRootPath,
+      recoveryEvidenceRootPath: value.context.recoveryEvidenceRootPath,
+      trustedRunContext: {
+        ...value.context.trustedRunContext,
+        humanAuthorizationTrustRoot: {
+          ...value.context.trustedRunContext.humanAuthorizationTrustRoot,
+          keyIdSha256: "0".repeat(64)
+        }
+      },
+      now: value.testOnly.now + 200
+    }),
+    /INTEGRATED_LIVE_DRILL/u
+  );
+  assert.throws(
+    () => intentFor(value, {
+      ...value.context.preCallInputs,
+      recoverySourceReceipt: {
+        ...value.context.preCallInputs.recoverySourceReceipt,
+        tenant_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+      }
+    }),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  const sourceClusterId =
+    value.context.trustedRunContext.recoveryBrokerConfiguration
+      .expectedSourceClusterId;
+  const recoveryClusterId =
+    value.context.trustedRunContext.recoveryBrokerConfiguration
+      .recoveryClusterId;
+  const trustedContextWith = (recoveryBrokerConfiguration) => Object.freeze({
+    ...value.context.trustedRunContext,
+    recoveryBrokerConfiguration
+  });
+  assert.throws(
+    () => intentFor(
+      value,
+      value.context.preCallInputs,
+      trustedContextWith(brokerConfigurationFor(value, {
+        expectedSourceClusterId:
+          "66666666-6666-4666-8666-666666666666"
+      }))
+    ),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  assert.throws(
+    () => intentFor(
+      value,
+      value.context.preCallInputs,
+      trustedContextWith(brokerConfigurationFor(value, {
+        expectedSourceClusterId: recoveryClusterId
+      }))
+    ),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  assert.throws(
+    () => intentFor(
+      value,
+      {
+        ...value.context.preCallInputs,
+        recoveryBinding: {
+          ...value.context.preCallInputs.recoveryBinding,
+          recoveryClusterId: sourceClusterId
+        }
+      },
+      trustedContextWith(brokerConfigurationFor(value, {
+        expectedSourceClusterId: recoveryClusterId,
+        recoveryClusterId: sourceClusterId
+      }))
+    ),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  assert.throws(
+    () => intentFor(value, {
+      ...value.context.preCallInputs,
+      recoveryBinding: {
+        ...value.context.preCallInputs.recoveryBinding,
+        recoveryClusterId:
+          "66666666-6666-4666-8666-666666666666"
+      }
+    }),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  assert.throws(
+    () => intentFor(value, {
+      ...value.context.preCallInputs,
+      recoveryBinding: {
+        ...value.context.preCallInputs.recoveryBinding,
+        subjectBindingSha256: "0".repeat(64)
+      }
+    }),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  const { receiptSha256: _receiptSha256, ...receiptBody } =
+    value.context.preCallInputs.signedBundlePersistenceReceipt;
+  const fabricatedReceiptBody = {
+    ...receiptBody,
+    pathSha256: "0".repeat(64)
+  };
+  assert.throws(
+    () => intentFor(value, {
+      ...value.context.preCallInputs,
+      signedBundlePersistenceReceipt: {
+        ...fabricatedReceiptBody,
+        receiptSha256: integratedLiveDrillCanonicalSha256(
+          fabricatedReceiptBody
+        )
+      }
+    }),
+    /RECOVERY_BUNDLE_PERSISTENCE_REJECTED/u
+  );
+  const childAttestation =
+    value.context.preCallInputs.consumedChildAuthorization.attestation;
+  for (const payload of [
+    { ...childAttestation.payload, unexpected: "field" },
+    { ...childAttestation.payload, nonceSha256: "not-a-digest" },
+    {
+      ...childAttestation.payload,
+      issuedAt: new Date(
+        value.context.authorization.expiresAt + 1
+      ).toISOString()
+    },
+    {
+      ...childAttestation.payload,
+      claim: {
+        ...childAttestation.payload.claim,
+        fileByteLength: childAttestation.payload.claim.fileByteLength + 1
+      }
+    }
+  ]) {
+    const resigned = signIntegratedLiveDrillEvidence(
+      Object.freeze(payload),
+      value.testOnly.childLaunch.privateKeyPkcs8DerBase64,
+      value.testOnly.childLaunch.publicKey
+    );
+    assert.throws(
+      () => intentFor(value, {
+        ...value.context.preCallInputs,
+        consumedChildAuthorization: { attestation: resigned }
+      }),
+      /CHILD_AUTHORIZATION|RECOVERY_CONTINUITY_BINDING_REJECTED/u
+    );
+  }
+});
+
+test("source timestamp is canonicalized, fresh, and transport-only extras are rejected", (t) => {
+  const value = fixture(t, "prooftoact-provider-continuity-source-");
+  const source = value.context.preCallInputs.recoverySourceReceipt;
+  const withDate = intentFor(value, {
+    ...value.context.preCallInputs,
+    recoverySourceReceipt: {
+      ...source,
+      recorded_at: new Date(source.recorded_at)
+    }
+  });
+  assert.equal(
+    withDate.recoverySourceReceiptSha256,
+    value.context.preCallIntent.recoverySourceReceiptSha256
+  );
+  assert.throws(
+    () => integratedLiveDrillRecoveryContinuityPreCallIntent({
+      ...value.context.preCallInputs,
+      recoverySourceReceipt: {
+        ...source,
+        recorded_at: new Date(
+          value.testOnly.now - 3_601_000
+        ).toISOString()
+      },
+      authorization: value.context.authorization,
+      ledgerRootPath: value.context.ledgerRootPath,
+      forbiddenRootPath: value.context.forbiddenRootPath,
+      recoveryEvidenceRootPath: value.context.recoveryEvidenceRootPath,
+      trustedRunContext: value.context.trustedRunContext,
+      now: value.testOnly.now + 200
+    }),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW1({
+      ...value.context,
+      preCallInputs: {
+        ...value.context.preCallInputs,
+        transportSessionId: "transport-only-random-value"
+      }
+    }),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+});
+
+test("mixed legacy intent and v2 journal artifacts fail closed", (t) => {
+  const value = fixture(t, "prooftoact-provider-continuity-mixed-schema-");
+  runIntegratedLiveDrillRecoveryContinuityW1(
+    value.context
+  );
+  const intentPath = path.join(
+    value.context.ledgerRootPath,
+    `${value.context.authorization.payload.authorizationId}.` +
+      "recovery-continuity-intent.json"
+  );
+  const persisted = JSON.parse(fs.readFileSync(intentPath, "utf8"));
+  const { intentSha256: _intentSha256, ...body } = persisted;
+  const legacyBody = {
+    ...body,
+    schemaVersion:
+      "tideproof.highwater-drill-recovery-continuity-pre-call-intent.v0"
+  };
+  fs.writeFileSync(intentPath, `${canonicalJson({
+    ...legacyBody,
+    intentSha256: integratedLiveDrillCanonicalSha256(legacyBody)
+  })}\n`, { mode: 0o600 });
+  assert.throws(
+    () => validateIntegratedLiveDrillRecoveryContinuityJournal(value.context),
+    /RECOVERY_CONTINUITY_BINDING_REJECTED/u
+  );
+});
+
+test("public W1-W5 reject caller-controlled journal timestamps", async (t) => {
+  const value = fixture(t, "prooftoact-provider-continuity-public-clock-");
+  const backdated = value.context.authorization.issuedAt + 1;
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW1(
+      value.context,
+      { now: backdated }
+    ),
+    /RECOVERY_CONTINUITY_OPTIONS_REJECTED/u
+  );
+  await assert.rejects(
+    runIntegratedLiveDrillRecoveryContinuityW2(value.context, {
+      mcpCall: async () => {
+        throw new Error("must not dispatch");
+      },
+      now: backdated
+    }),
+    /RECOVERY_CONTINUITY_OPTIONS_REJECTED/u
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW3(
+      value.context,
+      { now: backdated }
+    ),
+    /RECOVERY_CONTINUITY_OPTIONS_REJECTED/u
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW4(
+      value.context,
+      { now: backdated }
+    ),
+    /RECOVERY_CONTINUITY_OPTIONS_REJECTED/u
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW5(
+      minimalW5Context(value),
+      { now: backdated }
+    ),
+    /W5_PROVIDER_CLIENT_REJECTED/u
+  );
+});
+
+test("journal rejects future-start and predated first-entry evidence", (t) => {
+  const future = createRecoveryContinuityFixture(t, {
+    prefix: "prooftoact-provider-continuity-future-start-",
+    auditStartOffsetMs: 60_000
+  });
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW1(future.context),
+    /RECOVERY_CONTINUITY_ORDER_REJECTED/u
+  );
+  assert.equal(
+    fs.readdirSync(future.context.ledgerRootPath)
+      .some((name) => name.includes(".01.run-intent-durable.json")),
+    false
+  );
+
+  const predated = fixture(
+    t,
+    "prooftoact-provider-continuity-predated-entry-"
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW1(
+      predated.context,
+      { crashAfterEvent: "RUN_INTENT_DURABLE" }
+    ),
+    /SYNTHETIC_CRASH_RUN_INTENT_DURABLE/u
+  );
+  const firstEntryName = fs.readdirSync(predated.context.ledgerRootPath)
+    .find((name) => name.includes(".01.run-intent-durable.json"));
+  const firstEntryPath = path.join(
+    predated.context.ledgerRootPath,
+    firstEntryName
+  );
+  const firstEntry = JSON.parse(fs.readFileSync(firstEntryPath, "utf8"));
+  firstEntry.recordedAt = new Date(
+    Date.parse(predated.context.preCallIntent.startedAt) - 1
+  ).toISOString();
+  fs.writeFileSync(
+    firstEntryPath,
+    `${canonicalJson(firstEntry)}\n`,
+    { mode: 0o600 }
+  );
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW1(predated.context),
+    /RECOVERY_CONTINUITY_AMBIGUOUS/u
+  );
+});
+
+test("post-dispatch workers record truthful post-expiry time", async (t) => {
+  const originalNow = Date.now;
+  t.after(() => { Date.now = originalNow; });
+  const value = fixture(t, "prooftoact-provider-continuity-post-expiry-");
+  runIntegratedLiveDrillRecoveryContinuityW1(value.context);
+  await runIntegratedLiveDrillRecoveryContinuityW2(value.context, {
+    mcpCall: async ({ logicalMcpRequestSha256 }) => ({
+      logicalMcpRequestSha256,
+      mcpResultSha256: "9".repeat(64),
+      sessionCloseSha256: "8".repeat(64),
+      sessionClosed: true
+    })
+  });
+  const afterExpiry = value.context.authorization.expiresAt + 500;
+  Date.now = () => afterExpiry;
+  runIntegratedLiveDrillRecoveryContinuityW3(value.context);
+  runIntegratedLiveDrillRecoveryContinuityW4(value.context);
+  runIntegratedLiveDrillRecoveryContinuityW5(minimalW5Context(value));
+  const receipt = validateIntegratedLiveDrillRecoveryContinuityJournal(
+    value.context
+  );
+  assert.equal(receipt.entryCount, 17);
+  const lastEntryName = fs.readdirSync(value.context.ledgerRootPath)
+    .find((name) => name.includes(".17.w5-completed.json"));
+  const lastEntry = JSON.parse(fs.readFileSync(
+    path.join(value.context.ledgerRootPath, lastEntryName),
+    "utf8"
+  ));
+  assert.equal(Date.parse(lastEntry.recordedAt), afterExpiry);
+  assert.ok(Date.parse(lastEntry.recordedAt) >
+    value.context.authorization.expiresAt);
+});
+
+test("public W2 resamples authority time before claim and dispatch", async (t) => {
+  const originalNow = Date.now;
+  t.after(() => { Date.now = originalNow; });
+
+  const beforeClaim = fixture(
+    t,
+    "prooftoact-provider-continuity-expiry-before-claim-"
+  );
+  runIntegratedLiveDrillRecoveryContinuityW1(beforeClaim.context);
+  Date.now = () => beforeClaim.context.authorization.expiresAt + 1;
+  let calls = 0;
+  await assert.rejects(
+    runIntegratedLiveDrillRecoveryContinuityW2(beforeClaim.context, {
+      mcpCall: async ({ logicalMcpRequestSha256 }) => {
+        calls += 1;
+        return {
+          logicalMcpRequestSha256,
+          mcpResultSha256: "9".repeat(64),
+          sessionCloseSha256: "8".repeat(64),
+          sessionClosed: true
+        };
+      }
+    }),
+    /AUTHORIZATION/u
+  );
+  assert.equal(calls, 0);
+
+  Date.now = originalNow;
+  const beforeDispatch = fixture(
+    t,
+    "prooftoact-provider-continuity-expiry-before-dispatch-"
+  );
+  runIntegratedLiveDrillRecoveryContinuityW1(beforeDispatch.context);
+  const current = beforeDispatch.testOnly.now + 500;
+  const clock = [
+    current,
+    current,
+    current,
+    current,
+    current,
+    beforeDispatch.context.authorization.expiresAt + 1
+  ];
+  Date.now = () => clock.length > 1 ? clock.shift() : clock[0];
+  await assert.rejects(
+    runIntegratedLiveDrillRecoveryContinuityW2(beforeDispatch.context, {
+      mcpCall: async () => {
+        calls += 1;
+        throw new Error("must not dispatch");
+      }
+    }),
+    /AUTHORIZATION/u
+  );
+  assert.equal(calls, 0);
 });
