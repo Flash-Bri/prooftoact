@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Client } from "pg";
+import { parseStrictJson } from "./strict-json.js";
 import { connectionStringForDatabase } from "./authority-store.js";
 import {
   databaseClientMustBeDiscarded,
@@ -318,8 +319,15 @@ export async function resolveCommittedRecoveryAuditEvent({
   tenantId,
   eventId,
   eventDigest,
-  clientFactory = null
+  clientFactory = null,
+  beforeExternalAction = null
 } = {}) {
+  if (
+    beforeExternalAction !== null &&
+    typeof beforeExternalAction !== "function"
+  ) {
+    throw new TypeError("beforeExternalAction must be a function");
+  }
   const expectedTenantId = requireUuid(tenantId, "tenantId");
   const expectedEventId = requireUuid(eventId, "eventId");
   const expectedEventDigest = requireSha256(eventDigest, "eventDigest");
@@ -329,7 +337,13 @@ export async function resolveCommittedRecoveryAuditEvent({
     applicationName: "tideproof-recovery-audit-resolver"
   });
   try {
+    if (beforeExternalAction !== null) {
+      beforeExternalAction("AUDIT_RESOLVE_CONNECT");
+    }
     await client.connect();
+    if (beforeExternalAction !== null) {
+      beforeExternalAction("AUDIT_RESOLVE_QUERY");
+    }
     const result = await client.query(
       `
         SELECT *
@@ -431,25 +445,69 @@ function errorCodeFor(error) {
     .slice(0, 128);
 }
 
+function hasExactKeys(value, expected) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  return keys.length === expected.length &&
+    expected.every((key) => Object.hasOwn(value, key));
+}
+
 function rowsFromMcpResult(result) {
-  if (result && Array.isArray(result.rows)) {
+  const hasRows = result !== null &&
+    typeof result === "object" &&
+    Object.hasOwn(result, "rows");
+  const hasContent = result !== null &&
+    typeof result === "object" &&
+    Object.hasOwn(result, "content");
+  if (hasRows && hasContent) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_AMBIGUOUS");
+  }
+  if (hasRows) {
+    if (!hasExactKeys(result, ["rows"]) || !Array.isArray(result.rows)) {
+      throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+    }
     return result.rows;
+  }
+  if (!hasExactKeys(result, ["content"])) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
   }
   const content = result?.content;
   if (!Array.isArray(content) || content.length !== 1) {
     throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
   }
-  const text = content[0]?.text;
-  if (typeof text !== "string") {
+  if (
+    !hasExactKeys(content[0], ["type", "text"]) ||
+    content[0].type !== "text" ||
+    typeof content[0].text !== "string"
+  ) {
     throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
   }
+  const text = content[0].text;
   let parsed;
   try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error("RECOVERY_MCP_RESPONSE_JSON_INVALID");
+    parsed = parseStrictJson(text, {
+      duplicateCode: "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER",
+      invalidCode: "RECOVERY_MCP_RESPONSE_JSON_INVALID"
+    });
+  } catch (cause) {
+    throw new Error(
+      cause?.message === "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER"
+        ? "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER"
+        : "RECOVERY_MCP_RESPONSE_JSON_INVALID"
+    );
   }
-  if (!Array.isArray(parsed?.rows)) {
+  const parsedHasRows = parsed !== null &&
+    typeof parsed === "object" &&
+    Object.hasOwn(parsed, "rows");
+  const parsedHasContent = parsed !== null &&
+    typeof parsed === "object" &&
+    Object.hasOwn(parsed, "content");
+  if (parsedHasRows && parsedHasContent) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_AMBIGUOUS");
+  }
+  if (!hasExactKeys(parsed, ["rows"]) || !Array.isArray(parsed.rows)) {
     throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
   }
   return parsed.rows;
@@ -602,10 +660,16 @@ export class RecoveryAuditSink {
     }));
   }
 
-  async #resolve(event, eventDigest) {
+  async #resolve(event, eventDigest, beforeExternalAction) {
     const client = this.#client("tideproof-recovery-audit-reconcile");
     try {
+      if (beforeExternalAction !== null) {
+        beforeExternalAction("AUDIT_RESOLVE_CONNECT");
+      }
       await client.connect();
+      if (beforeExternalAction !== null) {
+        beforeExternalAction("AUDIT_RESOLVE_QUERY");
+      }
       return await client.query(
         `
           SELECT *
@@ -620,7 +684,47 @@ export class RecoveryAuditSink {
     }
   }
 
-  async append(event) {
+  async resolve(event, { beforeExternalAction = null } = {}) {
+    if (
+      beforeExternalAction !== null &&
+      typeof beforeExternalAction !== "function"
+    ) {
+      throw new TypeError("beforeExternalAction must be a function");
+    }
+    const normalized = Object.freeze({
+      ...event,
+      startedAt: new Date(event?.startedAt).toISOString(),
+      completedAt: new Date(event?.completedAt).toISOString(),
+      sourceWatermark:
+        event?.sourceWatermark === null
+          ? null
+          : new Date(event?.sourceWatermark).toISOString()
+    });
+    const eventDigest = recoveryAuditEventDigest(normalized);
+    const result = await this.#resolve(
+      normalized,
+      eventDigest,
+      beforeExternalAction
+    );
+    const row = result?.rows?.[0];
+    if (
+      result?.rowCount !== 1 ||
+      row?.event_id !== normalized.eventId ||
+      row?.tenant_id !== normalized.tenantId ||
+      row?.event_digest !== eventDigest
+    ) {
+      throw new Error("RECOVERY_AUDIT_EVENT_INVALID");
+    }
+    return Object.freeze({ ...row });
+  }
+
+  async append(event, { beforeExternalAction = null } = {}) {
+    if (
+      beforeExternalAction !== null &&
+      typeof beforeExternalAction !== "function"
+    ) {
+      throw new TypeError("beforeExternalAction must be a function");
+    }
     const eventDigest = recoveryAuditEventDigest(event);
     const client = this.#client("tideproof-recovery-audit");
     let transactionStarted = false;
@@ -628,9 +732,18 @@ export class RecoveryAuditSink {
     let committed = false;
     let clientClosed = false;
     try {
+      if (beforeExternalAction !== null) {
+        beforeExternalAction("AUDIT_APPEND_CONNECT");
+      }
       await client.connect();
+      if (beforeExternalAction !== null) {
+        beforeExternalAction("AUDIT_APPEND_BEGIN");
+      }
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
       transactionStarted = true;
+      if (beforeExternalAction !== null) {
+        beforeExternalAction("AUDIT_APPEND");
+      }
       const result = await client.query(
         `
           SELECT tp_api.g1_append_recovery_audit_event_v3(
@@ -666,9 +779,15 @@ export class RecoveryAuditSink {
       ) {
         throw new Error("RECOVERY_AUDIT_RECEIPT_MISMATCH");
       }
+      if (beforeExternalAction !== null) {
+        beforeExternalAction("AUDIT_APPEND_DATABASE_CLOCK");
+      }
       const clock = await client.query(
         "SELECT transaction_timestamp() AS database_now"
       );
+      if (beforeExternalAction !== null) {
+        beforeExternalAction("AUDIT_APPEND_COMMIT");
+      }
       commitDispatched = true;
       await client.query("COMMIT");
       committed = true;
@@ -694,7 +813,11 @@ export class RecoveryAuditSink {
       if (commitDispatched && !commitDefinitivelyAborted) {
         await client.end().catch(() => {});
         clientClosed = true;
-        const resolved = await this.#resolve(event, eventDigest);
+        const resolved = await this.#resolve(
+          event,
+          eventDigest,
+          beforeExternalAction
+        );
         const row = resolved?.rows?.[0];
         if (
           resolved?.rowCount === 1 &&
@@ -769,197 +892,633 @@ export class DeterministicRecoveryBroker {
     this.#trustedPublisherKeys = trustedPublisherKeys;
   }
 
-  async recover(input = {}) {
-    const { authenticatedPrincipal } = input ?? {};
-    const startedAt = new Date();
-    let callerSubjectHash;
-    try {
-      callerSubjectHash = principalBindingHash(authenticatedPrincipal);
-    } catch (error) {
-      return {
-        status: "UNKNOWN_DO_NOT_ACT",
-        reason: errorCodeFor(error),
-        authorityTransferred: false,
-        requiresFreshAuthorization: true
-      };
+  #unknown(reason) {
+    return Object.freeze({
+      status: "UNKNOWN_DO_NOT_ACT",
+      reason,
+      authorityTransferred: false,
+      requiresFreshAuthorization: true
+    });
+  }
+
+  #validatePreparedRecovery(prepared) {
+    const value = prepared ?? {};
+    const startedAt = new Date(value.startedAt);
+    const completedAt = new Date(value.preReadAuditEvent?.completedAt);
+    const preparedKeys = [
+      "boundInputDigest",
+      "brokerConfigDigest",
+      "callerSubjectHash",
+      "interactionId",
+      "preReadAuditDigest",
+      "preReadAuditEvent",
+      "preReadEventId",
+      "query",
+      "queryTemplateDigest",
+      "recoverySessionId",
+      "schemaVersion",
+      "sourceDigest",
+      "startedAt",
+      "tenantId",
+      "terminalEventId"
+    ];
+    const auditEventKeys = [
+      "boundInputDigest",
+      "brokerConfigDigest",
+      "callerSubjectHash",
+      "completedAt",
+      "errorCode",
+      "eventId",
+      "interactionId",
+      "outcome",
+      "phase",
+      "recoveryClusterId",
+      "recoverySessionId",
+      "resultDigest",
+      "sourceWatermark",
+      "startedAt",
+      "tenantId",
+      "queryTemplateDigest"
+    ];
+    const expectedBoundInputDigest = sha256(canonicalJson({
+      tenantId: value.tenantId,
+      recoverySessionId: value.recoverySessionId,
+      subjectBindingHash: value.callerSubjectHash,
+      sourceDigest: value.sourceDigest
+    }));
+    const expectedBrokerConfigDigest = recoveryBrokerConfigDigest({
+      recoveryClusterId: this.#recoveryClusterId,
+      expectedSourceClusterId: this.#expectedSourceClusterId,
+      buildIdentity: this.#buildIdentity,
+      trustedPublisherKeys: this.#trustedPublisherKeys
+    });
+    const expectedQuery = renderRecoveryQuery({
+      tenantId: value.tenantId,
+      recoverySessionId: value.recoverySessionId,
+      subjectBindingHash: value.callerSubjectHash,
+      sourceDigest: value.sourceDigest
+    });
+    if (
+      !hasExactKeys(value, preparedKeys) ||
+      !hasExactKeys(value.preReadAuditEvent, auditEventKeys) ||
+      value.schemaVersion !== "tideproof.prepared-recovery.v1" ||
+      requireUuid(value.tenantId, "prepared.tenantId") !== value.tenantId ||
+      requireUuid(value.recoverySessionId, "prepared.recoverySessionId") !==
+        value.recoverySessionId ||
+      requireSha256(value.callerSubjectHash, "prepared.callerSubjectHash") !==
+        value.callerSubjectHash ||
+      requireSha256(value.sourceDigest, "prepared.sourceDigest") !==
+        value.sourceDigest ||
+      requireSha256(value.boundInputDigest, "prepared.boundInputDigest") !==
+        expectedBoundInputDigest ||
+      requireSha256(value.brokerConfigDigest, "prepared.brokerConfigDigest") !==
+        expectedBrokerConfigDigest ||
+      requireSha256(
+        value.queryTemplateDigest,
+        "prepared.queryTemplateDigest"
+      ) !== recoveryQueryTemplateDigest() ||
+      value.query !== expectedQuery ||
+      requireUuid(value.interactionId, "prepared.interactionId") !==
+        value.interactionId ||
+      requireUuid(value.preReadEventId, "prepared.preReadEventId") !==
+        value.preReadEventId ||
+      requireUuid(value.terminalEventId, "prepared.terminalEventId") !==
+        value.terminalEventId ||
+      !Number.isFinite(startedAt.getTime()) ||
+      startedAt.toISOString() !== value.startedAt ||
+      !Number.isFinite(completedAt.getTime()) ||
+      completedAt.toISOString() !== value.preReadAuditEvent?.completedAt ||
+      completedAt.getTime() < startedAt.getTime() ||
+      value.preReadAuditEvent?.eventId !== value.preReadEventId ||
+      value.preReadAuditEvent?.interactionId !== value.interactionId ||
+      value.preReadAuditEvent?.tenantId !== value.tenantId ||
+      value.preReadAuditEvent?.recoverySessionId !== value.recoverySessionId ||
+      value.preReadAuditEvent?.callerSubjectHash !== value.callerSubjectHash ||
+      value.preReadAuditEvent?.recoveryClusterId !== this.#recoveryClusterId ||
+      value.preReadAuditEvent?.brokerConfigDigest !== value.brokerConfigDigest ||
+      value.preReadAuditEvent?.queryTemplateDigest !==
+        value.queryTemplateDigest ||
+      value.preReadAuditEvent?.boundInputDigest !== value.boundInputDigest ||
+      value.preReadAuditEvent?.startedAt !== value.startedAt ||
+      value.preReadAuditEvent?.phase !== "pre_read" ||
+      value.preReadAuditEvent?.outcome !== "read_authorized" ||
+      value.preReadAuditEvent?.resultDigest !== null ||
+      value.preReadAuditEvent?.sourceWatermark !== null ||
+      value.preReadAuditEvent?.errorCode !== null ||
+      recoveryAuditEventDigest(value.preReadAuditEvent) !==
+        value.preReadAuditDigest
+    ) {
+      throw new Error("RECOVERY_PREPARED_STATE_INVALID");
     }
-    let auditContext = null;
-    let observedResultDigest = null;
-    let observedSourceWatermark = null;
-    let preReadCommitted = false;
+    const preReadAuditEvent = Object.freeze({
+      boundInputDigest: value.preReadAuditEvent.boundInputDigest,
+      brokerConfigDigest: value.preReadAuditEvent.brokerConfigDigest,
+      callerSubjectHash: value.preReadAuditEvent.callerSubjectHash,
+      completedAt: value.preReadAuditEvent.completedAt,
+      errorCode: value.preReadAuditEvent.errorCode,
+      eventId: value.preReadAuditEvent.eventId,
+      interactionId: value.preReadAuditEvent.interactionId,
+      outcome: value.preReadAuditEvent.outcome,
+      phase: value.preReadAuditEvent.phase,
+      recoveryClusterId: value.preReadAuditEvent.recoveryClusterId,
+      recoverySessionId: value.preReadAuditEvent.recoverySessionId,
+      resultDigest: value.preReadAuditEvent.resultDigest,
+      sourceWatermark: value.preReadAuditEvent.sourceWatermark,
+      startedAt: value.preReadAuditEvent.startedAt,
+      tenantId: value.preReadAuditEvent.tenantId,
+      queryTemplateDigest: value.preReadAuditEvent.queryTemplateDigest
+    });
+    return Object.freeze({
+      boundInputDigest: value.boundInputDigest,
+      brokerConfigDigest: value.brokerConfigDigest,
+      callerSubjectHash: value.callerSubjectHash,
+      interactionId: value.interactionId,
+      preReadAuditDigest: value.preReadAuditDigest,
+      preReadAuditEvent,
+      preReadEventId: value.preReadEventId,
+      query: value.query,
+      queryTemplateDigest: value.queryTemplateDigest,
+      recoverySessionId: value.recoverySessionId,
+      schemaVersion: value.schemaVersion,
+      sourceDigest: value.sourceDigest,
+      startedAt: value.startedAt,
+      tenantId: value.tenantId,
+      terminalEventId: value.terminalEventId
+    });
+  }
+
+  async planRecovery(input = {}, { auditIdentity = null } = {}) {
+    const { authenticatedPrincipal } = input ?? {};
+    const callerSubjectHash = principalBindingHash(authenticatedPrincipal);
+    const binding = await this.#sessionResolver.resolve({
+      authenticatedPrincipal
+    });
+    const tenantId = requireUuid(binding.tenantId, "binding.tenantId");
+    const recoverySessionId = requireUuid(
+      binding.recoverySessionId,
+      "binding.recoverySessionId"
+    );
+    const sourceDigest = requireSha256(
+      binding.sourceDigest,
+      "binding.sourceDigest"
+    );
+    if (
+      requireSha256(
+        binding.subjectBindingHash,
+        "binding.subjectBindingHash"
+      ) !== callerSubjectHash
+    ) {
+      throw new Error("RECOVERY_PRINCIPAL_BINDING_MISMATCH");
+    }
+    const startedAt = auditIdentity?.startedAt === undefined
+      ? new Date()
+      : new Date(auditIdentity.startedAt);
+    if (
+      !Number.isFinite(startedAt.getTime()) ||
+      startedAt.toISOString() !==
+        (auditIdentity?.startedAt ?? startedAt.toISOString())
+    ) {
+      throw new Error("RECOVERY_AUDIT_IDENTITY_INVALID");
+    }
+    const interactionId = auditIdentity?.interactionId ?? randomUUID();
+    const preReadEventId = auditIdentity?.preReadEventId ?? randomUUID();
+    const terminalEventId = auditIdentity?.terminalEventId ?? randomUUID();
+    requireUuid(interactionId, "auditIdentity.interactionId");
+    requireUuid(preReadEventId, "auditIdentity.preReadEventId");
+    requireUuid(terminalEventId, "auditIdentity.terminalEventId");
+    if (new Set([interactionId, preReadEventId, terminalEventId]).size !== 3) {
+      throw new Error("RECOVERY_AUDIT_IDENTITY_INVALID");
+    }
+    const boundInputDigest = sha256(canonicalJson({
+      tenantId,
+      recoverySessionId,
+      subjectBindingHash: callerSubjectHash,
+      sourceDigest
+    }));
+    const brokerConfigDigest = recoveryBrokerConfigDigest({
+      recoveryClusterId: this.#recoveryClusterId,
+      expectedSourceClusterId: this.#expectedSourceClusterId,
+      buildIdentity: this.#buildIdentity,
+      trustedPublisherKeys: this.#trustedPublisherKeys
+    });
+    const query = renderRecoveryQuery({
+      tenantId,
+      recoverySessionId,
+      subjectBindingHash: callerSubjectHash,
+      sourceDigest
+    });
+    const auditContext = Object.freeze({
+      tenantId,
+      recoverySessionId,
+      callerSubjectHash,
+      recoveryClusterId: this.#recoveryClusterId,
+      brokerConfigDigest,
+      queryTemplateDigest: recoveryQueryTemplateDigest(),
+      boundInputDigest,
+      interactionId
+    });
+    const preReadAuditEvent = Object.freeze({
+      ...auditContext,
+      eventId: preReadEventId,
+      phase: "pre_read",
+      resultDigest: null,
+      sourceWatermark: null,
+      startedAt,
+      completedAt: new Date(),
+      outcome: "read_authorized",
+      errorCode: null
+    });
+    const preReadAuditDigest = recoveryAuditEventDigest(preReadAuditEvent);
+    const prepared = Object.freeze({
+      schemaVersion: "tideproof.prepared-recovery.v1",
+      tenantId,
+      recoverySessionId,
+      callerSubjectHash,
+      sourceDigest,
+      boundInputDigest,
+      brokerConfigDigest,
+      queryTemplateDigest: recoveryQueryTemplateDigest(),
+      query,
+      interactionId,
+      preReadEventId,
+      terminalEventId,
+      startedAt: startedAt.toISOString(),
+      preReadAuditEvent: Object.freeze({
+        ...preReadAuditEvent,
+        startedAt: startedAt.toISOString(),
+        completedAt: new Date(preReadAuditEvent.completedAt).toISOString()
+      }),
+      preReadAuditDigest
+    });
+    return this.#validatePreparedRecovery(prepared);
+  }
+
+  async commitPreparedRecoveryPreRead(
+    prepared,
+    { beforeAuditAppend = null } = {}
+  ) {
+    const value = this.#validatePreparedRecovery(prepared);
+    if (
+      beforeAuditAppend !== null &&
+      typeof beforeAuditAppend !== "function"
+    ) {
+      throw new Error("RECOVERY_AUDIT_ACTION_GUARD_INVALID");
+    }
+    let preReadAudit;
     try {
-      const binding = await this.#sessionResolver.resolve({
-        authenticatedPrincipal
-      });
-      const tenantId = requireUuid(binding.tenantId, "binding.tenantId");
-      const recoverySessionId = requireUuid(
-        binding.recoverySessionId,
-        "binding.recoverySessionId"
+      if (beforeAuditAppend !== null) {
+        beforeAuditAppend("PRE_READ_AUDIT_APPEND");
+      }
+      preReadAudit = await this.#auditSink.append(
+        value.preReadAuditEvent,
+        { beforeExternalAction: beforeAuditAppend }
       );
-      const sourceDigest = requireSha256(
-        binding.sourceDigest,
-        "binding.sourceDigest"
-      );
+    } catch (cause) {
       if (
-        requireSha256(
-          binding.subjectBindingHash,
-          "binding.subjectBindingHash"
-        ) !== callerSubjectHash
+        cause?.message ===
+          "INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED"
       ) {
-        throw new Error("RECOVERY_PRINCIPAL_BINDING_MISMATCH");
+        throw cause;
       }
-      const boundInputDigest = sha256(
-        canonicalJson({
-          tenantId,
-          recoverySessionId,
-          subjectBindingHash: callerSubjectHash,
-          sourceDigest
-        })
-      );
-      const brokerConfigDigest = recoveryBrokerConfigDigest({
-        recoveryClusterId: this.#recoveryClusterId,
+      throw new Error("RECOVERY_AUDIT_UNAVAILABLE", { cause });
+    }
+    if (
+      preReadAudit?.eventDigest !== undefined &&
+      preReadAudit.eventDigest !== value.preReadAuditDigest
+    ) {
+      throw new Error("RECOVERY_AUDIT_RECEIPT_MISMATCH");
+    }
+    return Object.freeze({
+      prepared: value,
+      preReadAudit: Object.freeze({ ...preReadAudit })
+    });
+  }
+
+  async resolvePreparedRecoveryAuditEvent(
+    event,
+    { beforeExternalAction = null } = {}
+  ) {
+    if (typeof this.#auditSink?.resolve !== "function") {
+      throw new Error("RECOVERY_AUDIT_RESOLVER_REQUIRED");
+    }
+    if (
+      beforeExternalAction !== null &&
+      typeof beforeExternalAction !== "function"
+    ) {
+      throw new Error("RECOVERY_AUDIT_ACTION_GUARD_INVALID");
+    }
+    return this.#auditSink.resolve(event, {
+      beforeExternalAction
+    });
+  }
+
+  async prepareRecovery(input = {}, options = {}) {
+    return this.commitPreparedRecoveryPreRead(
+      await this.planRecovery(input, options)
+    );
+  }
+
+  restorePreparedRecovery(prepared) {
+    return this.#validatePreparedRecovery(prepared);
+  }
+
+  async validatePreparedRecoveryResume(
+    prepared,
+    { authenticatedPrincipal } = {}
+  ) {
+    const value = this.#validatePreparedRecovery(prepared);
+    const callerSubjectHash = principalBindingHash(authenticatedPrincipal);
+    const binding = await this.#sessionResolver.resolve({
+      authenticatedPrincipal
+    });
+    if (
+      callerSubjectHash !== value.callerSubjectHash ||
+      requireUuid(binding.tenantId, "binding.tenantId") !== value.tenantId ||
+      requireUuid(binding.recoverySessionId, "binding.recoverySessionId") !==
+        value.recoverySessionId ||
+      requireSha256(binding.subjectBindingHash, "binding.subjectBindingHash") !==
+        value.callerSubjectHash ||
+      requireSha256(binding.sourceDigest, "binding.sourceDigest") !==
+        value.sourceDigest
+    ) {
+      throw new Error("RECOVERY_PREPARED_RESUME_BINDING_MISMATCH");
+    }
+    return value;
+  }
+
+  async executePreparedRecovery(
+    prepared,
+    { beforeProviderDispatch = null } = {}
+  ) {
+    const value = this.#validatePreparedRecovery(prepared);
+    if (
+      beforeProviderDispatch !== null &&
+      typeof beforeProviderDispatch !== "function"
+    ) {
+      throw new Error("RECOVERY_PROVIDER_DISPATCH_GUARD_INVALID");
+    }
+    return this.#mcpClient.selectQuery({
+      clusterId: this.#recoveryClusterId,
+      database: FIXED_DATABASE,
+      query: value.query,
+      beforeExternalAction: beforeProviderDispatch
+    });
+  }
+
+  async closePreparedRecoveryProviderSessionAndReadEvidence() {
+    if (
+      typeof this.#mcpClient.close !== "function" ||
+      typeof this.#mcpClient.transportEvidence !== "function" ||
+      typeof this.#mcpClient.semanticRequestEvidence !== "function"
+    ) {
+      throw new Error("RECOVERY_MCP_CLIENT_EVIDENCE_UNAVAILABLE");
+    }
+    await this.#mcpClient.close();
+    return Object.freeze({
+      semanticRequestEvidence: this.#mcpClient.semanticRequestEvidence(),
+      transportEvidence: this.#mcpClient.transportEvidence()
+    });
+  }
+
+  #buildPreparedRecoveryCompletion(prepared, rawResult, completedAtInput) {
+    const value = this.#validatePreparedRecovery(prepared);
+    const completedAt = new Date(completedAtInput);
+    if (
+      !Number.isFinite(completedAt.getTime()) ||
+      completedAt.toISOString() !== completedAtInput ||
+      completedAt.getTime() < Date.parse(value.startedAt)
+    ) {
+      throw new Error("RECOVERY_COMPLETION_PLAN_INVALID");
+    }
+    let observedResultDigest = sha256(canonicalJson(rawResult));
+    let observedSourceWatermark = null;
+    const rows = rowsFromMcpResult(rawResult);
+    if (rows.length === 1) {
+      observedResultDigest = sha256(canonicalJson(rows[0]));
+      const sourceCommitMs = new Date(rows[0]?.source_commit_ts).getTime();
+      if (Number.isFinite(sourceCommitMs)) {
+        observedSourceWatermark = new Date(sourceCommitMs).toISOString();
+      }
+    }
+    if (rows.length !== 1) {
+      throw new Error("RECOVERY_MCP_RESULT_CARDINALITY_INVALID");
+    }
+    const validated = validateRecoveryRow(
+      rows[0],
+      {
+        tenantId: value.tenantId,
+        recoverySessionId: value.recoverySessionId,
+        subjectBindingHash: value.callerSubjectHash,
+        sourceDigest: value.sourceDigest,
         expectedSourceClusterId: this.#expectedSourceClusterId,
-        buildIdentity: this.#buildIdentity,
         trustedPublisherKeys: this.#trustedPublisherKeys
-      });
-      const query = renderRecoveryQuery({
-        tenantId,
-        recoverySessionId,
-        subjectBindingHash: callerSubjectHash,
-        sourceDigest
-      });
-      const interactionId = randomUUID();
-      const preReadEventId = randomUUID();
-      auditContext = {
-        tenantId,
-        recoverySessionId,
-        callerSubjectHash,
-        recoveryClusterId: this.#recoveryClusterId,
-        brokerConfigDigest,
-        queryTemplateDigest: recoveryQueryTemplateDigest(),
-        boundInputDigest,
-        interactionId,
-        preReadEventId
-      };
-      try {
-        const preReadAudit = await this.#auditSink.append({
-          ...auditContext,
-          eventId: preReadEventId,
-          phase: "pre_read",
-          resultDigest: null,
-          sourceWatermark: null,
-          startedAt,
-          completedAt: new Date(),
-          outcome: "read_authorized",
-          errorCode: null
-        });
-        auditContext.preReadEventDigest = preReadAudit.eventDigest;
-      } catch {
-        return {
-          status: "UNKNOWN_DO_NOT_ACT",
-          reason: "recovery_audit_unavailable",
-          authorityTransferred: false,
-          requiresFreshAuthorization: true
-        };
+      },
+      completedAt
+    );
+    const terminalAuditEvent = Object.freeze({
+      tenantId: value.tenantId,
+      recoverySessionId: value.recoverySessionId,
+      callerSubjectHash: value.callerSubjectHash,
+      recoveryClusterId: this.#recoveryClusterId,
+      brokerConfigDigest: value.brokerConfigDigest,
+      queryTemplateDigest: value.queryTemplateDigest,
+      boundInputDigest: value.boundInputDigest,
+      interactionId: value.interactionId,
+      eventId: value.terminalEventId,
+      phase: "terminal",
+      resultDigest: observedResultDigest,
+      sourceWatermark: validated.row.source_commit_ts,
+      startedAt: value.startedAt,
+      completedAt,
+      outcome: "recovered_context_only",
+      errorCode: null
+    });
+    const terminalAuditDigest = recoveryAuditEventDigest(terminalAuditEvent);
+    const recovery = Object.freeze({
+      status: "RECOVERED_CONTEXT_ONLY",
+      auditId: value.terminalEventId,
+      auditDigest: terminalAuditDigest,
+      auditInteractionId: value.interactionId,
+      preReadAuditId: value.preReadEventId,
+      preReadAuditDigest: value.preReadAuditDigest,
+      recoverySessionId: value.recoverySessionId,
+      tenantId: value.tenantId,
+      sourceDigest: validated.sourceDigest,
+      bundleDigest: validated.bundleDigest,
+      context: Object.freeze({
+        checkpoint: validated.row.checkpoint_summary,
+        evidence: validated.row.evidence_summary,
+        conflicts: validated.row.conflict_summary,
+        receipt: validated.row.receipt_summary
+      }),
+      authorityTransferred: false,
+      requiresFreshAuthorization: true
+    });
+    return Object.freeze({
+      schemaVersion: "tideproof.prepared-recovery-completion.v1",
+      preparedSha256: sha256(canonicalJson(value)),
+      rawResultSha256: sha256(canonicalJson(rawResult)),
+      recovery,
+      resultDigest: observedResultDigest,
+      sourceWatermark: observedSourceWatermark,
+      terminalAuditEvent: Object.freeze({
+        ...terminalAuditEvent,
+        completedAt: new Date(terminalAuditEvent.completedAt).toISOString()
+      }),
+      terminalAuditDigest
+    });
+  }
+
+  planPreparedRecoveryCompletion(prepared, rawResult) {
+    return this.#buildPreparedRecoveryCompletion(
+      prepared,
+      rawResult,
+      new Date().toISOString()
+    );
+  }
+
+  async commitPreparedRecoveryCompletion(
+    plan,
+    prepared,
+    rawResult,
+    { beforeAuditAppend = null } = {}
+  ) {
+    if (
+      beforeAuditAppend !== null &&
+      typeof beforeAuditAppend !== "function"
+    ) {
+      throw new Error("RECOVERY_AUDIT_ACTION_GUARD_INVALID");
+    }
+    const expected = this.#buildPreparedRecoveryCompletion(
+      prepared,
+      rawResult,
+      plan?.terminalAuditEvent?.completedAt
+    );
+    if (canonicalJson(plan) !== canonicalJson(expected)) {
+      throw new Error("RECOVERY_COMPLETION_PLAN_INVALID");
+    }
+    const currentPrepared = this.#validatePreparedRecovery(prepared);
+    const currentRows = rowsFromMcpResult(rawResult);
+    if (currentRows.length !== 1) {
+      throw new Error("RECOVERY_MCP_RESULT_CARDINALITY_INVALID");
+    }
+    validateRecoveryRow(
+      currentRows[0],
+      {
+        tenantId: currentPrepared.tenantId,
+        recoverySessionId: currentPrepared.recoverySessionId,
+        subjectBindingHash: currentPrepared.callerSubjectHash,
+        sourceDigest: currentPrepared.sourceDigest,
+        expectedSourceClusterId: this.#expectedSourceClusterId,
+        trustedPublisherKeys: this.#trustedPublisherKeys
+      },
+      new Date()
+    );
+    let terminalAudit;
+    try {
+      if (beforeAuditAppend !== null) {
+        beforeAuditAppend("TERMINAL_AUDIT_APPEND");
       }
-      preReadCommitted = true;
-      const rawResult = await this.#mcpClient.selectQuery({
-        clusterId: this.#recoveryClusterId,
-        database: FIXED_DATABASE,
-        query
-      });
-      observedResultDigest = sha256(canonicalJson(rawResult));
-      const rows = rowsFromMcpResult(rawResult);
-      if (rows.length === 1) {
-        observedResultDigest = sha256(canonicalJson(rows[0]));
-        const sourceCommitMs = new Date(
-          rows[0]?.source_commit_ts
-        ).getTime();
-        if (Number.isFinite(sourceCommitMs)) {
-          observedSourceWatermark = new Date(sourceCommitMs).toISOString();
-        }
-      }
-      if (rows.length !== 1) {
-        throw new Error("RECOVERY_MCP_RESULT_CARDINALITY_INVALID");
-      }
-      const validated = validateRecoveryRow(
-        rows[0],
-        {
-          tenantId,
-          recoverySessionId,
-          subjectBindingHash: callerSubjectHash,
-          sourceDigest,
-          expectedSourceClusterId: this.#expectedSourceClusterId,
-          trustedPublisherKeys: this.#trustedPublisherKeys
-        },
-        new Date()
+      terminalAudit = await this.#auditSink.append(
+        expected.terminalAuditEvent,
+        { beforeExternalAction: beforeAuditAppend }
       );
-      const resultDigest = observedResultDigest;
-      const completedAt = new Date();
-      const terminalEventId = randomUUID();
-      const terminalAudit = await this.#auditSink.append({
-        ...auditContext,
-        eventId: terminalEventId,
-        phase: "terminal",
-        resultDigest,
-        sourceWatermark: validated.row.source_commit_ts,
-        startedAt,
-        completedAt,
-        outcome: "recovered_context_only",
-        errorCode: null
-      });
-      return {
-        status: "RECOVERED_CONTEXT_ONLY",
-        auditId: terminalEventId,
-        auditDigest: terminalAudit.eventDigest,
-        auditInteractionId: interactionId,
-        preReadAuditId: preReadEventId,
-        preReadAuditDigest: auditContext.preReadEventDigest,
-        recoverySessionId,
-        tenantId,
-        sourceDigest: validated.sourceDigest,
-        bundleDigest: validated.bundleDigest,
-        context: {
-          checkpoint: validated.row.checkpoint_summary,
-          evidence: validated.row.evidence_summary,
-          conflicts: validated.row.conflict_summary,
-          receipt: validated.row.receipt_summary
-        },
-        authorityTransferred: false,
-        requiresFreshAuthorization: true
-      };
-    } catch (error) {
-      const completedAt = new Date();
-      const errorCode = errorCodeFor(error);
-      if (preReadCommitted && auditContext) {
-        try {
-          await this.#auditSink.append({
-            ...auditContext,
-            eventId: randomUUID(),
-            phase: "terminal",
-            resultDigest:
-              observedResultDigest ?? sha256(canonicalJson({ errorCode })),
-            sourceWatermark: observedSourceWatermark ?? completedAt,
-            startedAt,
-            completedAt,
-            outcome: "unknown_do_not_act",
-            errorCode
-          });
-        } catch {
-          return {
-            status: "UNKNOWN_DO_NOT_ACT",
-            reason: "recovery_audit_unavailable",
-            authorityTransferred: false,
-            requiresFreshAuthorization: true
-          };
-        }
+    } catch (cause) {
+      if (
+        cause?.message ===
+          "INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED"
+      ) {
+        throw cause;
       }
-      return {
-        status: "UNKNOWN_DO_NOT_ACT",
-        reason: errorCode,
-        authorityTransferred: false,
-        requiresFreshAuthorization: true
-      };
+      throw new Error("RECOVERY_AUDIT_UNAVAILABLE", { cause });
+    }
+    if (
+      terminalAudit?.eventDigest !== undefined &&
+      terminalAudit.eventDigest !== expected.terminalAuditDigest
+    ) {
+      throw new Error("RECOVERY_AUDIT_RECEIPT_MISMATCH");
+    }
+    return Object.freeze({
+      ...expected,
+      terminalAudit: Object.freeze({ ...terminalAudit })
+    });
+  }
+
+  async completePreparedRecovery(prepared, rawResult) {
+    return this.commitPreparedRecoveryCompletion(
+      this.planPreparedRecoveryCompletion(prepared, rawResult),
+      prepared,
+      rawResult
+    );
+  }
+
+  async failPreparedRecovery(prepared, error, { rawResult = null } = {}) {
+    const value = this.#validatePreparedRecovery(prepared);
+    const errorCode = errorCodeFor(error);
+    const completedAt = new Date();
+    let observedResultDigest = sha256(canonicalJson({ errorCode }));
+    let observedSourceWatermark = completedAt;
+    if (rawResult !== null) {
+      observedResultDigest = sha256(canonicalJson(rawResult));
+      try {
+        const rows = rowsFromMcpResult(rawResult);
+        if (rows.length === 1) {
+          observedResultDigest = sha256(canonicalJson(rows[0]));
+          const sourceCommitMs = new Date(rows[0]?.source_commit_ts).getTime();
+          if (Number.isFinite(sourceCommitMs)) {
+            observedSourceWatermark = new Date(sourceCommitMs);
+          }
+        }
+      } catch {
+        // Preserve a digest of the exact observed result on malformed output.
+      }
+    }
+    try {
+      await this.#auditSink.append({
+        tenantId: value.tenantId,
+        recoverySessionId: value.recoverySessionId,
+        callerSubjectHash: value.callerSubjectHash,
+        recoveryClusterId: this.#recoveryClusterId,
+        brokerConfigDigest: value.brokerConfigDigest,
+        queryTemplateDigest: value.queryTemplateDigest,
+        boundInputDigest: value.boundInputDigest,
+        interactionId: value.interactionId,
+        eventId: value.terminalEventId,
+        phase: "terminal",
+        resultDigest: observedResultDigest,
+        sourceWatermark: observedSourceWatermark,
+        startedAt: value.startedAt,
+        completedAt,
+        outcome: "unknown_do_not_act",
+        errorCode
+      });
+    } catch {
+      return this.#unknown("recovery_audit_unavailable");
+    }
+    return this.#unknown(errorCode);
+  }
+
+  async recover(input = {}) {
+    let prepared;
+    let rawResult = null;
+    try {
+      ({ prepared } = await this.prepareRecovery(input));
+    } catch (error) {
+      return this.#unknown(
+        error?.message === "RECOVERY_AUDIT_UNAVAILABLE"
+          ? "recovery_audit_unavailable"
+          : errorCodeFor(error)
+      );
+    }
+    try {
+      rawResult = await this.executePreparedRecovery(prepared);
+      const completed = await this.completePreparedRecovery(
+        prepared,
+        rawResult
+      );
+      return completed.recovery;
+    } catch (error) {
+      return this.failPreparedRecovery(prepared, error, { rawResult });
     }
   }
 }

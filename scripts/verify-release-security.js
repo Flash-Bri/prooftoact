@@ -318,6 +318,15 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate2-integrated-live-drill-finalizer.js",
     role: "INTEGRATED_PROVIDER_DRILL_PACKET_A_OFFLINE_FINALIZER_RUNNER"
   }),
+  "integrated-live-drill-provider-recovery": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-recovery.js",
+    role: "INTEGRATED_PROVIDER_DRILL_B2A_UNWIRED_PROVIDER_RECOVERY_LIBRARY"
+  }),
+  "integrated-live-drill-provider-recovery-tests": Object.freeze({
+    path: "test/integrated-live-drill-provider-recovery.test.js",
+    role:
+      "INTEGRATED_PROVIDER_DRILL_B2A_STRICT_LOCAL_FAKE_TRANSPORT_VERIFICATION"
+  }),
   "integrated-live-drill-recovery-continuity": Object.freeze({
     path: "src/cloud/integrated-live-drill-recovery-continuity.js",
     role: "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_SCAFFOLD"
@@ -378,6 +387,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "src/cloud/managed-mcp-client.js",
     role: "RECOVERY_MCP_CLIENT"
   }),
+  "managed-mcp-client-tests": Object.freeze({
+    path: "test/managed-mcp-client.test.js",
+    role: "RECOVERY_MCP_STRICT_TRANSPORT_VERIFICATION"
+  }),
   "primary-security-bootstrap": Object.freeze({
     path: "src/cloud/primary-security.js",
     role: "PRIMARY_DATABASE_SECURITY"
@@ -425,6 +438,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "recovery-broker": Object.freeze({
     path: "src/cloud/recovery-broker.js",
     role: "RECOVERY_BROKER_RUNTIME"
+  }),
+  "recovery-broker-tests": Object.freeze({
+    path: "test/recovery-broker.test.js",
+    role: "RECOVERY_BROKER_AMBIGUOUS_RESULT_VERIFICATION"
   }),
   "recovery-bundle-signature": Object.freeze({
     path: "src/cloud/recovery-bundle-signature.js",
@@ -489,6 +506,10 @@ const EXPECTED_SURFACES = Object.freeze({
   "signer-runtime": Object.freeze({
     path: "infra/aws/lambda/signer.cjs",
     role: "AWS_SIGNING_RUNTIME"
+  }),
+  "strict-json-contract": Object.freeze({
+    path: "src/cloud/strict-json.js",
+    role: "STRICT_JSON_DUPLICATE_MEMBER_REJECTION"
   }),
   "synthetic-authority-proposal": Object.freeze({
     path: "scripts/lib/synthetic-authority-proposal.js",
@@ -1871,6 +1892,87 @@ const SOURCE_MARKERS = Object.freeze({
     "runIntegratedLiveDrillPacketAFinalizer",
     "--packet"
   ]),
+  "integrated-live-drill-provider-recovery": Object.freeze([
+    "tideproof.highwater-drill-provider-dispatch-preparation.v1",
+    "tideproof.highwater-drill-provider-expiry-burn.v1",
+    "tideproof.highwater-drill-provider-recovery-pre-read-plan.v1",
+    "tideproof.highwater-drill-provider-recovery-terminal-plan.v1",
+    "AWAITING_AUTHORIZATION",
+    "prepareIntegratedLiveDrillProviderRecoveryAuthorization",
+    "dedicatedCredentialFieldAcceptedOrPersisted: false",
+    "humanPrivateKeyRequired: false",
+    "humanSignatureProducedOutsidePreparationApi: true",
+    "preparationContextStrictlyAllowlisted: true",
+    "PROVIDER_PRE_CALL_INPUT_KEYS",
+    "RECOGNIZABLE_CREDENTIAL_TEXT_PATTERNS",
+    "normalizeProviderPreCallInputs",
+    "MAX_PROVIDER_DISPATCH_AUTHORIZATION_MS",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_CREDENTIAL_MATERIAL_REJECTED",
+    "fs.constants.O_EXCL",
+    "fs.constants.O_NOFOLLOW",
+    "after.nlink === 1",
+    "named.nlink === 1",
+    "named.size === after.size",
+    "assertSameRoot(secure);",
+    "validateIntegratedLiveDrillProviderDispatchAuthorization",
+    "childAuthorizationIssuedAt",
+    "providerAuthorityExpiryBurnBody",
+    "PROCESS_STICKY_PROVIDER_AUTHORITY_BURNS",
+    "clockRollbackCanReactivateAfterDurableBurn: false",
+    "failedBurnPersistenceRequiresRunAbandonment: true",
+    "processRestartSafetyAfterFailedPersistenceProven: false",
+    "processStickyBurnPrecedesPersistenceAttempt: true",
+    "retryPermitted: false",
+    "maximumManagedMcpToolCallCount: 1",
+    "requiredToolsCallCount: 1",
+    "requiredSessionCloseCount: 1",
+    "beforeProviderDispatch(action)",
+    "closePreparedRecoveryProviderSessionAndReadEvidence",
+    "validatePreparedRecoveryResume",
+    "commitPreparedRecoveryCompletion",
+    "resolvePreparedRecoveryAuditEvent",
+    "reconcileDurableResult",
+    "recoveryWorkerAuthorityIsCurrent",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED",
+    "strictly validated locally recorded transport/session-close evidence",
+    "does not establish provider origin",
+    "observedToolsCallCount",
+    "observedSessionCloseCount",
+    "providerBacked: false",
+    "accepted: false",
+    "finalReleaseReady: false",
+    "Production gate1/gate2 pause-resume orchestration",
+    "cross-host authority",
+    "remain unproven and unwired"
+  ]),
+  "integrated-live-drill-provider-recovery-tests": Object.freeze([
+    "actual provider path cross-binds W1-W3, exact tools/call bytes, and private evidence",
+    "W1 and W3 audit-commit crashes resume exact persisted event plans without duplicate MCP fetches",
+    "provider path rejects semantic or separately signed dispatch substitution",
+    "preparation defaults to a bounded lifetime and rejects extra or credential-bearing context",
+    "invalid exact dispatch authorization causes zero provider fetches",
+    "missing, substituted, or expired dispatch authority never fetches",
+    "prepared resume rejects changed cluster, query, intent, ledger, or launch",
+    "dispatch authorization is resampled immediately before selectQuery",
+    "pre-W2 expiry is durably burned across clock rollback and repeated invocation",
+    "signed child issuedAt gates dispatch before and at the exact boundary",
+    "failed expiry-burn persistence remains process-sticky after clock rollback",
+    "expiry inside audit resolver before actual dispatch stops with zero resolve or MCP action",
+    "expiry during initialize response burns W2 without notification, tool call, or retry",
+    "post-W2 expiry reconciles locally and remains burned after clock rollback",
+    "expiry after audit resolution preserves the exact event and remains non-accepting",
+    "a durable private result reconciles the W2 journal without redispatch",
+    "post-expiry wrapper reconciles W2 locally then stops before any audit-provider action",
+    "provider artifact read rejects chmod and hardlink mutation after descriptor read",
+    "continuity journal read rejects chmod and hardlink mutation after descriptor read",
+    "RECOVERY_PREPARED_RESUME_BINDING_MISMATCH",
+    "RECOVERY_BUNDLE_EXPIRED",
+    "dedicatedCredentialFieldAcceptedOrPersisted",
+    "humanSignatureProducedOutsidePreparationApi",
+    "transportMutations",
+    "auditResolveAttempts",
+    "AWAITING_AUTHORIZATION"
+  ]),
   "integrated-live-drill-recovery-continuity": Object.freeze([
     "tideproof.highwater-drill-recovery-continuity-journal-entry.v2",
     "tideproof.highwater-drill-recovery-continuity-journal-receipt.v2",
@@ -1878,10 +1980,13 @@ const SOURCE_MARKERS = Object.freeze({
     "LOCAL_SAME_HOST_SCAFFOLD_COMPLETED_NO_RETRY",
     "UNKNOWN_DO_NOT_ACT",
     "fs.constants.O_EXCL",
+    "after.nlink === 1",
+    "named.nlink === 1",
+    "named.size === after.size",
     "randomBytes(32)",
     "attemptOwnershipTokenSha256",
     "acceptExistingArtifact",
-    "DURABLE_BEFORE_LOCAL_SCAFFOLD_CALL",
+    "DURABLE_BEFORE_BOUND_CALL",
     "topLevelProviderClientOptionReceived: false",
     "providerClientInvoked: false",
     "exactMcpCallClaimCount = claimEntries.length",
@@ -1889,6 +1994,11 @@ const SOURCE_MARKERS = Object.freeze({
     "Local same-host scaffold only; actual provider-bound W1-W5 continuity remains unproven.",
     "records truthful post-dispatch evidence after authority expiry",
     "provider-bound persistence and crash reconciliation on the live Managed MCP path remain unproven",
+    "reconcileDurableResult",
+    "reconciledFromDurableResult: true",
+    "resumed: true",
+    "recoveryAppendReceiptSha256",
+    "recoveryReplayReceiptSha256",
     "not independently anchored against same-owner full-chain rewriting",
     "providerFreeW5ImportGraphProven: false",
     "recoveryBrokerConfiguration",
@@ -1918,7 +2028,9 @@ const SOURCE_MARKERS = Object.freeze({
     "integratedLiveDrillRecoveryContinuityPreCallIntent",
     "recoveryBrokerConfiguration",
     "recoveryBrokerConfigDigest",
-    "consumeIntegratedLiveDrillChildLaunch"
+    "consumeIntegratedLiveDrillChildLaunch",
+    "recoveryAppendReceipt",
+    "recoveryReplayReceipt"
   ]),
   "integrated-live-drill-recovery-continuity-worker": Object.freeze([
     "TEST_RECOVERY_CONTINUITY_BARRIER_TIMEOUT",
@@ -2007,7 +2119,27 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_MCP_RESPONSE_TOO_LARGE",
     "TextDecoder(\"utf-8\", { fatal: true })",
     "RECOVERY_MCP_RESPONSE_ID_MISMATCH",
-    "recoveryQueryBindingsFor(query)"
+    "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER",
+    "parseStrictJson(text, {",
+    "validateJsonRpcResponse(message, id)",
+    "Object.hasOwn(message, \"error\")",
+    "message.id !== expectedId",
+    "normalizedMcpContentType",
+    "RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS",
+    "recoveryQueryBindingsFor(query)",
+    "semanticRequestEvidence()",
+    "beforeExternalAction",
+    "tideproof.managed-mcp-semantic-request-evidence.v1"
+  ]),
+  "managed-mcp-client-tests": Object.freeze([
+    "strict JSON parsing rejects decoded-equivalent and nested duplicate members",
+    "Managed MCP response envelopes are exact across JSON and SSE",
+    "Managed MCP rejects duplicate decoded members across JSON and SSE",
+    "Managed MCP validates every SSE payload before correlation",
+    "Managed MCP accepts exact success and error envelopes across JSON and SSE",
+    "Managed MCP client rejects non-normalized or ambiguous content types",
+    "Managed MCP SSE rejects malformed, duplicate, or uncorrelated response data",
+    "RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS"
   ]),
   "primary-security-bootstrap": Object.freeze([
     "REVOKE ALL ON DATABASE tideproof FROM public",
@@ -2169,6 +2301,13 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_CLUSTER_SEPARATION_REQUIRED",
     "RECOVERY_PRINCIPAL_BINDING_MISMATCH",
     "RECOVERY_MCP_RESULT_CARDINALITY_INVALID",
+    "RECOVERY_MCP_RESPONSE_SHAPE_AMBIGUOUS",
+    "parseStrictJson(text, {",
+    "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER",
+    "hasExactKeys(parsed, [\"rows\"])",
+    "resolvePreparedRecoveryAuditEvent",
+    "beforeExternalAction(\"AUDIT_RESOLVE_CONNECT\")",
+    "beforeExternalAction(\"AUDIT_RESOLVE_QUERY\")",
     "g1_resolve_recovery_audit_event_v1",
     "g1_resolve_recovery_source_receipt_v2",
     "resolveCommittedRecoverySourceReceipt",
@@ -2179,7 +2318,17 @@ const SOURCE_MARKERS = Object.freeze({
     "RECOVERY_TRUST_ROOT_WRITE_PROBE_ROLLBACK_FAILED",
     "databaseClientMustBeDiscarded(error)",
     "read_reconciled",
-    "commitDefinitivelyAborted"
+    "commitDefinitivelyAborted",
+    "async prepareRecovery(input = {}, options = {})",
+    "async planRecovery(input = {}, { auditIdentity = null } = {})",
+    "async commitPreparedRecoveryPreRead(",
+    "async executePreparedRecovery(",
+    "closePreparedRecoveryProviderSessionAndReadEvidence",
+    "validatePreparedRecoveryResume",
+    "planPreparedRecoveryCompletion",
+    "commitPreparedRecoveryCompletion",
+    "async completePreparedRecovery(prepared, rawResult)",
+    "restorePreparedRecovery(prepared)"
   ]),
   "recovery-continuity-identity": Object.freeze([
     "tideproof.highwater-recovery-binding.v3",
@@ -2291,6 +2440,13 @@ const SOURCE_MARKERS = Object.freeze({
     "read_reconciled",
     "commitDefinitivelyAborted"
   ]),
+  "recovery-broker-tests": Object.freeze([
+    "audit resolver resamples authority after connect and before query dispatch",
+    "broker rejects an MCP result containing both rows and content",
+    "broker rejects nested MCP text containing rows plus another representation",
+    "broker rejects duplicate and escaped-equivalent members in nested MCP text",
+    "RECOVERY_MCP_RESPONSE_SHAPE_AMBIGUOUS"
+  ]),
   "recovery-store-tests": Object.freeze([
     "cross-act source binding digest changes with every authority identity field",
     "authorityEvidenceBindingSha256",
@@ -2337,6 +2493,13 @@ const SOURCE_MARKERS = Object.freeze({
     "SigningAlgorithm: \"ECDSA_SHA_256\"",
     "new VerifyCommand({",
     "KMS_SIGNATURE_VERIFICATION_FAILED"
+  ]),
+  "strict-json-contract": Object.freeze([
+    "export function parseStrictJson(",
+    "STRICT_JSON_DUPLICATE_MEMBER",
+    "Number.isFinite(Number(match[0]))",
+    "members.has(member)",
+    "return JSON.parse(text);"
   ]),
   "synthetic-authority-proposal": Object.freeze([
     "dviSelectionBindingSha256For(selection)",

@@ -127,6 +127,14 @@ test("security manifest binds local evidence generation and verification code", 
       "src/cloud/integrated-live-drill-recovery-continuity.js"
     ],
     [
+      "integrated-live-drill-provider-recovery",
+      "src/cloud/integrated-live-drill-provider-recovery.js"
+    ],
+    [
+      "integrated-live-drill-provider-recovery-tests",
+      "test/integrated-live-drill-provider-recovery.test.js"
+    ],
+    [
       "integrated-live-drill-recovery-continuity-tests",
       "test/integrated-live-drill-recovery-continuity.test.js"
     ],

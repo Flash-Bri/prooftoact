@@ -3,7 +3,8 @@ import test from "node:test";
 import {
   canonicalRecoveryAttempt,
   DeterministicRecoveryBroker,
-  principalBindingHash
+  principalBindingHash,
+  resolveCommittedRecoveryAuditEvent
 } from "../src/cloud/recovery-broker.js";
 import { normalizedRecoveryBundleFor } from "../src/cloud/recovery-store.js";
 import { createSyntheticRecoverySigner } from "../scripts/lib/synthetic-recovery-signer.js";
@@ -45,6 +46,54 @@ test("canonical recovery identity is stable and source-bound", () => {
     }),
     /canonical timestamp/
   );
+});
+
+test("audit resolver resamples authority after connect and before query dispatch", async () => {
+  const eventId = "55555555-5555-4555-8555-555555555555";
+  const eventDigest = "e".repeat(64);
+  const guardActions = [];
+  let authorityCurrent = true;
+  let connectCount = 0;
+  let queryCount = 0;
+  let endCount = 0;
+  await assert.rejects(
+    () => resolveCommittedRecoveryAuditEvent({
+      tenantId: TENANT_ID,
+      eventId,
+      eventDigest,
+      clientFactory() {
+        return {
+          async connect() {
+            connectCount += 1;
+            authorityCurrent = false;
+          },
+          async query() {
+            queryCount += 1;
+            throw new Error("query must not be dispatched after expiry");
+          },
+          async end() {
+            endCount += 1;
+          }
+        };
+      },
+      beforeExternalAction(action) {
+        guardActions.push(action);
+        if (!authorityCurrent) {
+          throw new Error(
+            "INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED"
+          );
+        }
+      }
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/
+  );
+  assert.deepEqual(guardActions, [
+    "AUDIT_RESOLVE_CONNECT",
+    "AUDIT_RESOLVE_QUERY"
+  ]);
+  assert.equal(connectCount, 1);
+  assert.equal(queryCount, 0);
+  assert.equal(endCount, 1);
 });
 
 function fixture() {
@@ -114,6 +163,7 @@ function brokerFor({
   row,
   signer,
   mcpError = null,
+  mcpResult = null,
   auditError = null,
   auditFailureAt = null,
   trace = [],
@@ -146,7 +196,7 @@ function brokerFor({
         if (mcpError) {
           throw mcpError;
         }
-        return { rows: [row] };
+        return mcpResult ?? { rows: [row] };
       }
     },
     auditSink: {
@@ -201,6 +251,117 @@ test("deterministic broker releases signed context and records audit", async () 
     "audit:terminal",
     "return"
   ]);
+});
+
+test("prepared recovery restore requires exact root and audit-event schemas", async () => {
+  const { row, signer } = fixture();
+  const { broker } = brokerFor({ row, signer });
+  const prepared = await broker.planRecovery({
+    authenticatedPrincipal: PRINCIPAL
+  });
+  const restored = broker.restorePreparedRecovery(prepared);
+  assert.notEqual(restored, prepared);
+  assert.notEqual(restored.preReadAuditEvent, prepared.preReadAuditEvent);
+  assert.deepEqual(restored, prepared);
+
+  const extraRoot = structuredClone(prepared);
+  extraRoot.capability = "dispatch";
+  assert.throws(
+    () => broker.restorePreparedRecovery(extraRoot),
+    /RECOVERY_PREPARED_STATE_INVALID/u
+  );
+
+  const extraNested = structuredClone(prepared);
+  extraNested.preReadAuditEvent.capability = "dispatch";
+  assert.throws(
+    () => broker.restorePreparedRecovery(extraNested),
+    /RECOVERY_PREPARED_STATE_INVALID/u
+  );
+});
+
+test("broker rejects an MCP result containing both rows and content", async () => {
+  const { row, signer } = fixture();
+  const { broker, mcpCalls, auditEvents } = brokerFor({
+    row,
+    signer,
+    mcpResult: {
+      rows: [row],
+      content: [{
+        type: "text",
+        text: JSON.stringify({ rows: [row] })
+      }]
+    }
+  });
+  const result = await broker.recover({ authenticatedPrincipal: PRINCIPAL });
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.reason, "RECOVERY_MCP_RESPONSE_SHAPE_AMBIGUOUS");
+  assert.equal(result.authorityTransferred, false);
+  assert.equal(result.requiresFreshAuthorization, true);
+  assert.equal(mcpCalls.length, 1);
+  assert.deepEqual(
+    auditEvents.map(({ phase }) => phase),
+    ["pre_read", "terminal"]
+  );
+});
+
+test("broker rejects nested MCP text containing rows plus another representation", async () => {
+  const { row, signer } = fixture();
+  const { broker, mcpCalls, auditEvents } = brokerFor({
+    row,
+    signer,
+    mcpResult: {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          rows: [row],
+          content: [{ type: "text", text: "ambiguous" }]
+        })
+      }]
+    }
+  });
+  const result = await broker.recover({ authenticatedPrincipal: PRINCIPAL });
+  assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+  assert.equal(result.reason, "RECOVERY_MCP_RESPONSE_SHAPE_AMBIGUOUS");
+  assert.equal(result.authorityTransferred, false);
+  assert.equal(result.requiresFreshAuthorization, true);
+  assert.equal(mcpCalls.length, 1);
+  assert.deepEqual(
+    auditEvents.map(({ phase }) => phase),
+    ["pre_read", "terminal"]
+  );
+});
+
+test("broker rejects duplicate and escaped-equivalent members in nested MCP text", async () => {
+  const { row, signer } = fixture();
+  const encodedRow = JSON.stringify(row);
+  const nestedBodies = [
+    `{"rows":[${encodedRow}],"rows":[]}`,
+    `{"rows":[${encodedRow}],"\\u0072ows":[]}`,
+    '{"content":[],"content":[]}',
+    '{"content":[],"\\u0063ontent":[]}'
+  ];
+  for (const text of nestedBodies) {
+    const { broker, mcpCalls, auditEvents } = brokerFor({
+      row,
+      signer,
+      mcpResult: { content: [{ type: "text", text }] }
+    });
+    const result = await broker.recover({
+      authenticatedPrincipal: PRINCIPAL
+    });
+    assert.equal(result.status, "UNKNOWN_DO_NOT_ACT");
+    assert.equal(
+      result.reason,
+      "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER"
+    );
+    assert.equal(result.authorityTransferred, false);
+    assert.equal(result.requiresFreshAuthorization, true);
+    assert.equal(mcpCalls.length, 1);
+    assert.deepEqual(
+      auditEvents.map(({ phase }) => phase),
+      ["pre_read", "terminal"]
+    );
+  }
 });
 
 test("broker derives session from principal and rejects cross-principal access", async () => {
