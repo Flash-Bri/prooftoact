@@ -122,6 +122,18 @@ test("security manifest binds local evidence generation and verification code", 
   const surfaces = __test.EXPECTED_SURFACES;
   for (const [id, path] of [
     ["integrated-live-drill-harness", "src/cloud/integrated-live-drill.js"],
+    [
+      "integrated-live-drill-recovery-continuity",
+      "src/cloud/integrated-live-drill-recovery-continuity.js"
+    ],
+    [
+      "integrated-live-drill-recovery-continuity-tests",
+      "test/integrated-live-drill-recovery-continuity.test.js"
+    ],
+    [
+      "integrated-live-drill-recovery-continuity-worker",
+      "test/helpers/integrated-live-drill-recovery-continuity-worker.js"
+    ],
     ["integrated-live-drill-runner", "scripts/gate2-integrated-live-drill.js"],
     ["integrated-live-drill-tests", "test/integrated-live-drill.test.js"],
     ["local-full-drill-harness", "src/local-full-drill.js"],

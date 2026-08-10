@@ -318,6 +318,18 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate2-integrated-live-drill-finalizer.js",
     role: "INTEGRATED_PROVIDER_DRILL_PACKET_A_OFFLINE_FINALIZER_RUNNER"
   }),
+  "integrated-live-drill-recovery-continuity": Object.freeze({
+    path: "src/cloud/integrated-live-drill-recovery-continuity.js",
+    role: "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_SCAFFOLD"
+  }),
+  "integrated-live-drill-recovery-continuity-tests": Object.freeze({
+    path: "test/integrated-live-drill-recovery-continuity.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_VERIFICATION"
+  }),
+  "integrated-live-drill-recovery-continuity-worker": Object.freeze({
+    path: "test/helpers/integrated-live-drill-recovery-continuity-worker.js",
+    role: "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_SUBPROCESS_FIXTURE"
+  }),
   "integrated-live-drill-pre-attestation-fixture": Object.freeze({
     path: "test/fixtures/integrated-live-drill-pre-attestation.json",
     role: "INTEGRATED_PROVIDER_DRILL_SIGNED_PRE_ATTESTATION_FIXTURE"
@@ -1818,6 +1830,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "integrated-live-drill-finalizer": Object.freeze([
     "tideproof.highwater-drill-packet-a-finalization-validation.v1",
+    "tideproof.highwater-drill-packet-b-finalization-validation.v1",
     "DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN",
     "INTEGRATED_LIVE_DRILL_CROSS_HOST_CLAIM_BLOCKER",
     "validateIntegratedLiveDrillEvidenceSet",
@@ -1827,6 +1840,9 @@ const SOURCE_MARKERS = Object.freeze({
     "integratedLiveDrillRunnerIdentityDigest",
     "validateIntegratedLiveDrillPacketAFinalization",
     "PACKET_B_PROVIDER_ACCEPTANCE_PENDING",
+    "PACKET_B_LOCAL_SAME_HOST_SCAFFOLD_VALIDATED_NON_ACCEPTING",
+    "Local same-host scaffold only; actual provider-bound W1-W5 continuity remains unproven.",
+    "liveProviderBoundW1W5ContinuityProven: false",
     "accepted: false",
     "finalReleaseReady: false"
   ]),
@@ -1840,6 +1856,39 @@ const SOURCE_MARKERS = Object.freeze({
     "forbiddenRootPath: MODULE_ROOT",
     "runIntegratedLiveDrillPacketAFinalizer",
     "--packet"
+  ]),
+  "integrated-live-drill-recovery-continuity": Object.freeze([
+    "tideproof.highwater-drill-recovery-continuity-journal-entry.v1",
+    "tideproof.highwater-drill-recovery-continuity-journal-receipt.v1",
+    "LOCAL_SAME_HOST_SCAFFOLD_COMPLETED_NO_RETRY",
+    "UNKNOWN_DO_NOT_ACT",
+    "fs.constants.O_EXCL",
+    "randomBytes(32)",
+    "attemptOwnershipTokenSha256",
+    "acceptExistingArtifact",
+    "DURABLE_BEFORE_LOCAL_SCAFFOLD_CALL",
+    "providerClientReceived: false",
+    "providerClientInvoked: false",
+    "exactMcpCallClaimCount = claimEntries.length",
+    "exactMcpDispatchMarkerCount = dispatchEntries.length",
+    "Local same-host scaffold only; actual provider-bound W1-W5 continuity remains unproven.",
+    "not independently anchored against same-owner full-chain rewriting"
+  ]),
+  "integrated-live-drill-recovery-continuity-tests": Object.freeze([
+    "five subprocess workers resume four failpoints with exactly one fake MCP call",
+    "only the O_EXCL claim creator dispatches across synchronized subprocess races",
+    "claimed call without durable completion is permanently unknown and never retried",
+    "W5 makes no ambient-credential claim, rejects a provider client, and journals reject tampering",
+    "liveProviderBoundW1W5ContinuityProven",
+    "liveProviderDispatchAuthorizationProven",
+    "providerCallCountProven"
+  ]),
+  "integrated-live-drill-recovery-continuity-worker": Object.freeze([
+    "TEST_RECOVERY_CONTINUITY_BARRIER_TIMEOUT",
+    "TEST_MCP_CALLED_BEFORE_DURABLE_CLAIM",
+    "--barrier-directory",
+    "fakeMcpCall",
+    "runIntegratedLiveDrillRecoveryContinuityW2"
   ]),
   "integrated-live-drill-pre-attestation-fixture": Object.freeze([
     "tideproof.gate2.aws-deployment-expectation.v5",
@@ -1860,6 +1909,9 @@ const SOURCE_MARKERS = Object.freeze({
     "value.race.invocationRequestDigests.changedInput",
     "value.race.awsInvokeRequestDigests.changedInput",
     "orchestrator executes exactly DVI, race, then exact-winner recovery",
+    "PACKET_B_LOCAL_SAME_HOST_SCAFFOLD_VALIDATED_NON_ACCEPTING",
+    "LOCAL_SAME_HOST_SCAFFOLD_VALIDATED",
+    "actual provider-bound W1-W5 continuity remains unproven",
     "runIntegratedLiveDrillPacketAFinalizer"
   ]),
   "recovery-bundle-persistence-tests": Object.freeze([

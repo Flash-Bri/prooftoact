@@ -1806,6 +1806,8 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     recovery: {
       exactWinnerBound: true,
       managedMcpCallCount: 1,
+      managedMcpRequestPayloadSha256:
+        recovery.mcpProviderEvidence.rpcCalls[1].requestPayloadSha256,
       unauthorizedPrincipalDenied: true,
       auditsCommitted: 2,
       operationalCapabilitiesReturned: false,
