@@ -128,6 +128,12 @@
       "path": "test/fixtures/integrated-live-drill-pre-attestation.json",
       "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
       "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "pem-private-key",
+      "path": "test/integrated-live-drill-provider-recovery.test.js",
+      "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
     }
   ],
   "allowedCommitIdentityDigests": [
