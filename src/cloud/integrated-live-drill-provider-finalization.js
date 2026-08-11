@@ -35,8 +35,11 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY =
+  "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. It accepts no provider client, key, raw result, or retry authority. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release.";
 
 const MAX_RECEIPT_BYTES = 64 * 1024;
+const HEX_64 = /^[0-9a-f]{64}$/u;
 const SAFE_PROCESS_ENVIRONMENT_NAMES = Object.freeze([
   "LANG",
   "LC_ALL",
@@ -448,6 +451,107 @@ function validateComponentReceipt(value, expected) {
   return Object.freeze({ ...value });
 }
 
+export function validateIntegratedLiveDrillProviderFinalizationReceipt(
+  value,
+  options
+) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_REJECTED";
+  requireCondition(
+    exactKeys(options, ["context", "providerContinuity"]),
+    code
+  );
+  const input = validateIntegratedLiveDrillProviderFinalizationInput({
+    context: Object.getOwnPropertyDescriptor(options, "context").value,
+    providerContinuity: Object.getOwnPropertyDescriptor(
+      options,
+      "providerContinuity"
+    ).value,
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA
+  });
+  const keys = [
+    "accepted",
+    "authorizationId",
+    "claimBoundary",
+    "componentReceiptSha256",
+    "contextCredentialMaterialAbsent",
+    "contextExactSchemaValidated",
+    "contextProviderCapabilityAbsent",
+    "contextRawProviderResultAbsent",
+    "contextRetryAuthorityAbsent",
+    "credentialOptionAccepted",
+    "finalReleaseReady",
+    "journalReceiptSha256",
+    "logicalMcpRequestSha256",
+    "observedInitializeCount",
+    "observedInitializedNotificationCount",
+    "observedSessionCloseCount",
+    "observedToolsCallCount",
+    "preCallIntentSha256",
+    "providerBacked",
+    "providerCapabilityAccepted",
+    "providerHandoffReceiptSha256",
+    "providerWorkerImportGraphProvenAbsent",
+    "rawProviderResultAccepted",
+    "receiptSha256",
+    "retryAuthorityAccepted",
+    "runId",
+    "schemaVersion",
+    "status"
+  ];
+  requireCondition(exactKeys(value, keys), code);
+  const normalized = Object.freeze(Object.fromEntries(keys.map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(value, key).value
+  ])));
+  const { receiptSha256, ...body } = normalized;
+  const verified = verifyIntegratedLiveDrillProviderEvidenceBundle({
+    context: input.context,
+    providerContinuity: input.providerContinuity
+  });
+  const handoff = verified.handoff;
+  requireCondition(
+    normalized.schemaVersion ===
+      INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_SCHEMA &&
+      normalized.status === "LOCAL_FAKE_PRODUCTION_WIRING_VALIDATED" &&
+      normalized.claimBoundary ===
+        INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY &&
+      normalized.accepted === false &&
+      normalized.providerBacked === false &&
+      normalized.finalReleaseReady === false &&
+      normalized.contextCredentialMaterialAbsent === true &&
+      normalized.contextExactSchemaValidated === true &&
+      normalized.contextProviderCapabilityAbsent === true &&
+      normalized.contextRawProviderResultAbsent === true &&
+      normalized.contextRetryAuthorityAbsent === true &&
+      normalized.credentialOptionAccepted === false &&
+      normalized.providerCapabilityAccepted === false &&
+      normalized.rawProviderResultAccepted === false &&
+      normalized.retryAuthorityAccepted === false &&
+      normalized.providerWorkerImportGraphProvenAbsent === false &&
+      [
+        normalized.componentReceiptSha256,
+        normalized.journalReceiptSha256,
+        receiptSha256
+      ].every((entry) => HEX_64.test(entry ?? "")) &&
+      receiptSha256 === integratedLiveDrillCanonicalSha256(body) &&
+      normalized.authorizationId === verified.intent.authorizationId &&
+      normalized.runId === verified.intent.runId &&
+      normalized.preCallIntentSha256 === verified.intent.intentSha256 &&
+      normalized.logicalMcpRequestSha256 ===
+        verified.intent.logicalMcpRequestSha256 &&
+      normalized.providerHandoffReceiptSha256 === handoff.receiptSha256 &&
+      normalized.journalReceiptSha256 === verified.journal.receiptSha256 &&
+      normalized.observedInitializeCount === handoff.observedInitializeCount &&
+      normalized.observedInitializedNotificationCount ===
+        handoff.observedInitializedNotificationCount &&
+      normalized.observedToolsCallCount === handoff.observedToolsCallCount &&
+      normalized.observedSessionCloseCount ===
+        handoff.observedSessionCloseCount,
+    code
+  );
+  return normalized;
+}
+
 export function finalizeIntegratedLiveDrillProviderRecovery(args) {
   requireCondition(
     exactKeys(args, ["context", "providerContinuity"]),
@@ -578,8 +682,10 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
     providerWorkerImportGraphProvenAbsent: false,
     runId: intent.runId,
     status: "LOCAL_FAKE_PRODUCTION_WIRING_VALIDATED",
-    claimBoundary:
-      "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. It accepts no provider client, key, raw result, or retry authority. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release."
+    claimBoundary: INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY
   });
-  return withReceipt(body);
+  return validateIntegratedLiveDrillProviderFinalizationReceipt(
+    withReceipt(body),
+    { context, providerContinuity }
+  );
 }

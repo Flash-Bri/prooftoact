@@ -15,6 +15,24 @@ test("provider worker and finalizer import graphs preserve process boundaries", 
   assert.equal(receipt.status, "PASS");
   assert.deepEqual(receipt.finalizer.externalPackages, []);
   assert.deepEqual(receipt.worker.externalPackages, ["pg"]);
+  assert.equal(
+    receipt.supervisor.path,
+    "scripts/gate1-integrated-live-drill-provider-supervisor.js"
+  );
+  assert.equal(receipt.supervisor.legacyRecoveryBrokerImported, false);
+  assert.equal(receipt.supervisor.managedMcpClientConstructed, false);
+  assert.equal(receipt.supervisor.providerWorkerEnvironmentRequired, true);
+  assert.equal(receipt.supervisor.providerFinalizerEnvironmentRequired, true);
+  assert.equal(
+    receipt.supervisor.directImports.includes("./gate1-recovery-broker.js"),
+    false
+  );
+  assert.equal(
+    receipt.supervisor.directImports.includes(
+      "../src/cloud/managed-mcp-client.js"
+    ),
+    false
+  );
   for (const forbidden of [
     "infra/aws/",
     "src/cloud/aws-gate2-template.js",

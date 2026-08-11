@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA =
-  "tideproof.highwater-drill-process-boundary-verification.v1";
+  "tideproof.highwater-drill-process-boundary-verification.v2";
 
 const ROOT = fs.realpathSync(path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -20,6 +20,8 @@ const WORKER_ROOTS = Object.freeze([
   "scripts/gate1-integrated-live-drill-provider-worker.js",
   "src/cloud/integrated-live-drill-provider-worker.js"
 ]);
+const SUPERVISOR_PATH =
+  "scripts/gate1-integrated-live-drill-provider-supervisor.js";
 const SAFE_BUILTINS = new Set([
   "node:crypto",
   "node:fs",
@@ -170,6 +172,50 @@ function validateGraph(graph, {
   return graph;
 }
 
+function validateSupervisorSource() {
+  const filePath = secureModulePath(path.join(ROOT, SUPERVISOR_PATH));
+  const source = fs.readFileSync(filePath, "utf8");
+  const directImports = importSpecifiers(source).sort();
+  for (const forbidden of [
+    "./gate1-recovery-broker.js",
+    "../src/cloud/managed-mcp-client.js"
+  ]) {
+    if (directImports.includes(forbidden)) {
+      reject(
+        "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SUPERVISOR_REJECTED",
+        forbidden
+      );
+    }
+  }
+  for (const required of [
+    "integratedLiveDrillProviderFinalizerEnvironment(",
+    "integratedLiveDrillProviderWorkerEnvironment(",
+    "scripts/gate1-integrated-live-drill-provider-worker.js",
+    "scripts/gate2-integrated-live-drill-provider-finalizer.js"
+  ]) {
+    if (!source.includes(required)) {
+      reject(
+        "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SUPERVISOR_REJECTED",
+        required
+      );
+    }
+  }
+  if (
+    /new\s+CockroachManagedMcpRecoveryClient\b/u.test(source) ||
+    /new\s+DeterministicRecoveryBroker\b/u.test(source)
+  ) {
+    reject("INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SUPERVISOR_REJECTED");
+  }
+  return Object.freeze({
+    directImports: Object.freeze(directImports),
+    legacyRecoveryBrokerImported: false,
+    managedMcpClientConstructed: false,
+    path: SUPERVISOR_PATH,
+    providerFinalizerEnvironmentRequired: true,
+    providerWorkerEnvironmentRequired: true
+  });
+}
+
 export function verifyIntegratedLiveDrillProcessBoundaries() {
   const finalizer = validateGraph(collectGraph(FINALIZER_ROOTS), {
     allowedExternalPackages: new Set(),
@@ -181,6 +227,7 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
     forbiddenPathPatterns: WORKER_FORBIDDEN_PATH_PATTERNS,
     name: "worker"
   });
+  const supervisor = validateSupervisorSource();
   if (
     !finalizer.modules.includes(
       "src/cloud/integrated-live-drill-provider-evidence.js"
@@ -196,6 +243,7 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
   return Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA,
     finalizer,
+    supervisor,
     worker,
     status: "PASS"
   });
