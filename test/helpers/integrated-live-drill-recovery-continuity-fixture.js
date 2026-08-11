@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { canonicalJson } from "../../src/cloud/canonical-json.js";
+import { committedDatabaseResult } from
+  "../../src/cloud/database-commit-result.js";
 
 import {
   INTEGRATED_LIVE_DRILL_CLAIM_AUTHORITY_SCHEMA,
@@ -73,7 +75,8 @@ export function createRecoveryContinuityFixture(
     prefix = "prooftoact-provider-continuity-",
     fakeDelayMs = 0,
     expiresAfterMs = 60 * 60 * 1_000,
-    auditStartOffsetMs = 0
+    auditStartOffsetMs = 0,
+    subjectBindingSha256 = "b".repeat(64)
   } = {}
 ) {
   const ledgerRootPath = privateDirectory(`${prefix}ledger-`);
@@ -299,7 +302,6 @@ export function createRecoveryContinuityFixture(
       recoverySourceReceipt.selected_evidence_binding_sha256,
     outcome: recoverySourceReceipt.outcome
   });
-  const subjectBindingSha256 = "b".repeat(64);
   const attempt = canonicalRecoveryAttempt({
     tenantId: recoverySourceReceipt.tenant_id,
     subjectBindingHash: subjectBindingSha256,
@@ -356,6 +358,27 @@ export function createRecoveryContinuityFixture(
     signedBundle: recoverySigner.sign(unsignedBundle),
     trustedPublisherKeys
   });
+  const recoveryPublicationReceipt = (outcome, offsetMs) => Object.freeze({
+    outcome,
+    bundleDigest: persistedBundle.bundle.bundleDigest,
+    commit: committedDatabaseResult({
+      operation: "recovery_publication",
+      operationDigest: persistedBundle.bundle.bundleDigest,
+      observation: "direct_ack",
+      databaseNow: new Date(now + offsetMs).toISOString(),
+      outcome: "bundle_present",
+      authorityCurrent: null,
+      requiresFreshAuthorization: true
+    })
+  });
+  const recoveryAppendReceipt = recoveryPublicationReceipt(
+    "bundle_appended",
+    10
+  );
+  const recoveryReplayReceipt = recoveryPublicationReceipt(
+    "bundle_replay",
+    20
+  );
   const audit = Object.freeze({
     interactionId: "99999999-9999-4999-8999-999999999999",
     preReadAuditEventId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -388,6 +411,8 @@ export function createRecoveryContinuityFixture(
     controlLedgerReceipt,
     managedMcpReservation: reservations[2],
     recoveryBinding,
+    recoveryAppendReceipt,
+    recoveryReplayReceipt,
     recoverySourceReceipt,
     signedBundlePersistenceReceipt: persistedBundle.receipt
   });

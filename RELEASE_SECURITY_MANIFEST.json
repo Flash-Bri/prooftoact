@@ -453,10 +453,22 @@
       "sha256": "94ea9e266ae17c5391f75a78abf0d92d43045042f22b45a44684326447771884"
     },
     {
+      "id": "integrated-live-drill-provider-recovery",
+      "path": "src/cloud/integrated-live-drill-provider-recovery.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_B2A_UNWIRED_PROVIDER_RECOVERY_LIBRARY",
+      "sha256": "09c20c8470869095a96b9fa379455cdd2c73b994206a6c1c3d8961b16d488bb1"
+    },
+    {
+      "id": "integrated-live-drill-provider-recovery-tests",
+      "path": "test/integrated-live-drill-provider-recovery.test.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_B2A_STRICT_LOCAL_FAKE_TRANSPORT_VERIFICATION",
+      "sha256": "f120ca5bbb40e8fd48e2ad7b0038814ff8565f1ad70d6deaa443d29349f8945f"
+    },
+    {
       "id": "integrated-live-drill-recovery-continuity",
       "path": "src/cloud/integrated-live-drill-recovery-continuity.js",
       "role": "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_SCAFFOLD",
-      "sha256": "de8ba0303e3181476098314e4e6e50b2a70b25d392a40249e167c0cdaa80c12d"
+      "sha256": "c88624b5d564d4f2e43e251abfa72972772f86b2e309e771b9073186cf31b335"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-tests",
@@ -468,7 +480,7 @@
       "id": "integrated-live-drill-recovery-continuity-fixture",
       "path": "test/helpers/integrated-live-drill-recovery-continuity-fixture.js",
       "role": "INTEGRATED_PROVIDER_DRILL_TRUSTED_PRE_CALL_TEST_FIXTURE",
-      "sha256": "e8abb5eef160e6f9977cf323d98c424582cbd9cf76bdb4be16c99a0f9fccea94"
+      "sha256": "0397f6b00234a7df4e39d6744a8f726a8495e62edd16ead0534bf168cac478cf"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-worker",
@@ -540,7 +552,13 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "02a218a564c2cc333d1172ef97f8e8ca2f707a80bd846ac2eeba32e43b8ce204"
+      "sha256": "e4c714daa22bdb7a174d82850a7f784ab676a61114023f18523053d2313b1fed"
+    },
+    {
+      "id": "managed-mcp-client-tests",
+      "path": "test/managed-mcp-client.test.js",
+      "role": "RECOVERY_MCP_STRICT_TRANSPORT_VERIFICATION",
+      "sha256": "6a1a6c05e6e5baf0afc092daf562fbd0049c824eafe56db40ec0f77e4d231705"
     },
     {
       "id": "primary-security-bootstrap",
@@ -558,7 +576,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "c733d49a754e55096cf02eb0bfa7d9cd1a020027aff2412eeec2d50633041574"
+      "sha256": "140983d34a11501fe715efd61f3e784442bb7e962423081e6ea9997bf1316e81"
     },
     {
       "id": "proof-manifest-verifier",
@@ -612,7 +630,13 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "6ddb0205c314e7cc6fa9c9e4d9d0d0edf264d04ba9361a0983cb8b2d14677a7e"
+      "sha256": "5b7f5f504d83ce0265a665a8d9eee9fea687fe1fbd86585d766264e1c98c739b"
+    },
+    {
+      "id": "recovery-broker-tests",
+      "path": "test/recovery-broker.test.js",
+      "role": "RECOVERY_BROKER_AMBIGUOUS_RESULT_VERIFICATION",
+      "sha256": "d82602e5a8fccc40ba6efd945df3460d1e64e69479ea74ecb7a1c6d737fe77c3"
     },
     {
       "id": "recovery-bundle-signature",
@@ -709,6 +733,12 @@
       "path": "infra/aws/lambda/signer.cjs",
       "role": "AWS_SIGNING_RUNTIME",
       "sha256": "d9f907adb1582a5064562349d7f472829461fd15cd74200da13b1a92641a88ea"
+    },
+    {
+      "id": "strict-json-contract",
+      "path": "src/cloud/strict-json.js",
+      "role": "STRICT_JSON_DUPLICATE_MEMBER_REJECTION",
+      "sha256": "9406ba23f88b4653c58fc33d53454e61156548c76cb426b06eac46247e4532ec"
     },
     {
       "id": "synthetic-authority-proposal",

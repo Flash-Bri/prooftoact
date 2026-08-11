@@ -132,7 +132,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 132);
+  assert.equal(receipt.artifactCount, 139);
   assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
@@ -310,6 +310,8 @@ test("release copy matches executable and generated source contracts", () => {
   assert.deepEqual(fullDrillClaim.artifacts, [
     "full-drill-evidence",
     "integrated-live-drill-harness",
+    "integrated-live-drill-provider-recovery",
+    "integrated-live-drill-provider-recovery-tests",
     "integrated-live-drill-recovery-continuity",
     "integrated-live-drill-recovery-continuity-fixture",
     "integrated-live-drill-recovery-continuity-tests",
@@ -321,6 +323,10 @@ test("release copy matches executable and generated source contracts", () => {
     "local-full-drill-runner",
     "local-full-drill-tests",
     "local-full-drill-verifier",
+    "managed-mcp-client",
+    "managed-mcp-client-tests",
+    "recovery-broker",
+    "recovery-broker-tests",
     "recovery-bundle-persistence-tests",
     "recovery-bundle-signature",
     "recovery-continuity-identity",

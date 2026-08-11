@@ -1,11 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "./canonical-json.js";
-import { recoveryQueryBindingsFor } from "./recovery-store.js";
+import { parseStrictJson } from "./strict-json.js";
+import {
+  recoveryQueryBindingsFor,
+  recoveryQueryTemplateDigest
+} from "./recovery-store.js";
 
 const MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 const RECOVERY_DATABASE = "tideproof_recovery";
 export const RECOVERY_MCP_RESPONSE_LIMIT_BYTES = 256 * 1024;
+const JSON_DUPLICATE_MEMBER_CODE =
+  "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER";
 
 function requireText(value, name) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -16,6 +22,30 @@ function requireText(value, name) {
 
 function sha256(value) {
   return createHash("sha256").update(String(value)).digest("hex");
+}
+
+function managedMcpLogicalRequest({ clusterId, query }) {
+  const bindings = recoveryQueryBindingsFor(query);
+  const boundInputSha256 = sha256(canonicalJson({
+    tenantId: bindings.tenantId,
+    recoverySessionId: bindings.recoverySessionId,
+    subjectBindingHash: bindings.subjectBindingHash,
+    sourceDigest: bindings.sourceDigest
+  }));
+  return Object.freeze({
+    schemaVersion:
+      "tideproof.highwater-drill-logical-managed-mcp-request.v1",
+    boundInputSha256,
+    databaseNameSha256: sha256(RECOVERY_DATABASE),
+    queryTemplateSha256: recoveryQueryTemplateDigest(),
+    recoveryClusterId: clusterId,
+    recoverySessionId: bindings.recoverySessionId,
+    renderedQuerySha256: sha256(query),
+    sourceDigest: bindings.sourceDigest,
+    subjectBindingSha256: bindings.subjectBindingHash,
+    tenantId: bindings.tenantId,
+    toolNameSha256: sha256("select_query")
+  });
 }
 
 function sessionId(value) {
@@ -42,25 +72,126 @@ function requireUuid(value, name) {
   return text;
 }
 
+function normalizedMcpContentType(value) {
+  if (typeof value !== "string") {
+    throw new Error("RECOVERY_MCP_CONTENT_TYPE_INVALID");
+  }
+  const parts = value.split(";").map((part) => part.trim().toLowerCase());
+  const mediaType = parts.shift();
+  if (
+    !["application/json", "text/event-stream"].includes(mediaType) ||
+    parts.some((parameter) => parameter !== "charset=utf-8") ||
+    new Set(parts).size !== parts.length
+  ) {
+    throw new Error("RECOVERY_MCP_CONTENT_TYPE_INVALID");
+  }
+  return mediaType;
+}
+
+function parseManagedMcpJson(text, invalidCode) {
+  return parseStrictJson(text, {
+    duplicateCode: JSON_DUPLICATE_MEMBER_CODE,
+    invalidCode
+  });
+}
+
+function hasExactOwnKeys(value, expected) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  return keys.length === expected.length &&
+    expected.every((key) => Object.hasOwn(value, key));
+}
+
+function validateJsonRpcResponse(message, expectedId) {
+  if (
+    message === null ||
+    typeof message !== "object" ||
+    Array.isArray(message)
+  ) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+  }
+  const hasResult = Object.hasOwn(message, "result");
+  const hasError = Object.hasOwn(message, "error");
+  if (hasResult === hasError) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+  }
+  const expectedKeys = hasResult
+    ? ["jsonrpc", "id", "result"]
+    : ["jsonrpc", "id", "error"];
+  if (!hasExactOwnKeys(message, expectedKeys)) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+  }
+  if (message.jsonrpc !== "2.0" || typeof message.id !== "string") {
+    throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+  }
+  if (message.id !== expectedId) {
+    throw new Error("RECOVERY_MCP_RESPONSE_ID_MISMATCH");
+  }
+  if (hasError) {
+    const errorKeys = Object.hasOwn(message.error ?? {}, "data")
+      ? ["code", "message", "data"]
+      : ["code", "message"];
+    if (
+      !hasExactOwnKeys(message.error, errorKeys) ||
+      !Number.isSafeInteger(message.error.code) ||
+      typeof message.error.message !== "string" ||
+      message.error.message.trim() === ""
+    ) {
+      throw new Error("RECOVERY_MCP_RESPONSE_SHAPE_INVALID");
+    }
+  }
+  return message;
+}
+
 function messageFromSse(text, expectedId) {
-  const messages = text
-    .split(/\r?\n/u)
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trim())
-    .filter((line) => line !== "" && line !== "[DONE]")
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-  return (
-    messages.find((message) => String(message.id) === String(expectedId)) ??
-    messages.at(-1) ??
-    null
-  );
+  const messages = [];
+  let dataLines = [];
+  let consumedLength = 0;
+  let eventOpen = false;
+  const dispatch = () => {
+    if (dataLines.length === 0) return;
+    const data = dataLines.join("\n");
+    dataLines = [];
+    const message = parseManagedMcpJson(
+      data,
+      "RECOVERY_MCP_RESPONSE_SSE_INVALID"
+    );
+    validateJsonRpcResponse(message, expectedId);
+    messages.push(message);
+  };
+  for (const match of text.matchAll(/([^\r\n]*)(?:\r\n|\r|\n)/gu)) {
+    consumedLength = match.index + match[0].length;
+    const line = match[1];
+    if (line === "") {
+      dispatch();
+      eventOpen = false;
+      continue;
+    }
+    eventOpen = true;
+    if (line.startsWith(":")) continue;
+    const colon = line.indexOf(":");
+    const field = colon === -1 ? line : line.slice(0, colon);
+    let value = colon === -1 ? "" : line.slice(colon + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+    if (field === "data") {
+      dataLines.push(value);
+      continue;
+    }
+    if (["event", "id", "retry"].includes(field)) continue;
+    // Unknown SSE fields are ignored by the WHATWG dispatch algorithm.
+  }
+  // This bounded one-shot transcript must end after an explicit blank event
+  // boundary. WHATWG would discard a pending event at EOF; doing so here could
+  // hide a malformed or additional provider response after the accepted one.
+  if (consumedLength !== text.length || eventOpen || dataLines.length !== 0) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS");
+  }
+  if (messages.length !== 1) {
+    throw new Error("RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS");
+  }
+  return messages[0];
 }
 
 async function cancelResponseBody(response) {
@@ -150,6 +281,7 @@ export class CockroachManagedMcpRecoveryClient {
   #rpcEvidence = [];
   #notificationEvidence = [];
   #closeEvidence = null;
+  #semanticRequestEvidence = null;
 
   constructor({ apiKey, clusterId, fetchImpl = globalThis.fetch } = {}) {
     this.#apiKey = requireText(apiKey, "apiKey");
@@ -221,7 +353,11 @@ export class CockroachManagedMcpRecoveryClient {
     });
   }
 
-  async #initialize() {
+  semanticRequestEvidence() {
+    return this.#semanticRequestEvidence;
+  }
+
+  async #initialize(beforeExternalAction) {
     if (this.#sessionId) {
       return;
     }
@@ -232,13 +368,17 @@ export class CockroachManagedMcpRecoveryClient {
         name: "tideproof-deterministic-recovery-broker",
         version: "0.1.0"
       }
-    });
+    }, { beforeExternalAction });
     if (
       response?.protocolVersion !== MCP_PROTOCOL_VERSION
     ) {
       throw new Error("RECOVERY_MCP_INITIALIZATION_INVALID");
     }
-    await this.#notification("notifications/initialized", {});
+    await this.#notification(
+      "notifications/initialized",
+      {},
+      beforeExternalAction
+    );
   }
 
   #headers() {
@@ -255,9 +395,12 @@ export class CockroachManagedMcpRecoveryClient {
     return headers;
   }
 
-  async #notification(method, params) {
+  async #notification(method, params, beforeExternalAction) {
     const outboundSessionId = sessionId(this.#sessionId);
     const body = JSON.stringify({ jsonrpc: "2.0", method, params });
+    if (beforeExternalAction !== null) {
+      beforeExternalAction("MCP_INITIALIZED_NOTIFICATION");
+    }
     const response = await this.#fetch(MCP_ENDPOINT, {
       method: "POST",
       headers: this.#headers(),
@@ -286,11 +429,42 @@ export class CockroachManagedMcpRecoveryClient {
     await cancelResponseBody(response);
   }
 
-  async #rpc(method, params) {
+  async #rpc(
+    method,
+    params,
+    { beforeExternalAction = null, logicalRequest = null } = {}
+  ) {
     const id = `${randomUUID()}:${this.#nextId}`;
     this.#nextId += 1;
     const outboundSessionId = this.#sessionId;
     const body = JSON.stringify({ jsonrpc: "2.0", id, method, params });
+    if (logicalRequest !== null) {
+      if (method !== "tools/call" || this.#semanticRequestEvidence !== null) {
+        throw new Error("RECOVERY_MCP_SEMANTIC_REQUEST_AMBIGUOUS");
+      }
+      const evidenceBody = Object.freeze({
+        schemaVersion: "tideproof.managed-mcp-semantic-request-evidence.v1",
+        clusterId: this.#clusterId,
+        database: params?.arguments?.database,
+        logicalRequest,
+        logicalMcpRequestSha256: sha256(canonicalJson(logicalRequest)),
+        query: params?.arguments?.query,
+        requestId: id,
+        requestIdSha256: sha256(id),
+        requestParamsSha256: sha256(canonicalJson(params)),
+        requestPayloadSha256: sha256(body),
+        toolName: params?.name
+      });
+      this.#semanticRequestEvidence = Object.freeze({
+        ...evidenceBody,
+        evidenceSha256: sha256(canonicalJson(evidenceBody))
+      });
+    }
+    if (beforeExternalAction !== null) {
+      beforeExternalAction(
+        method === "initialize" ? "MCP_INITIALIZE" : "MCP_TOOLS_CALL"
+      );
+    }
     const response = await this.#fetch(MCP_ENDPOINT, {
       method: "POST",
       headers: this.#headers(),
@@ -318,29 +492,22 @@ export class CockroachManagedMcpRecoveryClient {
       await cancelResponseBody(response);
       throw new Error(`RECOVERY_MCP_HTTP_${response.status}`);
     }
-    const contentType = response.headers.get("content-type") ?? "";
+    const contentType = normalizedMcpContentType(
+      response.headers.get("content-type")
+    );
     const responseText = await readBoundedUtf8Response(response);
     let message;
-    if (contentType.includes("application/json")) {
-      try {
-        message = JSON.parse(responseText);
-      } catch {
-        throw new Error("RECOVERY_MCP_RESPONSE_JSON_INVALID");
-      }
-    } else if (contentType.includes("text/event-stream")) {
+    if (contentType === "application/json") {
+      message = parseManagedMcpJson(
+        responseText,
+        "RECOVERY_MCP_RESPONSE_JSON_INVALID"
+      );
+    } else if (contentType === "text/event-stream") {
       message = messageFromSse(responseText, id);
-    } else {
-      throw new Error("RECOVERY_MCP_CONTENT_TYPE_INVALID");
     }
-    if (
-      !message ||
-      message.jsonrpc !== "2.0" ||
-      String(message.id) !== String(id)
-    ) {
-      throw new Error("RECOVERY_MCP_RESPONSE_ID_MISMATCH");
-    }
-    if (message.error) {
-      const code = String(message.error.code ?? "UNKNOWN")
+    validateJsonRpcResponse(message, id);
+    if (Object.hasOwn(message, "error")) {
+      const code = String(message.error.code)
         .replace(/[^A-Z0-9_]/giu, "_")
         .toUpperCase();
       throw new Error(`RECOVERY_MCP_RPC_${code}`);
@@ -356,10 +523,7 @@ export class CockroachManagedMcpRecoveryClient {
       resultSha256: sha256(canonicalJson(message.result)),
       responseCorrelated: true,
       httpStatus: response.status,
-      contentType:
-        contentType.includes("application/json")
-          ? "application/json"
-          : "text/event-stream",
+      contentType,
       sessionIdSha256:
         typeof this.#sessionId === "string" && this.#sessionId.length > 0
           ? sha256(this.#sessionId)
@@ -376,22 +540,43 @@ export class CockroachManagedMcpRecoveryClient {
     return message.result;
   }
 
-  async selectQuery({ clusterId, database, query }) {
+  async selectQuery({
+    clusterId,
+    database,
+    query,
+    beforeExternalAction = null,
+    beforeToolCall = null
+  }) {
     if (requireUuid(clusterId, "clusterId") !== this.#clusterId) {
       throw new Error("RECOVERY_MCP_CLUSTER_MISMATCH");
     }
     if (requireText(database, "database") !== RECOVERY_DATABASE) {
       throw new Error("RECOVERY_MCP_DATABASE_MISMATCH");
     }
-    recoveryQueryBindingsFor(query);
-    await this.#initialize();
+    const logicalRequest = managedMcpLogicalRequest({
+      clusterId: this.#clusterId,
+      query
+    });
+    if (beforeToolCall !== null && typeof beforeToolCall !== "function") {
+      throw new Error("RECOVERY_MCP_TOOL_CALL_GUARD_INVALID");
+    }
+    if (
+      beforeExternalAction !== null &&
+      typeof beforeExternalAction !== "function"
+    ) {
+      throw new Error("RECOVERY_MCP_EXTERNAL_ACTION_GUARD_INVALID");
+    }
+    await this.#initialize(beforeExternalAction);
+    if (beforeToolCall !== null) {
+      beforeToolCall();
+    }
     const result = await this.#rpc("tools/call", {
       name: "select_query",
       arguments: {
         database: RECOVERY_DATABASE,
         query
       }
-    });
+    }, { beforeExternalAction, logicalRequest });
     if (result?.isError === true) {
       throw new Error("RECOVERY_MCP_TOOL_REJECTED");
     }

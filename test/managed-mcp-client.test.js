@@ -5,6 +5,7 @@ import {
   readBoundedUtf8Response,
   RECOVERY_MCP_RESPONSE_LIMIT_BYTES
 } from "../src/cloud/managed-mcp-client.js";
+import { parseStrictJson } from "../src/cloud/strict-json.js";
 import { renderRecoveryQuery } from "../src/cloud/recovery-store.js";
 
 const CLUSTER_ID = "44444444-4444-4444-8444-444444444444";
@@ -21,6 +22,60 @@ function fixedQuery() {
     subjectBindingHash: SUBJECT_HASH,
     sourceDigest: SOURCE_DIGEST
   });
+}
+
+async function selectWithToolWireResponse({
+  contentType,
+  responseBodyForId
+}) {
+  const client = new CockroachManagedMcpRecoveryClient({
+    apiKey: API_KEY,
+    clusterId: CLUSTER_ID,
+    fetchImpl: async (_url, options) => {
+      if (options.method === "DELETE") {
+        return new Response(null, { status: 200 });
+      }
+      const payload = JSON.parse(options.body);
+      if (payload.method === "initialize") {
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: payload.id,
+          result: {
+            protocolVersion: "2025-03-26",
+            capabilities: {}
+          }
+        }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "mcp-session-id": "synthetic-session"
+          }
+        });
+      }
+      if (payload.method === "notifications/initialized") {
+        return new Response(null, { status: 202 });
+      }
+      return new Response(responseBodyForId(payload.id), {
+        status: 200,
+        headers: { "content-type": contentType }
+      });
+    }
+  });
+  try {
+    return await client.selectQuery({
+      clusterId: CLUSTER_ID,
+      database: "tideproof_recovery",
+      query: fixedQuery()
+    });
+  } finally {
+    await client.close();
+  }
+}
+
+function responseTransportBody(contentType, jsonText) {
+  return contentType === "application/json"
+    ? jsonText
+    : `data: ${jsonText}\n\n`;
 }
 
 test("Managed MCP bounded reader rejects an oversized advertised body before reading", async () => {
@@ -85,6 +140,249 @@ test("Managed MCP bounded reader accepts exact-cap UTF-8 and rejects invalid UTF
     readBoundedUtf8Response(invalid),
     /RECOVERY_MCP_RESPONSE_ENCODING_INVALID/
   );
+});
+
+test("strict JSON parsing rejects decoded-equivalent and nested duplicate members", () => {
+  const options = {
+    duplicateCode: "TEST_DUPLICATE",
+    invalidCode: "TEST_INVALID"
+  };
+  for (const text of [
+    '{"result":1,"result":2}',
+    '{"result":1,"\\u0072esult":2}',
+    '{"outer":{"key":1,"\\u006bey":2}}',
+    '{"𝄞":1,"\\uD834\\uDD1E":2}',
+    '{"__proto__":1,"\\u005f_proto__":2}'
+  ]) {
+    assert.throws(
+      () => parseStrictJson(text, options),
+      /TEST_DUPLICATE/u
+    );
+  }
+  for (const text of [
+    "1e400",
+    '{"value":1,}',
+    '\ufeff{"value":1}',
+    '{"value":01}'
+  ]) {
+    assert.throws(() => parseStrictJson(text, options), /TEST_INVALID/u);
+  }
+  assert.deepEqual(
+    parseStrictJson('{"left":{"key":1},"right":{"key":2}}', options),
+    { left: { key: 1 }, right: { key: 2 } }
+  );
+  assert.deepEqual(
+    parseStrictJson('{"é":1,"e\\u0301":2}', options),
+    { "é": 1, "é": 2 }
+  );
+});
+
+test("Managed MCP response envelopes are exact across JSON and SSE", async () => {
+  const shapeInvalid = /RECOVERY_MCP_RESPONSE_SHAPE_INVALID/u;
+  const cases = [
+    ["result-and-error-null", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{},"error":null}`, shapeInvalid],
+    ["error-and-result-null", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-1,"message":"failed"},"result":null}`, shapeInvalid],
+    ["missing-result-and-error", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)}}`, shapeInvalid],
+    ["falsy-error-false", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":false}`, shapeInvalid],
+    ["falsy-error-null", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":null}`, shapeInvalid],
+    ["malformed-error-code", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":"-1","message":"failed"}}`, shapeInvalid],
+    ["malformed-error-message", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-1,"message":""}}`, shapeInvalid],
+    ["extra-error-member", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-1,"message":"failed","extra":true}}`, shapeInvalid],
+    ["extra-top-level-member", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{},"extra":true}`, shapeInvalid],
+    ["numeric-id", () =>
+      '{"jsonrpc":"2.0","id":1,"result":{}}',
+    /RECOVERY_MCP_RESPONSE_(?:SHAPE_INVALID|SSE_AMBIGUOUS)/u]
+  ];
+  for (const contentType of ["application/json", "text/event-stream"]) {
+    for (const [name, bodyForId, expectedError] of cases) {
+      await assert.rejects(
+        () => selectWithToolWireResponse({
+          contentType,
+          responseBodyForId: (id) => responseTransportBody(
+            contentType,
+            bodyForId(id)
+          )
+        }),
+        expectedError,
+        `${contentType}: ${name}`
+      );
+    }
+  }
+});
+
+test("Managed MCP rejects duplicate decoded members across JSON and SSE", async () => {
+  const cases = [
+    ["duplicate-id", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"id":${JSON.stringify(id)},"result":{}}`],
+    ["escaped-id", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"\\u0069d":${JSON.stringify(id)},"result":{}}`],
+    ["duplicate-result", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{},"result":null}`],
+    ["escaped-result", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{},"\\u0072esult":null}`],
+    ["nested-result", (id) =>
+      `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"outer":{"key":1,"\\u006bey":2}}}`]
+  ];
+  for (const contentType of ["application/json", "text/event-stream"]) {
+    for (const [name, bodyForId] of cases) {
+      await assert.rejects(
+        () => selectWithToolWireResponse({
+          contentType,
+          responseBodyForId: (id) => responseTransportBody(
+            contentType,
+            bodyForId(id)
+          )
+        }),
+        /RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER/u,
+        `${contentType}: ${name}`
+      );
+    }
+  }
+});
+
+test("Managed MCP validates every SSE payload before correlation", async () => {
+  await assert.rejects(
+    () => selectWithToolWireResponse({
+      contentType: "text/event-stream",
+      responseBodyForId: (id) => [
+        'data: {"jsonrpc":"2.0","id":"uncorrelated","result":{"key":1,"\\u006bey":2}}',
+        "",
+        `data: {"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{}}`,
+        ""
+      ].join("\n")
+    }),
+    /RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER/u
+  );
+});
+
+test("Managed MCP SSE requires one blank-line-dispatched exact correlated response", async () => {
+  const exact = (id) =>
+    `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"rows":[]}}`;
+  const rejected = [
+    [
+      "valid wrong id before correct",
+      (id) => `data: ${exact("wrong-id")}\n\ndata: ${exact(id)}\n\n`,
+      /RECOVERY_MCP_RESPONSE_ID_MISMATCH/u
+    ],
+    [
+      "malformed wrong id before correct",
+      (id) =>
+        `data: {"jsonrpc":"2.0","id":"wrong-id","result":{},"extra":true}\n\n` +
+        `data: ${exact(id)}\n\n`,
+      /RECOVERY_MCP_RESPONSE_SHAPE_INVALID/u
+    ],
+    [
+      "primitive before correct",
+      (id) => `data: 1\n\ndata: ${exact(id)}\n\n`,
+      /RECOVERY_MCP_RESPONSE_SHAPE_INVALID/u
+    ],
+    [
+      "whitespace-only data event",
+      (id) => `data:    \n\ndata: ${exact(id)}\n\n`,
+      /RECOVERY_MCP_RESPONSE_SSE_INVALID/u
+    ],
+    [
+      "non-MCP done sentinel",
+      (id) => `data: [DONE]\n\ndata: ${exact(id)}\n\n`,
+      /RECOVERY_MCP_RESPONSE_SSE_INVALID/u
+    ],
+    [
+      "EOF without a line ending",
+      (id) => `data: ${exact(id)}`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ],
+    [
+      "EOF after one LF without a blank event line",
+      (id) => `data: ${exact(id)}\n`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ],
+    [
+      "two correlated responses",
+      (id) => `data: ${exact(id)}\n\ndata: ${exact(id)}\n\n`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ],
+    [
+      "valid response then unterminated done sentinel",
+      (id) => `data: ${exact(id)}\n\ndata: [DONE]`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ],
+    [
+      "valid response then done sentinel without a blank event boundary",
+      (id) => `data: ${exact(id)}\n\ndata: [DONE]\n`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ],
+    [
+      "valid response then primitive without a blank event boundary",
+      (id) => `data: ${exact(id)}\n\ndata: 7\n`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ],
+    [
+      "valid response then unterminated unknown field bytes",
+      (id) => `data: ${exact(id)}\n\ngarbage`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ],
+    [
+      "valid response then keepalive comment without a blank boundary",
+      (id) => `data: ${exact(id)}\n\n: keepalive\n`,
+      /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/u
+    ]
+  ];
+  for (const [name, responseBodyForId, expectedError] of rejected) {
+    await assert.rejects(
+      () => selectWithToolWireResponse({
+        contentType: "text/event-stream",
+        responseBodyForId
+      }),
+      expectedError,
+      name
+    );
+  }
+
+  const result = await selectWithToolWireResponse({
+    contentType: "text/event-stream",
+    responseBodyForId: (id) =>
+      `: comment\r\ndata: ${exact(id)}\r\n\r\n`
+  });
+  assert.deepEqual(result, { rows: [] });
+
+  const resultWithCompleteKeepalive = await selectWithToolWireResponse({
+    contentType: "text/event-stream",
+    responseBodyForId: (id) =>
+      `data: ${exact(id)}\n\n: keepalive\n\n`
+  });
+  assert.deepEqual(resultWithCompleteKeepalive, { rows: [] });
+});
+
+test("Managed MCP accepts exact success and error envelopes across JSON and SSE", async () => {
+  for (const contentType of ["application/json", "text/event-stream"]) {
+    const result = await selectWithToolWireResponse({
+      contentType,
+      responseBodyForId: (id) => responseTransportBody(
+        contentType,
+        `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":null}`
+      )
+    });
+    assert.equal(result, null);
+    await assert.rejects(
+      () => selectWithToolWireResponse({
+        contentType,
+        responseBodyForId: (id) => responseTransportBody(
+          contentType,
+          `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-32601,"message":"Method not found","data":[null,{"retry":false}]}}`
+        )
+      }),
+      /RECOVERY_MCP_RPC__32601/u
+    );
+  }
 });
 
 test("Managed MCP client initializes and invokes only fixed select_query", async () => {
@@ -385,6 +683,114 @@ test("Managed MCP client rejects responses without JSON-RPC 2.0", async () => {
       database: "tideproof_recovery",
       query: fixedQuery()
     }),
-    /RECOVERY_MCP_RESPONSE_ID_MISMATCH/
+    /RECOVERY_MCP_RESPONSE_SHAPE_INVALID/
   );
+});
+
+test("Managed MCP client rejects non-normalized or ambiguous content types", async () => {
+  for (const contentType of [
+    "application/json-malformed",
+    "application/json, text/event-stream",
+    "application/json; boundary=unexpected",
+    "application/json; charset=utf-8; charset=utf-8"
+  ]) {
+    let fetchCount = 0;
+    const client = new CockroachManagedMcpRecoveryClient({
+      apiKey: API_KEY,
+      clusterId: CLUSTER_ID,
+      fetchImpl: async (_url, options) => {
+        fetchCount += 1;
+        const payload = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: payload.id,
+          result: { protocolVersion: "2025-03-26", capabilities: {} }
+        }), {
+          status: 200,
+          headers: {
+            "content-type": contentType,
+            "mcp-session-id": "synthetic-session"
+          }
+        });
+      }
+    });
+    await assert.rejects(
+      client.selectQuery({
+        clusterId: CLUSTER_ID,
+        database: "tideproof_recovery",
+        query: fixedQuery()
+      }),
+      /RECOVERY_MCP_CONTENT_TYPE_INVALID/
+    );
+    assert.equal(fetchCount, 1);
+    await client.close();
+  }
+});
+
+test("Managed MCP SSE rejects malformed, duplicate, or uncorrelated response data", async () => {
+  for (const mode of ["malformed", "duplicate", "uncorrelated"]) {
+    const client = new CockroachManagedMcpRecoveryClient({
+      apiKey: API_KEY,
+      clusterId: CLUSTER_ID,
+      fetchImpl: async (_url, options) => {
+        if (options.method === "DELETE") {
+          return new Response(null, { status: 200 });
+        }
+        const payload = JSON.parse(options.body);
+        if (payload.method === "initialize") {
+          return new Response(JSON.stringify({
+            jsonrpc: "2.0",
+            id: payload.id,
+            result: {
+              protocolVersion: "2025-03-26",
+              capabilities: {}
+            }
+          }), {
+            status: 200,
+            headers: {
+              "content-type": "application/json; charset=UTF-8",
+              "mcp-session-id": "synthetic-session"
+            }
+          });
+        }
+        if (payload.method === "notifications/initialized") {
+          return new Response(null, { status: 202 });
+        }
+        const response = JSON.stringify({
+          jsonrpc: "2.0",
+          id: payload.id,
+          result: { rows: [] }
+        });
+        const sse = mode === "malformed"
+          ? "data: {not-json}\n\n"
+          : mode === "duplicate"
+            ? `data: ${response}\n\ndata: ${response}\n\n`
+            : `data: ${JSON.stringify({
+              jsonrpc: "2.0",
+              id: "different-id",
+              result: { rows: [] }
+            })}\n\n`;
+        return new Response(sse, {
+          status: 200,
+          headers: { "content-type": "text/event-stream; charset=utf-8" }
+        });
+      }
+    });
+    try {
+      await assert.rejects(
+        client.selectQuery({
+          clusterId: CLUSTER_ID,
+          database: "tideproof_recovery",
+          query: fixedQuery()
+        }),
+        mode === "malformed"
+          ? /RECOVERY_MCP_RESPONSE_SSE_INVALID/
+          : mode === "uncorrelated"
+            ? /RECOVERY_MCP_RESPONSE_ID_MISMATCH/
+            : /RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS/
+      );
+    } finally {
+      await client.close();
+    }
+  }
 });
