@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
+import { canonicalJson } from "../src/cloud/canonical-json.js";
+
 import {
   integratedLiveDrillCanonicalSha256,
   signIntegratedLiveDrillEvidence
@@ -17,6 +19,19 @@ import {
   validateIntegratedLiveDrillManagedMcpTransportEvidence,
   validateIntegratedLiveDrillProviderDispatchAuthorization
 } from "../src/cloud/integrated-live-drill-provider-recovery.js";
+import {
+  finalizeIntegratedLiveDrillProviderRecovery,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA,
+  readIntegratedLiveDrillProviderFinalizationInput,
+  validateIntegratedLiveDrillProviderRecoveryHandoff
+} from "../src/cloud/integrated-live-drill-provider-finalization.js";
+import {
+  __test as workerTest,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA,
+  integratedLiveDrillProviderWorkerEnvironment,
+  readIntegratedLiveDrillProviderWorkerInput,
+  validateIntegratedLiveDrillProviderWorkerInput
+} from "../src/cloud/integrated-live-drill-provider-worker.js";
 import {
   __test as continuityTest,
   runIntegratedLiveDrillRecoveryContinuityW1,
@@ -33,6 +48,124 @@ import { createRecoveryContinuityFixture } from
   "./helpers/integrated-live-drill-recovery-continuity-fixture.js";
 
 const PRINCIPAL = "principal://synthetic-provider-continuity";
+
+test("provider worker input and environment isolate credentials and resume context", (t) => {
+  const fixture = createRecoveryContinuityFixture(t, {
+    prefix: "prooftoact-b2-worker-input-",
+    subjectBindingSha256: principalBindingHash(PRINCIPAL)
+  });
+  const preparation = prepareDispatch(fixture);
+  const context = Object.freeze({
+    ...fixture.context,
+    providerDispatchAuthorization: signPreparedDispatch(fixture, preparation)
+  });
+  const input = Object.freeze({
+    authenticatedPrincipal: PRINCIPAL,
+    context,
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA
+  });
+  assert.equal(
+    validateIntegratedLiveDrillProviderWorkerInput(input)
+      .authenticatedPrincipal,
+    PRINCIPAL
+  );
+  const inputPath = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-worker-input.json"
+  );
+  fs.writeFileSync(inputPath, `${canonicalJson(input)}\n`, { mode: 0o600 });
+  assert.equal(
+    readIntegratedLiveDrillProviderWorkerInput({
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath,
+      rootPath: context.recoveryEvidenceRootPath
+    }).context.preCallIntent.intentSha256,
+    context.preCallIntent.intentSha256
+  );
+  const isolated = integratedLiveDrillProviderWorkerEnvironment({
+    ALL_PROXY: "http://unsafe.invalid",
+    AWS_ACCESS_KEY_ID: "AKIAUNSAFEUNSAFE0000",
+    AWS_PROFILE: "unsafe-profile",
+    HOME: "/tmp/unsafe-home",
+    MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
+    NODE_OPTIONS: "--inspect",
+    PATH: process.env.PATH,
+    PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof",
+    PRIMARY_RECOVERY_SOURCE_DATABASE_URL:
+      "postgresql://source.invalid/tideproof",
+    RECOVERY_PUBLISHER_DATABASE_URL:
+      "postgresql://publisher.invalid/tideproof"
+  }, {
+    authenticatedPrincipal: PRINCIPAL,
+    inputPath
+  });
+  assert.equal(isolated.MCP_API_KEY, "synthetic-test-only-mcp-api-key-0001");
+  assert.equal(
+    isolated.PRIMARY_AUDIT_DATABASE_URL,
+    "postgresql://audit.invalid/tideproof"
+  );
+  assert.equal(isolated.AWS_CONFIG_FILE, "/dev/null");
+  assert.equal(isolated.AWS_SHARED_CREDENTIALS_FILE, "/dev/null");
+  for (const name of [
+    "ALL_PROXY",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_PROFILE",
+    "HOME",
+    "NODE_OPTIONS",
+    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
+    "RECOVERY_PUBLISHER_DATABASE_URL"
+  ]) {
+    assert.equal(Object.hasOwn(isolated, name), false, name);
+  }
+  const wrongPrincipal = structuredClone(input);
+  wrongPrincipal.authenticatedPrincipal = "principal://wrong";
+  assert.throws(
+    () => validateIntegratedLiveDrillProviderWorkerInput(wrongPrincipal),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED/u
+  );
+  const symlinkPath = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-worker-input-link.json"
+  );
+  fs.symlinkSync(inputPath, symlinkPath);
+  assert.throws(
+    () => readIntegratedLiveDrillProviderWorkerInput({
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath: symlinkPath,
+      rootPath: context.recoveryEvidenceRootPath
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u
+  );
+});
+
+test("provider finalizer import surface is provider and credential free", () => {
+  const finalizerSource = fs.readFileSync(
+    new URL(
+      "../src/cloud/integrated-live-drill-provider-finalization.js",
+      import.meta.url
+    ),
+    "utf8"
+  );
+  const runnerSource = fs.readFileSync(
+    new URL(
+      "../scripts/gate2-integrated-live-drill-provider-finalizer.js",
+      import.meta.url
+    ),
+    "utf8"
+  );
+  for (const source of [finalizerSource, runnerSource]) {
+    for (const forbidden of [
+      "managed-mcp-client",
+      "recovery-broker",
+      "MCP_API_KEY",
+      "PRIMARY_AUDIT_DATABASE_URL",
+      "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
+      "RECOVERY_PUBLISHER_DATABASE_URL"
+    ]) {
+      assert.equal(source.includes(forbidden), false, forbidden);
+    }
+  }
+});
 
 function consumedChildAuthorizationIssuedAt(context) {
   return context.preCallInputs.consumedChildAuthorization.attestation.payload
@@ -356,9 +489,118 @@ function providerHarness(fixture, {
     auditRows,
     broker,
     calls,
+    fetchImpl,
     mcpClient
   };
 }
+
+function auditDatabaseClientFactory() {
+  const rows = new Map();
+  return {
+    clientFactory() {
+      return {
+        async connect() {},
+        async end() {},
+        async query(sql, params = []) {
+          if (/^BEGIN|^COMMIT|^ROLLBACK/u.test(sql.trim())) {
+            return { rowCount: 0, rows: [] };
+          }
+          if (sql.includes("transaction_timestamp()")) {
+            return {
+              rowCount: 1,
+              rows: [{ database_now: new Date().toISOString() }]
+            };
+          }
+          if (sql.includes("g1_append_recovery_audit_event_v3")) {
+            const row = {
+              event_id: params[0],
+              tenant_id: params[1],
+              interaction_id: params[2],
+              recovery_session_id: params[3],
+              caller_subject_hash: params[4],
+              phase: params[5],
+              tool_name: params[6],
+              recovery_cluster_id: params[7],
+              broker_config_digest: params[8],
+              query_template_digest: params[9],
+              bound_input_digest: params[10],
+              result_digest: params[11],
+              source_watermark: params[12],
+              outcome: params[13],
+              error_code: params[14],
+              event_digest: params[15],
+              started_at: params[16],
+              completed_at: params[17],
+              database_now: new Date().toISOString()
+            };
+            const existing = rows.get(row.event_id);
+            if (existing !== undefined) assert.deepEqual(existing, row);
+            rows.set(row.event_id, row);
+            return { rowCount: 1, rows: [{ event_id: row.event_id }] };
+          }
+          if (sql.includes("g1_resolve_recovery_audit_event_v1")) {
+            const row = rows.get(params[0]);
+            assert.equal(row?.tenant_id, params[1]);
+            assert.equal(row?.event_digest, params[2]);
+            return row === undefined
+              ? { rowCount: 0, rows: [] }
+              : { rowCount: 1, rows: [row] };
+          }
+          throw new Error(`unexpected synthetic audit query: ${sql}`);
+        }
+      };
+    },
+    rows
+  };
+}
+
+test("credential-isolated production worker uses only fake local transports", async (t) => {
+  const fixture = createRecoveryContinuityFixture(t, {
+    prefix: "prooftoact-b2-production-worker-",
+    subjectBindingSha256: principalBindingHash(PRINCIPAL)
+  });
+  const preparation = prepareDispatch(fixture);
+  const context = Object.freeze({
+    ...fixture.context,
+    providerDispatchAuthorization: signPreparedDispatch(fixture, preparation)
+  });
+  const input = Object.freeze({
+    authenticatedPrincipal: PRINCIPAL,
+    context,
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA
+  });
+  const transport = providerHarness(fixture);
+  const audit = auditDatabaseClientFactory();
+  const result = await workerTest.runWithLocalTransports({
+    environment: {
+      MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
+      PRIMARY_AUDIT_DATABASE_URL:
+        "postgresql://synthetic.invalid/tideproof"
+    },
+    input
+  }, {
+    auditClientFactory: audit.clientFactory,
+    fetchImpl: transport.fetchImpl
+  });
+  assert.equal(result.recovery.status, "RECOVERED_CONTEXT_ONLY");
+  assert.equal(result.providerContinuity.observedInitializeCount, 1);
+  assert.equal(result.providerContinuity.observedToolsCallCount, 1);
+  assert.equal(result.providerContinuity.observedSessionCloseCount, 1);
+  assert.equal(result.providerContinuity.providerBacked, false);
+  assert.equal(result.providerContinuity.accepted, false);
+  assert.equal(result.providerContinuity.finalReleaseReady, false);
+  assert.deepEqual(
+    transport.calls.map(({ payload, method }) => payload?.method ?? method),
+    ["initialize", "notifications/initialized", "tools/call", "DELETE"]
+  );
+  assert.equal(audit.rows.size, 2);
+  assert.equal(
+    JSON.stringify(result).includes(
+      "synthetic-test-only-mcp-api-key-0001"
+    ),
+    false
+  );
+});
 
 test("actual provider path cross-binds W1-W3, exact tools/call bytes, and private evidence", async (t) => {
   const subjectBindingSha256 = principalBindingHash(PRINCIPAL);
@@ -662,6 +904,87 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   });
   assert.equal(resumed.recovery.status, "RECOVERED_CONTEXT_ONLY");
   assert.equal(harness.calls.length, callCount);
+
+  assert.equal(
+    validateIntegratedLiveDrillProviderRecoveryHandoff(
+      result.providerContinuity
+    ).receiptSha256,
+    result.providerContinuity.receiptSha256
+  );
+  const finalized = finalizeIntegratedLiveDrillProviderRecovery({
+    context,
+    providerContinuity: result.providerContinuity
+  });
+  assert.equal(finalized.status, "LOCAL_FAKE_PRODUCTION_WIRING_VALIDATED");
+  assert.equal(finalized.providerBacked, false);
+  assert.equal(finalized.accepted, false);
+  assert.equal(finalized.finalReleaseReady, false);
+  assert.equal(finalized.providerCapabilityAccepted, false);
+  assert.equal(finalized.credentialOptionAccepted, false);
+  assert.equal(finalized.observedToolsCallCount, 1);
+  assert.equal(finalized.observedSessionCloseCount, 1);
+  assert.equal(
+    finalizeIntegratedLiveDrillProviderRecovery({
+      context,
+      providerContinuity: result.providerContinuity
+    }).receiptSha256,
+    finalized.receiptSha256
+  );
+  const finalizationInput = Object.freeze({
+    context,
+    providerContinuity: result.providerContinuity,
+    schemaVersion:
+      INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA
+  });
+  const finalizationInputPath = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-finalization-input.json"
+  );
+  fs.writeFileSync(
+    finalizationInputPath,
+    `${canonicalJson(finalizationInput)}\n`,
+    { mode: 0o600 }
+  );
+  assert.equal(
+    readIntegratedLiveDrillProviderFinalizationInput({
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath: finalizationInputPath,
+      rootPath: context.recoveryEvidenceRootPath
+    }).providerContinuity.receiptSha256,
+    result.providerContinuity.receiptSha256
+  );
+  const componentName = fs.readdirSync(context.recoveryEvidenceRootPath)
+    .find((name) => name.endsWith(".provider-recovery-component.json"));
+  assert.equal(typeof componentName, "string");
+  assert.equal(
+    fs.statSync(
+      path.join(context.recoveryEvidenceRootPath, componentName)
+    ).mode & 0o777,
+    0o600
+  );
+  const componentReceipt = JSON.parse(fs.readFileSync(
+    path.join(context.recoveryEvidenceRootPath, componentName),
+    "utf8"
+  ));
+  assert.equal(componentReceipt.containsCredentialMaterial, false);
+  assert.equal(componentReceipt.containsRawProviderResult, false);
+  assert.equal(
+    JSON.stringify(componentReceipt).includes("synthetic-api-key"),
+    false
+  );
+  const fabricatedHandoff = structuredClone(result.providerContinuity);
+  fabricatedHandoff.observedToolsCallCount = 2;
+  const { receiptSha256: _fabricatedReceipt, ...fabricatedBody } =
+    fabricatedHandoff;
+  void _fabricatedReceipt;
+  fabricatedHandoff.receiptSha256 =
+    integratedLiveDrillCanonicalSha256(fabricatedBody);
+  assert.throws(
+    () => validateIntegratedLiveDrillProviderRecoveryHandoff(
+      fabricatedHandoff
+    ),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_REJECTED/u
+  );
 });
 
 test("persisted provider recovery artifacts reject recomputed extra members and authority escalation", async (t) => {

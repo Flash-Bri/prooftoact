@@ -427,7 +427,7 @@
     {
       "id": "integrated-live-drill-child-authorization",
       "path": "src/cloud/integrated-live-drill-child-authorization.js",
-      "sha256": "7c5d48218db9bcb32adf18a6038810e362e2cf129e53d05da341cb94aa25b597",
+      "sha256": "4081de06846c329bdd58ff962dfa93e4666a751e7f7672e73f9b21538db73007",
       "kind": "verification-code"
     },
     {
@@ -473,6 +473,18 @@
       "kind": "verification-code"
     },
     {
+      "id": "integrated-live-drill-provider-finalization",
+      "path": "src/cloud/integrated-live-drill-provider-finalization.js",
+      "sha256": "dff6751584290c7bcd8ecd393c325e96ab742d1ccbb95478583f7fbaabecb1d9",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-provider-finalizer-runner",
+      "path": "scripts/gate2-integrated-live-drill-provider-finalizer.js",
+      "sha256": "b4f93093525c7b987a27d25e5b0e7357bb2cfa5891030635be0346e0faf80a60",
+      "kind": "verification-code"
+    },
+    {
       "id": "integrated-live-drill-provider-recovery",
       "path": "src/cloud/integrated-live-drill-provider-recovery.js",
       "sha256": "09c20c8470869095a96b9fa379455cdd2c73b994206a6c1c3d8961b16d488bb1",
@@ -481,7 +493,19 @@
     {
       "id": "integrated-live-drill-provider-recovery-tests",
       "path": "test/integrated-live-drill-provider-recovery.test.js",
-      "sha256": "f120ca5bbb40e8fd48e2ad7b0038814ff8565f1ad70d6deaa443d29349f8945f",
+      "sha256": "d256b5ba178901a443069a654d7c07e238696ec1500a463b44f9ef4462ef15dd",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-provider-worker",
+      "path": "src/cloud/integrated-live-drill-provider-worker.js",
+      "sha256": "445a352db9c54a1bd18fd6e814625e72917abc52fce4cf2e421127595e4c4586",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-provider-worker-runner",
+      "path": "scripts/gate1-integrated-live-drill-provider-worker.js",
+      "sha256": "b6f114f96a4b41e4d75655c5fa84e8182af077add693c42cfeea680b73c7c24c",
       "kind": "verification-code"
     },
     {
@@ -523,7 +547,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "289a8ac707dda459d1f1df00e910a0706f38b36092a1c66371309c596a23a212",
+      "sha256": "44957ccfe1f7bdad8ec1088dccdf42227170dac79eb1a91ba776b7aa17491fb9",
       "kind": "verification-code"
     },
     {
@@ -583,7 +607,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "140983d34a11501fe715efd61f3e784442bb7e962423081e6ea9997bf1316e81",
+      "sha256": "3f6a9343fb6b5e4244d665976973348a0cda184198e6d6cd2584388c7200b938",
       "kind": "verification-code"
     },
     {
@@ -787,19 +811,19 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "bc76c32b2763613f10063410bf88d8701810e4cc9aacbc770e97c4961e079841",
+      "sha256": "8ef06b60d9e1a1aea599370f5a5b88eb35330999126f66dbf49d13eb298ae8e0",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "3ad96504fc977c6299db23f1452fb55a41aac60659c3068ff4914e9c561bcb8a",
+      "sha256": "946954f80adb51e38d0209e7c56ef190a2e3a6afc71bd81c9c9687953b702d4c",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "4ad66f433925f65c88f86e497d8222071e1b635e5f473b912f24cce52c0b0888",
+      "sha256": "bcc09fec943b6a4f89e418df3dd9271bda73cbfc25ea101bf30adb52d6ed3240",
       "kind": "verification-code"
     },
     {
@@ -915,8 +939,12 @@
       "artifacts": [
         "full-drill-evidence",
         "integrated-live-drill-harness",
+        "integrated-live-drill-provider-finalization",
+        "integrated-live-drill-provider-finalizer-runner",
         "integrated-live-drill-provider-recovery",
         "integrated-live-drill-provider-recovery-tests",
+        "integrated-live-drill-provider-worker",
+        "integrated-live-drill-provider-worker-runner",
         "integrated-live-drill-recovery-continuity",
         "integrated-live-drill-recovery-continuity-fixture",
         "integrated-live-drill-recovery-continuity-tests",
@@ -1304,8 +1332,12 @@
         "integrated-live-drill-finalizer",
         "integrated-live-drill-finalizer-runner",
         "integrated-live-drill-pre-attestation-fixture",
+        "integrated-live-drill-provider-finalization",
+        "integrated-live-drill-provider-finalizer-runner",
         "integrated-live-drill-provider-recovery",
         "integrated-live-drill-provider-recovery-tests",
+        "integrated-live-drill-provider-worker",
+        "integrated-live-drill-provider-worker-runner",
         "integrated-live-drill-recovery-continuity",
         "integrated-live-drill-recovery-continuity-fixture",
         "integrated-live-drill-recovery-continuity-tests",
