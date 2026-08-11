@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -20,13 +21,20 @@ import {
   validateIntegratedLiveDrillProviderDispatchAuthorization
 } from "../src/cloud/integrated-live-drill-provider-recovery.js";
 import {
+  assertIntegratedLiveDrillProviderFinalizerEnvironment,
   finalizeIntegratedLiveDrillProviderRecovery,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA,
+  integratedLiveDrillProviderFinalizerEnvironment,
   readIntegratedLiveDrillProviderFinalizationInput,
+  validateIntegratedLiveDrillProviderFinalizationInput,
   validateIntegratedLiveDrillProviderRecoveryHandoff
 } from "../src/cloud/integrated-live-drill-provider-finalization.js";
 import {
+  verifyIntegratedLiveDrillProviderEvidenceBundle
+} from "../src/cloud/integrated-live-drill-provider-evidence.js";
+import {
   __test as workerTest,
+  assertIntegratedLiveDrillProviderWorkerEnvironment,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA,
   integratedLiveDrillProviderWorkerEnvironment,
   readIntegratedLiveDrillProviderWorkerInput,
@@ -49,7 +57,7 @@ import { createRecoveryContinuityFixture } from
 
 const PRINCIPAL = "principal://synthetic-provider-continuity";
 
-test("provider worker input and environment isolate credentials and resume context", (t) => {
+test("provider worker input and environment isolate credentials and resume context", async (t) => {
   const fixture = createRecoveryContinuityFixture(t, {
     prefix: "prooftoact-b2-worker-input-",
     subjectBindingSha256: principalBindingHash(PRINCIPAL)
@@ -64,10 +72,14 @@ test("provider worker input and environment isolate credentials and resume conte
     context,
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA
   });
+  const validatedWorkerInput =
+    validateIntegratedLiveDrillProviderWorkerInput(input);
+  assert.equal(validatedWorkerInput.authenticatedPrincipal, PRINCIPAL);
+  assert.notEqual(validatedWorkerInput.context, context);
+  assert.equal(Object.isFrozen(validatedWorkerInput.context), true);
   assert.equal(
-    validateIntegratedLiveDrillProviderWorkerInput(input)
-      .authenticatedPrincipal,
-    PRINCIPAL
+    canonicalJson(validatedWorkerInput.context),
+    canonicalJson(context)
   );
   const inputPath = path.join(
     context.recoveryEvidenceRootPath,
@@ -97,19 +109,30 @@ test("provider worker input and environment isolate credentials and resume conte
       "postgresql://publisher.invalid/tideproof"
   }, {
     authenticatedPrincipal: PRINCIPAL,
-    inputPath
+    forbiddenRootPath: context.forbiddenRootPath,
+    inputPath,
+    rootPath: context.recoveryEvidenceRootPath
   });
   assert.equal(isolated.MCP_API_KEY, "synthetic-test-only-mcp-api-key-0001");
   assert.equal(
     isolated.PRIMARY_AUDIT_DATABASE_URL,
     "postgresql://audit.invalid/tideproof"
   );
-  assert.equal(isolated.AWS_CONFIG_FILE, "/dev/null");
-  assert.equal(isolated.AWS_SHARED_CREDENTIALS_FILE, "/dev/null");
+  const normalizedWorkerEnvironment =
+    assertIntegratedLiveDrillProviderWorkerEnvironment(isolated, {
+      authenticatedPrincipal: PRINCIPAL,
+      forbiddenRootPath: context.forbiddenRootPath,
+      rootPath: context.recoveryEvidenceRootPath
+    });
+  assert.notEqual(normalizedWorkerEnvironment, isolated);
+  assert.deepEqual(normalizedWorkerEnvironment, isolated);
+  assert.equal(Object.isFrozen(normalizedWorkerEnvironment), true);
   for (const name of [
     "ALL_PROXY",
     "AWS_ACCESS_KEY_ID",
+    "AWS_CONFIG_FILE",
     "AWS_PROFILE",
+    "AWS_SHARED_CREDENTIALS_FILE",
     "HOME",
     "NODE_OPTIONS",
     "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
@@ -117,6 +140,137 @@ test("provider worker input and environment isolate credentials and resume conte
   ]) {
     assert.equal(Object.hasOwn(isolated, name), false, name);
   }
+  for (const name of [
+    "ALL_PROXY",
+    "AWS_PROFILE",
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "NODE_OPTIONS",
+    "RECOVERY_PUBLISHER_PRIVATE_KEY"
+  ]) {
+    assert.throws(
+      () => assertIntegratedLiveDrillProviderWorkerEnvironment({
+        ...isolated,
+        [name]: "synthetic-forbidden"
+      }, {
+        authenticatedPrincipal: PRINCIPAL,
+        forbiddenRootPath: context.forbiddenRootPath,
+        rootPath: context.recoveryEvidenceRootPath
+      }),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED/u,
+      name
+    );
+  }
+  const workerEnvironmentDirectApiMutations = [
+    ["enumerable symbol", (value) => {
+      Object.defineProperty(value, Symbol("providerClient"), {
+        enumerable: true,
+        value: {}
+      });
+    }],
+    ["non-enumerable extra", (value) => {
+      Object.defineProperty(value, "providerClient", {
+        enumerable: false,
+        value: {}
+      });
+    }],
+    ["custom prototype", (value) => {
+      Object.setPrototypeOf(value, { providerClient: {} });
+    }],
+    ["getter", (value) => {
+      Object.defineProperty(value, "MCP_API_KEY", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          throw new Error("worker environment getter must never run");
+        }
+      });
+    }]
+  ];
+  for (const [name, mutate] of workerEnvironmentDirectApiMutations) {
+    const changedEnvironment = { ...isolated };
+    mutate(changedEnvironment);
+    assert.throws(
+      () => assertIntegratedLiveDrillProviderWorkerEnvironment(
+        changedEnvironment,
+        {
+          authenticatedPrincipal: PRINCIPAL,
+          forbiddenRootPath: context.forbiddenRootPath,
+          rootPath: context.recoveryEvidenceRootPath
+        }
+      ),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED/u,
+      name
+    );
+  }
+  const workerEnvironmentProbe = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import { assertIntegratedLiveDrillProviderWorkerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-worker.js", import.meta.url).href)}; check(process.env, ${JSON.stringify({
+        authenticatedPrincipal: PRINCIPAL,
+        forbiddenRootPath: context.forbiddenRootPath,
+        rootPath: context.recoveryEvidenceRootPath
+      })});`
+    ],
+    { encoding: "utf8", env: isolated }
+  );
+  assert.equal(
+    workerEnvironmentProbe.status,
+    0,
+    workerEnvironmentProbe.stderr
+  );
+  let fakeFetchCalls = 0;
+  let fakeAuditFactoryCalls = 0;
+  const workerInputDirectApiMutations = [
+    ["enumerable symbol", (value) => {
+      Object.defineProperty(value, Symbol("providerClient"), {
+        enumerable: true,
+        value: {}
+      });
+    }],
+    ["non-enumerable extra", (value) => {
+      Object.defineProperty(value, "providerClient", {
+        enumerable: false,
+        value: {}
+      });
+    }],
+    ["custom prototype", (value) => {
+      Object.setPrototypeOf(value, { providerClient: {} });
+    }],
+    ["getter", (value) => {
+      Object.defineProperty(value, "context", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          throw new Error("worker input getter must never run");
+        }
+      });
+    }]
+  ];
+  for (const [name, mutate] of workerInputDirectApiMutations) {
+    const changedInput = structuredClone(input);
+    mutate(changedInput);
+    await assert.rejects(
+      () => workerTest.runWithLocalTransports({
+        environment: isolated,
+        input: changedInput
+      }, {
+        auditClientFactory: async () => {
+          fakeAuditFactoryCalls += 1;
+          throw new Error("fake audit factory must never run");
+        },
+        fetchImpl: async () => {
+          fakeFetchCalls += 1;
+          throw new Error("fake fetch must never run");
+        }
+      }),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u,
+      name
+    );
+  }
+  assert.equal(fakeFetchCalls, 0);
+  assert.equal(fakeAuditFactoryCalls, 0);
   const wrongPrincipal = structuredClone(input);
   wrongPrincipal.authenticatedPrincipal = "principal://wrong";
   assert.throws(
@@ -132,6 +286,48 @@ test("provider worker input and environment isolate credentials and resume conte
     () => readIntegratedLiveDrillProviderWorkerInput({
       forbiddenRootPath: context.forbiddenRootPath,
       inputPath: symlinkPath,
+      rootPath: context.recoveryEvidenceRootPath
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u
+  );
+  const outsideRoot = fs.mkdtempSync(path.join(
+    path.dirname(context.recoveryEvidenceRootPath),
+    "provider-worker-outside-"
+  ));
+  fs.chmodSync(outsideRoot, 0o700);
+  t.after(() => fs.rmSync(outsideRoot, { force: true, recursive: true }));
+  const outsideInputPath = path.join(outsideRoot, "worker-input.json");
+  fs.writeFileSync(outsideInputPath, `${canonicalJson(input)}\n`, {
+    mode: 0o600
+  });
+  const intermediateLink = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-worker-outside-link"
+  );
+  fs.symlinkSync(outsideRoot, intermediateLink);
+  assert.throws(
+    () => readIntegratedLiveDrillProviderWorkerInput({
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath: path.join(intermediateLink, "worker-input.json"),
+      rootPath: context.recoveryEvidenceRootPath
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u
+  );
+  const substitutedRootInput = structuredClone(input);
+  substitutedRootInput.context.recoveryEvidenceRootPath = outsideRoot;
+  const substitutedRootInputPath = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-worker-substituted-root.json"
+  );
+  fs.writeFileSync(
+    substitutedRootInputPath,
+    `${canonicalJson(substitutedRootInput)}\n`,
+    { mode: 0o600 }
+  );
+  assert.throws(
+    () => readIntegratedLiveDrillProviderWorkerInput({
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath: substitutedRootInputPath,
       rootPath: context.recoveryEvidenceRootPath
     }),
     /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u
@@ -165,6 +361,100 @@ test("provider finalizer import surface is provider and credential free", () => 
       assert.equal(source.includes(forbidden), false, forbidden);
     }
   }
+  const rootPath = "/private/tmp/prooftoact-provider-finalizer";
+  const isolated = integratedLiveDrillProviderFinalizerEnvironment({
+    ALL_PROXY: "http://unsafe.invalid",
+    AWS_PROFILE: "unsafe-profile",
+    HOME: "/tmp/unsafe-home",
+    MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
+    NODE_OPTIONS: "--inspect",
+    PATH: process.env.PATH,
+    PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof",
+    RECOVERY_PUBLISHER_PRIVATE_KEY: "synthetic-forbidden"
+  }, {
+    forbiddenRootPath: "/private/tmp/prooftoact-forbidden",
+    inputPath: `${rootPath}/provider-finalization-input.json`,
+    rootPath
+  });
+  for (const name of [
+    "ALL_PROXY",
+    "AWS_PROFILE",
+    "HOME",
+    "MCP_API_KEY",
+    "NODE_OPTIONS",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "RECOVERY_PUBLISHER_PRIVATE_KEY"
+  ]) {
+    assert.equal(Object.hasOwn(isolated, name), false, name);
+    assert.throws(
+      () => assertIntegratedLiveDrillProviderFinalizerEnvironment({
+        ...isolated,
+        [name]: "synthetic-forbidden"
+      }),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED/u,
+      name
+    );
+  }
+  const normalizedFinalizerEnvironment =
+    assertIntegratedLiveDrillProviderFinalizerEnvironment(isolated);
+  assert.notEqual(normalizedFinalizerEnvironment, isolated);
+  assert.deepEqual(normalizedFinalizerEnvironment, isolated);
+  assert.equal(Object.isFrozen(normalizedFinalizerEnvironment), true);
+  const finalizerEnvironmentDirectApiMutations = [
+    ["enumerable symbol", (value) => {
+      Object.defineProperty(value, Symbol("providerClient"), {
+        enumerable: true,
+        value: {}
+      });
+    }],
+    ["non-enumerable extra", (value) => {
+      Object.defineProperty(value, "providerClient", {
+        enumerable: false,
+        value: {}
+      });
+    }],
+    ["custom prototype", (value) => {
+      Object.setPrototypeOf(value, { providerClient: {} });
+    }],
+    ["getter", (value) => {
+      Object.defineProperty(
+        value,
+        "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH",
+        {
+          configurable: true,
+          enumerable: true,
+          get() {
+            throw new Error("finalizer environment getter must never run");
+          }
+        }
+      );
+    }]
+  ];
+  for (const [name, mutate] of finalizerEnvironmentDirectApiMutations) {
+    const changedEnvironment = { ...isolated };
+    mutate(changedEnvironment);
+    assert.throws(
+      () => assertIntegratedLiveDrillProviderFinalizerEnvironment(
+        changedEnvironment
+      ),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED/u,
+      name
+    );
+  }
+  const finalizerEnvironmentProbe = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import { assertIntegratedLiveDrillProviderFinalizerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-finalization.js", import.meta.url).href)}; check(process.env);`
+    ],
+    { encoding: "utf8", env: isolated }
+  );
+  assert.equal(
+    finalizerEnvironmentProbe.status,
+    0,
+    finalizerEnvironmentProbe.stderr
+  );
 });
 
 function consumedChildAuthorizationIssuedAt(context) {
@@ -572,11 +862,19 @@ test("credential-isolated production worker uses only fake local transports", as
   const transport = providerHarness(fixture);
   const audit = auditDatabaseClientFactory();
   const result = await workerTest.runWithLocalTransports({
-    environment: {
+    environment: integratedLiveDrillProviderWorkerEnvironment({
       MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
       PRIMARY_AUDIT_DATABASE_URL:
         "postgresql://synthetic.invalid/tideproof"
-    },
+    }, {
+      authenticatedPrincipal: PRINCIPAL,
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath: path.join(
+        context.recoveryEvidenceRootPath,
+        "provider-worker-input.json"
+      ),
+      rootPath: context.recoveryEvidenceRootPath
+    }),
     input
   }, {
     auditClientFactory: audit.clientFactory,
@@ -722,6 +1020,15 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
     false
   );
   const providerFile = privateFiles.find((name) => name.endsWith("-mcp.json"));
+  const preReadFile = privateFiles.find((name) =>
+    name.endsWith("-pre-read.json")
+  );
+  const terminalFile = privateFiles.find((name) =>
+    name.endsWith("-terminal.json")
+  );
+  assert.equal(typeof preReadFile, "string");
+  assert.equal(typeof providerFile, "string");
+  assert.equal(typeof terminalFile, "string");
   const providerArtifact = JSON.parse(fs.readFileSync(
     path.join(context.recoveryEvidenceRootPath, providerFile),
     "utf8"
@@ -896,6 +1203,80 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
     /INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_BINDING_REJECTED/u
   );
 
+  for (const field of [
+    "logicalMcpRequestSha256",
+    "preCallIntentSha256",
+    "preReadEvidenceReceiptSha256",
+    "providerDispatchAuthorizationSha256",
+    "providerEvidenceReceiptSha256",
+    "terminalEvidenceReceiptSha256",
+    "transportEvidenceSha256"
+  ]) {
+    const changed = structuredClone(result.providerContinuity);
+    changed[field] = "0".repeat(64);
+    const recomputed = recomputeArtifactReceipt(changed);
+    assert.throws(
+      () => finalizeIntegratedLiveDrillProviderRecovery({
+        context,
+        providerContinuity: recomputed
+      }),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_(?:FINALIZATION_INPUT|HANDOFF_BINDING|JOURNAL_BINDING)_REJECTED/u,
+      field
+    );
+  }
+  const tamperedDispatchContext = structuredClone(context);
+  const dispatchSignature =
+    tamperedDispatchContext.providerDispatchAuthorization.signature.value;
+  tamperedDispatchContext.providerDispatchAuthorization.signature.value =
+    `${dispatchSignature[0] === "A" ? "B" : "A"}${dispatchSignature.slice(1)}`;
+  assert.throws(
+    () => finalizeIntegratedLiveDrillProviderRecovery({
+      context: tamperedDispatchContext,
+      providerContinuity: result.providerContinuity
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_(?:DISPATCH_AUTHORIZATION|FINALIZATION_INPUT)_REJECTED/u
+  );
+
+  const evidencePaths = [preReadFile, providerFile, terminalFile].map((name) =>
+    path.join(context.recoveryEvidenceRootPath, name)
+  );
+  const evidenceBytes = evidencePaths.map((filePath) =>
+    fs.readFileSync(filePath)
+  );
+  for (let index = 0; index < evidencePaths.length; index += 1) {
+    const filePath = evidencePaths[index];
+    const missingPath = `${filePath}.missing`;
+    fs.renameSync(filePath, missingPath);
+    try {
+      assert.throws(
+        () => finalizeIntegratedLiveDrillProviderRecovery({
+          context,
+          providerContinuity: result.providerContinuity
+        }),
+        /INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS/u,
+        `missing ${path.basename(filePath)}`
+      );
+    } finally {
+      fs.renameSync(missingPath, filePath);
+    }
+    fs.writeFileSync(
+      filePath,
+      evidenceBytes[(index + 1) % evidenceBytes.length]
+    );
+    try {
+      assert.throws(
+        () => finalizeIntegratedLiveDrillProviderRecovery({
+          context,
+          providerContinuity: result.providerContinuity
+        }),
+        /INTEGRATED_LIVE_DRILL_PROVIDER_(?:EVIDENCE_BINDING|RECEIPT|TRANSPORT|SEMANTIC_REQUEST)_REJECTED/u,
+        `substituted ${path.basename(filePath)}`
+      );
+    } finally {
+      fs.writeFileSync(filePath, evidenceBytes[index]);
+    }
+  }
+
   const callCount = harness.calls.length;
   const resumed = await runIntegratedLiveDrillProviderRecovery({
     authenticatedPrincipal: PRINCIPAL,
@@ -905,11 +1286,345 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   assert.equal(resumed.recovery.status, "RECOVERED_CONTEXT_ONLY");
   assert.equal(harness.calls.length, callCount);
 
-  assert.equal(
+  const normalizedProviderContinuity =
     validateIntegratedLiveDrillProviderRecoveryHandoff(
       result.providerContinuity
-    ).receiptSha256,
+    );
+  assert.equal(
+    normalizedProviderContinuity.receiptSha256,
     result.providerContinuity.receiptSha256
+  );
+  assert.notEqual(normalizedProviderContinuity, result.providerContinuity);
+  assert.deepEqual(normalizedProviderContinuity, result.providerContinuity);
+  assert.equal(Object.isFrozen(normalizedProviderContinuity), true);
+  const componentReceiptName =
+    `${context.preCallIntent.authorizationId}.provider-recovery-component.json`;
+  const finalizationFilesBefore = fs.readdirSync(
+    context.recoveryEvidenceRootPath
+  ).sort();
+  assert.equal(finalizationFilesBefore.includes(componentReceiptName), false);
+  const finalizationInputFor = (changedContext) => ({
+    context: changedContext,
+    providerContinuity: result.providerContinuity,
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA
+  });
+  let nestedHandoffGetterCalls = 0;
+  const handoffDirectApiMutations = [
+    ["provider client", (value) => { value.providerClient = {}; }],
+    ["raw provider result", (value) => { value.rawProviderResult = {}; }],
+    ["retry authority", (value) => { value.retryAuthority = true; }],
+    ["credential-like symbol", (value) => {
+      Object.defineProperty(value, Symbol("MCP_API_KEY"), {
+        enumerable: true,
+        value: "synthetic-secret"
+      });
+    }],
+    ["non-enumerable extra", (value) => {
+      Object.defineProperty(value, "providerClient", {
+        enumerable: false,
+        value: {}
+      });
+    }],
+    ["custom prototype", (value) => {
+      Object.setPrototypeOf(value, { providerClient: {} });
+    }],
+    ["getter", (value) => {
+      Object.defineProperty(value, "receiptSha256", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          throw new Error("provider handoff getter must never run");
+        }
+      });
+    }],
+    ["nested getter", (value) => {
+      const nestedCapability = {};
+      Object.defineProperty(nestedCapability, "providerClient", {
+        enumerable: true,
+        get() {
+          nestedHandoffGetterCalls += 1;
+          throw new Error("nested handoff getter must never run");
+        }
+      });
+      value.observedInitializeCount = nestedCapability;
+    }],
+    ["coercible digest object", (value) => {
+      const coercibleDigest = Object.create(null);
+      Object.defineProperty(coercibleDigest, Symbol.toPrimitive, {
+        enumerable: false,
+        value: () => "a".repeat(64)
+      });
+      value.preReadEvidenceReceiptSha256 = coercibleDigest;
+      const { receiptSha256: _receiptSha256, ...body } = value;
+      void _receiptSha256;
+      value.receiptSha256 = integratedLiveDrillCanonicalSha256(body);
+    }]
+  ];
+  for (const [name, mutate] of handoffDirectApiMutations) {
+    const changedHandoff = structuredClone(result.providerContinuity);
+    mutate(changedHandoff);
+    assert.throws(
+      () => validateIntegratedLiveDrillProviderRecoveryHandoff(
+        changedHandoff
+      ),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_REJECTED/u,
+      `${name} handoff validator`
+    );
+    assert.throws(
+      () => finalizeIntegratedLiveDrillProviderRecovery({
+        context,
+        providerContinuity: changedHandoff
+      }),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_REJECTED/u,
+      `${name} direct finalizer`
+    );
+    assert.deepEqual(
+      fs.readdirSync(context.recoveryEvidenceRootPath).sort(),
+      finalizationFilesBefore,
+      `${name} created no W4, W5, or component artifact`
+    );
+  }
+  assert.equal(nestedHandoffGetterCalls, 0);
+  const rejectedContextMutations = [
+    ["root MCP credential", (value) => {
+      value.MCP_API_KEY = "synthetic-secret";
+    }],
+    ["root database credential", (value) => {
+      value.PRIMARY_AUDIT_DATABASE_URL =
+        "postgresql://synthetic.invalid/tideproof";
+    }],
+    ["root AWS profile", (value) => { value.AWS_PROFILE = "unsafe"; }],
+    ["root proxy capability", (value) => {
+      value.HTTPS_PROXY = "https://unsafe.invalid";
+    }],
+    ["root private key", (value) => {
+      value.RECOVERY_PUBLISHER_PRIVATE_KEY = "synthetic-secret";
+    }],
+    ["root provider client", (value) => { value.providerClient = {}; }],
+    ["root MCP client", (value) => { value.mcpClient = {}; }],
+    ["root raw result", (value) => { value.rawProviderResult = {}; }],
+    ["root transport evidence", (value) => {
+      value.transportEvidence = {};
+    }],
+    ["root retry authority", (value) => {
+      value.retryAuthority = true;
+    }],
+    ["root allow retry", (value) => { value.allowRetry = true; }],
+    ["root arbitrary metadata", (value) => {
+      value.unexpectedMetadata = "innocuous";
+    }],
+    ["nested pre-call metadata", (value) => {
+      value.preCallInputs.unexpectedMetadata = "innocuous";
+    }],
+    ["nested audit retry", (value) => {
+      value.preCallInputs.audit.retryPermitted = true;
+    }],
+    ["nested child payload secret", (value) => {
+      value.preCallInputs.consumedChildAuthorization.attestation.payload
+        .clientSecret = "synthetic-secret";
+    }],
+    ["nested child signature provider", (value) => {
+      value.preCallInputs.consumedChildAuthorization.attestation.signature
+        .providerClient = {};
+    }],
+    ["nested trusted provider", (value) => {
+      value.trustedRunContext.providerClient = {};
+    }],
+    ["nested spec metadata", (value) => {
+      value.trustedRunContext.spec.unexpectedMetadata = "innocuous";
+    }],
+    ["nested authorization raw result", (value) => {
+      value.authorization.payload.rawResult = {};
+    }],
+    ["nested ledger retry authority", (value) => {
+      value.controlLedgerReceipt.retryAfterMs = 1000;
+    }],
+    ["nested dispatch transport evidence", (value) => {
+      value.providerDispatchAuthorization.payload.transportEvidence = {};
+    }]
+  ];
+  for (const [name, mutate] of rejectedContextMutations) {
+    const changedContext = structuredClone(context);
+    mutate(changedContext);
+    assert.throws(
+      () => validateIntegratedLiveDrillProviderFinalizationInput(
+        finalizationInputFor(changedContext)
+      ),
+      /INTEGRATED_LIVE_DRILL_(?:AUTHORIZATION|PROVIDER_(?:CONTEXT|CREDENTIAL_MATERIAL|FINALIZATION_INPUT))_REJECTED/u,
+      `${name} validator`
+    );
+    assert.throws(
+      () => finalizeIntegratedLiveDrillProviderRecovery({
+        context: changedContext,
+        providerContinuity: result.providerContinuity
+      }),
+      /INTEGRATED_LIVE_DRILL_(?:AUTHORIZATION|PROVIDER_(?:CONTEXT|CREDENTIAL_MATERIAL|FINALIZATION_INPUT))_REJECTED/u,
+      `${name} direct finalizer`
+    );
+    assert.deepEqual(
+      fs.readdirSync(context.recoveryEvidenceRootPath).sort(),
+      finalizationFilesBefore,
+      `${name} created no finalization artifact`
+    );
+  }
+  const directApiMutations = [
+    ["function", (value) => { value.providerClient = () => undefined; }],
+    ["symbol", (value) => {
+      Object.defineProperty(value, Symbol("providerClient"), {
+        enumerable: true,
+        value: {}
+      });
+    }],
+    ["non-enumerable", (value) => {
+      Object.defineProperty(value, "providerClient", {
+        enumerable: false,
+        value: {}
+      });
+    }],
+    ["prototype", (value) => {
+      Object.setPrototypeOf(value, { providerClient: {} });
+    }],
+    ["nested array prototype", (value) => {
+      Object.setPrototypeOf(
+        value.controlLedgerReceipt.childLaunchDigests,
+        Object.create(Array.prototype, {
+          providerClient: { enumerable: true, value: {} }
+        })
+      );
+    }],
+    ["getter", (value) => {
+      Object.defineProperty(value, "providerClient", {
+        enumerable: true,
+        get() {
+          throw new Error("getter must never run");
+        }
+      });
+    }],
+    ["nested array getter", (value) => {
+      Object.defineProperty(
+        value.controlLedgerReceipt.childLaunchDigests,
+        "0",
+        {
+          configurable: true,
+          enumerable: true,
+          get() {
+            throw new Error("nested getter must never run");
+          }
+        }
+      );
+    }]
+  ];
+  for (const [name, mutate] of directApiMutations) {
+    const changedContext = structuredClone(context);
+    mutate(changedContext);
+    assert.throws(
+      () => validateIntegratedLiveDrillProviderFinalizationInput(
+        finalizationInputFor(changedContext)
+      ),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_(?:CONTEXT|FINALIZATION_INPUT)_REJECTED/u,
+      `${name} direct API value`
+    );
+    assert.throws(
+      () => finalizeIntegratedLiveDrillProviderRecovery({
+        context: changedContext,
+        providerContinuity: result.providerContinuity
+      }),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED/u,
+      `${name} direct finalizer value`
+    );
+    assert.deepEqual(
+      fs.readdirSync(context.recoveryEvidenceRootPath).sort(),
+      finalizationFilesBefore,
+      `${name} created no finalization artifact`
+    );
+  }
+  const wrapperDirectApiMutations = [
+    ["symbol", (value) => {
+      Object.defineProperty(value, Symbol("providerClient"), {
+        enumerable: true,
+        value: {}
+      });
+    }],
+    ["non-enumerable", (value) => {
+      Object.defineProperty(value, "providerClient", {
+        enumerable: false,
+        value: {}
+      });
+    }],
+    ["prototype", (value) => {
+      Object.setPrototypeOf(value, { providerClient: {} });
+    }],
+    ["getter", (value) => {
+      Object.defineProperty(value, "context", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          throw new Error("wrapper getter must never run");
+        }
+      });
+    }]
+  ];
+  for (const [name, mutate] of wrapperDirectApiMutations) {
+    const changedInput = finalizationInputFor(context);
+    mutate(changedInput);
+    assert.throws(
+      () => validateIntegratedLiveDrillProviderFinalizationInput(changedInput),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED/u,
+      `${name} finalization-input wrapper`
+    );
+    const changedFinalizerArgs = {
+      context,
+      providerContinuity: result.providerContinuity
+    };
+    mutate(changedFinalizerArgs);
+    assert.throws(
+      () => finalizeIntegratedLiveDrillProviderRecovery(changedFinalizerArgs),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED/u,
+      `${name} finalizer wrapper`
+    );
+    const changedEvidenceArgs = {
+      context,
+      providerContinuity: result.providerContinuity
+    };
+    mutate(changedEvidenceArgs);
+    assert.throws(
+      () => verifyIntegratedLiveDrillProviderEvidenceBundle(
+        changedEvidenceArgs
+      ),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_JOURNAL_BINDING_REJECTED/u,
+      `${name} evidence wrapper`
+    );
+    assert.deepEqual(
+      fs.readdirSync(context.recoveryEvidenceRootPath).sort(),
+      finalizationFilesBefore,
+      `${name} wrapper created no finalization artifact`
+    );
+  }
+  const normalizedFinalizationInput =
+    validateIntegratedLiveDrillProviderFinalizationInput(
+      finalizationInputFor(context)
+    );
+  assert.notEqual(normalizedFinalizationInput.context, context);
+  assert.notEqual(
+    normalizedFinalizationInput.context.preCallInputs,
+    context.preCallInputs
+  );
+  assert.notEqual(
+    normalizedFinalizationInput.context.trustedRunContext,
+    context.trustedRunContext
+  );
+  assert.equal(Object.isFrozen(normalizedFinalizationInput.context), true);
+  assert.equal(
+    Object.isFrozen(normalizedFinalizationInput.context.authorization),
+    true
+  );
+  assert.equal(
+    Object.isFrozen(normalizedFinalizationInput.context.preCallInputs),
+    true
+  );
+  assert.equal(
+    Object.isFrozen(normalizedFinalizationInput.context.trustedRunContext.spec),
+    true
   );
   const finalized = finalizeIntegratedLiveDrillProviderRecovery({
     context,
@@ -921,8 +1636,26 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   assert.equal(finalized.finalReleaseReady, false);
   assert.equal(finalized.providerCapabilityAccepted, false);
   assert.equal(finalized.credentialOptionAccepted, false);
+  assert.equal(finalized.rawProviderResultAccepted, false);
+  assert.equal(finalized.retryAuthorityAccepted, false);
+  assert.equal(finalized.contextCredentialMaterialAbsent, true);
+  assert.equal(finalized.contextExactSchemaValidated, true);
+  assert.equal(finalized.contextProviderCapabilityAbsent, true);
+  assert.equal(finalized.contextRawProviderResultAbsent, true);
+  assert.equal(finalized.contextRetryAuthorityAbsent, true);
   assert.equal(finalized.observedToolsCallCount, 1);
   assert.equal(finalized.observedSessionCloseCount, 1);
+  const normalizedComponentReceipt = JSON.parse(fs.readFileSync(
+    path.join(context.recoveryEvidenceRootPath, componentReceiptName),
+    "utf8"
+  ));
+  assert.equal(normalizedComponentReceipt.containsCredentialMaterial, false);
+  assert.equal(normalizedComponentReceipt.containsRawProviderResult, false);
+  assert.equal(normalizedComponentReceipt.contextCredentialMaterialAbsent, true);
+  assert.equal(normalizedComponentReceipt.contextExactSchemaValidated, true);
+  assert.equal(normalizedComponentReceipt.contextProviderCapabilityAbsent, true);
+  assert.equal(normalizedComponentReceipt.contextRawProviderResultAbsent, true);
+  assert.equal(normalizedComponentReceipt.contextRetryAuthorityAbsent, true);
   assert.equal(
     finalizeIntegratedLiveDrillProviderRecovery({
       context,
@@ -952,6 +1685,60 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
       rootPath: context.recoveryEvidenceRootPath
     }).providerContinuity.receiptSha256,
     result.providerContinuity.receiptSha256
+  );
+  const finalizerOutsideRoot = fs.mkdtempSync(path.join(
+    path.dirname(context.recoveryEvidenceRootPath),
+    "provider-finalizer-outside-"
+  ));
+  fs.chmodSync(finalizerOutsideRoot, 0o700);
+  t.after(() => fs.rmSync(finalizerOutsideRoot, {
+    force: true,
+    recursive: true
+  }));
+  const finalizerOutsideInput = path.join(
+    finalizerOutsideRoot,
+    "provider-finalization-input.json"
+  );
+  fs.writeFileSync(
+    finalizerOutsideInput,
+    `${canonicalJson(finalizationInput)}\n`,
+    { mode: 0o600 }
+  );
+  const finalizerIntermediateLink = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-finalizer-outside-link"
+  );
+  fs.symlinkSync(finalizerOutsideRoot, finalizerIntermediateLink);
+  assert.throws(
+    () => readIntegratedLiveDrillProviderFinalizationInput({
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath: path.join(
+        finalizerIntermediateLink,
+        "provider-finalization-input.json"
+      ),
+      rootPath: context.recoveryEvidenceRootPath
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED/u
+  );
+  const substitutedFinalizationInput = structuredClone(finalizationInput);
+  substitutedFinalizationInput.context.recoveryEvidenceRootPath =
+    finalizerOutsideRoot;
+  const substitutedFinalizationInputPath = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-finalization-substituted-root.json"
+  );
+  fs.writeFileSync(
+    substitutedFinalizationInputPath,
+    `${canonicalJson(substitutedFinalizationInput)}\n`,
+    { mode: 0o600 }
+  );
+  assert.throws(
+    () => readIntegratedLiveDrillProviderFinalizationInput({
+      forbiddenRootPath: context.forbiddenRootPath,
+      inputPath: substitutedFinalizationInputPath,
+      rootPath: context.recoveryEvidenceRootPath
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED/u
   );
   const componentName = fs.readdirSync(context.recoveryEvidenceRootPath)
     .find((name) => name.endsWith(".provider-recovery-component.json"));

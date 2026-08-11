@@ -1,8 +1,11 @@
 import { pathToFileURL } from "node:url";
 
 import {
+  assertIntegratedLiveDrillProviderWorkerEnvironment,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT,
   readIntegratedLiveDrillProviderWorkerInput,
   runIntegratedLiveDrillProviderWorker
 } from "../src/cloud/integrated-live-drill-provider-worker.js";
@@ -21,28 +24,35 @@ function requiredEnvironment(name) {
 }
 
 export async function main() {
+  const authenticatedPrincipal = requiredEnvironment(
+    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT
+  );
+  const forbiddenRootPath = requiredEnvironment(
+    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT
+  );
+  const rootPath = requiredEnvironment(
+    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT
+  );
+  const environment = assertIntegratedLiveDrillProviderWorkerEnvironment(
+    process.env,
+    { authenticatedPrincipal, forbiddenRootPath, rootPath }
+  );
   const input = readIntegratedLiveDrillProviderWorkerInput({
-    forbiddenRootPath: requiredEnvironment(
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT"
-    ),
+    forbiddenRootPath,
     inputPath: requiredEnvironment(
       INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT
     ),
-    rootPath: requiredEnvironment(
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT"
-    )
+    rootPath
   });
   if (
-    input.authenticatedPrincipal !== requiredEnvironment(
-      INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT
-    )
+    input.authenticatedPrincipal !== authenticatedPrincipal
   ) {
     throw new Error(
       "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED"
     );
   }
   const result = await runIntegratedLiveDrillProviderWorker({
-    environment: process.env,
+    environment,
     input
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

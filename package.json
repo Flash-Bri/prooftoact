@@ -32,6 +32,7 @@
     "dev": "\"$npm_node_execpath\" src/server.js",
     "proof:verify": "\"$npm_node_execpath\" scripts/verify-proof-manifest.js",
     "privacy:verify": "\"$npm_node_execpath\" scripts/verify-release-privacy.js",
+    "process-boundaries:verify": "\"$npm_node_execpath\" scripts/verify-integrated-live-drill-process-boundaries.js",
     "rights:verify": "\"$npm_node_execpath\" scripts/verify-release-rights.js",
     "security:verify": "\"$npm_node_execpath\" scripts/verify-release-security.js",
     "submission:verify": "\"$npm_node_execpath\" scripts/verify-release-submission.js",

@@ -120,7 +120,7 @@
       "id": "aws-deployment-attestation",
       "path": "src/cloud/aws-deployment-attestation.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VALIDATOR",
-      "sha256": "3a452e102ec2ff833a44dc309d3fd7d7460efab133f3c2712f24eea95dd91642"
+      "sha256": "fb4f1b84e5a5d6d8f554cb72b77517367b62256a4acce86e4e690bd877ec2e90"
     },
     {
       "id": "aws-deployment-attestation-runner",
@@ -132,7 +132,7 @@
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "bce28ebf2a39bb06b23f78de967c42dca40d8c1d2699359846dd2bdbfad6d157"
+      "sha256": "51fda205f2cf2f0fc3dd17bd7b0ffc8dab2e49e9bb8b70217c0cff07cdfebe4d"
     },
     {
       "id": "aws-evidence-identity",
@@ -345,6 +345,12 @@
       "sha256": "eb64e2417358101ca02e95ee847c231ed0c12c30e04ce23407c88362ca8c6536"
     },
     {
+      "id": "deployment-config-digest",
+      "path": "src/cloud/deployment-config-digest.js",
+      "role": "PROVIDER_FREE_DEPLOYMENT_CONFIGURATION_DIGEST_VALIDATOR",
+      "sha256": "73ed61ee4ba12a044c50b03e1446fbb6321fb92fb1d19114a49aacd500523443"
+    },
+    {
       "id": "dvi-proposal-authorization",
       "path": "src/cloud/dvi-proposal-authorization.js",
       "role": "DATABASE_OWNED_PROPOSAL_AUTHORIZATION",
@@ -453,40 +459,58 @@
       "sha256": "94ea9e266ae17c5391f75a78abf0d92d43045042f22b45a44684326447771884"
     },
     {
+      "id": "integrated-live-drill-process-boundary-verifier",
+      "path": "scripts/verify-integrated-live-drill-process-boundaries.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_RECURSIVE_PROCESS_IMPORT_GATE",
+      "sha256": "32cbd46c9532e86115e0597e97237ad1159710a2dd2eff439f030cb8f49b7475"
+    },
+    {
+      "id": "integrated-live-drill-process-boundary-tests",
+      "path": "test/integrated-live-drill-process-boundaries.test.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_PROCESS_ISOLATION_VERIFICATION",
+      "sha256": "9e9a2fb68e38dc1d2f91381cd0fc11465a323758759dca955304fe8a2bfcc00f"
+    },
+    {
+      "id": "integrated-live-drill-provider-evidence",
+      "path": "src/cloud/integrated-live-drill-provider-evidence.js",
+      "role": "INTEGRATED_PROVIDER_DRILL_PROVIDER_FREE_EVIDENCE_VALIDATOR",
+      "sha256": "307860d746a0dec99a02667c67d538d17b0155aeb33ef493efb1db897d4aaf7b"
+    },
+    {
       "id": "integrated-live-drill-provider-recovery",
       "path": "src/cloud/integrated-live-drill-provider-recovery.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2A_UNWIRED_PROVIDER_RECOVERY_LIBRARY",
-      "sha256": "09c20c8470869095a96b9fa379455cdd2c73b994206a6c1c3d8961b16d488bb1"
+      "sha256": "9d74b3bbd116232321f269f83becdbdfb4061dbc68cd1f9369348b0b28ef447d"
     },
     {
       "id": "integrated-live-drill-provider-recovery-tests",
       "path": "test/integrated-live-drill-provider-recovery.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2A_STRICT_LOCAL_FAKE_TRANSPORT_VERIFICATION",
-      "sha256": "d256b5ba178901a443069a654d7c07e238696ec1500a463b44f9ef4462ef15dd"
+      "sha256": "3efb5e568cb6abd250bbac3ae1751f36f90879a86d3ec9981a085bc90cc1bfef"
     },
     {
       "id": "integrated-live-drill-provider-finalization",
       "path": "src/cloud/integrated-live-drill-provider-finalization.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_FREE_W4_W5_FINALIZATION",
-      "sha256": "dff6751584290c7bcd8ecd393c325e96ab742d1ccbb95478583f7fbaabecb1d9"
+      "sha256": "dec3acd6473fe36977483015266b0a722da5597a999430da28ccdd8201514f85"
     },
     {
       "id": "integrated-live-drill-provider-finalizer-runner",
       "path": "scripts/gate2-integrated-live-drill-provider-finalizer.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_FREE_FINALIZER_RUNNER",
-      "sha256": "b4f93093525c7b987a27d25e5b0e7357bb2cfa5891030635be0346e0faf80a60"
+      "sha256": "92cfcf9454ef0e43f51a5060e74c86a00a01ef63f9402dd3ecb70a9d51ef92d5"
     },
     {
       "id": "integrated-live-drill-provider-worker",
       "path": "src/cloud/integrated-live-drill-provider-worker.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_CREDENTIAL_ISOLATED_PROVIDER_WORKER",
-      "sha256": "445a352db9c54a1bd18fd6e814625e72917abc52fce4cf2e421127595e4c4586"
+      "sha256": "fc5a1e185fc9c6926f527cc47d615e6b3584ad610013d5cbe089baf549800f34"
     },
     {
       "id": "integrated-live-drill-provider-worker-runner",
       "path": "scripts/gate1-integrated-live-drill-provider-worker.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_WORKER_RUNNER",
-      "sha256": "b6f114f96a4b41e4d75655c5fa84e8182af077add693c42cfeea680b73c7c24c"
+      "sha256": "2f468f30b0c22c16b92d727970b23e8483567fe808401454512f58f0d06e697d"
     },
     {
       "id": "integrated-live-drill-recovery-continuity",
@@ -600,7 +624,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "3f6a9343fb6b5e4244d665976973348a0cda184198e6d6cd2584388c7200b938"
+      "sha256": "c93b5e78f40d6690a48eea57a8c68d1cca180db8294aba499ded6f54f7991ccb"
     },
     {
       "id": "proof-manifest-verifier",

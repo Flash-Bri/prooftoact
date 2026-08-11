@@ -1,0 +1,216 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+export const INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA =
+  "tideproof.highwater-drill-process-boundary-verification.v1";
+
+const ROOT = fs.realpathSync(path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  ".."
+));
+const IMPORT_PATTERN =
+  /\b(?:import|export)\s+(?:[^'";]*?\s+from\s+)?["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)|\brequire\s*\(\s*["']([^"']+)["']\s*\)/gu;
+
+const FINALIZER_ROOTS = Object.freeze([
+  "scripts/gate2-integrated-live-drill-provider-finalizer.js",
+  "src/cloud/integrated-live-drill-provider-finalization.js"
+]);
+const WORKER_ROOTS = Object.freeze([
+  "scripts/gate1-integrated-live-drill-provider-worker.js",
+  "src/cloud/integrated-live-drill-provider-worker.js"
+]);
+const SAFE_BUILTINS = new Set([
+  "node:crypto",
+  "node:fs",
+  "node:module",
+  "node:path",
+  "node:url"
+]);
+const FINALIZER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
+  /(?:^|\/)database-runtime\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-recovery\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-worker\.js$/u,
+  /(?:^|\/)managed-mcp-client\.js$/u,
+  /(?:^|\/)recovery-broker\.js$/u
+]);
+const WORKER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
+  /(?:^|\/)gate2-/u,
+  /(?:^|\/)integrated-live-drill-provider-finalization\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-finalizer\.js$/u
+]);
+
+function reject(code, detail) {
+  throw new Error(detail === undefined ? code : `${code}:${detail}`);
+}
+
+function normalizedRelative(filePath) {
+  const relative = path.relative(ROOT, filePath);
+  if (
+    relative === "" ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
+    reject("INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_PATH_REJECTED", filePath);
+  }
+  return relative.split(path.sep).join("/");
+}
+
+function secureModulePath(filePath) {
+  const resolved = path.resolve(filePath);
+  let real;
+  let stat;
+  try {
+    real = fs.realpathSync(resolved);
+    stat = fs.lstatSync(resolved);
+  } catch (cause) {
+    reject(
+      "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_PATH_REJECTED",
+      String(cause?.message ?? cause)
+    );
+  }
+  if (
+    real !== resolved ||
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    ![".cjs", ".js"].includes(path.extname(real))
+  ) {
+    reject("INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_PATH_REJECTED", resolved);
+  }
+  normalizedRelative(real);
+  return real;
+}
+
+function localImportPath(specifier, importer) {
+  if (!specifier.startsWith(".")) return null;
+  const unresolved = path.resolve(path.dirname(importer), specifier);
+  const candidates = path.extname(unresolved) === ""
+    ? [`${unresolved}.js`, path.join(unresolved, "index.js")]
+    : [unresolved];
+  const existing = candidates.filter((candidate) => fs.existsSync(candidate));
+  if (existing.length !== 1) {
+    reject(
+      "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_IMPORT_REJECTED",
+      `${normalizedRelative(importer)}:${specifier}`
+    );
+  }
+  return secureModulePath(existing[0]);
+}
+
+function importSpecifiers(source) {
+  const matches = [];
+  for (const match of source.matchAll(IMPORT_PATTERN)) {
+    matches.push(match[1] ?? match[2] ?? match[3]);
+  }
+  return matches;
+}
+
+function collectGraph(rootPaths) {
+  const pending = rootPaths.map((entry) => secureModulePath(
+    path.join(ROOT, entry)
+  ));
+  const modules = new Set();
+  const builtins = new Set();
+  const externalPackages = new Set();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (modules.has(current)) continue;
+    modules.add(current);
+    const source = fs.readFileSync(current, "utf8");
+    for (const specifier of importSpecifiers(source)) {
+      const local = localImportPath(specifier, current);
+      if (local !== null) {
+        pending.push(local);
+      } else if (specifier.startsWith("node:")) {
+        builtins.add(specifier);
+      } else {
+        externalPackages.add(specifier);
+      }
+    }
+  }
+  return Object.freeze({
+    builtins: Object.freeze([...builtins].sort()),
+    externalPackages: Object.freeze([...externalPackages].sort()),
+    modules: Object.freeze([...modules].map(normalizedRelative).sort()),
+    rootPaths: Object.freeze([...rootPaths])
+  });
+}
+
+function validateGraph(graph, {
+  allowedExternalPackages,
+  forbiddenPathPatterns,
+  name
+}) {
+  for (const builtin of graph.builtins) {
+    if (!SAFE_BUILTINS.has(builtin)) {
+      reject(
+        "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_BUILTIN_REJECTED",
+        `${name}:${builtin}`
+      );
+    }
+  }
+  for (const dependency of graph.externalPackages) {
+    if (!allowedExternalPackages.has(dependency)) {
+      reject(
+        "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_PACKAGE_REJECTED",
+        `${name}:${dependency}`
+      );
+    }
+  }
+  for (const modulePath of graph.modules) {
+    for (const pattern of forbiddenPathPatterns) {
+      if (pattern.test(modulePath)) {
+        reject(
+          "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_MODULE_REJECTED",
+          `${name}:${modulePath}`
+        );
+      }
+    }
+  }
+  return graph;
+}
+
+export function verifyIntegratedLiveDrillProcessBoundaries() {
+  const finalizer = validateGraph(collectGraph(FINALIZER_ROOTS), {
+    allowedExternalPackages: new Set(),
+    forbiddenPathPatterns: FINALIZER_FORBIDDEN_PATH_PATTERNS,
+    name: "finalizer"
+  });
+  const worker = validateGraph(collectGraph(WORKER_ROOTS), {
+    allowedExternalPackages: new Set(["pg"]),
+    forbiddenPathPatterns: WORKER_FORBIDDEN_PATH_PATTERNS,
+    name: "worker"
+  });
+  if (
+    !finalizer.modules.includes(
+      "src/cloud/integrated-live-drill-provider-evidence.js"
+    ) ||
+    !worker.modules.includes(
+      "src/cloud/integrated-live-drill-provider-recovery.js"
+    ) ||
+    !worker.modules.includes("src/cloud/managed-mcp-client.js") ||
+    !worker.modules.includes("src/cloud/recovery-broker.js")
+  ) {
+    reject("INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_GRAPH_REJECTED");
+  }
+  return Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA,
+    finalizer,
+    worker,
+    status: "PASS"
+  });
+}
+
+const startedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (startedDirectly) {
+  try {
+    process.stdout.write(
+      `${JSON.stringify(verifyIntegratedLiveDrillProcessBoundaries())}\n`
+    );
+  } catch (error) {
+    process.stderr.write(`${String(error?.message ?? error)}\n`);
+    process.exitCode = 1;
+  }
+}

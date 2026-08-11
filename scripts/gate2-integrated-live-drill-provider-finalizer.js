@@ -1,36 +1,28 @@
 import { pathToFileURL } from "node:url";
 
 import {
+  assertIntegratedLiveDrillProviderFinalizerEnvironment,
   finalizeIntegratedLiveDrillProviderRecovery,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
   readIntegratedLiveDrillProviderFinalizationInput
 } from "../src/cloud/integrated-live-drill-provider-finalization.js";
 
-function requiredEnvironment(name) {
-  const value = process.env[name];
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > 8192 ||
-    /[\0\r\n]/u.test(value)
-  ) {
-    throw new Error(
-      "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED"
-    );
-  }
-  return value;
-}
-
 export function main() {
+  const environment = assertIntegratedLiveDrillProviderFinalizerEnvironment(
+    process.env
+  );
   const input = readIntegratedLiveDrillProviderFinalizationInput({
-    forbiddenRootPath: requiredEnvironment(
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT"
-    ),
-    inputPath: requiredEnvironment(
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH"
-    ),
-    rootPath: requiredEnvironment(
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT"
-    )
+    forbiddenRootPath: environment[
+      INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT
+    ],
+    inputPath: environment[
+      INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT
+    ],
+    rootPath: environment[
+      INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT
+    ]
   });
   const receipt = finalizeIntegratedLiveDrillProviderRecovery({
     context: input.context,

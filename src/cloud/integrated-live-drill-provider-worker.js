@@ -1,12 +1,14 @@
-import fs from "node:fs";
 import path from "node:path";
 
-import { isolatedEvidenceProcessEnvironment } from
-  "./aws-evidence-identity.js";
-import { canonicalJson } from "./canonical-json.js";
 import {
   validateIntegratedLiveDrillRecoveryContinuityPreCallIntent
 } from "./integrated-live-drill-recovery-continuity.js";
+import {
+  assertIntegratedLiveDrillPrivateRootCurrent,
+  normalizeIntegratedLiveDrillProviderContext,
+  readIntegratedLiveDrillExactPrivateJson,
+  secureIntegratedLiveDrillPrivateRoot
+} from "./integrated-live-drill-provider-evidence.js";
 import { runIntegratedLiveDrillProviderRecovery } from
   "./integrated-live-drill-provider-recovery.js";
 import { CockroachManagedMcpRecoveryClient } from
@@ -23,8 +25,30 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT";
 
 const MAX_WORKER_INPUT_BYTES = 8 * 1024 * 1024;
+const SAFE_PROCESS_ENVIRONMENT_NAMES = Object.freeze([
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "NO_COLOR",
+  "PATH",
+  "TMPDIR"
+]);
+const WORKER_ENVIRONMENT_NAMES = Object.freeze([
+  ...SAFE_PROCESS_ENVIRONMENT_NAMES,
+  "MCP_API_KEY",
+  "PRIMARY_AUDIT_DATABASE_URL",
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT
+]);
+const WORKER_ENVIRONMENT_NAME_SET = new Set(WORKER_ENVIRONMENT_NAMES);
 
 function reject(code, cause) {
   throw new Error(code, cause === undefined ? undefined : { cause });
@@ -35,12 +59,66 @@ function requireCondition(condition, code) {
 }
 
 function exactKeys(value, keys) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  ) {
     return false;
   }
-  const ownKeys = Object.keys(value);
+  const ownKeys = Reflect.ownKeys(value);
   return ownKeys.length === keys.length &&
-    keys.every((key) => Object.hasOwn(value, key));
+    ownKeys.every((key) => typeof key === "string") &&
+    keys.every((key) => Object.hasOwn(value, key)) &&
+    ownKeys.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined &&
+        Object.hasOwn(descriptor, "value") &&
+        descriptor.enumerable === true;
+    });
+}
+
+function normalizeWorkerEnvironment(environment, code) {
+  const realProcessEnvironment = environment === process.env;
+  requireCondition(
+    environment &&
+      typeof environment === "object" &&
+      !Array.isArray(environment) &&
+      (
+        realProcessEnvironment ||
+        [Object.prototype, null].includes(Object.getPrototypeOf(environment))
+      ),
+    code
+  );
+  const ownKeys = Reflect.ownKeys(environment);
+  requireCondition(
+    ownKeys.every((key) => {
+      if (
+        typeof key !== "string"
+      ) {
+        return false;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(environment, key);
+      return descriptor !== undefined &&
+        Object.hasOwn(descriptor, "value") &&
+        descriptor.enumerable === true &&
+        typeof descriptor.value === "string" &&
+        (
+          realProcessEnvironment ||
+          WORKER_ENVIRONMENT_NAME_SET.has(key)
+        );
+    }),
+    code
+  );
+  return Object.freeze(Object.fromEntries(
+    ownKeys
+      .filter((key) => WORKER_ENVIRONMENT_NAME_SET.has(key))
+      .map((key) => [
+        key,
+        Object.getOwnPropertyDescriptor(environment, key).value
+      ])
+  ));
 }
 
 function requiredText(value, code, maximum = 4096) {
@@ -52,121 +130,6 @@ function requiredText(value, code, maximum = 4096) {
     code
   );
   return value;
-}
-
-function pathIsWithin(candidate, root) {
-  const relative = path.relative(root, candidate);
-  return relative === "" || (
-    !relative.startsWith("..") && !path.isAbsolute(relative)
-  );
-}
-
-function secureWorkerInputPath(inputPath, rootPath, forbiddenRootPath) {
-  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED";
-  requireCondition(
-    [inputPath, rootPath, forbiddenRootPath].every(
-      (value) =>
-        typeof value === "string" &&
-        path.isAbsolute(value) &&
-        path.resolve(value) === value
-    ),
-    code
-  );
-  let canonicalRoot;
-  let canonicalForbidden;
-  let rootStat;
-  try {
-    canonicalRoot = fs.realpathSync(rootPath);
-    canonicalForbidden = fs.realpathSync(forbiddenRootPath);
-    rootStat = fs.lstatSync(rootPath);
-  } catch (cause) {
-    reject(code, cause);
-  }
-  const expectedUid = typeof process.getuid === "function"
-    ? process.getuid()
-    : rootStat.uid;
-  requireCondition(
-    canonicalRoot === rootPath &&
-      rootStat.isDirectory() &&
-      !rootStat.isSymbolicLink() &&
-      rootStat.uid === expectedUid &&
-      (rootStat.mode & 0o777) === 0o700 &&
-      pathIsWithin(inputPath, canonicalRoot) &&
-      !pathIsWithin(canonicalRoot, canonicalForbidden),
-    code
-  );
-  return Object.freeze({
-    expectedUid,
-    inputPath,
-    rootPath,
-    rootStat
-  });
-}
-
-function readWorkerInputFile(inputPath, secure) {
-  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED";
-  let descriptor;
-  try {
-    const currentRoot = fs.lstatSync(secure.rootPath);
-    requireCondition(
-      currentRoot.dev === secure.rootStat.dev &&
-        currentRoot.ino === secure.rootStat.ino &&
-        currentRoot.uid === secure.expectedUid &&
-        currentRoot.isDirectory() &&
-        !currentRoot.isSymbolicLink() &&
-        (currentRoot.mode & 0o777) === 0o700,
-      code
-    );
-    descriptor = fs.openSync(
-      inputPath,
-      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
-    );
-    const before = fs.fstatSync(descriptor);
-    requireCondition(
-      before.isFile() &&
-        before.uid === secure.expectedUid &&
-        before.nlink === 1 &&
-        (before.mode & 0o777) === 0o600 &&
-        before.size > 0 &&
-        before.size <= MAX_WORKER_INPUT_BYTES,
-      code
-    );
-    const bytes = fs.readFileSync(descriptor);
-    const after = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(inputPath);
-    requireCondition(
-      before.dev === after.dev &&
-        before.ino === after.ino &&
-        before.size === after.size &&
-        after.uid === secure.expectedUid &&
-        after.nlink === 1 &&
-        (after.mode & 0o777) === 0o600 &&
-        named.dev === after.dev &&
-        named.ino === after.ino &&
-        named.uid === after.uid &&
-        named.nlink === 1 &&
-        (named.mode & 0o777) === 0o600 &&
-        !named.isSymbolicLink() &&
-        bytes.length === after.size,
-      code
-    );
-    let parsed;
-    try {
-      parsed = JSON.parse(bytes.toString("utf8"));
-    } catch (cause) {
-      reject(code, cause);
-    }
-    requireCondition(
-      bytes.equals(Buffer.from(`${canonicalJson(parsed)}\n`, "utf8")),
-      code
-    );
-    return parsed;
-  } catch (cause) {
-    if (cause?.message === code) throw cause;
-    reject(code, cause);
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
 }
 
 export function validateIntegratedLiveDrillProviderWorkerInput(value) {
@@ -185,11 +148,17 @@ export function validateIntegratedLiveDrillProviderWorkerInput(value) {
     "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED",
     512
   );
+  let context;
+  try {
+    context = normalizeIntegratedLiveDrillProviderContext(value.context);
+  } catch (cause) {
+    reject("INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED", cause);
+  }
   const intent = validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
-    value.context?.preCallIntent,
+    context.preCallIntent,
     {
-      authorization: value.context?.authorization,
-      controlLedgerReceipt: value.context?.controlLedgerReceipt
+      authorization: context.authorization,
+      controlLedgerReceipt: context.controlLedgerReceipt
     }
   );
   requireCondition(
@@ -199,7 +168,7 @@ export function validateIntegratedLiveDrillProviderWorkerInput(value) {
   );
   return Object.freeze({
     authenticatedPrincipal,
-    context: value.context,
+    context,
     schemaVersion: value.schemaVersion
   });
 }
@@ -209,19 +178,32 @@ export function readIntegratedLiveDrillProviderWorkerInput({
   inputPath,
   rootPath
 }) {
-  const secure = secureWorkerInputPath(
-    inputPath,
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED";
+  const secure = secureIntegratedLiveDrillPrivateRoot(
     rootPath,
-    forbiddenRootPath
+    forbiddenRootPath,
+    code
   );
-  return validateIntegratedLiveDrillProviderWorkerInput(
-    readWorkerInputFile(inputPath, secure)
+  const input = validateIntegratedLiveDrillProviderWorkerInput(
+    readIntegratedLiveDrillExactPrivateJson({
+      code,
+      filePath: inputPath,
+      maximumBytes: MAX_WORKER_INPUT_BYTES,
+      secure
+    })
   );
+  requireCondition(
+    input.context?.recoveryEvidenceRootPath === secure.rootPath &&
+      input.context?.forbiddenRootPath === secure.forbiddenRootPath,
+    code
+  );
+  assertIntegratedLiveDrillPrivateRootCurrent(secure, code);
+  return input;
 }
 
 export function integratedLiveDrillProviderWorkerEnvironment(
   sourceEnvironment,
-  { inputPath, authenticatedPrincipal }
+  { authenticatedPrincipal, forbiddenRootPath, inputPath, rootPath }
 ) {
   const apiKey = requiredText(
     sourceEnvironment?.MCP_API_KEY,
@@ -238,7 +220,11 @@ export function integratedLiveDrillProviderWorkerEnvironment(
     8192
   );
   const value = {
-    ...isolatedEvidenceProcessEnvironment(sourceEnvironment),
+    ...Object.fromEntries(
+      Object.entries(sourceEnvironment ?? {}).filter(([name]) =>
+        SAFE_PROCESS_ENVIRONMENT_NAMES.includes(name)
+      )
+    ),
     MCP_API_KEY: apiKey,
     PRIMARY_AUDIT_DATABASE_URL: auditDatabaseUrl,
     [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT]:
@@ -251,9 +237,69 @@ export function integratedLiveDrillProviderWorkerEnvironment(
         authenticatedPrincipal,
         "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED",
         512
+      ),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT]:
+      requiredText(
+        rootPath,
+        "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED"
+      ),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT]:
+      requiredText(
+        forbiddenRootPath,
+        "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED"
       )
   };
-  return Object.freeze(value);
+  return assertIntegratedLiveDrillProviderWorkerEnvironment(value, {
+    authenticatedPrincipal,
+    forbiddenRootPath,
+    rootPath
+  });
+}
+
+export function assertIntegratedLiveDrillProviderWorkerEnvironment(
+  environment,
+  { authenticatedPrincipal, forbiddenRootPath, rootPath }
+) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED";
+  const normalized = normalizeWorkerEnvironment(environment, code);
+  const inputPath = normalized[
+    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT
+  ];
+  requireCondition(
+    normalized[
+        INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT
+      ] === authenticatedPrincipal &&
+      normalized[
+        INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT
+      ] === rootPath &&
+      normalized[
+        INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT
+      ] === forbiddenRootPath &&
+      typeof inputPath === "string" &&
+      path.isAbsolute(inputPath) &&
+      path.resolve(inputPath) === inputPath &&
+      path.dirname(inputPath) === rootPath,
+    code
+  );
+  requiredText(
+    normalized.MCP_API_KEY,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED",
+    8192
+  );
+  requireCondition(
+    normalized.MCP_API_KEY.length >= 24,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED"
+  );
+  requiredText(
+    normalized.PRIMARY_AUDIT_DATABASE_URL,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_DATABASE_REJECTED",
+    8192
+  );
+  requiredText(inputPath, code, 8192);
+  requiredText(rootPath, code, 8192);
+  requiredText(forbiddenRootPath, code, 8192);
+  requiredText(authenticatedPrincipal, code, 512);
+  return normalized;
 }
 
 async function runIntegratedLiveDrillProviderWorkerInternal({
@@ -264,9 +310,15 @@ async function runIntegratedLiveDrillProviderWorkerInternal({
   auditClientFactory
 }) {
   const validated = validateIntegratedLiveDrillProviderWorkerInput(input);
+  const isolatedEnvironment =
+    assertIntegratedLiveDrillProviderWorkerEnvironment(environment, {
+      authenticatedPrincipal: validated.authenticatedPrincipal,
+      forbiddenRootPath: validated.context.forbiddenRootPath,
+      rootPath: validated.context.recoveryEvidenceRootPath
+    });
   const intent = validated.context.preCallIntent;
   const apiKey = requiredText(
-    environment?.MCP_API_KEY,
+    isolatedEnvironment.MCP_API_KEY,
     "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED",
     8192
   );
@@ -275,7 +327,7 @@ async function runIntegratedLiveDrillProviderWorkerInternal({
     "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED"
   );
   const auditDatabaseUrl = requiredText(
-    environment?.PRIMARY_AUDIT_DATABASE_URL,
+    isolatedEnvironment.PRIMARY_AUDIT_DATABASE_URL,
     "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_DATABASE_REJECTED",
     8192
   );

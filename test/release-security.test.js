@@ -83,6 +83,10 @@ test("security manifest binds every AWS provider runtime and template-security c
       "src/cloud/aws-gate2-preflight.js"
     ],
     [
+      "deployment-config-digest",
+      "src/cloud/deployment-config-digest.js"
+    ],
+    [
       "aws-oidc-identity-bootstrap",
       ".github/workflows/aws-oidc-identity-bootstrap.yml"
     ],
@@ -125,6 +129,18 @@ test("security manifest binds local evidence generation and verification code", 
     [
       "integrated-live-drill-recovery-continuity",
       "src/cloud/integrated-live-drill-recovery-continuity.js"
+    ],
+    [
+      "integrated-live-drill-process-boundary-verifier",
+      "scripts/verify-integrated-live-drill-process-boundaries.js"
+    ],
+    [
+      "integrated-live-drill-process-boundary-tests",
+      "test/integrated-live-drill-process-boundaries.test.js"
+    ],
+    [
+      "integrated-live-drill-provider-evidence",
+      "src/cloud/integrated-live-drill-provider-evidence.js"
     ],
     [
       "integrated-live-drill-provider-recovery",

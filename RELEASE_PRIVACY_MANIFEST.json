@@ -4,6 +4,12 @@
   "reviewedOn": "2026-08-10",
   "allowedFindings": [
     {
+      "rule": "aws-access-key",
+      "path": "test/integrated-live-drill-provider-recovery.test.js",
+      "matchSha256": "c33c81391bfa7d2188ef11575efc07d925bf27aaec5f7a26b8fc78a016ea6f3f",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
       "rule": "basic-auth-url",
       "path": "test/admissible-vector-retrieval.test.js",
       "matchSha256": "4668de8f10203760472c7a4884e84aa51459ec545355336cf2299a6c41f8edcc",
