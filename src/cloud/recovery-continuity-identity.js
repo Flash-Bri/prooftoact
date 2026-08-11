@@ -21,6 +21,8 @@ const RECOVERY_BUNDLE_PERSISTENCE_SCHEMA =
   "tideproof.highwater-drill-live-recovery-bundle-persistence.v1";
 const RECOVERY_BUNDLE_ENVELOPE_SCHEMA =
   "tideproof.highwater-drill-live-signed-recovery-bundle.v1";
+export const RECOVERY_AUDIT_TARGET_IDENTITY_SCHEMA =
+  "tideproof.highwater-drill-recovery-audit-target.v1";
 
 export const RECOVERY_DATABASE_FRESHNESS_SQL = `
 AND source_commit_ts >= statement_timestamp() - INTERVAL '1 hour'
@@ -296,14 +298,141 @@ export function recoveryQueryTemplateDigest() {
   return sha256(RECOVERY_QUERY_TEMPLATE);
 }
 
+function exactObjectKeys(value, keys) {
+  return value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value)) &&
+    Reflect.ownKeys(value).length === keys.length &&
+    keys.every((key) => Object.hasOwn(value, key));
+}
+
+export function validateRecoveryAuditTargetIdentity(value) {
+  const keys = [
+    "connectionOptionsSha256",
+    "database",
+    "hostname",
+    "port",
+    "primaryClusterId",
+    "protocol",
+    "schemaVersion",
+    "tlsPolicySha256",
+    "usernameSha256"
+  ];
+  if (
+    !exactObjectKeys(value, keys) ||
+    value.schemaVersion !== RECOVERY_AUDIT_TARGET_IDENTITY_SCHEMA ||
+    value.protocol !== "postgresql" ||
+    typeof value.hostname !== "string" ||
+    value.hostname.length === 0 ||
+    value.hostname !== value.hostname.toLowerCase() ||
+    !Number.isSafeInteger(value.port) ||
+    value.port < 1 ||
+    value.port > 65535 ||
+    typeof value.database !== "string" ||
+    value.database.length === 0 ||
+    requireUuid(value.primaryClusterId, "primaryClusterId") !==
+      value.primaryClusterId ||
+    ![
+      value.connectionOptionsSha256,
+      value.tlsPolicySha256,
+      value.usernameSha256
+    ].every((entry) => /^[0-9a-f]{64}$/u.test(entry ?? ""))
+  ) {
+    throw new TypeError("auditTargetIdentity is invalid");
+  }
+  return Object.freeze(Object.fromEntries(keys.map((key) => [
+    key,
+    value[key]
+  ])));
+}
+
+export function recoveryAuditTargetIdentity({
+  connectionString,
+  primaryClusterId
+}) {
+  let parsed;
+  try {
+    parsed = new URL(requireText(connectionString, "connectionString"));
+  } catch (cause) {
+    throw new TypeError("connectionString must be an absolute PostgreSQL URL", {
+      cause
+    });
+  }
+  if (
+    !["postgres:", "postgresql:"].includes(parsed.protocol) ||
+    parsed.hostname.length === 0 ||
+    parsed.hash !== ""
+  ) {
+    throw new TypeError("connectionString must identify PostgreSQL exactly");
+  }
+  let database;
+  try {
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length !== 1) {
+      throw new TypeError("connectionString must name one database");
+    }
+    database = decodeURIComponent(segments[0]);
+  } catch (cause) {
+    throw new TypeError("connectionString database is invalid", { cause });
+  }
+  if (database.length === 0 || database.length > 256) {
+    throw new TypeError("connectionString database is invalid");
+  }
+  const credentialQueryName = /(?:password|passwd|secret|token|key)$/iu;
+  const optionDigests = [...parsed.searchParams.entries()]
+    .filter(([name]) => !credentialQueryName.test(name))
+    .map(([name, optionValue]) => [
+      name.toLowerCase(),
+      sha256(optionValue)
+    ])
+    .sort(([leftName, leftValue], [rightName, rightValue]) =>
+      leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue)
+    );
+  const tlsOptionNames = new Set([
+    "channel_binding",
+    "sslcert",
+    "sslcrl",
+    "sslkey",
+    "sslmaxprotocolversion",
+    "sslminprotocolversion",
+    "sslmode",
+    "sslrootcert"
+  ]);
+  const tlsOptionDigests = optionDigests.filter(([name]) =>
+    tlsOptionNames.has(name)
+  );
+  return validateRecoveryAuditTargetIdentity(Object.freeze({
+    schemaVersion: RECOVERY_AUDIT_TARGET_IDENTITY_SCHEMA,
+    connectionOptionsSha256: sha256(canonicalJson(optionDigests)),
+    database,
+    hostname: parsed.hostname.toLowerCase(),
+    port: parsed.port === "" ? 5432 : Number(parsed.port),
+    primaryClusterId: requireUuid(primaryClusterId, "primaryClusterId"),
+    protocol: "postgresql",
+    tlsPolicySha256: sha256(canonicalJson({
+      policy: "exact-postgresql-url-tls-options-v1",
+      tlsOptionDigests
+    })),
+    usernameSha256: sha256(parsed.username)
+  }));
+}
+
 export function recoveryBrokerConfigDigest({
   recoveryClusterId,
   expectedSourceClusterId,
   buildIdentity,
-  trustedPublisherKeys
+  trustedPublisherKeys,
+  auditTargetIdentity = null
 }) {
+  const acceptedAuditTargetIdentity = auditTargetIdentity === null
+    ? null
+    : validateRecoveryAuditTargetIdentity(auditTargetIdentity);
   return sha256(
     canonicalJson({
+      auditTargetIdentitySha256: acceptedAuditTargetIdentity === null
+        ? null
+        : sha256(canonicalJson(acceptedAuditTargetIdentity)),
       auditSchema: "g1_recovery_audit_events_v3",
       buildIdentity: requireText(buildIdentity, "buildIdentity"),
       client: "tideproof-managed-mcp-client-v1",

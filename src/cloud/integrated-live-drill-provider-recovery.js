@@ -4,10 +4,12 @@ import path from "node:path";
 import { canonicalJson } from "./canonical-json.js";
 import { parseStrictJson } from "./strict-json.js";
 import {
+  assertIntegratedLiveDrillPrivateRootMatchesBinding,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
   INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_CLAIM_BOUNDARY,
   normalizeIntegratedLiveDrillProviderContext,
+  secureIntegratedLiveDrillPrivateRoot,
   validateIntegratedLiveDrillProviderDispatchAuthorizationPure
 } from "./integrated-live-drill-provider-evidence.js";
 import {
@@ -208,6 +210,7 @@ export function integratedLiveDrillProviderDispatchAuthorizationPayload({
   );
   return Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
+    auditTargetIdentitySha256: intent.auditTargetIdentitySha256,
     authorityStatement:
       INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
     authorizationAttestationSha256: intent.authorizationAttestationSha256,
@@ -415,47 +418,12 @@ function requirePostProviderAuditAuthority(actionGuard) {
   }
 }
 
-function pathIsWithin(candidate, root) {
-  const relative = path.relative(root, candidate);
-  return relative === "" || (
-    !relative.startsWith("..") && !path.isAbsolute(relative)
-  );
-}
-
 function secureEvidenceRoot(rootPath, forbiddenRootPath) {
-  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_REJECTED";
-  requireCondition(
-    typeof rootPath === "string" &&
-      path.isAbsolute(rootPath) &&
-      path.resolve(rootPath) === rootPath &&
-      typeof forbiddenRootPath === "string" &&
-      path.isAbsolute(forbiddenRootPath) &&
-      path.resolve(forbiddenRootPath) === forbiddenRootPath,
-    code
+  return secureIntegratedLiveDrillPrivateRoot(
+    rootPath,
+    forbiddenRootPath,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_REJECTED"
   );
-  let canonicalRoot;
-  let canonicalForbidden;
-  let stat;
-  try {
-    canonicalRoot = fs.realpathSync(rootPath);
-    canonicalForbidden = fs.realpathSync(forbiddenRootPath);
-    stat = fs.lstatSync(rootPath);
-  } catch (cause) {
-    reject(code, cause);
-  }
-  const expectedUid = typeof process.getuid === "function"
-    ? process.getuid()
-    : stat.uid;
-  requireCondition(
-    canonicalRoot === rootPath &&
-      stat.isDirectory() &&
-      !stat.isSymbolicLink() &&
-      stat.uid === expectedUid &&
-      (stat.mode & 0o777) === 0o700 &&
-      !pathIsWithin(canonicalRoot, canonicalForbidden),
-    code
-  );
-  return Object.freeze({ expectedUid, rootPath, stat });
 }
 
 function assertSameRoot(secure) {
@@ -1124,7 +1092,7 @@ function validateDispatchPreparation(value, context) {
       value.accepted === false &&
       value.finalReleaseReady === false &&
       value.claimBoundary ===
-        "B2a recursively allowlists and freshly reconstructs every exact pre-call input schema, requires canonical equality with the caller input, rejects recognizable credential text as defense in depth, and persists only that normalized object plus the exact dispatch-signing payload before any Managed MCP client is required. Its preparation API exposes no dedicated credential or private-key field, requires no human private key, and produces no human signature; a separate human-held private key must sign those exact bytes outside this API. Arbitrary allowed text is not claimed to be a complete secret classifier. Production gate1/gate2 pause-resume orchestration, copied-ledger and cross-host authority, live provider continuity, finalization, acceptance, and release remain unproven and unwired.",
+        "B2a recursively allowlists and freshly reconstructs every exact pre-call input schema, requires canonical equality with the caller input, rejects recognizable credential text as defense in depth, and persists only that normalized object plus the exact dispatch-signing payload before any Managed MCP client is required. Its preparation API exposes no dedicated credential or private-key field, requires no human private key, and produces no human signature; a separate human-held private key must sign those exact bytes outside this API. Arbitrary allowed text is not claimed to be a complete secret classifier. Gate1/Gate2 PREPARE/HOLD/RESUME is source-wired and locally tested, but it has not been deployed or executed against the live provider; copied-ledger and cross-host authority, live provider continuity, finalization, acceptance, and release remain unproven.",
     "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_PREPARATION_REJECTED"
   );
   return normalized;
@@ -1148,6 +1116,11 @@ export function prepareIntegratedLiveDrillProviderRecoveryAuthorization({
   const secure = secureEvidenceRoot(
     context.recoveryEvidenceRootPath,
     context.forbiddenRootPath
+  );
+  assertIntegratedLiveDrillPrivateRootMatchesBinding(
+    secure,
+    context.evidenceRootBinding,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED"
   );
   const resolvedExpiresAt = expiresAt ?? new Date(Math.min(
     exactIsoMilliseconds(
@@ -1174,7 +1147,7 @@ export function prepareIntegratedLiveDrillProviderRecoveryAuthorization({
     accepted: false,
     authorizationId: intent.authorizationId,
     claimBoundary:
-      "B2a recursively allowlists and freshly reconstructs every exact pre-call input schema, requires canonical equality with the caller input, rejects recognizable credential text as defense in depth, and persists only that normalized object plus the exact dispatch-signing payload before any Managed MCP client is required. Its preparation API exposes no dedicated credential or private-key field, requires no human private key, and produces no human signature; a separate human-held private key must sign those exact bytes outside this API. Arbitrary allowed text is not claimed to be a complete secret classifier. Production gate1/gate2 pause-resume orchestration, copied-ledger and cross-host authority, live provider continuity, finalization, acceptance, and release remain unproven and unwired.",
+      "B2a recursively allowlists and freshly reconstructs every exact pre-call input schema, requires canonical equality with the caller input, rejects recognizable credential text as defense in depth, and persists only that normalized object plus the exact dispatch-signing payload before any Managed MCP client is required. Its preparation API exposes no dedicated credential or private-key field, requires no human private key, and produces no human signature; a separate human-held private key must sign those exact bytes outside this API. Arbitrary allowed text is not claimed to be a complete secret classifier. Gate1/Gate2 PREPARE/HOLD/RESUME is source-wired and locally tested, but it has not been deployed or executed against the live provider; copied-ledger and cross-host authority, live provider continuity, finalization, acceptance, and release remain unproven.",
     createdAt: signingPayload.issuedAt,
     dedicatedCredentialFieldAcceptedOrPersisted: false,
     expiresAt: signingPayload.expiresAt,
@@ -1229,6 +1202,40 @@ function readDispatchPreparation(secure, intent, context) {
     ),
     context
   );
+}
+
+export function readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
+  context
+) {
+  const normalizedContext = normalizeIntegratedLiveDrillProviderContext(
+    context,
+    { requireDispatchAuthorization: false }
+  );
+  const secure = secureEvidenceRoot(
+    normalizedContext.recoveryEvidenceRootPath,
+    normalizedContext.forbiddenRootPath
+  );
+  assertIntegratedLiveDrillPrivateRootMatchesBinding(
+    secure,
+    normalizedContext.evidenceRootBinding,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED"
+  );
+  return readDispatchPreparation(
+    secure,
+    normalizedContext.preCallIntent,
+    normalizedContext
+  );
+}
+
+export function validateIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
+  value,
+  context
+) {
+  const normalizedContext = normalizeIntegratedLiveDrillProviderContext(
+    context,
+    { requireDispatchAuthorization: false }
+  );
+  return validateDispatchPreparation(value, normalizedContext);
 }
 
 function validTransportDigest(value) {
@@ -1909,6 +1916,7 @@ function validateTerminalArtifact(value, intent) {
 
 async function runIntegratedLiveDrillProviderRecoveryInternal({
   authenticatedPrincipal,
+  assertProviderAdmission,
   broker,
   context
 }, {
@@ -1930,6 +1938,8 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
       typeof broker?.commitPreparedRecoveryCompletion === "function" &&
       typeof broker?.completePreparedRecovery === "function" &&
       typeof trustedClock === "function" &&
+      (assertProviderAdmission === undefined ||
+        typeof assertProviderAdmission === "function") &&
       context?.preCallIntent &&
       context?.providerDispatchAuthorization,
     "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_INPUT_REJECTED"
@@ -1944,6 +1954,11 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
   const secure = secureEvidenceRoot(
     context.recoveryEvidenceRootPath,
     context.forbiddenRootPath
+  );
+  assertIntegratedLiveDrillPrivateRootMatchesBinding(
+    secure,
+    context.evidenceRootBinding,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED"
   );
   const preparation = readDispatchPreparation(secure, intent, context);
   const boundDispatchAuthorization =
@@ -1962,11 +1977,15 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
       canonicalJson(preparation.signingPayload),
     "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_REJECTED"
   );
-  const externalActionGuard = providerDispatchGuard(
+  const dispatchAuthorityGuard = providerDispatchGuard(
     context,
     intent,
     trustedClock
   );
+  const externalActionGuard = (action) => {
+    assertProviderAdmission?.();
+    return dispatchAuthorityGuard(action);
+  };
   const providerPath = artifactPath(
     secure,
     intent.authorizationId,
@@ -2142,6 +2161,7 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
       intent
     );
   }
+  assertProviderAdmission?.();
   runIntegratedLiveDrillRecoveryContinuityW1(context);
   const w2 = await runIntegratedLiveDrillRecoveryContinuityW2(context, {
     reconcileDurableResult: async ({ logicalMcpRequestSha256 }) => {

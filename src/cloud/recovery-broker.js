@@ -852,6 +852,7 @@ export class RecoveryAuditSink {
 
 export class DeterministicRecoveryBroker {
   #auditSink;
+  #auditTargetIdentity;
   #buildIdentity;
   #expectedSourceClusterId;
   #mcpClient;
@@ -863,6 +864,7 @@ export class DeterministicRecoveryBroker {
     mcpClient,
     sessionResolver,
     auditSink,
+    auditTargetIdentity = null,
     buildIdentity,
     recoveryClusterId,
     expectedSourceClusterId,
@@ -880,6 +882,7 @@ export class DeterministicRecoveryBroker {
     this.#mcpClient = mcpClient;
     this.#sessionResolver = sessionResolver;
     this.#auditSink = auditSink;
+    this.#auditTargetIdentity = auditTargetIdentity;
     this.#buildIdentity = requireText(buildIdentity, "buildIdentity");
     this.#recoveryClusterId = requireUuid(
       recoveryClusterId,
@@ -950,7 +953,8 @@ export class DeterministicRecoveryBroker {
       recoveryClusterId: this.#recoveryClusterId,
       expectedSourceClusterId: this.#expectedSourceClusterId,
       buildIdentity: this.#buildIdentity,
-      trustedPublisherKeys: this.#trustedPublisherKeys
+      trustedPublisherKeys: this.#trustedPublisherKeys,
+      auditTargetIdentity: this.#auditTargetIdentity
     });
     const expectedQuery = renderRecoveryQuery({
       tenantId: value.tenantId,
@@ -1099,7 +1103,8 @@ export class DeterministicRecoveryBroker {
       recoveryClusterId: this.#recoveryClusterId,
       expectedSourceClusterId: this.#expectedSourceClusterId,
       buildIdentity: this.#buildIdentity,
-      trustedPublisherKeys: this.#trustedPublisherKeys
+      trustedPublisherKeys: this.#trustedPublisherKeys,
+      auditTargetIdentity: this.#auditTargetIdentity
     });
     const query = renderRecoveryQuery({
       tenantId,

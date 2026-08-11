@@ -24,6 +24,7 @@ import {
 import {
   canonicalRecoveryAttempt,
   normalizedRecoverySourceReceiptForContinuity,
+  validateRecoveryAuditTargetIdentity,
   recoveryBrokerConfigDigest,
   recoveryQueryTemplateDigest,
   recoverySourceBindingDigestFor,
@@ -165,6 +166,26 @@ function assertSameRoot(secure) {
       (current.mode & 0o777) === 0o700,
     code
   );
+}
+
+function ledgerEntryPresent(filePath, secure) {
+  const code = "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_AMBIGUOUS";
+  try {
+    assertSameRoot(secure);
+    fs.lstatSync(filePath);
+    assertSameRoot(secure);
+    return true;
+  } catch (cause) {
+    if (cause?.code === "ENOENT") {
+      assertSameRoot(secure);
+      return false;
+    }
+    if (cause?.message ===
+      "INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_ROOT_DRIFT") {
+      throw cause;
+    }
+    reject(code, cause);
+  }
 }
 
 function syncDirectory(secure) {
@@ -322,10 +343,10 @@ function intentFileName(authorizationId) {
 }
 
 function unknownDispositionExists(secure, authorizationId) {
-  return fs.existsSync(path.join(
+  return ledgerEntryPresent(path.join(
     secure.ledgerRootPath,
     unknownFileName(authorizationId)
-  ));
+  ), secure);
 }
 
 function unknownDoNotAct() {
@@ -512,6 +533,9 @@ export function integratedLiveDrillRecoveryContinuityPreCallIntent({
     Number.isFinite(Date.parse(receipt.commit?.databaseNow));
   const trustedRecoveryBrokerConfiguration =
     trustedRunContext.recoveryBrokerConfiguration;
+  const acceptedAuditTargetIdentity = validateRecoveryAuditTargetIdentity(
+    trustedRecoveryBrokerConfiguration?.auditTargetIdentity
+  );
   const acceptedExpectedSourceClusterId =
     typeof trustedRecoveryBrokerConfiguration?.expectedSourceClusterId ===
       "string"
@@ -526,8 +550,12 @@ export function integratedLiveDrillRecoveryContinuityPreCallIntent({
     expectedSourceClusterId: acceptedExpectedSourceClusterId,
     buildIdentity: trustedRunContext.spec.sourceBuildIdentity,
     trustedPublisherKeys:
-      trustedRunContext.committedTrustRoot.trustedPublisherKeys
+      trustedRunContext.committedTrustRoot.trustedPublisherKeys,
+    auditTargetIdentity: acceptedAuditTargetIdentity
   });
+  const auditTargetIdentitySha256 = integratedLiveDrillCanonicalSha256(
+    acceptedAuditTargetIdentity
+  );
   const signedBundlePersistenceReceiptSha256 =
     persistedRecoveryBundle.persistenceReceipt.receiptSha256;
   const signedBundleSha256 = persistedRecoveryBundle.signedBundleSha256;
@@ -692,6 +720,7 @@ export function integratedLiveDrillRecoveryContinuityPreCallIntent({
       UUID.test(recoveryBinding.recoverySessionId ?? "") &&
       UUID.test(recoveryBinding.recoveryClusterId ?? "") &&
       exactKeys(trustedRecoveryBrokerConfiguration, [
+        "auditTargetIdentity",
         "expectedSourceClusterId",
         "recoveryBrokerConfigDigest",
         "recoveryClusterId"
@@ -734,6 +763,7 @@ export function integratedLiveDrillRecoveryContinuityPreCallIntent({
   );
   const body = Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_INTENT_SCHEMA,
+    auditTargetIdentitySha256,
     authorizationAttestationSha256:
       integratedLiveDrillAuthorizationAttestationDigest(
         authorization.attestation
@@ -816,6 +846,7 @@ export function validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
   );
   requireCondition(
     exactKeys(value, [
+      "auditTargetIdentitySha256",
       "authorizationAttestationSha256",
       "authorizationClaimSha256",
       "authorizationId",
@@ -863,6 +894,7 @@ export function validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
     ]) &&
       body.schemaVersion ===
         INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_INTENT_SCHEMA &&
+      HEX_64.test(body.auditTargetIdentitySha256 ?? "") &&
       intentSha256 === integratedLiveDrillCanonicalSha256(body) &&
       body.authorizationAttestationSha256 ===
         integratedLiveDrillAuthorizationAttestationDigest(
@@ -1284,7 +1316,7 @@ function readUnknownDisposition(
     secure.ledgerRootPath,
     unknownFileName(bound.authorizationId)
   );
-  if (!fs.existsSync(filePath)) return null;
+  if (!ledgerEntryPresent(filePath, secure)) return null;
   const body = parseCanonicalRecord(readLedgerFile(filePath, secure));
   const recordedAt = Date.parse(body?.recordedAt);
   requireCondition(
@@ -1482,10 +1514,10 @@ function runIntegratedLiveDrillRecoveryContinuityW1Internal(
   const authorizationId = context.authorization?.payload?.authorizationId;
   if (
     UUID.test(authorizationId ?? "") &&
-    fs.existsSync(path.join(
+    ledgerEntryPresent(path.join(
       secure.ledgerRootPath,
       intentFileName(authorizationId)
-    ))
+    ), secure)
   ) {
     readPersistedPreCallIntent(context, secure);
     const existing = readEntries(context, secure);
@@ -1898,9 +1930,11 @@ export function validateIntegratedLiveDrillRecoveryContinuityJournal(
   );
   if (allowAbsent) {
     const authorizationId = context.authorization?.payload?.authorizationId;
-    const intentPresent = UUID.test(authorizationId ?? "") && fs.existsSync(
-      path.join(secure.ledgerRootPath, intentFileName(authorizationId))
-    );
+    const intentPresent = UUID.test(authorizationId ?? "") &&
+      ledgerEntryPresent(
+        path.join(secure.ledgerRootPath, intentFileName(authorizationId)),
+        secure
+      );
     const journalPresent = UUID.test(authorizationId ?? "") &&
       fs.readdirSync(secure.ledgerRootPath).some((name) =>
         name.startsWith(journalFilePrefix(authorizationId))

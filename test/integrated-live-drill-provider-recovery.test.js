@@ -30,11 +30,16 @@ import {
   validateIntegratedLiveDrillProviderRecoveryHandoff
 } from "../src/cloud/integrated-live-drill-provider-finalization.js";
 import {
+  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
   verifyIntegratedLiveDrillProviderEvidenceBundle
 } from "../src/cloud/integrated-live-drill-provider-evidence.js";
 import {
+  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
+} from "../src/cloud/integrated-live-drill-provider-orchestration.js";
+import {
   __test as workerTest,
   assertIntegratedLiveDrillProviderWorkerEnvironment,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA,
   integratedLiveDrillProviderWorkerEnvironment,
   readIntegratedLiveDrillProviderWorkerInput,
@@ -52,7 +57,10 @@ import {
   principalBindingHash,
   recoveryAuditEventDigest
 } from "../src/cloud/recovery-broker.js";
-import { createRecoveryContinuityFixture } from
+import {
+  createRecoveryContinuityFixture,
+  persistFixtureProviderOrchestrationAdmission
+} from
   "./helpers/integrated-live-drill-recovery-continuity-fixture.js";
 
 const PRINCIPAL = "principal://synthetic-provider-continuity";
@@ -67,9 +75,15 @@ test("provider worker input and environment isolate credentials and resume conte
     ...fixture.context,
     providerDispatchAuthorization: signPreparedDispatch(fixture, preparation)
   });
+  const { admission } = persistFixtureProviderOrchestrationAdmission(t, {
+    context,
+    dispatchAuthorization: context.providerDispatchAuthorization,
+    dispatchPreparation: preparation
+  });
   const input = Object.freeze({
     authenticatedPrincipal: PRINCIPAL,
     context,
+    providerAdmissionReceiptSha256: admission.receiptSha256,
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA
   });
   const validatedWorkerInput =
@@ -111,9 +125,24 @@ test("provider worker input and environment isolate credentials and resume conte
     authenticatedPrincipal: PRINCIPAL,
     forbiddenRootPath: context.forbiddenRootPath,
     inputPath,
+    rootBinding: context.evidenceRootBinding,
     rootPath: context.recoveryEvidenceRootPath
   });
   assert.equal(isolated.MCP_API_KEY, "synthetic-test-only-mcp-api-key-0001");
+  assert.equal(
+    isolated[INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT],
+    canonicalJson(context.evidenceRootBinding)
+  );
+  assert.equal(
+    isolated[INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT],
+    "3"
+  );
+  assert.equal(
+    isolated[
+      INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
+    ],
+    "4"
+  );
   assert.equal(
     isolated.PRIMARY_AUDIT_DATABASE_URL,
     "postgresql://audit.invalid/tideproof"
@@ -122,11 +151,24 @@ test("provider worker input and environment isolate credentials and resume conte
     assertIntegratedLiveDrillProviderWorkerEnvironment(isolated, {
       authenticatedPrincipal: PRINCIPAL,
       forbiddenRootPath: context.forbiddenRootPath,
+      rootBinding: context.evidenceRootBinding,
       rootPath: context.recoveryEvidenceRootPath
     });
   assert.notEqual(normalizedWorkerEnvironment, isolated);
   assert.deepEqual(normalizedWorkerEnvironment, isolated);
   assert.equal(Object.isFrozen(normalizedWorkerEnvironment), true);
+  assert.throws(
+    () => assertIntegratedLiveDrillProviderWorkerEnvironment({
+      ...isolated,
+      [INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]: "4"
+    }, {
+      authenticatedPrincipal: PRINCIPAL,
+      forbiddenRootPath: context.forbiddenRootPath,
+      rootBinding: context.evidenceRootBinding,
+      rootPath: context.recoveryEvidenceRootPath
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED/u
+  );
   for (const name of [
     "ALL_PROXY",
     "AWS_ACCESS_KEY_ID",
@@ -154,6 +196,7 @@ test("provider worker input and environment isolate credentials and resume conte
       }, {
         authenticatedPrincipal: PRINCIPAL,
         forbiddenRootPath: context.forbiddenRootPath,
+        rootBinding: context.evidenceRootBinding,
         rootPath: context.recoveryEvidenceRootPath
       }),
       /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED/u,
@@ -195,6 +238,7 @@ test("provider worker input and environment isolate credentials and resume conte
         {
           authenticatedPrincipal: PRINCIPAL,
           forbiddenRootPath: context.forbiddenRootPath,
+          rootBinding: context.evidenceRootBinding,
           rootPath: context.recoveryEvidenceRootPath
         }
       ),
@@ -210,6 +254,7 @@ test("provider worker input and environment isolate credentials and resume conte
       `import { assertIntegratedLiveDrillProviderWorkerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-worker.js", import.meta.url).href)}; check(process.env, ${JSON.stringify({
         authenticatedPrincipal: PRINCIPAL,
         forbiddenRootPath: context.forbiddenRootPath,
+        rootBinding: context.evidenceRootBinding,
         rootPath: context.recoveryEvidenceRootPath
       })});`
     ],
@@ -219,6 +264,28 @@ test("provider worker input and environment isolate credentials and resume conte
     workerEnvironmentProbe.status,
     0,
     workerEnvironmentProbe.stderr
+  );
+  const workerUnexpectedEnvironmentProbe = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import { assertIntegratedLiveDrillProviderWorkerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-worker.js", import.meta.url).href)}; check(process.env, ${JSON.stringify({
+        authenticatedPrincipal: PRINCIPAL,
+        forbiddenRootPath: context.forbiddenRootPath,
+        rootBinding: context.evidenceRootBinding,
+        rootPath: context.recoveryEvidenceRootPath
+      })});`
+    ],
+    {
+      encoding: "utf8",
+      env: { ...isolated, FOO_UNEXPECTED: "present" }
+    }
+  );
+  assert.notEqual(workerUnexpectedEnvironmentProbe.status, 0);
+  assert.match(
+    workerUnexpectedEnvironmentProbe.stderr,
+    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED/u
   );
   let fakeFetchCalls = 0;
   let fakeAuditFactoryCalls = 0;
@@ -362,6 +429,7 @@ test("provider finalizer import surface is provider and credential free", () => 
     }
   }
   const rootPath = "/private/tmp/prooftoact-provider-finalizer";
+  const rootBinding = Object.freeze({ synthetic: "root-binding" });
   const isolated = integratedLiveDrillProviderFinalizerEnvironment({
     ALL_PROXY: "http://unsafe.invalid",
     AWS_PROFILE: "unsafe-profile",
@@ -374,8 +442,24 @@ test("provider finalizer import surface is provider and credential free", () => 
   }, {
     forbiddenRootPath: "/private/tmp/prooftoact-forbidden",
     inputPath: `${rootPath}/provider-finalization-input.json`,
+    rootBinding,
     rootPath
   });
+  assert.equal(
+    isolated.TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING,
+    canonicalJson(rootBinding)
+  );
+  assert.equal(
+    isolated[INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT],
+    "3"
+  );
+  assert.throws(
+    () => assertIntegratedLiveDrillProviderFinalizerEnvironment({
+      ...isolated,
+      [INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]: "4"
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED/u
+  );
   for (const name of [
     "ALL_PROXY",
     "AWS_PROFILE",
@@ -454,6 +538,23 @@ test("provider finalizer import surface is provider and credential free", () => 
     finalizerEnvironmentProbe.status,
     0,
     finalizerEnvironmentProbe.stderr
+  );
+  const finalizerUnexpectedEnvironmentProbe = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import { assertIntegratedLiveDrillProviderFinalizerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-finalization.js", import.meta.url).href)}; check(process.env);`
+    ],
+    {
+      encoding: "utf8",
+      env: { ...isolated, FOO_UNEXPECTED: "present" }
+    }
+  );
+  assert.notEqual(finalizerUnexpectedEnvironmentProbe.status, 0);
+  assert.match(
+    finalizerUnexpectedEnvironmentProbe.stderr,
+    /INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED/u
   );
 });
 
@@ -687,6 +788,9 @@ function providerHarness(fixture, {
     fetchImpl
   });
   const broker = new DeterministicRecoveryBroker({
+    auditTargetIdentity:
+      fixture.context.trustedRunContext.recoveryBrokerConfiguration
+        .auditTargetIdentity,
     buildIdentity:
       fixture.context.trustedRunContext.spec.sourceBuildIdentity,
     recoveryClusterId: fixture.context.preCallIntent.recoveryClusterId,
@@ -854,18 +958,136 @@ test("credential-isolated production worker uses only fake local transports", as
     ...fixture.context,
     providerDispatchAuthorization: signPreparedDispatch(fixture, preparation)
   });
+  const {
+    admission,
+    decisionRootLease,
+    evidenceRootLease
+  } = persistFixtureProviderOrchestrationAdmission(t, {
+    context,
+    dispatchAuthorization: context.providerDispatchAuthorization,
+    dispatchPreparation: preparation
+  });
   const input = Object.freeze({
     authenticatedPrincipal: PRINCIPAL,
     context,
+    providerAdmissionReceiptSha256: admission.receiptSha256,
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA
   });
   const transport = providerHarness(fixture);
   const audit = auditDatabaseClientFactory();
+  await assert.rejects(
+    () => workerTest.runWithLocalTransports({
+      decisionRootDescriptor: decisionRootLease.descriptor,
+      evidenceRootDescriptor: evidenceRootLease.descriptor,
+      environment: integratedLiveDrillProviderWorkerEnvironment({
+        MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
+        PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof"
+      }, {
+        authenticatedPrincipal: PRINCIPAL,
+        forbiddenRootPath: context.forbiddenRootPath,
+        inputPath: path.join(
+          context.recoveryEvidenceRootPath,
+          "provider-worker-input.json"
+        ),
+        rootBinding: context.evidenceRootBinding,
+        rootPath: context.recoveryEvidenceRootPath
+      }),
+      input: {
+        ...input,
+        providerAdmissionReceiptSha256: "f".repeat(64)
+      }
+    }, {
+      auditClientFactory: audit.clientFactory,
+      fetchImpl: transport.fetchImpl
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED/u
+  );
+  assert.equal(transport.calls.length, 0);
+  assert.equal(audit.rows.size, 0);
+  const decisionPath = path.join(
+    context.ledgerRootPath,
+    `${context.preCallIntent.runId}.provider-orchestration-decision.json`
+  );
+  const forgedAdmission = structuredClone(admission);
+  forgedAdmission.preparationReceiptSha256 = "e".repeat(64);
+  forgedAdmission.checkpointPersistenceReceiptSha256 = "d".repeat(64);
+  delete forgedAdmission.receiptSha256;
+  forgedAdmission.receiptSha256 =
+    integratedLiveDrillCanonicalSha256(forgedAdmission);
+  fs.writeFileSync(
+    decisionPath,
+    `${canonicalJson(forgedAdmission)}\n`,
+    { mode: 0o600 }
+  );
+  try {
+    await assert.rejects(
+      () => workerTest.runWithLocalTransports({
+        decisionRootDescriptor: decisionRootLease.descriptor,
+        evidenceRootDescriptor: evidenceRootLease.descriptor,
+        environment: integratedLiveDrillProviderWorkerEnvironment({
+          MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
+          PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof"
+        }, {
+          authenticatedPrincipal: PRINCIPAL,
+          forbiddenRootPath: context.forbiddenRootPath,
+          inputPath: path.join(
+            context.recoveryEvidenceRootPath,
+            "provider-worker-input.json"
+          ),
+          rootBinding: context.evidenceRootBinding,
+          rootPath: context.recoveryEvidenceRootPath
+        }),
+        input: {
+          ...input,
+          providerAdmissionReceiptSha256: forgedAdmission.receiptSha256
+        }
+      }, {
+        auditClientFactory: audit.clientFactory,
+        fetchImpl: transport.fetchImpl
+      }),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED/u
+    );
+  } finally {
+    fs.writeFileSync(decisionPath, `${canonicalJson(admission)}\n`, {
+      mode: 0o600
+    });
+  }
+  assert.equal(transport.calls.length, 0);
+  assert.equal(audit.rows.size, 0);
+  await assert.rejects(
+    () => workerTest.runWithLocalTransports({
+      decisionRootDescriptor: decisionRootLease.descriptor,
+      evidenceRootDescriptor: evidenceRootLease.descriptor,
+      environment: integratedLiveDrillProviderWorkerEnvironment({
+        MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
+        PRIMARY_AUDIT_DATABASE_URL:
+          "postgresql://substituted-audit.invalid/tideproof"
+      }, {
+        authenticatedPrincipal: PRINCIPAL,
+        forbiddenRootPath: context.forbiddenRootPath,
+        inputPath: path.join(
+          context.recoveryEvidenceRootPath,
+          "provider-worker-input.json"
+        ),
+        rootBinding: context.evidenceRootBinding,
+        rootPath: context.recoveryEvidenceRootPath
+      }),
+      input
+    }, {
+      auditClientFactory: audit.clientFactory,
+      fetchImpl: transport.fetchImpl
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_TARGET_REJECTED/u
+  );
+  assert.equal(transport.calls.length, 0);
+  assert.equal(audit.rows.size, 0);
   const result = await workerTest.runWithLocalTransports({
+    decisionRootDescriptor: decisionRootLease.descriptor,
+    evidenceRootDescriptor: evidenceRootLease.descriptor,
     environment: integratedLiveDrillProviderWorkerEnvironment({
       MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
       PRIMARY_AUDIT_DATABASE_URL:
-        "postgresql://synthetic.invalid/tideproof"
+        "postgresql://audit.invalid/tideproof"
     }, {
       authenticatedPrincipal: PRINCIPAL,
       forbiddenRootPath: context.forbiddenRootPath,
@@ -873,6 +1095,7 @@ test("credential-isolated production worker uses only fake local transports", as
         context.recoveryEvidenceRootPath,
         "provider-worker-input.json"
       ),
+      rootBinding: context.evidenceRootBinding,
       rootPath: context.recoveryEvidenceRootPath
     }),
     input

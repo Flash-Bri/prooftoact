@@ -11,7 +11,9 @@ import {
   validateIntegratedLiveDrillRecoveryContinuityPreCallIntent
 } from "./integrated-live-drill-recovery-continuity.js";
 import {
+  assertIntegratedLiveDrillPrivateRootMatchesBinding,
   assertIntegratedLiveDrillPrivateRootCurrent,
+  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
   integratedLiveDrillProviderContextAssertions,
   normalizeIntegratedLiveDrillProviderContext,
   readIntegratedLiveDrillExactPrivateJson,
@@ -35,9 +37,15 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY =
+  "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. It accepts no provider client, key, raw result, or retry authority. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release.";
 
 const MAX_RECEIPT_BYTES = 64 * 1024;
+const HEX_64 = /^[0-9a-f]{64}$/u;
 const SAFE_PROCESS_ENVIRONMENT_NAMES = Object.freeze([
+  "__CF_USER_TEXT_ENCODING",
   "LANG",
   "LC_ALL",
   "LC_CTYPE",
@@ -49,7 +57,9 @@ const FINALIZER_ENVIRONMENT_NAMES = new Set([
   ...SAFE_PROCESS_ENVIRONMENT_NAMES,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT
 ]);
 
 function reject(code, cause) {
@@ -117,10 +127,7 @@ function normalizeFinalizerEnvironment(environment, code) {
         Object.hasOwn(descriptor, "value") &&
         descriptor.enumerable === true &&
         typeof descriptor.value === "string" &&
-        (
-          realProcessEnvironment ||
-          FINALIZER_ENVIRONMENT_NAMES.has(key)
-        );
+        FINALIZER_ENVIRONMENT_NAMES.has(key);
     }),
     code
   );
@@ -136,7 +143,7 @@ function normalizeFinalizerEnvironment(environment, code) {
 
 export function integratedLiveDrillProviderFinalizerEnvironment(
   sourceEnvironment,
-  { forbiddenRootPath, inputPath, rootPath }
+  { forbiddenRootPath, inputPath, rootBinding, rootPath }
 ) {
   const value = {
     ...Object.fromEntries(
@@ -158,7 +165,10 @@ export function integratedLiveDrillProviderFinalizerEnvironment(
       requiredEnvironmentText(
         forbiddenRootPath,
         "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED"
-      )
+      ),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT]:
+      canonicalJson(rootBinding),
+    [INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]: "3"
   };
   return assertIntegratedLiveDrillProviderFinalizerEnvironment(value);
 }
@@ -172,54 +182,26 @@ export function assertIntegratedLiveDrillProviderFinalizerEnvironment(
   for (const name of [
     INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT,
     INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
-    INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT
+    INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT
   ]) {
     requiredEnvironmentText(normalized[name], code);
   }
+  requireCondition(
+    normalized[INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT] ===
+      "3",
+    code
+  );
   return normalized;
 }
 
-function pathIsWithin(candidate, root) {
-  const relative = path.relative(root, candidate);
-  return relative === "" || (
-    !relative.startsWith("..") && !path.isAbsolute(relative)
-  );
-}
-
 function secureRoot(rootPath, forbiddenRootPath) {
-  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_REJECTED";
-  requireCondition(
-    typeof rootPath === "string" &&
-      path.isAbsolute(rootPath) &&
-      path.resolve(rootPath) === rootPath &&
-      typeof forbiddenRootPath === "string" &&
-      path.isAbsolute(forbiddenRootPath) &&
-      path.resolve(forbiddenRootPath) === forbiddenRootPath,
-    code
+  return secureIntegratedLiveDrillPrivateRoot(
+    rootPath,
+    forbiddenRootPath,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_REJECTED"
   );
-  let canonicalRoot;
-  let canonicalForbidden;
-  let stat;
-  try {
-    canonicalRoot = fs.realpathSync(rootPath);
-    canonicalForbidden = fs.realpathSync(forbiddenRootPath);
-    stat = fs.lstatSync(rootPath);
-  } catch (cause) {
-    reject(code, cause);
-  }
-  const expectedUid = typeof process.getuid === "function"
-    ? process.getuid()
-    : stat.uid;
-  requireCondition(
-    canonicalRoot === rootPath &&
-      stat.isDirectory() &&
-      !stat.isSymbolicLink() &&
-      stat.uid === expectedUid &&
-      (stat.mode & 0o777) === 0o700 &&
-      !pathIsWithin(canonicalRoot, canonicalForbidden),
-    code
-  );
-  return Object.freeze({ expectedUid, rootPath, stat });
 }
 
 function assertSameRoot(secure) {
@@ -433,6 +415,11 @@ export function readIntegratedLiveDrillProviderFinalizationInput({
       input.context?.forbiddenRootPath === secure.forbiddenRootPath,
     code
   );
+  assertIntegratedLiveDrillPrivateRootMatchesBinding(
+    secure,
+    input.context.evidenceRootBinding,
+    code
+  );
   assertIntegratedLiveDrillPrivateRootCurrent(secure, code);
   return input;
 }
@@ -446,6 +433,107 @@ function validateComponentReceipt(value, expected) {
     "INTEGRATED_LIVE_DRILL_PROVIDER_COMPONENT_RECEIPT_REJECTED"
   );
   return Object.freeze({ ...value });
+}
+
+export function validateIntegratedLiveDrillProviderFinalizationReceipt(
+  value,
+  options
+) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_REJECTED";
+  requireCondition(
+    exactKeys(options, ["context", "providerContinuity"]),
+    code
+  );
+  const input = validateIntegratedLiveDrillProviderFinalizationInput({
+    context: Object.getOwnPropertyDescriptor(options, "context").value,
+    providerContinuity: Object.getOwnPropertyDescriptor(
+      options,
+      "providerContinuity"
+    ).value,
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA
+  });
+  const keys = [
+    "accepted",
+    "authorizationId",
+    "claimBoundary",
+    "componentReceiptSha256",
+    "contextCredentialMaterialAbsent",
+    "contextExactSchemaValidated",
+    "contextProviderCapabilityAbsent",
+    "contextRawProviderResultAbsent",
+    "contextRetryAuthorityAbsent",
+    "credentialOptionAccepted",
+    "finalReleaseReady",
+    "journalReceiptSha256",
+    "logicalMcpRequestSha256",
+    "observedInitializeCount",
+    "observedInitializedNotificationCount",
+    "observedSessionCloseCount",
+    "observedToolsCallCount",
+    "preCallIntentSha256",
+    "providerBacked",
+    "providerCapabilityAccepted",
+    "providerHandoffReceiptSha256",
+    "providerWorkerImportGraphProvenAbsent",
+    "rawProviderResultAccepted",
+    "receiptSha256",
+    "retryAuthorityAccepted",
+    "runId",
+    "schemaVersion",
+    "status"
+  ];
+  requireCondition(exactKeys(value, keys), code);
+  const normalized = Object.freeze(Object.fromEntries(keys.map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(value, key).value
+  ])));
+  const { receiptSha256, ...body } = normalized;
+  const verified = verifyIntegratedLiveDrillProviderEvidenceBundle({
+    context: input.context,
+    providerContinuity: input.providerContinuity
+  });
+  const handoff = verified.handoff;
+  requireCondition(
+    normalized.schemaVersion ===
+      INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_SCHEMA &&
+      normalized.status === "LOCAL_FAKE_PRODUCTION_WIRING_VALIDATED" &&
+      normalized.claimBoundary ===
+        INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY &&
+      normalized.accepted === false &&
+      normalized.providerBacked === false &&
+      normalized.finalReleaseReady === false &&
+      normalized.contextCredentialMaterialAbsent === true &&
+      normalized.contextExactSchemaValidated === true &&
+      normalized.contextProviderCapabilityAbsent === true &&
+      normalized.contextRawProviderResultAbsent === true &&
+      normalized.contextRetryAuthorityAbsent === true &&
+      normalized.credentialOptionAccepted === false &&
+      normalized.providerCapabilityAccepted === false &&
+      normalized.rawProviderResultAccepted === false &&
+      normalized.retryAuthorityAccepted === false &&
+      normalized.providerWorkerImportGraphProvenAbsent === false &&
+      [
+        normalized.componentReceiptSha256,
+        normalized.journalReceiptSha256,
+        receiptSha256
+      ].every((entry) => HEX_64.test(entry ?? "")) &&
+      receiptSha256 === integratedLiveDrillCanonicalSha256(body) &&
+      normalized.authorizationId === verified.intent.authorizationId &&
+      normalized.runId === verified.intent.runId &&
+      normalized.preCallIntentSha256 === verified.intent.intentSha256 &&
+      normalized.logicalMcpRequestSha256 ===
+        verified.intent.logicalMcpRequestSha256 &&
+      normalized.providerHandoffReceiptSha256 === handoff.receiptSha256 &&
+      normalized.journalReceiptSha256 === verified.journal.receiptSha256 &&
+      normalized.observedInitializeCount === handoff.observedInitializeCount &&
+      normalized.observedInitializedNotificationCount ===
+        handoff.observedInitializedNotificationCount &&
+      normalized.observedToolsCallCount === handoff.observedToolsCallCount &&
+      normalized.observedSessionCloseCount ===
+        handoff.observedSessionCloseCount,
+    code
+  );
+  return normalized;
 }
 
 export function finalizeIntegratedLiveDrillProviderRecovery(args) {
@@ -494,6 +582,11 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
   const secure = secureRoot(
     context.recoveryEvidenceRootPath,
     context.forbiddenRootPath
+  );
+  assertIntegratedLiveDrillPrivateRootMatchesBinding(
+    secure,
+    context.evidenceRootBinding,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_REJECTED"
   );
   const componentBody = Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_COMPONENT_RECEIPT_SCHEMA,
@@ -578,8 +671,10 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
     providerWorkerImportGraphProvenAbsent: false,
     runId: intent.runId,
     status: "LOCAL_FAKE_PRODUCTION_WIRING_VALIDATED",
-    claimBoundary:
-      "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. It accepts no provider client, key, raw result, or retry authority. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release."
+    claimBoundary: INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY
   });
-  return withReceipt(body);
+  return validateIntegratedLiveDrillProviderFinalizationReceipt(
+    withReceipt(body),
+    { context, providerContinuity }
+  );
 }

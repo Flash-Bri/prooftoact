@@ -113,7 +113,7 @@ export function selectedEvidenceBindingSha256(evidenceId, evidenceDigest) {
   return sha256(canonicalJson({ evidenceId, evidenceDigest }));
 }
 
-function acceptedDvi(dvi, spec, selectedBinding) {
+export function acceptedIntegratedLiveDrillDvi(dvi, spec, selectedBinding) {
   return (
     dvi?.schemaVersion === "tideproof.gate1.admissible-vector-proof.v2" &&
     dvi.status === "PASS" &&
@@ -133,7 +133,7 @@ function acceptedDvi(dvi, spec, selectedBinding) {
   );
 }
 
-function acceptedRace(race, spec, dvi) {
+export function acceptedIntegratedLiveDrillRace(race, spec, dvi) {
   const functionVersion = spec.functionArn.split(":").at(-1);
   const invocationKeys = [
     "alpha",
@@ -994,8 +994,8 @@ export function persistIntegratedLiveDrillPrivateEvidence({
     typeof destinationPath !== "string" ||
     path.basename(destinationPath) !==
       `${acceptedSpec.runId}.private-evidence.json` ||
-    !acceptedDvi(dvi, acceptedSpec, selectedBinding) ||
-    !acceptedRace(race, acceptedSpec, dvi) ||
+    !acceptedIntegratedLiveDrillDvi(dvi, acceptedSpec, selectedBinding) ||
+    !acceptedIntegratedLiveDrillRace(race, acceptedSpec, dvi) ||
     !acceptedRecovery(recovery, acceptedSpec, race)
   ) {
     throw new Error("INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_REJECTED");
@@ -1726,8 +1726,8 @@ export function buildIntegratedLiveDrillCandidateReceipt({
     }
   });
   if (
-    !acceptedDvi(dvi, acceptedSpec, selectedBinding) ||
-    !acceptedRace(race, acceptedSpec, dvi) ||
+    !acceptedIntegratedLiveDrillDvi(dvi, acceptedSpec, selectedBinding) ||
+    !acceptedIntegratedLiveDrillRace(race, acceptedSpec, dvi) ||
     !acceptedRecovery(recovery, acceptedSpec, race) ||
     !acceptedPrivateEvidence(
       verifiedPrivateEvidenceReceipt,
