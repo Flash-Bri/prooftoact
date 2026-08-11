@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 
 import { validateAwsEvidenceCaller } from "./aws-evidence-identity.js";
-import { deploymentConfigDigest } from "./aws-gate2-template.js";
+import { deploymentConfigDigestPure as deploymentConfigDigest } from
+  "./deployment-config-digest.js";
 
 export const DEPLOYMENT_FUNCTIONS = Object.freeze([
   "agent",

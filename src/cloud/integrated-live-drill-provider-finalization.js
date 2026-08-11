@@ -1,0 +1,585 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import { canonicalJson } from "./canonical-json.js";
+import {
+  integratedLiveDrillCanonicalSha256
+} from "./integrated-live-drill-authorization.js";
+import {
+  runIntegratedLiveDrillRecoveryContinuityW4,
+  runIntegratedLiveDrillRecoveryContinuityW5,
+  validateIntegratedLiveDrillRecoveryContinuityPreCallIntent
+} from "./integrated-live-drill-recovery-continuity.js";
+import {
+  assertIntegratedLiveDrillPrivateRootCurrent,
+  integratedLiveDrillProviderContextAssertions,
+  normalizeIntegratedLiveDrillProviderContext,
+  readIntegratedLiveDrillExactPrivateJson,
+  secureIntegratedLiveDrillPrivateRoot,
+  validateIntegratedLiveDrillProviderRecoveryHandoff,
+  verifyIntegratedLiveDrillProviderEvidenceBundle
+} from "./integrated-live-drill-provider-evidence.js";
+
+export { validateIntegratedLiveDrillProviderRecoveryHandoff } from
+  "./integrated-live-drill-provider-evidence.js";
+
+export const INTEGRATED_LIVE_DRILL_PROVIDER_COMPONENT_RECEIPT_SCHEMA =
+  "tideproof.highwater-drill-provider-component-receipt.v2";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_SCHEMA =
+  "tideproof.highwater-drill-provider-finalization.v2";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA =
+  "tideproof.highwater-drill-provider-finalization-input.v2";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT";
+
+const MAX_RECEIPT_BYTES = 64 * 1024;
+const SAFE_PROCESS_ENVIRONMENT_NAMES = Object.freeze([
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "NO_COLOR",
+  "PATH",
+  "TMPDIR"
+]);
+const FINALIZER_ENVIRONMENT_NAMES = new Set([
+  ...SAFE_PROCESS_ENVIRONMENT_NAMES,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT
+]);
+
+function reject(code, cause) {
+  throw new Error(code, cause === undefined ? undefined : { cause });
+}
+
+function requireCondition(condition, code) {
+  if (!condition) reject(code);
+}
+
+function exactKeys(value, keys) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  ) {
+    return false;
+  }
+  const ownKeys = Reflect.ownKeys(value);
+  return ownKeys.length === keys.length &&
+    ownKeys.every((key) => typeof key === "string") &&
+    keys.every((key) => Object.hasOwn(value, key)) &&
+    ownKeys.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined &&
+        Object.hasOwn(descriptor, "value") &&
+        descriptor.enumerable === true;
+    });
+}
+
+function requiredEnvironmentText(value, code) {
+  requireCondition(
+    typeof value === "string" &&
+      value.length > 0 &&
+      value.length <= 8192 &&
+      !/[\0\r\n]/u.test(value),
+    code
+  );
+  return value;
+}
+
+function normalizeFinalizerEnvironment(environment, code) {
+  const realProcessEnvironment = environment === process.env;
+  requireCondition(
+    environment &&
+      typeof environment === "object" &&
+      !Array.isArray(environment) &&
+      (
+        realProcessEnvironment ||
+        [Object.prototype, null].includes(Object.getPrototypeOf(environment))
+      ),
+    code
+  );
+  const ownKeys = Reflect.ownKeys(environment);
+  requireCondition(
+    ownKeys.every((key) => {
+      if (
+        typeof key !== "string"
+      ) {
+        return false;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(environment, key);
+      return descriptor !== undefined &&
+        Object.hasOwn(descriptor, "value") &&
+        descriptor.enumerable === true &&
+        typeof descriptor.value === "string" &&
+        (
+          realProcessEnvironment ||
+          FINALIZER_ENVIRONMENT_NAMES.has(key)
+        );
+    }),
+    code
+  );
+  return Object.freeze(Object.fromEntries(
+    ownKeys
+      .filter((key) => FINALIZER_ENVIRONMENT_NAMES.has(key))
+      .map((key) => [
+        key,
+        Object.getOwnPropertyDescriptor(environment, key).value
+      ])
+  ));
+}
+
+export function integratedLiveDrillProviderFinalizerEnvironment(
+  sourceEnvironment,
+  { forbiddenRootPath, inputPath, rootPath }
+) {
+  const value = {
+    ...Object.fromEntries(
+      Object.entries(sourceEnvironment ?? {}).filter(([name]) =>
+        SAFE_PROCESS_ENVIRONMENT_NAMES.includes(name)
+      )
+    ),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT]:
+      requiredEnvironmentText(
+        inputPath,
+        "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED"
+      ),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT]:
+      requiredEnvironmentText(
+        rootPath,
+        "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED"
+      ),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT]:
+      requiredEnvironmentText(
+        forbiddenRootPath,
+        "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED"
+      )
+  };
+  return assertIntegratedLiveDrillProviderFinalizerEnvironment(value);
+}
+
+export function assertIntegratedLiveDrillProviderFinalizerEnvironment(
+  environment
+) {
+  const code =
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ENVIRONMENT_REJECTED";
+  const normalized = normalizeFinalizerEnvironment(environment, code);
+  for (const name of [
+    INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT
+  ]) {
+    requiredEnvironmentText(normalized[name], code);
+  }
+  return normalized;
+}
+
+function pathIsWithin(candidate, root) {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (
+    !relative.startsWith("..") && !path.isAbsolute(relative)
+  );
+}
+
+function secureRoot(rootPath, forbiddenRootPath) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_REJECTED";
+  requireCondition(
+    typeof rootPath === "string" &&
+      path.isAbsolute(rootPath) &&
+      path.resolve(rootPath) === rootPath &&
+      typeof forbiddenRootPath === "string" &&
+      path.isAbsolute(forbiddenRootPath) &&
+      path.resolve(forbiddenRootPath) === forbiddenRootPath,
+    code
+  );
+  let canonicalRoot;
+  let canonicalForbidden;
+  let stat;
+  try {
+    canonicalRoot = fs.realpathSync(rootPath);
+    canonicalForbidden = fs.realpathSync(forbiddenRootPath);
+    stat = fs.lstatSync(rootPath);
+  } catch (cause) {
+    reject(code, cause);
+  }
+  const expectedUid = typeof process.getuid === "function"
+    ? process.getuid()
+    : stat.uid;
+  requireCondition(
+    canonicalRoot === rootPath &&
+      stat.isDirectory() &&
+      !stat.isSymbolicLink() &&
+      stat.uid === expectedUid &&
+      (stat.mode & 0o777) === 0o700 &&
+      !pathIsWithin(canonicalRoot, canonicalForbidden),
+    code
+  );
+  return Object.freeze({ expectedUid, rootPath, stat });
+}
+
+function assertSameRoot(secure) {
+  let current;
+  try {
+    current = fs.lstatSync(secure.rootPath);
+  } catch (cause) {
+    reject("INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_DRIFT", cause);
+  }
+  requireCondition(
+    current.isDirectory() &&
+      !current.isSymbolicLink() &&
+      current.dev === secure.stat.dev &&
+      current.ino === secure.stat.ino &&
+      current.uid === secure.expectedUid &&
+      (current.mode & 0o777) === 0o700,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_DRIFT"
+  );
+}
+
+function syncDirectory(secure) {
+  let descriptor;
+  try {
+    assertSameRoot(secure);
+    descriptor = fs.openSync(
+      secure.rootPath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
+    );
+    const opened = fs.fstatSync(descriptor);
+    requireCondition(
+      opened.dev === secure.stat.dev &&
+        opened.ino === secure.stat.ino &&
+        opened.uid === secure.expectedUid &&
+        (opened.mode & 0o777) === 0o700,
+      "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_DRIFT"
+    );
+    fs.fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
+function readCanonicalReceipt(filePath, secure) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_AMBIGUOUS";
+  let descriptor;
+  try {
+    assertSameRoot(secure);
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
+    );
+    const before = fs.fstatSync(descriptor);
+    requireCondition(
+      before.isFile() &&
+        before.uid === secure.expectedUid &&
+        before.nlink === 1 &&
+        (before.mode & 0o777) === 0o600 &&
+        before.size > 0 &&
+        before.size <= MAX_RECEIPT_BYTES,
+      code
+    );
+    const bytes = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(filePath);
+    requireCondition(
+      before.dev === after.dev &&
+        before.ino === after.ino &&
+        before.size === after.size &&
+        after.uid === secure.expectedUid &&
+        after.nlink === 1 &&
+        (after.mode & 0o777) === 0o600 &&
+        named.dev === after.dev &&
+        named.ino === after.ino &&
+        named.uid === after.uid &&
+        named.nlink === 1 &&
+        (named.mode & 0o777) === 0o600 &&
+        !named.isSymbolicLink() &&
+        bytes.length === after.size,
+      code
+    );
+    let parsed;
+    try {
+      parsed = JSON.parse(bytes.toString("utf8"));
+    } catch (cause) {
+      reject(code, cause);
+    }
+    requireCondition(
+      bytes.equals(Buffer.from(`${canonicalJson(parsed)}\n`, "utf8")),
+      code
+    );
+    assertSameRoot(secure);
+    return parsed;
+  } catch (cause) {
+    if (cause?.message === code) throw cause;
+    reject(code, cause);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
+function createOrReadCanonicalReceipt(filePath, value, secure) {
+  const bytes = Buffer.from(`${canonicalJson(value)}\n`, "utf8");
+  requireCondition(
+    bytes.length > 0 && bytes.length <= MAX_RECEIPT_BYTES,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED"
+  );
+  let descriptor;
+  try {
+    assertSameRoot(secure);
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600
+    );
+    fs.writeFileSync(descriptor, bytes);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    syncDirectory(secure);
+  } catch (cause) {
+    if (descriptor !== undefined) {
+      try { fs.closeSync(descriptor); } catch { /* Preserve first error. */ }
+    }
+    if (cause?.code !== "EEXIST") {
+      if (cause?.message?.startsWith("INTEGRATED_LIVE_DRILL_")) throw cause;
+      reject(
+        "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED",
+        cause
+      );
+    }
+  }
+  const reread = readCanonicalReceipt(filePath, secure);
+  requireCondition(
+    canonicalJson(reread) === canonicalJson(value),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_AMBIGUOUS"
+  );
+  return reread;
+}
+
+function withReceipt(body) {
+  return Object.freeze({
+    ...body,
+    receiptSha256: integratedLiveDrillCanonicalSha256(body)
+  });
+}
+
+export function validateIntegratedLiveDrillProviderFinalizationInput(value) {
+  requireCondition(
+    exactKeys(value, ["context", "providerContinuity", "schemaVersion"]) &&
+      value.schemaVersion ===
+        INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED"
+  );
+  let context;
+  try {
+    context = normalizeIntegratedLiveDrillProviderContext(value.context);
+  } catch (cause) {
+    reject(
+      "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED",
+      cause
+    );
+  }
+  const intent = validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
+    context.preCallIntent,
+    {
+      authorization: context.authorization,
+      controlLedgerReceipt: context.controlLedgerReceipt
+    }
+  );
+  const handoff = validateIntegratedLiveDrillProviderRecoveryHandoff(
+    value.providerContinuity
+  );
+  requireCondition(
+    handoff.authorizationId === intent.authorizationId &&
+      handoff.preCallIntentSha256 === intent.intentSha256 &&
+      handoff.logicalMcpRequestSha256 === intent.logicalMcpRequestSha256,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED"
+  );
+  return Object.freeze({
+    context,
+    providerContinuity: handoff,
+    schemaVersion: value.schemaVersion
+  });
+}
+
+export function readIntegratedLiveDrillProviderFinalizationInput({
+  forbiddenRootPath,
+  inputPath,
+  rootPath
+}) {
+  const code =
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED";
+  const secure = secureIntegratedLiveDrillPrivateRoot(
+    rootPath,
+    forbiddenRootPath,
+    code
+  );
+  const input = validateIntegratedLiveDrillProviderFinalizationInput(
+    readIntegratedLiveDrillExactPrivateJson({
+      code,
+      filePath: inputPath,
+      maximumBytes: MAX_RECEIPT_BYTES,
+      secure
+    })
+  );
+  requireCondition(
+    input.context?.recoveryEvidenceRootPath === secure.rootPath &&
+      input.context?.forbiddenRootPath === secure.forbiddenRootPath,
+    code
+  );
+  assertIntegratedLiveDrillPrivateRootCurrent(secure, code);
+  return input;
+}
+
+function validateComponentReceipt(value, expected) {
+  const { receiptSha256, ...body } = value ?? {};
+  requireCondition(
+    exactKeys(value, [...Object.keys(expected), "receiptSha256"]) &&
+      receiptSha256 === integratedLiveDrillCanonicalSha256(body) &&
+      canonicalJson(body) === canonicalJson(expected),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_COMPONENT_RECEIPT_REJECTED"
+  );
+  return Object.freeze({ ...value });
+}
+
+export function finalizeIntegratedLiveDrillProviderRecovery(args) {
+  requireCondition(
+    exactKeys(args, ["context", "providerContinuity"]),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED"
+  );
+  const validatedInput = validateIntegratedLiveDrillProviderFinalizationInput({
+    context: args.context,
+    providerContinuity: args.providerContinuity,
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA
+  });
+  const { context, providerContinuity } = validatedInput;
+  const contextAssertions = integratedLiveDrillProviderContextAssertions(
+    context
+  );
+  requireCondition(
+    Object.values(contextAssertions).every((value) => value === true),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED"
+  );
+  validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
+    context?.preCallIntent,
+    {
+      authorization: context?.authorization,
+      controlLedgerReceipt: context?.controlLedgerReceipt
+    }
+  );
+  validateIntegratedLiveDrillProviderRecoveryHandoff(providerContinuity);
+  verifyIntegratedLiveDrillProviderEvidenceBundle({
+    context,
+    providerContinuity,
+    requireCompleteJournal: false
+  });
+  runIntegratedLiveDrillRecoveryContinuityW4(context);
+  runIntegratedLiveDrillRecoveryContinuityW5({
+    authorization: context.authorization,
+    controlLedgerReceipt: context.controlLedgerReceipt,
+    forbiddenRootPath: context.forbiddenRootPath,
+    ledgerRootPath: context.ledgerRootPath
+  });
+  const verified = verifyIntegratedLiveDrillProviderEvidenceBundle({
+    context,
+    providerContinuity
+  });
+  const { handoff, intent, journal } = verified;
+  const secure = secureRoot(
+    context.recoveryEvidenceRootPath,
+    context.forbiddenRootPath
+  );
+  const componentBody = Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_COMPONENT_RECEIPT_SCHEMA,
+    accepted: false,
+    authorizationId: intent.authorizationId,
+    containsCredentialMaterial:
+      !contextAssertions.credentialMaterialAbsent,
+    containsRawProviderResult:
+      !contextAssertions.rawProviderResultAbsent,
+    contextCredentialMaterialAbsent:
+      contextAssertions.credentialMaterialAbsent,
+    contextExactSchemaValidated:
+      contextAssertions.contextExactSchemaValidated,
+    contextProviderCapabilityAbsent:
+      contextAssertions.providerCapabilityAbsent,
+    contextRawProviderResultAbsent:
+      contextAssertions.rawProviderResultAbsent,
+    contextRetryAuthorityAbsent:
+      contextAssertions.retryAuthorityAbsent,
+    finalReleaseReady: false,
+    logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
+    observedInitializeCount: handoff.observedInitializeCount,
+    observedInitializedNotificationCount:
+      handoff.observedInitializedNotificationCount,
+    observedSessionCloseCount: handoff.observedSessionCloseCount,
+    observedToolsCallCount: handoff.observedToolsCallCount,
+    preCallIntentSha256: intent.intentSha256,
+    preReadEvidenceReceiptSha256: handoff.preReadEvidenceReceiptSha256,
+    providerBacked: false,
+    providerEvidenceReceiptSha256: handoff.providerEvidenceReceiptSha256,
+    providerHandoffReceiptSha256: handoff.receiptSha256,
+    runId: intent.runId,
+    status: "DURABLE_SANITIZED_COMPONENT_RECEIPT",
+    terminalEvidenceReceiptSha256: handoff.terminalEvidenceReceiptSha256,
+    transportEvidenceSha256: handoff.transportEvidenceSha256
+  });
+  const componentReceipt = validateComponentReceipt(
+    createOrReadCanonicalReceipt(
+      path.join(
+        secure.rootPath,
+        `${intent.authorizationId}.provider-recovery-component.json`
+      ),
+      withReceipt(componentBody),
+      secure
+    ),
+    componentBody
+  );
+  const body = Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_SCHEMA,
+    accepted: false,
+    authorizationId: intent.authorizationId,
+    componentReceiptSha256: componentReceipt.receiptSha256,
+    contextCredentialMaterialAbsent:
+      contextAssertions.credentialMaterialAbsent,
+    contextExactSchemaValidated:
+      contextAssertions.contextExactSchemaValidated,
+    contextProviderCapabilityAbsent:
+      contextAssertions.providerCapabilityAbsent,
+    contextRawProviderResultAbsent:
+      contextAssertions.rawProviderResultAbsent,
+    contextRetryAuthorityAbsent:
+      contextAssertions.retryAuthorityAbsent,
+    credentialOptionAccepted:
+      !contextAssertions.credentialMaterialAbsent,
+    finalReleaseReady: false,
+    journalReceiptSha256: journal.receiptSha256,
+    logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
+    observedInitializeCount: handoff.observedInitializeCount,
+    observedInitializedNotificationCount:
+      handoff.observedInitializedNotificationCount,
+    observedSessionCloseCount: handoff.observedSessionCloseCount,
+    observedToolsCallCount: handoff.observedToolsCallCount,
+    preCallIntentSha256: intent.intentSha256,
+    providerBacked: false,
+    providerCapabilityAccepted:
+      !contextAssertions.providerCapabilityAbsent,
+    rawProviderResultAccepted:
+      !contextAssertions.rawProviderResultAbsent,
+    retryAuthorityAccepted:
+      !contextAssertions.retryAuthorityAbsent,
+    providerHandoffReceiptSha256: handoff.receiptSha256,
+    providerWorkerImportGraphProvenAbsent: false,
+    runId: intent.runId,
+    status: "LOCAL_FAKE_PRODUCTION_WIRING_VALIDATED",
+    claimBoundary:
+      "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. It accepts no provider client, key, raw result, or retry authority. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release."
+  });
+  return withReceipt(body);
+}

@@ -83,6 +83,10 @@ test("security manifest binds every AWS provider runtime and template-security c
       "src/cloud/aws-gate2-preflight.js"
     ],
     [
+      "deployment-config-digest",
+      "src/cloud/deployment-config-digest.js"
+    ],
+    [
       "aws-oidc-identity-bootstrap",
       ".github/workflows/aws-oidc-identity-bootstrap.yml"
     ],
@@ -127,12 +131,40 @@ test("security manifest binds local evidence generation and verification code", 
       "src/cloud/integrated-live-drill-recovery-continuity.js"
     ],
     [
+      "integrated-live-drill-process-boundary-verifier",
+      "scripts/verify-integrated-live-drill-process-boundaries.js"
+    ],
+    [
+      "integrated-live-drill-process-boundary-tests",
+      "test/integrated-live-drill-process-boundaries.test.js"
+    ],
+    [
+      "integrated-live-drill-provider-evidence",
+      "src/cloud/integrated-live-drill-provider-evidence.js"
+    ],
+    [
       "integrated-live-drill-provider-recovery",
       "src/cloud/integrated-live-drill-provider-recovery.js"
     ],
     [
       "integrated-live-drill-provider-recovery-tests",
       "test/integrated-live-drill-provider-recovery.test.js"
+    ],
+    [
+      "integrated-live-drill-provider-finalization",
+      "src/cloud/integrated-live-drill-provider-finalization.js"
+    ],
+    [
+      "integrated-live-drill-provider-finalizer-runner",
+      "scripts/gate2-integrated-live-drill-provider-finalizer.js"
+    ],
+    [
+      "integrated-live-drill-provider-worker",
+      "src/cloud/integrated-live-drill-provider-worker.js"
+    ],
+    [
+      "integrated-live-drill-provider-worker-runner",
+      "scripts/gate1-integrated-live-drill-provider-worker.js"
     ],
     [
       "integrated-live-drill-recovery-continuity-tests",

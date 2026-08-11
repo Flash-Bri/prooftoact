@@ -246,6 +246,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "infra/aws/lambda/demo.js",
     role: "AWS_PUBLIC_ENTRY"
   }),
+  "deployment-config-digest": Object.freeze({
+    path: "src/cloud/deployment-config-digest.js",
+    role: "PROVIDER_FREE_DEPLOYMENT_CONFIGURATION_DIGEST_VALIDATOR"
+  }),
   "dvi-proposal-authorization": Object.freeze({
     path: "src/cloud/dvi-proposal-authorization.js",
     role: "DATABASE_OWNED_PROPOSAL_AUTHORIZATION"
@@ -318,6 +322,18 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate2-integrated-live-drill-finalizer.js",
     role: "INTEGRATED_PROVIDER_DRILL_PACKET_A_OFFLINE_FINALIZER_RUNNER"
   }),
+  "integrated-live-drill-process-boundary-verifier": Object.freeze({
+    path: "scripts/verify-integrated-live-drill-process-boundaries.js",
+    role: "INTEGRATED_PROVIDER_DRILL_RECURSIVE_PROCESS_IMPORT_GATE"
+  }),
+  "integrated-live-drill-process-boundary-tests": Object.freeze({
+    path: "test/integrated-live-drill-process-boundaries.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_PROCESS_ISOLATION_VERIFICATION"
+  }),
+  "integrated-live-drill-provider-evidence": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-evidence.js",
+    role: "INTEGRATED_PROVIDER_DRILL_PROVIDER_FREE_EVIDENCE_VALIDATOR"
+  }),
   "integrated-live-drill-provider-recovery": Object.freeze({
     path: "src/cloud/integrated-live-drill-provider-recovery.js",
     role: "INTEGRATED_PROVIDER_DRILL_B2A_UNWIRED_PROVIDER_RECOVERY_LIBRARY"
@@ -326,6 +342,26 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/integrated-live-drill-provider-recovery.test.js",
     role:
       "INTEGRATED_PROVIDER_DRILL_B2A_STRICT_LOCAL_FAKE_TRANSPORT_VERIFICATION"
+  }),
+  "integrated-live-drill-provider-finalization": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-finalization.js",
+    role:
+      "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_FREE_W4_W5_FINALIZATION"
+  }),
+  "integrated-live-drill-provider-finalizer-runner": Object.freeze({
+    path: "scripts/gate2-integrated-live-drill-provider-finalizer.js",
+    role:
+      "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_FREE_FINALIZER_RUNNER"
+  }),
+  "integrated-live-drill-provider-worker": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-worker.js",
+    role:
+      "INTEGRATED_PROVIDER_DRILL_B2_CREDENTIAL_ISOLATED_PROVIDER_WORKER"
+  }),
+  "integrated-live-drill-provider-worker-runner": Object.freeze({
+    path: "scripts/gate1-integrated-live-drill-provider-worker.js",
+    role:
+      "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_WORKER_RUNNER"
   }),
   "integrated-live-drill-recovery-continuity": Object.freeze({
     path: "src/cloud/integrated-live-drill-recovery-continuity.js",
@@ -1585,6 +1621,15 @@ const SOURCE_MARKERS = Object.freeze({
     "functionVersion: process.env.AWS_LAMBDA_FUNCTION_VERSION",
     "runScenario"
   ]),
+  "deployment-config-digest": Object.freeze([
+    "deploymentConfigDigestPure",
+    "DEPLOYMENT_CONFIG_SHAPE_REJECTED",
+    "functionConfigurationDigests",
+    "functionRolePolicyDigests",
+    "receiptPublicKeys",
+    "crypto.createPublicKey",
+    "canonicalJson(configuration)"
+  ]),
   "dvi-selection-contract": Object.freeze([
     "tideproof.authority.dvi-selection-receipt.v2",
     "dviSelectionReceiptFor(input)",
@@ -1822,6 +1867,7 @@ const SOURCE_MARKERS = Object.freeze({
     "integratedLiveDrillChildAuthorizationContext",
     "parseIntegratedLiveDrillChildAuthorization",
     "authorizeIntegratedLiveDrillChildLaunch",
+    "authorizeOrVerifyIntegratedLiveDrillChildLaunch",
     "verifyIntegratedLiveDrillConsumedChildLaunch",
     "verifyIntegratedLiveDrillEvidence",
     "consumeIntegratedLiveDrillChildLaunch",
@@ -1892,6 +1938,59 @@ const SOURCE_MARKERS = Object.freeze({
     "runIntegratedLiveDrillPacketAFinalizer",
     "--packet"
   ]),
+  "integrated-live-drill-process-boundary-verifier": Object.freeze([
+    "tideproof.highwater-drill-process-boundary-verification.v1",
+    "verifyIntegratedLiveDrillProcessBoundaries",
+    "FINALIZER_FORBIDDEN_PATH_PATTERNS",
+    "WORKER_FORBIDDEN_PATH_PATTERNS",
+    "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_BUILTIN_REJECTED",
+    "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_PACKAGE_REJECTED",
+    "managed-mcp-client\\.js$",
+    "recovery-broker\\.js$"
+  ]),
+  "integrated-live-drill-process-boundary-tests": Object.freeze([
+    "provider worker and finalizer import graphs preserve process boundaries",
+    "node:child_process",
+    "src/cloud/integrated-live-drill-provider-evidence.js",
+    "src/cloud/integrated-live-drill-provider-recovery.js",
+    "src/cloud/managed-mcp-client.js",
+    "src/cloud/recovery-broker.js"
+  ]),
+  "integrated-live-drill-provider-evidence": Object.freeze([
+    "tideproof.highwater-drill-provider-recovery-handoff.v1",
+    "normalizeIntegratedLiveDrillProviderContext",
+    "integratedLiveDrillProviderContextAssertions",
+    "FINALIZER_CONTEXT_FORBIDDEN_KEY_CLASSES",
+    "exactContextRecord",
+    "exactContextRecord(value, HANDOFF_KEYS)",
+    "HANDOFF_KEYS.map",
+    "HANDOFF_BOOLEAN_KEYS.every",
+    "HANDOFF_COUNT_KEYS.every",
+    "HANDOFF_STRING_KEYS.every",
+    "Object.getOwnPropertyDescriptor(value, key).value",
+    "contextKeyAssertions",
+    "Object.getPrototypeOf(entry) === Array.prototype",
+    "PROVIDER_PRE_CALL_INPUT_KEYS",
+    "RECOGNIZABLE_CREDENTIAL_TEXT_PATTERNS",
+    "credentialMaterialAbsent",
+    "providerCapabilityAbsent",
+    "rawProviderResultAbsent",
+    "retryAuthorityAbsent",
+    "validateIntegratedLiveDrillProviderDispatchAuthorizationPure",
+    "secureIntegratedLiveDrillPrivateRoot",
+    "readIntegratedLiveDrillExactPrivateJson",
+    "verifyIntegratedLiveDrillProviderEvidenceBundle",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_BINDING_REJECTED",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_JOURNAL_BINDING_REJECTED",
+    "canonicalJson(recomputed) === canonicalJson(reported)",
+    "strictly validated locally recorded transport/session-close evidence",
+    "does not establish provider origin",
+    "path.dirname(filePath) === secure.rootPath",
+    "fs.constants.O_NOFOLLOW",
+    "providerBacked: false",
+    "accepted: false",
+    "finalReleaseReady: false"
+  ]),
   "integrated-live-drill-provider-recovery": Object.freeze([
     "tideproof.highwater-drill-provider-dispatch-preparation.v1",
     "tideproof.highwater-drill-provider-expiry-burn.v1",
@@ -1903,11 +2002,8 @@ const SOURCE_MARKERS = Object.freeze({
     "humanPrivateKeyRequired: false",
     "humanSignatureProducedOutsidePreparationApi: true",
     "preparationContextStrictlyAllowlisted: true",
-    "PROVIDER_PRE_CALL_INPUT_KEYS",
-    "RECOGNIZABLE_CREDENTIAL_TEXT_PATTERNS",
-    "normalizeProviderPreCallInputs",
+    "normalizeIntegratedLiveDrillProviderContext",
     "MAX_PROVIDER_DISPATCH_AUTHORIZATION_MS",
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CREDENTIAL_MATERIAL_REJECTED",
     "fs.constants.O_EXCL",
     "fs.constants.O_NOFOLLOW",
     "after.nlink === 1",
@@ -1934,8 +2030,6 @@ const SOURCE_MARKERS = Object.freeze({
     "reconcileDurableResult",
     "recoveryWorkerAuthorityIsCurrent",
     "INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED",
-    "strictly validated locally recorded transport/session-close evidence",
-    "does not establish provider origin",
     "observedToolsCallCount",
     "observedSessionCloseCount",
     "providerBacked: false",
@@ -1946,6 +2040,9 @@ const SOURCE_MARKERS = Object.freeze({
     "remain unproven and unwired"
   ]),
   "integrated-live-drill-provider-recovery-tests": Object.freeze([
+    "provider worker input and environment isolate credentials and resume context",
+    "provider finalizer import surface is provider and credential free",
+    "credential-isolated production worker uses only fake local transports",
     "actual provider path cross-binds W1-W3, exact tools/call bytes, and private evidence",
     "W1 and W3 audit-commit crashes resume exact persisted event plans without duplicate MCP fetches",
     "provider path rejects semantic or separately signed dispatch substitution",
@@ -1970,8 +2067,101 @@ const SOURCE_MARKERS = Object.freeze({
     "dedicatedCredentialFieldAcceptedOrPersisted",
     "humanSignatureProducedOutsidePreparationApi",
     "transportMutations",
+    "provider-worker-outside-link",
+    "provider-finalizer-outside-link",
+    "substitutedRootInput",
+    "tamperedDispatchContext",
+    "rejectedContextMutations",
+    "directApiMutations",
+    "wrapperDirectApiMutations",
+    "handoffDirectApiMutations",
+    "nestedHandoffGetterCalls",
+    "coercible digest object",
+    "workerInputDirectApiMutations",
+    "workerEnvironmentDirectApiMutations",
+    "finalizerEnvironmentDirectApiMutations",
+    "fakeFetchCalls",
+    "fakeAuditFactoryCalls",
+    "created no W4, W5, or component artifact",
+    "nested array prototype",
+    "nested array getter",
+    "created no finalization artifact",
+    "normalizedFinalizationInput",
+    "contextExactSchemaValidated",
     "auditResolveAttempts",
     "AWAITING_AUTHORIZATION"
+  ]),
+  "integrated-live-drill-provider-finalization": Object.freeze([
+    "tideproof.highwater-drill-provider-component-receipt.v2",
+    "tideproof.highwater-drill-provider-finalization.v2",
+    "tideproof.highwater-drill-provider-finalization-input.v2",
+    "DURABLE_SANITIZED_COMPONENT_RECEIPT",
+    "LOCAL_FAKE_PRODUCTION_WIRING_VALIDATED",
+    "normalizeIntegratedLiveDrillProviderContext",
+    "validateIntegratedLiveDrillProviderFinalizationInput",
+    "contextCredentialMaterialAbsent",
+    "contextExactSchemaValidated",
+    "contextProviderCapabilityAbsent",
+    "contextRawProviderResultAbsent",
+    "contextRetryAuthorityAbsent",
+    "credentialOptionAccepted:",
+    "providerCapabilityAccepted:",
+    "rawProviderResultAccepted:",
+    "retryAuthorityAccepted:",
+    "!contextAssertions.credentialMaterialAbsent",
+    "!contextAssertions.providerCapabilityAbsent",
+    "!contextAssertions.rawProviderResultAbsent",
+    "!contextAssertions.retryAuthorityAbsent",
+    "runIntegratedLiveDrillRecoveryContinuityW4",
+    "runIntegratedLiveDrillRecoveryContinuityW5",
+    "verifyIntegratedLiveDrillProviderEvidenceBundle",
+    "requireCompleteJournal: false",
+    "assertIntegratedLiveDrillProviderFinalizerEnvironment",
+    "normalizeFinalizerEnvironment",
+    "Reflect.ownKeys(environment)",
+    "environment === process.env",
+    "FINALIZER_ENVIRONMENT_NAMES",
+    "fs.constants.O_EXCL",
+    "fs.constants.O_NOFOLLOW",
+    "fs.fsyncSync",
+    "providerBacked: false",
+    "accepted: false",
+    "finalReleaseReady: false"
+  ]),
+  "integrated-live-drill-provider-finalizer-runner": Object.freeze([
+    "assertIntegratedLiveDrillProviderFinalizerEnvironment",
+    "readIntegratedLiveDrillProviderFinalizationInput",
+    "finalizeIntegratedLiveDrillProviderRecovery",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT"
+  ]),
+  "integrated-live-drill-provider-worker": Object.freeze([
+    "tideproof.highwater-drill-provider-worker-input.v1",
+    "integratedLiveDrillProviderWorkerEnvironment",
+    "assertIntegratedLiveDrillProviderWorkerEnvironment",
+    "normalizeIntegratedLiveDrillProviderContext",
+    "normalizeWorkerEnvironment",
+    "Reflect.ownKeys(environment)",
+    "environment === process.env",
+    "WORKER_ENVIRONMENT_NAME_SET",
+    "MCP_API_KEY",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "CockroachManagedMcpRecoveryClient",
+    "DeterministicRecoveryBroker",
+    "RecoveryAuditSink",
+    "runIntegratedLiveDrillProviderRecovery",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED",
+    "path.dirname(inputPath) === rootPath"
+  ]),
+  "integrated-live-drill-provider-worker-runner": Object.freeze([
+    "assertIntegratedLiveDrillProviderWorkerEnvironment",
+    "readIntegratedLiveDrillProviderWorkerInput",
+    "runIntegratedLiveDrillProviderWorker",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT"
   ]),
   "integrated-live-drill-recovery-continuity": Object.freeze([
     "tideproof.highwater-drill-recovery-continuity-journal-entry.v2",

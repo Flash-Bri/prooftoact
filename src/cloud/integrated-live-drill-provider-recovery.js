@@ -4,18 +4,22 @@ import path from "node:path";
 import { canonicalJson } from "./canonical-json.js";
 import { parseStrictJson } from "./strict-json.js";
 import {
+  INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
+  INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_CLAIM_BOUNDARY,
+  normalizeIntegratedLiveDrillProviderContext,
+  validateIntegratedLiveDrillProviderDispatchAuthorizationPure
+} from "./integrated-live-drill-provider-evidence.js";
+import {
   integratedLiveDrillAuthorizationAttestationDigest,
   integratedLiveDrillCanonicalSha256,
-  integratedLiveDrillSha256,
-  validateIntegratedLiveDrillHumanAuthorizationTrustRoot,
-  verifyIntegratedLiveDrillEvidence
+  integratedLiveDrillSha256
 } from "./integrated-live-drill-authorization.js";
 import { renderRecoveryQuery } from "./recovery-continuity-identity.js";
 import { recoveryAuditEventDigest } from "./recovery-broker.js";
 import {
   INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
   INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN,
-  integratedLiveDrillRecoveryContinuityPreCallIntent,
   runIntegratedLiveDrillRecoveryContinuityW1,
   runIntegratedLiveDrillRecoveryContinuityW2,
   runIntegratedLiveDrillRecoveryContinuityW3,
@@ -34,8 +38,8 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_TERMINAL_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-terminal.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_TERMINAL_PLAN_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-terminal-plan.v1";
-export const INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA =
-  "tideproof.highwater-drill-provider-dispatch-authorization.v1";
+export { INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA } from
+  "./integrated-live-drill-provider-evidence.js";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_PREPARATION_SCHEMA =
   "tideproof.highwater-drill-provider-dispatch-preparation.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_EXPIRY_BURN_SCHEMA =
@@ -135,44 +139,6 @@ const RECOVERY_ROW_KEYS = Object.freeze([
   "tenant_id"
 ]);
 const PROCESS_STICKY_PROVIDER_AUTHORITY_BURNS = new Set();
-const PROVIDER_PRE_CALL_INPUT_KEYS = Object.freeze([
-  "audit",
-  "claim",
-  "consumedChildAuthorization",
-  "consumedManagedMcpLaunch",
-  "controlLedgerReceipt",
-  "managedMcpReservation",
-  "recoveryAppendReceipt",
-  "recoveryBinding",
-  "recoveryReplayReceipt",
-  "recoverySourceReceipt",
-  "signedBundlePersistenceReceipt"
-]);
-const PROVIDER_PREPARATION_CONTEXT_KEYS = Object.freeze([
-  "authorization",
-  "controlLedgerReceipt",
-  "forbiddenRootPath",
-  "ledgerRootPath",
-  "preCallInputs",
-  "preCallIntent",
-  "recoveryEvidenceRootPath",
-  "trustedRunContext"
-]);
-const PROVIDER_RUN_CONTEXT_KEYS = Object.freeze([
-  ...PROVIDER_PREPARATION_CONTEXT_KEYS,
-  "providerDispatchAuthorization"
-]);
-const PROVIDER_DISPATCH_AUTHORITY_STATEMENT =
-  "Authorize at most one bounded CockroachDB Managed MCP session initialization and one initialized notification, exactly one select_query tools/call for the exact recovery broker configuration and logical request digests bound below, and required close or cleanup of any opened session. No additional session, tools/call, provider action, or retry is authorized; close remains permitted solely to terminate an opened session after any denial or expiry.";
-const RECOGNIZABLE_CREDENTIAL_TEXT_PATTERNS = Object.freeze([
-  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/iu,
-  /^(?:Bearer|Basic)\s+\S+/iu,
-  /^(?:AKIA|ASIA)[A-Z0-9]{16}$/u,
-  /^(?:gh[oprsu]_|github_pat_)[A-Za-z0-9_]+$/u,
-  /^(?:sk-(?:proj-)?|xox[baprs]-|AIza)[A-Za-z0-9_-]{8,}$/u,
-  /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u,
-  /"(?:d|p|q|dp|dq|qi|k)"\s*:/u
-]);
 
 function reject(code, cause) {
   throw new Error(code, cause === undefined ? undefined : { cause });
@@ -201,321 +167,13 @@ function exactIsoMilliseconds(value, code) {
   return milliseconds;
 }
 
-function normalizeScalar(value) {
-  requireCondition(
-    value === null ||
-      typeof value === "string" ||
-      typeof value === "boolean" ||
-      (typeof value === "number" && Number.isFinite(value)),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  if (typeof value === "string") {
-    requireCondition(
-      !RECOGNIZABLE_CREDENTIAL_TEXT_PATTERNS.some((pattern) =>
-        pattern.test(value)
-      ),
-      "INTEGRATED_LIVE_DRILL_PROVIDER_CREDENTIAL_MATERIAL_REJECTED"
-    );
-  }
-  return value;
-}
-
-function normalizeScalarArray(value) {
-  requireCondition(
-    Array.isArray(value),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  return Object.freeze(value.map((entry) => normalizeScalar(entry)));
-}
-
-function normalizeExactRecord(value, keys, nested = {}) {
-  requireCondition(
-    exactKeys(value, keys),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  const normalized = {};
-  for (const key of keys) {
-    normalized[key] = Object.hasOwn(nested, key)
-      ? nested[key](value[key])
-      : normalizeScalar(value[key]);
-  }
-  return Object.freeze(normalized);
-}
-
-function normalizeClaim(value) {
-  return normalizeExactRecord(value, [
-    "authorizationClaimSha256",
-    "authorizationId",
-    "fileByteLength",
-    "fileNameSha256",
-    "schemaVersion",
-    "spendAuthorizationSha256"
-  ]);
-}
-
-function normalizeReservation(value) {
-  return normalizeExactRecord(value, [
-    "authorizationId",
-    "cumulativeAuthorizedExposureUsd",
-    "fileByteLength",
-    "fileNameSha256",
-    "reservationSha256",
-    "schemaVersion",
-    "scopeId",
-    "sequence"
-  ]);
-}
-
-function normalizeChildScope(value) {
-  return normalizeExactRecord(value, [
-    "component",
-    "maximumExecutions",
-    "maximumExposureUsd",
-    "provider",
-    "scopeId",
-    "sequence"
-  ]);
-}
-
-function normalizeChildAttestation(value) {
-  return normalizeExactRecord(value, [
-    "payload",
-    "schemaVersion",
-    "signature"
-  ], {
-    payload: (payload) => normalizeExactRecord(payload, [
-      "authorizationAttestationSha256",
-      "authorizationId",
-      "claim",
-      "configDigest",
-      "expectationSha256",
-      "expiresAt",
-      "issuedAt",
-      "nonceSha256",
-      "reservation",
-      "runId",
-      "runnerIdentitySha256",
-      "schemaVersion",
-      "scope",
-      "sourceCommit",
-      "specSha256",
-      "tokenId",
-      "treeDigest"
-    ], {
-      claim: normalizeClaim,
-      reservation: normalizeReservation,
-      scope: normalizeChildScope
-    }),
-    signature: (signature) => normalizeExactRecord(signature, [
-      "algorithm",
-      "keyIdSha256",
-      "value"
-    ])
-  });
-}
-
-function normalizeChildAuthorization(value) {
-  return normalizeExactRecord(value, ["attestation"], {
-    attestation: normalizeChildAttestation
-  });
-}
-
-function normalizeConsumedLaunch(value) {
-  return normalizeExactRecord(value, [
-    "authorizationId",
-    "childLaunchSha256",
-    "fileByteLength",
-    "fileNameSha256",
-    "reservationSha256",
-    "schemaVersion",
-    "scopeId",
-    "sequence",
-    "tokenId"
-  ]);
-}
-
-function normalizeControlLedgerReceipt(value) {
-  return normalizeExactRecord(value, [
-    "authorizationAttestationSha256",
-    "authorizationClaimSha256",
-    "authorizationId",
-    "authorizedMaximumCumulativeExposureUsd",
-    "childLaunchDigests",
-    "exactChildLaunchCount",
-    "exactScopeCount",
-    "receiptSha256",
-    "reservationDigests",
-    "reservedCumulativeExposureUsd",
-    "runId",
-    "schemaVersion",
-    "spendAuthorizationSha256"
-  ], {
-    childLaunchDigests: normalizeScalarArray,
-    reservationDigests: normalizeScalarArray
-  });
-}
-
-function normalizeCommitAuthority(value) {
-  const normalized = normalizeExactRecord(value, [
-    "current",
-    "requiresFreshAuthorization"
-  ]);
-  requireCondition(
-    normalized.current === null,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  return normalized;
-}
-
-function normalizePublicationCommit(value) {
-  const normalized = normalizeExactRecord(value, [
-    "authority",
-    "databaseNow",
-    "observation",
-    "operation",
-    "operationDigest",
-    "outcome",
-    "reason",
-    "schemaVersion",
-    "status"
-  ], { authority: normalizeCommitAuthority });
-  requireCondition(
-    normalized.reason === null,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  return normalized;
-}
-
-function normalizePublicationReceipt(value) {
-  return normalizeExactRecord(value, [
-    "bundleDigest",
-    "commit",
-    "outcome"
-  ], { commit: normalizePublicationCommit });
-}
-
-function normalizeRecoveryBinding(value) {
-  return normalizeExactRecord(value, [
-    "recoveryClusterId",
-    "recoverySessionId",
-    "subjectBindingSha256",
-    "tenantId"
-  ]);
-}
-
-function normalizeRecoverySourceReceipt(value) {
-  return normalizeExactRecord(value, [
-    "admissibility",
-    "authority_evidence_binding_sha256",
-    "authorization_binding_sha256",
-    "authorization_epoch",
-    "evidence_digest",
-    "evidence_id",
-    "has_durable_intent",
-    "incident_id",
-    "logical_action_digest",
-    "logical_authority_key_sha256",
-    "operation_id",
-    "outcome",
-    "proposal_digest",
-    "recorded_at",
-    "request_digest",
-    "resource_id",
-    "run_id",
-    "selected_evidence_binding_sha256",
-    "tenant_id"
-  ]);
-}
-
-function normalizeBundlePersistenceReceipt(value) {
-  return normalizeExactRecord(value, [
-    "atomicCreateOnly",
-    "bundleDigest",
-    "configDigest",
-    "creationProtocolObserved",
-    "directoryEntrySynced",
-    "fileByteLength",
-    "fileDataSynced",
-    "fileMode",
-    "parentDirectoryMode",
-    "pathSha256",
-    "receiptSha256",
-    "rereadVerified",
-    "reusedExisting",
-    "runId",
-    "sameFilesystemAtomicLink",
-    "schemaVersion",
-    "signatureDigest",
-    "signedBundleSha256",
-    "sourceBuildIdentitySha256",
-    "sourceCommit",
-    "treeDigest"
-  ]);
-}
-
-function normalizeProviderPreCallInputs(value) {
-  const normalized = normalizeExactRecord(
-    value,
-    PROVIDER_PRE_CALL_INPUT_KEYS,
-    {
-      audit: (audit) => normalizeExactRecord(audit, [
-        "interactionId",
-        "preReadAuditEventId",
-        "startedAt",
-        "terminalAuditEventId"
-      ]),
-      claim: normalizeClaim,
-      consumedChildAuthorization: normalizeChildAuthorization,
-      consumedManagedMcpLaunch: normalizeConsumedLaunch,
-      controlLedgerReceipt: normalizeControlLedgerReceipt,
-      managedMcpReservation: normalizeReservation,
-      recoveryAppendReceipt: normalizePublicationReceipt,
-      recoveryBinding: normalizeRecoveryBinding,
-      recoveryReplayReceipt: normalizePublicationReceipt,
-      recoverySourceReceipt: normalizeRecoverySourceReceipt,
-      signedBundlePersistenceReceipt: normalizeBundlePersistenceReceipt
-    }
-  );
-  requireCondition(
-    canonicalJson(normalized) === canonicalJson(value),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  return normalized;
-}
-
 function validateProviderRecoveryContext(
   context,
   { requireDispatchAuthorization }
 ) {
-  const keys = requireDispatchAuthorization
-    ? PROVIDER_RUN_CONTEXT_KEYS
-    : PROVIDER_PREPARATION_CONTEXT_KEYS;
-  requireCondition(
-    exactKeys(context, keys),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  const normalizedPreCallInputs = normalizeProviderPreCallInputs(
-    context.preCallInputs
-  );
-  const childIssuedAt = exactIsoMilliseconds(
-    normalizedPreCallInputs.consumedChildAuthorization.attestation.payload
-      ?.issuedAt,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  const recomputed = integratedLiveDrillRecoveryContinuityPreCallIntent({
-    ...normalizedPreCallInputs,
-    authorization: context.authorization,
-    ledgerRootPath: context.ledgerRootPath,
-    forbiddenRootPath: context.forbiddenRootPath,
-    recoveryEvidenceRootPath: context.recoveryEvidenceRootPath,
-    trustedRunContext: context.trustedRunContext,
-    now: childIssuedAt
-  });
-  requireCondition(
-    canonicalJson(recomputed) === canonicalJson(context.preCallIntent),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
-  );
-  return normalizedPreCallInputs;
+  return normalizeIntegratedLiveDrillProviderContext(context, {
+    requireDispatchAuthorization
+  }).preCallInputs;
 }
 
 function childAuthorizationIssuedAtFromNormalizedInputs(
@@ -550,7 +208,8 @@ export function integratedLiveDrillProviderDispatchAuthorizationPayload({
   );
   return Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
-    authorityStatement: PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
+    authorityStatement:
+      INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
     authorizationAttestationSha256: intent.authorizationAttestationSha256,
     authorizationId: intent.authorizationId,
     childAuthorizationIssuedAt,
@@ -570,85 +229,12 @@ export function integratedLiveDrillProviderDispatchAuthorizationPayload({
 
 export function validateIntegratedLiveDrillProviderDispatchAuthorization(
   attestation,
-  {
-    childAuthorizationIssuedAt,
-    humanAuthorizationTrustRoot,
-    intent,
-    now = Date.now(),
-    requireCurrent = true
-  }
+  options
 ) {
-  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_REJECTED";
-  const trustRoot = validateIntegratedLiveDrillHumanAuthorizationTrustRoot(
-    humanAuthorizationTrustRoot
-  );
-  const payload = verifyIntegratedLiveDrillEvidence(
+  return validateIntegratedLiveDrillProviderDispatchAuthorizationPure(
     attestation,
-    {
-      keyIdSha256: trustRoot.keyIdSha256,
-      publicKeySpkiDerBase64: trustRoot.publicKeySpkiDerBase64
-    },
-    INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
-    code
+    options
   );
-  const issuedAt = exactIsoMilliseconds(payload?.issuedAt, code);
-  const expiresAt = exactIsoMilliseconds(payload?.expiresAt, code);
-  const childIssuedAt = exactIsoMilliseconds(
-    childAuthorizationIssuedAt,
-    code
-  );
-  const payloadChildIssuedAt = exactIsoMilliseconds(
-    payload?.childAuthorizationIssuedAt,
-    code
-  );
-  const intentStartedAt = exactIsoMilliseconds(intent?.startedAt, code);
-  const runExpiresAt = exactIsoMilliseconds(intent?.expiresAt, code);
-  requireCondition(
-    exactKeys(payload, [
-      "authorityStatement",
-      "authorizationAttestationSha256",
-      "authorizationId",
-      "childAuthorizationIssuedAt",
-      "expiresAt",
-      "issuedAt",
-      "logicalMcpRequestSha256",
-      "maximumInitializeCount",
-      "maximumInitializedNotificationCount",
-      "maximumManagedMcpToolCallCount",
-      "preCallIntentSha256",
-      "requiredSessionCloseCount",
-      "requiredToolsCallCount",
-      "recoveryBrokerConfigDigest",
-      "runId",
-      "schemaVersion"
-    ]) &&
-      payload.authorityStatement === PROVIDER_DISPATCH_AUTHORITY_STATEMENT &&
-      payload.authorizationAttestationSha256 ===
-        intent.authorizationAttestationSha256 &&
-      payload.authorizationId === intent.authorizationId &&
-      payload.runId === intent.runId &&
-      payload.preCallIntentSha256 === intent.intentSha256 &&
-      payload.recoveryBrokerConfigDigest ===
-        intent.recoveryBrokerConfigDigest &&
-      payload.logicalMcpRequestSha256 === intent.logicalMcpRequestSha256 &&
-      payload.maximumInitializeCount === 1 &&
-      payload.maximumInitializedNotificationCount === 1 &&
-      payload.maximumManagedMcpToolCallCount === 1 &&
-      payload.requiredToolsCallCount === 1 &&
-      payload.requiredSessionCloseCount === 1 &&
-      payloadChildIssuedAt === childIssuedAt &&
-      intentStartedAt <= issuedAt &&
-      childIssuedAt <= issuedAt &&
-      issuedAt < expiresAt &&
-      expiresAt <= issuedAt + MAX_PROVIDER_DISPATCH_AUTHORIZATION_MS &&
-      (!requireCurrent || (issuedAt <= now && now < expiresAt)) &&
-      expiresAt <= runExpiresAt,
-    code
-  );
-  return Object.freeze({
-    attestationSha256: integratedLiveDrillCanonicalSha256(attestation),
-    payload: Object.freeze({ ...payload })
-  });
 }
 
 function providerDispatchGuard(context, intent, clock = () => Date.now()) {
@@ -2804,8 +2390,7 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
     providerBacked: false,
     accepted: false,
     finalReleaseReady: false,
-    claimBoundary:
-      "This handoff binds one integrated W1 pre-read audit, one W2 owner-only actual Managed MCP client path with private raw result, independently recomputable exact semantic tools/call request bytes, strictly validated locally recorded transport/session-close evidence, and one independently resolved full-event W3 terminal audit. Initialize and response byte hashes are locally recorded rather than provider-signed or fully reconstructable; this scaffold does not establish provider origin, a provider-global exact-call count, cross-host continuity, or an accepted live result. The reviewed broker/audit-sink resolver resamples current authority immediately before its database connect and query boundaries; production B2b runner wiring remains unproven and unwired. The broad signed run authorization does not directly bind the derived recovery broker configuration or exact logical MCP request; W2 therefore requires a second human-signed exact provider-dispatch authorization at the immediate client boundary. It remains non-accepting until a governed live run establishes the remaining W4/W5, finalizer, release, deployment, and evidence gates. Ambiguous claim, dispatch, provider-result, persistence, or audit states are permanent UNKNOWN_DO_NOT_ACT and never authorize retry."
+    claimBoundary: INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_CLAIM_BOUNDARY
   });
   requirePostProviderAuditAuthority(externalActionGuard);
   return Object.freeze({

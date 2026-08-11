@@ -17,6 +17,8 @@ import {
   validateSignedDeploymentAttestationPair
 } from "../src/cloud/aws-deployment-attestation.js";
 import { deploymentConfigDigest } from "../src/cloud/aws-gate2-template.js";
+import { deploymentConfigDigestPure } from
+  "../src/cloud/deployment-config-digest.js";
 import { validateAwsEvidenceCaller } from "../src/cloud/aws-evidence-identity.js";
 import {
   __test as runnerTest,
@@ -507,6 +509,7 @@ function fixture() {
     ])
   );
   assert.equal(deploymentConfigDigest(configuration), configDigest);
+  assert.equal(deploymentConfigDigestPure(configuration), configDigest);
   const expectation = {
     schemaVersion: __test.EXPECTATION_SCHEMA,
     accountId: ACCOUNT_ID,

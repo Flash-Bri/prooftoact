@@ -68,6 +68,7 @@ import {
   generateSyntheticTestOnlyP256PublicKey
 } from "./helpers/synthetic-test-signing-keys.js";
 import {
+  authorizeOrVerifyIntegratedLiveDrillChildLaunch,
   authorizeIntegratedLiveDrillChildLaunch,
   parseIntegratedLiveDrillChildAuthorization
 } from "../src/cloud/integrated-live-drill-child-authorization.js";
@@ -1103,7 +1104,10 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
         "AWS_AUTHORITY_RACE",
         "MANAGED_MCP_RECOVERY"
       ][calls.length];
-      childAuthorizations.push(authorizeIntegratedLiveDrillChildLaunch(
+      const authorizeChild = scopeId === "MANAGED_MCP_RECOVERY"
+        ? authorizeOrVerifyIntegratedLiveDrillChildLaunch
+        : authorizeIntegratedLiveDrillChildLaunch;
+      childAuthorizations.push(authorizeChild(
         childEnvironment,
         scopeId,
         {
@@ -1160,6 +1164,23 @@ test("orchestrator executes exactly DVI, race, then exact-winner recovery", asyn
       childAuthorizations[index].launchReceipt.sequence,
       index + 1
     );
+    if (scope === "MANAGED_MCP_RECOVERY") {
+      assert.equal(childAuthorizations[index].launchConsumedNow, true);
+      const resumedChildAuthorization =
+        authorizeOrVerifyIntegratedLiveDrillChildLaunch(
+          calls[index].environment,
+          scope,
+          {
+            now: launch.checkedAt,
+            forbiddenRootPath: fs.realpathSync(process.cwd())
+          }
+        );
+      assert.equal(resumedChildAuthorization.launchConsumedNow, false);
+      assert.equal(
+        resumedChildAuthorization.launchReceipt.receiptSha256,
+        childAuthorizations[index].launchReceipt.receiptSha256
+      );
+    }
     assert.throws(
       () => authorizeIntegratedLiveDrillChildLaunch(
         calls[index].environment,

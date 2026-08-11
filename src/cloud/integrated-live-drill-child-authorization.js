@@ -518,6 +518,42 @@ export function verifyIntegratedLiveDrillConsumedChildLaunch(
   });
 }
 
+export function authorizeOrVerifyIntegratedLiveDrillChildLaunch(
+  environment,
+  expectedScopeId,
+  options = {}
+) {
+  let launchReceipt;
+  let launchConsumedNow = false;
+  try {
+    launchReceipt = authorizeIntegratedLiveDrillChildLaunch(
+      environment,
+      expectedScopeId,
+      options
+    ).launchReceipt;
+    launchConsumedNow = true;
+  } catch (cause) {
+    if (
+      cause?.message !==
+        "INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_ALREADY_CONSUMED"
+    ) {
+      throw cause;
+    }
+  }
+  const verified = verifyIntegratedLiveDrillConsumedChildLaunch(
+    environment,
+    expectedScopeId,
+    {
+      ...(launchReceipt === undefined ? {} : { launchReceipt }),
+      ...options
+    }
+  );
+  return Object.freeze({
+    ...verified,
+    launchConsumedNow
+  });
+}
+
 export function assertIntegratedLiveDrillChildAuthorizationCurrent(
   context,
   { now = Date.now() } = {}
