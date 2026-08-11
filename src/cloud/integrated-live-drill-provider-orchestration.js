@@ -6,14 +6,20 @@ import {
   integratedLiveDrillCanonicalSha256
 } from "./integrated-live-drill-authorization.js";
 import {
+  acquireIntegratedLiveDrillPrivateRootLease,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
+  integratedLiveDrillPrivateRootBinding,
   assertIntegratedLiveDrillPrivateRootCurrent,
   readIntegratedLiveDrillExactPrivateJson,
-  secureIntegratedLiveDrillPrivateRoot
+  normalizeIntegratedLiveDrillProviderContext,
+  secureIntegratedLiveDrillPrivateRoot,
+  validateIntegratedLiveDrillPrivateRootBinding
 } from "./integrated-live-drill-provider-evidence.js";
 import {
-  INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AWAITING_AUTHORIZATION
+  INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AWAITING_AUTHORIZATION,
+  readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation,
+  validateIntegratedLiveDrillProviderRecoveryAuthorizationPreparation
 } from "./integrated-live-drill-provider-recovery.js";
 import {
   acceptedIntegratedLiveDrillDvi,
@@ -23,7 +29,7 @@ import {
 } from "./integrated-live-drill.js";
 
 export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PREPARATION_SCHEMA =
-  "tideproof.highwater-drill-provider-orchestration-preparation.v1";
+  "tideproof.highwater-drill-provider-orchestration-preparation.v2";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETION_SCHEMA =
   "tideproof.highwater-drill-provider-orchestration-completion.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_SCHEMA =
@@ -32,8 +38,11 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_COMPLETION_SCHEMA =
   "tideproof.highwater-drill-provider-supervisor-completion.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_CHECKPOINT_PERSISTENCE_SCHEMA =
   "tideproof.highwater-drill-provider-checkpoint-persistence.v1";
-export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_SCHEMA =
-  "tideproof.highwater-drill-provider-orchestration-stop.v1";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_SCHEMA =
+  "tideproof.highwater-drill-provider-orchestration-decision.v2";
+export const
+INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_HOLD =
   "HOLD_AWAITING_EXACT_PROVIDER_DISPATCH_AUTHORIZATION";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETE =
@@ -48,6 +57,8 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES = Object.freeze
   PROVIDER_WORKER_HANDOFF_DURABLE: "PROVIDER_WORKER_HANDOFF_DURABLE",
   PROVIDER_FINALIZATION_DURABLE: "PROVIDER_FINALIZATION_DURABLE",
   CANDIDATE_BUILT_NON_ACCEPTING: "CANDIDATE_BUILT_NON_ACCEPTING",
+  PROVIDER_ADMITTED: "PROVIDER_ADMITTED",
+  STOPPED_BEFORE_PROVIDER_ADMISSION: "STOPPED_BEFORE_PROVIDER_ADMISSION",
   UNKNOWN_DO_NOT_ACT: "UNKNOWN_DO_NOT_ACT",
   EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED:
     "EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED"
@@ -244,6 +255,7 @@ function persistIntegratedLiveDrillExactPrivateJsonInternal({
   filePath,
   forbiddenRootPath,
   maximumBytes = MAX_CHECKPOINT_BYTES,
+  returnCreationStatus = false,
   rootPath,
   value
 }) {
@@ -328,7 +340,13 @@ function persistIntegratedLiveDrillExactPrivateJsonInternal({
     code
   );
   assertIntegratedLiveDrillPrivateRootCurrent(secure, code);
-  return Object.freeze(normalizeJson(reread));
+  const persisted = Object.freeze(normalizeJson(reread));
+  return returnCreationStatus
+    ? Object.freeze({
+      created: createdIdentity !== null,
+      value: persisted
+    })
+    : persisted;
 }
 
 export function persistIntegratedLiveDrillExactPrivateJson(args) {
@@ -404,7 +422,7 @@ export function readIntegratedLiveDrillOrchestrationPrivateJson(args) {
   return readIntegratedLiveDrillOrchestrationPrivateJsonInternal(normalized);
 }
 
-export function validateIntegratedLiveDrillProviderSupervisorPreparation(value) {
+function validateIntegratedLiveDrillProviderSupervisorPreparationShape(value) {
   const code =
     "INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED";
   const normalized = validateReceipt(normalizeJson(value), [
@@ -428,6 +446,7 @@ export function validateIntegratedLiveDrillProviderSupervisorPreparation(value) 
   ], INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_SCHEMA, code);
   const payload = normalizeJson(normalized.signingPayload);
   const payloadKeys = [
+    "auditTargetIdentitySha256",
     "authorityStatement",
     "authorizationAttestationSha256",
     "authorizationId",
@@ -447,6 +466,9 @@ export function validateIntegratedLiveDrillProviderSupervisorPreparation(value) 
   ];
   const issuedAt = Date.parse(payload.issuedAt);
   const expiresAt = Date.parse(payload.expiresAt);
+  const childAuthorizationIssuedAt = Date.parse(
+    payload.childAuthorizationIssuedAt
+  );
   requireCondition(
     normalized.status ===
       INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AWAITING_AUTHORIZATION &&
@@ -460,6 +482,7 @@ export function validateIntegratedLiveDrillProviderSupervisorPreparation(value) 
         INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA &&
       payload.authorityStatement ===
         INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT &&
+      HEX_64.test(payload.auditTargetIdentitySha256 ?? "") &&
       UUID.test(normalized.authorizationId ?? "") &&
       UUID.test(normalized.runId ?? "") &&
       HEX_64.test(normalized.preCallIntentSha256 ?? "") &&
@@ -489,8 +512,12 @@ export function validateIntegratedLiveDrillProviderSupervisorPreparation(value) 
       ].every((count) => count === 1) &&
       Number.isFinite(issuedAt) &&
       Number.isFinite(expiresAt) &&
+      Number.isFinite(childAuthorizationIssuedAt) &&
       new Date(issuedAt).toISOString() === payload.issuedAt &&
       new Date(expiresAt).toISOString() === payload.expiresAt &&
+      new Date(childAuthorizationIssuedAt).toISOString() ===
+        payload.childAuthorizationIssuedAt &&
+      childAuthorizationIssuedAt <= issuedAt &&
       issuedAt < expiresAt &&
       expiresAt <= issuedAt + 15 * 60 * 1_000 &&
       exactStateHistory(normalized.stateHistory, [
@@ -500,6 +527,48 @@ export function validateIntegratedLiveDrillProviderSupervisorPreparation(value) 
     code
   );
   return Object.freeze({ ...normalized, signingPayload: payload });
+}
+
+export function validateIntegratedLiveDrillProviderSupervisorPreparation(
+  value,
+  evidence
+) {
+  const code =
+    "INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED";
+  const normalized = validateIntegratedLiveDrillProviderSupervisorPreparationShape(
+    value
+  );
+  const normalizedEvidence = normalizeJson(evidence);
+  requireCondition(
+    exactRecord(normalizedEvidence, ["context", "dispatchPreparation"]),
+    code
+  );
+  const context = normalizeIntegratedLiveDrillProviderContext(
+    normalizedEvidence.context,
+    { requireDispatchAuthorization: false }
+  );
+  const dispatchPreparation =
+    validateIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
+      normalizedEvidence.dispatchPreparation,
+      context
+    );
+  requireCondition(
+    normalized.preparationContextSha256 ===
+        integratedLiveDrillCanonicalSha256(context) &&
+      normalized.preparationReceiptSha256 ===
+        dispatchPreparation.receiptSha256 &&
+      canonicalJson(normalized.signingPayload) ===
+        canonicalJson(dispatchPreparation.signingPayload) &&
+      normalized.signingPayloadSha256 ===
+        dispatchPreparation.signingPayloadSha256 &&
+      normalized.signingPayload.childAuthorizationIssuedAt ===
+        context.preCallInputs.consumedChildAuthorization.attestation.payload
+          .issuedAt &&
+      dispatchPreparation.createdAt === normalized.signingPayload.issuedAt &&
+      dispatchPreparation.expiresAt === normalized.signingPayload.expiresAt,
+    code
+  );
+  return normalized;
 }
 
 export function validateIntegratedLiveDrillProviderSupervisorCompletion(value) {
@@ -559,7 +628,11 @@ export function validateIntegratedLiveDrillProviderSupervisorCompletion(value) {
 function buildIntegratedLiveDrillProviderOrchestrationPreparationInternal({
   authorityEvidenceId,
   authoritySelectedEvidenceDigest,
+  decisionPathSha256,
+  decisionRootBinding,
+  decisionRootPathSha256,
   dvi,
+  evidenceRootBinding,
   gate1Preparation,
   journalIntentBindingSha256,
   journalPathSha256,
@@ -586,11 +659,19 @@ function buildIntegratedLiveDrillProviderOrchestrationPreparationInternal({
       ),
     "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPONENT_REJECTED"
   );
-  const supervisor = validateIntegratedLiveDrillProviderSupervisorPreparation(
-    gate1Preparation
-  );
+  const supervisor =
+    validateIntegratedLiveDrillProviderSupervisorPreparationShape(
+      gate1Preparation
+    );
+  const acceptedEvidenceRootBinding =
+    validateIntegratedLiveDrillPrivateRootBinding(evidenceRootBinding);
+  const acceptedDecisionRootBinding =
+    validateIntegratedLiveDrillPrivateRootBinding(decisionRootBinding);
   requireCondition(
     supervisor.runId === acceptedSpec.runId &&
+      HEX_64.test(decisionPathSha256 ?? "") &&
+      HEX_64.test(decisionRootPathSha256 ?? "") &&
+      acceptedDecisionRootBinding.rootPathSha256 === decisionRootPathSha256 &&
       HEX_64.test(journalIntentBindingSha256 ?? "") &&
       HEX_64.test(journalPathSha256 ?? ""),
     "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PREPARATION_REJECTED"
@@ -604,8 +685,12 @@ function buildIntegratedLiveDrillProviderOrchestrationPreparationInternal({
     authorityEvidenceId,
     authoritySelectedEvidenceDigest,
     authorizationId: supervisor.authorizationId,
+    decisionPathSha256,
+    decisionRootBinding: acceptedDecisionRootBinding,
+    decisionRootPathSha256,
     dvi: acceptedDvi,
     dviSha256: integratedLiveDrillCanonicalSha256(acceptedDvi),
+    evidenceRootBinding: acceptedEvidenceRootBinding,
     finalReleaseReady: false,
     gate1Preparation: supervisor,
     gate1PreparationReceiptSha256: supervisor.receiptSha256,
@@ -630,7 +715,11 @@ export function buildIntegratedLiveDrillProviderOrchestrationPreparation(args) {
     exactRecord(normalized, [
       "authorityEvidenceId",
       "authoritySelectedEvidenceDigest",
+      "decisionPathSha256",
+      "decisionRootBinding",
+      "decisionRootPathSha256",
       "dvi",
+      "evidenceRootBinding",
       "gate1Preparation",
       "journalIntentBindingSha256",
       "journalPathSha256",
@@ -657,8 +746,12 @@ export function validateIntegratedLiveDrillProviderOrchestrationPreparation(
     "authorityEvidenceId",
     "authoritySelectedEvidenceDigest",
     "authorizationId",
+    "decisionPathSha256",
+    "decisionRootBinding",
+    "decisionRootPathSha256",
     "dvi",
     "dviSha256",
+    "evidenceRootBinding",
     "finalReleaseReady",
     "gate1Preparation",
     "gate1PreparationReceiptSha256",
@@ -675,18 +768,76 @@ export function validateIntegratedLiveDrillProviderOrchestrationPreparation(
     "status",
     "treeDigest"
   ], INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PREPARATION_SCHEMA, code);
-  const expected = buildIntegratedLiveDrillProviderOrchestrationPreparation({
+  const supervisor =
+    validateIntegratedLiveDrillProviderSupervisorPreparationShape(
+      normalized.gate1Preparation
+    );
+  const evidenceRootBinding = validateIntegratedLiveDrillPrivateRootBinding(
+    normalized.evidenceRootBinding
+  );
+  const decisionRootBinding = validateIntegratedLiveDrillPrivateRootBinding(
+    normalized.decisionRootBinding
+  );
+  const selectedBinding = selectedEvidenceBindingSha256(
+    normalized.authorityEvidenceId,
+    normalized.authoritySelectedEvidenceDigest
+  );
+  requireCondition(
+    acceptedIntegratedLiveDrillDvi(
+      normalized.dvi,
+      acceptedSpec,
+      selectedBinding
+    ) &&
+      acceptedIntegratedLiveDrillRace(
+        normalized.race,
+        acceptedSpec,
+        normalized.dvi
+      ) &&
+      normalized.dviSha256 ===
+        integratedLiveDrillCanonicalSha256(normalized.dvi) &&
+      normalized.raceSha256 ===
+        integratedLiveDrillCanonicalSha256(normalized.race),
+    code
+  );
+  const expected = withReceipt(Object.freeze({
+    schemaVersion:
+      INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PREPARATION_SCHEMA,
+    accepted: false,
+    ambiguityBlocker:
+      INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
     authorityEvidenceId: normalized.authorityEvidenceId,
     authoritySelectedEvidenceDigest:
       normalized.authoritySelectedEvidenceDigest,
+    authorizationId: supervisor.authorizationId,
+    decisionPathSha256: normalized.decisionPathSha256,
+    decisionRootBinding,
+    decisionRootPathSha256: normalized.decisionRootPathSha256,
     dvi: normalized.dvi,
-    gate1Preparation: normalized.gate1Preparation,
+    dviSha256: normalized.dviSha256,
+    evidenceRootBinding,
+    finalReleaseReady: false,
+    gate1Preparation: supervisor,
+    gate1PreparationReceiptSha256: supervisor.receiptSha256,
     journalIntentBindingSha256: normalized.journalIntentBindingSha256,
     journalPathSha256: normalized.journalPathSha256,
+    providerBacked: false,
     race: normalized.race,
-    spec: acceptedSpec
-  });
+    raceSha256: normalized.raceSha256,
+    runId: acceptedSpec.runId,
+    signingPayloadSha256: supervisor.signingPayloadSha256,
+    sourceCommit: acceptedSpec.sourceCommit,
+    stateHistory: PREPARATION_STATE_HISTORY,
+    status: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_HOLD,
+    treeDigest: acceptedSpec.treeDigest
+  }));
   requireCondition(canonicalJson(expected) === canonicalJson(normalized), code);
+  requireCondition(
+    HEX_64.test(normalized.decisionPathSha256 ?? "") &&
+      HEX_64.test(normalized.decisionRootPathSha256 ?? "") &&
+      decisionRootBinding.rootPathSha256 ===
+        normalized.decisionRootPathSha256,
+    code
+  );
   return expected;
 }
 
@@ -721,6 +872,8 @@ function checkpointPersistenceReceipt({
       rootStat.ino === secure.stat.ino &&
       rootStat.uid === secure.expectedUid &&
       (rootStat.mode & 0o777) === 0o700 &&
+      canonicalJson(preparation.evidenceRootBinding) ===
+        canonicalJson(integratedLiveDrillPrivateRootBinding(secure, code)) &&
       checkpointStat.isFile() &&
       !checkpointStat.isSymbolicLink() &&
       checkpointStat.uid === secure.expectedUid &&
@@ -740,6 +893,8 @@ function checkpointPersistenceReceipt({
     checkpointSize: checkpointStat.size,
     checkpointUid: checkpointStat.uid,
     preparationReceiptSha256: preparation.receiptSha256,
+    rootBindingReceiptSha256:
+      preparation.evidenceRootBinding.receiptSha256,
     rootDevice: String(rootStat.dev),
     rootInode: String(rootStat.ino),
     rootMode: "0700",
@@ -883,9 +1038,10 @@ export function sanitizedIntegratedLiveDrillProviderOrchestrationHold(
       normalizeJson(preparation),
       normalizeJson(spec)
     );
-  const supervisor = validateIntegratedLiveDrillProviderSupervisorPreparation(
-    normalizedPreparation.gate1Preparation
-  );
+  const supervisor =
+    validateIntegratedLiveDrillProviderSupervisorPreparationShape(
+      normalizedPreparation.gate1Preparation
+    );
   requireCondition(
     normalizedPreparation.status ===
         INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_HOLD &&
@@ -902,6 +1058,8 @@ export function sanitizedIntegratedLiveDrillProviderOrchestrationHold(
     ambiguityBlocker:
       INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
     authorizationId: supervisor.authorizationId,
+    evidenceRootBindingSha256:
+      normalizedPreparation.evidenceRootBinding.receiptSha256,
     finalReleaseReady: false,
     preparationReceiptSha256: normalizedPreparation.receiptSha256,
     providerBacked: false,
@@ -962,22 +1120,97 @@ export function buildIntegratedLiveDrillProviderOrchestrationCompletion(args) {
   }));
 }
 
+export function validateIntegratedLiveDrillProviderOrchestrationCompletion(
+  value,
+  preparation,
+  spec
+) {
+  const code =
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETION_REJECTED";
+  const acceptedPreparation =
+    validateIntegratedLiveDrillProviderOrchestrationPreparation(
+      preparation,
+      spec
+    );
+  const normalized = validateReceipt(normalizeJson(value), [
+    "accepted",
+    "ambiguityBlocker",
+    "authorizationId",
+    "finalReleaseReady",
+    "gate1CompletionReceiptSha256",
+    "observedInitializeCount",
+    "observedInitializedNotificationCount",
+    "observedSessionCloseCount",
+    "observedToolsCallCount",
+    "preparationReceiptSha256",
+    "providerBacked",
+    "providerHandoffReceiptSha256",
+    "runId",
+    "schemaVersion",
+    "sourceCommit",
+    "stateHistory",
+    "status",
+    "treeDigest"
+  ], INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETION_SCHEMA, code);
+  requireCondition(
+    normalized.status === INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETE &&
+      normalized.accepted === false &&
+      normalized.providerBacked === false &&
+      normalized.finalReleaseReady === false &&
+      normalized.ambiguityBlocker ===
+        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER &&
+      normalized.authorizationId === acceptedPreparation.authorizationId &&
+      normalized.runId === acceptedPreparation.runId &&
+      normalized.sourceCommit === acceptedPreparation.sourceCommit &&
+      normalized.treeDigest === acceptedPreparation.treeDigest &&
+      normalized.preparationReceiptSha256 ===
+        acceptedPreparation.receiptSha256 &&
+      [
+        normalized.gate1CompletionReceiptSha256,
+        normalized.providerHandoffReceiptSha256
+      ].every((entry) => HEX_64.test(entry ?? "")) &&
+      normalized.observedInitializeCount === 1 &&
+      normalized.observedInitializedNotificationCount === 1 &&
+      normalized.observedToolsCallCount === 1 &&
+      normalized.observedSessionCloseCount === 1 &&
+      exactStateHistory(normalized.stateHistory, COMPLETION_STATE_HISTORY),
+    code
+  );
+  return normalized;
+}
+
 export function integratedLiveDrillProviderOrchestrationStopDisposition(value) {
   const normalized = normalizeJson(value);
   requireCondition(
     exactRecord(normalized, [
       "authorizationId",
       "causeCode",
+      "decisionPathSha256",
+      "decisionRootBindingReceiptSha256",
+      "decisionRootPathSha256",
+      "evidenceRootBindingReceiptSha256",
       "preparationReceiptSha256",
+      "preparationContextSha256",
       "runId",
-      "state"
+      "signingPayloadSha256",
+      "sourceCommit",
+      "state",
+      "treeDigest"
     ]) &&
       UUID.test(normalized.authorizationId ?? "") &&
       UUID.test(normalized.runId ?? "") &&
       /^INTEGRATED_LIVE_DRILL_[A-Z0-9_]{1,140}$/u.test(
         normalized.causeCode ?? ""
       ) &&
+      HEX_64.test(normalized.decisionPathSha256 ?? "") &&
+      HEX_64.test(normalized.decisionRootBindingReceiptSha256 ?? "") &&
+      HEX_64.test(normalized.decisionRootPathSha256 ?? "") &&
       HEX_64.test(normalized.preparationReceiptSha256 ?? "") &&
+      HEX_64.test(normalized.preparationContextSha256 ?? "") &&
+      HEX_64.test(normalized.evidenceRootBindingReceiptSha256 ?? "") &&
+      HEX_64.test(normalized.signingPayloadSha256 ?? "") &&
+      HEX_40.test(normalized.sourceCommit ?? "") &&
+      HEX_40.test(normalized.treeDigest ?? "") &&
       [
         INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
           .UNKNOWN_DO_NOT_ACT,
@@ -987,11 +1220,21 @@ export function integratedLiveDrillProviderOrchestrationStopDisposition(value) {
     "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_REJECTED"
   );
   return withReceipt(Object.freeze({
-    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_SCHEMA,
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_SCHEMA,
     accepted: false,
     ambiguityBlocker:
       INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
     authorizationId: normalized.authorizationId,
+    checkpointPersistenceReceiptSha256: null,
+    decision: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
+      .STOPPED_BEFORE_PROVIDER_ADMISSION,
+    dispatchAuthorizationSha256: null,
+    decisionPathSha256: normalized.decisionPathSha256,
+    decisionRootBindingReceiptSha256:
+      normalized.decisionRootBindingReceiptSha256,
+    decisionRootPathSha256: normalized.decisionRootPathSha256,
+    evidenceRootBindingReceiptSha256:
+      normalized.evidenceRootBindingReceiptSha256,
     finalReleaseReady: false,
     providerBacked: false,
     retryPermitted: false,
@@ -999,28 +1242,48 @@ export function integratedLiveDrillProviderOrchestrationStopDisposition(value) {
       normalized.causeCode
     ),
     preparationReceiptSha256: normalized.preparationReceiptSha256,
+    preparationContextSha256: normalized.preparationContextSha256,
     runId: normalized.runId,
+    signingPayloadSha256: normalized.signingPayloadSha256,
+    sourceCommit: normalized.sourceCommit,
     state: normalized.state,
-    status: normalized.state
+    status: normalized.state,
+    treeDigest: normalized.treeDigest
   }));
 }
 
-export function validateIntegratedLiveDrillProviderOrchestrationStop(value) {
-  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_REJECTED";
+export function validateIntegratedLiveDrillProviderOrchestrationDecision(value) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_REJECTED";
   const normalized = validateReceipt(normalizeJson(value), [
     "accepted",
     "ambiguityBlocker",
     "authorizationId",
+    "checkpointPersistenceReceiptSha256",
     "causeCodeSha256",
+    "decision",
+    "decisionPathSha256",
+    "decisionRootBindingReceiptSha256",
+    "decisionRootPathSha256",
+    "dispatchAuthorizationSha256",
+    "evidenceRootBindingReceiptSha256",
     "finalReleaseReady",
     "preparationReceiptSha256",
+    "preparationContextSha256",
     "providerBacked",
     "retryPermitted",
     "runId",
     "schemaVersion",
+    "signingPayloadSha256",
+    "sourceCommit",
     "state",
-    "status"
-  ], INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_SCHEMA, code);
+    "status",
+    "treeDigest"
+  ], INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_SCHEMA, code);
+  const admitted = normalized.decision ===
+    INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED;
+  const stopped = normalized.decision ===
+    INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
+      .STOPPED_BEFORE_PROVIDER_ADMISSION;
   requireCondition(
     normalized.accepted === false &&
       normalized.providerBacked === false &&
@@ -1030,17 +1293,183 @@ export function validateIntegratedLiveDrillProviderOrchestrationStop(value) {
         INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER &&
       UUID.test(normalized.authorizationId ?? "") &&
       UUID.test(normalized.runId ?? "") &&
-      HEX_64.test(normalized.causeCodeSha256 ?? "") &&
       HEX_64.test(normalized.preparationReceiptSha256 ?? "") &&
+      HEX_64.test(normalized.preparationContextSha256 ?? "") &&
+      HEX_64.test(normalized.decisionPathSha256 ?? "") &&
+      HEX_64.test(normalized.decisionRootBindingReceiptSha256 ?? "") &&
+      HEX_64.test(normalized.decisionRootPathSha256 ?? "") &&
+      HEX_64.test(normalized.evidenceRootBindingReceiptSha256 ?? "") &&
+      HEX_64.test(normalized.signingPayloadSha256 ?? "") &&
+      HEX_40.test(normalized.sourceCommit ?? "") &&
+      HEX_40.test(normalized.treeDigest ?? "") &&
       normalized.status === normalized.state &&
-      [
-        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.UNKNOWN_DO_NOT_ACT,
-        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-          .EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED
-      ].includes(normalized.state),
+      (
+        admitted &&
+        normalized.state === INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
+          .PROVIDER_ADMITTED &&
+        normalized.causeCodeSha256 === null &&
+        HEX_64.test(normalized.checkpointPersistenceReceiptSha256 ?? "") &&
+        HEX_64.test(normalized.dispatchAuthorizationSha256 ?? "")
+      ) !== (
+        stopped &&
+        [
+          INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.UNKNOWN_DO_NOT_ACT,
+          INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
+            .EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED
+        ].includes(normalized.state) &&
+        HEX_64.test(normalized.causeCodeSha256 ?? "") &&
+        normalized.checkpointPersistenceReceiptSha256 === null &&
+        normalized.dispatchAuthorizationSha256 === null
+      ),
     code
   );
   return normalized;
+}
+
+export function validateIntegratedLiveDrillProviderOrchestrationStop(value) {
+  const normalized = validateIntegratedLiveDrillProviderOrchestrationDecision(
+    value
+  );
+  requireCondition(
+    normalized.decision === INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
+      .STOPPED_BEFORE_PROVIDER_ADMISSION,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_REJECTED"
+  );
+  return normalized;
+}
+
+export function integratedLiveDrillProviderOrchestrationAdmissionDisposition(
+  value
+) {
+  const normalized = normalizeJson(value);
+  requireCondition(
+    exactRecord(normalized, [
+      "dispatchAuthorizationSha256",
+      "persistence",
+      "preparation"
+    ]),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED"
+  );
+  const preparation = normalized.preparation;
+  const persistence = normalized.persistence;
+  requireCondition(
+    UUID.test(preparation?.authorizationId ?? "") &&
+      UUID.test(preparation?.runId ?? "") &&
+      HEX_64.test(preparation?.receiptSha256 ?? "") &&
+      HEX_64.test(preparation?.gate1Preparation?.preparationContextSha256 ?? "") &&
+      HEX_64.test(preparation?.gate1Preparation?.signingPayloadSha256 ?? "") &&
+      HEX_64.test(preparation?.decisionPathSha256 ?? "") &&
+      HEX_64.test(preparation?.decisionRootBinding?.receiptSha256 ?? "") &&
+      HEX_64.test(preparation?.decisionRootPathSha256 ?? "") &&
+      HEX_64.test(preparation?.evidenceRootBinding?.receiptSha256 ?? "") &&
+      HEX_64.test(persistence?.receiptSha256 ?? "") &&
+      HEX_64.test(normalized.dispatchAuthorizationSha256 ?? "") &&
+      HEX_40.test(preparation?.sourceCommit ?? "") &&
+      HEX_40.test(preparation?.treeDigest ?? ""),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED"
+  );
+  return withReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_SCHEMA,
+    accepted: false,
+    ambiguityBlocker:
+      INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
+    authorizationId: preparation.authorizationId,
+    checkpointPersistenceReceiptSha256: persistence.receiptSha256,
+    causeCodeSha256: null,
+    decision:
+      INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED,
+    decisionPathSha256: preparation.decisionPathSha256,
+    decisionRootBindingReceiptSha256:
+      preparation.decisionRootBinding.receiptSha256,
+    decisionRootPathSha256: preparation.decisionRootPathSha256,
+    dispatchAuthorizationSha256: normalized.dispatchAuthorizationSha256,
+    evidenceRootBindingReceiptSha256:
+      preparation.evidenceRootBinding.receiptSha256,
+    finalReleaseReady: false,
+    preparationReceiptSha256: preparation.receiptSha256,
+    preparationContextSha256:
+      preparation.gate1Preparation.preparationContextSha256,
+    providerBacked: false,
+    retryPermitted: false,
+    runId: preparation.runId,
+    signingPayloadSha256:
+      preparation.gate1Preparation.signingPayloadSha256,
+    sourceCommit: preparation.sourceCommit,
+    state: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
+      .PROVIDER_ADMITTED,
+    status: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
+      .PROVIDER_ADMITTED,
+    treeDigest: preparation.treeDigest
+  }));
+}
+
+function claimIntegratedLiveDrillProviderOrchestrationDecision({
+  decision,
+  decisionPath,
+  forbiddenRootPath,
+  rootPath
+}) {
+  const accepted = validateIntegratedLiveDrillProviderOrchestrationDecision(
+    decision
+  );
+  try {
+    const claim = persistIntegratedLiveDrillExactPrivateJsonInternal({
+        code: "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_REJECTED",
+        filePath: decisionPath,
+        forbiddenRootPath,
+        returnCreationStatus: true,
+        rootPath,
+        value: accepted
+      });
+    return Object.freeze({
+      claimed: claim.created,
+      decision: validateIntegratedLiveDrillProviderOrchestrationDecision(
+        claim.value
+      )
+    });
+  } catch (cause) {
+    if (cause?.message !==
+      "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_REJECTED") {
+      throw cause;
+    }
+    return Object.freeze({
+      claimed: false,
+      decision: readIntegratedLiveDrillProviderOrchestrationDecision({
+        decisionPath,
+        forbiddenRootPath,
+        rootPath
+      })
+    });
+  }
+}
+
+export function claimIntegratedLiveDrillProviderOrchestrationAdmission(args) {
+  const normalized = normalizeJson(args);
+  requireCondition(
+    exactRecord(normalized, [
+      "decisionPath",
+      "dispatchAuthorizationSha256",
+      "forbiddenRootPath",
+      "persistence",
+      "preparation",
+      "rootPath"
+    ]),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED"
+  );
+  return claimIntegratedLiveDrillProviderOrchestrationDecision({
+    decision: integratedLiveDrillProviderOrchestrationAdmissionDisposition({
+      dispatchAuthorizationSha256: normalized.dispatchAuthorizationSha256,
+      persistence: normalized.persistence,
+      preparation: normalized.preparation
+    }),
+    decisionPath: normalized.decisionPath,
+    forbiddenRootPath: normalized.forbiddenRootPath,
+    rootPath: normalized.rootPath
+  });
+}
+
+export function persistIntegratedLiveDrillProviderOrchestrationAdmission(args) {
+  return claimIntegratedLiveDrillProviderOrchestrationAdmission(args).decision;
 }
 
 export function persistIntegratedLiveDrillProviderOrchestrationStop(args) {
@@ -1059,19 +1488,221 @@ export function persistIntegratedLiveDrillProviderOrchestrationStop(args) {
   const stop = integratedLiveDrillProviderOrchestrationStopDisposition({
     authorizationId: normalized.preparation.authorizationId,
     causeCode: normalized.causeCode,
+    decisionPathSha256: normalized.preparation.decisionPathSha256,
+    decisionRootBindingReceiptSha256:
+      normalized.preparation.decisionRootBinding.receiptSha256,
+    decisionRootPathSha256:
+      normalized.preparation.decisionRootPathSha256,
+    evidenceRootBindingReceiptSha256:
+      normalized.preparation.evidenceRootBinding.receiptSha256,
     preparationReceiptSha256: normalized.preparation.receiptSha256,
+    preparationContextSha256:
+      normalized.preparation.gate1Preparation.preparationContextSha256,
     runId: normalized.preparation.runId,
-    state: normalized.state
+    signingPayloadSha256:
+      normalized.preparation.gate1Preparation.signingPayloadSha256,
+    sourceCommit: normalized.preparation.sourceCommit,
+    state: normalized.state,
+    treeDigest: normalized.preparation.treeDigest
   });
-  return validateIntegratedLiveDrillProviderOrchestrationStop(
-    persistIntegratedLiveDrillExactPrivateJson({
-      code: "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_REJECTED",
-      filePath: normalized.stopPath,
+  return claimIntegratedLiveDrillProviderOrchestrationDecision({
+    decision: stop,
+    decisionPath: normalized.stopPath,
+    forbiddenRootPath: normalized.forbiddenRootPath,
+    rootPath: normalized.rootPath
+  }).decision;
+}
+
+export function readIntegratedLiveDrillProviderOrchestrationDecision(args) {
+  const normalized = normalizeJson(args);
+  requireCondition(
+    exactRecord(normalized, [
+      "decisionPath",
+      "forbiddenRootPath",
+      "rootPath"
+    ]),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_REJECTED"
+  );
+  return validateIntegratedLiveDrillProviderOrchestrationDecision(
+    readIntegratedLiveDrillOrchestrationPrivateJson({
+      code: "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_REJECTED",
+      filePath: normalized.decisionPath,
       forbiddenRootPath: normalized.forbiddenRootPath,
-      rootPath: normalized.rootPath,
-      value: stop
+      rootPath: normalized.rootPath
     })
   );
+}
+
+export function readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent(
+  args
+) {
+  const normalized = normalizeJson(args);
+  requireCondition(
+    exactRecord(normalized, [
+      "decisionPath",
+      "forbiddenRootPath",
+      "rootPath"
+    ]),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_REJECTED"
+  );
+  try {
+    fs.lstatSync(normalized.decisionPath);
+  } catch (cause) {
+    if (cause?.code === "ENOENT") return null;
+    reject(
+      "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_REJECTED",
+      cause
+    );
+  }
+  return readIntegratedLiveDrillProviderOrchestrationDecision(normalized);
+}
+
+export function readBoundIntegratedLiveDrillProviderOrchestrationAdmission({
+  context,
+  decisionRootDescriptor,
+  evidenceRootDescriptor,
+  expectedReceiptSha256,
+  forbiddenRootPath
+}) {
+  const code =
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED";
+  requireCondition(
+    HEX_64.test(expectedReceiptSha256 ?? "") &&
+      Number.isSafeInteger(decisionRootDescriptor) &&
+      decisionRootDescriptor >= 0 &&
+      Number.isSafeInteger(evidenceRootDescriptor) &&
+      evidenceRootDescriptor >= 0,
+    code
+  );
+  const normalizedContext = normalizeIntegratedLiveDrillProviderContext(
+    context
+  );
+  const spec = parseIntegratedLiveDrillSpec(
+    normalizedContext.trustedRunContext.spec
+  );
+  const evidenceRootPath = normalizedContext.recoveryEvidenceRootPath;
+  const checkpointPath = path.join(
+    evidenceRootPath,
+    `${spec.runId}.provider-orchestration-preparation.json`
+  );
+  const decisionRootPath = normalizedContext.ledgerRootPath;
+  const decisionPath = path.join(
+    decisionRootPath,
+    `${normalizedContext.preCallIntent.runId}.provider-orchestration-decision.json`
+  );
+  const evidenceRootLease = acquireIntegratedLiveDrillPrivateRootLease({
+    binding: normalizedContext.evidenceRootBinding,
+    code,
+    descriptor: evidenceRootDescriptor,
+    forbiddenRootPath,
+    rootPath: evidenceRootPath
+  });
+  let decisionRootLease = null;
+  try {
+    const checkpointObservation = evidenceRootLease.beginOperation();
+    const checkpoint =
+      readIntegratedLiveDrillProviderOrchestrationPreparation({
+        checkpointPath,
+        forbiddenRootPath,
+        rootPath: evidenceRootPath,
+        spec
+      });
+    evidenceRootLease.assertOperation(checkpointObservation);
+    const { persistence, preparation } = checkpoint;
+    const { providerDispatchAuthorization, ...preparationContextValue } =
+      normalizedContext;
+    const preparationContext = normalizeIntegratedLiveDrillProviderContext(
+      preparationContextValue,
+      { requireDispatchAuthorization: false }
+    );
+    const dispatchPreparation =
+      readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
+        preparationContext
+      );
+    requireCondition(
+      preparation.authorizationId ===
+          normalizedContext.preCallIntent.authorizationId &&
+        preparation.runId === normalizedContext.preCallIntent.runId &&
+        preparation.gate1Preparation.preparationContextSha256 ===
+          integratedLiveDrillCanonicalSha256(preparationContext) &&
+        preparation.gate1Preparation.preparationReceiptSha256 ===
+          dispatchPreparation.receiptSha256 &&
+        preparation.gate1Preparation.signingPayloadSha256 ===
+          dispatchPreparation.signingPayloadSha256 &&
+        canonicalJson(preparation.gate1Preparation.signingPayload) ===
+          canonicalJson(dispatchPreparation.signingPayload) &&
+        canonicalJson(preparation.evidenceRootBinding) ===
+          canonicalJson(evidenceRootLease.binding) &&
+        preparation.decisionRootPathSha256 ===
+          integratedLiveDrillCanonicalSha256(decisionRootPath) &&
+        preparation.decisionPathSha256 ===
+          integratedLiveDrillCanonicalSha256(decisionPath) &&
+        preparation.sourceCommit === spec.sourceCommit &&
+        preparation.treeDigest === spec.treeDigest,
+      code
+    );
+    decisionRootLease = acquireIntegratedLiveDrillPrivateRootLease({
+      binding: preparation.decisionRootBinding,
+      code,
+      descriptor: decisionRootDescriptor,
+      forbiddenRootPath,
+      rootPath: decisionRootPath
+    });
+    const observation = decisionRootLease.beginOperation();
+    const decision = readIntegratedLiveDrillProviderOrchestrationDecision({
+      decisionPath,
+      forbiddenRootPath,
+      rootPath: decisionRootPath
+    });
+    decisionRootLease.assertOperation(observation);
+    requireCondition(
+      decision.decision ===
+          INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED &&
+        decision.receiptSha256 === expectedReceiptSha256 &&
+        decision.authorizationId ===
+          normalizedContext.preCallIntent.authorizationId &&
+        decision.runId === normalizedContext.preCallIntent.runId &&
+        decision.preparationContextSha256 ===
+          integratedLiveDrillCanonicalSha256(preparationContext) &&
+        decision.signingPayloadSha256 ===
+          dispatchPreparation.signingPayloadSha256 &&
+        decision.dispatchAuthorizationSha256 ===
+          integratedLiveDrillCanonicalSha256(providerDispatchAuthorization) &&
+        decision.preparationReceiptSha256 === preparation.receiptSha256 &&
+        decision.checkpointPersistenceReceiptSha256 ===
+          persistence.receiptSha256 &&
+        decision.evidenceRootBindingReceiptSha256 ===
+          preparation.evidenceRootBinding.receiptSha256 &&
+        decision.decisionRootBindingReceiptSha256 ===
+          decisionRootLease.binding.receiptSha256 &&
+        decision.decisionRootPathSha256 ===
+          preparation.decisionRootPathSha256 &&
+        decision.decisionPathSha256 ===
+          preparation.decisionPathSha256 &&
+        decision.sourceCommit === preparation.sourceCommit &&
+        decision.treeDigest === preparation.treeDigest,
+      code
+    );
+    const reboundObservation = evidenceRootLease.beginOperation();
+    const rebound =
+      readIntegratedLiveDrillProviderOrchestrationPreparation({
+        checkpointPath,
+        forbiddenRootPath,
+        rootPath: evidenceRootPath,
+        spec
+      });
+    evidenceRootLease.assertOperation(reboundObservation);
+    requireCondition(
+      canonicalJson(rebound) === canonicalJson(checkpoint),
+      code
+    );
+    evidenceRootLease.assertCurrent();
+    decisionRootLease.assertCurrent();
+    return decision;
+  } finally {
+    decisionRootLease?.release();
+    evidenceRootLease.release();
+  }
 }
 
 export function readIntegratedLiveDrillProviderOrchestrationStop(args) {
@@ -1085,9 +1716,8 @@ export function readIntegratedLiveDrillProviderOrchestrationStop(args) {
     "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_REJECTED"
   );
   return validateIntegratedLiveDrillProviderOrchestrationStop(
-    readIntegratedLiveDrillOrchestrationPrivateJson({
-      code: "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_REJECTED",
-      filePath: normalized.stopPath,
+    readIntegratedLiveDrillProviderOrchestrationDecision({
+      decisionPath: normalized.stopPath,
       forbiddenRootPath: normalized.forbiddenRootPath,
       rootPath: normalized.rootPath
     })

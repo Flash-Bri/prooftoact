@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA =
-  "tideproof.highwater-drill-process-boundary-verification.v2";
+  "tideproof.highwater-drill-process-boundary-verification.v3";
 
 const ROOT = fs.realpathSync(path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -208,7 +208,7 @@ function validateSupervisorSource() {
   }
   return Object.freeze({
     directImports: Object.freeze(directImports),
-    legacyRecoveryBrokerImported: false,
+    legacyRecoveryEntryPointImported: false,
     managedMcpClientConstructed: false,
     path: SUPERVISOR_PATH,
     providerFinalizerEnvironmentRequired: true,
@@ -234,6 +234,9 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
     ) ||
     !worker.modules.includes(
       "src/cloud/integrated-live-drill-provider-recovery.js"
+    ) ||
+    !worker.modules.includes(
+      "src/cloud/integrated-live-drill-provider-orchestration.js"
     ) ||
     !worker.modules.includes("src/cloud/managed-mcp-client.js") ||
     !worker.modules.includes("src/cloud/recovery-broker.js")

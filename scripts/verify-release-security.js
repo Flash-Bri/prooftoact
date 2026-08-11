@@ -336,7 +336,8 @@ const EXPECTED_SURFACES = Object.freeze({
   }),
   "integrated-live-drill-provider-recovery": Object.freeze({
     path: "src/cloud/integrated-live-drill-provider-recovery.js",
-    role: "INTEGRATED_PROVIDER_DRILL_B2A_UNWIRED_PROVIDER_RECOVERY_LIBRARY"
+    role:
+      "INTEGRATED_PROVIDER_DRILL_B2A_SOURCE_WIRED_NOT_LIVE_PROVIDER_RECOVERY_LIBRARY"
   }),
   "integrated-live-drill-provider-recovery-tests": Object.freeze({
     path: "test/integrated-live-drill-provider-recovery.test.js",
@@ -1959,7 +1960,7 @@ const SOURCE_MARKERS = Object.freeze({
     "--packet"
   ]),
   "integrated-live-drill-process-boundary-verifier": Object.freeze([
-    "tideproof.highwater-drill-process-boundary-verification.v2",
+    "tideproof.highwater-drill-process-boundary-verification.v3",
     "verifyIntegratedLiveDrillProcessBoundaries",
     "FINALIZER_FORBIDDEN_PATH_PATTERNS",
     "WORKER_FORBIDDEN_PATH_PATTERNS",
@@ -1973,7 +1974,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "integrated-live-drill-process-boundary-tests": Object.freeze([
     "provider worker and finalizer import graphs preserve process boundaries",
-    "receipt.supervisor.legacyRecoveryBrokerImported, false",
+    "receipt.supervisor.legacyRecoveryEntryPointImported, false",
     "receipt.supervisor.managedMcpClientConstructed, false",
     "node:child_process",
     "src/cloud/integrated-live-drill-provider-evidence.js",
@@ -2060,9 +2061,9 @@ const SOURCE_MARKERS = Object.freeze({
     "providerBacked: false",
     "accepted: false",
     "finalReleaseReady: false",
-    "Production gate1/gate2 pause-resume orchestration",
+    "Gate1/Gate2 PREPARE/HOLD/RESUME is source-wired and locally tested",
     "cross-host authority",
-    "remain unproven and unwired"
+    "has not been deployed or executed against the live provider"
   ]),
   "integrated-live-drill-provider-recovery-tests": Object.freeze([
     "provider worker input and environment isolate credentials and resume context",
@@ -2094,6 +2095,8 @@ const SOURCE_MARKERS = Object.freeze({
     "transportMutations",
     "provider-worker-outside-link",
     "provider-finalizer-outside-link",
+    "FOO_UNEXPECTED",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_TARGET_REJECTED",
     "substitutedRootInput",
     "tamperedDispatchContext",
     "rejectedContextMutations",
@@ -2164,16 +2167,21 @@ const SOURCE_MARKERS = Object.freeze({
     "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT"
   ]),
   "integrated-live-drill-provider-orchestration": Object.freeze([
-    "tideproof.highwater-drill-provider-orchestration-preparation.v1",
+    "tideproof.highwater-drill-provider-orchestration-preparation.v2",
     "tideproof.highwater-drill-provider-orchestration-completion.v1",
-    "tideproof.highwater-drill-provider-orchestration-stop.v1",
+    "tideproof.highwater-drill-provider-orchestration-decision.v2",
     "HOLD_AWAITING_EXACT_PROVIDER_DISPATCH_AUTHORIZATION",
     "RECOVERY_PREPARED_AWAITING_EXACT_DISPATCH_AUTHORIZATION",
     "UNKNOWN_DO_NOT_ACT",
     "EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED",
     "persistIntegratedLiveDrillProviderOrchestrationPreparation",
     "readIntegratedLiveDrillProviderOrchestrationPreparation",
+    "claimIntegratedLiveDrillProviderOrchestrationAdmission",
+    "readBoundIntegratedLiveDrillProviderOrchestrationAdmission",
     "persistIntegratedLiveDrillProviderOrchestrationStop",
+    "readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent",
+    "STOPPED_BEFORE_PROVIDER_ADMISSION",
+    "PROVIDER_ADMITTED",
     "retryPermitted: false",
     "providerBacked: false",
     "accepted: false",
@@ -2195,6 +2203,12 @@ const SOURCE_MARKERS = Object.freeze({
     "integratedLiveDrillProviderFinalizerEnvironment",
     "validateIntegratedLiveDrillProviderFinalizationReceipt",
     "verifyIntegratedLiveDrillProviderEvidenceBundle",
+    "validateIntegratedLiveDrillProviderDispatchAuthorizationPure",
+    "readBoundIntegratedLiveDrillProviderOrchestrationAdmission",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256",
+    "readBoundPreparationContext",
     "result.stderr.trim()",
     "RECOVERY_PREPARED_AWAITING_EXACT_DISPATCH_AUTHORIZATION",
     "providerBacked: false",
@@ -2202,7 +2216,7 @@ const SOURCE_MARKERS = Object.freeze({
     "finalReleaseReady: false"
   ]),
   "integrated-live-drill-provider-worker": Object.freeze([
-    "tideproof.highwater-drill-provider-worker-input.v1",
+    "tideproof.highwater-drill-provider-worker-input.v2",
     "integratedLiveDrillProviderWorkerEnvironment",
     "assertIntegratedLiveDrillProviderWorkerEnvironment",
     "normalizeIntegratedLiveDrillProviderContext",
@@ -2212,6 +2226,10 @@ const SOURCE_MARKERS = Object.freeze({
     "WORKER_ENVIRONMENT_NAME_SET",
     "MCP_API_KEY",
     "PRIMARY_AUDIT_DATABASE_URL",
+    "recoveryAuditTargetIdentity",
+    "providerAdmissionReceiptSha256",
+    "readBoundIntegratedLiveDrillProviderOrchestrationAdmission",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_TARGET_REJECTED",
     "CockroachManagedMcpRecoveryClient",
     "DeterministicRecoveryBroker",
     "RecoveryAuditSink",
@@ -2265,6 +2283,7 @@ const SOURCE_MARKERS = Object.freeze({
     "validateIntegratedLiveDrillRunAuthorization"
   ]),
   "integrated-live-drill-recovery-continuity-tests": Object.freeze([
+    "audit target identity binds endpoint and TLS policy without credentials",
     "five subprocess workers resume four failpoints with exactly one fake MCP call",
     "only the O_EXCL claim creator dispatches across synchronized subprocess races",
     "claimed call without durable completion is permanently unknown and never retried",
@@ -2319,8 +2338,12 @@ const SOURCE_MARKERS = Object.freeze({
     "packetA.recoveryContinuityDisposition",
     "runIntegratedLiveDrillPacketAFinalizer",
     "provider orchestration PREPARE holds after durable DVI/race and RESUME does not rerun them",
-    "checkpoint root swap during RESUME completion becomes a durable UNKNOWN stop",
-    "post-expiry RESUME persists a fresh-audit-authority stop and never reruns",
+    "concurrent RESUMEs atomically choose stop or admission without provider overlap",
+    "RESUME rejects authorization-ledger substitution before provider admission",
+    "RESUME rebind and terminal path anomalies fail before provider admission",
+    "checkpoint root swap during completion cannot contradict admission",
+    "one-use admission prevents production redispatch",
+    "pre-admission expiry persists a fresh-audit-authority stop and never runs",
     "Gate2 preserves one exact bounded child stop code without stderr detail"
   ]),
   "recovery-bundle-persistence-tests": Object.freeze([

@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-10",
+  "reviewedOn": "2026-08-11",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -462,91 +462,91 @@
       "id": "integrated-live-drill-process-boundary-verifier",
       "path": "scripts/verify-integrated-live-drill-process-boundaries.js",
       "role": "INTEGRATED_PROVIDER_DRILL_RECURSIVE_PROCESS_IMPORT_GATE",
-      "sha256": "8ad79589a618759da402cba5e33735419d605721016cb374a03249e4c09ba071"
+      "sha256": "8024feed7b0845e5d14dd11a69efb2bce96e82efba5628254a61b084573d2819"
     },
     {
       "id": "integrated-live-drill-process-boundary-tests",
       "path": "test/integrated-live-drill-process-boundaries.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_PROCESS_ISOLATION_VERIFICATION",
-      "sha256": "f77557021f3c53e6fe916089602ef494af9a26f901fcffd61a63f7128660815a"
+      "sha256": "32f30bd9032b2e617396e20b93d928d2ef7b6c2996010ba5fb27c4ee4a1e28fd"
     },
     {
       "id": "integrated-live-drill-provider-evidence",
       "path": "src/cloud/integrated-live-drill-provider-evidence.js",
       "role": "INTEGRATED_PROVIDER_DRILL_PROVIDER_FREE_EVIDENCE_VALIDATOR",
-      "sha256": "307860d746a0dec99a02667c67d538d17b0155aeb33ef493efb1db897d4aaf7b"
+      "sha256": "3e006ebcd5f52d4c6bb4a34ee910f6817f9f62e5f2128ce21cc342affbdc6ef4"
     },
     {
       "id": "integrated-live-drill-provider-recovery",
       "path": "src/cloud/integrated-live-drill-provider-recovery.js",
-      "role": "INTEGRATED_PROVIDER_DRILL_B2A_UNWIRED_PROVIDER_RECOVERY_LIBRARY",
-      "sha256": "9d74b3bbd116232321f269f83becdbdfb4061dbc68cd1f9369348b0b28ef447d"
+      "role": "INTEGRATED_PROVIDER_DRILL_B2A_SOURCE_WIRED_NOT_LIVE_PROVIDER_RECOVERY_LIBRARY",
+      "sha256": "999ff265ebf4ac13e633244a4d71071da2bb72128773908716c40dcc54d3f1b1"
     },
     {
       "id": "integrated-live-drill-provider-recovery-tests",
       "path": "test/integrated-live-drill-provider-recovery.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2A_STRICT_LOCAL_FAKE_TRANSPORT_VERIFICATION",
-      "sha256": "3efb5e568cb6abd250bbac3ae1751f36f90879a86d3ec9981a085bc90cc1bfef"
+      "sha256": "e06feebf9902847d7be1856316196688d88b9b6e084ab7c5cd986925366b98c0"
     },
     {
       "id": "integrated-live-drill-provider-finalization",
       "path": "src/cloud/integrated-live-drill-provider-finalization.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_FREE_W4_W5_FINALIZATION",
-      "sha256": "8a6c36d1bb66410dfdca98f3ff67aeeacc1b4967ae60c2ee16a54e25f6daa1c7"
+      "sha256": "b0e22344bd18ee4247bfccbaf5efbbb4545285ac0c2542d532a77a29f5518799"
     },
     {
       "id": "integrated-live-drill-provider-finalizer-runner",
       "path": "scripts/gate2-integrated-live-drill-provider-finalizer.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_FREE_FINALIZER_RUNNER",
-      "sha256": "92cfcf9454ef0e43f51a5060e74c86a00a01ef63f9402dd3ecb70a9d51ef92d5"
+      "sha256": "dc147b37ffdb71f2c89979f5453276ae2f7f110f64e59ee1b894115bf4cfd20b"
     },
     {
       "id": "integrated-live-drill-provider-orchestration",
       "path": "src/cloud/integrated-live-drill-provider-orchestration.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_DURABLE_PREPARE_HOLD_RESUME_CONTRACT",
-      "sha256": "59ed318d0bf4043a7bb904f978634bb15880b201938a2cc409ef29813e00cea9"
+      "sha256": "42ab526fb344f9788219870b53810f51dd369fded7400726e2e8846645c50414"
     },
     {
       "id": "integrated-live-drill-provider-orchestration-tests",
       "path": "test/integrated-live-drill-provider-orchestration.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_ORCHESTRATION_FAIL_CLOSED_VERIFICATION",
-      "sha256": "b06586e61fa4df1345e16d1dcd8e51b991199f70740df12afe9def5a822c1fc6"
+      "sha256": "b29fbc6b5d31c75cb68bbf88276ee064d312699618eb8cefa50a68f123158540"
     },
     {
       "id": "integrated-live-drill-provider-supervisor-runner",
       "path": "scripts/gate1-integrated-live-drill-provider-supervisor.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PREPARE_RESUME_SUPERVISOR",
-      "sha256": "651b4f5bb40789ba8b311296b52e2e4a33e2ebbf198e02b1d117fbcdb11ed2b8"
+      "sha256": "10651b1716ef908733d5a7dd691ce173cc33495154f556b585a9ab5e4d7d17d1"
     },
     {
       "id": "integrated-live-drill-provider-worker",
       "path": "src/cloud/integrated-live-drill-provider-worker.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_CREDENTIAL_ISOLATED_PROVIDER_WORKER",
-      "sha256": "fc5a1e185fc9c6926f527cc47d615e6b3584ad610013d5cbe089baf549800f34"
+      "sha256": "235f2a4c6dfc5d6e3f6a4be1415d69ec9c9665316ae814d6803788ad5ed052fc"
     },
     {
       "id": "integrated-live-drill-provider-worker-runner",
       "path": "scripts/gate1-integrated-live-drill-provider-worker.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_WORKER_RUNNER",
-      "sha256": "2f468f30b0c22c16b92d727970b23e8483567fe808401454512f58f0d06e697d"
+      "sha256": "739cd7da9e5ae06680efb2725aac4eb107e3eae58a29e7222b3f66e964f5d2eb"
     },
     {
       "id": "integrated-live-drill-recovery-continuity",
       "path": "src/cloud/integrated-live-drill-recovery-continuity.js",
       "role": "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_SCAFFOLD",
-      "sha256": "c88624b5d564d4f2e43e251abfa72972772f86b2e309e771b9073186cf31b335"
+      "sha256": "eb119a224c4bf27357a55a1a7f04090d531b44aa9d999c0e9f21e5368f006bb9"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-tests",
       "path": "test/integrated-live-drill-recovery-continuity.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_LOCAL_RECOVERY_CONTINUITY_VERIFICATION",
-      "sha256": "6c56962e3b4afb57baeb04d82191a1114be892940149701f0be564001e57de7c"
+      "sha256": "7866bf23f3240f9f1cd4c7bf1115d362558fe02144f617f080206d459e1c2722"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-fixture",
       "path": "test/helpers/integrated-live-drill-recovery-continuity-fixture.js",
       "role": "INTEGRATED_PROVIDER_DRILL_TRUSTED_PRE_CALL_TEST_FIXTURE",
-      "sha256": "0397f6b00234a7df4e39d6744a8f726a8495e62edd16ead0534bf168cac478cf"
+      "sha256": "8ee019a6ed86f56e0cce81dadb30b6757df06d926b38c0d515cdc4ea1db12879"
     },
     {
       "id": "integrated-live-drill-recovery-continuity-worker",
@@ -570,13 +570,13 @@
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER",
-      "sha256": "a3271f1913b62c85981ca32e8f7df18935a6031e2743143eb8a60f4c1850fbdd"
+      "sha256": "147671c55250fb484423fd3294dab9de05dc08401af5b0c24a1f94d7188f162d"
     },
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "1c485ed6b4b95f01dca1bc6384c63e39f224832b6c933cc389f7a954006d6f94"
+      "sha256": "f89d812cc6d0520e12cdf9dca6d16bda49ad8532afb733dc7af07dd9ee8200d9"
     },
     {
       "id": "recovery-bundle-persistence-tests",
@@ -696,7 +696,7 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "5b7f5f504d83ce0265a665a8d9eee9fea687fe1fbd86585d766264e1c98c739b"
+      "sha256": "991ea775319d1f667b64b5b9e4b78fd3d52b91a9b1448c4fd3a385efa8bea55d"
     },
     {
       "id": "recovery-broker-tests",
@@ -714,7 +714,7 @@
       "id": "recovery-continuity-identity",
       "path": "src/cloud/recovery-continuity-identity.js",
       "role": "PROVIDER_FREE_RECOVERY_PRE_CALL_IDENTITY_AND_BUNDLE_VERIFICATION",
-      "sha256": "f95fb6bfbb46de941f58791926670f82a14da3bb0c5b48b1ba0bfebd3b3373d2"
+      "sha256": "717796b264bcf6d15f26d7642ecac1a395ce790a1ff481a6a897d7cc2c8081cb"
     },
     {
       "id": "recovery-security-contract",

@@ -13,6 +13,7 @@ import {
 import { verifyIntegratedLiveDrillConsumedChildLaunch } from
   "../src/cloud/integrated-live-drill-child-authorization.js";
 import {
+  recoveryAuditTargetIdentity,
   recoveryBrokerConfigDigest,
   verifyRecoveryBundleSourceSignature as
     verifyRecoveryBundleSourceSignatureForContinuity
@@ -125,13 +126,21 @@ function brokerConfigurationFor(
   } = {}
 ) {
   return Object.freeze({
+    auditTargetIdentity: recoveryAuditTargetIdentity({
+      connectionString: "postgresql://audit.invalid/tideproof",
+      primaryClusterId: expectedSourceClusterId
+    }),
     expectedSourceClusterId,
     recoveryBrokerConfigDigest: recoveryBrokerConfigDigest({
       recoveryClusterId,
       expectedSourceClusterId,
       buildIdentity: value.context.trustedRunContext.spec.sourceBuildIdentity,
       trustedPublisherKeys:
-        value.context.trustedRunContext.committedTrustRoot.trustedPublisherKeys
+        value.context.trustedRunContext.committedTrustRoot.trustedPublisherKeys,
+      auditTargetIdentity: recoveryAuditTargetIdentity({
+        connectionString: "postgresql://audit.invalid/tideproof",
+        primaryClusterId: expectedSourceClusterId
+      })
     }),
     recoveryClusterId
   });
@@ -152,6 +161,38 @@ function sanitizedEnvironment(extra = {}) {
     ...extra
   });
 }
+
+test("audit target identity binds endpoint and TLS policy without credentials", () => {
+  const primaryClusterId = "88888888-8888-4888-8888-888888888888";
+  const identity = recoveryAuditTargetIdentity({
+    connectionString:
+      "postgresql://audit-user:super-secret@audit.example:26257/tideproof?sslmode=verify-full&password=also-secret",
+    primaryClusterId
+  });
+  assert.equal(identity.hostname, "audit.example");
+  assert.equal(identity.port, 26257);
+  assert.equal(identity.database, "tideproof");
+  assert.equal(identity.primaryClusterId, primaryClusterId);
+  assert.equal(JSON.stringify(identity).includes("audit-user"), false);
+  assert.equal(JSON.stringify(identity).includes("super-secret"), false);
+  assert.equal(JSON.stringify(identity).includes("also-secret"), false);
+  assert.notDeepEqual(
+    identity,
+    recoveryAuditTargetIdentity({
+      connectionString:
+        "postgresql://audit-user:changed@other.example:26257/tideproof?sslmode=verify-full",
+      primaryClusterId
+    })
+  );
+  assert.notDeepEqual(
+    identity,
+    recoveryAuditTargetIdentity({
+      connectionString:
+        "postgresql://audit-user:changed@audit.example:26257/tideproof?sslmode=require",
+      primaryClusterId
+    })
+  );
+});
 
 function runWorker(value, worker, ...args) {
   return spawnSync(
@@ -437,6 +478,55 @@ test("claimed call without durable completion is permanently unknown and never r
   const w5 = runWorker(value, "W5", "--no-client");
   assert.notEqual(w5.status, 0);
   assert.match(w5.stderr, /W5_RECONCILIATION_REJECTED/u);
+});
+
+test("a dangling unknown marker is never treated as dispatch permission", async (t) => {
+  const value = fixture(t, "prooftoact-packet-b-dangling-unknown-");
+  runIntegratedLiveDrillRecoveryContinuityW1(value.context);
+  const authorizationId = value.context.authorization.payload.authorizationId;
+  const unknownPath = path.join(
+    value.context.ledgerRootPath,
+    `${authorizationId}.recovery-continuity-unknown-do-not-act.json`
+  );
+  fs.symlinkSync("missing-unknown-disposition", unknownPath);
+  let calls = 0;
+  const result = await runIntegratedLiveDrillRecoveryContinuityW2(
+    value.context,
+    {
+      mcpCall: async () => {
+        calls += 1;
+        throw new Error("must not dispatch");
+      }
+    }
+  );
+  assert.deepEqual(result, {
+    status: INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN,
+    retryPermitted: false
+  });
+  assert.equal(calls, 0);
+  assert.equal(journalCount(value), 4);
+});
+
+test("a dangling intent entry is present and fails closed", (t) => {
+  const value = fixture(t, "prooftoact-packet-b-dangling-intent-");
+  const authorizationId = value.context.authorization.payload.authorizationId;
+  const intentPath = path.join(
+    value.context.ledgerRootPath,
+    `${authorizationId}.recovery-continuity-intent.json`
+  );
+  fs.symlinkSync("missing-pre-call-intent", intentPath);
+  assert.throws(
+    () => runIntegratedLiveDrillRecoveryContinuityW1(value.context),
+    /RECOVERY_CONTINUITY_AMBIGUOUS/u
+  );
+  assert.throws(
+    () => validateIntegratedLiveDrillRecoveryContinuityJournal(
+      value.context,
+      { allowAbsent: true }
+    ),
+    /RECOVERY_CONTINUITY_AMBIGUOUS/u
+  );
+  assert.equal(journalCount(value), 0);
 });
 
 test("W5 makes no ambient-credential claim, rejects a provider client, and journals reject tampering", (t) => {

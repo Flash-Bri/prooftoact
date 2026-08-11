@@ -30,9 +30,13 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA =
   "tideproof.highwater-drill-provider-dispatch-authorization.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT =
   "Authorize at most one bounded CockroachDB Managed MCP session initialization and one initialized notification, exactly one select_query tools/call for the exact recovery broker configuration and logical request digests bound below, and required close or cleanup of any opened session. No additional session, tools/call, provider action, or retry is authorized; close remains permitted solely to terminate an opened session after any denial or expiry.";
+export const INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_BINDING_SCHEMA =
+  "tideproof.highwater-drill-private-root-binding.v2";
+export const INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_FD";
 
 export const INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_CLAIM_BOUNDARY =
-  "This handoff binds one integrated W1 pre-read audit, one W2 owner-only actual Managed MCP client path with private raw result, independently recomputable exact semantic tools/call request bytes, strictly validated locally recorded transport/session-close evidence, and one independently resolved full-event W3 terminal audit. Initialize and response byte hashes are locally recorded rather than provider-signed or fully reconstructable; this scaffold does not establish provider origin, a provider-global exact-call count, cross-host continuity, or an accepted live result. The reviewed broker/audit-sink resolver resamples current authority immediately before its database connect and query boundaries; production B2b runner wiring remains unproven and unwired. The broad signed run authorization does not directly bind the derived recovery broker configuration or exact logical MCP request; W2 therefore requires a second human-signed exact provider-dispatch authorization at the immediate client boundary. It remains non-accepting until a governed live run establishes the remaining W4/W5, finalizer, release, deployment, and evidence gates. Ambiguous claim, dispatch, provider-result, persistence, or audit states are permanent UNKNOWN_DO_NOT_ACT and never authorize retry.";
+  "This handoff binds one integrated W1 pre-read audit, one W2 owner-only actual Managed MCP client path with private raw result, independently recomputable exact semantic tools/call request bytes, strictly validated locally recorded transport/session-close evidence, and one independently resolved full-event W3 terminal audit. Initialize and response byte hashes are locally recorded rather than provider-signed or fully reconstructable; this scaffold does not establish provider origin, a provider-global exact-call count, cross-host continuity, or an accepted live result. The reviewed broker/audit-sink resolver resamples current authority immediately before its database connect and query boundaries. Gate1/Gate2 PREPARE/HOLD/RESUME is source-wired and locally tested, but it has not been deployed or executed against the live provider; copied-ledger and cross-host authority, live provider continuity, finalization, acceptance, and release remain unproven. The broad signed run authorization does not directly bind the derived recovery broker configuration or exact logical MCP request; W2 therefore requires a second human-signed exact provider-dispatch authorization at the immediate client boundary. It remains non-accepting until a governed live run establishes the remaining W4/W5, finalizer, release, deployment, and evidence gates. Ambiguous claim, dispatch, provider-result, persistence, or audit states are permanent UNKNOWN_DO_NOT_ACT and never authorize retry.";
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const UUID =
@@ -57,6 +61,7 @@ const PROVIDER_PRE_CALL_INPUT_KEYS = Object.freeze([
 const PROVIDER_PREPARATION_CONTEXT_KEYS = Object.freeze([
   "authorization",
   "controlLedgerReceipt",
+  "evidenceRootBinding",
   "forbiddenRootPath",
   "ledgerRootPath",
   "preCallInputs",
@@ -686,6 +691,9 @@ export function normalizeIntegratedLiveDrillProviderContext(
     ].map((key) => [key, normalizeContextJson]))
   );
   const authorization = normalizeContextJson(context.authorization);
+  const evidenceRootBinding = validateIntegratedLiveDrillPrivateRootBinding(
+    context.evidenceRootBinding
+  );
   const controlLedgerReceipt = normalizeContextControlLedgerReceipt(
     context.controlLedgerReceipt
   );
@@ -717,6 +725,7 @@ export function normalizeIntegratedLiveDrillProviderContext(
   const normalized = {
     authorization,
     controlLedgerReceipt,
+    evidenceRootBinding,
     forbiddenRootPath: normalizeContextScalar(context.forbiddenRootPath),
     ledgerRootPath: normalizeContextScalar(context.ledgerRootPath),
     preCallInputs,
@@ -726,6 +735,13 @@ export function normalizeIntegratedLiveDrillProviderContext(
     ),
     trustedRunContext
   };
+  requireCondition(
+    evidenceRootBinding.rootPathSha256 ===
+        integratedLiveDrillCanonicalSha256(normalized.recoveryEvidenceRootPath) &&
+      evidenceRootBinding.forbiddenRootPathSha256 ===
+        integratedLiveDrillCanonicalSha256(normalized.forbiddenRootPath),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED"
+  );
   if (requireDispatchAuthorization) {
     const providerDispatchAuthorization = normalizeContextJson(
       context.providerDispatchAuthorization
@@ -784,10 +800,19 @@ export function secureIntegratedLiveDrillPrivateRoot(
   );
   let canonicalRoot;
   let canonicalForbidden;
+  let canonicalParent;
+  let parentStat;
+  let parentCtimeNs;
   let stat;
+  const parentPath = path.dirname(rootPath);
   try {
     canonicalRoot = fs.realpathSync(rootPath);
     canonicalForbidden = fs.realpathSync(forbiddenRootPath);
+    canonicalParent = fs.realpathSync(parentPath);
+    parentStat = fs.lstatSync(parentPath);
+    parentCtimeNs = String(
+      fs.lstatSync(parentPath, { bigint: true }).ctimeNs
+    );
     stat = fs.lstatSync(rootPath);
   } catch (cause) {
     reject(code, cause);
@@ -807,8 +832,311 @@ export function secureIntegratedLiveDrillPrivateRoot(
   return Object.freeze({
     expectedUid,
     forbiddenRootPath: canonicalForbidden,
+    parentCtimeNs,
+    parentPath: canonicalParent,
+    parentStat,
     rootPath: canonicalRoot,
     stat
+  });
+}
+
+function assertIntegratedLiveDrillPrivateRootGuardCurrent(
+  secure,
+  code
+) {
+  let parent;
+  let parentCtimeNs;
+  let canonicalParent;
+  let entries;
+  try {
+    parent = fs.lstatSync(secure.parentPath);
+    parentCtimeNs = String(
+      fs.lstatSync(secure.parentPath, { bigint: true }).ctimeNs
+    );
+    canonicalParent = fs.realpathSync(secure.parentPath);
+    entries = fs.readdirSync(secure.parentPath);
+  } catch (cause) {
+    reject(code, cause);
+  }
+  requireCondition(
+    secure.parentPath === path.dirname(secure.rootPath) &&
+      parent.isDirectory() &&
+      !parent.isSymbolicLink() &&
+      parent.dev === secure.parentStat.dev &&
+      parent.ino === secure.parentStat.ino &&
+      parent.uid === secure.expectedUid &&
+      (parent.mode & 0o777) === 0o700 &&
+      parentCtimeNs === secure.parentCtimeNs &&
+      canonicalParent === secure.parentPath &&
+      !pathIsWithin(secure.parentPath, secure.forbiddenRootPath) &&
+      entries.length === 1 &&
+      entries[0] === path.basename(secure.rootPath),
+    code
+  );
+}
+
+function privateRootBindingBody(
+  secure,
+  code = "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED"
+) {
+  assertIntegratedLiveDrillPrivateRootGuardCurrent(secure, code);
+  return Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_BINDING_SCHEMA,
+    device: String(secure.stat.dev),
+    forbiddenRootPathSha256: integratedLiveDrillCanonicalSha256(
+      secure.forbiddenRootPath
+    ),
+    inode: String(secure.stat.ino),
+    mode: "0700",
+    parentCtimeNs: secure.parentCtimeNs,
+    parentDevice: String(secure.parentStat.dev),
+    parentInode: String(secure.parentStat.ino),
+    parentMode: "0700",
+    parentPathSha256: integratedLiveDrillCanonicalSha256(secure.parentPath),
+    parentUid: secure.expectedUid,
+    rootPathSha256: integratedLiveDrillCanonicalSha256(secure.rootPath),
+    uid: secure.expectedUid
+  });
+}
+
+export function integratedLiveDrillPrivateRootBinding(
+  secure,
+  code = "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED"
+) {
+  const body = privateRootBindingBody(secure, code);
+  return Object.freeze({
+    ...body,
+    receiptSha256: integratedLiveDrillCanonicalSha256(body)
+  });
+}
+
+export function validateIntegratedLiveDrillPrivateRootBinding(value) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED";
+  requireCondition(
+    exactKeys(value, [
+      "device",
+      "forbiddenRootPathSha256",
+      "inode",
+      "mode",
+      "parentCtimeNs",
+      "parentDevice",
+      "parentInode",
+      "parentMode",
+      "parentPathSha256",
+      "parentUid",
+      "receiptSha256",
+      "rootPathSha256",
+      "schemaVersion",
+      "uid"
+    ]),
+    code
+  );
+  const { receiptSha256, ...body } = value;
+  requireCondition(
+    body.schemaVersion === INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_BINDING_SCHEMA &&
+      /^(?:0|[1-9][0-9]*)$/u.test(body.device ?? "") &&
+      /^(?:0|[1-9][0-9]*)$/u.test(body.inode ?? "") &&
+      /^(?:0|[1-9][0-9]*)$/u.test(body.parentCtimeNs ?? "") &&
+      /^(?:0|[1-9][0-9]*)$/u.test(body.parentDevice ?? "") &&
+      /^(?:0|[1-9][0-9]*)$/u.test(body.parentInode ?? "") &&
+      Number.isSafeInteger(body.uid) &&
+      body.uid >= 0 &&
+      Number.isSafeInteger(body.parentUid) &&
+      body.parentUid >= 0 &&
+      body.parentUid === body.uid &&
+      body.mode === "0700" &&
+      body.parentMode === "0700" &&
+      HEX_64.test(body.forbiddenRootPathSha256 ?? "") &&
+      HEX_64.test(body.parentPathSha256 ?? "") &&
+      HEX_64.test(body.rootPathSha256 ?? "") &&
+      HEX_64.test(receiptSha256 ?? "") &&
+      receiptSha256 === integratedLiveDrillCanonicalSha256(body),
+    code
+  );
+  return Object.freeze({ ...value });
+}
+
+export function assertIntegratedLiveDrillPrivateRootMatchesBinding(
+  secure,
+  binding,
+  code = "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED"
+) {
+  const accepted = validateIntegratedLiveDrillPrivateRootBinding(binding);
+  assertIntegratedLiveDrillPrivateRootCurrent(secure, code);
+  assertIntegratedLiveDrillPrivateRootGuardCurrent(secure, code);
+  requireCondition(
+    canonicalJson(accepted) ===
+      canonicalJson(integratedLiveDrillPrivateRootBinding(secure, code)),
+    code
+  );
+  return accepted;
+}
+
+export function acquireIntegratedLiveDrillPrivateRootLease({
+  binding,
+  code = "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED",
+  descriptor: inheritedDescriptor,
+  forbiddenRootPath,
+  rootPath
+}) {
+  const secure = secureIntegratedLiveDrillPrivateRoot(
+    rootPath,
+    forbiddenRootPath,
+    code
+  );
+  const acceptedBinding = binding === undefined
+    ? integratedLiveDrillPrivateRootBinding(secure, code)
+    : assertIntegratedLiveDrillPrivateRootMatchesBinding(
+        secure,
+        binding,
+        code
+      );
+  let descriptor;
+  let parentDescriptor;
+  const descriptorInherited = inheritedDescriptor !== undefined;
+  const parentPath = secure.parentPath;
+  try {
+    requireCondition(
+      inheritedDescriptor === undefined ||
+        (Number.isSafeInteger(inheritedDescriptor) && inheritedDescriptor >= 0),
+      code
+    );
+    descriptor = inheritedDescriptor ?? fs.openSync(
+        secure.rootPath,
+        fs.constants.O_RDONLY |
+          fs.constants.O_NOFOLLOW |
+          (fs.constants.O_DIRECTORY ?? 0)
+      );
+    parentDescriptor = fs.openSync(
+      parentPath,
+      fs.constants.O_RDONLY |
+        fs.constants.O_NOFOLLOW |
+        (fs.constants.O_DIRECTORY ?? 0)
+    );
+    const opened = fs.fstatSync(descriptor);
+    const openedParent = fs.fstatSync(parentDescriptor);
+    const openedParentCtimeNs = String(
+      fs.fstatSync(parentDescriptor, { bigint: true }).ctimeNs
+    );
+    const namedParent = fs.lstatSync(parentPath);
+    requireCondition(
+      opened.isDirectory() &&
+        opened.dev === secure.stat.dev &&
+        opened.ino === secure.stat.ino &&
+        opened.uid === secure.expectedUid &&
+        (opened.mode & 0o777) === 0o700 &&
+        openedParent.isDirectory() &&
+        !namedParent.isSymbolicLink() &&
+        openedParent.dev === secure.parentStat.dev &&
+        openedParent.ino === secure.parentStat.ino &&
+        openedParent.uid === secure.expectedUid &&
+        (openedParent.mode & 0o777) === 0o700 &&
+        openedParentCtimeNs === secure.parentCtimeNs &&
+        openedParent.dev === namedParent.dev &&
+        openedParent.ino === namedParent.ino &&
+        fs.realpathSync(parentPath) === parentPath,
+      code
+    );
+  } catch (cause) {
+    if (descriptor !== undefined && !descriptorInherited) {
+      try { fs.closeSync(descriptor); } catch { /* Preserve first failure. */ }
+    }
+    if (parentDescriptor !== undefined) {
+      try { fs.closeSync(parentDescriptor); } catch { /* Preserve first failure. */ }
+    }
+    if (cause?.message === code) throw cause;
+    reject(code, cause);
+  }
+  let released = false;
+  const assertCurrent = () => {
+    requireCondition(!released, code);
+    let opened;
+    let openedParent;
+    let openedParentCtimeNs;
+    let namedParent;
+    try {
+      opened = fs.fstatSync(descriptor);
+      openedParent = fs.fstatSync(parentDescriptor);
+      openedParentCtimeNs = String(
+        fs.fstatSync(parentDescriptor, { bigint: true }).ctimeNs
+      );
+      namedParent = fs.lstatSync(parentPath);
+    } catch (cause) {
+      reject(code, cause);
+    }
+    requireCondition(
+      opened.isDirectory() &&
+        opened.dev === secure.stat.dev &&
+        opened.ino === secure.stat.ino &&
+        opened.uid === secure.expectedUid &&
+        (opened.mode & 0o777) === 0o700 &&
+        openedParent.isDirectory() &&
+        !namedParent.isSymbolicLink() &&
+        openedParent.dev === secure.parentStat.dev &&
+        openedParent.ino === secure.parentStat.ino &&
+        openedParent.uid === secure.expectedUid &&
+        (openedParent.mode & 0o777) === 0o700 &&
+        openedParentCtimeNs === secure.parentCtimeNs &&
+        openedParent.dev === namedParent.dev &&
+        openedParent.ino === namedParent.ino &&
+        fs.realpathSync(parentPath) === parentPath,
+      code
+    );
+    const accepted = assertIntegratedLiveDrillPrivateRootMatchesBinding(
+      secure,
+      acceptedBinding,
+      code
+    );
+    return accepted;
+  };
+  const assertSettled = async () => {
+    return assertCurrent();
+  };
+  const operations = new WeakSet();
+  const beginOperation = () => {
+    assertCurrent();
+    const parent = fs.fstatSync(parentDescriptor, { bigint: true });
+    const operation = Object.freeze({
+      device: parent.dev,
+      inode: parent.ino,
+      ctimeNs: parent.ctimeNs
+    });
+    operations.add(operation);
+    return operation;
+  };
+  const assertOperation = (operation) => {
+    requireCondition(
+      operation &&
+        typeof operation === "object" &&
+        operations.has(operation),
+      code
+    );
+    operations.delete(operation);
+    const parent = fs.fstatSync(parentDescriptor, { bigint: true });
+    requireCondition(
+      parent.dev === operation.device &&
+        parent.ino === operation.inode &&
+        parent.ctimeNs === operation.ctimeNs,
+      code
+    );
+    return assertCurrent();
+  };
+  const release = () => {
+    if (released) return;
+    released = true;
+    if (!descriptorInherited) fs.closeSync(descriptor);
+    fs.closeSync(parentDescriptor);
+  };
+  assertCurrent();
+  return Object.freeze({
+    assertOperation,
+    assertCurrent,
+    assertSettled,
+    beginOperation,
+    binding: acceptedBinding,
+    descriptor,
+    release,
+    secure
   });
 }
 
@@ -1664,6 +1992,7 @@ export function validateIntegratedLiveDrillProviderDispatchAuthorizationPure(
   const runExpiresAt = exactIsoMilliseconds(intent?.expiresAt, code);
   requireCondition(
     exactKeys(payload, [
+      "auditTargetIdentitySha256",
       "authorityStatement",
       "authorizationAttestationSha256",
       "authorizationId",
@@ -1683,6 +2012,8 @@ export function validateIntegratedLiveDrillProviderDispatchAuthorizationPure(
     ]) &&
       payload.authorityStatement ===
         INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT &&
+      payload.auditTargetIdentitySha256 ===
+        intent.auditTargetIdentitySha256 &&
       payload.authorizationAttestationSha256 ===
         intent.authorizationAttestationSha256 &&
       payload.authorizationId === intent.authorizationId &&

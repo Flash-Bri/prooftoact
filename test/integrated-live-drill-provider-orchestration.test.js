@@ -12,10 +12,18 @@ import {
 } from "../src/cloud/integrated-live-drill-authorization.js";
 import {
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA
+  INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
+  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_BINDING_SCHEMA,
+  acquireIntegratedLiveDrillPrivateRootLease,
+  integratedLiveDrillPrivateRootBinding,
+  secureIntegratedLiveDrillPrivateRoot
 } from "../src/cloud/integrated-live-drill-provider-evidence.js";
 import {
+  readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation
+} from "../src/cloud/integrated-live-drill-provider-recovery.js";
+import {
   buildIntegratedLiveDrillProviderOrchestrationPreparation,
+  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
   INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_HOLD,
   INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES,
@@ -34,8 +42,13 @@ import {
 } from "../src/cloud/integrated-live-drill.js";
 import {
   __test as supervisorTest,
+  INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_CONTEXT_PATH_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT,
   persistIntegratedLiveDrillProviderSupervisorPreparation,
@@ -43,7 +56,10 @@ import {
   resumeIntegratedLiveDrillProviderSupervisor
 } from "../scripts/gate1-integrated-live-drill-provider-supervisor.js";
 import { principalBindingHash } from "../src/cloud/recovery-broker.js";
-import { createRecoveryContinuityFixture } from
+import {
+  createRecoveryContinuityFixture,
+  persistFixtureProviderOrchestrationAdmission
+} from
   "./helpers/integrated-live-drill-recovery-continuity-fixture.js";
 
 const sha = (value) => createHash("sha256").update(value).digest("hex");
@@ -74,6 +90,18 @@ const spec = Object.freeze({
   ...specWithoutIdentity,
   sourceBuildIdentity: integratedSourceBuildIdentity(specWithoutIdentity)
 });
+
+function dedicatedPrivateRoot(prefix) {
+  const guardPath = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}guard-`));
+  fs.chmodSync(guardPath, 0o700);
+  const rootPath = path.join(guardPath, "root");
+  fs.mkdirSync(rootPath, { mode: 0o700 });
+  fs.chmodSync(rootPath, 0o700);
+  return Object.freeze({
+    guardPath: fs.realpathSync(guardPath),
+    rootPath: fs.realpathSync(rootPath)
+  });
+}
 
 function withReceipt(body) {
   return Object.freeze({
@@ -214,6 +242,7 @@ function supervisorPreparation() {
   const issuedAt = "2026-08-10T16:00:00.000Z";
   const payload = Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
+    auditTargetIdentitySha256: "a".repeat(64),
     authorityStatement: INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
     authorizationAttestationSha256: "1".repeat(64),
     authorizationId,
@@ -255,11 +284,45 @@ function supervisorPreparation() {
   }));
 }
 
+function evidenceRootBinding() {
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  return withReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_BINDING_SCHEMA,
+    device: "1",
+    forbiddenRootPathSha256: "9".repeat(64),
+    inode: "2",
+    mode: "0700",
+    parentCtimeNs: "3",
+    parentDevice: "4",
+    parentInode: "5",
+    parentMode: "0700",
+    parentPathSha256: "b".repeat(64),
+    parentUid: uid,
+    rootPathSha256: "a".repeat(64),
+    uid
+  }));
+}
+
+function rehashSupervisorPreparation(value) {
+  const changed = structuredClone(value);
+  changed.signingPayloadSha256 = integratedLiveDrillCanonicalSha256(
+    changed.signingPayload
+  );
+  delete changed.receiptSha256;
+  changed.receiptSha256 = integratedLiveDrillCanonicalSha256(changed);
+  return changed;
+}
+
 function preparationArgs() {
+  const decisionRootBinding = evidenceRootBinding();
   return {
     authorityEvidenceId: evidenceId,
     authoritySelectedEvidenceDigest: evidenceDigest,
+    decisionPathSha256: "9".repeat(64),
+    decisionRootBinding,
+    decisionRootPathSha256: decisionRootBinding.rootPathSha256,
     ...components(),
+    evidenceRootBinding: evidenceRootBinding(),
     gate1Preparation: supervisorPreparation(),
     journalIntentBindingSha256: "7".repeat(64),
     journalPathSha256: "8".repeat(64),
@@ -285,6 +348,35 @@ test("provider orchestration HOLD binds full legacy DVI/race invariants and exac
   assert.equal(hold.finalReleaseReady, false);
   assert.equal(hold.signingPayload.runId, runId);
 
+  const exactFifteenMinutes = rehashSupervisorPreparation(
+    supervisorPreparation()
+  );
+  exactFifteenMinutes.signingPayload.expiresAt = new Date(
+    Date.parse(exactFifteenMinutes.signingPayload.issuedAt) + 15 * 60 * 1_000
+  ).toISOString();
+  exactFifteenMinutes.signingPayload.childAuthorizationIssuedAt =
+    exactFifteenMinutes.signingPayload.issuedAt;
+  const exactBoundary = rehashSupervisorPreparation(exactFifteenMinutes);
+  assert.equal(
+    buildIntegratedLiveDrillProviderOrchestrationPreparation({
+      ...preparationArgs(),
+      gate1Preparation: exactBoundary
+    }).gate1Preparation.signingPayload.expiresAt,
+    exactBoundary.signingPayload.expiresAt
+  );
+  const overFifteenMinutes = structuredClone(exactBoundary);
+  overFifteenMinutes.signingPayload.expiresAt = new Date(
+    Date.parse(overFifteenMinutes.signingPayload.issuedAt) +
+      15 * 60 * 1_000 + 1
+  ).toISOString();
+  assert.throws(
+    () => buildIntegratedLiveDrillProviderOrchestrationPreparation({
+      ...preparationArgs(),
+      gate1Preparation: rehashSupervisorPreparation(overFifteenMinutes)
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED/u
+  );
+
   const badDvi = preparationArgs();
   badDvi.dvi.cleanup.snapshotRetired = false;
   assert.throws(
@@ -301,7 +393,10 @@ test("provider orchestration HOLD binds full legacy DVI/race invariants and exac
   delete substituted.receiptSha256;
   substituted.receiptSha256 = integratedLiveDrillCanonicalSha256(substituted);
   assert.throws(
-    () => validateIntegratedLiveDrillProviderSupervisorPreparation(substituted),
+    () => buildIntegratedLiveDrillProviderOrchestrationPreparation({
+      ...preparationArgs(),
+      gate1Preparation: substituted
+    }),
     /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED/u
   );
 });
@@ -367,28 +462,141 @@ test("orchestration boundaries reject accessors, exotic keys, prototypes, and co
   assert.equal(coercionRuns, 0);
 });
 
+test("HOLD validates exact timestamp order and cross-binds persisted context and dispatch preparation", (t) => {
+  const fixture = createRecoveryContinuityFixture(t, {
+    prefix: "pta-orchestration-hold-binding-",
+    subjectBindingSha256: principalBindingHash(
+      "principal://tideproof-demo-successor"
+    )
+  });
+  const contextPath = path.join(
+    fixture.context.recoveryEvidenceRootPath,
+    "provider-supervisor-context.json"
+  );
+  const issuedAt = fixture.context.preCallInputs.consumedChildAuthorization
+    .attestation.payload.issuedAt;
+  const preparation = persistIntegratedLiveDrillProviderSupervisorPreparation({
+    context: fixture.context,
+    contextPath,
+    forbiddenRootPath: fixture.context.forbiddenRootPath,
+    issuedAt,
+    rootPath: fixture.context.recoveryEvidenceRootPath
+  });
+  const evidence = Object.freeze({
+    context: fixture.context,
+    dispatchPreparation:
+      readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
+        fixture.context
+      )
+  });
+  assert.equal(
+    validateIntegratedLiveDrillProviderSupervisorPreparation(
+      preparation,
+      evidence
+    ).receiptSha256,
+    preparation.receiptSha256
+  );
+
+  for (const [name, mutate] of [
+    ["malformed child time", (value) => {
+      value.signingPayload.childAuthorizationIssuedAt = "not-an-instant";
+    }],
+    ["child after issue", (value) => {
+      value.signingPayload.childAuthorizationIssuedAt =
+        new Date(Date.parse(value.signingPayload.issuedAt) + 1).toISOString();
+    }],
+    ["expiry at issue", (value) => {
+      value.signingPayload.expiresAt = value.signingPayload.issuedAt;
+    }]
+  ]) {
+    const changed = structuredClone(preparation);
+    mutate(changed);
+    assert.throws(
+      () => validateIntegratedLiveDrillProviderSupervisorPreparation(
+        rehashSupervisorPreparation(changed),
+        evidence
+      ),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED/u,
+      name
+    );
+  }
+
+  for (const field of [
+    "preparationContextSha256",
+    "preparationReceiptSha256"
+  ]) {
+    const changed = structuredClone(preparation);
+    changed[field] = "f".repeat(64);
+    assert.throws(
+      () => validateIntegratedLiveDrillProviderSupervisorPreparation(
+        rehashSupervisorPreparation(changed),
+        evidence
+      ),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED/u,
+      field
+    );
+  }
+
+  const substitute = createRecoveryContinuityFixture(t, {
+    prefix: "pta-orchestration-hold-substitute-",
+    subjectBindingSha256: principalBindingHash(
+      "principal://tideproof-demo-successor"
+    )
+  });
+  const substituteContextPath = path.join(
+    substitute.context.recoveryEvidenceRootPath,
+    "provider-supervisor-context.json"
+  );
+  persistIntegratedLiveDrillProviderSupervisorPreparation({
+    context: substitute.context,
+    contextPath: substituteContextPath,
+    forbiddenRootPath: substitute.context.forbiddenRootPath,
+    issuedAt: substitute.context.preCallInputs.consumedChildAuthorization
+      .attestation.payload.issuedAt,
+    rootPath: substitute.context.recoveryEvidenceRootPath
+  });
+  assert.throws(
+    () => validateIntegratedLiveDrillProviderSupervisorPreparation(
+      preparation,
+      {
+        context: substitute.context,
+        dispatchPreparation:
+          readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
+            substitute.context
+          )
+      }
+    ),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED/u
+  );
+});
+
 test("checkpoint sidecar binds canonical root and checkpoint file identity across resume", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pta-orchestration-root-"));
-  fs.chmodSync(root, 0o700);
+  const dedicated = dedicatedPrivateRoot("pta-orchestration-root-");
+  const root = dedicated.rootPath;
   const moved = `${root}.original`;
   t.after(() => {
-    fs.rmSync(root, { recursive: true, force: true });
-    fs.rmSync(moved, { recursive: true, force: true });
+    fs.rmSync(dedicated.guardPath, { recursive: true, force: true });
   });
   const checkpointPath = path.join(root, `${runId}.preparation.json`);
+  const forbiddenRootPath = fs.realpathSync(process.cwd());
   const preparation = buildIntegratedLiveDrillProviderOrchestrationPreparation(
-    preparationArgs()
+    {
+      ...preparationArgs(),
+      evidenceRootBinding: integratedLiveDrillPrivateRootBinding(
+        secureIntegratedLiveDrillPrivateRoot(root, forbiddenRootPath)
+      )
+    }
   );
   persistIntegratedLiveDrillProviderOrchestrationPreparation({
     checkpointPath,
-    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    forbiddenRootPath,
     preparation,
     rootPath: root,
     spec
   });
   const accepted = readIntegratedLiveDrillProviderOrchestrationPreparation({
     checkpointPath,
-    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    forbiddenRootPath,
     rootPath: root,
     spec
   });
@@ -415,7 +623,7 @@ test("checkpoint sidecar binds canonical root and checkpoint file identity acros
   assert.throws(
     () => readIntegratedLiveDrillProviderOrchestrationPreparation({
       checkpointPath,
-      forbiddenRootPath: fs.realpathSync(process.cwd()),
+      forbiddenRootPath,
       rootPath: root,
       spec
     }),
@@ -423,6 +631,91 @@ test("checkpoint sidecar binds canonical root and checkpoint file identity acros
   );
   fs.rmSync(root, { recursive: true, force: true });
   fs.renameSync(moved, root);
+});
+
+test("private root binding requires one dedicated owner-only guard parent", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pta-shared-parent-"));
+  fs.chmodSync(root, 0o700);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const secure = secureIntegratedLiveDrillPrivateRoot(
+    root,
+    fs.realpathSync(process.cwd())
+  );
+  assert.throws(
+    () => integratedLiveDrillPrivateRootBinding(secure),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED/u
+  );
+});
+
+test("root lease ignores outer churn and rejects guard namespace churn", (t) => {
+  const dedicated = dedicatedPrivateRoot("pta-root-lease-scope-");
+  t.after(() => fs.rmSync(dedicated.guardPath, {
+    recursive: true,
+    force: true
+  }));
+  const lease = acquireIntegratedLiveDrillPrivateRootLease({
+    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    rootPath: dedicated.rootPath
+  });
+  try {
+    const outerOperation = lease.beginOperation();
+    const outerSibling = fs.mkdtempSync(path.join(
+      os.tmpdir(),
+      "pta-root-lease-outer-churn-"
+    ));
+    fs.rmSync(outerSibling, { recursive: true, force: true });
+    lease.assertOperation(outerOperation);
+
+    const guardOperation = lease.beginOperation();
+    fs.writeFileSync(path.join(dedicated.guardPath, "unexpected-sibling"), "x", {
+      mode: 0o600
+    });
+    assert.throws(
+      () => lease.assertOperation(guardOperation),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED/u
+    );
+  } finally {
+    lease.release();
+  }
+});
+
+test("held root lease synchronously rejects swap-out use and exact-path restoration", async (t) => {
+  const dedicated = dedicatedPrivateRoot("pta-root-lease-swap-");
+  const root = dedicated.rootPath;
+  const moved = `${root}.original`;
+  t.after(() => {
+    fs.rmSync(dedicated.guardPath, { recursive: true, force: true });
+  });
+  const lease = acquireIntegratedLiveDrillPrivateRootLease({
+    forbiddenRootPath: fs.realpathSync(process.cwd()),
+    rootPath: root
+  });
+  try {
+    const operation = lease.beginOperation();
+    fs.renameSync(root, moved);
+    fs.mkdirSync(root, { mode: 0o700 });
+    fs.writeFileSync(path.join(root, "replacement.json"), "{}\n", {
+      mode: 0o600
+    });
+    // Mask root-level ctime/mtime heuristics by mutating the moved original.
+    // The held parent-directory generation must still make the swap permanent.
+    fs.writeFileSync(path.join(moved, "legitimate-looking-write.json"), "{}\n", {
+      mode: 0o600
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.renameSync(moved, root);
+    let providerActions = 0;
+    await assert.rejects(
+      async () => {
+        lease.assertOperation(operation);
+        providerActions += 1;
+      },
+      /INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED/u
+    );
+    assert.equal(providerActions, 0);
+  } finally {
+    lease.release();
+  }
 });
 
 test("UNKNOWN and expired orchestration stops are durable and permanently nonretryable", (t) => {
@@ -499,6 +792,20 @@ test("supervisor snapshots options and rejects accessor-bearing worker output be
     fixture.testOnly.human.privateKeyPkcs8DerBase64,
     fixture.testOnly.human.publicKey
   );
+  const dispatchPreparation =
+    readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
+      fixture.context
+    );
+  const { admission, decisionRootLease } =
+    persistFixtureProviderOrchestrationAdmission(t, {
+      context: Object.freeze({
+        ...fixture.context,
+        providerDispatchAuthorization: dispatch
+      }),
+      dispatchAuthorization: dispatch,
+      dispatchPreparation,
+      gate1Preparation: preparation
+    });
   const environment = {
     PATH: process.env.PATH,
     MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
@@ -507,10 +814,20 @@ test("supervisor snapshots options and rejects accessor-bearing worker output be
       fixture.context.forbiddenRootPath,
     TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT:
       fixture.context.recoveryEvidenceRootPath,
+    [INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING_ENVIRONMENT]:
+      canonicalJson(fixture.context.evidenceRootBinding),
     [INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_CONTEXT_PATH_ENVIRONMENT]:
       contextPath,
     [INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT]:
       canonicalJson(dispatch),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT]:
+      preparation.preparationContextSha256,
+    [INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256_ENVIRONMENT]:
+      preparation.preparationReceiptSha256,
+    [INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256_ENVIRONMENT]:
+      preparation.signingPayloadSha256,
+    [INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT]:
+      admission.receiptSha256,
     [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT]: path.join(
       fixture.context.recoveryEvidenceRootPath,
       "provider-worker-input.json"
@@ -521,10 +838,60 @@ test("supervisor snapshots options and rejects accessor-bearing worker output be
         "provider-finalization-input.json"
       )
   };
+  const expectedContextSha256 =
+    environment[
+      INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT
+    ];
+  environment[
+    INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT
+  ] = "f".repeat(64);
+  let substitutedPreparationWorkerCalls = 0;
+  await assert.rejects(
+    () => resumeIntegratedLiveDrillProviderSupervisor({
+      clock: () => Date.parse(issuedAt) + 1,
+      decisionRootDescriptor: decisionRootLease.descriptor,
+      environment,
+      rootDir: fs.realpathSync(process.cwd()),
+      runComponent: async () => {
+        substitutedPreparationWorkerCalls += 1;
+        return {};
+      }
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED/u
+  );
+  assert.equal(substitutedPreparationWorkerCalls, 0);
+  environment[
+    INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT
+  ] = expectedContextSha256;
+  const expectedAdmissionReceiptSha256 =
+    environment[INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT];
+  environment[
+    INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT
+  ] = "f".repeat(64);
+  let forgedAdmissionWorkerCalls = 0;
+  await assert.rejects(
+    () => resumeIntegratedLiveDrillProviderSupervisor({
+      clock: () => Date.parse(issuedAt) + 1,
+      decisionRootDescriptor: decisionRootLease.descriptor,
+      environment,
+      rootDir: fs.realpathSync(process.cwd()),
+      runComponent: async () => {
+        forgedAdmissionWorkerCalls += 1;
+        return {};
+      }
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED/u
+  );
+  assert.equal(forgedAdmissionWorkerCalls, 0);
+  environment[
+    INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT
+  ] = expectedAdmissionReceiptSha256;
   let getterRuns = 0;
   let observedWorkerEnvironment;
   await assert.rejects(
     () => resumeIntegratedLiveDrillProviderSupervisor({
+      clock: () => Date.parse(issuedAt) + 1,
+      decisionRootDescriptor: decisionRootLease.descriptor,
       environment,
       rootDir: fs.realpathSync(process.cwd()),
       runComponent: async (_script, childEnvironment) => {
@@ -551,6 +918,9 @@ test("supervisor snapshots options and rejects accessor-bearing worker output be
       "PRIMARY_AUDIT_DATABASE_URL",
       "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT",
       "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_FD",
+      INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT,
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING",
       "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH",
       "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL"
     ].sort()

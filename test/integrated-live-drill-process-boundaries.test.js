@@ -19,7 +19,7 @@ test("provider worker and finalizer import graphs preserve process boundaries", 
     receipt.supervisor.path,
     "scripts/gate1-integrated-live-drill-provider-supervisor.js"
   );
-  assert.equal(receipt.supervisor.legacyRecoveryBrokerImported, false);
+  assert.equal(receipt.supervisor.legacyRecoveryEntryPointImported, false);
   assert.equal(receipt.supervisor.managedMcpClientConstructed, false);
   assert.equal(receipt.supervisor.providerWorkerEnvironmentRequired, true);
   assert.equal(receipt.supervisor.providerFinalizerEnvironmentRequired, true);
@@ -67,6 +67,7 @@ test("provider worker and finalizer import graphs preserve process boundaries", 
     true
   );
   for (const required of [
+    "src/cloud/integrated-live-drill-provider-orchestration.js",
     "src/cloud/integrated-live-drill-provider-recovery.js",
     "src/cloud/managed-mcp-client.js",
     "src/cloud/recovery-broker.js"

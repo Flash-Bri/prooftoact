@@ -99,13 +99,49 @@ The live runner requires
 absolute path named `<run-id>.private-evidence.json` whose parent exactly
 matches `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT`. That
 precreated, canonical, process-owned mode-0700 root must be outside the Git
-checkout. It also requires `TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH` to
+checkout and must be the sole child of its own canonical, process-owned
+mode-0700 guard directory. The guard directory must not be a shared temporary
+directory; its device, inode, owner, mode, path digest, and baseline namespace
+change time are bound across PREPARE and RESUME so unrelated activity outside
+the guard cannot create false root-swap alarms. This namespace-change-time
+check is accepted only for the exact local filesystem exercised by the test
+suite; it is not claimed to be a portable generation counter or protection
+against a hostile same-UID process, a copied ledger, another host, or another
+filesystem implementation. It also requires
+`TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH` to
 be the sibling canonical absolute path `<run-id>.journal`. Neither final path
 may already exist. The orchestrator supplies the recovery child one additional
 sibling canonical path named `<run-id>.signed-recovery-bundle.json`, the
 mode-0700 root, the exact integrated spec, and the forbidden checkout root.
 No raw private bytes or path is included in the public candidate; only bounded
 digests and source-control receipt facts leave the child.
+
+Packet B's source-wired provider path is split into Managed-MCP-credential-free
+`PREPARE`, durable `HOLD`, and separately authorized `RESUME`. `PREPARE` still
+processes configured database endpoints and the recovery-publisher private
+signing key while building frozen evidence; it does not receive the Managed MCP
+API key. Before `RESUME` can expose the credential-isolated worker, Gate2 and
+the supervisor independently reread and rebind the exact persisted context,
+dispatch-preparation receipt, human signing payload, decision-ledger binding,
+source commit, and tree digest. The signed payload also binds a canonical
+non-secret audit-target identity; the worker recomputes that identity from the
+credentialed audit URL before constructing either provider or database clients.
+
+Pre-provider failure and provider admission compete for one owner-only,
+create-only, fsynced decision path. Only `ENOENT` means no decision; malformed
+entries, dangling links, and other filesystem errors fail closed. A durable
+`STOPPED_BEFORE_PROVIDER_ADMISSION` decision permanently excludes admission.
+A durable `PROVIDER_ADMITTED` decision is the one-use dispatch claim and
+permanently excludes a later stop. Only the process that atomically creates
+that claim may spawn the supervisor; concurrent observers and later restarts
+return the non-accepting admission receipt without re-entering provider work.
+A crash after admission therefore remains nonretryable and ambiguous rather
+than silently redispatching. Completion is accepted only after the matching
+admission decision, and the lower W2 ledger retains its own durable `O_EXCL`
+one-use claim as defense in depth. These are local source and fake-transport
+controls, not evidence of a live provider call, provider-global exact-call
+count, deployment, cross-host authority, hostile-host safety, or an accepted
+submission result.
 
 ## Per-drill binding
 
@@ -701,7 +737,7 @@ bindings; `gate1:recovery` does not consume them:
 | Broker-only integrated input | Required source |
 | --- | --- |
 | `TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC` | Exact canonical integrated spec supplied by the source-controlled orchestrator |
-| `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT` | Canonical process-owned mode-0700 root outside the Git checkout |
+| `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT` | Canonical process-owned mode-0700 root outside the Git checkout and sole child of a dedicated canonical process-owned mode-0700 guard directory |
 | `TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH` | Exact sibling `<run-id>.signed-recovery-bundle.json` path under that root |
 | `TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT` | Canonical Git checkout root that the private path must not enter |
 
