@@ -20,7 +20,8 @@ import { readOfficialNodeRuntime } from
   "./lib/official-node-runtime.js";
 import {
   GATE2_BUILD_OUTPUT_COUNT,
-  GATE2_BUILD_SCHEMA
+  GATE2_BUILD_SCHEMA,
+  GATE2_LIVE_RUNTIME_COMPONENTS
 } from "./lib/gate2-build-contract.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -387,7 +388,11 @@ function copyOutputs(stagingRoot, receipt) {
   requireCondition(
     liveRuntime &&
       /^[0-9a-f]{64}$/u.test(liveRuntime.manifestSha256 ?? "") &&
-      liveRuntimePaths.length === 10 &&
+      exactObjectKeys(
+        liveRuntime.components,
+        GATE2_LIVE_RUNTIME_COMPONENTS
+      ) &&
+      liveRuntimePaths.length === GATE2_LIVE_RUNTIME_COMPONENTS.length + 3 &&
       liveRuntimePaths.every((relativePath) =>
         typeof relativePath === "string" &&
         /^dist\/runtime\/[a-z0-9.-]+$/u.test(relativePath)

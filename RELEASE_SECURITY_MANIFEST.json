@@ -384,7 +384,7 @@
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
       "role": "IMMUTABLE_GIT_BUILD_VERIFICATION",
-      "sha256": "52315488a011554d15c5fd79009566c79a29bb40437410324452d61d0abe59f5"
+      "sha256": "818d322e85c521edae1af99f72337d955dedcedd6712bf46b4f69b6315b48a56"
     },
     {
       "id": "gate2-build-runner",
@@ -396,7 +396,7 @@
       "id": "gate2-exact-build-bootstrap",
       "path": "scripts/build-gate2-exact.js",
       "role": "ISOLATED_EXACT_GIT_BUILD_BOOTSTRAP",
-      "sha256": "626526128c16288858c7d24d4572c47d01a33788442966abd471707c31f439b5"
+      "sha256": "0e480d1362b633264b7252176c4b8f836864f591cc6bcb779ab27265d22b0eb9"
     },
     {
       "id": "gate2-build-contract",

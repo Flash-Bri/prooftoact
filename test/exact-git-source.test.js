@@ -1112,6 +1112,11 @@ test("outer exact build revalidates the detached checkout before accepting outpu
   assert.equal(postBuildValidation > childExecution, true);
   assert.equal(receiptAcceptance > postBuildValidation, true);
   assert.equal(outputCopy > receiptAcceptance, true);
+  assert.match(
+    source,
+    /liveRuntimePaths\.length === GATE2_LIVE_RUNTIME_COMPONENTS\.length \+ 3/u
+  );
+  assert.doesNotMatch(source, /liveRuntimePaths\.length === \d+/u);
 });
 
 test("npm scripts use the invoking Node instead of node_modules bin", () => {
