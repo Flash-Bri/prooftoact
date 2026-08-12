@@ -811,7 +811,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "59ea1bcd47262447ecd3a5abd57a084324ef0a1d6aea996320a7575cb70a6990",
+      "sha256": "2e86dc207f3561f1e52a9bae1e82da6a80dba5143064c65b6afb0fa1a8f0ca76",
       "kind": "boundary-ledger"
     },
     {
@@ -859,7 +859,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "8fef83c56116b2b8cf2137aed6d38baee11d85ac7dccbf2f9ae3f1722d2fe8c0",
+      "sha256": "bf10a05b76a0965e62d5d5a9f9d4c6ab02a823c358d8648b62bdb8dee70d0c85",
       "kind": "boundary-ledger"
     },
     {
@@ -925,7 +925,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "19f5cbcc6b928b0582113bf790619ea934cbccf3cb9ac3e48f1f175e14a69118",
+      "sha256": "d5078b354a7254a6844784bf8348deef761f89f4a33c5f2cf8352bc4b9b261fc",
       "kind": "boundary-ledger"
     },
     {
@@ -973,7 +973,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "cf26d99ca2fc4dc10851ef0e35a9f57316d3370e58e7dc47dc0f2aa0cde15212",
+      "sha256": "7a0c3955d81f293012dfb99ddeff8aebe5322f0b493cdc432a7b0906a50a050e",
       "kind": "boundary-ledger"
     },
     {

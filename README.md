@@ -167,7 +167,7 @@ inventory, and bundle notice inputs to the exact public checkout. The final
 release must rerun that control with the zero-vulnerability and exact-head
 build gates, then bind the uploaded object versions and deployed Lambda
 `CodeSha256` values. Gate Two artifact builds execute the committed builder in
-a detached exact-commit worktree, read project inputs from regular tracked Git
+a standalone exact-commit checkout, read project inputs from regular tracked Git
 blobs, reject host-filesystem path escape, and record both builder and project
 blob identities. The generated deployment invokes numeric Lambda versions;
 monitored aliases are not invocation authority. Credentialed acceptance still
