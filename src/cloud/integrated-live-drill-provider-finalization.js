@@ -21,6 +21,12 @@ import {
   validateIntegratedLiveDrillProviderRecoveryHandoff,
   verifyIntegratedLiveDrillProviderEvidenceBundle
 } from "./integrated-live-drill-provider-evidence.js";
+import {
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
+} from "./integrated-live-drill-runtime.js";
 
 export { validateIntegratedLiveDrillProviderRecoveryHandoff } from
   "./integrated-live-drill-provider-evidence.js";
@@ -40,7 +46,7 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONM
 export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY =
-  "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. It accepts no provider client, key, raw result, or retry authority. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release.";
+  "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. Its exact schema rejects provider clients, credential material, raw provider results, and every supplied context key whose normalized name contains retry; the key-name check does not prove that arbitrary data cannot semantically encode retry intent. The finalizer exposes no retry or provider operation. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release.";
 
 const MAX_RECEIPT_BYTES = 64 * 1024;
 const HEX_64 = /^[0-9a-f]{64}$/u;
@@ -59,7 +65,11 @@ const FINALIZER_ENVIRONMENT_NAMES = new Set([
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT
+  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
 ]);
 
 function reject(code, cause) {
@@ -461,7 +471,7 @@ export function validateIntegratedLiveDrillProviderFinalizationReceipt(
     "contextExactSchemaValidated",
     "contextProviderCapabilityAbsent",
     "contextRawProviderResultAbsent",
-    "contextRetryAuthorityAbsent",
+    "contextRetryNamedKeyAbsent",
     "credentialOptionAccepted",
     "finalReleaseReady",
     "journalReceiptSha256",
@@ -477,7 +487,7 @@ export function validateIntegratedLiveDrillProviderFinalizationReceipt(
     "providerWorkerImportGraphProvenAbsent",
     "rawProviderResultAccepted",
     "receiptSha256",
-    "retryAuthorityAccepted",
+    "retryNamedKeyAccepted",
     "runId",
     "schemaVersion",
     "status"
@@ -506,11 +516,11 @@ export function validateIntegratedLiveDrillProviderFinalizationReceipt(
       normalized.contextExactSchemaValidated === true &&
       normalized.contextProviderCapabilityAbsent === true &&
       normalized.contextRawProviderResultAbsent === true &&
-      normalized.contextRetryAuthorityAbsent === true &&
+      normalized.contextRetryNamedKeyAbsent === true &&
       normalized.credentialOptionAccepted === false &&
       normalized.providerCapabilityAccepted === false &&
       normalized.rawProviderResultAccepted === false &&
-      normalized.retryAuthorityAccepted === false &&
+      normalized.retryNamedKeyAccepted === false &&
       normalized.providerWorkerImportGraphProvenAbsent === false &&
       [
         normalized.componentReceiptSha256,
@@ -604,8 +614,8 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
       contextAssertions.providerCapabilityAbsent,
     contextRawProviderResultAbsent:
       contextAssertions.rawProviderResultAbsent,
-    contextRetryAuthorityAbsent:
-      contextAssertions.retryAuthorityAbsent,
+    contextRetryNamedKeyAbsent:
+      contextAssertions.retryNamedKeyAbsent,
     finalReleaseReady: false,
     logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
     observedInitializeCount: handoff.observedInitializeCount,
@@ -647,8 +657,8 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
       contextAssertions.providerCapabilityAbsent,
     contextRawProviderResultAbsent:
       contextAssertions.rawProviderResultAbsent,
-    contextRetryAuthorityAbsent:
-      contextAssertions.retryAuthorityAbsent,
+    contextRetryNamedKeyAbsent:
+      contextAssertions.retryNamedKeyAbsent,
     credentialOptionAccepted:
       !contextAssertions.credentialMaterialAbsent,
     finalReleaseReady: false,
@@ -665,8 +675,8 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
       !contextAssertions.providerCapabilityAbsent,
     rawProviderResultAccepted:
       !contextAssertions.rawProviderResultAbsent,
-    retryAuthorityAccepted:
-      !contextAssertions.retryAuthorityAbsent,
+    retryNamedKeyAccepted:
+      !contextAssertions.retryNamedKeyAbsent,
     providerHandoffReceiptSha256: handoff.receiptSha256,
     providerWorkerImportGraphProvenAbsent: false,
     runId: intent.runId,

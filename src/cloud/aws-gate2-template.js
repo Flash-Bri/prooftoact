@@ -50,23 +50,6 @@ function assumeLambdaRolePolicy() {
   };
 }
 
-function assumeAccountRolePolicy() {
-  return {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Principal: {
-          AWS: sub(
-            "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
-          )
-        },
-        Action: "sts:AssumeRole"
-      }
-    ]
-  };
-}
-
 function assumeExactEvidencePrincipalPolicy() {
   return {
     Version: "2012-10-17",
@@ -1082,7 +1065,7 @@ export function buildGate2Template() {
   resources.AdvisoryCallerRole = roleResource({
     description:
       "Short-lived human-assumed caller for one exact IAM-authenticated advisory route; direct Lambda invocation is denied.",
-    assumeRolePolicy: assumeAccountRolePolicy(),
+    assumeRolePolicy: assumeExactEvidencePrincipalPolicy(),
     statements: [
       {
         Sid: "InvokeOneAdvisoryRoute",
@@ -1104,7 +1087,7 @@ export function buildGate2Template() {
   resources.AuthorityRaceCallerRole = roleResource({
     description:
       "Short-lived human-assumed caller for one exact numeric authority version; no model, secret, signing, IAM, or other Lambda capability.",
-    assumeRolePolicy: assumeAccountRolePolicy(),
+    assumeRolePolicy: assumeExactEvidencePrincipalPolicy(),
     statements: [
       {
         Sid: "InvokeOnlyAuthorityProof",
@@ -1264,7 +1247,7 @@ export function buildGate2Template() {
   resources.DeploymentEvidenceAlternateRole = roleResource({
     description:
       "Dedicated negative-control principal whose only positive capability is attempting the deployment-evidence role.",
-    assumeRolePolicy: assumeAccountRolePolicy(),
+    assumeRolePolicy: assumeExactEvidencePrincipalPolicy(),
     statements: [
       {
         Sid: "AttemptOnlyDeploymentEvidenceRole",

@@ -110,6 +110,7 @@ function fixture() {
     packageLockDigest: "d".repeat(64),
     authoritySourceDigest: "e".repeat(64),
     authorityArtifactDigest: "f".repeat(64),
+    runtimeBundleManifestSha256: "6".repeat(64),
     functionArn: expectationTemplate.functions.authority.numericVersionArn,
     raceId: RACE_ID,
     runId: RUN_ID,

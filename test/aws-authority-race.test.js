@@ -27,6 +27,7 @@ import {
   awsEvidenceClientOptions,
   createAuthorityRaceGitRunner,
   safeAuthorityRaceFailureCode,
+  snapshotAuthorityRaceRelease,
   validateAuthorityRaceExpectedPrincipal
 } from "../scripts/gate2-authority-race.js";
 import {
@@ -421,10 +422,50 @@ test("authority race checkout rejects Git object indirection and binds the tree"
     "assertExactGitRepositoryLayout",
     "assertCleanExactGitCheckout",
     '"--no-recurse-submodules"',
-    "runReleaseProvenance({",
+    "snapshotAuthorityRaceRelease(rootDir, checkout)",
     'receipt.treeDigest !== checkout.treeDigest'
   ]) {
     assert.equal(source.includes(required), true, required);
+  }
+});
+
+test("authority race runtime release snapshot binds exact single-link files", () => {
+  const fixtureRoot = fs.realpathSync(fs.mkdtempSync(
+    path.join(os.tmpdir(), "tideproof-authority-release-")
+  ));
+  try {
+    fs.mkdirSync(path.join(fixtureRoot, "docs"));
+    const packageLock = Buffer.from("package-lock\n");
+    const inventory = Buffer.from("dependency-inventory\n");
+    fs.writeFileSync(path.join(fixtureRoot, "package-lock.json"), packageLock);
+    fs.writeFileSync(
+      path.join(fixtureRoot, "docs/DEPENDENCY_INVENTORY.md"),
+      inventory
+    );
+    const checkout = {
+      sourceCommit: "a".repeat(40),
+      treeDigest: "b".repeat(40)
+    };
+    assert.deepEqual(snapshotAuthorityRaceRelease(fixtureRoot, checkout), {
+      ...checkout,
+      packageLockDigest: createHash("sha256").update(packageLock).digest("hex"),
+      dependencyInventoryDigest: createHash("sha256")
+        .update(inventory)
+        .digest("hex")
+    });
+
+    const inventoryPath = path.join(
+      fixtureRoot,
+      "docs/DEPENDENCY_INVENTORY.md"
+    );
+    const linkedPath = path.join(fixtureRoot, "inventory-hardlink");
+    fs.linkSync(inventoryPath, linkedPath);
+    assert.throws(
+      () => snapshotAuthorityRaceRelease(fixtureRoot, checkout),
+      /AUTHORITY_RACE_RELEASE_FILE_REJECTED/
+    );
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
 });
 

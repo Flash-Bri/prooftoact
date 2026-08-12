@@ -36,6 +36,7 @@
     "rights:verify": "\"$npm_node_execpath\" scripts/verify-release-rights.js",
     "security:verify": "\"$npm_node_execpath\" scripts/verify-release-security.js",
     "submission:verify": "\"$npm_node_execpath\" scripts/verify-release-submission.js",
+    "stress:provider-resume": "\"$npm_node_execpath\" scripts/run-integrated-live-drill-stress.js",
     "release:provenance": "\"$npm_node_execpath\" scripts/verify-release-provenance.js",
     "gate1:ambiguity": "\"$npm_node_execpath\" scripts/gate1-ambiguity.js",
     "gate1:ambiguity:full": "AMBIGUITY_RUNS=100 \"$npm_node_execpath\" scripts/gate1-ambiguity.js",

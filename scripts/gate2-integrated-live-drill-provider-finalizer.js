@@ -14,6 +14,8 @@ import {
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
   readIntegratedLiveDrillProviderFinalizationInput
 } from "../src/cloud/integrated-live-drill-provider-finalization.js";
+import { assertIntegratedLiveDrillRuntime } from
+  "../src/cloud/integrated-live-drill-runtime.js";
 
 export async function main() {
   const environment = assertIntegratedLiveDrillProviderFinalizerEnvironment(
@@ -57,6 +59,11 @@ export async function main() {
     rootPath: environment[
       INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT
     ]
+  });
+  assertIntegratedLiveDrillRuntime({
+    environment: process.env,
+    expectedComponent: "finalizer",
+    spec: input.context.trustedRunContext.spec
   });
   await rootLease.assertSettled();
   const receipt = finalizeIntegratedLiveDrillProviderRecovery({

@@ -216,10 +216,24 @@ remain outside this local source claim. On that commit it bundles each runtime
 role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
-the 46-package union present across the six Lambda graphs and the separately
-content-addressed evidence-provider runtime graph. Over-inclusion in each ZIP
+the 46-package union present across the six Lambda graphs, the separately
+content-addressed evidence-provider graph, and seven integrated-live runtime
+graphs. Over-inclusion in each ZIP
 is intentional so every independently distributed ZIP carries the complete
 reviewed notice set.
+The v7 receipt also binds seven content-addressed integrated-live ESM bundles,
+one content-addressed canonical manifest, the reviewed file-descriptor
+launcher, and one pinned official Node v22.23.1 executable for the exact
+`linux-x64` or `darwin-arm64` target. A platform package-manager shim or any
+unreviewed executable digest is rejected. The build inventories all 19
+generated outputs; it privacy-scans the 18 non-Node outputs and records the
+one exact official Node binary as a pinned upstream toolchain exemption.
+Readiness independently recomputes those paths, sizes, hashes, package union,
+manifest bindings, scan results, and exemption before provider evidence.
+The outer exact builder also verifies every staged output byte against that
+inventory before copying it into the release checkout. For the DVI graph,
+`pg`'s optional `pg-native` peer resolves to a tracked module that raises
+`MODULE_NOT_FOUND`; only the reviewed pure-JavaScript driver is available.
 The Demo artifact embeds the exact reviewed browser source, scenario
 implementation, claims ledger, and Gate One evidence through build-time raw
 imports. The receipt records:
@@ -232,7 +246,11 @@ imports. The receipt records:
 - every bundled project input's path, Git blob ID, and SHA-256;
 - ZIP SHA-256 in hexadecimal and base64;
 - immutable S3 key recommendation;
-- template formatted and canonical digests.
+- template formatted and canonical digests;
+- the integrated-live manifest, launcher, official Node target, and seven
+  component graphs; and
+- the complete generated-output privacy inventory and explicit pinned-
+  toolchain byte boundary.
 
 Each Lambda Version uses CloudFormation `CodeSha256`, so a version cannot be
 published when the deployed code hash differs from the reviewed artifact.
@@ -244,6 +262,18 @@ source, blob, and artifact digests. The receipt measures but does not
 independently certify the local Node/npm/esbuild/Git toolchain. Component-walk
 checks reject symlinked artifact parents, but a same-identity hostile host is
 still outside the claim and requires independent exact-release reproduction.
+
+Never run the integrated live drill from `dist/runtime` in the checkout. Copy
+only the ten files named by the accepted runtime receipt into a dedicated
+root-owned stage whose entire absolute ancestor chain is root-owned and not
+group- or world-writable. Use 0444 for the manifest and 0555 for the launcher,
+official Node executable, and seven bundles; require regular single-link
+root-owned files. Launch through the reviewed system-Perl descriptor verifier
+as a dedicated non-root identity from an allowlisted clean environment, with
+the exact stage path and manifest digest also bound into the integrated spec.
+Secrets must come from private custody and must not enter shell history. This
+trusts the root account, kernel, system loader, system Perl, and system
+libraries; it is not a hostile-administrator proof.
 
 The reviewed JSON is pretty printed for auditability and is larger than
 CloudFormation's 51,200-byte inline `TemplateBody` limit. Deploy it through a
@@ -1007,7 +1037,12 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
    `npm run privacy:verify`,
    CloudFormation lint, and generated-template equality.
 2. Commit the accepted local candidate.
-3. Build from that clean commit.
+3. Build from that clean commit. Require the v7 19-output inventory/privacy
+   receipt and the pinned official Node target. Before any integrated-live
+   credential is introduced, copy only the ten named live-runtime files into
+   the reviewed root-owned immutable stage, verify its complete ancestor chain
+   and file modes, and preserve a private stage receipt. Do not run from the
+   checkout or use a package-manager Node shim.
 4. Reuse the prerequisite bootstrap stack under its preserved legacy physical
    name. Do not update it merely to change descriptions or tags. Verify its
    account-wide $15 budget and $1/$5/$10 actual plus $15 forecast notifications

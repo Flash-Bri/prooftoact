@@ -26,6 +26,13 @@ import {
   principalBindingHash,
   RecoveryAuditSink
 } from "./recovery-broker.js";
+import { ProviderDispatchControl } from "./provider-dispatch-control.js";
+import {
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
+} from "./integrated-live-drill-runtime.js";
 import {
   recoveryAuditTargetIdentity
 } from "./recovery-continuity-identity.js";
@@ -58,6 +65,10 @@ const WORKER_ENVIRONMENT_NAMES = Object.freeze([
   ...SAFE_PROCESS_ENVIRONMENT_NAMES,
   "MCP_API_KEY",
   "PRIMARY_AUDIT_DATABASE_URL",
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT,
@@ -419,6 +430,10 @@ async function runIntegratedLiveDrillProviderWorkerInternal({
     expectedSourceClusterId:
       trustedRunContext.recoveryBrokerConfiguration.expectedSourceClusterId,
     mcpClient: client,
+    providerDispatchControl: new ProviderDispatchControl({
+      connectionString: auditDatabaseUrl,
+      clientFactory: auditClientFactory
+    }),
     recoveryClusterId: intent.recoveryClusterId,
     sessionResolver: Object.freeze({
       async resolve({ authenticatedPrincipal }) {

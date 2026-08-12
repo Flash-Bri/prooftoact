@@ -69,7 +69,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_BOUNDARY",
-      "sha256": "447972d8e3b0d93050a1c2522940e77be4a5562f3a5521175cdb3e1c3714c876"
+      "sha256": "17a24942538250d79658af27fb83d203b5db0a383f3a78fc6e327dbc491e3d5d"
     },
     {
       "id": "contest-matrix",
@@ -87,7 +87,7 @@
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
       "role": "PUBLIC_CLAIM_INVENTORY",
-      "sha256": "1755cb82014c8408d55b5f0883f325e4436152986423e2fc15e5143b0fcb0201"
+      "sha256": "91bd1ed1666ff275ba5f402616fe0cbe0b74e9c92da749070bea3050b34072b7"
     },
     {
       "id": "release-submission-ledger",

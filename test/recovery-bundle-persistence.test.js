@@ -28,6 +28,7 @@ const specWithoutIdentity = {
   packageLockDigest: "d".repeat(64),
   authoritySourceDigest: "e".repeat(64),
   authorityArtifactDigest: "f".repeat(64),
+  runtimeBundleManifestSha256: "6".repeat(64),
   functionArn:
     "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-authority:7",
   raceId: "22222222-2222-4222-8222-222222222222",

@@ -121,6 +121,7 @@ const specWithoutIdentity = {
   packageLockDigest: "1".repeat(64),
   authoritySourceDigest: "2".repeat(64),
   authorityArtifactDigest: "3".repeat(64),
+  runtimeBundleManifestSha256: "7".repeat(64),
   functionArn: preAttestationFixture.expectation.functions.authority
     .numericVersionArn,
   raceId,
@@ -1902,7 +1903,7 @@ test("provider orchestration mode/environment accessors fail before execution", 
   assert.equal(getterRuns, 0);
 });
 
-test("concurrent RESUMEs atomically choose stop or admission without provider overlap", async () => {
+test("concurrent RESUMEs atomically choose stop or globally guarded reconciliation", async () => {
   const stopWinsCase = await preparedProviderOrchestrationCase();
   let releaseBlockedVerifier;
   let signalBlockedVerifier;
@@ -2003,7 +2004,10 @@ test("concurrent RESUMEs atomically choose stop or admission without provider ov
       return providerSupervisorCompletion(admissionWinsCase.preparation);
     }
   });
-  assert.equal(admissionObservedByContender.decision, "PROVIDER_ADMITTED");
+  assert.equal(
+    admissionObservedByContender.status,
+    "LOCAL_PROVIDER_ORCHESTRATION_COMPLETED_NOT_RELEASED"
+  );
   releaseProvider();
   const admissionCompletion = await admissionOwner;
   assert.equal(
@@ -2011,7 +2015,7 @@ test("concurrent RESUMEs atomically choose stop or admission without provider ov
     "LOCAL_PROVIDER_ORCHESTRATION_COMPLETED_NOT_RELEASED"
   );
   assert.equal(ownerCalls, 1);
-  assert.equal(contenderCalls, 0);
+  assert.equal(contenderCalls, 1);
 });
 
 test("RESUME catch path never returns a mismatched admitted decision", async () => {
@@ -2335,7 +2339,7 @@ test("transient root swap-out after admission cannot create a stop", async (t) =
   );
 });
 
-test("synthetic crash codes escape only under test and one-use admission prevents production redispatch", async (t) => {
+test("synthetic crash codes escape only under test and admitted production resumes always reconcile", async (t) => {
   const makePreparedCase = async (prefix) => {
     const values = components();
     const preparation = providerSupervisorPreparation();
@@ -2419,7 +2423,7 @@ test("synthetic crash codes escape only under test and one-use admission prevent
     assert.equal(productionCalls, 1);
     const second = await resumeProduction();
     assert.deepEqual(second, first);
-    assert.equal(productionCalls, 1);
+    assert.equal(productionCalls, 2);
   }
 });
 
@@ -2479,7 +2483,24 @@ test("pre-admission expiry persists a fresh-audit-authority stop and never runs"
   assert.equal(componentCalls, 0);
 });
 
-test("Gate2 preserves one exact bounded child stop code without stderr detail", (t) => {
+test("an admitted-but-incomplete CLI result is a nonzero checkpoint", () => {
+  assert.equal(
+    integratedLiveDrillRunnerTest.integratedLiveDrillCliExitCode({
+      decision: "PROVIDER_ADMITTED",
+      status: "PROVIDER_ADMITTED"
+    }),
+    3
+  );
+  assert.equal(
+    integratedLiveDrillRunnerTest.integratedLiveDrillCliExitCode({
+      decision: "PROVIDER_COMPLETED",
+      status: "PROVIDER_COMPLETED"
+    }),
+    0
+  );
+});
+
+test("Gate2 refuses mutable source-path child execution", (t) => {
   const directory = privateEvidenceDirectory();
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const script = path.join(directory, "fail-closed-child.js");
@@ -2495,7 +2516,7 @@ test("Gate2 preserves one exact bounded child stop code without stderr detail", 
       {},
       fs.realpathSync(process.cwd())
     ),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+    /INTEGRATED_LIVE_DRILL_RUNTIME_REJECTED/u
   );
 });
 

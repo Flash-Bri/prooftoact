@@ -18,7 +18,7 @@
       "id": "aws-boundary",
       "path": "docs/AWS_GATE2.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "81de0cb40521b35b76565b3ef78aa2d3fde9787a02fea1749ef5646355d7e658"
+      "sha256": "73b3aa615f4486af7a96ecd1216020690cf2da0447eee792e93dec69fd671fcb"
     },
     {
       "id": "aws-demo-entry",
@@ -42,7 +42,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "447972d8e3b0d93050a1c2522940e77be4a5562f3a5521175cdb3e1c3714c876"
+      "sha256": "17a24942538250d79658af27fb83d203b5db0a383f3a78fc6e327dbc491e3d5d"
     },
     {
       "id": "contest-matrix",
@@ -60,7 +60,7 @@
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
       "role": "EVIDENCE_BOUNDARY",
-      "sha256": "3952215432773130aea48edc04f485c61a74a41a0bf983b5cf2a326a3fc147ab"
+      "sha256": "d74f591e8c7ff9135d132960d3a3c8e13ff95290065748be0e0ba5030a42ee18"
     },
     {
       "id": "public-demo-runtime",
@@ -72,7 +72,7 @@
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "e4e75e37d9e13df8dd26745a49520263daffae0f2def256bfabbd5b4ceb03eec"
+      "sha256": "e01571215cd7c52294aa2583b98733b6837f7f875859f865990629cbc49b495b"
     },
     {
       "id": "release-claims-ledger",

@@ -16,6 +16,12 @@ import {
   trustedGitExecutable,
   trustedTemporaryRoot
 } from "./lib/exact-git-source.js";
+import { readOfficialNodeRuntime } from
+  "./lib/official-node-runtime.js";
+import {
+  GATE2_BUILD_OUTPUT_COUNT,
+  GATE2_BUILD_SCHEMA
+} from "./lib/gate2-build-contract.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -85,6 +91,82 @@ function git(args, cwd = root, gitExecutable = trustedGitExecutable()) {
 
 function sha256(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function exactObjectKeys(value, keys) {
+  return value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).sort().join("\n") === [...keys].sort().join("\n");
+}
+
+export function validateStagedOutputInventory(
+  stagingRoot,
+  expectedPaths,
+  privacy
+) {
+  const code = "EXACT_BUILD_STAGED_OUTPUT_INVENTORY";
+  const sortedPaths = [...expectedPaths].sort();
+  requireCondition(
+    sortedPaths.length === GATE2_BUILD_OUTPUT_COUNT &&
+      new Set(sortedPaths).size === sortedPaths.length &&
+      exactObjectKeys(privacy, [
+        "allowedUpstreamAttributionFindingCount",
+        "findingCount",
+        "inventorySha256",
+        "outputCount",
+        "outputs",
+        "pinnedOfficialToolchainBytes",
+        "pinnedOfficialToolchainOutputCount",
+        "scannedBytes",
+        "schemaVersion",
+        "status"
+      ]) &&
+      privacy.schemaVersion ===
+        "tideproof.gate2-build-output-privacy.v1" &&
+      privacy.status === "PASS" &&
+      privacy.outputCount === GATE2_BUILD_OUTPUT_COUNT &&
+      privacy.pinnedOfficialToolchainOutputCount === 1 &&
+      Number.isSafeInteger(privacy.pinnedOfficialToolchainBytes) &&
+      privacy.pinnedOfficialToolchainBytes > 0 &&
+      Array.isArray(privacy.outputs) &&
+      privacy.outputs.length === GATE2_BUILD_OUTPUT_COUNT &&
+      JSON.stringify(privacy.outputs.map(({ path: outputPath }) => outputPath)) ===
+        JSON.stringify(sortedPaths) &&
+      /^[0-9a-f]{64}$/u.test(privacy.inventorySha256 ?? "") &&
+      crypto.createHash("sha256")
+        .update(JSON.stringify(privacy.outputs))
+        .digest("hex") === privacy.inventorySha256,
+    code
+  );
+  for (const output of privacy.outputs) {
+    requireCondition(
+      exactObjectKeys(output, ["bytes", "path", "sha256"]) &&
+        Number.isSafeInteger(output.bytes) &&
+        output.bytes > 0 &&
+        /^[0-9a-f]{64}$/u.test(output.sha256 ?? ""),
+      code
+    );
+    const outputPath = path.join(stagingRoot, output.path);
+    assertSafeProjectPath({
+      rootDir: stagingRoot,
+      filePath: outputPath,
+      code
+    });
+    const stat = fs.lstatSync(outputPath);
+    requireCondition(
+      stat.isFile() &&
+        !stat.isSymbolicLink() &&
+        stat.nlink === 1 &&
+        fs.realpathSync(outputPath) === outputPath &&
+        stat.size === output.bytes &&
+        sha256(outputPath) === output.sha256,
+      code
+    );
+  }
+  return Object.freeze(privacy.outputs.map((output) => Object.freeze({
+    ...output
+  })));
 }
 
 function copyExactFile(source, destination, { sourceRoot, destinationRoot }) {
@@ -273,14 +355,7 @@ function copyOutputs(stagingRoot, receipt) {
       "infra/aws/bootstrap-template.json\ninfra/aws/gate2-template.json",
     "EXACT_BUILD_TEMPLATE_OUTPUTS"
   );
-  for (const relativePath of expectedTemplates) {
-    copyExactFile(
-      path.join(stagingRoot, relativePath),
-      path.join(root, relativePath),
-      { sourceRoot: stagingRoot, destinationRoot: root }
-    );
-  }
-  for (const artifact of receipt.artifacts ?? []) {
+  const artifactPaths = (receipt.artifacts ?? []).map((artifact) => {
     requireCondition(
       typeof artifact.artifactPath === "string" &&
         /^dist\/aws\/[a-z]+-[0-9a-f]{64}\.zip$/.test(
@@ -288,12 +363,13 @@ function copyOutputs(stagingRoot, receipt) {
         ),
       "EXACT_BUILD_ARTIFACT_OUTPUT"
     );
-    copyExactFile(
-      path.join(stagingRoot, artifact.artifactPath),
-      path.join(root, artifact.artifactPath),
-      { sourceRoot: stagingRoot, destinationRoot: root }
-    );
-  }
+    return artifact.artifactPath;
+  });
+  requireCondition(
+    artifactPaths.length === 6 &&
+      new Set(artifactPaths).size === artifactPaths.length,
+    "EXACT_BUILD_ARTIFACT_OUTPUT"
+  );
   const runtime = receipt.evidenceProviderRuntime;
   requireCondition(
     runtime &&
@@ -301,11 +377,41 @@ function copyOutputs(stagingRoot, receipt) {
       /^dist\/aws\/evidence-provider-[0-9a-f]{64}\.mjs$/.test(runtime.path),
     "EXACT_BUILD_PROVIDER_RUNTIME_OUTPUT"
   );
-  copyExactFile(
-    path.join(stagingRoot, runtime.path),
-    path.join(root, runtime.path),
-    { sourceRoot: stagingRoot, destinationRoot: root }
+  const liveRuntime = receipt.liveDrillRuntime;
+  const liveRuntimePaths = [
+    liveRuntime?.manifestPath,
+    liveRuntime?.launcher?.path,
+    liveRuntime?.node?.path,
+    ...Object.values(liveRuntime?.components ?? {}).map(({ path }) => path)
+  ];
+  requireCondition(
+    liveRuntime &&
+      /^[0-9a-f]{64}$/u.test(liveRuntime.manifestSha256 ?? "") &&
+      liveRuntimePaths.length === 10 &&
+      liveRuntimePaths.every((relativePath) =>
+        typeof relativePath === "string" &&
+        /^dist\/runtime\/[a-z0-9.-]+$/u.test(relativePath)
+      ),
+    "EXACT_BUILD_LIVE_RUNTIME_OUTPUT"
   );
+  const expectedPaths = [
+    ...expectedTemplates,
+    ...artifactPaths,
+    runtime.path,
+    ...liveRuntimePaths
+  ];
+  validateStagedOutputInventory(
+    stagingRoot,
+    expectedPaths,
+    receipt.outputPrivacy
+  );
+  for (const relativePath of expectedPaths) {
+    copyExactFile(
+      path.join(stagingRoot, relativePath),
+      path.join(root, relativePath),
+      { sourceRoot: stagingRoot, destinationRoot: root }
+    );
+  }
 }
 
 export function main(argv = process.argv.slice(2)) {
@@ -367,6 +473,19 @@ export function main(argv = process.argv.slice(2)) {
       packageManager === `npm@${npmVersion}`,
     "EXACT_BUILD_NPM_VERSION"
   );
+  const runtimeNodePath =
+    process.env.TIDEPROOF_INTEGRATED_LIVE_DRILL_NODE_PATH ??
+      process.execPath;
+  let runtimeNode;
+  try {
+    runtimeNode = readOfficialNodeRuntime({ filePath: runtimeNodePath });
+  } catch {
+    throw new Error("EXACT_BUILD_RUNTIME_NODE");
+  }
+  requireCondition(
+    run(runtimeNodePath, ["--version"]).trim() === runtimeNode.version,
+    "EXACT_BUILD_RUNTIME_NODE"
+  );
 
   const temporaryRoot = fs.mkdtempSync(
     path.join(trustedTemporaryRoot(), "tideproof-exact-build-")
@@ -416,7 +535,9 @@ export function main(argv = process.argv.slice(2)) {
         JSON.stringify(dependencySnapshot),
       TIDEPROOF_EXACT_BUILD_SOURCE_COMMIT: sourceCommit,
       TIDEPROOF_EXACT_BUILD_TOOLCHAIN: JSON.stringify(toolchain),
-      TIDEPROOF_EXACT_BUILD_TREE_DIGEST: treeDigest
+      TIDEPROOF_EXACT_BUILD_TREE_DIGEST: treeDigest,
+      TIDEPROOF_EXACT_RUNTIME_NODE_PATH: runtimeNodePath,
+      TIDEPROOF_EXACT_RUNTIME_NODE_SHA256: runtimeNode.sha256
     };
     const output = run(
       process.execPath,
@@ -448,18 +569,28 @@ export function main(argv = process.argv.slice(2)) {
       npmCli
     });
     requireCondition(
-      receipt?.schemaVersion === "tideproof.gate2-build.v6" &&
+      receipt?.schemaVersion === GATE2_BUILD_SCHEMA &&
         receipt.mode === "CLEAN_ARTIFACT_BUILD" &&
         receipt.projectSourceMode ===
           "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS" &&
         receipt.sourceCommit === sourceCommit &&
         receipt.treeDigest === treeDigest &&
+        receipt.liveDrillRuntime?.node?.sha256 === runtimeNode.sha256 &&
+        receipt.liveDrillRuntime?.node?.distribution ===
+          runtimeNode.distribution &&
         JSON.stringify(postBuildDependencySnapshot) ===
           JSON.stringify(dependencySnapshot) &&
         JSON.stringify(postBuildToolchain) === JSON.stringify(toolchain),
       "EXACT_BUILD_RECEIPT"
     );
     copyOutputs(stagingRoot, receipt);
+    const postBuildRuntimeNode = readOfficialNodeRuntime({
+      filePath: runtimeNodePath
+    });
+    requireCondition(
+      postBuildRuntimeNode.sha256 === runtimeNode.sha256,
+      "EXACT_BUILD_RUNTIME_NODE"
+    );
     const postBuildSource = assertCleanExactGitCheckout({
       rootDir: root,
       sourceCommit,
@@ -493,5 +624,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 export const __test = Object.freeze({
   exactNpmCli,
   isolatedEnvironment,
-  npmEnvironment
+  npmEnvironment,
+  validateStagedOutputInventory
 });

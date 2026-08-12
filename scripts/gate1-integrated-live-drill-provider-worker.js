@@ -7,6 +7,8 @@ import {
 import {
   INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
 } from "../src/cloud/integrated-live-drill-provider-orchestration.js";
+import { assertIntegratedLiveDrillRuntime } from
+  "../src/cloud/integrated-live-drill-runtime.js";
 
 import {
   assertIntegratedLiveDrillProviderWorkerEnvironment,
@@ -84,6 +86,11 @@ export async function main() {
     rootPath
   });
   rootLease.assertOperation(inputObservation);
+  assertIntegratedLiveDrillRuntime({
+    environment: process.env,
+    expectedComponent: "worker",
+    spec: input.context.trustedRunContext.spec
+  });
   if (
     input.authenticatedPrincipal !== authenticatedPrincipal
   ) {

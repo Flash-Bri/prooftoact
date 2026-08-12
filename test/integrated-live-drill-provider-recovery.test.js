@@ -714,6 +714,61 @@ function injectMutationAfterTargetRead(t, targetPath, mutate) {
   return () => injected;
 }
 
+function inMemoryProviderDispatchControl() {
+  let bindingSha256 = null;
+  let state = null;
+  let terminal = Object.freeze({
+    mcpResultSha256: null,
+    sessionCloseSha256: null
+  });
+  const result = (binding, transitionOutcome) => Object.freeze({
+    authorizationId: binding.authorizationId,
+    controlBindingSha256: binding.controlBindingSha256,
+    databaseNow: binding.issuedAt,
+    expiresAt: binding.expiresAt,
+    ...terminal,
+    ownerNonce: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    state,
+    transitionOutcome
+  });
+  const assertBinding = (binding) => {
+    if (bindingSha256 === null) {
+      bindingSha256 = binding.controlBindingSha256;
+    }
+    assert.equal(binding.controlBindingSha256, bindingSha256);
+  };
+  return Object.freeze({
+    consume(binding) {
+      assertBinding(binding);
+      if (state === null) {
+        state = "CONSUMED";
+        return result(binding, "DISPATCH_GRANTED");
+      }
+      return result(binding, "ALREADY_TERMINAL_OR_CONSUMED");
+    },
+    complete(binding, value) {
+      assertBinding(binding);
+      if (state === "CONSUMED") {
+        terminal = Object.freeze({ ...value });
+        state = "COMPLETED";
+      }
+      assert.equal(state, "COMPLETED");
+      assert.deepEqual(terminal, value);
+      return result(binding, "COMPLETED");
+    },
+    markUnknown(binding) {
+      assertBinding(binding);
+      if (state === "CONSUMED") state = "UNKNOWN_DO_NOT_ACT";
+      return result(binding, "UNKNOWN_RECORDED");
+    },
+    resolve(binding) {
+      assertBinding(binding);
+      assert.notEqual(state, null);
+      return result(binding, "RESOLVED");
+    }
+  });
+}
+
 function providerHarness(fixture, {
   afterAuditAppend = null,
   afterAuditResolve = null,
@@ -801,6 +856,7 @@ function providerHarness(fixture, {
         fixture.testOnly.recoverySigner.publicKeySpkiBase64
     },
     mcpClient,
+    providerDispatchControl: inMemoryProviderDispatchControl(),
     sessionResolver: {
       async resolve({ authenticatedPrincipal }) {
         assert.equal(typeof authenticatedPrincipal, "string");
@@ -890,6 +946,7 @@ function providerHarness(fixture, {
 
 function auditDatabaseClientFactory() {
   const rows = new Map();
+  const providerControls = new Map();
   return {
     clientFactory() {
       return {
@@ -940,10 +997,83 @@ function auditDatabaseClientFactory() {
               ? { rowCount: 0, rows: [] }
               : { rowCount: 1, rows: [row] };
           }
+          if (sql.includes("g1_transition_provider_dispatch_v1")) {
+            const [
+              action,
+              authorizationId,
+              tenantId,
+              runId,
+              interactionId,
+              ownerNonce,
+              controlBindingSha256,
+              logicalMcpRequestSha256,
+              providerEffectKeySha256,
+              providerDispatchAuthorizationSha256,
+              sourceCommit,
+              treeDigest,
+              sourceBuildIdentity,
+              issuedAt,
+              expiresAt,
+              mcpResultSha256,
+              sessionCloseSha256
+            ] = params;
+            let control = providerControls.get(authorizationId);
+            let transitionOutcome = "RESOLVED";
+            if (control === undefined) {
+              assert.equal(action, "CONSUME");
+              control = {
+                authorization_id: authorizationId,
+                tenant_id: tenantId,
+                run_id: runId,
+                interaction_id: interactionId,
+                owner_nonce: ownerNonce,
+                control_binding_sha256: controlBindingSha256,
+                logical_mcp_request_sha256: logicalMcpRequestSha256,
+                provider_effect_key_sha256: providerEffectKeySha256,
+                provider_dispatch_authorization_sha256:
+                  providerDispatchAuthorizationSha256,
+                source_commit: sourceCommit,
+                tree_digest: treeDigest,
+                source_build_identity: sourceBuildIdentity,
+                issued_at: issuedAt,
+                expires_at: expiresAt,
+                database_now: issuedAt,
+                state: "CONSUMED",
+                mcp_result_sha256: null,
+                session_close_sha256: null
+              };
+              providerControls.set(authorizationId, control);
+              transitionOutcome = "DISPATCH_GRANTED";
+            } else {
+              assert.equal(
+                control.control_binding_sha256,
+                controlBindingSha256
+              );
+              if (action === "COMPLETE") {
+                assert.equal(control.owner_nonce, ownerNonce);
+                control.state = "COMPLETED";
+                control.mcp_result_sha256 = mcpResultSha256;
+                control.session_close_sha256 = sessionCloseSha256;
+                transitionOutcome = "COMPLETED";
+              } else if (action === "MARK_UNKNOWN") {
+                if (control.state === "CONSUMED") {
+                  control.state = "UNKNOWN_DO_NOT_ACT";
+                }
+                transitionOutcome = "UNKNOWN_RECORDED";
+              } else if (action === "CONSUME") {
+                transitionOutcome = "ALREADY_TERMINAL_OR_CONSUMED";
+              }
+            }
+            return {
+              rowCount: 1,
+              rows: [{ ...control, transition_outcome: transitionOutcome }]
+            };
+          }
           throw new Error(`unexpected synthetic audit query: ${sql}`);
         }
       };
     },
+    providerControls,
     rows
   };
 }
@@ -1536,6 +1666,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
     ["provider client", (value) => { value.providerClient = {}; }],
     ["raw provider result", (value) => { value.rawProviderResult = {}; }],
     ["retry authority", (value) => { value.retryAuthority = true; }],
+    ["generic retry key", (value) => { value.retry = true; }],
     ["credential-like symbol", (value) => {
       Object.defineProperty(value, Symbol("MCP_API_KEY"), {
         enumerable: true,
@@ -1860,12 +1991,12 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   assert.equal(finalized.providerCapabilityAccepted, false);
   assert.equal(finalized.credentialOptionAccepted, false);
   assert.equal(finalized.rawProviderResultAccepted, false);
-  assert.equal(finalized.retryAuthorityAccepted, false);
+  assert.equal(finalized.retryNamedKeyAccepted, false);
   assert.equal(finalized.contextCredentialMaterialAbsent, true);
   assert.equal(finalized.contextExactSchemaValidated, true);
   assert.equal(finalized.contextProviderCapabilityAbsent, true);
   assert.equal(finalized.contextRawProviderResultAbsent, true);
-  assert.equal(finalized.contextRetryAuthorityAbsent, true);
+  assert.equal(finalized.contextRetryNamedKeyAbsent, true);
   assert.equal(finalized.observedToolsCallCount, 1);
   assert.equal(finalized.observedSessionCloseCount, 1);
   const normalizedComponentReceipt = JSON.parse(fs.readFileSync(
@@ -1878,7 +2009,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   assert.equal(normalizedComponentReceipt.contextExactSchemaValidated, true);
   assert.equal(normalizedComponentReceipt.contextProviderCapabilityAbsent, true);
   assert.equal(normalizedComponentReceipt.contextRawProviderResultAbsent, true);
-  assert.equal(normalizedComponentReceipt.contextRetryAuthorityAbsent, true);
+  assert.equal(normalizedComponentReceipt.contextRetryNamedKeyAbsent, true);
   assert.equal(
     finalizeIntegratedLiveDrillProviderRecovery({
       context,
@@ -2247,7 +2378,9 @@ test("W1 and W3 audit-commit crashes resume exact persisted event plans without 
       }
     }
   );
-  const shortExpiry = new Date(Date.now() + 120).toISOString();
+  const expiryClock = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now: expiryClock });
+  const shortExpiry = new Date(expiryClock + 120).toISOString();
   const expiringRawResult = Object.freeze({
     content: [Object.freeze({
       type: "text",
@@ -2263,7 +2396,7 @@ test("W1 and W3 audit-commit crashes resume exact persisted event plans without 
     expiryPrepared,
     expiringRawResult
   );
-  await new Promise((resolve) => setTimeout(resolve, 180));
+  t.mock.timers.setTime(expiryClock + 180);
   await assert.rejects(
     () => expiryHarness.broker.commitPreparedRecoveryCompletion(
       expiringPlan,
@@ -3207,10 +3340,20 @@ test("post-expiry wrapper reconciles W2 locally then stops before any audit-prov
     broker: harness.broker,
     context
   });
+  const beforeExpiry = Math.max(
+    Date.parse(context.preCallIntent.startedAt),
+    context.authorization.issuedAt,
+    Date.parse(
+      context.preCallInputs.consumedChildAuthorization.attestation.payload
+        .issuedAt
+    ),
+    Date.parse(context.providerDispatchAuthorization.payload.issuedAt)
+  ) + 1;
   await assert.rejects(
-    () => providerTest.runProviderRecoveryWithInterruption(
+    () => providerTest.runProviderRecoveryWithInterruptionAndTrustedClock(
       args,
-      "AFTER_PROVIDER_EVIDENCE_DURABLE"
+      "AFTER_PROVIDER_EVIDENCE_DURABLE",
+      () => beforeExpiry
     ),
     /INTEGRATED_LIVE_DRILL_PROVIDER_SYNTHETIC_CRASH_AFTER_PROVIDER_EVIDENCE_DURABLE/u
   );
@@ -3236,18 +3379,17 @@ test("post-expiry wrapper reconciles W2 locally then stops before any audit-prov
   }
   const auditAppendCount = harness.auditAppendAttempts.length;
   const auditResolveCount = harness.auditResolveAttempts.length;
-  const waitMs = Math.max(
-    0,
-    Date.parse(context.preCallIntent.expiresAt) - Date.now() + 30
-  );
-  await new Promise((resolve) => setTimeout(resolve, waitMs));
-  assert.ok(Date.now() > context.authorization.expiresAt);
-  assert.ok(Date.now() > Date.parse(
-    context.preCallIntent.childAuthorizationExpiresAt
-  ));
+  const afterExpiry = Math.max(
+    context.authorization.expiresAt,
+    Date.parse(context.preCallIntent.childAuthorizationExpiresAt),
+    Date.parse(context.preCallIntent.expiresAt)
+  ) + 1;
 
   await assert.rejects(
-    () => runIntegratedLiveDrillProviderRecovery(args),
+    () => providerTest.runProviderRecoveryWithTrustedClock(
+      args,
+      () => afterExpiry
+    ),
     /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
   );
   assert.equal(harness.calls.length, initialFetchCount);

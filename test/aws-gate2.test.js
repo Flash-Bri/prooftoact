@@ -1102,9 +1102,7 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
     "cloudformation:DescribeStackResource",
     "lambda:InvokeFunction"
   ]);
-  const evidenceTrust =
-    resources.DeploymentEvidenceRole.Properties.AssumeRolePolicyDocument;
-  assert.deepEqual(evidenceTrust.Statement, [
+  const exactOperatorTrust = [
     {
       Effect: "Allow",
       Principal: { AWS: { Ref: "EvidenceOperatorPrincipalArn" } },
@@ -1115,7 +1113,19 @@ test("Gate Two template invokes numeric versions and keeps monitored aliases", (
         }
       }
     }
-  ]);
+  ];
+  for (const roleName of [
+    "AdvisoryCallerRole",
+    "AuthorityRaceCallerRole",
+    "DeploymentEvidenceAlternateRole",
+    "DeploymentEvidenceRole"
+  ]) {
+    assert.deepEqual(
+      resources[roleName].Properties.AssumeRolePolicyDocument.Statement,
+      exactOperatorTrust,
+      roleName
+    );
+  }
   assert.deepEqual(
     resources.DeploymentEvidenceRole.Properties.RoleName,
     { "Fn::Sub": "${AWS::StackName}-evidence" }

@@ -14,7 +14,18 @@ import {
   validateBuildToolchain,
   validateDependencySnapshot
 } from "./lib/dependency-snapshot.js";
+import { readOfficialNodeRuntime } from
+  "./lib/official-node-runtime.js";
+import {
+  GATE2_BUILD_CONTROL_PATHS,
+  GATE2_BUILD_SCHEMA
+} from "./lib/gate2-build-contract.js";
 import { collectBundledPackageNames } from "./verify-bundled-third-party-notices.js";
+import {
+  reviewBuildOutputFindings,
+  scanBuildOutputBuffer,
+  validateManifest as validatePrivacyManifest
+} from "./verify-release-privacy.js";
 import {
   buildAwsBootstrapTemplate,
   buildGate2Template,
@@ -41,23 +52,6 @@ const artifactNames = [
   "probe",
   "signer"
 ];
-const buildControlPaths = Object.freeze([
-  "infra/aws/lambda/agent.cjs",
-  "scripts/build-gate2-exact.js",
-  "scripts/build-gate2-template.js",
-  "scripts/lib/aws-provider-bundle-entry.js",
-  "scripts/lib/aws-provider-runtime.js",
-  "scripts/lib/aws-provider-runtime-loader.js",
-  "scripts/lib/bundled-third-party-notices.js",
-  "scripts/lib/dependency-snapshot.js",
-  "scripts/lib/deterministic-zip.js",
-  "scripts/lib/exact-build-reproduction.js",
-  "scripts/lib/exact-git-source.js",
-  "scripts/lib/raw-text-plugin.js",
-  "scripts/verify-bundled-third-party-notices.js",
-  "src/cloud/aws-gate2-template.js",
-  "src/cloud/public-demo.js"
-]);
 const nodeBuiltins = new Set(
   builtinModules.map((name) => name.replace(/^node:/, ""))
 );
@@ -73,7 +67,38 @@ const outputRoot = isolatedBuild
   ? path.resolve(argumentsList[1])
   : root;
 const distRoot = path.join(outputRoot, "dist/aws");
+const runtimeDistRoot = path.join(outputRoot, "dist/runtime");
 const templateRoot = path.join(outputRoot, "infra/aws");
+const runtimeComponentDefinitions = Object.freeze({
+  "authority-race": Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-authority-race.js",
+    packageKey: "runtimeAuthorityRace"
+  }),
+  dvi: Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-dvi.js",
+    packageKey: "runtimeDvi"
+  }),
+  finalizer: Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-finalizer.js",
+    packageKey: "runtimeFinalizer"
+  }),
+  orchestrator: Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
+    packageKey: "runtimeOrchestrator"
+  }),
+  recovery: Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-recovery.js",
+    packageKey: "runtimeRecovery"
+  }),
+  supervisor: Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-supervisor.js",
+    packageKey: "runtimeSupervisor"
+  }),
+  worker: Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-worker.js",
+    packageKey: "runtimeWorker"
+  })
+});
 
 function sha256File(filePath) {
   return crypto
@@ -87,6 +112,76 @@ function sha256FileBase64(filePath) {
     .createHash("sha256")
     .update(fs.readFileSync(filePath))
     .digest("base64");
+}
+
+function verifyBuildOutputPrivacy(
+  relativePaths,
+  sourceCommit,
+  pinnedOfficialNodePath
+) {
+  if (
+    !Array.isArray(relativePaths) ||
+    relativePaths.length === 0 ||
+    new Set(relativePaths).size !== relativePaths.length ||
+    relativePaths.some((relativePath) =>
+      typeof relativePath !== "string" ||
+      path.isAbsolute(relativePath) ||
+      relativePath.split("/").some((part) => !part || part === "..")
+    )
+  ) {
+    throw new Error("GATE2_BUILD_OUTPUT_PRIVACY_PATHS");
+  }
+  const privacyManifest = validatePrivacyManifest(JSON.parse(
+    readExactGitBlob({
+      rootDir: root,
+      sourceCommit,
+      filePath: path.join(root, "RELEASE_PRIVACY_MANIFEST.json")
+    }).bytes.toString("utf8")
+  ));
+  const findings = [];
+  let scannedBytes = 0;
+  let pinnedOfficialToolchainBytes = 0;
+  let pinnedOfficialToolchainOutputCount = 0;
+  const outputs = [...relativePaths].sort().map((relativePath) => {
+    const absolutePath = path.join(outputRoot, relativePath);
+    const stat = fs.lstatSync(absolutePath);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.nlink !== 1 ||
+      fs.realpathSync(absolutePath) !== absolutePath
+    ) {
+      throw new Error("GATE2_BUILD_OUTPUT_PRIVACY_FILE");
+    }
+    const bytes = fs.readFileSync(absolutePath);
+    if (relativePath === pinnedOfficialNodePath) {
+      pinnedOfficialToolchainBytes += bytes.length;
+      pinnedOfficialToolchainOutputCount += 1;
+    } else {
+      scannedBytes += bytes.length;
+      findings.push(...scanBuildOutputBuffer(bytes, relativePath));
+    }
+    return Object.freeze({
+      bytes: bytes.length,
+      path: relativePath,
+      sha256: crypto.createHash("sha256").update(bytes).digest("hex")
+    });
+  });
+  const review = reviewBuildOutputFindings(findings, privacyManifest);
+  const inventorySha256 = crypto.createHash("sha256")
+    .update(JSON.stringify(outputs))
+    .digest("hex");
+  return Object.freeze({
+    schemaVersion: "tideproof.gate2-build-output-privacy.v1",
+    status: "PASS",
+    ...review,
+    inventorySha256,
+    outputCount: outputs.length,
+    outputs,
+    pinnedOfficialToolchainBytes,
+    pinnedOfficialToolchainOutputCount,
+    scannedBytes
+  });
 }
 
 function gitValue(args) {
@@ -313,6 +408,197 @@ async function buildEvidenceProviderRuntime(
   });
 }
 
+async function buildLiveDrillRuntime({
+  expectedPackages,
+  packageLockDigest,
+  runtimeNode,
+  sourceCommit,
+  treeDigest,
+  toolchain
+}) {
+  fs.mkdirSync(runtimeDistRoot, { recursive: true });
+  const components = {};
+  for (const [name, definition] of Object.entries(
+    runtimeComponentDefinitions
+  )) {
+    const sourcePath = path.join(root, definition.entry);
+    const exactSource = exactGitSourcePlugin({
+      rootDir: root,
+      sourceCommit,
+      dependencyRoot: fs.realpathSync(path.join(root, "node_modules"))
+    });
+    const temporaryDirectory = fs.mkdtempSync(
+      path.join(trustedTemporaryRoot(), `tideproof-runtime-${name}-`)
+    );
+    const stagedPath = path.join(temporaryDirectory, `${name}.mjs`);
+    let result;
+    try {
+      result = await build({
+        absWorkingDir: root,
+        alias: {
+          "pg-native": path.join(
+            root,
+            "scripts/lib/pg-native-unavailable.cjs"
+          )
+        },
+        entryPoints: [sourcePath],
+        bundle: true,
+        platform: "node",
+        target: "node22",
+        format: "esm",
+        legalComments: "none",
+        logLevel: "silent",
+        metafile: true,
+        outfile: stagedPath,
+        splitting: false,
+        banner: {
+          js:
+            "import { builtinModules as __tideproofBuiltins, createRequire as __tideproofCreateRequire } from \"node:module\"; const __tideproofNativeRequire = __tideproofCreateRequire(\"/tideproof-integrated-live-drill-runtime.mjs\"); const __tideproofAllowedRequires = new Set(__tideproofBuiltins.flatMap((name) => [name, name.startsWith(\"node:\") ? name : `node:${name}`])); const require = (specifier) => { if (!__tideproofAllowedRequires.has(specifier)) throw new Error(\"INTEGRATED_LIVE_DRILL_RUNTIME_EXTERNAL_REQUIRE\"); return __tideproofNativeRequire(specifier.startsWith(\"node:\") ? specifier : `node:${specifier}`); };"
+        },
+        plugins: [nodeBuiltinExternalPlugin(), exactSource.plugin]
+      });
+    } catch (error) {
+      fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+      throw new Error(`INTEGRATED_LIVE_DRILL_RUNTIME_BUILD:${name}:${error.message}`);
+    }
+    const bundledPackages = packageNamesFromMetafile(result.metafile);
+    if (
+      JSON.stringify(bundledPackages) !==
+        JSON.stringify(expectedPackages[definition.packageKey])
+    ) {
+      fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+      throw new Error(`INTEGRATED_LIVE_DRILL_RUNTIME_PACKAGE_SET_DRIFT:${name}`);
+    }
+    const externalImports = [
+      ...new Set(
+        Object.values(result.metafile.outputs).flatMap((output) =>
+          output.imports
+            .filter((candidate) => candidate.external)
+            .map((candidate) => candidate.path)
+        )
+      )
+    ].sort();
+    if (
+      externalImports.length === 0 ||
+      externalImports.some((candidate) =>
+        !/^node:[a-z0-9_./-]+$/u.test(candidate)
+      )
+    ) {
+      fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+      throw new Error(`INTEGRATED_LIVE_DRILL_RUNTIME_EXTERNAL_IMPORT:${name}`);
+    }
+    const bytes = fs.readFileSync(stagedPath);
+    const digest = crypto.createHash("sha256").update(bytes).digest("hex");
+    const file = `${name}-${digest}.mjs`;
+    const outputPath = path.join(runtimeDistRoot, file);
+    if (fs.existsSync(outputPath)) {
+      if (sha256File(outputPath) !== digest) {
+        fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+        throw new Error("INTEGRATED_LIVE_DRILL_RUNTIME_OUTPUT_CONFLICT");
+      }
+    } else {
+      fs.renameSync(stagedPath, outputPath);
+    }
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    components[name] = Object.freeze({
+      bundledPackages,
+      bytes: bytes.length,
+      exactGitInputs: exactSource.inputRecords(),
+      externalImports,
+      file,
+      path: `dist/runtime/${file}`,
+      sha256: digest
+    });
+  }
+
+  const launcherRecord = readExactGitBlob({
+    rootDir: root,
+    sourceCommit,
+    filePath: path.join(
+      root,
+      "scripts/lib/verified-node-bundle-launcher.pl"
+    )
+  });
+  const launcherFile = "verified-node-bundle-launcher.pl";
+  const launcherPath = path.join(runtimeDistRoot, launcherFile);
+  fs.writeFileSync(launcherPath, launcherRecord.bytes, { mode: 0o555 });
+
+  const nodeSha256 = runtimeNode.sha256;
+  const nodeFile = `node-${nodeSha256}`;
+  const nodePath = path.join(runtimeDistRoot, nodeFile);
+  if (!fs.existsSync(nodePath)) {
+    fs.writeFileSync(nodePath, runtimeNode.bytes, {
+      flag: "wx",
+      mode: 0o555
+    });
+  }
+  if (sha256File(nodePath) !== nodeSha256) {
+    throw new Error("INTEGRATED_LIVE_DRILL_RUNTIME_NODE_CONFLICT");
+  }
+  fs.chmodSync(nodePath, 0o555);
+
+  const manifest = Object.freeze({
+    schemaVersion: "tideproof.integrated-live-drill-runtime-manifest.v1",
+    sourceCommit,
+    treeDigest,
+    packageLockDigest,
+    toolchainSha256: crypto.createHash("sha256")
+      .update(JSON.stringify(toolchain))
+      .digest("hex"),
+    launcher: Object.freeze({
+      file: launcherFile,
+      sha256: launcherRecord.sha256
+    }),
+    node: Object.freeze({
+      architecture: runtimeNode.architecture,
+      distribution: runtimeNode.distribution,
+      file: nodeFile,
+      platform: runtimeNode.platform,
+      sha256: nodeSha256,
+      version: runtimeNode.version
+    }),
+    components: Object.freeze(Object.fromEntries(
+      Object.entries(components).map(([name, component]) => [
+        name,
+        Object.freeze({
+          bundledPackages: component.bundledPackages,
+          bytes: component.bytes,
+          externalImports: component.externalImports,
+          file: component.file,
+          sha256: component.sha256
+        })
+      ])
+    ))
+  });
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  const manifestSha256 = crypto.createHash("sha256")
+    .update(manifestBytes)
+    .digest("hex");
+  const manifestFile = `runtime-manifest-${manifestSha256}.json`;
+  fs.writeFileSync(
+    path.join(runtimeDistRoot, manifestFile),
+    manifestBytes,
+    { mode: 0o444 }
+  );
+  return Object.freeze({
+    components,
+    launcher: Object.freeze({
+      path: `dist/runtime/${launcherFile}`,
+      sha256: launcherRecord.sha256
+    }),
+    manifestPath: `dist/runtime/${manifestFile}`,
+    manifestSha256,
+    node: Object.freeze({
+      architecture: runtimeNode.architecture,
+      distribution: runtimeNode.distribution,
+      path: `dist/runtime/${nodeFile}`,
+      platform: runtimeNode.platform,
+      sha256: nodeSha256,
+      version: runtimeNode.version
+    })
+  });
+}
+
 const sourceCommit = gitValue(["rev-parse", "HEAD"]);
 const treeDigest = gitValue(["rev-parse", "HEAD^{tree}"]);
 assertExactGitSourceContext({ rootDir: root, sourceCommit });
@@ -328,6 +614,7 @@ const packageLockRecord = readExactGitBlob({
 });
 let dependencySnapshot = null;
 let toolchain = null;
+let runtimeNode = null;
 if (isolatedBuild) {
   if (
     process.env.TIDEPROOF_EXACT_BUILD_SOURCE_COMMIT !== sourceCommit ||
@@ -346,6 +633,15 @@ if (isolatedBuild) {
     toolchain = validateBuildToolchain(
       JSON.parse(process.env.TIDEPROOF_EXACT_BUILD_TOOLCHAIN ?? "")
     );
+    runtimeNode = readOfficialNodeRuntime({
+      filePath: process.env.TIDEPROOF_EXACT_RUNTIME_NODE_PATH
+    });
+    if (
+      runtimeNode.sha256 !==
+        process.env.TIDEPROOF_EXACT_RUNTIME_NODE_SHA256
+    ) {
+      throw new Error("GATE2_ISOLATED_RUNTIME_NODE_BINDING");
+    }
   } catch {
     throw new Error("GATE2_ISOLATED_DEPENDENCY_BINDING");
   }
@@ -403,6 +699,8 @@ if (isolatedBuild && !workingTreeClean) {
 let artifacts = [];
 let thirdPartyNotices = null;
 let evidenceProviderRuntime = null;
+let liveDrillRuntime = null;
+let outputPrivacy = null;
 if (!templatesOnly) {
   const bundled = await collectBundledPackageNames({ rootDir: root });
   thirdPartyNotices = verifyBundledThirdPartyNotices({
@@ -419,6 +717,14 @@ if (!templatesOnly) {
     sourceCommit,
     bundled.artifactPackages.evidenceProvider
   );
+  liveDrillRuntime = await buildLiveDrillRuntime({
+    expectedPackages: bundled.artifactPackages,
+    packageLockDigest: packageLockRecord.sha256,
+    runtimeNode,
+    sourceCommit,
+    treeDigest,
+    toolchain
+  });
   for (const name of artifactNames) {
     artifacts.push(
       await buildArtifact(
@@ -429,10 +735,22 @@ if (!templatesOnly) {
       )
     );
   }
+  outputPrivacy = verifyBuildOutputPrivacy([
+    "infra/aws/bootstrap-template.json",
+    "infra/aws/gate2-template.json",
+    evidenceProviderRuntime.path,
+    liveDrillRuntime.manifestPath,
+    liveDrillRuntime.launcher.path,
+    liveDrillRuntime.node.path,
+    ...Object.values(liveDrillRuntime.components).map(({ path }) => path),
+    ...artifacts.map(({ artifactPath }) =>
+      `dist/aws/${path.basename(artifactPath)}`
+    )
+  ], sourceCommit, liveDrillRuntime.node.path);
 }
 
 const receipt = {
-  schemaVersion: "tideproof.gate2-build.v6",
+  schemaVersion: GATE2_BUILD_SCHEMA,
   mode: templatesOnly ? "TEMPLATES_ONLY_UNBOUND" : "CLEAN_ARTIFACT_BUILD",
   projectSourceMode: templatesOnly
     ? "WORKTREE_UNBOUND"
@@ -444,9 +762,11 @@ const receipt = {
   archiveFormat: "ZIP_STORED_TWO_FILE_V2",
   dependencySnapshot,
   evidenceProviderRuntime,
+  liveDrillRuntime,
+  outputPrivacy,
   toolchain,
   buildControlInputs: isolatedBuild
-    ? buildControlPaths.map((filePath) => {
+    ? GATE2_BUILD_CONTROL_PATHS.map((filePath) => {
         const record = readExactGitBlob({
           rootDir: root,
           sourceCommit,

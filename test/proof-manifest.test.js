@@ -132,7 +132,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 150);
+  assert.equal(receipt.artifactCount, 164);
   assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
@@ -328,6 +328,11 @@ test("release copy matches executable and generated source contracts", () => {
     "integrated-live-drill-recovery-continuity-tests",
     "integrated-live-drill-recovery-continuity-worker",
     "integrated-live-drill-runner",
+    "integrated-live-drill-runtime-contract",
+    "integrated-live-drill-runtime-spawn",
+    "integrated-live-drill-runtime-tests",
+    "integrated-live-drill-stress-runner",
+    "integrated-live-drill-stress-tests",
     "integrated-live-drill-tests",
     "local-full-drill-harness",
     "local-full-drill-receipt",
@@ -336,11 +341,17 @@ test("release copy matches executable and generated source contracts", () => {
     "local-full-drill-verifier",
     "managed-mcp-client",
     "managed-mcp-client-tests",
+    "official-node-runtime-contract",
+    "official-node-runtime-loader",
+    "official-node-runtime-tests",
+    "provider-dispatch-control",
+    "provider-dispatch-control-tests",
     "recovery-broker",
     "recovery-broker-tests",
     "recovery-bundle-persistence-tests",
     "recovery-bundle-signature",
     "recovery-continuity-identity",
+    "verified-node-bundle-launcher",
   ]);
   const claimRows = claims.split("\n");
   const dviClaimRows = [

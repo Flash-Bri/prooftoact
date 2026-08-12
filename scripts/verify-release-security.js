@@ -282,6 +282,34 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/build-gate2-exact.js",
     role: "ISOLATED_EXACT_GIT_BUILD_BOOTSTRAP"
   }),
+  "gate2-build-contract": Object.freeze({
+    path: "scripts/lib/gate2-build-contract.js",
+    role: "EXACT_BUILD_RECEIPT_AND_CONTROL_PATH_CONTRACT"
+  }),
+  "official-node-runtime-contract": Object.freeze({
+    path: "src/cloud/official-node-runtime-contract.js",
+    role: "PINNED_OFFICIAL_NODE_RUNTIME_METADATA_CONTRACT"
+  }),
+  "official-node-runtime-loader": Object.freeze({
+    path: "scripts/lib/official-node-runtime.js",
+    role: "PINNED_OFFICIAL_NODE_RUNTIME_BINARY_VALIDATOR"
+  }),
+  "official-node-runtime-tests": Object.freeze({
+    path: "test/official-node-runtime.test.js",
+    role: "PINNED_OFFICIAL_NODE_RUNTIME_VERIFICATION"
+  }),
+  "pg-native-unavailable": Object.freeze({
+    path: "scripts/lib/pg-native-unavailable.cjs",
+    role: "OPTIONAL_NATIVE_DATABASE_DEPENDENCY_DENIAL"
+  }),
+  "release-build-receipt-contract": Object.freeze({
+    path: "src/cloud/release-build-receipt-contract.js",
+    role: "SHARED_EXACT_BUILD_RECEIPT_SHAPE"
+  }),
+  "verified-node-bundle-launcher": Object.freeze({
+    path: "scripts/lib/verified-node-bundle-launcher.pl",
+    role: "CONTENT_ADDRESSED_RUNTIME_EXECUTION_LAUNCHER"
+  }),
   "immutable-deployment-attestation-ledger": Object.freeze({
     path: "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
     role: "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY"
@@ -329,6 +357,54 @@ const EXPECTED_SURFACES = Object.freeze({
   "integrated-live-drill-process-boundary-tests": Object.freeze({
     path: "test/integrated-live-drill-process-boundaries.test.js",
     role: "INTEGRATED_PROVIDER_DRILL_PROCESS_ISOLATION_VERIFICATION"
+  }),
+  "integrated-live-drill-runtime-contract": Object.freeze({
+    path: "src/cloud/integrated-live-drill-runtime.js",
+    role: "INTEGRATED_PROVIDER_DRILL_IMMUTABLE_RUNTIME_VALIDATOR"
+  }),
+  "integrated-live-drill-runtime-spawn": Object.freeze({
+    path: "src/cloud/integrated-live-drill-runtime-spawn.js",
+    role: "INTEGRATED_PROVIDER_DRILL_SANITIZED_RUNTIME_SPAWN"
+  }),
+  "integrated-live-drill-runtime-tests": Object.freeze({
+    path: "test/integrated-live-drill-runtime.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_RUNTIME_TAMPER_VERIFICATION"
+  }),
+  "integrated-live-drill-runtime-authority-race-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-authority-race.js",
+    role: "CONTENT_ADDRESSED_AUTHORITY_RACE_ENTRY"
+  }),
+  "integrated-live-drill-runtime-dvi-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-dvi.js",
+    role: "CONTENT_ADDRESSED_DVI_ENTRY"
+  }),
+  "integrated-live-drill-runtime-finalizer-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-finalizer.js",
+    role: "CONTENT_ADDRESSED_FINALIZER_ENTRY"
+  }),
+  "integrated-live-drill-runtime-orchestrator-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
+    role: "CONTENT_ADDRESSED_ORCHESTRATOR_ENTRY"
+  }),
+  "integrated-live-drill-runtime-recovery-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-recovery.js",
+    role: "CONTENT_ADDRESSED_RECOVERY_ENTRY"
+  }),
+  "integrated-live-drill-runtime-supervisor-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-supervisor.js",
+    role: "CONTENT_ADDRESSED_SUPERVISOR_ENTRY"
+  }),
+  "integrated-live-drill-runtime-worker-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-worker.js",
+    role: "CONTENT_ADDRESSED_WORKER_ENTRY"
+  }),
+  "integrated-live-drill-stress-runner": Object.freeze({
+    path: "scripts/run-integrated-live-drill-stress.js",
+    role: "INTEGRATED_PROVIDER_DRILL_COUNT_BOUND_REGRESSION_RUNNER"
+  }),
+  "integrated-live-drill-stress-tests": Object.freeze({
+    path: "test/integrated-live-drill-stress.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_COUNT_BOUND_VERIFICATION"
   }),
   "integrated-live-drill-provider-evidence": Object.freeze({
     path: "src/cloud/integrated-live-drill-provider-evidence.js",
@@ -450,6 +526,14 @@ const EXPECTED_SURFACES = Object.freeze({
   "primary-security-runner": Object.freeze({
     path: "scripts/gate1-security.js",
     role: "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER"
+  }),
+  "provider-dispatch-control": Object.freeze({
+    path: "src/cloud/provider-dispatch-control.js",
+    role: "DATABASE_GLOBAL_PROVIDER_DISPATCH_LEASE"
+  }),
+  "provider-dispatch-control-tests": Object.freeze({
+    path: "test/provider-dispatch-control.test.js",
+    role: "DATABASE_GLOBAL_PROVIDER_DISPATCH_VERIFICATION"
   }),
   "proof-manifest-tests": Object.freeze({
     path: "test/proof-manifest.test.js",
@@ -1480,9 +1564,14 @@ const SOURCE_MARKERS = Object.freeze({
     "awsPreflight: preflight ? \"PASS\" : \"NOT_RUN\"",
     "AWS was not queried or mutated",
     "upload and deployment remain separate reviewed actions",
-    "tideproof.gate2-build.v6",
+    "GATE2_BUILD_SCHEMA",
     "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
     "evidenceProviderRuntime",
+    "liveDrillRuntime",
+    "outputPrivacy",
+    "AWS_READINESS_BUILD_VALIDATOR",
+    "validateLiveDrillRuntime(",
+    "validateBuildOutputPrivacy(",
     "AWS_READINESS_BUILD_CONTROL_SET",
     "validateDependencySnapshot(",
     "templateReceipt(JSON.parse",
@@ -1496,6 +1585,7 @@ const SOURCE_MARKERS = Object.freeze({
     "http.sslVerify=true"
   ]),
   "aws-readiness-tests": Object.freeze([
+    "AWS readiness rejects substituted runtime validators",
     "AWS readiness rejects repository-local provenance and transport overrides",
     "AWS readiness fetches only the explicit official URL with sanitized transport",
     "--readiness-fetched-official-main",
@@ -1686,6 +1776,7 @@ const SOURCE_MARKERS = Object.freeze({
     "gitInvariantArguments()"
   ]),
   "exact-git-source-tests": Object.freeze([
+    "exact build validates every staged output before copying",
     "Gate Two bundling reads project inputs from immutable Git blobs",
     "committed bytes",
     "dirty bytes",
@@ -1730,9 +1821,12 @@ const SOURCE_MARKERS = Object.freeze({
     "exactGitSourcePlugin({",
     "exactGitInputs: exactSource.inputRecords()",
     "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
-    "tideproof.gate2-build.v6",
+    "GATE2_BUILD_SCHEMA",
     "buildEvidenceProviderRuntime(",
     "evidenceProviderRuntime",
+    "liveDrillRuntime",
+    "verifyBuildOutputPrivacy(",
+    "TIDEPROOF_EXACT_RUNTIME_NODE_SHA256",
     "TIDEPROOF_EXACT_BUILD_DEPENDENCY_SNAPSHOT",
     "TIDEPROOF_EXACT_BUILD_TOOLCHAIN",
     "GATE2_GENERATED_TEMPLATE_DRIFT_REQUIRES_COMMIT"
@@ -1758,7 +1852,49 @@ const SOURCE_MARKERS = Object.freeze({
     "GIT_NO_REPLACE_OBJECTS: \"1\"",
     "trustedGitExecutable()",
     "trustedTemporaryRoot()",
-    "assertCleanExactGitCheckout({"
+    "assertCleanExactGitCheckout({",
+    "validateStagedOutputInventory(",
+    "EXACT_BUILD_STAGED_OUTPUT_INVENTORY"
+  ]),
+  "gate2-build-contract": Object.freeze([
+    "GATE2_BUILD_CONTROL_INPUT_COUNT",
+    "scripts/lib/pg-native-unavailable.cjs",
+    "scripts/lib/verified-node-bundle-launcher.pl",
+    "src/cloud/release-build-receipt-contract.js",
+    "GATE2_BUILD_CONTROL_INPUT_COUNT_DRIFT"
+  ]),
+  "official-node-runtime-contract": Object.freeze([
+    "nodejs.org-release-v22.23.1",
+    "2e3f1286a7eb3736346ed1803e458a0ff909e2b2d5bc746144dcb76970e9b99d",
+    "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
+    "OFFICIAL_NODE_RUNTIME_METADATA_REJECTED"
+  ]),
+  "official-node-runtime-loader": Object.freeze([
+    "fs.constants.O_NOFOLLOW",
+    "before.nlink === 1",
+    "digest === expected.sha256",
+    "OFFICIAL_NODE_RUNTIME_REJECTED"
+  ]),
+  "official-node-runtime-tests": Object.freeze([
+    "official runtime node reader binds one stable regular executable",
+    "official runtime node reader rejects an unpinned platform or digest",
+    "node-hardlink"
+  ]),
+  "pg-native-unavailable": Object.freeze([
+    "optional pg-native binding is unavailable",
+    "MODULE_NOT_FOUND"
+  ]),
+  "release-build-receipt-contract": Object.freeze([
+    "tideproof.gate2-build.v7",
+    "GATE2_BUILD_CONTROL_INPUT_COUNT = 32",
+    "GATE2_BUILD_OUTPUT_COUNT = 19"
+  ]),
+  "verified-node-bundle-launcher": Object.freeze([
+    "tideproof.integrated-live-drill-runtime-manifest.v1",
+    "O_NOFOLLOW",
+    "node-[0-9a-f]{64}",
+    "exec {",
+    "--disable-proto=throw"
   ]),
   "immutable-deployment-attestation-ledger": Object.freeze([
     "SOURCE_CLOSED_PROVIDER_VALIDATION_PENDING",
@@ -1982,6 +2118,64 @@ const SOURCE_MARKERS = Object.freeze({
     "src/cloud/managed-mcp-client.js",
     "src/cloud/recovery-broker.js"
   ]),
+  "integrated-live-drill-runtime-contract": Object.freeze([
+    "tideproof.integrated-live-drill-runtime-manifest.v1",
+    "INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_REJECTED",
+    "INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED",
+    "INTEGRATED_LIVE_DRILL_RUNTIME_REJECTED",
+    "assertRootOwnedStagePath"
+  ]),
+  "integrated-live-drill-runtime-spawn": Object.freeze([
+    "PRE_EXECUTION_INJECTION_ENVIRONMENT",
+    "assertIntegratedLiveDrillRuntime",
+    "spawnSync",
+    "/usr/bin/perl"
+  ]),
+  "integrated-live-drill-runtime-tests": Object.freeze([
+    "runtime manifest binds every content-addressed executable component",
+    "reviewed runtime makes the optional native Postgres binding unavailable",
+    "runtime stage rejects any mutable ancestor in its absolute path",
+    "child launch removes every pre-execution injection surface"
+  ]),
+  "integrated-live-drill-runtime-authority-race-entry": Object.freeze([
+    "../gate2-authority-race.js",
+    "tideproof.aws-authority-race-error.v1"
+  ]),
+  "integrated-live-drill-runtime-dvi-entry": Object.freeze([
+    "../gate1-admissible-vector.js",
+    "safeAdmissibleVectorFailureCode"
+  ]),
+  "integrated-live-drill-runtime-finalizer-entry": Object.freeze([
+    "../gate2-integrated-live-drill-provider-finalizer.js",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_UNKNOWN"
+  ]),
+  "integrated-live-drill-runtime-orchestrator-entry": Object.freeze([
+    "../gate2-integrated-live-drill.js",
+    "safeIntegratedLiveDrillFailureCode"
+  ]),
+  "integrated-live-drill-runtime-recovery-entry": Object.freeze([
+    "../gate1-recovery-broker.js",
+    "noninteractive Managed MCP deterministic recovery broker"
+  ]),
+  "integrated-live-drill-runtime-supervisor-entry": Object.freeze([
+    "../gate1-integrated-live-drill-provider-supervisor.js",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_UNKNOWN"
+  ]),
+  "integrated-live-drill-runtime-worker-entry": Object.freeze([
+    "../gate1-integrated-live-drill-provider-worker.js",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_UNKNOWN"
+  ]),
+  "integrated-live-drill-stress-runner": Object.freeze([
+    "tideproof.integrated-live-drill-stress-receipt.v1",
+    "concurrent RESUMEs atomically choose stop or globally guarded reconciliation",
+    "INTEGRATED_LIVE_DRILL_STRESS_DIRTY_TREE",
+    "observedTargetPassCount"
+  ]),
+  "integrated-live-drill-stress-tests": Object.freeze([
+    "stress TAP parser accepts exactly one named pass",
+    "stress receipt binds the claimed count to every iteration digest",
+    "deliberately makes no provider, deployment, cross-host, hostile-host, or release claim"
+  ]),
   "integrated-live-drill-provider-evidence": Object.freeze([
     "tideproof.highwater-drill-provider-recovery-handoff.v1",
     "normalizeIntegratedLiveDrillProviderContext",
@@ -2001,7 +2195,7 @@ const SOURCE_MARKERS = Object.freeze({
     "credentialMaterialAbsent",
     "providerCapabilityAbsent",
     "rawProviderResultAbsent",
-    "retryAuthorityAbsent",
+    "retryNamedKeyAbsent",
     "validateIntegratedLiveDrillProviderDispatchAuthorizationPure",
     "secureIntegratedLiveDrillPrivateRoot",
     "readIntegratedLiveDrillExactPrivateJson",
@@ -2133,15 +2327,15 @@ const SOURCE_MARKERS = Object.freeze({
     "contextExactSchemaValidated",
     "contextProviderCapabilityAbsent",
     "contextRawProviderResultAbsent",
-    "contextRetryAuthorityAbsent",
+    "contextRetryNamedKeyAbsent",
     "credentialOptionAccepted:",
     "providerCapabilityAccepted:",
     "rawProviderResultAccepted:",
-    "retryAuthorityAccepted:",
+    "retryNamedKeyAccepted:",
     "!contextAssertions.credentialMaterialAbsent",
     "!contextAssertions.providerCapabilityAbsent",
     "!contextAssertions.rawProviderResultAbsent",
-    "!contextAssertions.retryAuthorityAbsent",
+    "!contextAssertions.retryNamedKeyAbsent",
     "runIntegratedLiveDrillRecoveryContinuityW4",
     "runIntegratedLiveDrillRecoveryContinuityW5",
     "verifyIntegratedLiveDrillProviderEvidenceBundle",
@@ -2192,7 +2386,6 @@ const SOURCE_MARKERS = Object.freeze({
     "checkpoint sidecar binds canonical root and checkpoint file identity across resume",
     "UNKNOWN and expired orchestration stops are durable and permanently nonretryable",
     "supervisor snapshots options and rejects accessor-bearing worker output before dereference",
-    "supervisor preserves one exact bounded worker stop code",
     "orchestration boundaries reject accessors, exotic keys, prototypes, and coercible scalars before hashing"
   ]),
   "integrated-live-drill-provider-supervisor-runner": Object.freeze([
@@ -2338,13 +2531,12 @@ const SOURCE_MARKERS = Object.freeze({
     "packetA.recoveryContinuityDisposition",
     "runIntegratedLiveDrillPacketAFinalizer",
     "provider orchestration PREPARE holds after durable DVI/race and RESUME does not rerun them",
-    "concurrent RESUMEs atomically choose stop or admission without provider overlap",
+    "concurrent RESUMEs atomically choose stop or globally guarded reconciliation",
     "RESUME rejects authorization-ledger substitution before provider admission",
     "RESUME rebind and terminal path anomalies fail before provider admission",
     "checkpoint root swap during completion cannot contradict admission",
-    "one-use admission prevents production redispatch",
     "pre-admission expiry persists a fresh-audit-authority stop and never runs",
-    "Gate2 preserves one exact bounded child stop code without stderr detail"
+    "an admitted-but-incomplete CLI result is a nonzero checkpoint"
   ]),
   "recovery-bundle-persistence-tests": Object.freeze([
     "signed recovery bundle survives restart with the exact first signature bytes",
@@ -2506,6 +2698,18 @@ const SOURCE_MARKERS = Object.freeze({
     "requestDigestRejected?.sqlstate",
     "nullIntentNonceRejected?.sqlstate",
     "tp_authorizer_user"
+  ]),
+  "provider-dispatch-control": Object.freeze([
+    "tideproof.provider-dispatch-control-binding.v1",
+    "tideproof.provider-effect-key.v1",
+    "UNKNOWN_DO_NOT_ACT",
+    "ProviderDispatchControl",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_TRANSITION_REJECTED",
+    "databaseNow"
+  ]),
+  "provider-dispatch-control-tests": Object.freeze([
+    "two independent hosts receive one global provider-dispatch grant",
+    "database-time expiry remains terminal after restart and clock rollback"
   ]),
   "proof-manifest-tests": Object.freeze([
     "proof manifest propagates nested local full-drill failure",
@@ -3280,44 +3484,40 @@ function assertTemplateContract(template, builtTemplate = buildGate2Template()) 
   const alternateTrust =
     resources.DeploymentEvidenceAlternateRole?.Properties
       ?.AssumeRolePolicyDocument;
+  const exactOperatorTrust = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: { Ref: "EvidenceOperatorPrincipalArn" } },
+        Action: "sts:AssumeRole",
+        Condition: {
+          StringEquals: {
+            "aws:PrincipalArn": {
+              Ref: "EvidenceOperatorPrincipalArn"
+            }
+          }
+        }
+      }
+    ]
+  };
   assert(
     template.Parameters?.EvidenceOperatorPrincipalArn?.AllowedPattern ===
       "^arn:aws[a-zA-Z-]*:iam::[0-9]{12}:(?:role|user)/[A-Za-z0-9+=,.@_-]{1,64}$" &&
-      sameJson(evidenceTrust, {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: { AWS: { Ref: "EvidenceOperatorPrincipalArn" } },
-            Action: "sts:AssumeRole",
-            Condition: {
-              StringEquals: {
-                "aws:PrincipalArn": {
-                  Ref: "EvidenceOperatorPrincipalArn"
-                }
-              }
-            }
-          }
-        ]
-      }) &&
+      sameJson(evidenceTrust, exactOperatorTrust) &&
+      sameJson(
+        resources.AdvisoryCallerRole?.Properties?.AssumeRolePolicyDocument,
+        exactOperatorTrust
+      ) &&
+      sameJson(
+        resources.AuthorityRaceCallerRole?.Properties
+          ?.AssumeRolePolicyDocument,
+        exactOperatorTrust
+      ) &&
       sameJson(template.Outputs?.DeploymentEvidenceRoleArn?.Value, {
         "Fn::GetAtt": ["DeploymentEvidenceRole", "Arn"]
       }) &&
-      sameJson(alternateTrust, {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: {
-              AWS: {
-                "Fn::Sub":
-                  "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
-              }
-            },
-            Action: "sts:AssumeRole"
-          }
-        ]
-      }) &&
+      sameJson(alternateTrust, exactOperatorTrust) &&
       sameJson(
         template.Outputs?.DeploymentEvidenceAlternateRoleArn?.Value,
         {

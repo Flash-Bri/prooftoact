@@ -14,6 +14,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_PATH = "RELEASE_PRIVACY_MANIFEST.json";
 const SCHEMA = "tideproof.release-privacy-verification.v1";
 const MAX_BLOB_BYTES = 5 * 1024 * 1024;
+const MAX_BUILD_OUTPUT_BYTES = 160 * 1024 * 1024;
 const MAX_HISTORY_BYTES = 128 * 1024 * 1024;
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
@@ -240,10 +241,10 @@ export function forbiddenTrackedPath(filePath) {
   return /\.(?:jks|key|keystore|p12|pem|pfx)$/i.test(base);
 }
 
-export function scanBuffer(buffer, filePath) {
+function scanBufferWithLimit(buffer, filePath, maximumBytes) {
   assert(Buffer.isBuffer(buffer), "RELEASE_PRIVACY_SCAN_BUFFER");
   assert(
-    Number.isSafeInteger(buffer.length) && buffer.length <= MAX_BLOB_BYTES,
+    Number.isSafeInteger(buffer.length) && buffer.length <= maximumBytes,
     "RELEASE_PRIVACY_BLOB_SIZE"
   );
   const text = buffer.toString("latin1");
@@ -276,6 +277,35 @@ export function scanBuffer(buffer, filePath) {
           candidate.end >= finding.end
       )
   );
+}
+
+export function scanBuffer(buffer, filePath) {
+  return scanBufferWithLimit(buffer, filePath, MAX_BLOB_BYTES);
+}
+
+export function scanBuildOutputBuffer(buffer, filePath) {
+  return scanBufferWithLimit(buffer, filePath, MAX_BUILD_OUTPUT_BYTES);
+}
+
+export function reviewBuildOutputFindings(findings, manifest) {
+  validateManifest(manifest);
+  const allowed = new Set(
+    manifest.allowedFindings
+      .filter(({ classification }) =>
+        classification === "PUBLIC_UPSTREAM_ATTRIBUTION"
+      )
+      .map(({ matchSha256, rule }) => `${rule}\0${matchSha256}`)
+  );
+  for (const finding of findings) {
+    assert(
+      allowed.has(`${finding.rule}\0${finding.matchSha256}`),
+      `RELEASE_PRIVACY_UNREVIEWED_BUILD_OUTPUT:${finding.rule}:${finding.path}:${finding.matchSha256}`
+    );
+  }
+  return Object.freeze({
+    allowedUpstreamAttributionFindingCount: findings.length,
+    findingCount: findings.length
+  });
 }
 
 export function reviewFindings(findings, manifest) {
@@ -648,6 +678,7 @@ if (startedDirectly) {
 
 export const __test = Object.freeze({
   MAX_BLOB_BYTES,
+  MAX_BUILD_OUTPUT_BYTES,
   RULES,
   parseBatch,
   sha256

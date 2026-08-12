@@ -19,7 +19,19 @@ const BUNDLED_COMPONENTS = Object.freeze({
   demo: "infra/aws/lambda/demo.js",
   evidenceProvider: "scripts/lib/aws-provider-bundle-entry.js",
   probe: "infra/aws/lambda/probe.cjs",
-  signer: "infra/aws/lambda/signer.cjs"
+  signer: "infra/aws/lambda/signer.cjs",
+  runtimeAuthorityRace:
+    "scripts/runtime-entries/integrated-live-drill-authority-race.js",
+  runtimeDvi: "scripts/runtime-entries/integrated-live-drill-dvi.js",
+  runtimeFinalizer:
+    "scripts/runtime-entries/integrated-live-drill-finalizer.js",
+  runtimeOrchestrator:
+    "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
+  runtimeRecovery:
+    "scripts/runtime-entries/integrated-live-drill-recovery.js",
+  runtimeSupervisor:
+    "scripts/runtime-entries/integrated-live-drill-supervisor.js",
+  runtimeWorker: "scripts/runtime-entries/integrated-live-drill-worker.js"
 });
 
 function assert(condition, message) {
@@ -41,7 +53,8 @@ export async function collectBundledPackageNames({
   const artifactPackages = {};
   const packageUnion = new Set();
   for (const [name, entryPoint] of Object.entries(BUNDLED_COMPONENTS)) {
-    const providerRuntime = name === "evidenceProvider";
+    const providerRuntime =
+      name === "evidenceProvider" || name.startsWith("runtime");
     const result = await build({
       absWorkingDir: resolvedRoot,
       entryPoints: [entryPoint],

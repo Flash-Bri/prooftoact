@@ -1,5 +1,10 @@
 import crypto from "node:crypto";
 
+import {
+  GATE2_BUILD_CONTROL_INPUT_COUNT,
+  GATE2_BUILD_SCHEMA,
+  GATE2_BUILD_OUTPUT_COUNT
+} from "./release-build-receipt-contract.js";
 import { validateAwsEvidenceCaller } from "./aws-evidence-identity.js";
 import { deploymentConfigDigestPure as deploymentConfigDigest } from
   "./deployment-config-digest.js";
@@ -436,18 +441,29 @@ function validateEvidenceOperatorTrust(policy, trustedPrincipalArn) {
   return sha256(policy);
 }
 
-function validateAlternateRoleTrust(policy, accountId) {
+function validateAlternateRoleTrust(policy, trustedPrincipalArn) {
   requireCondition(
     exactKeys(policy, ["Statement", "Version"]) &&
       policy.Version === "2012-10-17" &&
       Array.isArray(policy.Statement) &&
       policy.Statement.length === 1 &&
-      exactKeys(policy.Statement[0], ["Action", "Effect", "Principal"]) &&
+      exactKeys(policy.Statement[0], [
+        "Action",
+        "Condition",
+        "Effect",
+        "Principal"
+      ]) &&
       policy.Statement[0].Action === "sts:AssumeRole" &&
       policy.Statement[0].Effect === "Allow" &&
       exactKeys(policy.Statement[0].Principal, ["AWS"]) &&
       policy.Statement[0].Principal.AWS ===
-        `arn:aws:iam::${accountId}:root`,
+        trustedPrincipalArn &&
+      exactKeys(policy.Statement[0].Condition, ["StringEquals"]) &&
+      exactKeys(policy.Statement[0].Condition.StringEquals, [
+        "aws:PrincipalArn"
+      ]) &&
+      policy.Statement[0].Condition.StringEquals["aws:PrincipalArn"] ===
+        trustedPrincipalArn,
     "AWS_ATTEST_ALTERNATE_ROLE_TRUST"
   );
   return sha256(policy);
@@ -753,7 +769,7 @@ export function validateDeploymentEvidenceBasis({
   );
   requireCondition(
     buildReceipt &&
-      buildReceipt.schemaVersion === "tideproof.gate2-build.v6" &&
+      buildReceipt.schemaVersion === GATE2_BUILD_SCHEMA &&
       buildReceipt.mode === "CLEAN_ARTIFACT_BUILD" &&
       buildReceipt.projectSourceMode ===
         "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS" &&
@@ -770,7 +786,16 @@ export function validateDeploymentEvidenceBasis({
       buildReceipt.gate2Template?.canonicalDigest ===
         expectation.templateCanonicalDigest &&
       Array.isArray(buildReceipt.buildControlInputs) &&
-      buildReceipt.buildControlInputs.length === 15 &&
+      buildReceipt.buildControlInputs.length ===
+        GATE2_BUILD_CONTROL_INPUT_COUNT &&
+      HEX_64.test(buildReceipt.liveDrillRuntime?.manifestSha256 ?? "") &&
+      buildReceipt.liveDrillRuntime?.manifestPath ===
+        `dist/runtime/runtime-manifest-${buildReceipt.liveDrillRuntime?.manifestSha256}.json` &&
+      buildReceipt.outputPrivacy?.schemaVersion ===
+        "tideproof.gate2-build-output-privacy.v1" &&
+      buildReceipt.outputPrivacy?.status === "PASS" &&
+      buildReceipt.outputPrivacy?.outputCount === GATE2_BUILD_OUTPUT_COUNT &&
+      HEX_64.test(buildReceipt.outputPrivacy?.inventorySha256 ?? "") &&
       Array.isArray(buildReceipt.artifacts),
     "AWS_ATTEST_BASIS_BUILD_RECEIPT"
   );
@@ -1871,7 +1896,10 @@ export function validateDeploymentSnapshot(
       expectedArn: expectation.alternatePrincipal.roleArn,
       expectedPolicyDigest: expectation.alternatePrincipal.rolePolicyDigest,
       trustValidator: (policy) =>
-        validateAlternateRoleTrust(policy, expectation.accountId),
+        validateAlternateRoleTrust(
+          policy,
+          expectation.evidenceOperator.trustedPrincipalArn
+        ),
       alternateTargetRoleArn: expectation.evidenceOperator.roleArn
     }
   );

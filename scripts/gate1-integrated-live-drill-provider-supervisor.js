@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -52,6 +51,11 @@ import {
 import {
   integratedLiveDrillRecoveryContinuityPreCallIntent
 } from "../src/cloud/integrated-live-drill-recovery-continuity.js";
+import {
+  assertIntegratedLiveDrillRuntime
+} from "../src/cloud/integrated-live-drill-runtime.js";
+import { spawnIntegratedLiveDrillRuntimeComponent } from
+  "../src/cloud/integrated-live-drill-runtime-spawn.js";
 import {
   normalizedRecoverySourceReceiptForContinuity,
   recoveryAuditTargetIdentity
@@ -248,21 +252,23 @@ function defaultRunComponent(
   script,
   environment,
   rootDir,
-  { capabilityRootPath, decisionRootDescriptor, rootDescriptor } = {}
+  { capabilityRootPath, decisionRootDescriptor, rootDescriptor, spec } = {}
 ) {
   const stdio = Number.isSafeInteger(rootDescriptor)
     ? Number.isSafeInteger(decisionRootDescriptor)
       ? ["ignore", "pipe", "pipe", rootDescriptor, decisionRootDescriptor]
       : ["ignore", "pipe", "pipe", rootDescriptor]
     : ["ignore", "pipe", "pipe"];
-  const result = spawnSync(process.execPath, [script], {
+  const result = spawnIntegratedLiveDrillRuntimeComponent({
+    args: [],
+    childEnvironment: environment,
     cwd: Number.isSafeInteger(rootDescriptor)
       ? capabilityRootPath
       : rootDir,
-    encoding: "utf8",
-    env: environment,
-    maxBuffer: 8 * 1024 * 1024,
-    timeout: 10 * 60 * 1_000,
+    parentComponent: "supervisor",
+    parentEnvironment: process.env,
+    script,
+    spec,
     stdio
   });
   if (
@@ -962,7 +968,8 @@ export async function resumeIntegratedLiveDrillProviderSupervisor(args = {}) {
     {
       capabilityRootPath: ".",
       decisionRootDescriptor: options.decisionRootDescriptor,
-      rootDescriptor: rootLease.descriptor
+      rootDescriptor: rootLease.descriptor,
+      spec: context.trustedRunContext.spec
     }
       )
     );
@@ -1024,7 +1031,11 @@ export async function resumeIntegratedLiveDrillProviderSupervisor(args = {}) {
         ),
         finalizerEnvironment,
         rootDir,
-        { capabilityRootPath: ".", rootDescriptor: rootLease.descriptor }
+        {
+          capabilityRootPath: ".",
+          rootDescriptor: rootLease.descriptor,
+          spec: context.trustedRunContext.spec
+        }
       )
     ),
     { context, providerContinuity }
@@ -1073,6 +1084,16 @@ export async function resumeIntegratedLiveDrillProviderSupervisor(args = {}) {
 
 export async function main() {
   const environment = normalizedSupervisorEnvironment(process.env);
+  const runtimeSpec = parseIntegratedLiveDrillSpec(parseEnvironmentJson(
+    environment,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+    8192
+  ));
+  assertIntegratedLiveDrillRuntime({
+    environment: process.env,
+    expectedComponent: "supervisor",
+    spec: runtimeSpec
+  });
   const mode = requiredEnvironment(
     environment,
     INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_MODE_ENVIRONMENT,

@@ -15,6 +15,7 @@ export const PRIMARY_MANAGED_BASE_TABLES = Object.freeze([
   "tp_ledger.g1_authority_receipts",
   "tp_ledger.g1_outbox_intents",
   "tp_ledger.g1_protected_effects",
+  "tp_ledger.g1_provider_dispatch_controls",
   "tp_ledger.g1_recovery_audit_receipts",
   "tp_ledger.g1_recovery_audit_receipts_v2",
   "tp_ledger.g1_recovery_audit_events_v3",

@@ -89,8 +89,7 @@ const FINALIZER_CONTEXT_FORBIDDEN_KEY_CLASSES = Object.freeze({
     /^(?:broker|databaseclient|fetchimpl|mcpclient|providercapability|providerclient)$/u,
   rawProviderResultAbsent:
     /(?:providerresult|rawproviderresult|rawresult|transportevidence)/u,
-  retryAuthorityAbsent:
-    /(?:allowretry|retryafter|retryauthority|retrycapability|retrypermitted|retrypermission)/u
+  retryNamedKeyAbsent: /retry/u
 });
 const HANDOFF_KEYS = Object.freeze([
   "accepted",
@@ -293,7 +292,7 @@ function contextKeyAssertions(value, seen = new Set()) {
     credentialMaterialAbsent: true,
     providerCapabilityAbsent: true,
     rawProviderResultAbsent: true,
-    retryAuthorityAbsent: true
+    retryNamedKeyAbsent: true
   };
   const visit = (entry) => {
     if (

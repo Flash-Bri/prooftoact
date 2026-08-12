@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +26,10 @@ import {
   createStandaloneExactCheckout
 } from "../scripts/build-gate2-exact.js";
 
+function sha256(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
 function installedNpmCliForTest() {
   const bundledCandidate = path.resolve(
     path.dirname(fs.realpathSync(process.execPath)),
@@ -45,6 +50,60 @@ function installedNpmCliForTest() {
   }
   throw new Error("EXACT_GIT_TEST_NPM_CLI");
 }
+
+test("exact build validates every staged output before copying", (t) => {
+  const stagingRoot = fs.realpathSync(fs.mkdtempSync(
+    path.join(os.tmpdir(), "tideproof-staged-output-")
+  ));
+  t.after(() => fs.rmSync(stagingRoot, { recursive: true, force: true }));
+  const expectedPaths = Array.from(
+    { length: 19 },
+    (_, index) => `dist/output-${String(index + 1).padStart(2, "0")}.bin`
+  );
+  const outputs = expectedPaths.map((relativePath, index) => {
+    const bytes = Buffer.from(`output-${index + 1}`, "utf8");
+    const outputPath = path.join(stagingRoot, relativePath);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, bytes, { flag: "wx" });
+    return {
+      bytes: bytes.length,
+      path: relativePath,
+      sha256: sha256(bytes)
+    };
+  });
+  const privacy = {
+    schemaVersion: "tideproof.gate2-build-output-privacy.v1",
+    status: "PASS",
+    allowedUpstreamAttributionFindingCount: 0,
+    findingCount: 0,
+    inventorySha256: sha256(JSON.stringify(outputs)),
+    outputCount: outputs.length,
+    outputs,
+    pinnedOfficialToolchainBytes: outputs[0].bytes,
+    pinnedOfficialToolchainOutputCount: 1,
+    scannedBytes: outputs.slice(1).reduce(
+      (total, output) => total + output.bytes,
+      0
+    )
+  };
+  assert.equal(
+    exactBuildTest.validateStagedOutputInventory(
+      stagingRoot,
+      expectedPaths,
+      privacy
+    ).length,
+    19
+  );
+  fs.appendFileSync(path.join(stagingRoot, expectedPaths[0]), "tamper");
+  assert.throws(
+    () => exactBuildTest.validateStagedOutputInventory(
+      stagingRoot,
+      expectedPaths,
+      privacy
+    ),
+    /EXACT_BUILD_STAGED_OUTPUT_INVENTORY/u
+  );
+});
 
 function git(rootDir, ...args) {
   return execFileSync("git", args, {

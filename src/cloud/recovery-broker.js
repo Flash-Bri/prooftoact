@@ -856,6 +856,7 @@ export class DeterministicRecoveryBroker {
   #buildIdentity;
   #expectedSourceClusterId;
   #mcpClient;
+  #providerDispatchControl;
   #recoveryClusterId;
   #sessionResolver;
   #trustedPublisherKeys;
@@ -866,6 +867,7 @@ export class DeterministicRecoveryBroker {
     auditSink,
     auditTargetIdentity = null,
     buildIdentity,
+    providerDispatchControl = null,
     recoveryClusterId,
     expectedSourceClusterId,
     trustedPublisherKeys
@@ -884,6 +886,18 @@ export class DeterministicRecoveryBroker {
     this.#auditSink = auditSink;
     this.#auditTargetIdentity = auditTargetIdentity;
     this.#buildIdentity = requireText(buildIdentity, "buildIdentity");
+    if (
+      providerDispatchControl !== null &&
+      (
+        typeof providerDispatchControl.consume !== "function" ||
+        typeof providerDispatchControl.complete !== "function" ||
+        typeof providerDispatchControl.markUnknown !== "function" ||
+        typeof providerDispatchControl.resolve !== "function"
+      )
+    ) {
+      throw new TypeError("providerDispatchControl is invalid");
+    }
+    this.#providerDispatchControl = providerDispatchControl;
     this.#recoveryClusterId = requireUuid(
       recoveryClusterId,
       "recoveryClusterId"
@@ -893,6 +907,29 @@ export class DeterministicRecoveryBroker {
       "expectedSourceClusterId"
     );
     this.#trustedPublisherKeys = trustedPublisherKeys;
+  }
+
+  #requiredProviderDispatchControl() {
+    if (this.#providerDispatchControl === null) {
+      throw new Error("RECOVERY_PROVIDER_DISPATCH_CONTROL_REQUIRED");
+    }
+    return this.#providerDispatchControl;
+  }
+
+  consumeProviderDispatch(binding) {
+    return this.#requiredProviderDispatchControl().consume(binding);
+  }
+
+  completeProviderDispatch(binding, terminal) {
+    return this.#requiredProviderDispatchControl().complete(binding, terminal);
+  }
+
+  markProviderDispatchUnknown(binding) {
+    return this.#requiredProviderDispatchControl().markUnknown(binding);
+  }
+
+  resolveProviderDispatch(binding) {
+    return this.#requiredProviderDispatchControl().resolve(binding);
   }
 
   #unknown(reason) {

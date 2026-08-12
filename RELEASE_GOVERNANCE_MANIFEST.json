@@ -28,7 +28,7 @@
       "id": "ci-workflow",
       "path": ".github/workflows/ci.yml",
       "role": "REQUIRED_CHECK_SOURCE",
-      "sha256": "3aa1021b973a81cb5ef8aec45550dd126fc48c6892cabc773cacb06225236b36"
+      "sha256": "cb65ee9f082a223418749212bd714c1b9b81a59d8cd8fb9538bb2578746b5703"
     },
     {
       "id": "governance-ledger",
@@ -52,7 +52,7 @@
       "id": "public-readme",
       "path": "README.md",
       "role": "PUBLIC_PROJECT_SURFACE",
-      "sha256": "e4e75e37d9e13df8dd26745a49520263daffae0f2def256bfabbd5b4ceb03eec"
+      "sha256": "e01571215cd7c52294aa2583b98733b6837f7f875859f865990629cbc49b495b"
     },
     {
       "id": "security-policy",

@@ -271,6 +271,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g2_spend_authority_race_v1", /session_user <> 'tp_gate2_authorizer_user'/u],
     ["g1_resolve_request_v1", sharedAuthorizerGuard],
     ["g1_observe_authority_race_v1", sharedAuthorizerGuard],
+    ["g1_transition_provider_dispatch_v1", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
@@ -582,9 +583,20 @@ test("primary function SQL is digest-pinned before any database query", async ()
   );
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
-    statementCount: 38,
-    sha256: "8e81ea155fc206367c9b6e84c790acbcc8e0b859adc754177ab97c3010f42ce8"
+    statementCount: 39,
+    sha256: "8bb15fd3a92b602f69762237bbfb247e87f943da69415dcc0d48143ddf5c39a6"
   });
+  const providerControl = statements.find((statement) =>
+    statement.includes("g1_transition_provider_dispatch_v1")
+  );
+  assert.match(
+    providerControl,
+    /clock_timestamp\(\)[\s\S]*FOR UPDATE[\s\S]*v_database_now := clock_timestamp\(\)[\s\S]*ON CONFLICT DO NOTHING/u
+  );
+  assert.match(
+    providerControl,
+    /'DISPATCH_GRANTED'[\s\S]*'ALREADY_TERMINAL_OR_CONSUMED'[\s\S]*owner_nonce <> p_owner_nonce[\s\S]*'UNKNOWN_DO_NOT_ACT'/u
+  );
   assert.equal(
     statements.filter((statement) =>
       statement.includes("g1_resolve_recovery_source_receipt_v2")
@@ -792,7 +804,7 @@ test("recovery operator contract enumerates every exact private input", async ()
   assert.match(source, /race receipt `dvi\.authorityEvidenceBindingSha256`/u);
   assert.match(source, /race receipt `dvi\.selectedEvidenceBindingSha256`/u);
   assert.match(source, /The nine `RECOVERY_SOURCE_\*` values/u);
-  assert.match(source, /all 18[\s\S]*managed base-table read probes/u);
+  assert.match(source, /all 19[\s\S]*managed base-table read probes/u);
   assert.match(source, /administrator URL/u);
   assert.match(source, /exact shared private inputs/u);
   assert.match(source, /broker is invoked by the integrated-live[\s\S]*it alone also requires/u);

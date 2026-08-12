@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
 
+import { GATE2_BUILD_CONTROL_PATHS } from
+  "../scripts/lib/gate2-build-contract.js";
 import {
   DEPLOYMENT_API_INTEGRATIONS,
   DEPLOYMENT_API_ROUTE_KEYS,
@@ -117,19 +119,6 @@ function operatorTrustPolicy() {
             "aws:PrincipalArn": TRUSTED_PRINCIPAL_ARN
           }
         }
-      }
-    ]
-  };
-}
-
-function accountTrustPolicy() {
-  return {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Principal: { AWS: `arn:aws:iam::${ACCOUNT_ID}:root` },
-        Action: "sts:AssumeRole"
       }
     ]
   };
@@ -546,7 +535,7 @@ function fixture() {
     treeDigest: TREE_DIGEST
   };
   const buildReceipt = {
-    schemaVersion: "tideproof.gate2-build.v6",
+    schemaVersion: "tideproof.gate2-build.v7",
     mode: "CLEAN_ARTIFACT_BUILD",
     projectSourceMode: "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
     sourceCommit: SOURCE_COMMIT,
@@ -559,11 +548,24 @@ function fixture() {
     evidenceProviderRuntime: {
       sha256: PROVIDER_RUNTIME_SHA256
     },
-    buildControlInputs: Array.from({ length: 15 }, (_, index) => ({
-      path: `control-${index}.js`,
-      gitBlobId: String(index + 1).repeat(40).slice(0, 40),
-      sha256: String(index + 1).repeat(64).slice(0, 64)
-    })),
+    buildControlInputs: Array.from(
+      { length: GATE2_BUILD_CONTROL_PATHS.length },
+      (_, index) => ({
+        path: `control-${index}.js`,
+        gitBlobId: String(index + 1).repeat(40).slice(0, 40),
+        sha256: String(index + 1).repeat(64).slice(0, 64)
+      })
+    ),
+    liveDrillRuntime: {
+      manifestPath: `dist/runtime/runtime-manifest-${"9".repeat(64)}.json`,
+      manifestSha256: "9".repeat(64)
+    },
+    outputPrivacy: {
+      schemaVersion: "tideproof.gate2-build-output-privacy.v1",
+      status: "PASS",
+      outputCount: 19,
+      inventorySha256: "8".repeat(64)
+    },
     gate2Template: {
       templateDigest: TEMPLATE_DIGEST,
       canonicalDigest: TEMPLATE_CANONICAL_DIGEST
@@ -836,7 +838,7 @@ function state(phase, observedAt) {
       arn: ALTERNATE_ROLE_ARN,
       id: "AROATIDEPROOFALTERNATE",
       policy: alternatePolicy(),
-      trustPolicy: accountTrustPolicy()
+      trustPolicy: operatorTrustPolicy()
     }),
     apiGateway: apiGatewayFixture(value.expectation),
     callerIdentity: {

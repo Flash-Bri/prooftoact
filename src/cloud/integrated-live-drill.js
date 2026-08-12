@@ -67,6 +67,7 @@ export function parseIntegratedLiveDrillSpec(value) {
       "packageLockDigest",
       "raceId",
       "runId",
+      "runtimeBundleManifestSha256",
       "schemaVersion",
       "sourceBuildIdentity",
       "sourceCommit",
@@ -77,6 +78,7 @@ export function parseIntegratedLiveDrillSpec(value) {
     !SHA256.test(value.packageLockDigest) ||
     !SHA256.test(value.authoritySourceDigest) ||
     !SHA256.test(value.authorityArtifactDigest) ||
+    !SHA256.test(value.runtimeBundleManifestSha256) ||
     !SHA1.test(value.sourceCommit) ||
     !SHA1.test(value.treeDigest) ||
     !UUID.test(value.raceId) ||
@@ -102,6 +104,7 @@ export function integratedSourceBuildIdentity(value) {
     packageLockDigest: value?.packageLockDigest,
     authoritySourceDigest: value?.authoritySourceDigest,
     authorityArtifactDigest: value?.authorityArtifactDigest,
+    runtimeBundleManifestSha256: value?.runtimeBundleManifestSha256,
     functionArn: value?.functionArn
   }));
 }

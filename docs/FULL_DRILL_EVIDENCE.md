@@ -71,6 +71,19 @@ accepted integrated receipt is the complete provider target.
 The current source runner emits only a
 `tideproof.highwater-drill-live-candidate.v2` receipt with status
 `INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
+The exact Gate Two v7 build now emits seven content-addressed live-drill ESM
+bundles, a content-addressed manifest, the reviewed launcher, and a Node
+v22.23.1 executable whose byte digest must match one pinned official
+nodejs.org release for the exact `linux-x64` or `darwin-arm64` target. A
+Homebrew thin launcher, an unpinned Node executable, a different platform, or
+a changed digest fails the build. The build receipt inventories all 19
+generated files, scans the 18 non-Node outputs for the repository's bounded
+privacy signatures, and separately records the byte count of the one pinned
+official toolchain object; it does not mislabel that exemption as scanned.
+The outer builder checks all 19 staged paths, sizes, and digests before copying
+them into the release checkout. The DVI bundle replaces `pg`'s optional
+`pg-native` lookup with a tracked fail-closed module, preventing an ambient
+native peer from entering the reviewed runtime.
 After release verification and before the first provider component, the runner
 creates a source-local owner-only journal and durably publishes a run-intent
 digest. It then writes create-only, fsynced hash-chain entries for each observed
@@ -93,6 +106,34 @@ candidate remains blocked until a separate reviewed finalizer validates a
 signed pre/post deployment-attestation pair around the drill, independently
 attests and recomputes the private evidence, and proves crash-safe recovery
 without a second Managed MCP read for the same canonical attempt.
+
+The live command must not execute a bundle, launcher, manifest, or Node binary
+directly from the mutable checkout or `dist/runtime`. Before credentials are
+introduced, an operator with separate root authority must copy the exact ten
+live-runtime files named by the accepted build receipt into a dedicated stage
+whose complete absolute ancestor chain is root-owned and not group- or
+world-writable. The manifest is mode 0444; the launcher, Node executable, and
+seven bundles are mode 0555; every file is regular, root-owned, single-link,
+and named by its digest where applicable. The drill itself runs as a dedicated
+non-root identity. The system `/usr/bin/perl` launcher opens the manifest,
+bundle, and Node executable with `O_NOFOLLOW`, verifies ownership, mode, link
+count, and SHA-256 from file descriptors, passes the verified bundle through
+an already-open descriptor, and removes Node, Perl, and dynamic-loader
+injection variables from every child environment. Each component repeats the
+stage, manifest, Node, launcher, component, source, tree, lockfile, and spec
+bindings before provider work.
+
+The top-level launch must begin from a clean, allowlisted environment (for
+example an approved service supervisor or `/usr/bin/env -i`) and must inject
+secrets from private custody without putting them in shell history. The stage
+root path and manifest digest are copied exactly into
+`TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT` and
+`TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256`; the integrated spec
+must carry that same manifest digest. Do not improvise a stage under `/tmp`, a
+user-writable parent, the repository, or a linked worktree. These controls
+bound a non-hostile non-root runner. They trust the root account, kernel,
+system loader, system Perl, and system libraries and do not claim resistance
+to a malicious administrator or compromised host.
 
 The live runner requires
 `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH` to be one canonical
@@ -127,21 +168,34 @@ source commit, and tree digest. The signed payload also binds a canonical
 non-secret audit-target identity; the worker recomputes that identity from the
 credentialed audit URL before constructing either provider or database clients.
 
-Pre-provider failure and provider admission compete for one owner-only,
-create-only, fsynced decision path. Only `ENOENT` means no decision; malformed
-entries, dangling links, and other filesystem errors fail closed. A durable
+Pre-provider failure and provider admission first compete for one owner-only,
+create-only, fsynced local decision path. Only `ENOENT` means no decision;
+malformed entries, dangling links, and other filesystem errors fail closed. A durable
 `STOPPED_BEFORE_PROVIDER_ADMISSION` decision permanently excludes admission.
 A durable `PROVIDER_ADMITTED` decision is the one-use dispatch claim and
 permanently excludes a later stop. Only the process that atomically creates
 that claim may spawn the supervisor; concurrent observers and later restarts
-return the non-accepting admission receipt without re-entering provider work.
-A crash after admission therefore remains nonretryable and ambiguous rather
-than silently redispatching. Completion is accepted only after the matching
-admission decision, and the lower W2 ledger retains its own durable `O_EXCL`
-one-use claim as defense in depth. These are local source and fake-transport
-controls, not evidence of a live provider call, provider-global exact-call
-count, deployment, cross-host authority, hostile-host safety, or an accepted
-submission result.
+enter reconciliation instead of returning early or silently redispatching.
+Immediately before the Managed MCP `tools/call`, the worker consumes one
+database-global control row through
+`tp_api.g1_transition_provider_dispatch_v1`. The row binds the authorization,
+run, tenant, interaction, logical request, provider-effect key, dispatch
+authorization, source commit, tree, and build identity. The authoritative
+database clock decides freshness, and one transaction can return
+`DISPATCH_GRANTED`; every other host, process, or restart observes a terminal
+or already-consumed state. The winning owner alone can bind completion
+digests. A crash after consumption becomes `UNKNOWN_DO_NOT_ACT` and sacrifices
+liveness rather than granting another call. The local W2 `O_EXCL` ledger
+remains defense in depth, not global authority.
+
+Local tests model two independent hosts sharing one database and also cover
+database-time expiry followed by a process restart and local-clock rollback.
+The count-bound stress runner repeats the concurrent RESUME race from one exact
+clean commit. These are source and simulated-database controls. They do not
+yet prove the function's behavior on the exact CockroachDB Cloud version, a
+real cross-host race, one provider-global Managed MCP call, deployment,
+hostile-root safety, or an accepted submission result; the +1 drill must supply
+that evidence.
 
 ## Per-drill binding
 
@@ -181,6 +235,10 @@ replayed.
 
 Acceptance additionally requires:
 
+- an exact v7 build receipt whose 19-file output inventory and privacy boundary
+  recompute, followed by a root-owned immutable-stage receipt for the pinned
+  manifest, official Node target, launcher, and seven component bundles; the
+  live process must be non-root and begin with the reviewed clean environment;
 - one signed pre/post deployment-attestation pair whose exact expectation
   binds the source commit, tree, configuration, Authority numeric-version ARN,
   code hash, execution role, revisions, and alias target around the drill;
@@ -189,6 +247,11 @@ Acceptance additionally requires:
 - crash/failpoint evidence that retry after pre-read audit, Managed MCP response,
   terminal-audit COMMIT dispatch/ACK loss, or receipt-publication loss reconciles
   the same canonical recovery attempt without issuing a second MCP read;
+- a database receipt for the global provider-dispatch control showing exactly
+  one `DISPATCH_GRANTED` transition for the canonical effect key, its matching
+  terminal state, and no second provider call across concurrent hosts and
+  restart; the count-bound clean-commit RESUME stress receipt is a local
+  prerequisite, not a substitute;
 - exact clean public `main`, tree, lockfile, artifacts, configuration, caller
   binding, primary cluster, and recovery cluster digests;
 - exactly one passing integrated run digest, all enumerated invariants true,
@@ -228,13 +291,16 @@ path now consumes database-authorized DVI proposal identities and the exact
 selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
 recomputing receipt validator now exist. The source now also contains a
-single-run integrated orchestrator, owner-restricted external private-evidence
-source control, current-byte reread verifier, and strict sanitized candidate composer,
+single-run integrated orchestrator, database-global dispatch-control source,
+content-addressed seven-component runtime, pinned official Node target,
+root-stage verifier, build-output inventory/privacy receipt, count-bound RESUME
+stress runner, owner-restricted external private-evidence source control,
+current-byte reread verifier, and strict sanitized candidate composer,
 but the provider-backed execution and accepted live receipt do not. The
 candidate explicitly records that deployment attestation, independently
 attested private-evidence retention/recomputation, pre-provider crash journaling,
-crash-safe recovery, and provider
-pricing/billing are unproven. The exact
+root-stage execution, provider-backed global dispatch, crash-safe recovery, and
+provider pricing/billing are unproven. The exact
 cross-act recovery lookup now has a locally tested source control, but no
 provider-backed receipt. Public claims and final release readiness must
 therefore remain partial and blocked.
@@ -625,7 +691,7 @@ the exact, database-time-current authority-receipt resolver; the separate
 `tp_recovery_audit_user` receives only the exact audit-event and trust-root
 resolvers plus the append-only audit surface. Neither receives base-table
 access. Before either runner reads source state or the trust root, it executes
-six rollback-bounded privilege-pure write probes and 18 managed-table read
+six rollback-bounded privilege-pure write probes and 19 managed-table read
 probes, requiring SQLSTATE `42501` from both primary credentials for each. The
 broker re-reads its two audit events only by their
 committed event IDs and digests. No recovery runner accepts
@@ -746,7 +812,7 @@ the winner operation and request digest onto tenant, incident, evidence, or
 resource values or DVI digests from another run, and do not reconstruct missing
 fields from a latest-row query. Before any resolver, signing, publication, recovery
 bootstrap, or MCP call, both primary credentials must independently return
-SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 18
+SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 19
 managed base-table read probes. The source resolver then joins the authority receipt
 to its outbox intent and exact DVI proposal across request, proposal,
 logical-action, authorization, run, incident, resource, agency, policy,

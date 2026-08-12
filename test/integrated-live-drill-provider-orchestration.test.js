@@ -76,6 +76,7 @@ const functionArn = "arn:aws:lambda:us-east-1:111111111111:function:test:7";
 const specWithoutIdentity = Object.freeze({
   schemaVersion: INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   authorityArtifactDigest: "3".repeat(64),
+  runtimeBundleManifestSha256: "7".repeat(64),
   authoritySourceDigest: "2".repeat(64),
   configDigest: "0".repeat(64),
   functionArn,
@@ -952,7 +953,7 @@ test("supervisor snapshots options and rejects accessor-bearing worker output be
   assert.equal(environmentGetterRuns, 0);
 });
 
-test("supervisor preserves one exact bounded worker stop code", (t) => {
+test("supervisor refuses mutable source-path worker execution", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pta-supervisor-stop-"));
   fs.chmodSync(root, 0o700);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -964,6 +965,6 @@ test("supervisor preserves one exact bounded worker stop code", (t) => {
   );
   assert.throws(
     () => supervisorTest.defaultRunComponent(script, {}, root),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+    /INTEGRATED_LIVE_DRILL_RUNTIME_REJECTED/u
   );
 });

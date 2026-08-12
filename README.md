@@ -151,8 +151,9 @@ identifiers, optional state, and install-script flag. Run
 `npm run dependencies:verify` to reject drift, unreviewed license identifiers,
 non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
 The generated [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) separately
-binds the 46-package union whose source is actually present in the six Gate
-Two bundles, including exact license-text hashes and five explicit fallbacks
+binds the 46-package union whose source is actually present across the six Gate
+Two Lambda bundles, the evidence-provider runtime, and the seven integrated-
+live runtime bundles, including exact license-text hashes and five explicit fallbacks
 for published packages that omit a standalone license file. Run
 `npm run licenses:verify` to rebuild the esbuild input graph and reject package,
 version, integrity, license-source, fallback, or notice-byte drift. Every Gate
@@ -173,6 +174,22 @@ fenced provider observations per phase, exact censuses of the five primary
 runtime functions plus their shared roles and the two evidence roles,
 and the alternate-principal denial described in
 [`docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md`](docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md).
+
+The exact Gate Two v7 build also produces a content-addressed integrated-live
+runtime manifest, seven ESM component bundles, the reviewed descriptor
+launcher, and a pinned official Node v22.23.1 executable for the exact
+`linux-x64` or `darwin-arm64` target. Its receipt inventories all 19 generated
+outputs, privacy-scans the 18 non-Node outputs, and labels the exact official
+Node bytes as a pinned toolchain exemption. Readiness recomputes those facts.
+Before copying anything out of the isolated child build, the parent rehashes
+and size-checks the complete 19-output inventory. The DVI bundle resolves
+`pg`'s optional `pg-native` peer to a tracked fail-closed module, so no
+unreviewed native database binding remains discoverable at runtime.
+The live drill may run only as a dedicated non-root identity from the ten
+receipt-named runtime files copied into a root-owned, non-writable-ancestor
+stage; running from the checkout or a package-manager Node shim is rejected.
+This is a source and build boundary, not proof of a live provider drill or a
+hostile-administrator defense.
 
 The machine-readable
 [`docs/media/RIGHTS_MANIFEST.json`](docs/media/RIGHTS_MANIFEST.json) binds the
