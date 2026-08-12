@@ -792,7 +792,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "3fe7398acd25a36577cfe204f792c6ca03a732ee38e216696bc395b776b8d8d2"
+      "sha256": "c35f65931e5dd3e8d9cf6670b900dd2826fe6e8ea0a5d4e770d35899c5f4cc24"
     },
     {
       "id": "proof-manifest-verifier",

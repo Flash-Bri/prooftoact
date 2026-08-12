@@ -727,7 +727,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "3fe7398acd25a36577cfe204f792c6ca03a732ee38e216696bc395b776b8d8d2",
+      "sha256": "c35f65931e5dd3e8d9cf6670b900dd2826fe6e8ea0a5d4e770d35899c5f4cc24",
       "kind": "verification-code"
     },
     {
@@ -949,7 +949,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "ea264a8f3f6feec1a2bcb773ff483112b4745e4bb2a56a34c7c45390b1f1f69d",
+      "sha256": "8a6ad9c9490ac41b02951270ff77a8705fec86af2cdb39e77a6ed9ca2388daaa",
       "kind": "boundary-ledger"
     },
     {
