@@ -1078,7 +1078,7 @@
       "id": "full-highwater-drills",
       "claim": "The approved 100+1 high-water target binds 100 deterministic offline specifications plus one exact-release provider-backed integrated drill.",
       "currentStatus": "Partial; the recomputing offline receipt passes 100 unique runs and 1,100 invariant evaluations with zero violations, while the +1 provider execution and acceptance review remain pending",
-      "claimsLedgerRowSha256": "4f2a91b307c0012e84120e99e965fda5b3d5ac7bde105bef6b869ff7b8ccbba7",
+      "claimsLedgerRowSha256": "ca5601c9eb71eb8af4ac4107920b22409ae0cac866be11acedf89d1ad058ac29",
       "proofState": "PARTIAL",
       "artifacts": [
         "deployment-config-digest",
