@@ -6,7 +6,7 @@ import {
   verifyIntegratedLiveDrillProcessBoundaries
 } from "../scripts/verify-integrated-live-drill-process-boundaries.js";
 
-test("provider worker and finalizer import graphs preserve process boundaries", () => {
+test("provider worker, reconciler, and finalizer import graphs preserve process boundaries", () => {
   const receipt = verifyIntegratedLiveDrillProcessBoundaries();
   assert.equal(
     receipt.schemaVersion,
@@ -15,6 +15,7 @@ test("provider worker and finalizer import graphs preserve process boundaries", 
   assert.equal(receipt.status, "PASS");
   assert.deepEqual(receipt.finalizer.externalPackages, []);
   assert.deepEqual(receipt.worker.externalPackages, ["pg"]);
+  assert.deepEqual(receipt.reconciler.externalPackages, ["pg"]);
   assert.equal(
     receipt.supervisor.path,
     "scripts/gate1-integrated-live-drill-provider-supervisor.js"
@@ -48,7 +49,7 @@ test("provider worker and finalizer import graphs preserve process boundaries", 
       forbidden
     );
   }
-  for (const graph of [receipt.finalizer, receipt.worker]) {
+  for (const graph of [receipt.finalizer, receipt.reconciler, receipt.worker]) {
     for (const forbidden of [
       "node:child_process",
       "node:dns",
@@ -60,6 +61,16 @@ test("provider worker and finalizer import graphs preserve process boundaries", 
       assert.equal(graph.builtins.includes(forbidden), false, forbidden);
     }
   }
+  assert.equal(
+    receipt.reconciler.modules.includes("src/cloud/managed-mcp-client.js"),
+    false
+  );
+  assert.equal(
+    receipt.reconciler.modules.includes(
+      "src/cloud/provider-dispatch-control.js"
+    ),
+    true
+  );
   assert.equal(
     receipt.finalizer.modules.includes(
       "src/cloud/integrated-live-drill-provider-evidence.js"

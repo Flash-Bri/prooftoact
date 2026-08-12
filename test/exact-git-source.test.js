@@ -35,7 +35,12 @@ function installedNpmCliForTest() {
     path.dirname(fs.realpathSync(process.execPath)),
     "../lib/node_modules/npm/bin/npm-cli.js"
   );
-  const candidates = [bundledCandidate, process.env.npm_execpath];
+  const candidates = [
+    bundledCandidate,
+    process.env.npm_execpath,
+    "/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js",
+    "/usr/local/lib/node_modules/npm/bin/npm-cli.js"
+  ];
   for (const candidate of candidates) {
     if (
       typeof candidate === "string" &&
@@ -57,7 +62,7 @@ test("exact build validates every staged output before copying", (t) => {
   ));
   t.after(() => fs.rmSync(stagingRoot, { recursive: true, force: true }));
   const expectedPaths = Array.from(
-    { length: 19 },
+    { length: 20 },
     (_, index) => `dist/output-${String(index + 1).padStart(2, "0")}.bin`
   );
   const outputs = expectedPaths.map((relativePath, index) => {
@@ -92,7 +97,7 @@ test("exact build validates every staged output before copying", (t) => {
       expectedPaths,
       privacy
     ).length,
-    19
+    20
   );
   fs.appendFileSync(path.join(stagingRoot, expectedPaths[0]), "tamper");
   assert.throws(

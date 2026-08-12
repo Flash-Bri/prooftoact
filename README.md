@@ -80,7 +80,9 @@ Those are explicit build gates, not implied capabilities.
 
 ## Run locally
 
-Requires Node.js 22 or newer. Local tests and the browser demo need no cloud
+Requires the pinned official Node.js v22.23.1 runtime and npm 10.9.8 declared
+in `package.json`. Install the exact lockfile without lifecycle scripts first:
+`npm ci --ignore-scripts`. Local tests and the browser demo need no cloud
 credentials. Live Gate One scripts use the `pg` dependency and explicit
 project credentials supplied through the environment; secrets must remain in
 a secret store and never enter the repository.
@@ -152,7 +154,7 @@ identifiers, optional state, and install-script flag. Run
 non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
 The generated [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) separately
 binds the 46-package union whose source is actually present across the six Gate
-Two Lambda bundles, the evidence-provider runtime, and the seven integrated-
+Two Lambda bundles, the evidence-provider runtime, and the eight integrated-
 live runtime bundles, including exact license-text hashes and five explicit fallbacks
 for published packages that omit a standalone license file. Run
 `npm run licenses:verify` to rebuild the esbuild input graph and reject package,
@@ -176,16 +178,16 @@ and the alternate-principal denial described in
 [`docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md`](docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md).
 
 The exact Gate Two v7 build also produces a content-addressed integrated-live
-runtime manifest, seven ESM component bundles, the reviewed descriptor
+runtime manifest, eight ESM component bundles, the reviewed descriptor
 launcher, and a pinned official Node v22.23.1 executable for the exact
-`linux-x64` or `darwin-arm64` target. Its receipt inventories all 19 generated
-outputs, privacy-scans the 18 non-Node outputs, and labels the exact official
+`linux-x64` or `darwin-arm64` target. Its receipt inventories all 20 generated
+outputs, privacy-scans the 19 non-Node outputs, and labels the exact official
 Node bytes as a pinned toolchain exemption. Readiness recomputes those facts.
 Before copying anything out of the isolated child build, the parent rehashes
-and size-checks the complete 19-output inventory. The DVI bundle resolves
+and size-checks the complete 20-output inventory. The DVI bundle resolves
 `pg`'s optional `pg-native` peer to a tracked fail-closed module, so no
 unreviewed native database binding remains discoverable at runtime.
-The live drill may run only as a dedicated non-root identity from the ten
+The live drill may run only as a dedicated non-root identity from the eleven
 receipt-named runtime files copied into a root-owned, non-writable-ancestor
 stage; running from the checkout or a package-manager Node shim is rejected.
 This is a source and build boundary, not proof of a live provider drill or a

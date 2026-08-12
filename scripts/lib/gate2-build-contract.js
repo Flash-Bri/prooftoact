@@ -15,6 +15,7 @@ export const GATE2_LIVE_RUNTIME_COMPONENTS = Object.freeze([
   "dvi",
   "finalizer",
   "orchestrator",
+  "reconciler",
   "recovery",
   "supervisor",
   "worker"
@@ -41,6 +42,7 @@ export const GATE2_BUILD_CONTROL_PATHS = Object.freeze([
   "scripts/runtime-entries/integrated-live-drill-dvi.js",
   "scripts/runtime-entries/integrated-live-drill-finalizer.js",
   "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
+  "scripts/runtime-entries/integrated-live-drill-reconciler.js",
   "scripts/runtime-entries/integrated-live-drill-recovery.js",
   "scripts/runtime-entries/integrated-live-drill-supervisor.js",
   "scripts/runtime-entries/integrated-live-drill-worker.js",

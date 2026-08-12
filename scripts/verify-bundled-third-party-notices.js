@@ -27,6 +27,8 @@ const BUNDLED_COMPONENTS = Object.freeze({
     "scripts/runtime-entries/integrated-live-drill-finalizer.js",
   runtimeOrchestrator:
     "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
+  runtimeReconciler:
+    "scripts/runtime-entries/integrated-live-drill-reconciler.js",
   runtimeRecovery:
     "scripts/runtime-entries/integrated-live-drill-recovery.js",
   runtimeSupervisor:

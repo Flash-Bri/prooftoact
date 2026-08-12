@@ -217,16 +217,16 @@ role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
 the 46-package union present across the six Lambda graphs, the separately
-content-addressed evidence-provider graph, and seven integrated-live runtime
+content-addressed evidence-provider graph, and eight integrated-live runtime
 graphs. Over-inclusion in each ZIP
 is intentional so every independently distributed ZIP carries the complete
 reviewed notice set.
-The v7 receipt also binds seven content-addressed integrated-live ESM bundles,
+The v7 receipt also binds eight content-addressed integrated-live ESM bundles,
 one content-addressed canonical manifest, the reviewed file-descriptor
 launcher, and one pinned official Node v22.23.1 executable for the exact
 `linux-x64` or `darwin-arm64` target. A platform package-manager shim or any
-unreviewed executable digest is rejected. The build inventories all 19
-generated outputs; it privacy-scans the 18 non-Node outputs and records the
+unreviewed executable digest is rejected. The build inventories all 20
+generated outputs; it privacy-scans the 19 non-Node outputs and records the
 one exact official Node binary as a pinned upstream toolchain exemption.
 Readiness independently recomputes those paths, sizes, hashes, package union,
 manifest bindings, scan results, and exemption before provider evidence.
@@ -247,7 +247,7 @@ imports. The receipt records:
 - ZIP SHA-256 in hexadecimal and base64;
 - immutable S3 key recommendation;
 - template formatted and canonical digests;
-- the integrated-live manifest, launcher, official Node target, and seven
+- the integrated-live manifest, launcher, official Node target, and eight
   component graphs; and
 - the complete generated-output privacy inventory and explicit pinned-
   toolchain byte boundary.
@@ -264,10 +264,10 @@ checks reject symlinked artifact parents, but a same-identity hostile host is
 still outside the claim and requires independent exact-release reproduction.
 
 Never run the integrated live drill from `dist/runtime` in the checkout. Copy
-only the ten files named by the accepted runtime receipt into a dedicated
+only the eleven files named by the accepted runtime receipt into a dedicated
 root-owned stage whose entire absolute ancestor chain is root-owned and not
 group- or world-writable. Use 0444 for the manifest and 0555 for the launcher,
-official Node executable, and seven bundles; require regular single-link
+official Node executable, and eight bundles; require regular single-link
 root-owned files. Launch through the reviewed system-Perl descriptor verifier
 as a dedicated non-root identity from an allowlisted clean environment, with
 the exact stage path and manifest digest also bound into the integrated spec.
@@ -1033,13 +1033,23 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 
 ## Live acceptance sequence
 
-1. Re-run all local tests, syntax checks, dependency audit,
+1. In an ordinary standalone clone (not a linked worktree), use the pinned
+   official Node.js v22.23.1 and npm 10.9.8, run `npm ci --ignore-scripts`,
+   then re-run all local tests, syntax checks, dependency audit,
    `npm run privacy:verify`,
-   CloudFormation lint, and generated-template equality.
-2. Commit the accepted local candidate.
-3. Build from that clean commit. Require the v7 19-output inventory/privacy
+   CloudFormation lint and generated-template equality. Run the
+   `gate2:integrated-live-drill` PREPARE/RESUME commands only with their exact
+   reviewed private fixture, ledger, authorization, and provider environments;
+   they are not a credential-free unit-test command. Also run
+   `npm run stress:provider-resume`. Require a count-bound 20/20 stress
+   receipt for the exact candidate commit and tree.
+2. Obtain independent Packet C source acceptance. Commit the accepted local
+   candidate, merge it to official `main`, and require hosted CI to pass on
+   that exact `main` commit. Do not use a feature commit as live authority.
+3. Obtain a fresh, explicit pre-live GO for that exact official-main commit.
+   Build from the same clean commit. Require the v7 20-output inventory/privacy
    receipt and the pinned official Node target. Before any integrated-live
-   credential is introduced, copy only the ten named live-runtime files into
+   credential is introduced, copy only the eleven named live-runtime files into
    the reviewed root-owned immutable stage, verify its complete ancestor chain
    and file modes, and preserve a private stage receipt. Do not run from the
    checkout or use a package-manager Node shim.

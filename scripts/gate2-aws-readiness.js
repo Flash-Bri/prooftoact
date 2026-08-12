@@ -31,6 +31,8 @@ import {
   GATE2_BUILD_SCHEMA,
   GATE2_LIVE_RUNTIME_COMPONENTS
 } from "./lib/gate2-build-contract.js";
+import { validateIntegratedLiveDrillStressReceipt } from
+  "./run-integrated-live-drill-stress.js";
 import { validateReleaseClaimsReceipt } from "./verify-release-claims.js";
 import { validateReleaseCostReceipt } from "./verify-release-cost.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
@@ -2479,6 +2481,20 @@ export async function runAwsReadiness({
     ["test"],
     "AWS_READINESS_TESTS"
   );
+  const providerResumeStress = validateIntegratedLiveDrillStressReceipt(
+    jsonCommand(
+      run,
+      "npm",
+      ["run", "--silent", "stress:provider-resume"],
+      "AWS_READINESS_PROVIDER_RESUME_STRESS"
+    )
+  );
+  requireCondition(
+    providerResumeStress.sourceCommit === checkout.sourceCommit &&
+      providerResumeStress.treeDigest === checkout.treeDigest &&
+      providerResumeStress.iterationCount === 20,
+    "AWS_READINESS_PROVIDER_RESUME_STRESS"
+  );
   const audit = validateAuditReport(
     jsonCommand(
       run,
@@ -2550,6 +2566,7 @@ export async function runAwsReadiness({
       releasePrivacy: true,
       staticAccessibility: true,
       testsPassed: true,
+      providerResumeStress20Of20: true,
       dependencyAudit: audit,
       exactHeadBuild: true,
       artifactSet: ARTIFACT_NAMES,
@@ -2558,6 +2575,7 @@ export async function runAwsReadiness({
       awsPreflight: preflight ? "PASS" : "NOT_RUN"
     },
     releaseProvenance,
+    providerResumeStress,
     build,
     awsPreflight: preflight,
     claimBoundary: localOnly

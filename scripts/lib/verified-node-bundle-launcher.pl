@@ -16,18 +16,29 @@ sub fail_closed {
 my $self_path = abs_path($0);
 defined($self_path) or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_LAUNCHER_REJECTED");
 my $stage_root = dirname($self_path);
-my @stage_stat = lstat($stage_root);
-@stage_stat && -d _ && !-l _
-  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_REJECTED");
-$stage_stat[4] == 0 && (($stage_stat[2] & 0022) == 0)
-  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_REJECTED");
+
+sub assert_root_owned_immutable_directory_chain {
+  my ($candidate) = @_;
+  my $current = $candidate;
+  while (1) {
+    my @current_stat = lstat($current);
+    @current_stat && -d _ && !-l _
+      && $current_stat[4] == 0 && (($current_stat[2] & 0022) == 0)
+      or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_REJECTED");
+    my $parent = dirname($current);
+    last if $parent eq $current;
+    $current = $parent;
+  }
+}
+
+assert_root_owned_immutable_directory_chain($stage_root);
 $> != 0
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_PRIVILEGE_REJECTED");
 
 @ARGV >= 2
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_ARGUMENT_REJECTED");
 my ($component_name, $manifest_sha256, @component_args) = @ARGV;
-$component_name =~ /\A(?:orchestrator|dvi|authority-race|recovery|supervisor|worker|finalizer)\z/
+$component_name =~ /\A(?:orchestrator|dvi|authority-race|recovery|supervisor|worker|finalizer|reconciler)\z/
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_REJECTED");
 $manifest_sha256 =~ /\A[0-9a-f]{64}\z/
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
@@ -37,7 +48,7 @@ defined($ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256})
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
 
 for my $name (keys %ENV) {
-  $name !~ /\A(?:NODE_OPTIONS|NODE_PATH|LD_PRELOAD|DYLD_.*|PERL5OPT|PERL5LIB|PERLLIB|PERL_LOCAL_LIB_ROOT)\z/
+  $name !~ /\A(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*)\z/
     or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_ENVIRONMENT_REJECTED");
 }
 
@@ -57,6 +68,8 @@ my $manifest = eval { decode_json($manifest_bytes) };
 $@ eq "" && ref($manifest) eq "HASH"
   && ($manifest->{schemaVersion} // "") eq
     "tideproof.integrated-live-drill-runtime-manifest.v1"
+  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
+close($manifest_fh)
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
 
 my $components = $manifest->{components};

@@ -97,7 +97,7 @@
     {
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
-      "sha256": "010bca337b4f6c102f92cc0c015b2ca482499f2b86402177500ed29eab5a9b5d",
+      "sha256": "025ab1bcc0a7243cb04a0c280a45dcde4a2e28e53a3e6f4ef7ce1f5b0dfd85f8",
       "kind": "verification-code"
     },
     {
@@ -109,7 +109,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "73b3aa615f4486af7a96ecd1216020690cf2da0447eee792e93dec69fd671fcb",
+      "sha256": "c0bbe31d3307a4e57125774432c9180ca69018df173567a33204381e2a0e2a37",
       "kind": "boundary-ledger"
     },
     {
@@ -229,13 +229,13 @@
     {
       "id": "bundle-license-notice-verifier",
       "path": "scripts/verify-bundled-third-party-notices.js",
-      "sha256": "717cab3966797135e8c4f30145e0c8f8be2d41ad8586d9ff0fd5a7d89f12e638",
+      "sha256": "099ab9e4a71945494b95b9db39f3f1163e67de653d48b7f72f585cfd6ab6c765",
       "kind": "verification-code"
     },
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "17a24942538250d79658af27fb83d203b5db0a383f3a78fc6e327dbc491e3d5d",
+      "sha256": "f08480d05d8aae1a27b3c8cc116cf62c8ca7d788d2f2a7a07992ffb0e32417dc",
       "kind": "boundary-ledger"
     },
     {
@@ -319,13 +319,13 @@
     {
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
-      "sha256": "5f689ee38ca0052b30ae756190affb0b5bc77c0af0fa67cd7ac1e0b17e8d6ce4",
+      "sha256": "52315488a011554d15c5fd79009566c79a29bb40437410324452d61d0abe59f5",
       "kind": "verification-code"
     },
     {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "d74f591e8c7ff9135d132960d3a3c8e13ff95290065748be0e0ba5030a42ee18",
+      "sha256": "d9b416f8482e8ac45d37f86075d6208a4419029182c5b84d529cf58f29fa926e",
       "kind": "boundary-ledger"
     },
     {
@@ -355,7 +355,7 @@
     {
       "id": "gate2-artifact-builder",
       "path": "scripts/build-gate2-template.js",
-      "sha256": "bd23a3085f6b912df06f980e61ad6e74b6422aa661c57d5cf706838ecbad944d",
+      "sha256": "03f3cfbd199bc5b563a3cf865f9173ee6ce7f4b14baa15f0e42bef75e974f3cf",
       "kind": "verification-code"
     },
     {
@@ -391,7 +391,7 @@
     {
       "id": "gate2-build-contract",
       "path": "scripts/lib/gate2-build-contract.js",
-      "sha256": "c3dd207385db127743b5b9bfc57c68659f2393bc8b5ca0c9ba911ba583e8a341",
+      "sha256": "a9970fdcea95db8759f3ff2378e4e9b90aa05805c96290e51dc89d9fa33f938e",
       "kind": "verification-code"
     },
     {
@@ -415,13 +415,13 @@
     {
       "id": "gate2-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
-      "sha256": "9307e0e8d4b2365d3322d000996db81550614e423c458a847edb36b8a7c389fc",
+      "sha256": "0948f7474aba688227fcabc93dff9e28d116457e849ca13b9068047101552d05",
       "kind": "verification-code"
     },
     {
       "id": "gate2-readiness-verifier",
       "path": "scripts/gate2-aws-readiness.js",
-      "sha256": "c008ef532c51e56ba7a16972806bb37b75a69da4a8d9d91061a0849b194b3f7b",
+      "sha256": "beed282bb20293a25d8d5d272ea0284fe1bcd4f3d9ec3c44c7492bcf9d47500e",
       "kind": "verification-code"
     },
     {
@@ -487,25 +487,25 @@
     {
       "id": "integrated-live-drill-process-boundary-tests",
       "path": "test/integrated-live-drill-process-boundaries.test.js",
-      "sha256": "32f30bd9032b2e617396e20b93d928d2ef7b6c2996010ba5fb27c4ee4a1e28fd",
+      "sha256": "c96743763196656559143fab2281d6b70f4b5920b7f436643a4fcf01631e7685",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-process-boundary-verifier",
       "path": "scripts/verify-integrated-live-drill-process-boundaries.js",
-      "sha256": "8024feed7b0845e5d14dd11a69efb2bce96e82efba5628254a61b084573d2819",
+      "sha256": "25b3eb95388365364b943a39f1ac7d4f1e1d389e78a8004330826ba27432d668",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-provider-evidence",
       "path": "src/cloud/integrated-live-drill-provider-evidence.js",
-      "sha256": "39af7b99f114b66470459cd1f4520e97fa0407ac46773549d842bdf0665f8001",
+      "sha256": "fe725a14878fddf34140b2cb551d2b4da67b7680dee520fa6da3981d63451c37",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-provider-finalization",
       "path": "src/cloud/integrated-live-drill-provider-finalization.js",
-      "sha256": "804a3ffdf2fed2d67fc6d85ac43c16ad265bdc3461a96422a88159fbc4df006e",
+      "sha256": "2aa2203b3bdbc6c371a8914aff41e73ba4c86cca53da121a712c785c4082719c",
       "kind": "verification-code"
     },
     {
@@ -527,15 +527,33 @@
       "kind": "verification-code"
     },
     {
+      "id": "integrated-live-drill-provider-reconciliation",
+      "path": "src/cloud/integrated-live-drill-provider-reconciliation.js",
+      "sha256": "10f1107e0b596ef25eabc617824e9d49968a96eac0c6573ca51cf61385fa15fd",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-provider-reconciliation-runner",
+      "path": "scripts/gate1-integrated-live-drill-provider-reconciler.js",
+      "sha256": "56cdfacd98777c20345d5ff8a3cf2fd5bc7f52a4900cafb4db518e70e20b406b",
+      "kind": "verification-code"
+    },
+    {
+      "id": "integrated-live-drill-provider-reconciliation-tests",
+      "path": "test/integrated-live-drill-provider-reconciliation.test.js",
+      "sha256": "c701cec0f9bbf989411be6203dc081d1734d3bcec064738bada41a231f2fd106",
+      "kind": "verification-code"
+    },
+    {
       "id": "integrated-live-drill-provider-recovery",
       "path": "src/cloud/integrated-live-drill-provider-recovery.js",
-      "sha256": "c1525b83f9670cdbc292abc0b25ad8900fba238f11df7e773b8dc4185b5a3165",
+      "sha256": "bcaca3f8d82f33f48466c17c27d6c9f199188e688d270a639a15480c091d25eb",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-provider-recovery-tests",
       "path": "test/integrated-live-drill-provider-recovery.test.js",
-      "sha256": "bd8a64c962faa4497c22a40d9aafdab8b9258768e116bdab73861dcadda770b4",
+      "sha256": "28c01577bc99313ad7332d6f2db972b95677b74681d24bfadcca3733e35450b3",
       "kind": "verification-code"
     },
     {
@@ -583,25 +601,25 @@
     {
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
-      "sha256": "1a3bbc5502c2c0e90ba28fa79bdc3181f89d4c6c8943cd7bddec8e08711b3f95",
+      "sha256": "360318da183fb194a0900840933a33a587e6963fbe6a86cdb3ea1d0189d1cccb",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-runtime-contract",
       "path": "src/cloud/integrated-live-drill-runtime.js",
-      "sha256": "4e76cd9c5e4afbbf930a05e28ead4a2e0840aa15cb199906ea4168aae25b0d0d",
+      "sha256": "46de86330b942ebad3d06c96f23b60c65ca85eff00cc8db27aad16dfaf9178fb",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-runtime-spawn",
       "path": "src/cloud/integrated-live-drill-runtime-spawn.js",
-      "sha256": "c1645f429795d1293acabcfb84fa5900c8c15c2cb2616841ede85e427a103a19",
+      "sha256": "8e8598588763bb9337b111421bd7f3b637879e739cfbaa516093ad8a1bf1054a",
       "kind": "verification-code"
     },
     {
       "id": "integrated-live-drill-runtime-tests",
       "path": "test/integrated-live-drill-runtime.test.js",
-      "sha256": "1a46d436ca2991ee9471853b172c7515a189a20bc7c4a31311cb5f9bdb7ffc61",
+      "sha256": "2f37046bdef7c7f0d3c8a5e7351ed7296ee47e25c8b4446969bfb8a05d2ce5d3",
       "kind": "verification-code"
     },
     {
@@ -625,7 +643,7 @@
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
-      "sha256": "fb9b215c6a1bc092a4668d76e79fb268e894353cac1b8bc367115231461376da",
+      "sha256": "78c9fdf59f97c8d5b443e7299d66ebf19815eab5bdac63f662b08f0858460c6d",
       "kind": "verification-code"
     },
     {
@@ -709,7 +727,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "533752dbc9d5edd99f752dce2649fa7d1e89d9aab40be47ec1cc6bb3b32895f7",
+      "sha256": "3fe7398acd25a36577cfe204f792c6ca03a732ee38e216696bc395b776b8d8d2",
       "kind": "verification-code"
     },
     {
@@ -721,13 +739,13 @@
     {
       "id": "provider-dispatch-control",
       "path": "src/cloud/provider-dispatch-control.js",
-      "sha256": "1a1faeac52a8f88cc9eb822836b851d324ec02c736abf19dd3e437bd976e0dbe",
+      "sha256": "2ea225c7d35aa97579d1d038570035de545c2c56fd781dab4057f14b25d3397e",
       "kind": "verification-code"
     },
     {
       "id": "provider-dispatch-control-tests",
       "path": "test/provider-dispatch-control.test.js",
-      "sha256": "324947d8348db0b49eb4c4738cf0a29b479f5b981b0e1840decb438c713fb7c7",
+      "sha256": "759079c6870b832c311228aab7d45cb5cc25f2524193a297f099165884d7e5f3",
       "kind": "verification-code"
     },
     {
@@ -739,7 +757,7 @@
     {
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
-      "sha256": "1ad18d6832a79b129641e85a351748b65285f90d9e3988d5200f1dde19a0cb64",
+      "sha256": "2b4ce822037ac6289b977093448c2f62736d67d26702690ec2fd7f19367aa134",
       "kind": "verification-code"
     },
     {
@@ -763,7 +781,7 @@
     {
       "id": "recovery-continuity-identity",
       "path": "src/cloud/recovery-continuity-identity.js",
-      "sha256": "717796b264bcf6d15f26d7642ecac1a395ce790a1ff481a6a897d7cc2c8081cb",
+      "sha256": "ef1d26769c3eb31c2c346aaf89cfa718ee7406011938bb268df9640f330865ec",
       "kind": "verification-code"
     },
     {
@@ -775,7 +793,7 @@
     {
       "id": "release-build-receipt-contract",
       "path": "src/cloud/release-build-receipt-contract.js",
-      "sha256": "67bc7c887ee87d6f41d1527264d2cd699b19e0080ee95029d7c25abee3a1ba5c",
+      "sha256": "6b98c6e9bfcc42467e87e01fb3b06b362b64a345952ec61f311c6aceda77b05b",
       "kind": "verification-code"
     },
     {
@@ -793,7 +811,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "91bd1ed1666ff275ba5f402616fe0cbe0b74e9c92da749070bea3050b34072b7",
+      "sha256": "59ea1bcd47262447ecd3a5abd57a084324ef0a1d6aea996320a7575cb70a6990",
       "kind": "boundary-ledger"
     },
     {
@@ -817,7 +835,7 @@
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "9403933fb041ef599dc228c330a5fb22d703b106b3ac8fbbba763dc2f3c35cf7",
+      "sha256": "7c8be412a7d859d5b17fc36c47d12e58db481b27e51f3c061682e49393c38f34",
       "kind": "boundary-ledger"
     },
     {
@@ -841,7 +859,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "9ba0984ec70fce8f21bae5086de5805a04072ae900cc820002ff71f943b885a6",
+      "sha256": "8fef83c56116b2b8cf2137aed6d38baee11d85ac7dccbf2f9ae3f1722d2fe8c0",
       "kind": "boundary-ledger"
     },
     {
@@ -871,7 +889,7 @@
     {
       "id": "release-privacy-ledger",
       "path": "docs/RELEASE_PRIVACY.md",
-      "sha256": "b9f10f3b160e091d5cc68317b7238c870bc0e9a14c02371510c72a28b7945ae0",
+      "sha256": "d11af917e3a2fcef1223ba7119aa0212ce27b2bebad53fb484cd809d3ba8b42e",
       "kind": "boundary-ledger"
     },
     {
@@ -907,7 +925,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "acefedd9547789b66af1280ba0a59a86ccaf40766074d6adc68bedef791673b5",
+      "sha256": "19f5cbcc6b928b0582113bf790619ea934cbccf3cb9ac3e48f1f175e14a69118",
       "kind": "boundary-ledger"
     },
     {
@@ -925,13 +943,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "eb4c27002a22584dfffb886e616ff3e0ba6b3138acd3ab9cf5b99ead4069ee3a",
+      "sha256": "5955bf9ad6256faab69bde105790d04e959468d27da2f5ec018c79d3ba508cb4",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "b0614ebedf2f6d2364774a468739b55621d9597481aacbc900a7bc2ced00eefc",
+      "sha256": "ea264a8f3f6feec1a2bcb773ff483112b4745e4bb2a56a34c7c45390b1f1f69d",
       "kind": "boundary-ledger"
     },
     {
@@ -943,7 +961,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "78c8f9738a5b4f7f9dd37257ceb29cbeb961af224bf53ed9c80ec65bd72b8d3a",
+      "sha256": "8e2be600beb38f869b68dac5b3b65a3279d57544cb6e977a5122af88891db986",
       "kind": "verification-code"
     },
     {
@@ -955,7 +973,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "4cd55cf72deebe024689a3cae593a08af15d836dc179347a5b22704d8c28cbb9",
+      "sha256": "cf26d99ca2fc4dc10851ef0e35a9f57316d3370e58e7dc47dc0f2aa0cde15212",
       "kind": "boundary-ledger"
     },
     {
@@ -985,7 +1003,7 @@
     {
       "id": "verified-node-bundle-launcher",
       "path": "scripts/lib/verified-node-bundle-launcher.pl",
-      "sha256": "f7faeae4326c3c063652ce7ca945ee7c33c138383a49d7a45811b75df1886335",
+      "sha256": "a708e5275e917ae381ea76a683b89bd96010104ecd8a3c6a045d3cb0f04f213f",
       "kind": "verification-code"
     }
   ],
@@ -1073,6 +1091,9 @@
         "integrated-live-drill-provider-finalizer-runner",
         "integrated-live-drill-provider-orchestration",
         "integrated-live-drill-provider-orchestration-tests",
+        "integrated-live-drill-provider-reconciliation",
+        "integrated-live-drill-provider-reconciliation-runner",
+        "integrated-live-drill-provider-reconciliation-tests",
         "integrated-live-drill-provider-recovery",
         "integrated-live-drill-provider-recovery-tests",
         "integrated-live-drill-provider-supervisor-runner",
@@ -1108,7 +1129,7 @@
         "recovery-continuity-identity",
         "verified-node-bundle-launcher"
       ],
-      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Before publication it create-only persists and verifies an owner-only canonical envelope containing the exact normalized signed recovery bundle; a later invocation with the same unsigned bundle must reuse the first randomized P-256 signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, but explicitly does not claim that invocation observed the original create/link protocol. Current bytes are source-bound, but provider-backed restart reuse and crash continuity remain unproven. B2a contributes the lower-level prepare/sign/resume library that persists an owner-only exact dispatch request and runtime context before a separately held human key signs it; fake-transport tests bind one initialize, one initialized notification, one exact select_query tools/call, result, and close, reject signature and context substitution, and reconcile a durable private result without redispatch. Only the semantic tools/call request payload is independently recomputable from the bound intent; initialize and response byte hashes are strictly validated locally recorded evidence, not provider-signed or fully reconstructable proof. The reviewed broker/audit-sink resolver resamples current authority immediately before its database connect and query boundaries. The current B2 worker/finalizer scaffold uses exact allowlisted process environments, a recursive import graph gate, direct-child canonical-root evidence reads, a provider-free strict validator, signed dispatch verification, and recomputed W1/W2/W3 artifact and transport bindings before W4/W5; tests reject intermediate symlink escape, missing or substituted evidence, forged handoff digests, and forbidden process variables. The explicit PREPARE/HOLD/RESUME orchestration is now source-wired and locally tested with durable nonretryable UNKNOWN and post-expiry stop states. Live-provider execution, provider origin, a provider-global exact-call count, copied-ledger and cross-host authority, acceptance, and release remain unproven. Within fake transport, one negotiated Managed MCP session and locally recorded canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in the same canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Packet A now requires a distinct human-controlled Ed25519 trust root, durable create-only one-use authorization consumption on one exact authoritative owner-only ledger root, exact ordered cumulative spend reservations, a distinct human-bound child-launch signer, per-scope signed launch tokens, exact declared runner identity, atomic one-use child launch consumption, typed signed evidence, and a signed finalization statement. Its finalizer remains non-accepting and carries the hard blockers CROSS_HOST_STRONGLY_CONSISTENT_AUTHORIZATION_CLAIM_AUTHORITY_NOT_PROVEN and DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN. The candidate also leaves signed deployment evidence, independent journal/private-evidence retention and recomputation review, provider-backed restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending. The repaired candidate now forces every admitted RESUME through database-global provider-dispatch reconciliation using authoritative database time, builds seven content-addressed runtime bundles around a pinned official Node binary, rejects mutable or non-root-owned stage ancestry, strips pre-execution injection variables, and inventories all 19 build outputs. Local two-host simulation and a count-bound stress runner exercise these invariants. They remain source and local-execution evidence, not a real cross-host CockroachDB transition, provider-origin receipt, root-stage execution receipt, or accepted live +1 drill.",
+      "acceptanceBoundary": "The validator-passing local receipt satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The source now orchestrates one DVI proof, one genuinely overlapping two-Lambda authority race with exact replay and changed-input denial, and exact-winner Managed MCP recovery into one sanitized non-accepting candidate. Recovery uses one source-derived canonical attempt. Before publication it create-only persists and verifies an owner-only canonical envelope containing the exact normalized signed recovery bundle; a later invocation with the same unsigned bundle must reuse the first randomized P-256 signature bytes. Reuse resyncs the validated file and parent and proves the current pathname, but explicitly does not claim that invocation observed the original create/link protocol. Current bytes are source-bound, but provider-backed restart reuse and crash continuity remain unproven. B2a contributes the lower-level prepare/sign/resume library that persists an owner-only exact dispatch request and runtime context before a separately held human key signs it; fake-transport tests bind one initialize, one initialized notification, one exact select_query tools/call, result, and close, reject signature and context substitution, and reconcile a durable private result without redispatch. Only the semantic tools/call request payload is independently recomputable from the bound intent; initialize and response byte hashes are strictly validated locally recorded evidence, not provider-signed or fully reconstructable proof. The reviewed broker/audit-sink resolver resamples current authority immediately before its database connect and query boundaries. The current B2 worker/finalizer scaffold uses exact allowlisted process environments, a recursive import graph gate, direct-child canonical-root evidence reads, a provider-free strict validator, signed dispatch verification, and recomputed W1/W2/W3 artifact and transport bindings before W4/W5; tests reject intermediate symlink escape, missing or substituted evidence, forged handoff digests, and forbidden process variables. The explicit PREPARE/HOLD/RESUME orchestration is now source-wired and locally tested with durable nonretryable UNKNOWN and fail-closed pre-provider expiry states. After a durable provider result, reconciliation has no Managed MCP credential and cannot claim a fresh dispatch; it can complete the exact persisted database-global result and then perform W3 audit plus W4/W5 only after verifying the terminal database binding. Live-provider execution, provider origin, a provider-global exact-call count, copied-ledger and cross-host authority, acceptance, and release remain unproven. Within fake transport, one negotiated Managed MCP session and locally recorded canonical request, response, and result digests are bound through close. Before candidate composition, the runner create-only persists the raw private component bundle in the same canonical owner-only directory, syncs the directory entry, and rereads the exact canonical bytes; the public candidate exposes only bound digests. Those are fail-closed component controls, not independent provider signatures or an accepted +1 receipt. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Packet A now requires a distinct human-controlled Ed25519 trust root, durable create-only one-use authorization consumption on one exact authoritative owner-only ledger root, exact ordered cumulative spend reservations, a distinct human-bound child-launch signer, per-scope signed launch tokens, exact declared runner identity, atomic one-use child launch consumption, typed signed evidence, and a signed finalization statement. Its finalizer remains non-accepting and carries the hard blockers CROSS_HOST_STRONGLY_CONSISTENT_AUTHORIZATION_CLAIM_AUTHORITY_NOT_PROVEN and DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN. The candidate also leaves signed deployment evidence, independent journal/private-evidence retention and recomputation review, provider-backed restart-stable signed-bundle reuse, crash-safe single-call recovery, and provider pricing/billing unproven. The +1 half and release claim remain pending. The repaired candidate now routes every non-owning admitted RESUME through capability-reduced audit-only reconciliation using authoritative database time, persists the winning dispatch owner for post-crash completion without redispatch, builds eight content-addressed runtime bundles around a pinned official Node binary, rejects mutable or non-root-owned stage ancestry before executable bytes run, strips pre-execution injection variables, and inventories all 20 build outputs. Local two-host simulation and a count-bound 20/20 stress runner exercise these invariants. They remain source and local-execution evidence, not a real cross-host CockroachDB transition, provider-origin receipt, root-stage execution receipt, or accepted live +1 drill.",
       "remainingRequirements": [
         "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, one canonical exact-winner recovery bundle, one continuous digest-bound Managed MCP session, bounded cleanup, and zero invariant violations."
       ]
@@ -1278,7 +1299,7 @@
         "release-build-receipt-contract",
         "verified-node-bundle-launcher"
       ],
-      "boundary": "The exact verifier derives the current 46-package union from all six Lambda esbuild graphs plus the content-addressed evidence-provider and seven live-drill runtime graphs, validates 17 normalized license texts and five explicit version-pinned fallbacks, and the clean builder embeds the hash-bound notice bytes in every two-entry ZIP. The builder reads every project input from a regular tracked blob at the exact Git commit and records its blob ID and SHA-256; focused tests reject dirty-byte substitution, untracked inputs, symlinked artifact parents, and path escape. Readiness independently validates those input identities plus ZIP structure, CRCs, package-union count, provider-runtime bytes, seven content-addressed live-drill bundles, the pinned official Node binary, its root-stage launcher contract, the complete 19-output privacy inventory, and notice bytes. This is not legal advice or proof of the final deployed artifacts.",
+      "boundary": "The exact verifier derives the current 46-package union from all six Lambda esbuild graphs plus the content-addressed evidence-provider and eight live-drill runtime graphs, validates 17 normalized license texts and five explicit version-pinned fallbacks, and the clean builder embeds the hash-bound notice bytes in every two-entry ZIP. The builder reads every project input from a regular tracked blob at the exact Git commit and records its blob ID and SHA-256; focused tests reject dirty-byte substitution, untracked inputs, symlinked artifact parents, and path escape. Readiness independently validates those input identities plus ZIP structure, CRCs, package-union count, provider-runtime bytes, eight content-addressed live-drill bundles, the pinned official Node binary, its root-stage launcher contract, the complete 20-output privacy inventory, and notice bytes. This is not legal advice or proof of the final deployed artifacts.",
       "remainingRequirements": [
         "Rerun release:provenance and the readiness wrapper after a clean final install, then bind the receipts to the final vulnerability report, build receipt, uploaded object versions, and deployed Lambda CodeSha256 values."
       ]
@@ -1491,6 +1512,9 @@
         "integrated-live-drill-provider-finalizer-runner",
         "integrated-live-drill-provider-orchestration",
         "integrated-live-drill-provider-orchestration-tests",
+        "integrated-live-drill-provider-reconciliation",
+        "integrated-live-drill-provider-reconciliation-runner",
+        "integrated-live-drill-provider-reconciliation-tests",
         "integrated-live-drill-provider-recovery",
         "integrated-live-drill-provider-recovery-tests",
         "integrated-live-drill-provider-supervisor-runner",
@@ -1512,7 +1536,7 @@
         "release-security-verifier",
         "strict-json-contract"
       ],
-      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the GitHub-hosted-only pre-verification checkout normalizer, its workflow placement and hostile-residue tests, the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers. It also binds the B2 process-isolation and orchestration gates: the finalizer graph has no network, database, Managed MCP, recovery-broker, or external-package capability; the worker graph is limited to the intended local modules plus pg; both entrypoints enforce exact allowlisted environments; the supervisor constructs those isolated child environments without directly constructing a Managed MCP client or invoking the legacy broker path; durable PREPARE/HOLD/RESUME checkpoints bind root and file identity; ambiguous and expired resumptions persist nonretryable stop states; and the provider-free validator rereads direct-child owner-only artifacts and recomputes their transport, journal, and signed dispatch bindings. It also binds the source-only CloudShell-optional OIDC identity and read-only preflight lanes, their exact protected subjects, least-privilege read list and explicit deny, bounded temporary sessions, exact-main source checks, privacy-preserving fixed domain diagnostics, encrypted sanitized receipt boundary, and adversarial verifier tests while keeping external provider state outside the source receipt and an accepted provider PASS receipt pending; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit. It now additionally binds the database-global provider-dispatch lease and database-time expiry tests, the official Node distribution digests, content-addressed runtime manifest and launcher, sanitized runtime spawn, seven exact runtime entrypoints, optional pg-native fail-closed replacement, and count-bound concurrency stress controls.",
+      "boundary": "The exact current-source verifier hash-binds every manifest-enumerated reviewed security surface, including the GitHub-hosted-only pre-verification checkout normalizer, its workflow placement and hostile-residue tests, the local full-drill generator, recomputing verifier, nested proof-manifest verification, and their focused tests, and requires the generated Gate Two template to match its source; preserves the exact public and IAM-authenticated route split, browser headers, negative probes, throttles, concurrency, numeric Lambda invocation targets, monitored aliases, a symlink-parent-rejecting exact-Git build with dependency and toolchain snapshots, SDK provider clients whose raw build receipt is independently reproduced before both credentialed evidence lanes, exact configuration and ingress censuses for the five primary runtime functions, their shared role-policy census, both evidence roles, exact API/integration/route/stage/explicit-active-deployment and access-log bindings, 37 drift-supported CloudFormation resources, two directly attested integrations, one directly attested create-only explicit API deployment, a bounded evidence collector plus causally eligible alternate principal, signed phase-specific pre/post and denial receipts, revision-fenced provider observations, IAM allow and deny boundaries, scoped API Gateway permissions, asymmetric KMS key, log retention, one read-only transaction with cache-versioned role/default introspection plus matching-barrier cross-database ProofToAct-principal isolation, exact runtime routine signatures and session-user guards, exact recovery-source binding, bounded database and Managed MCP runtimes, and AWS evidence identity markers. It also binds the B2 process-isolation and orchestration gates: the finalizer graph has no network, database, Managed MCP, recovery-broker, or external-package capability; the worker graph is limited to the intended local modules plus pg; the reconciler graph has database but no Managed MCP capability; all entrypoints enforce exact allowlisted environments; the supervisor constructs isolated child environments without directly constructing a Managed MCP client or invoking the legacy broker path; durable PREPARE/HOLD/RESUME checkpoints bind root and file identity; ambiguous and expired resumptions persist nonretryable stop states; and the provider-free validator rereads direct-child owner-only artifacts and recomputes their transport, journal, and signed dispatch bindings. It also binds the source-only CloudShell-optional OIDC identity and read-only preflight lanes, their exact protected subjects, least-privilege read list and explicit deny, bounded temporary sessions, exact-main source checks, privacy-preserving fixed domain diagnostics, encrypted sanitized receipt boundary, and adversarial verifier tests while keeping external provider state outside the source receipt and an accepted provider PASS receipt pending; and returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. The AWS attestation accepts only a never-updated CREATE_COMPLETE stack and requires teardown plus a fresh create for any change. Conditional probe-function configurations remain stage-four provider evidence. The local toolchain is measured, not independently certified, and the source controls do not create a hostile-host boundary. It is not a vulnerability-free claim, penetration test, administrator-exclusion finding, cluster-atomic snapshot, live AWS or CockroachDB receipt, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit. It now additionally binds the database-global provider-dispatch lease, durable recovered-owner completion and database-time expiry tests, the official Node distribution digests, content-addressed runtime manifest and launcher, sanitized runtime spawn, eight exact runtime entrypoints, optional pg-native fail-closed replacement, and count-bound 20/20 concurrency stress controls.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

@@ -261,9 +261,17 @@ export class ProviderDispatchControl {
     }));
   }
 
-  async #transition(action, bindingInput, terminalInput = null) {
+  async #transition(
+    action,
+    bindingInput,
+    terminalInput = null,
+    ownerNonceInput = this.#ownerNonce
+  ) {
     const binding = validateProviderDispatchControlBinding(bindingInput);
     const terminal = validateTerminalDigests(action, terminalInput);
+    if (!UUID.test(ownerNonceInput ?? "")) {
+      fail("INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_OWNER_REJECTED");
+    }
     const client = this.#client();
     try {
       await client.connect();
@@ -282,7 +290,7 @@ export class ProviderDispatchControl {
           binding.tenantId,
           binding.runId,
           binding.interactionId,
-          this.#ownerNonce,
+          ownerNonceInput,
           binding.controlBindingSha256,
           binding.logicalMcpRequestSha256,
           binding.providerEffectKeySha256,
@@ -315,8 +323,8 @@ export class ProviderDispatchControl {
     return this.#transition(ACTIONS.CONSUME, binding);
   }
 
-  complete(binding, terminal) {
-    return this.#transition(ACTIONS.COMPLETE, binding, terminal);
+  complete(binding, terminal, ownerNonce = this.#ownerNonce) {
+    return this.#transition(ACTIONS.COMPLETE, binding, terminal, ownerNonce);
   }
 
   markUnknown(binding) {

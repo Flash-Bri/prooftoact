@@ -187,6 +187,37 @@ test("two independent hosts receive one global provider-dispatch grant", async (
   assert.equal(completed.sessionCloseSha256, terminal.sessionCloseSha256);
 });
 
+test("a fresh process can complete from a durably recovered owner token", async () => {
+  const database = globalControlDatabase();
+  const exactBinding = binding({
+    authorizationId: "77777777-7777-4777-8777-777777777777",
+    logicalMcpRequestSha256: "7".repeat(64)
+  });
+  const firstProcess = new ProviderDispatchControl({
+    clientFactory: database.clientFactory,
+    ownerNonce: OWNER_A
+  });
+  const consumed = await firstProcess.consume(exactBinding);
+  assert.equal(consumed.transitionOutcome, "DISPATCH_GRANTED");
+  assert.equal(consumed.ownerNonce, OWNER_A);
+
+  const restartedProcess = new ProviderDispatchControl({
+    clientFactory: database.clientFactory
+  });
+  const terminal = {
+    mcpResultSha256: "8".repeat(64),
+    sessionCloseSha256: "9".repeat(64)
+  };
+  const completed = await restartedProcess.complete(
+    exactBinding,
+    terminal,
+    consumed.ownerNonce
+  );
+  assert.equal(completed.state, PROVIDER_DISPATCH_CONTROL_STATES.COMPLETED);
+  assert.equal(completed.mcpResultSha256, terminal.mcpResultSha256);
+  assert.equal(completed.sessionCloseSha256, terminal.sessionCloseSha256);
+});
+
 test("database-time expiry remains terminal after restart and clock rollback", async () => {
   const database = globalControlDatabase(NOW);
   const expiredBinding = binding({

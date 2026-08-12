@@ -20,6 +20,10 @@ const WORKER_ROOTS = Object.freeze([
   "scripts/gate1-integrated-live-drill-provider-worker.js",
   "src/cloud/integrated-live-drill-provider-worker.js"
 ]);
+const RECONCILER_ROOTS = Object.freeze([
+  "scripts/gate1-integrated-live-drill-provider-reconciler.js",
+  "src/cloud/integrated-live-drill-provider-reconciliation.js"
+]);
 const SUPERVISOR_PATH =
   "scripts/gate1-integrated-live-drill-provider-supervisor.js";
 const SAFE_BUILTINS = new Set([
@@ -40,6 +44,10 @@ const WORKER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
   /(?:^|\/)gate2-/u,
   /(?:^|\/)integrated-live-drill-provider-finalization\.js$/u,
   /(?:^|\/)integrated-live-drill-provider-finalizer\.js$/u
+]);
+const RECONCILER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
+  /(?:^|\/)integrated-live-drill-provider-worker\.js$/u,
+  /(?:^|\/)managed-mcp-client\.js$/u
 ]);
 
 function reject(code, detail) {
@@ -227,6 +235,11 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
     forbiddenPathPatterns: WORKER_FORBIDDEN_PATH_PATTERNS,
     name: "worker"
   });
+  const reconciler = validateGraph(collectGraph(RECONCILER_ROOTS), {
+    allowedExternalPackages: new Set(["pg"]),
+    forbiddenPathPatterns: RECONCILER_FORBIDDEN_PATH_PATTERNS,
+    name: "reconciler"
+  });
   const supervisor = validateSupervisorSource();
   if (
     !finalizer.modules.includes(
@@ -239,13 +252,18 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
       "src/cloud/integrated-live-drill-provider-orchestration.js"
     ) ||
     !worker.modules.includes("src/cloud/managed-mcp-client.js") ||
-    !worker.modules.includes("src/cloud/recovery-broker.js")
+    !worker.modules.includes("src/cloud/recovery-broker.js") ||
+    !reconciler.modules.includes(
+      "src/cloud/provider-dispatch-control.js"
+    ) ||
+    reconciler.modules.includes("src/cloud/managed-mcp-client.js")
   ) {
     reject("INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_GRAPH_REJECTED");
   }
   return Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA,
     finalizer,
+    reconciler,
     supervisor,
     worker,
     status: "PASS"

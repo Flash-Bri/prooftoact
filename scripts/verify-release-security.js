@@ -386,6 +386,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
     role: "CONTENT_ADDRESSED_ORCHESTRATOR_ENTRY"
   }),
+  "integrated-live-drill-runtime-reconciler-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-reconciler.js",
+    role: "CONTENT_ADDRESSED_PROVIDER_RECONCILER_ENTRY"
+  }),
   "integrated-live-drill-runtime-recovery-entry": Object.freeze({
     path: "scripts/runtime-entries/integrated-live-drill-recovery.js",
     role: "CONTENT_ADDRESSED_RECOVERY_ENTRY"
@@ -439,6 +443,18 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/integrated-live-drill-provider-orchestration.test.js",
     role:
       "INTEGRATED_PROVIDER_DRILL_B2_ORCHESTRATION_FAIL_CLOSED_VERIFICATION"
+  }),
+  "integrated-live-drill-provider-reconciliation": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-reconciliation.js",
+    role: "INTEGRATED_PROVIDER_DRILL_AUDIT_ONLY_RECONCILIATION"
+  }),
+  "integrated-live-drill-provider-reconciliation-runner": Object.freeze({
+    path: "scripts/gate1-integrated-live-drill-provider-reconciler.js",
+    role: "INTEGRATED_PROVIDER_DRILL_AUDIT_ONLY_RECONCILIATION_RUNNER"
+  }),
+  "integrated-live-drill-provider-reconciliation-tests": Object.freeze({
+    path: "test/integrated-live-drill-provider-reconciliation.test.js",
+    role: "INTEGRATED_PROVIDER_DRILL_AUDIT_ONLY_RECONCILIATION_VERIFICATION"
   }),
   "integrated-live-drill-provider-supervisor-runner": Object.freeze({
     path: "scripts/gate1-integrated-live-drill-provider-supervisor.js",
@@ -1886,12 +1902,14 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "release-build-receipt-contract": Object.freeze([
     "tideproof.gate2-build.v7",
-    "GATE2_BUILD_CONTROL_INPUT_COUNT = 32",
-    "GATE2_BUILD_OUTPUT_COUNT = 19"
+    "GATE2_BUILD_CONTROL_INPUT_COUNT = 33",
+    "GATE2_BUILD_OUTPUT_COUNT = 20"
   ]),
   "verified-node-bundle-launcher": Object.freeze([
     "tideproof.integrated-live-drill-runtime-manifest.v1",
     "O_NOFOLLOW",
+    "assert_root_owned_immutable_directory_chain",
+    "LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH",
     "node-[0-9a-f]{64}",
     "exec {",
     "--disable-proto=throw"
@@ -2099,17 +2117,20 @@ const SOURCE_MARKERS = Object.freeze({
     "tideproof.highwater-drill-process-boundary-verification.v3",
     "verifyIntegratedLiveDrillProcessBoundaries",
     "FINALIZER_FORBIDDEN_PATH_PATTERNS",
+    "RECONCILER_FORBIDDEN_PATH_PATTERNS",
     "WORKER_FORBIDDEN_PATH_PATTERNS",
     "validateSupervisorSource",
     "providerFinalizerEnvironmentRequired: true",
     "providerWorkerEnvironmentRequired: true",
+    "name: \"reconciler\"",
     "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_BUILTIN_REJECTED",
     "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_PACKAGE_REJECTED",
     "managed-mcp-client\\.js$",
     "recovery-broker\\.js$"
   ]),
   "integrated-live-drill-process-boundary-tests": Object.freeze([
-    "provider worker and finalizer import graphs preserve process boundaries",
+    "provider worker, reconciler, and finalizer import graphs preserve process boundaries",
+    "receipt.reconciler.externalPackages, [\"pg\"]",
     "receipt.supervisor.legacyRecoveryEntryPointImported, false",
     "receipt.supervisor.managedMcpClientConstructed, false",
     "node:child_process",
@@ -2152,6 +2173,11 @@ const SOURCE_MARKERS = Object.freeze({
   "integrated-live-drill-runtime-orchestrator-entry": Object.freeze([
     "../gate2-integrated-live-drill.js",
     "safeIntegratedLiveDrillFailureCode"
+  ]),
+  "integrated-live-drill-runtime-reconciler-entry": Object.freeze([
+    "../gate1-integrated-live-drill-provider-reconciler.js",
+    "main().catch((error)",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_UNKNOWN_DO_NOT_ACT"
   ]),
   "integrated-live-drill-runtime-recovery-entry": Object.freeze([
     "../gate1-recovery-broker.js",
@@ -2276,10 +2302,10 @@ const SOURCE_MARKERS = Object.freeze({
     "failed expiry-burn persistence remains process-sticky after clock rollback",
     "expiry inside audit resolver before actual dispatch stops with zero resolve or MCP action",
     "expiry during initialize response burns W2 without notification, tool call, or retry",
-    "post-W2 expiry reconciles locally and remains burned after clock rollback",
-    "expiry after audit resolution preserves the exact event and remains non-accepting",
+    "post-W2 expiry reconciles audit-only without reactivating provider access",
+    "expiry after audit resolution preserves the exact event and completes audit-only",
     "a durable private result reconciles the W2 journal without redispatch",
-    "post-expiry wrapper reconciles W2 locally then stops before any audit-provider action",
+    "post-expiry wrapper reconciles W2 and terminal audit without provider redispatch",
     "provider artifact read rejects chmod and hardlink mutation after descriptor read",
     "continuity journal read rejects chmod and hardlink mutation after descriptor read",
     "RECOVERY_PREPARED_RESUME_BINDING_MISMATCH",
@@ -2387,6 +2413,28 @@ const SOURCE_MARKERS = Object.freeze({
     "UNKNOWN and expired orchestration stops are durable and permanently nonretryable",
     "supervisor snapshots options and rejects accessor-bearing worker output before dereference",
     "orchestration boundaries reject accessors, exotic keys, prototypes, and coercible scalars before hashing"
+  ]),
+  "integrated-live-drill-provider-reconciliation": Object.freeze([
+    "tideproof.highwater-drill-provider-reconciliation.v1",
+    "providerApiCredentialPresent: false",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "!Object.hasOwn(environment, \"MCP_API_KEY\")",
+    "ProviderDispatchControl",
+    "reconcileIntegratedLiveDrillProviderDispatchControl",
+    "resolved = await control.resolve(binding)",
+    "durable.providerDispatchOwnerNonce",
+    "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED"
+  ]),
+  "integrated-live-drill-provider-reconciliation-runner": Object.freeze([
+    "expectedComponent: \"reconciler\"",
+    "runIntegratedLiveDrillProviderReconciliation",
+    "readIntegratedLiveDrillProviderReconciliationInput"
+  ]),
+  "integrated-live-drill-provider-reconciliation-tests": Object.freeze([
+    "reconciliation environment carries database authority without provider API authority",
+    "reconciliation receipt is exact, non-accepting, and capability-reduced",
+    "audit-only reconciliation observes but never consumes an undispatched authorization",
+    "audit-only reconciliation completes a consumed row from the durable owner token"
   ]),
   "integrated-live-drill-provider-supervisor-runner": Object.freeze([
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_MODE",
@@ -2709,6 +2757,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "provider-dispatch-control-tests": Object.freeze([
     "two independent hosts receive one global provider-dispatch grant",
+    "a fresh process can complete from a durably recovered owner token",
     "database-time expiry remains terminal after restart and clock rollback"
   ]),
   "proof-manifest-tests": Object.freeze([

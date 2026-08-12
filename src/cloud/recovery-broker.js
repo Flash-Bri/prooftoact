@@ -12,6 +12,7 @@ import {
 } from "./database-commit-result.js";
 import {
   canonicalRecoveryAttempt,
+  recoveryAuditEventDigest,
   recoveryBrokerConfigDigest
 } from "./recovery-continuity-identity.js";
 import {
@@ -32,6 +33,7 @@ const RECOVERY_PUBLISHER_TRUST_ROOT_ID =
   "gate1-recovery-publisher-v1";
 export {
   canonicalRecoveryAttempt,
+  recoveryAuditEventDigest,
   recoveryBrokerConfigDigest
 } from "./recovery-continuity-identity.js";
 
@@ -580,57 +582,6 @@ export function assertSeparatedDatabaseEndpoints({
   };
 }
 
-export function recoveryAuditEventDigest(event) {
-  return sha256(
-    canonicalJson({
-      eventId: requireUuid(event.eventId, "event.eventId"),
-      interactionId: requireUuid(event.interactionId, "event.interactionId"),
-      tenantId: requireUuid(event.tenantId, "event.tenantId"),
-      recoverySessionId: requireUuid(
-        event.recoverySessionId,
-        "event.recoverySessionId"
-      ),
-      callerSubjectHash: requireSha256(
-        event.callerSubjectHash,
-        "event.callerSubjectHash"
-      ),
-      phase: requireText(event.phase, "event.phase"),
-      toolName: FIXED_TOOL,
-      recoveryClusterId: requireUuid(
-        event.recoveryClusterId,
-        "event.recoveryClusterId"
-      ),
-      brokerConfigDigest: requireSha256(
-        event.brokerConfigDigest,
-        "event.brokerConfigDigest"
-      ),
-      queryTemplateDigest: requireSha256(
-        event.queryTemplateDigest,
-        "event.queryTemplateDigest"
-      ),
-      boundInputDigest: requireSha256(
-        event.boundInputDigest,
-        "event.boundInputDigest"
-      ),
-      resultDigest:
-        event.resultDigest === null
-          ? null
-          : requireSha256(event.resultDigest, "event.resultDigest"),
-      sourceWatermark:
-        event.sourceWatermark === null
-          ? null
-          : new Date(event.sourceWatermark).toISOString(),
-      outcome: requireText(event.outcome, "event.outcome"),
-      errorCode:
-        event.errorCode === null
-          ? null
-          : requireText(event.errorCode, "event.errorCode"),
-      startedAt: new Date(event.startedAt).toISOString(),
-      completedAt: new Date(event.completedAt).toISOString()
-    })
-  );
-}
-
 export class RecoveryAuditSink {
   #clientFactory;
   #connectionString;
@@ -920,8 +871,12 @@ export class DeterministicRecoveryBroker {
     return this.#requiredProviderDispatchControl().consume(binding);
   }
 
-  completeProviderDispatch(binding, terminal) {
-    return this.#requiredProviderDispatchControl().complete(binding, terminal);
+  completeProviderDispatch(binding, terminal, ownerNonce) {
+    return this.#requiredProviderDispatchControl().complete(
+      binding,
+      terminal,
+      ownerNonce
+    );
   }
 
   markProviderDispatchUnknown(binding) {

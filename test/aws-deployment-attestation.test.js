@@ -563,7 +563,7 @@ function fixture() {
     outputPrivacy: {
       schemaVersion: "tideproof.gate2-build-output-privacy.v1",
       status: "PASS",
-      outputCount: 19,
+      outputCount: 20,
       inventorySha256: "8".repeat(64)
     },
     gate2Template: {

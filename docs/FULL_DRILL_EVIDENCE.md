@@ -71,16 +71,16 @@ accepted integrated receipt is the complete provider target.
 The current source runner emits only a
 `tideproof.highwater-drill-live-candidate.v2` receipt with status
 `INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
-The exact Gate Two v7 build now emits seven content-addressed live-drill ESM
+The exact Gate Two v7 build now emits eight content-addressed live-drill ESM
 bundles, a content-addressed manifest, the reviewed launcher, and a Node
 v22.23.1 executable whose byte digest must match one pinned official
 nodejs.org release for the exact `linux-x64` or `darwin-arm64` target. A
 Homebrew thin launcher, an unpinned Node executable, a different platform, or
-a changed digest fails the build. The build receipt inventories all 19
-generated files, scans the 18 non-Node outputs for the repository's bounded
+a changed digest fails the build. The build receipt inventories all 20
+generated files, scans the 19 non-Node outputs for the repository's bounded
 privacy signatures, and separately records the byte count of the one pinned
 official toolchain object; it does not mislabel that exemption as scanned.
-The outer builder checks all 19 staged paths, sizes, and digests before copying
+The outer builder checks all 20 staged paths, sizes, and digests before copying
 them into the release checkout. The DVI bundle replaces `pg`'s optional
 `pg-native` lookup with a tracked fail-closed module, preventing an ambient
 native peer from entering the reviewed runtime.
@@ -109,11 +109,11 @@ without a second Managed MCP read for the same canonical attempt.
 
 The live command must not execute a bundle, launcher, manifest, or Node binary
 directly from the mutable checkout or `dist/runtime`. Before credentials are
-introduced, an operator with separate root authority must copy the exact ten
+introduced, an operator with separate root authority must copy the exact eleven
 live-runtime files named by the accepted build receipt into a dedicated stage
 whose complete absolute ancestor chain is root-owned and not group- or
 world-writable. The manifest is mode 0444; the launcher, Node executable, and
-seven bundles are mode 0555; every file is regular, root-owned, single-link,
+eight bundles are mode 0555; every file is regular, root-owned, single-link,
 and named by its digest where applicable. The drill itself runs as a dedicated
 non-root identity. The system `/usr/bin/perl` launcher opens the manifest,
 bundle, and Node executable with `O_NOFOLLOW`, verifies ownership, mode, link
@@ -184,9 +184,17 @@ authorization, source commit, tree, and build identity. The authoritative
 database clock decides freshness, and one transaction can return
 `DISPATCH_GRANTED`; every other host, process, or restart observes a terminal
 or already-consumed state. The winning owner alone can bind completion
-digests. A crash after consumption becomes `UNKNOWN_DO_NOT_ACT` and sacrifices
-liveness rather than granting another call. The local W2 `O_EXCL` ledger
-remains defense in depth, not global authority.
+digests. A crash after consumption without exact durable provider evidence
+becomes `UNKNOWN_DO_NOT_ACT` and sacrifices liveness rather than granting
+another call. Once an exact private provider result and close receipt are
+durable, the owner nonce is persisted with them. Any later admitted process
+runs the audit-only reconciler without `MCP_API_KEY`: it may complete the
+matching consumed database row with that durable owner, commit or resolve only
+the bound W3 terminal audit after database-global completion, and run
+provider-free W4/W5 finalization. Its provider client is deny-only, it never
+consumes a new dispatch, and the outer orchestrator persists the same terminal
+completion. The local W2 `O_EXCL` ledger remains defense in depth, not global
+authority.
 
 Local tests model two independent hosts sharing one database and also cover
 database-time expiry followed by a process restart and local-clock rollback.
@@ -235,9 +243,9 @@ replayed.
 
 Acceptance additionally requires:
 
-- an exact v7 build receipt whose 19-file output inventory and privacy boundary
+- an exact v7 build receipt whose 20-file output inventory and privacy boundary
   recompute, followed by a root-owned immutable-stage receipt for the pinned
-  manifest, official Node target, launcher, and seven component bundles; the
+  manifest, official Node target, launcher, and eight component bundles; the
   live process must be non-root and begin with the reviewed clean environment;
 - one signed pre/post deployment-attestation pair whose exact expectation
   binds the source commit, tree, configuration, Authority numeric-version ARN,
@@ -292,7 +300,7 @@ selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
 recomputing receipt validator now exist. The source now also contains a
 single-run integrated orchestrator, database-global dispatch-control source,
-content-addressed seven-component runtime, pinned official Node target,
+content-addressed eight-component runtime, pinned official Node target,
 root-stage verifier, build-output inventory/privacy receipt, count-bound RESUME
 stress runner, owner-restricted external private-evidence source control,
 current-byte reread verifier, and strict sanitized candidate composer,

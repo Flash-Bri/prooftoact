@@ -746,8 +746,11 @@ function inMemoryProviderDispatchControl() {
       }
       return result(binding, "ALREADY_TERMINAL_OR_CONSUMED");
     },
-    complete(binding, value) {
+    complete(binding, value, ownerNonce) {
       assertBinding(binding);
+      if (ownerNonce !== undefined) {
+        assert.equal(ownerNonce, "dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+      }
       if (state === "CONSUMED") {
         terminal = Object.freeze({ ...value });
         state = "COMPLETED";
@@ -3152,7 +3155,7 @@ test("expiry during initialize response burns W2 without notification, tool call
   assert.equal(harness.calls.length, callCount);
 });
 
-test("post-W2 expiry reconciles locally and remains burned after clock rollback", async (t) => {
+test("post-W2 expiry reconciles audit-only without reactivating provider access", async (t) => {
   const fixture = createRecoveryContinuityFixture(t, {
     prefix: "prooftoact-b2-tools-result-expiry-",
     subjectBindingSha256: principalBindingHash(PRINCIPAL)
@@ -3177,20 +3180,18 @@ test("post-W2 expiry reconciles locally and remains burned after clock rollback"
     broker: harness.broker,
     context
   });
-  await assert.rejects(
-    () => providerTest.runProviderRecoveryWithTrustedClock(
-      args,
-      () => clockNow
-    ),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+  const first = await providerTest.runProviderRecoveryWithTrustedClock(
+    args,
+    () => clockNow
   );
+  assert.equal(first.recovery.status, "RECOVERED_CONTEXT_ONLY");
   assert.deepEqual(
     harness.calls.map(({ payload, method }) => payload?.method ?? method),
     ["initialize", "notifications/initialized", "tools/call", "DELETE"]
   );
   assert.equal(
     harness.auditRows.has(context.preCallIntent.terminalAuditEventId),
-    false
+    true
   );
 
   const callCount = harness.calls.length;
@@ -3201,24 +3202,23 @@ test("post-W2 expiry reconciles locally and remains burned after clock rollback"
     `${context.preCallIntent.authorizationId}` +
       ".provider-recovery-authority-expiry-burn.json"
   );
-  assert.equal(fs.existsSync(burnPath), true);
+  assert.equal(fs.existsSync(burnPath), false);
 
   clockNow = Date.parse(consumedChildAuthorizationIssuedAt(context));
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await assert.rejects(
-      () => providerTest.runProviderRecoveryWithTrustedClock(
-        args,
-        () => clockNow
-      ),
-      /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+    const resumed = await providerTest.runProviderRecoveryWithTrustedClock(
+      args,
+      () => clockNow
     );
+    assert.equal(resumed.providerContinuity.receiptSha256,
+      first.providerContinuity.receiptSha256);
     assert.equal(harness.calls.length, callCount);
     assert.equal(harness.auditAppendAttempts.length, appendCount);
-    assert.equal(harness.auditResolveAttempts.length, resolveCount);
+    assert.ok(harness.auditResolveAttempts.length >= resolveCount);
   }
 });
 
-test("expiry after audit resolution preserves the exact event and remains non-accepting", async (t) => {
+test("expiry after audit resolution preserves the exact event and completes audit-only", async (t) => {
   for (const phase of ["pre-read", "terminal"]) {
     const fixture = createRecoveryContinuityFixture(t, {
       prefix: `prooftoact-b2-${phase}-resolve-expiry-`,
@@ -3250,32 +3250,47 @@ test("expiry after audit resolution preserves the exact event and remains non-ac
       broker: harness.broker,
       context
     });
-    await assert.rejects(
-      () => providerTest.runProviderRecoveryWithTrustedClock(
+    if (phase === "pre-read") {
+      await assert.rejects(
+        () => providerTest.runProviderRecoveryWithTrustedClock(
+          args,
+          () => clockNow
+        ),
+        /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
+      );
+    } else {
+      const completed = await providerTest.runProviderRecoveryWithTrustedClock(
         args,
         () => clockNow
-      ),
-      phase === "pre-read"
-        ? /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
-        : /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
-    );
+      );
+      assert.equal(completed.recovery.status, "RECOVERED_CONTEXT_ONLY");
+    }
     const callsAfterExpiry = harness.calls.length;
     const appendCount = harness.auditAppendAttempts.length;
     const resolveCount = harness.auditResolveAttempts.length;
     assert.equal(harness.auditRows.has(targetEventId), true);
 
-    await assert.rejects(
-      () => providerTest.runProviderRecoveryWithTrustedClock(
+    if (phase === "pre-read") {
+      await assert.rejects(
+        () => providerTest.runProviderRecoveryWithTrustedClock(
+          args,
+          () => clockNow
+        ),
+        /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
+      );
+    } else {
+      await providerTest.runProviderRecoveryWithTrustedClock(
         args,
         () => clockNow
-      ),
-      phase === "pre-read"
-        ? /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
-        : /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
-    );
+      );
+    }
     assert.equal(harness.calls.length, callsAfterExpiry);
     assert.equal(harness.auditAppendAttempts.length, appendCount);
-    assert.equal(harness.auditResolveAttempts.length, resolveCount);
+    if (phase === "pre-read") {
+      assert.equal(harness.auditResolveAttempts.length, resolveCount);
+    } else {
+      assert.ok(harness.auditResolveAttempts.length > resolveCount);
+    }
     const attempts = harness.auditAppendAttempts.filter(
       ({ event }) => event.eventId === targetEventId
     );
@@ -3321,7 +3336,7 @@ test("a durable private result reconciles the W2 journal without redispatch", as
   assert.equal(calls, 1);
 });
 
-test("post-expiry wrapper reconciles W2 locally then stops before any audit-provider action", async (t) => {
+test("post-expiry wrapper reconciles W2 and terminal audit without provider redispatch", async (t) => {
   const fixture = createRecoveryContinuityFixture(t, {
     prefix: "prooftoact-b2-provider-expired-wrapper-resume-",
     expiresAfterMs: 1_500,
@@ -3385,19 +3400,17 @@ test("post-expiry wrapper reconciles W2 locally then stops before any audit-prov
     Date.parse(context.preCallIntent.expiresAt)
   ) + 1;
 
-  await assert.rejects(
-    () => providerTest.runProviderRecoveryWithTrustedClock(
-      args,
-      () => afterExpiry
-    ),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+  const resumed = await providerTest.runProviderRecoveryWithTrustedClock(
+    args,
+    () => afterExpiry
   );
+  assert.equal(resumed.recovery.status, "RECOVERED_CONTEXT_ONLY");
   assert.equal(harness.calls.length, initialFetchCount);
-  assert.equal(harness.auditAppendAttempts.length, auditAppendCount);
-  assert.equal(harness.auditResolveAttempts.length, auditResolveCount);
+  assert.equal(harness.auditAppendAttempts.length, auditAppendCount + 1);
+  assert.ok(harness.auditResolveAttempts.length > auditResolveCount);
   assert.equal(
     harness.auditRows.has(context.preCallIntent.terminalAuditEventId),
-    false
+    true
   );
   const journalSequences = fs.readdirSync(context.ledgerRootPath)
     .filter((name) => name.startsWith(journalPrefix))
@@ -3413,7 +3426,7 @@ test("post-expiry wrapper reconciles W2 locally then stops before any audit-prov
       context.preCallIntent.authorizationId,
       "terminal"
     )),
-    false
+    true
   );
 });
 

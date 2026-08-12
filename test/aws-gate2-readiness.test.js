@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { templateReceipt } from "../src/cloud/aws-gate2-template.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 import { validateIntegratedLiveDrillRuntimeManifest } from
   "../src/cloud/integrated-live-drill-runtime.js";
 import { deterministicZip } from "../scripts/lib/deterministic-zip.js";
@@ -995,6 +996,40 @@ function successfulRunner(buildReceipt, calls) {
     ) {
       stdout = JSON.stringify(buildReceipt);
     } else if (
+      shape === "npm run --silent stress:provider-resume"
+    ) {
+      const stressBody = {
+        schemaVersion: "tideproof.integrated-live-drill-stress-receipt.v1",
+        status: "PASS",
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST,
+        testPath: "test/integrated-live-drill.test.js",
+        target:
+          "concurrent RESUMEs atomically choose stop or globally guarded reconciliation",
+        iterationCount: 20,
+        observedIterationCount: 20,
+        observedTargetPassCount: 20,
+        iterations: Array.from({ length: 20 }, (_, index) => ({
+          index: index + 1,
+          tapSha256: String((index % 9) + 1).repeat(64)
+        })),
+        claimBoundary:
+          "This count-bound receipt proves only repeated local execution of one named fake-transport concurrency regression against one clean exact commit. It does not prove live provider behavior, cross-host database isolation, deployment, hostile-host safety, or release acceptance."
+      };
+      stressBody.countBindingSha256 = crypto.createHash("sha256").update(
+        canonicalJson({
+          iterationCount: stressBody.iterationCount,
+          iterations: stressBody.iterations,
+          observedIterationCount: stressBody.observedIterationCount,
+          observedTargetPassCount: stressBody.observedTargetPassCount,
+          sourceCommit: stressBody.sourceCommit,
+          target: stressBody.target,
+          testPath: stressBody.testPath,
+          treeDigest: stressBody.treeDigest
+        })
+      ).digest("hex");
+      stdout = JSON.stringify(stressBody);
+    } else if (
       shape === "npm run --silent gate2:aws-preflight"
     ) {
       stdout = JSON.stringify(preflightReceipt());
@@ -1480,6 +1515,8 @@ test("AWS readiness full mode performs only reviewed command families", async ()
     assert.equal(receipt.checks.awsPreflight, "PASS");
     assert.equal(receipt.checks.releaseProvenance, true);
     assert.equal(receipt.checks.staticAccessibility, true);
+    assert.equal(receipt.checks.providerResumeStress20Of20, true);
+    assert.equal(receipt.providerResumeStress.iterationCount, 20);
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.equal(
       calls.some(
@@ -1908,7 +1945,11 @@ test("AWS readiness ignores PATH-selected Git and npm wrappers", () => {
       ...process.env,
       npm_execpath:
         process.env.npm_execpath ??
-        fs.realpathSync(path.join(path.dirname(process.execPath), "npm")),
+        (
+          fs.existsSync(path.join(path.dirname(process.execPath), "npm"))
+            ? fs.realpathSync(path.join(path.dirname(process.execPath), "npm"))
+            : "/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js"
+        ),
       npm_node_execpath: process.execPath,
       PATH: projectRoot
     });

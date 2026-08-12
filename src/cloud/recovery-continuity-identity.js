@@ -86,6 +86,52 @@ function requireUuid(value, name) {
   return text;
 }
 
+export function recoveryAuditEventDigest(event) {
+  return sha256(canonicalJson({
+    eventId: requireUuid(event.eventId, "event.eventId"),
+    interactionId: requireUuid(event.interactionId, "event.interactionId"),
+    tenantId: requireUuid(event.tenantId, "event.tenantId"),
+    recoverySessionId: requireUuid(
+      event.recoverySessionId,
+      "event.recoverySessionId"
+    ),
+    callerSubjectHash: requireSha256(
+      event.callerSubjectHash,
+      "event.callerSubjectHash"
+    ),
+    phase: requireText(event.phase, "event.phase"),
+    toolName: "select_query",
+    recoveryClusterId: requireUuid(
+      event.recoveryClusterId,
+      "event.recoveryClusterId"
+    ),
+    brokerConfigDigest: requireSha256(
+      event.brokerConfigDigest,
+      "event.brokerConfigDigest"
+    ),
+    queryTemplateDigest: requireSha256(
+      event.queryTemplateDigest,
+      "event.queryTemplateDigest"
+    ),
+    boundInputDigest: requireSha256(
+      event.boundInputDigest,
+      "event.boundInputDigest"
+    ),
+    resultDigest: event.resultDigest === null
+      ? null
+      : requireSha256(event.resultDigest, "event.resultDigest"),
+    sourceWatermark: event.sourceWatermark === null
+      ? null
+      : new Date(event.sourceWatermark).toISOString(),
+    outcome: requireText(event.outcome, "event.outcome"),
+    errorCode: event.errorCode === null
+      ? null
+      : requireText(event.errorCode, "event.errorCode"),
+    startedAt: new Date(event.startedAt).toISOString(),
+    completedAt: new Date(event.completedAt).toISOString()
+  }));
+}
+
 function requireSha256(value, name) {
   const text = requireText(value, name).toLowerCase();
   if (!/^[a-f0-9]{64}$/u.test(text)) {

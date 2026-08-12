@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 
@@ -18,6 +19,7 @@ const COMPONENTS = [
   "dvi",
   "finalizer",
   "orchestrator",
+  "reconciler",
   "recovery",
   "supervisor",
   "worker"
@@ -46,7 +48,7 @@ function manifest() {
     components: Object.fromEntries(COMPONENTS.map((name, index) => [
       name,
       {
-        bundledPackages: index === 6 ? ["pg"] : [],
+        bundledPackages: [4, 7].includes(index) ? ["pg"] : [],
         bytes: index + 1,
         externalImports: ["node:fs"],
         file: `${name}-${String(index + 1).repeat(64)}.mjs`,
@@ -113,12 +115,27 @@ test("runtime stage rejects any mutable ancestor in its absolute path", () => {
   );
 });
 
-test("script dispatch maps only the seven reviewed runtime entry roles", () => {
+test("pre-execution launcher validates immutable ancestry before pathname exec", () => {
+  const source = fs.readFileSync(
+    new URL("../scripts/lib/verified-node-bundle-launcher.pl", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /assert_root_owned_immutable_directory_chain\(\$stage_root\)/u);
+  assert.match(source, /exec \{\s*"\$stage_root\/\$node_name"/u);
+});
+
+test("script dispatch maps only the eight reviewed runtime entry roles", () => {
   assert.equal(
     stagedRuntimeComponentForScript(
-      "/immutable/gate1-integrated-live-drill-provider-worker.js"
+    "/immutable/gate1-integrated-live-drill-provider-worker.js"
     ),
     "worker"
+  );
+  assert.equal(
+    stagedRuntimeComponentForScript(
+      "/immutable/gate1-integrated-live-drill-provider-reconciler.js"
+    ),
+    "reconciler"
   );
   assert.throws(
     () => stagedRuntimeComponentForScript("/mutable/arbitrary.js"),
@@ -130,7 +147,12 @@ test("child launch removes every pre-execution injection surface", () => {
   const injected = {
     SAFE_INPUT: "preserved",
     DYLD_INSERT_LIBRARIES: "/tmp/inject.dylib",
+    GCONV_PATH: "/tmp/gconv",
+    GLIBC_TUNABLES: "glibc.malloc.check=1",
+    LD_AUDIT: "/tmp/audit.so",
+    LD_LIBRARY_PATH: "/tmp/lib",
     LD_PRELOAD: "/tmp/inject.so",
+    NODE_EXTRA_CA_CERTS: "/tmp/ca.pem",
     NODE_OPTIONS: "--require=/tmp/inject.cjs",
     NODE_PATH: "/tmp/modules",
     PERL5LIB: "/tmp/perl",

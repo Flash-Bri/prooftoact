@@ -86,6 +86,10 @@ const runtimeComponentDefinitions = Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
     packageKey: "runtimeOrchestrator"
   }),
+  reconciler: Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-reconciler.js",
+    packageKey: "runtimeReconciler"
+  }),
   recovery: Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-recovery.js",
     packageKey: "runtimeRecovery"

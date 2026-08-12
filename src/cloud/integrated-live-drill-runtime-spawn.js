@@ -11,7 +11,7 @@ import {
 } from "./integrated-live-drill-runtime.js";
 
 const PRE_EXECUTION_INJECTION_ENVIRONMENT =
-  /^(?:DYLD_.*|LD_PRELOAD|NODE_OPTIONS|NODE_PATH|PERL5LIB|PERL5OPT|PERLLIB|PERL_LOCAL_LIB_ROOT)$/u;
+  /^(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*)$/u;
 
 function runtimeChildEnvironment(childEnvironment, runtime) {
   const environment = {

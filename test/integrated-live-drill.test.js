@@ -89,6 +89,9 @@ import {
   INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_SCHEMA
 } from "../src/cloud/integrated-live-drill-provider-orchestration.js";
 import {
+  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA
+} from "../src/cloud/integrated-live-drill-provider-reconciliation.js";
+import {
   INTEGRATED_LIVE_DRILL_PACKET_A_INPUT_SCHEMA,
   INTEGRATED_LIVE_DRILL_PACKET_A_TRUSTED_CONTEXT_SCHEMA,
   loadIntegratedLiveDrillPacketAFinalizerTrustedContext,
@@ -893,6 +896,47 @@ function providerSupervisorCompletion(preparation) {
         .PROVIDER_FINALIZATION_DURABLE
     ],
     status: "LOCAL_PROVIDER_SUPERVISOR_COMPLETED_NOT_RELEASED"
+  }));
+}
+
+function providerReconciliationReceipt(preparation, state = "CONSUMED") {
+  return orchestrationReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA,
+    accepted: false,
+    authorizationId: preparation.authorizationId,
+    controlBindingSha256: "9".repeat(64),
+    databaseNow: "2026-08-10T16:01:00.000Z",
+    finalReleaseReady: false,
+    mcpResultSha256: null,
+    providerCompletion: null,
+    providerApiCredentialPresent: false,
+    providerBacked: false,
+    runId,
+    sessionCloseSha256: null,
+    state,
+    status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED",
+    transitionOutcome: "RESOLVED"
+  }));
+}
+
+function completedProviderReconciliationReceipt(preparation) {
+  const completion = providerSupervisorCompletion(preparation);
+  return orchestrationReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA,
+    accepted: false,
+    authorizationId: preparation.authorizationId,
+    controlBindingSha256: "9".repeat(64),
+    databaseNow: "2026-08-10T16:01:00.000Z",
+    finalReleaseReady: false,
+    mcpResultSha256: "e".repeat(64),
+    providerCompletion: completion,
+    providerApiCredentialPresent: false,
+    providerBacked: false,
+    runId,
+    sessionCloseSha256: "f".repeat(64),
+    state: "COMPLETED",
+    status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED",
+    transitionOutcome: "COMPLETED"
   }));
 }
 
@@ -1999,14 +2043,20 @@ test("concurrent RESUMEs atomically choose stop or globally guarded reconciliati
     },
     rootDir: fs.realpathSync(process.cwd()),
     verifyRelease: async () => postRelease,
-    runComponent: async () => {
+    runComponent: async (script, _args, childEnvironment) => {
       contenderCalls += 1;
-      return providerSupervisorCompletion(admissionWinsCase.preparation);
+      assert.match(script, /provider-reconciler\.js$/u);
+      assert.equal("MCP_API_KEY" in childEnvironment, false);
+      assert.equal(
+        childEnvironment.PRIMARY_AUDIT_DATABASE_URL,
+        admissionWinsCase.environment.PRIMARY_AUDIT_DATABASE_URL
+      );
+      return providerReconciliationReceipt(admissionWinsCase.preparation);
     }
   });
   assert.equal(
     admissionObservedByContender.status,
-    "LOCAL_PROVIDER_ORCHESTRATION_COMPLETED_NOT_RELEASED"
+    "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED"
   );
   releaseProvider();
   const admissionCompletion = await admissionOwner;
@@ -2016,6 +2066,115 @@ test("concurrent RESUMEs atomically choose stop or globally guarded reconciliati
   );
   assert.equal(ownerCalls, 1);
   assert.equal(contenderCalls, 1);
+
+  const atomicClaimCase = await preparedProviderOrchestrationCase();
+  let verifierArrivals = 0;
+  let releaseVerifiers;
+  const bothVerifiersReached = new Promise((resolve) => {
+    releaseVerifiers = resolve;
+  });
+  const verificationBarrier = new Promise((resolve) => {
+    const poll = () => {
+      if (verifierArrivals === 2) resolve();
+      else setImmediate(poll);
+    };
+    poll();
+  });
+  let atomicClaimComponentCalls = 0;
+  const atomicResume = () => runIntegratedLiveDrill({
+    ...providerResumeVerification,
+    environment: {
+      ...atomicClaimCase.environment,
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
+    },
+    rootDir: fs.realpathSync(process.cwd()),
+    verifyProviderDispatchAuthorization: async () => {
+      verifierArrivals += 1;
+      await bothVerifiersReached;
+      return Object.freeze({ attestationSha256: "d".repeat(64) });
+    },
+    verifyRelease: async () => postRelease,
+    runComponent: async (script, _args, childEnvironment) => {
+      atomicClaimComponentCalls += 1;
+      if (/provider-reconciler\.js$/u.test(script)) {
+        assert.equal("MCP_API_KEY" in childEnvironment, false);
+        return providerReconciliationReceipt(atomicClaimCase.preparation);
+      }
+      assert.match(script, /provider-supervisor\.js$/u);
+      assert.equal(
+        childEnvironment.MCP_API_KEY,
+        atomicClaimCase.environment.MCP_API_KEY
+      );
+      return providerSupervisorCompletion(atomicClaimCase.preparation);
+    }
+  });
+  const atomicResumes = [atomicResume(), atomicResume()];
+  await verificationBarrier;
+  releaseVerifiers();
+  const atomicResults = await Promise.all(atomicResumes);
+  assert.deepEqual(
+    atomicResults.map(({ status }) => status).sort(),
+    [
+      "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED",
+      "LOCAL_PROVIDER_ORCHESTRATION_COMPLETED_NOT_RELEASED"
+    ]
+  );
+  assert.equal(atomicClaimComponentCalls, 2);
+});
+
+test("audit-only reconciliation persists terminal orchestration completion", async () => {
+  const prepared = await preparedProviderOrchestrationCase();
+  let first = true;
+  const baseRun = () => runIntegratedLiveDrill({
+    ...providerResumeVerification,
+    environment: {
+      ...prepared.environment,
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
+    },
+    rootDir: fs.realpathSync(process.cwd()),
+    verifyRelease: async () => postRelease,
+    runComponent: async (script) => {
+      if (first) {
+        first = false;
+        assert.match(script, /provider-supervisor\.js$/u);
+        throw new Error(
+          "INTEGRATED_LIVE_DRILL_PROVIDER_SYNTHETIC_CRASH_AFTER_PROVIDER_EVIDENCE_DURABLE"
+        );
+      }
+      assert.match(script, /provider-reconciler\.js$/u);
+      return completedProviderReconciliationReceipt(prepared.preparation);
+    }
+  });
+  await assert.rejects(
+    () => runIntegratedLiveDrill({
+      ...providerResumeVerification,
+      environment: {
+        ...prepared.environment,
+        NODE_ENV: "test",
+        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
+        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
+      },
+      rootDir: fs.realpathSync(process.cwd()),
+      verifyRelease: async () => postRelease,
+      runComponent: async (script) => {
+        first = false;
+        assert.match(script, /provider-supervisor\.js$/u);
+        throw new Error(
+          "INTEGRATED_LIVE_DRILL_PROVIDER_SYNTHETIC_CRASH_AFTER_PROVIDER_EVIDENCE_DURABLE"
+        );
+      }
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_SYNTHETIC_CRASH_AFTER_PROVIDER_EVIDENCE_DURABLE/u
+  );
+  const completed = await baseRun();
+  assert.equal(
+    completed.status,
+    "LOCAL_PROVIDER_ORCHESTRATION_COMPLETED_NOT_RELEASED"
+  );
+  const replayed = await baseRun();
+  assert.deepEqual(replayed, completed);
 });
 
 test("RESUME catch path never returns a mismatched admitted decision", async () => {
@@ -2488,6 +2647,13 @@ test("an admitted-but-incomplete CLI result is a nonzero checkpoint", () => {
     integratedLiveDrillRunnerTest.integratedLiveDrillCliExitCode({
       decision: "PROVIDER_ADMITTED",
       status: "PROVIDER_ADMITTED"
+    }),
+    3
+  );
+  assert.equal(
+    integratedLiveDrillRunnerTest.integratedLiveDrillCliExitCode({
+      accepted: false,
+      status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED"
     }),
     3
   );
