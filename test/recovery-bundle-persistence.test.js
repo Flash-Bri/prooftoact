@@ -84,7 +84,7 @@ test("standalone recovery broker does not require integrated persistence inputs"
     () => integratedPersistenceEnvironment({
       TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec)
     }),
-    /persistence inputs must be supplied together/
+    /INTEGRATED_LIVE_DRILL_RECOVERY_BROKER_PARTIAL_CONFIG_REJECTED/
   );
   const environment = {
     TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec),

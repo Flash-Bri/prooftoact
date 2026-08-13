@@ -251,7 +251,7 @@ function fixture() {
     sourceCommit: SOURCE_COMMIT,
     treeDigest: TREE_DIGEST,
     packageLockDigest: sha256(packageLock),
-    toolchainSha256: sha256(JSON.stringify(toolchain)),
+    toolchainSha256: sha256(canonicalJson(toolchain)),
     launcher: {
       file: path.basename(launcherPath),
       sha256: sha256(launcherBytes)
@@ -1003,9 +1003,9 @@ function successfulRunner(buildReceipt, calls) {
         status: "PASS",
         sourceCommit: SOURCE_COMMIT,
         treeDigest: TREE_DIGEST,
-        testPath: "test/integrated-live-drill.test.js",
+        testPath: "test/integrated-live-drill-dispatch-broker.test.js",
         target:
-          "concurrent RESUMEs atomically choose stop or globally guarded reconciliation",
+          "two real broker processes publish one execution grant after one global begin",
         iterationCount: 20,
         observedIterationCount: 20,
         observedTargetPassCount: 20,
@@ -1095,6 +1095,44 @@ test("AWS readiness validates every exact-head artifact byte", () => {
       current.buildReceipt.artifacts.find(
         (artifact) => artifact.name === "demo"
       ).artifactDigest
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness canonicalizes toolchain key order", () => {
+  const current = fixture();
+  try {
+    current.buildReceipt.toolchain = Object.fromEntries(
+      Object.entries(current.buildReceipt.toolchain).reverse()
+    );
+    const accepted = validateBuildReceipt(
+      current.buildReceipt,
+      buildValidationOptions(current)
+    );
+    assert.equal(
+      accepted.liveDrillRuntime.manifestSha256,
+      current.buildReceipt.liveDrillRuntime.manifestSha256
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects redundant runtime receipt fields", () => {
+  const current = fixture();
+  try {
+    current.buildReceipt.liveDrillRuntime.components.worker.file =
+      path.basename(
+        current.buildReceipt.liveDrillRuntime.components.worker.path
+      );
+    assert.throws(
+      () => validateBuildReceipt(
+        current.buildReceipt,
+        buildValidationOptions(current)
+      ),
+      /AWS_READINESS_LIVE_RUNTIME/u
     );
   } finally {
     current.cleanup();

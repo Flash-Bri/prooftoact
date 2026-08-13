@@ -21,10 +21,8 @@ import {
   recoveryAuditEventDigest,
   renderRecoveryQuery
 } from "./recovery-continuity-identity.js";
-import {
-  buildProviderDispatchControlBinding,
-  PROVIDER_DISPATCH_CONTROL_STATES
-} from "./provider-dispatch-control.js";
+import { buildProviderDispatchControlBinding } from
+  "./provider-dispatch-binding.js";
 import {
   INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
   INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN,
@@ -41,7 +39,7 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_PRE_READ_SCHEMA =
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_PRE_READ_PLAN_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-pre-read-plan.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_RESULT_SCHEMA =
-  "tideproof.highwater-drill-provider-recovery-result.v1";
+  "tideproof.highwater-drill-provider-recovery-result.v2";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_TERMINAL_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-terminal.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_TERMINAL_PLAN_SCHEMA =
@@ -275,7 +273,7 @@ function providerDispatchGuard(context, intent, clock = () => Date.now()) {
         requireCurrent: false
       }
     );
-  const authorityTimes = providerAuthorityTimes(
+  const authorityTimes = integratedLiveDrillProviderAuthorityTimes(
     context,
     intent,
     dispatchAuthorization,
@@ -629,6 +627,54 @@ function createOrReadExact(filePath, value, secure) {
   return reread;
 }
 
+function claimCreateOnlyExact(filePath, value, secure) {
+  const serialized = Buffer.from(`${canonicalJson(value)}\n`, "utf8");
+  requireCondition(
+    serialized.length > 0 && serialized.length <= MAX_PRIVATE_ARTIFACT_BYTES,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED"
+  );
+  let descriptor;
+  try {
+    assertSameRoot(secure);
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600
+    );
+    fs.writeFileSync(descriptor, serialized);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    syncDirectory(secure);
+  } catch (cause) {
+    if (descriptor !== undefined) {
+      try { fs.closeSync(descriptor); } catch { /* Preserve first error. */ }
+    }
+    if (cause?.code === "EEXIST") {
+      // A concurrent loser may reuse only an exact, fully readable attempt to
+      // ask the provider-operation broker for its durable transcript. The
+      // broker's database redemption fence—not this file—prevents redispatch.
+      const existing = readArtifact(filePath, secure);
+      requireCondition(
+        canonicalJson(existing) === canonicalJson(value),
+        "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS"
+      );
+      return Object.freeze({ created: false, value: existing });
+    }
+    if (cause?.message?.startsWith("INTEGRATED_LIVE_DRILL_")) throw cause;
+    reject("INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED", cause);
+  }
+  const reread = readArtifact(filePath, secure);
+  requireCondition(
+    canonicalJson(reread) === canonicalJson(value),
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS"
+  );
+  return Object.freeze({ created: true, value: reread });
+}
+
 function artifactPath(secure, authorizationId, suffix) {
   requireCondition(
     UUID.test(authorizationId ?? ""),
@@ -645,6 +691,56 @@ function withReceipt(body) {
     ...body,
     receiptSha256: integratedLiveDrillCanonicalSha256(body)
   });
+}
+
+export const INTEGRATED_LIVE_DRILL_PROVIDER_EXECUTION_ATTEMPT_SCHEMA =
+  "tideproof.highwater-drill-provider-execution-attempt.v1";
+
+function providerExecutionAttemptBody({
+  executionGrant,
+  intent,
+  providerControlBinding
+}) {
+  return Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_EXECUTION_ATTEMPT_SCHEMA,
+    authorizationId: intent.authorizationId,
+    controlBindingSha256: providerControlBinding.controlBindingSha256,
+    executionCapabilitySha256: executionGrant.executionCapabilitySha256,
+    grantId: executionGrant.grantId,
+    operationNonceSha256: executionGrant.operationNonceSha256,
+    preCallIntentSha256: intent.intentSha256,
+    workerSpecSha256: executionGrant.workerSpecSha256
+  });
+}
+
+export function validateProviderExecutionAttempt(
+  value,
+  { executionGrant, intent, providerControlBinding }
+) {
+  const normalized = validateReceipt(value, [
+    "authorizationId",
+    "controlBindingSha256",
+    "executionCapabilitySha256",
+    "grantId",
+    "operationNonceSha256",
+    "preCallIntentSha256",
+    "schemaVersion",
+    "workerSpecSha256"
+  ], INTEGRATED_LIVE_DRILL_PROVIDER_EXECUTION_ATTEMPT_SCHEMA);
+  requireCondition(
+    normalized.authorizationId === intent.authorizationId &&
+      normalized.controlBindingSha256 ===
+        providerControlBinding.controlBindingSha256 &&
+      normalized.executionCapabilitySha256 ===
+        executionGrant.executionCapabilitySha256 &&
+      normalized.grantId === executionGrant.grantId &&
+      normalized.operationNonceSha256 ===
+        executionGrant.operationNonceSha256 &&
+      normalized.preCallIntentSha256 === intent.intentSha256 &&
+      normalized.workerSpecSha256 === executionGrant.workerSpecSha256,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EXECUTION_ATTEMPT_REJECTED"
+  );
+  return normalized;
 }
 
 function validateReceipt(value, keys, schema) {
@@ -867,7 +963,7 @@ function normalizeManagedMcpRawResult(value) {
   });
 }
 
-function providerAuthorityTimes(
+export function integratedLiveDrillProviderAuthorityTimes(
   context,
   intent,
   dispatchAuthorization,
@@ -948,7 +1044,7 @@ function providerAuthorityExpiryBurnBody(
   dispatchAuthorization,
   childAuthorizationIssuedAt
 ) {
-  const authorityTimes = providerAuthorityTimes(
+  const authorityTimes = integratedLiveDrillProviderAuthorityTimes(
     context,
     intent,
     dispatchAuthorization,
@@ -1819,7 +1915,7 @@ function validateProviderArtifact(value, intent, context) {
       "logicalMcpRequestSha256",
       "mcpResultSha256",
       "observedTransportCounts",
-      "providerDispatchOwnerNonce",
+      "providerDispatchGrantId",
       "preCallIntentSha256",
       "providerDispatchAuthorizationSha256",
       "rawResult",
@@ -1858,7 +1954,7 @@ function validateProviderArtifact(value, intent, context) {
     logicalMcpRequestSha256: value.logicalMcpRequestSha256,
     mcpResultSha256: value.mcpResultSha256,
     observedTransportCounts: observed,
-    providerDispatchOwnerNonce: value.providerDispatchOwnerNonce,
+    providerDispatchGrantId: value.providerDispatchGrantId,
     preCallIntentSha256: value.preCallIntentSha256,
     providerDispatchAuthorizationSha256:
       value.providerDispatchAuthorizationSha256,
@@ -1878,7 +1974,7 @@ function validateProviderArtifact(value, intent, context) {
       normalized.logicalMcpRequestSha256 === intent.logicalMcpRequestSha256 &&
       normalized.providerDispatchAuthorizationSha256 ===
         dispatchAuthorization.attestationSha256 &&
-      UUID.test(normalized.providerDispatchOwnerNonce ?? "") &&
+      UUID.test(normalized.providerDispatchGrantId ?? "") &&
       normalized.mcpResultSha256 ===
         integratedLiveDrillCanonicalSha256(rawResult) &&
       transportEvidence.rpcCalls[1].resultSha256 ===
@@ -1921,7 +2017,6 @@ export function readIntegratedLiveDrillDurableProviderDispatchResult(
   );
   return Object.freeze({
     mcpResultSha256: provider.mcpResultSha256,
-    providerDispatchOwnerNonce: provider.providerDispatchOwnerNonce,
     sessionCloseSha256: provider.sessionCloseSha256
   });
 }
@@ -2004,7 +2099,8 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
   authenticatedPrincipal,
   assertProviderAdmission,
   broker,
-  context
+  context,
+  executionGrant
 }, {
   interruptAfterPhase = null,
   trustedClock = () => Date.now()
@@ -2023,10 +2119,18 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
       typeof broker?.planPreparedRecoveryCompletion === "function" &&
       typeof broker?.commitPreparedRecoveryCompletion === "function" &&
       typeof broker?.completePreparedRecovery === "function" &&
-      typeof broker?.consumeProviderDispatch === "function" &&
       typeof broker?.completeProviderDispatch === "function" &&
       typeof broker?.markProviderDispatchUnknown === "function" &&
-      typeof broker?.resolveProviderDispatch === "function" &&
+      exactKeys(executionGrant, [
+        "executionCapabilitySha256",
+        "grantId",
+        "operationNonceSha256",
+        "workerSpecSha256"
+      ]) &&
+      HEX_64.test(executionGrant.executionCapabilitySha256 ?? "") &&
+      UUID.test(executionGrant.grantId ?? "") &&
+      HEX_64.test(executionGrant.operationNonceSha256 ?? "") &&
+      HEX_64.test(executionGrant.workerSpecSha256 ?? "") &&
       typeof trustedClock === "function" &&
       (assertProviderAdmission === undefined ||
         typeof assertProviderAdmission === "function") &&
@@ -2067,7 +2171,7 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
       canonicalJson(preparation.signingPayload),
     "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_REJECTED"
   );
-  const authorityTimes = providerAuthorityTimes(
+  const authorityTimes = integratedLiveDrillProviderAuthorityTimes(
     context,
     intent,
     boundDispatchAuthorization,
@@ -2083,6 +2187,13 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
     earliestControllingExpiry: authorityTimes.earliestControllingExpiry,
     latestControllingIssuedAt: authorityTimes.latestControllingIssuedAt
   });
+  const providerDispatchGrant = Object.freeze({
+    grantId: executionGrant.grantId
+  });
+  requireCondition(
+    providerControlBinding.authorizationId === intent.authorizationId,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EXECUTION_GRANT_REJECTED"
+  );
   const dispatchAuthorityGuard = providerDispatchGuard(
     context,
     intent,
@@ -2097,12 +2208,38 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
     intent.authorizationId,
     "mcp"
   );
+  const executionAttemptPath = path.join(
+    secure.rootPath,
+    "provider-execution-attempt.json"
+  );
   const providerAtEntry = readArtifactIfPresent(providerPath, secure);
+  const executionAttemptAtEntry = readArtifactIfPresent(
+    executionAttemptPath,
+    secure
+  );
   const postProviderReconciliation = providerAtEntry !== null;
   if (providerAtEntry === null) {
+    if (executionAttemptAtEntry !== null) {
+      validateProviderExecutionAttempt(executionAttemptAtEntry, {
+        executionGrant,
+        intent,
+        providerControlBinding
+      });
+      // Continue only to the brokered transcript/redeem boundary. This
+      // process has no provider credential and cannot itself redispatch.
+    }
     externalActionGuard("PROVIDER_RECOVERY_ENTRY");
   } else {
     validateProviderArtifact(providerAtEntry, intent, context);
+    requireCondition(
+      executionAttemptAtEntry !== null,
+      "INTEGRATED_LIVE_DRILL_PROVIDER_EXECUTION_ATTEMPT_REJECTED"
+    );
+    validateProviderExecutionAttempt(executionAttemptAtEntry, {
+      executionGrant,
+      intent,
+      providerControlBinding
+    });
   }
   const durableProviderResult = () => {
     const existing = readArtifactIfPresent(providerPath, secure);
@@ -2111,7 +2248,6 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
     return Object.freeze({
       logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
       mcpResultSha256: provider.mcpResultSha256,
-      providerDispatchOwnerNonce: provider.providerDispatchOwnerNonce,
       sessionCloseSha256: provider.sessionCloseSha256,
       sessionClosed: true
     });
@@ -2124,17 +2260,14 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
     );
     let control;
     try {
-      control = await broker.resolveProviderDispatch(providerControlBinding);
-      if (control.state === PROVIDER_DISPATCH_CONTROL_STATES.CONSUMED) {
-        control = await broker.completeProviderDispatch(
-          providerControlBinding,
-          {
-            mcpResultSha256: provider.mcpResultSha256,
-            sessionCloseSha256: provider.sessionCloseSha256
-          },
-          provider.providerDispatchOwnerNonce
-        );
-      }
+      control = await broker.completeProviderDispatch(
+        providerControlBinding,
+        providerDispatchGrant,
+        {
+          mcpResultSha256: provider.mcpResultSha256,
+          sessionCloseSha256: provider.sessionCloseSha256
+        }
+      );
     } catch (cause) {
       reject(
         "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_UNKNOWN_DO_NOT_ACT",
@@ -2142,7 +2275,7 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
       );
     }
     requireCondition(
-      control.state === PROVIDER_DISPATCH_CONTROL_STATES.COMPLETED &&
+      control.state === "COMPLETED" &&
         control.mcpResultSha256 === provider.mcpResultSha256 &&
         control.sessionCloseSha256 === provider.sessionCloseSha256,
       "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_UNKNOWN_DO_NOT_ACT"
@@ -2155,19 +2288,18 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
       intent,
       context
     );
-    let control;
-    try {
-      control = await broker.resolveProviderDispatch(providerControlBinding);
-    } catch (cause) {
-      reject(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_UNKNOWN_DO_NOT_ACT",
-        cause
-      );
-    }
+    const control = await broker.completeProviderDispatch(
+      providerControlBinding,
+      providerDispatchGrant,
+      {
+        mcpResultSha256: provider.mcpResultSha256,
+        sessionCloseSha256: provider.sessionCloseSha256
+      }
+    );
     requireCondition(
-      control.state === PROVIDER_DISPATCH_CONTROL_STATES.COMPLETED &&
-        control.mcpResultSha256 === provider.mcpResultSha256 &&
-        control.sessionCloseSha256 === provider.sessionCloseSha256,
+      control.state === "COMPLETED" &&
+      control.mcpResultSha256 === provider.mcpResultSha256 &&
+      control.sessionCloseSha256 === provider.sessionCloseSha256,
       "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_UNKNOWN_DO_NOT_ACT"
     );
     return true;
@@ -2329,46 +2461,43 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
   }
   assertProviderAdmission?.();
   runIntegratedLiveDrillRecoveryContinuityW1(context);
-  const w2 = await runIntegratedLiveDrillRecoveryContinuityW2(context, {
-    reconcileDurableResult: async ({ logicalMcpRequestSha256 }) => {
-      requireCondition(
-        logicalMcpRequestSha256 === intent.logicalMcpRequestSha256,
-        "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_BINDING_REJECTED"
-      );
-      return durableProviderResult();
-    },
-    mcpCall: async ({ logicalMcpRequestSha256 }) => {
-      requireCondition(
-        logicalMcpRequestSha256 === intent.logicalMcpRequestSha256,
-        "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_BINDING_REJECTED"
-      );
+  const executeOrRecoverProviderResult = async ({
+    logicalMcpRequestSha256
+  }) => {
+    requireCondition(
+      logicalMcpRequestSha256 === intent.logicalMcpRequestSha256,
+      "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_BINDING_REJECTED"
+    );
       const durable = durableProviderResult();
       if (durable !== null) {
         return durable;
       }
+      const attempt = withReceipt(providerExecutionAttemptBody({
+        executionGrant,
+        intent,
+        providerControlBinding
+      }));
+      const claimedAttempt = claimCreateOnlyExact(
+        executionAttemptPath,
+        attempt,
+        secure
+      );
+      validateProviderExecutionAttempt(
+        claimedAttempt.value,
+        { executionGrant, intent, providerControlBinding }
+      );
+      if (
+        claimedAttempt.created &&
+        interruptAfterPhase === "AFTER_EXECUTION_ATTEMPT_DURABLE"
+      ) {
+        const crash = new Error(
+          "INTEGRATED_LIVE_DRILL_PROVIDER_SYNTHETIC_CRASH_AFTER_EXECUTION_ATTEMPT_DURABLE"
+        );
+        crash.simulatedProcessDeath = true;
+        throw crash;
+      }
       const preliminaryDispatchAuthorization =
         externalActionGuard("BEFORE_MANAGED_MCP_SEQUENCE");
-      let controlGrant;
-      try {
-        controlGrant = await broker.consumeProviderDispatch(
-          providerControlBinding
-        );
-      } catch (cause) {
-        reject(
-          "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_UNKNOWN_DO_NOT_ACT",
-          cause
-        );
-      }
-      if (controlGrant.state === PROVIDER_DISPATCH_CONTROL_STATES.EXPIRED) {
-        reject(
-          "INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED"
-        );
-      }
-      requireCondition(
-        controlGrant.state === PROVIDER_DISPATCH_CONTROL_STATES.CONSUMED &&
-          controlGrant.transitionOutcome === "DISPATCH_GRANTED",
-        "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_UNKNOWN_DO_NOT_ACT"
-      );
       let dispatchAuthorization = null;
       let rawResult;
       let providerEvidence;
@@ -2412,7 +2541,7 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
           transportEvidenceSha256:
             observedTransportCounts.transportEvidenceSha256,
           observedTransportCounts,
-          providerDispatchOwnerNonce: controlGrant.ownerNonce,
+          providerDispatchGrantId: executionGrant.grantId,
           semanticRequestEvidence,
           semanticRequestEvidenceSha256:
             semanticRequestEvidence?.evidenceSha256,
@@ -2431,8 +2560,12 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
           sessionClosed: true
         });
       } catch (cause) {
+        if (cause?.simulatedProcessDeath === true) throw cause;
         try {
-          await broker.markProviderDispatchUnknown(providerControlBinding);
+          await broker.markProviderDispatchUnknown(
+            providerControlBinding,
+            providerDispatchGrant
+          );
         } catch {
           // A consumed or ambiguously completed global record already denies
           // every fresh provider attempt. Preserve the original failure.
@@ -2442,8 +2575,12 @@ async function runIntegratedLiveDrillProviderRecoveryInternal({
           cause
         );
       }
+  };
+  const w2 = await runIntegratedLiveDrillRecoveryContinuityW2(context, {
+    reconcileDurableResult: executeOrRecoverProviderResult,
+    mcpCall: executeOrRecoverProviderResult
     }
-  });
+  );
   requireCondition(
     w2.status !== INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_UNKNOWN &&
       w2.status === INTEGRATED_LIVE_DRILL_RECOVERY_CONTINUITY_COMPLETE,
@@ -2641,11 +2778,26 @@ export async function runIntegratedLiveDrillProviderRecovery(args) {
 
 export const __test = Object.freeze({
   artifactPath,
+  claimCreateOnlyExactForTest({
+    filePath,
+    forbiddenRootPath,
+    rootPath,
+    value
+  }) {
+    const secure = secureEvidenceRoot(rootPath, forbiddenRootPath);
+    requireCondition(
+      path.dirname(filePath) === secure.rootPath,
+      "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_BINDING_REJECTED"
+    );
+    return claimCreateOnlyExact(filePath, value, secure);
+  },
+  INTEGRATED_LIVE_DRILL_PROVIDER_EXECUTION_ATTEMPT_SCHEMA,
   providerDispatchGuard,
   runProviderRecoveryWithInterruption(args, interruptAfterPhase) {
     requireCondition(
       [
         "AFTER_PRE_READ_AUDIT_COMMIT",
+        "AFTER_EXECUTION_ATTEMPT_DURABLE",
         "AFTER_PROVIDER_EVIDENCE_DURABLE",
         "AFTER_TERMINAL_AUDIT_COMMIT"
       ].includes(interruptAfterPhase),

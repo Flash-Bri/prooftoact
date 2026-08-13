@@ -16,9 +16,9 @@ redisplaying identity values. A new finding, identity, path, oversized blob,
 shallow checkout, dirty tree, stale allowance, or malformed manifest fails the
 gate.
 
-The exact Gate Two v7 build applies a second boundary to generated outputs.
-Its receipt enumerates every one of the 20 template, Lambda, evidence-provider,
-and live-drill runtime files by path, byte count, and SHA-256. It scans the 19
+The exact Gate Two v9 build applies a second boundary to generated outputs.
+Its receipt enumerates every one of the 21 template, Lambda, evidence-provider,
+and live-drill runtime files by path, byte count, and SHA-256. It scans the 20
 non-Node outputs with the same bounded signature rules and permits only
 already-reviewed public upstream attribution hashes. The remaining file is an
 official Node v22.23.1 executable: the build accepts only one of the pinned

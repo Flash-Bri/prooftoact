@@ -1,19 +1,12 @@
-import path from "node:path";
-
 import { canonicalJson } from "./canonical-json.js";
 import {
   integratedLiveDrillCanonicalSha256
 } from "./integrated-live-drill-authorization.js";
 import {
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
   normalizeIntegratedLiveDrillProviderContext,
-  readIntegratedLiveDrillExactPrivateJson,
-  secureIntegratedLiveDrillPrivateRoot,
   validateIntegratedLiveDrillProviderDispatchAuthorizationPure
 } from "./integrated-live-drill-provider-evidence.js";
 import {
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT,
-  readBoundIntegratedLiveDrillProviderOrchestrationAdmission,
   validateIntegratedLiveDrillProviderSupervisorCompletion
 } from "./integrated-live-drill-provider-orchestration.js";
 import {
@@ -22,20 +15,15 @@ import {
 } from "./integrated-live-drill-provider-finalization.js";
 import {
   readIntegratedLiveDrillDurableProviderDispatchResult,
-  readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation,
-  runIntegratedLiveDrillProviderRecovery
+  readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation
 } from "./integrated-live-drill-provider-recovery.js";
+import { buildProviderDispatchControlBinding } from
+  "./provider-dispatch-binding.js";
+import { ProviderDispatchResolver } from "./provider-dispatch-resolver.js";
 import {
-  buildProviderDispatchControlBinding,
-  ProviderDispatchControl
-} from "./provider-dispatch-control.js";
-import {
-  DeterministicRecoveryBroker,
-  principalBindingHash,
-  RecoveryAuditSink
-} from "./recovery-broker.js";
-import { recoveryAuditTargetIdentity } from
-  "./recovery-continuity-identity.js";
+  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA,
+  validateIntegratedLiveDrillExecutionGrant
+} from "./integrated-live-drill-dispatch-broker.js";
 import {
   INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
@@ -44,25 +32,14 @@ import {
 } from "./integrated-live-drill-runtime.js";
 
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA =
-  "tideproof.highwater-drill-provider-reconciliation.v1";
-export const INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_PATH_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_PATH";
-export const INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA =
-  "tideproof.highwater-drill-provider-reconciliation-input.v1";
+  "tideproof.highwater-drill-provider-reconciliation.v2";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_OUTCOMES =
   Object.freeze([
-    "ALREADY_TERMINAL_OR_CONSUMED",
-    "AUTHORITY_NOT_CURRENT",
-    "COMPLETED",
-    "DISPATCH_GRANTED",
     "RESOLVED",
-    "UNKNOWN_RECORDED"
+    "RESOLVED_ABSENT"
   ]);
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
-const MAX_INPUT_BYTES = 8 * 1024 * 1024;
-const RECONCILIATION_PRINCIPAL =
-  "principal://tideproof-demo-successor";
 const SAFE_ENVIRONMENT_NAMES = Object.freeze([
   "__CF_USER_TEXT_ENCODING",
   "LANG",
@@ -71,17 +48,13 @@ const SAFE_ENVIRONMENT_NAMES = Object.freeze([
   "NO_COLOR",
   "PATH",
   "TMPDIR",
-  "PRIMARY_AUDIT_DATABASE_URL",
+  "PRIMARY_PROVIDER_RECONCILE_DATABASE_URL",
   INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_PATH_ENVIRONMENT,
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT",
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT"
 ]);
 
 function reject(code, cause) {
@@ -158,8 +131,8 @@ export function integratedLiveDrillProviderReconciliationEnvironment(
         .filter((name) => typeof sourceEnvironment?.[name] === "string")
         .map((name) => [name, sourceEnvironment[name]])
     ),
-    PRIMARY_AUDIT_DATABASE_URL: requiredText(
-      sourceEnvironment?.PRIMARY_AUDIT_DATABASE_URL,
+    PRIMARY_PROVIDER_RECONCILE_DATABASE_URL: requiredText(
+      sourceEnvironment?.PRIMARY_PROVIDER_RECONCILE_DATABASE_URL,
       "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_ENVIRONMENT_REJECTED",
       16_384
     ),
@@ -173,12 +146,11 @@ export function validateIntegratedLiveDrillProviderReconciliationInput(value) {
   requireCondition(
     exactRecord(value, [
       "context",
-      "providerAdmissionReceiptSha256",
+      "executionGrant",
       "schemaVersion"
     ]) &&
       value.schemaVersion ===
-        INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA &&
-      HEX_64.test(value.providerAdmissionReceiptSha256 ?? ""),
+        INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA,
     code
   );
   const context = normalizeIntegratedLiveDrillProviderContext(value.context, {
@@ -186,7 +158,9 @@ export function validateIntegratedLiveDrillProviderReconciliationInput(value) {
   });
   return Object.freeze({
     context,
-    providerAdmissionReceiptSha256: value.providerAdmissionReceiptSha256,
+    executionGrant: validateIntegratedLiveDrillExecutionGrant(
+      value.executionGrant
+    ),
     schemaVersion: value.schemaVersion
   });
 }
@@ -229,7 +203,8 @@ export function validateIntegratedLiveDrillProviderReconciliationReceipt(
       value.runId === runId &&
       HEX_64.test(value.controlBindingSha256 ?? "") &&
       HEX_64.test(receiptSha256 ?? "") &&
-      ["COMPLETED", "CONSUMED", "EXPIRED", "UNKNOWN_DO_NOT_ACT"]
+      ["ABSENT", "COMPLETED", "EXECUTING", "EXPIRED", "GRANTED",
+        "UNKNOWN_DO_NOT_ACT"]
         .includes(value.state) &&
       INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_OUTCOMES.includes(
         value.transitionOutcome
@@ -254,49 +229,32 @@ export function validateIntegratedLiveDrillProviderReconciliationReceipt(
 
 export async function reconcileIntegratedLiveDrillProviderDispatchControl({
   binding,
-  control,
+  resolver,
   durable
 }) {
   const code =
     "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_UNKNOWN_DO_NOT_ACT";
   requireCondition(
-    control &&
-      typeof control === "object" &&
-      typeof control.resolve === "function" &&
-      typeof control.complete === "function" &&
+    resolver &&
+      typeof resolver === "object" &&
+      typeof resolver.resolve === "function" &&
       (durable === null ||
         exactRecord(durable, [
           "mcpResultSha256",
-          "providerDispatchOwnerNonce",
           "sessionCloseSha256"
         ])),
     code
   );
   let resolved;
   try {
-    resolved = await control.resolve(binding);
+    resolved = await resolver.resolve(binding);
     if (durable !== null) {
       requireCondition(
         HEX_64.test(durable.mcpResultSha256 ?? "") &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
-            .test(durable.providerDispatchOwnerNonce ?? "") &&
-          HEX_64.test(durable.sessionCloseSha256 ?? ""),
-        code
-      );
-      if (resolved.state === "CONSUMED") {
-        resolved = await control.complete(
-          binding,
-          {
-            mcpResultSha256: durable.mcpResultSha256,
-            sessionCloseSha256: durable.sessionCloseSha256
-          },
-          durable.providerDispatchOwnerNonce
-        );
-      }
-      requireCondition(
-        resolved.state === "COMPLETED" &&
+          HEX_64.test(durable.sessionCloseSha256 ?? "") &&
+          (resolved.state !== "COMPLETED" ||
           resolved.mcpResultSha256 === durable.mcpResultSha256 &&
-          resolved.sessionCloseSha256 === durable.sessionCloseSha256,
+            resolved.sessionCloseSha256 === durable.sessionCloseSha256),
         code
       );
     }
@@ -309,27 +267,11 @@ export async function reconcileIntegratedLiveDrillProviderDispatchControl({
 
 export async function runIntegratedLiveDrillProviderReconciliation({
   auditClientFactory = null,
-  decisionRootDescriptor,
   environment,
-  evidenceRootDescriptor,
   input
 }) {
   const isolated = normalizedEnvironment(environment);
   const validated = validateIntegratedLiveDrillProviderReconciliationInput(input);
-  requireCondition(
-    Number.isSafeInteger(decisionRootDescriptor) &&
-      Number.isSafeInteger(evidenceRootDescriptor),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_ADMISSION_REJECTED"
-  );
-  const assertProviderAdmission = () =>
-    readBoundIntegratedLiveDrillProviderOrchestrationAdmission({
-      context: validated.context,
-      decisionRootDescriptor,
-      evidenceRootDescriptor,
-      expectedReceiptSha256: validated.providerAdmissionReceiptSha256,
-      forbiddenRootPath: validated.context.forbiddenRootPath
-    });
-  assertProviderAdmission();
   const preparation =
     readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
       validated.context
@@ -375,9 +317,16 @@ export async function runIntegratedLiveDrillProviderReconciliation({
     earliestControllingExpiry: Math.min(...expiries),
     latestControllingIssuedAt: Math.max(...issued)
   });
-  const control = new ProviderDispatchControl({
+  requireCondition(
+    validated.executionGrant.authorizationId === binding.authorizationId &&
+      validated.executionGrant.controlBindingSha256 ===
+        binding.controlBindingSha256 &&
+      validated.executionGrant.state === "EXECUTING",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_ADMISSION_REJECTED"
+  );
+  const resolver = new ProviderDispatchResolver({
     connectionString: requiredText(
-      isolated.PRIMARY_AUDIT_DATABASE_URL,
+      isolated.PRIMARY_PROVIDER_RECONCILE_DATABASE_URL,
       "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_DATABASE_REJECTED",
       16_384
     ),
@@ -388,77 +337,11 @@ export async function runIntegratedLiveDrillProviderReconciliation({
   );
   const resolved = await reconcileIntegratedLiveDrillProviderDispatchControl({
     binding,
-    control,
+    resolver,
     durable
   });
   let providerCompletion = null;
-  if (durable !== null) {
-    const trusted = validated.context.trustedRunContext;
-    const intent = validated.context.preCallIntent;
-    const databaseUrl = requiredText(
-      isolated.PRIMARY_AUDIT_DATABASE_URL,
-      "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_DATABASE_REJECTED",
-      16_384
-    );
-    const currentAuditTargetIdentity = recoveryAuditTargetIdentity({
-      connectionString: databaseUrl,
-      primaryClusterId:
-        trusted.recoveryBrokerConfiguration.expectedSourceClusterId
-    });
-    requireCondition(
-      canonicalJson(currentAuditTargetIdentity) === canonicalJson(
-        trusted.recoveryBrokerConfiguration.auditTargetIdentity
-      ) &&
-        principalBindingHash(RECONCILIATION_PRINCIPAL) ===
-          intent.subjectBindingSha256,
-      "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_BINDING_REJECTED"
-    );
-    const denyProvider = () => reject(
-      "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_PROVIDER_ACTION_REJECTED"
-    );
-  const providerDeniedClient = Object.freeze({
-      async close() {},
-      semanticRequestEvidence() { denyProvider(); },
-      selectQuery() { denyProvider(); },
-      transportEvidence() { denyProvider(); }
-    });
-    const broker = new DeterministicRecoveryBroker({
-      auditSink: new RecoveryAuditSink({
-        connectionString: databaseUrl,
-        clientFactory: auditClientFactory
-      }),
-      auditTargetIdentity: currentAuditTargetIdentity,
-      buildIdentity: trusted.spec.sourceBuildIdentity,
-      expectedSourceClusterId:
-        trusted.recoveryBrokerConfiguration.expectedSourceClusterId,
-      mcpClient: providerDeniedClient,
-      providerDispatchControl: control,
-      recoveryClusterId: intent.recoveryClusterId,
-      sessionResolver: Object.freeze({
-        async resolve({ authenticatedPrincipal }) {
-          requireCondition(
-            authenticatedPrincipal === RECONCILIATION_PRINCIPAL &&
-              principalBindingHash(authenticatedPrincipal) ===
-                intent.subjectBindingSha256,
-            "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_BINDING_REJECTED"
-          );
-          return Object.freeze({
-            recoverySessionId: intent.recoverySessionId,
-            sourceDigest: intent.sourceDigest,
-            subjectBindingHash: intent.subjectBindingSha256,
-            tenantId: intent.tenantId
-          });
-        }
-      }),
-      trustedPublisherKeys:
-        trusted.committedTrustRoot.trustedPublisherKeys
-    });
-    await runIntegratedLiveDrillProviderRecovery({
-      authenticatedPrincipal: RECONCILIATION_PRINCIPAL,
-      assertProviderAdmission,
-      broker,
-      context: validated.context
-    });
+  if (durable !== null && resolved.state === "COMPLETED") {
     providerCompletion =
       reconstructIntegratedLiveDrillProviderFinalizationCompletion({
         context: validated.context,
@@ -489,40 +372,5 @@ export async function runIntegratedLiveDrillProviderReconciliation({
     receiptSha256: integratedLiveDrillCanonicalSha256(body)
     }),
     { authorizationId: binding.authorizationId, runId: binding.runId }
-  );
-}
-
-export function readIntegratedLiveDrillProviderReconciliationInput(
-  environment
-) {
-  const isolated = normalizedEnvironment(environment);
-  const rootPath = requiredText(
-    isolated.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED"
-  );
-  const forbiddenRootPath = requiredText(
-    isolated.TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED"
-  );
-  const secure = secureIntegratedLiveDrillPrivateRoot(
-    rootPath,
-    forbiddenRootPath,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED"
-  );
-  const inputPath = path.resolve(requiredText(
-    isolated[INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_PATH_ENVIRONMENT],
-    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED"
-  ));
-  requireCondition(
-    path.dirname(inputPath) === secure.rootPath,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED"
-  );
-  return validateIntegratedLiveDrillProviderReconciliationInput(
-    readIntegratedLiveDrillExactPrivateJson({
-      code: "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED",
-      filePath: inputPath,
-      maximumBytes: MAX_INPUT_BYTES,
-      secure
-    })
   );
 }

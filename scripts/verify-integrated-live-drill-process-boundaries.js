@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA =
-  "tideproof.highwater-drill-process-boundary-verification.v3";
+  "tideproof.highwater-drill-process-boundary-verification.v4";
 
 const ROOT = fs.realpathSync(path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -20,6 +20,10 @@ const WORKER_ROOTS = Object.freeze([
   "scripts/gate1-integrated-live-drill-provider-worker.js",
   "src/cloud/integrated-live-drill-provider-worker.js"
 ]);
+const PROVIDER_OPERATION_ROOTS = Object.freeze([
+  "scripts/gate1-integrated-live-drill-provider-operation-broker.js",
+  "src/cloud/integrated-live-drill-provider-operation-broker.js"
+]);
 const RECONCILER_ROOTS = Object.freeze([
   "scripts/gate1-integrated-live-drill-provider-reconciler.js",
   "src/cloud/integrated-live-drill-provider-reconciliation.js"
@@ -33,6 +37,14 @@ const SAFE_BUILTINS = new Set([
   "node:path",
   "node:url"
 ]);
+const PROVIDER_OPERATION_SAFE_BUILTINS = new Set([
+  ...SAFE_BUILTINS,
+  "node:net"
+]);
+const WORKER_SAFE_BUILTINS = new Set([
+  ...SAFE_BUILTINS,
+  "node:net"
+]);
 const FINALIZER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
   /(?:^|\/)database-runtime\.js$/u,
   /(?:^|\/)integrated-live-drill-provider-recovery\.js$/u,
@@ -43,7 +55,11 @@ const FINALIZER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
 const WORKER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
   /(?:^|\/)gate2-/u,
   /(?:^|\/)integrated-live-drill-provider-finalization\.js$/u,
-  /(?:^|\/)integrated-live-drill-provider-finalizer\.js$/u
+  /(?:^|\/)integrated-live-drill-provider-finalizer\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-operation-broker\.js$/u,
+  /(?:^|\/)managed-mcp-client\.js$/u,
+  /(?:^|\/)provider-dispatch-finalize-control\.js$/u,
+  /(?:^|\/)provider-dispatch-redeem-control\.js$/u
 ]);
 const RECONCILER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
   /(?:^|\/)integrated-live-drill-provider-worker\.js$/u,
@@ -148,11 +164,12 @@ function collectGraph(rootPaths) {
 
 function validateGraph(graph, {
   allowedExternalPackages,
+  allowedBuiltins = SAFE_BUILTINS,
   forbiddenPathPatterns,
   name
 }) {
   for (const builtin of graph.builtins) {
-    if (!SAFE_BUILTINS.has(builtin)) {
+    if (!allowedBuiltins.has(builtin)) {
       reject(
         "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_BUILTIN_REJECTED",
         `${name}:${builtin}`
@@ -196,10 +213,8 @@ function validateSupervisorSource() {
     }
   }
   for (const required of [
-    "integratedLiveDrillProviderFinalizerEnvironment(",
-    "integratedLiveDrillProviderWorkerEnvironment(",
-    "scripts/gate1-integrated-live-drill-provider-worker.js",
-    "scripts/gate2-integrated-live-drill-provider-finalizer.js"
+    "INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_RESUME_DISABLED",
+    "mode === \"PREPARE\""
   ]) {
     if (!source.includes(required)) {
       reject(
@@ -210,7 +225,9 @@ function validateSupervisorSource() {
   }
   if (
     /new\s+CockroachManagedMcpRecoveryClient\b/u.test(source) ||
-    /new\s+DeterministicRecoveryBroker\b/u.test(source)
+    /new\s+DeterministicRecoveryBroker\b/u.test(source) ||
+    /integratedLiveDrillProviderWorkerEnvironment\b/u.test(source) ||
+    /integratedLiveDrillProviderFinalizerEnvironment\b/u.test(source)
   ) {
     reject("INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SUPERVISOR_REJECTED");
   }
@@ -219,8 +236,9 @@ function validateSupervisorSource() {
     legacyRecoveryEntryPointImported: false,
     managedMcpClientConstructed: false,
     path: SUPERVISOR_PATH,
-    providerFinalizerEnvironmentRequired: true,
-    providerWorkerEnvironmentRequired: true
+    providerFinalizerEnvironmentRequired: false,
+    providerWorkerEnvironmentRequired: false,
+    resumeDisabled: true
   });
 }
 
@@ -232,9 +250,21 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
   });
   const worker = validateGraph(collectGraph(WORKER_ROOTS), {
     allowedExternalPackages: new Set(["pg"]),
+    allowedBuiltins: WORKER_SAFE_BUILTINS,
     forbiddenPathPatterns: WORKER_FORBIDDEN_PATH_PATTERNS,
     name: "worker"
   });
+  const providerOperation = validateGraph(
+    collectGraph(PROVIDER_OPERATION_ROOTS),
+    {
+      allowedBuiltins: PROVIDER_OPERATION_SAFE_BUILTINS,
+      allowedExternalPackages: new Set(["pg"]),
+      forbiddenPathPatterns: Object.freeze([
+        /(?:^|\/)integrated-live-drill-provider-reconciliation\.js$/u
+      ]),
+      name: "provider-operation"
+    }
+  );
   const reconciler = validateGraph(collectGraph(RECONCILER_ROOTS), {
     allowedExternalPackages: new Set(["pg"]),
     forbiddenPathPatterns: RECONCILER_FORBIDDEN_PATH_PATTERNS,
@@ -248,12 +278,22 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
     !worker.modules.includes(
       "src/cloud/integrated-live-drill-provider-recovery.js"
     ) ||
-    !worker.modules.includes(
-      "src/cloud/integrated-live-drill-provider-orchestration.js"
-    ) ||
-    !worker.modules.includes("src/cloud/managed-mcp-client.js") ||
     !worker.modules.includes("src/cloud/recovery-broker.js") ||
+    worker.modules.includes("src/cloud/managed-mcp-client.js") ||
+    !worker.modules.includes(
+      "src/cloud/brokered-provider-operation-client.js"
+    ) ||
+    !providerOperation.modules.includes("src/cloud/managed-mcp-client.js") ||
+    !providerOperation.modules.includes(
+      "src/cloud/provider-dispatch-redeem-control.js"
+    ) ||
+    !providerOperation.modules.includes(
+      "src/cloud/provider-dispatch-finalize-control.js"
+    ) ||
     !reconciler.modules.includes(
+      "src/cloud/provider-dispatch-resolver.js"
+    ) ||
+    reconciler.modules.includes(
       "src/cloud/provider-dispatch-control.js"
     ) ||
     reconciler.modules.includes("src/cloud/managed-mcp-client.js")
@@ -263,6 +303,7 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
   return Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA,
     finalizer,
+    providerOperation,
     reconciler,
     supervisor,
     worker,

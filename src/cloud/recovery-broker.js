@@ -807,7 +807,7 @@ export class DeterministicRecoveryBroker {
   #buildIdentity;
   #expectedSourceClusterId;
   #mcpClient;
-  #providerDispatchControl;
+  #providerDispatchFinalizer;
   #recoveryClusterId;
   #sessionResolver;
   #trustedPublisherKeys;
@@ -818,7 +818,7 @@ export class DeterministicRecoveryBroker {
     auditSink,
     auditTargetIdentity = null,
     buildIdentity,
-    providerDispatchControl = null,
+    providerDispatchFinalizer = null,
     recoveryClusterId,
     expectedSourceClusterId,
     trustedPublisherKeys
@@ -838,17 +838,15 @@ export class DeterministicRecoveryBroker {
     this.#auditTargetIdentity = auditTargetIdentity;
     this.#buildIdentity = requireText(buildIdentity, "buildIdentity");
     if (
-      providerDispatchControl !== null &&
+      providerDispatchFinalizer !== null &&
       (
-        typeof providerDispatchControl.consume !== "function" ||
-        typeof providerDispatchControl.complete !== "function" ||
-        typeof providerDispatchControl.markUnknown !== "function" ||
-        typeof providerDispatchControl.resolve !== "function"
+        typeof providerDispatchFinalizer.complete !== "function" ||
+        typeof providerDispatchFinalizer.markUnknown !== "function"
       )
     ) {
-      throw new TypeError("providerDispatchControl is invalid");
+      throw new TypeError("providerDispatchFinalizer is invalid");
     }
-    this.#providerDispatchControl = providerDispatchControl;
+    this.#providerDispatchFinalizer = providerDispatchFinalizer;
     this.#recoveryClusterId = requireUuid(
       recoveryClusterId,
       "recoveryClusterId"
@@ -860,31 +858,26 @@ export class DeterministicRecoveryBroker {
     this.#trustedPublisherKeys = trustedPublisherKeys;
   }
 
-  #requiredProviderDispatchControl() {
-    if (this.#providerDispatchControl === null) {
-      throw new Error("RECOVERY_PROVIDER_DISPATCH_CONTROL_REQUIRED");
+  #requiredProviderDispatchFinalizer() {
+    if (this.#providerDispatchFinalizer === null) {
+      throw new Error("RECOVERY_PROVIDER_DISPATCH_FINALIZER_REQUIRED");
     }
-    return this.#providerDispatchControl;
+    return this.#providerDispatchFinalizer;
   }
 
-  consumeProviderDispatch(binding) {
-    return this.#requiredProviderDispatchControl().consume(binding);
-  }
-
-  completeProviderDispatch(binding, terminal, ownerNonce) {
-    return this.#requiredProviderDispatchControl().complete(
+  completeProviderDispatch(binding, grant, terminal) {
+    return this.#requiredProviderDispatchFinalizer().complete(
       binding,
-      terminal,
-      ownerNonce
+      grant,
+      terminal
     );
   }
 
-  markProviderDispatchUnknown(binding) {
-    return this.#requiredProviderDispatchControl().markUnknown(binding);
-  }
-
-  resolveProviderDispatch(binding) {
-    return this.#requiredProviderDispatchControl().resolve(binding);
+  markProviderDispatchUnknown(binding, grant) {
+    return this.#requiredProviderDispatchFinalizer().markUnknown(
+      binding,
+      grant
+    );
   }
 
   #unknown(reason) {

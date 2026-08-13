@@ -25,6 +25,11 @@ const USERS = [
   "tp_dispatch_user",
   "tp_recovery_source_user",
   "tp_recovery_audit_user",
+  "tp_provider_claim_user",
+  "tp_provider_begin_user",
+  "tp_provider_redeem_user",
+  "tp_provider_finalize_user",
+  "tp_provider_reconcile_user",
   "tp_audit_user"
 ];
 
@@ -140,6 +145,147 @@ async function expectPrivilegeDeniedOrUndefined(client, query, values = []) {
     throw error;
   }
   throw new Error("expected legacy resolver denial or absence");
+}
+
+const PROVIDER_PROBE = Object.freeze({
+  authorizationId: "11111111-1111-4111-8111-111111111111",
+  bindingSha256: "a".repeat(64),
+  completionCapability: "b".repeat(64),
+  completionCapabilitySha256: "c".repeat(64),
+  executionCapability: "d".repeat(64),
+  executionCapabilitySha256: "e".repeat(64),
+  grantId: "22222222-2222-4222-8222-222222222222",
+  interactionId: "33333333-3333-4333-8333-333333333333",
+  issuedAt: "2026-08-12T00:00:00.000Z",
+  expiresAt: "2026-08-13T00:00:00.000Z",
+  runId: "44444444-4444-4444-8444-444444444444",
+  tenantId: "55555555-5555-4555-8555-555555555555",
+  workerSpecSha256: "f".repeat(64)
+});
+
+const FORBIDDEN_PROVIDER_MUTATIONS = Object.freeze([
+  Object.freeze({
+    name: "claim",
+    sql: `
+      SELECT * FROM tp_api.g1_claim_provider_dispatch_v2(
+        $1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID,
+        $6, $7, $8, $9, $10, $11, $12,
+        $13::TIMESTAMPTZ, $14::TIMESTAMPTZ, $15, $16
+      )
+    `,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.tenantId,
+      PROVIDER_PROBE.runId,
+      PROVIDER_PROBE.interactionId,
+      PROVIDER_PROBE.bindingSha256,
+      "1".repeat(64),
+      "2".repeat(64),
+      "3".repeat(64),
+      "4".repeat(40),
+      "5".repeat(40),
+      "6".repeat(64),
+      PROVIDER_PROBE.issuedAt,
+      PROVIDER_PROBE.expiresAt,
+      PROVIDER_PROBE.executionCapabilitySha256,
+      PROVIDER_PROBE.workerSpecSha256
+    ]
+  }),
+  Object.freeze({
+    name: "begin",
+    sql: `SELECT * FROM tp_api.g1_begin_provider_dispatch_v2(
+      $1::UUID, $2::UUID, $3, $4, $5
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.executionCapability,
+      PROVIDER_PROBE.workerSpecSha256
+    ]
+  }),
+  Object.freeze({
+    name: "redeem",
+    sql: `SELECT * FROM tp_api.g1_redeem_provider_dispatch_v2(
+      $1::UUID, $2::UUID, $3, $4, $5, $6
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.executionCapability,
+      PROVIDER_PROBE.completionCapabilitySha256,
+      PROVIDER_PROBE.workerSpecSha256
+    ]
+  }),
+  Object.freeze({
+    name: "complete",
+    sql: `SELECT * FROM tp_api.g1_complete_provider_dispatch_v2(
+      $1::UUID, $2::UUID, $3, $4, $5, $6
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.completionCapability,
+      "7".repeat(64),
+      "8".repeat(64)
+    ]
+  }),
+  Object.freeze({
+    name: "markUnknown",
+    sql: `SELECT * FROM tp_api.g1_mark_provider_dispatch_unknown_v2(
+      $1::UUID, $2::UUID, $3, $4
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.completionCapability
+    ]
+  })
+]);
+
+const LEGACY_PROVIDER_TRANSITION_SQL = `
+  SELECT * FROM tp_api.g1_transition_provider_dispatch_v1(
+    'CONSUME', $1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID,
+    $6, $7, $8, $9, $10, $11, $12,
+    $13::TIMESTAMPTZ, $14::TIMESTAMPTZ, NULL, NULL
+  )
+`;
+const LEGACY_PROVIDER_TRANSITION_VALUES = Object.freeze([
+  PROVIDER_PROBE.authorizationId,
+  PROVIDER_PROBE.tenantId,
+  PROVIDER_PROBE.runId,
+  PROVIDER_PROBE.interactionId,
+  PROVIDER_PROBE.grantId,
+  PROVIDER_PROBE.bindingSha256,
+  "1".repeat(64),
+  "2".repeat(64),
+  "3".repeat(64),
+  "4".repeat(40),
+  "5".repeat(40),
+  "6".repeat(64),
+  PROVIDER_PROBE.issuedAt,
+  PROVIDER_PROBE.expiresAt
+]);
+
+async function providerMutationDenials(client) {
+  const denials = {};
+  for (const probe of FORBIDDEN_PROVIDER_MUTATIONS) {
+    denials[probe.name] = await expectPrivilegeDeniedOrUndefined(
+      client,
+      probe.sql,
+      probe.values
+    );
+  }
+  denials.legacyTransition = await expectPrivilegeDeniedOrUndefined(
+    client,
+    LEGACY_PROVIDER_TRANSITION_SQL,
+    LEGACY_PROVIDER_TRANSITION_VALUES
+  );
+  return denials;
 }
 
 async function main() {
@@ -889,6 +1035,8 @@ async function main() {
           normalizedCapabilityRequest.requestDigest
         ]
       );
+      const providerControlMutationDenials =
+        await providerMutationDenials(client);
       const resolvedTrustRoot = await client.query(
         `
           SELECT *
@@ -1224,6 +1372,7 @@ async function main() {
         directRead,
         directTrustRootWrite,
         sourceResolverDenied,
+        providerControlMutationDenials,
         publisherTrustRootCommittedAt:
           resolvedTrustRoot.rows[0].committed_at,
         directWrite,
@@ -1236,6 +1385,42 @@ async function main() {
         changedReplayV3,
         changedFieldSameDigestV3,
         orphanTerminalV3
+      };
+    }
+  );
+
+  const providerReconcile = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_provider_reconcile_user",
+      passwords.tp_provider_reconcile_user
+    ),
+    async (client) => {
+      const directRead = await expectPrivilegeDenied(
+        client,
+        "SELECT * FROM tp_ledger.g1_provider_dispatch_controls_v2 LIMIT 1"
+      );
+      const providerControlMutationDenials =
+        await providerMutationDenials(client);
+      const resolved = await client.query(
+        `SELECT * FROM tp_api.g1_resolve_provider_dispatch_v2($1::UUID, $2)`,
+        [PROVIDER_PROBE.authorizationId, PROVIDER_PROBE.bindingSha256]
+      );
+      const row = resolved.rows[0];
+      if (
+        resolved.rowCount !== 1 || row?.state !== "ABSENT" ||
+        row?.transition_outcome !== "RESOLVED_ABSENT" ||
+        Object.keys(row).some((name) =>
+          /nonce|capability/u.test(name)
+        )
+      ) {
+        throw new Error("provider reconcile capability invariant failed");
+      }
+      return {
+        directRead,
+        providerControlMutationDenials,
+        resolveColumns: Object.keys(row).sort(),
+        resolveState: row.state
       };
     }
   );
@@ -1274,6 +1459,7 @@ async function main() {
         dispatch,
         recoverySource,
         recoveryAudit,
+        providerReconcile,
         audit,
         capabilityAuthority: {
           receiptCount: capabilitySnapshot.receipts.length,

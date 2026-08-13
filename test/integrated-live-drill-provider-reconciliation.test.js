@@ -10,9 +10,30 @@ import {
 } from "../src/cloud/integrated-live-drill-provider-reconciliation.js";
 import { integratedLiveDrillCanonicalSha256 } from
   "../src/cloud/integrated-live-drill-authorization.js";
+import {
+  INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_SCHEMA
+} from "../src/cloud/integrated-live-drill-dispatch-broker.js";
 
 const AUTHORIZATION_ID = "11111111-1111-4111-8111-111111111111";
 const RUN_ID = "22222222-2222-4222-8222-222222222222";
+
+function executionGrant() {
+  const body = Object.freeze({
+    authorizationId: AUTHORIZATION_ID,
+    controlBindingSha256: "a".repeat(64),
+    executionCapabilitySha256: "b".repeat(64),
+    grantId: "33333333-3333-4333-8333-333333333333",
+    operationNonceSha256: "c".repeat(64),
+    requestSha256: "d".repeat(64),
+    schemaVersion: INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_SCHEMA,
+    state: "EXECUTING",
+    workerSpecSha256: "e".repeat(64)
+  });
+  return Object.freeze({
+    ...body,
+    receiptSha256: integratedLiveDrillCanonicalSha256(body)
+  });
+}
 
 function receipt() {
   const body = Object.freeze({
@@ -28,7 +49,7 @@ function receipt() {
     providerBacked: false,
     runId: RUN_ID,
     sessionCloseSha256: null,
-    state: "CONSUMED",
+    state: "GRANTED",
     status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED",
     transitionOutcome: "RESOLVED"
   });
@@ -38,18 +59,17 @@ function receipt() {
   });
 }
 
-test("reconciliation environment carries database authority without provider API authority", () => {
+test("reconciliation environment carries resolve-only authority without provider API authority", () => {
   const environment = integratedLiveDrillProviderReconciliationEnvironment({
     LANG: "C",
     MCP_API_KEY: "must-not-cross-boundary",
-    PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof"
-  }, {
-    TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: "{}"
-  });
+    PRIMARY_PROVIDER_RECONCILE_DATABASE_URL:
+      "postgresql://reconcile.invalid/tideproof"
+  }, {});
   assert.equal(environment.LANG, "C");
   assert.deepEqual(
-    environment.PRIMARY_AUDIT_DATABASE_URL,
-    "postgresql://audit.invalid/tideproof"
+    environment.PRIMARY_PROVIDER_RECONCILE_DATABASE_URL,
+    "postgresql://reconcile.invalid/tideproof"
   );
   assert.equal("MCP_API_KEY" in environment, false);
 });
@@ -85,24 +105,16 @@ test("reconciliation receipt is exact, non-accepting, and capability-reduced", (
   }
 });
 
-test("audit-only reconciliation observes but never consumes an undispatched authorization", async () => {
+test("audit-only reconciliation observes with a resolver that has no mutation surface", async () => {
   const calls = [];
   const resolved = Object.freeze({
     mcpResultSha256: null,
     sessionCloseSha256: null,
-    state: "CONSUMED"
+    state: "GRANTED"
   });
   const actual = await reconcileIntegratedLiveDrillProviderDispatchControl({
     binding: Object.freeze({ controlBindingSha256: "b".repeat(64) }),
-    control: {
-      async complete() {
-        calls.push("complete");
-        throw new Error("completion must not run without durable provider evidence");
-      },
-      async consume() {
-        calls.push("consume");
-        throw new Error("reconciliation must never consume dispatch authority");
-      },
+    resolver: {
       async resolve() {
         calls.push("resolve");
         return resolved;
@@ -114,48 +126,53 @@ test("audit-only reconciliation observes but never consumes an undispatched auth
   assert.deepEqual(calls, ["resolve"]);
 });
 
-test("audit-only reconciliation completes a consumed row from the durable owner token", async () => {
+test("audit-only reconciliation never mutates an executing row with durable evidence", async () => {
   const calls = [];
   const binding = Object.freeze({ controlBindingSha256: "b".repeat(64) });
   const durable = Object.freeze({
     mcpResultSha256: "c".repeat(64),
-    providerDispatchOwnerNonce: "33333333-3333-4333-8333-333333333333",
     sessionCloseSha256: "d".repeat(64)
-  });
-  const completed = Object.freeze({
-    mcpResultSha256: durable.mcpResultSha256,
-    sessionCloseSha256: durable.sessionCloseSha256,
-    state: "COMPLETED"
   });
   const actual = await reconcileIntegratedLiveDrillProviderDispatchControl({
     binding,
-    control: {
-      async complete(actualBinding, terminal, ownerNonce) {
-        calls.push(["complete", actualBinding, terminal, ownerNonce]);
-        return completed;
-      },
+    resolver: {
       async resolve(actualBinding) {
         calls.push(["resolve", actualBinding]);
         return Object.freeze({
           mcpResultSha256: null,
           sessionCloseSha256: null,
-          state: "CONSUMED"
+          state: "EXECUTING"
         });
       }
     },
     durable
   });
-  assert.equal(actual, completed);
+  assert.equal(actual.state, "EXECUTING");
   assert.deepEqual(calls, [
-    ["resolve", binding],
-    [
-      "complete",
-      binding,
-      {
-        mcpResultSha256: durable.mcpResultSha256,
-        sessionCloseSha256: durable.sessionCloseSha256
-      },
-      durable.providerDispatchOwnerNonce
-    ]
+    ["resolve", binding]
   ]);
+});
+
+test("reconciliation input accepts only an exact global EXECUTING grant", async () => {
+  const { validateIntegratedLiveDrillProviderReconciliationInput } =
+    await import("../src/cloud/integrated-live-drill-provider-reconciliation.js");
+  const fixture = Object.freeze({
+    context: Object.freeze({ marker: "invalid-context-is-checked-first" }),
+    executionGrant: executionGrant(),
+    schemaVersion: "tideproof.highwater-drill-provider-reconciliation-input.v2"
+  });
+  assert.throws(
+    () => validateIntegratedLiveDrillProviderReconciliationInput(fixture),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED/u
+  );
+  const withLegacyLocalReceipt = Object.freeze({
+    ...fixture,
+    providerAdmissionReceiptSha256: "f".repeat(64)
+  });
+  assert.throws(
+    () => validateIntegratedLiveDrillProviderReconciliationInput(
+      withLegacyLocalReceipt
+    ),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED/u
+  );
 });

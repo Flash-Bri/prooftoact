@@ -3,7 +3,7 @@ use warnings;
 
 use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
-use Fcntl qw(O_RDONLY O_NOFOLLOW SEEK_SET);
+use Fcntl qw(F_SETFD O_RDONLY O_NOFOLLOW SEEK_SET);
 use File::Basename qw(dirname);
 use JSON::PP qw(decode_json);
 
@@ -35,24 +35,43 @@ assert_root_owned_immutable_directory_chain($stage_root);
 $> != 0
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_PRIVILEGE_REJECTED");
 
-@ARGV >= 2
+@ARGV >= 1
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_ARGUMENT_REJECTED");
-my ($component_name, $manifest_sha256, @component_args) = @ARGV;
-$component_name =~ /\A(?:orchestrator|dvi|authority-race|recovery|supervisor|worker|finalizer|reconciler)\z/
+my ($component_name, @component_args) = @ARGV;
+$component_name =~ /\A(?:orchestrator|dvi|authority-race|dispatch-broker|provider-operation|supervisor|worker|finalizer|reconciler)\z/
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_REJECTED");
-$manifest_sha256 =~ /\A[0-9a-f]{64}\z/
-  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
-defined($ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256})
-  && $ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256} eq
-    $manifest_sha256
-  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
 
 for my $name (keys %ENV) {
   $name !~ /\A(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*)\z/
     or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_ENVIRONMENT_REJECTED");
 }
 
-my $manifest_name = "runtime-manifest-$manifest_sha256.json";
+opendir(my $stage_directory, $stage_root)
+  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
+my @manifest_names = grep {
+  /\Aruntime-manifest-[0-9a-f]{64}\.json\z/
+} readdir($stage_directory);
+closedir($stage_directory)
+  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
+@manifest_names == 1
+  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
+my $manifest_name = $manifest_names[0];
+$manifest_name =~ /\Aruntime-manifest-([0-9a-f]{64})\.json\z/
+  or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
+my $manifest_sha256 = $1;
+if (defined($ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256})) {
+  $ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256} eq
+    $manifest_sha256
+    or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
+}
+if (defined($ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT})) {
+  $ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT} eq $stage_root
+    or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_REJECTED");
+}
+$ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256} =
+  $manifest_sha256;
+$ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT} = $stage_root;
+
 my $manifest_path = "$stage_root/$manifest_name";
 sysopen(my $manifest_fh, $manifest_path, O_RDONLY | O_NOFOLLOW)
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
@@ -119,8 +138,9 @@ my $node_fh = open_root_owned_exact_file(
   $node_sha256,
   "INTEGRATED_LIVE_DRILL_RUNTIME_NODE_REJECTED"
 );
-close($node_fh)
+fcntl($node_fh, F_SETFD, 0)
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_NODE_REJECTED");
+my $node_descriptor_path = "/proc/self/fd/" . fileno($node_fh);
 
 open(STDIN, "<&", fileno($bundle_fh))
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_REJECTED");
@@ -131,7 +151,7 @@ $ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT} = $component_name;
 $ENV{TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256} =
   $bundle_sha256;
 exec {
-  "$stage_root/$node_name"
-} "$stage_root/$node_name", "--disable-proto=throw", "--input-type=module", "-",
+  $node_descriptor_path
+} $node_descriptor_path, "--disable-proto=throw", "--input-type=module", "-",
   @component_args
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_EXEC_REJECTED");

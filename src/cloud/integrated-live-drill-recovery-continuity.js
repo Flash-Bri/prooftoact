@@ -1726,7 +1726,8 @@ async function runIntegratedLiveDrillRecoveryContinuityW2Internal(
     result = await mcpCall(Object.freeze({
       logicalMcpRequestSha256: journal.bound.logicalMcpRequestSha256
     }));
-  } catch {
+  } catch (cause) {
+    if (cause?.simulatedProcessDeath === true) throw cause;
     journal = readEntries(context, secure);
     persistUnknownDisposition(
       context,

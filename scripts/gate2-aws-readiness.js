@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { assertNoAwsEndpointOverrides } from "../src/cloud/aws-evidence-identity.js";
 import { templateReceipt } from "../src/cloud/aws-gate2-template.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 import { validateIntegratedLiveDrillRuntimeManifest } from
   "../src/cloud/integrated-live-drill-runtime.js";
 import { validateOfficialNodeRuntimeMetadata } from
@@ -587,7 +588,7 @@ function validateLiveDrillRuntime(
       manifest.sourceCommit === sourceCommit &&
       manifest.treeDigest === treeDigest &&
       manifest.packageLockDigest === packageLockDigest &&
-      manifest.toolchainSha256 === sha256(JSON.stringify(toolchain)) &&
+      manifest.toolchainSha256 === sha256(canonicalJson(toolchain)) &&
       manifest.launcher.file === path.basename(runtime.launcher.path) &&
       manifest.launcher.sha256 === runtime.launcher.sha256 &&
       manifest.node.file === path.basename(runtime.node.path) &&

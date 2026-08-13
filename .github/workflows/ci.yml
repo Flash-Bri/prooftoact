@@ -14,12 +14,98 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-pr-head-no-secrets:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out exact pull-request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+
+      - name: Normalize exact GitHub Actions checkout
+        env:
+          EXPECTED_PULL_REQUEST_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          EXPECTED_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: node scripts/normalize-actions-checkout.js
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify proof manifest
+        run: npm run proof:verify
+
+      - name: Verify ProofToAct brand migration
+        run: npm run brand:verify
+
+      - name: Verify current claim surfaces
+        run: npm run claims:verify
+
+      - name: Verify current-source cost guards
+        run: npm run cost:verify
+
+      - name: Verify repository release governance snapshot
+        run: npm run governance:verify
+
+      - name: Verify current-surface rights inventory
+        run: npm run rights:verify
+
+      - name: Verify bounded release privacy controls
+        run: npm run privacy:verify
+
+      - name: Verify current source security boundaries
+        run: npm run security:verify
+
+      - name: Verify fail-closed submission draft
+        run: npm run submission:verify
+
+      - name: Verify bounded static accessibility controls
+        run: npm run accessibility:verify
+
+      - name: Verify rendered browser accessibility controls
+        run: npm run accessibility:browser
+
+      - name: Verify locked dependency inventory
+        run: npm run dependencies:verify
+
+      - name: Verify bundled third-party notices
+        run: npm run licenses:verify
+
+      - name: Run deterministic tests
+        run: npm test
+
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=low
+
+      - name: Rebuild Gate Two artifacts
+        run: npm run build:gate2
+
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
-      - name: Check out source
+      - name: Check out synthetic merge or official main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0

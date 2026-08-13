@@ -1,0 +1,52 @@
+[Unit]
+Description=ProofToAct provider-free integrated live-drill authorization handoff %i
+Documentation=https://github.com/Flash-Bri/prooftoact/blob/main/docs/FULL_DRILL_EVIDENCE.md
+Requires=prooftoact-integrated-live-drill@%i.service
+After=prooftoact-integrated-live-drill@%i.service
+ConditionPathExists=/var/lib/prooftoact/evidence/%i/%i.provider-orchestration-preparation.json
+RequiresMountsFor=/opt/prooftoact/runtime/runs/%i /var/lib/prooftoact/evidence/%i
+
+[Service]
+Type=oneshot
+SuccessExitStatus=3
+RemainAfterExit=yes
+User=prooftoact
+Group=prooftoact
+UMask=0077
+Environment=LANG=C.UTF-8
+Environment=LC_ALL=C.UTF-8
+Environment=PATH=/usr/bin:/bin
+UnsetEnvironment=NODE_OPTIONS NODE_PATH NODE_EXTRA_CA_CERTS LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH GLIBC_TUNABLES GCONV_PATH PERL5OPT PERL5LIB PERLLIB
+UnsetEnvironment=MCP_API_KEY OPENAI_API_KEY DATABASE_URL AUTHORIZER_DATABASE_URL DISPATCH_DATABASE_URL RECOVERY_DATABASE_URL PRIMARY_AUDIT_DATABASE_URL PRIMARY_RECOVERY_SOURCE_DATABASE_URL RECOVERY_PUBLISHER_DATABASE_URL RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64 RECOVERY_PUBLISHER_PASSWORD TIDEPROOF_AUDITOR_DATABASE_URL TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64 PRIMARY_PROVIDER_CLAIM_DATABASE_URL PRIMARY_PROVIDER_BEGIN_DATABASE_URL PRIMARY_PROVIDER_REDEEM_DATABASE_URL PRIMARY_PROVIDER_FINALIZE_DATABASE_URL PRIMARY_PROVIDER_RECONCILE_DATABASE_URL PGPASSWORD PGPASSFILE PGSERVICE PGSERVICEFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_AUTHORIZATION_TOKEN AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE
+Environment=TIDEPROOF_INTEGRATED_LIVE_DRILL_SYSTEMD_BOUNDARY=resume-v1
+Environment=TIDEPROOF_INTEGRATED_LIVE_DRILL_SYSTEMD_INSTANCE=%i
+LoadCredential=orchestrator-input:/etc/prooftoact/runs/%i/resume-input.json
+ExecStart=/usr/bin/perl /opt/prooftoact/runtime/runs/%i/verified-node-bundle-launcher.pl orchestrator
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadOnlyPaths=/opt/prooftoact/runtime/runs/%i /etc/prooftoact/runs/%i/resume-input.json
+ReadWritePaths=/var/lib/prooftoact/authorization/%i /var/lib/prooftoact/evidence/%i
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+KeyringMode=private
+StandardInput=null
+StandardOutput=journal
+StandardError=journal

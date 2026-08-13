@@ -271,7 +271,12 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g2_spend_authority_race_v1", /session_user <> 'tp_gate2_authorizer_user'/u],
     ["g1_resolve_request_v1", sharedAuthorizerGuard],
     ["g1_observe_authority_race_v1", sharedAuthorizerGuard],
-    ["g1_transition_provider_dispatch_v1", /session_user <> 'tp_recovery_audit_user'/u],
+    ["g1_claim_provider_dispatch_v2", /session_user <> 'tp_provider_claim_user'/u],
+    ["g1_begin_provider_dispatch_v2", /session_user <> 'tp_provider_begin_user'/u],
+    ["g1_redeem_provider_dispatch_v2", /session_user <> 'tp_provider_redeem_user'/u],
+    ["g1_complete_provider_dispatch_v2", /session_user <> 'tp_provider_finalize_user'/u],
+    ["g1_mark_provider_dispatch_unknown_v2", /session_user <> 'tp_provider_finalize_user'/u],
+    ["g1_resolve_provider_dispatch_v2", /session_user <> 'tp_provider_reconcile_user'/u],
     ["g1_append_recovery_audit_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
@@ -307,7 +312,10 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
 });
 
 test("recovery evidence selects one exact upstream authority receipt", async () => {
-  for (const url of recoveryScriptUrls) {
+  // The standalone recovery publisher remains the only source-receipt
+  // constructor. The former direct provider broker entry now intentionally
+  // fails closed behind the root-managed systemd boundary.
+  for (const url of [recoveryScriptUrls[0]]) {
     const source = await readFile(url, "utf8");
     for (const field of [
       "RECOVERY_SOURCE_TENANT_ID",
@@ -583,19 +591,64 @@ test("primary function SQL is digest-pinned before any database query", async ()
   );
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
-    statementCount: 39,
-    sha256: "8bb15fd3a92b602f69762237bbfb247e87f943da69415dcc0d48143ddf5c39a6"
+    statementCount: 45,
+    sha256: "4c462a05114b01aac35ac36744756d82a7488324dc0d52e0c155968d411dcd06"
   });
-  const providerControl = statements.find((statement) =>
-    statement.includes("g1_transition_provider_dispatch_v1")
+  const legacyProviderDrop = statements.find((statement) =>
+    statement.includes("DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1")
   );
   assert.match(
-    providerControl,
-    /clock_timestamp\(\)[\s\S]*FOR UPDATE[\s\S]*v_database_now := clock_timestamp\(\)[\s\S]*ON CONFLICT DO NOTHING/u
+    legacyProviderDrop,
+    /DROP FUNCTION IF EXISTS tp_api\.g1_transition_provider_dispatch_v1/u
+  );
+  const providerClaim = statements.find((statement) =>
+    statement.includes("g1_claim_provider_dispatch_v2")
+  );
+  const providerBegin = statements.find((statement) =>
+    statement.includes("g1_begin_provider_dispatch_v2")
+  );
+  const providerRedeem = statements.find((statement) =>
+    statement.includes("g1_redeem_provider_dispatch_v2")
+  );
+  const providerComplete = statements.find((statement) =>
+    statement.includes("g1_complete_provider_dispatch_v2")
+  );
+  const providerUnknown = statements.find((statement) =>
+    statement.includes("g1_mark_provider_dispatch_unknown_v2")
+  );
+  const providerResolve = statements.find((statement) =>
+    statement.includes("g1_resolve_provider_dispatch_v2")
+  );
+  assert.match(providerClaim, /session_user <> 'tp_provider_claim_user'/u);
+  assert.match(providerBegin, /session_user <> 'tp_provider_begin_user'/u);
+  assert.match(providerRedeem, /session_user <> 'tp_provider_redeem_user'/u);
+  assert.match(
+    providerRedeem,
+    /state = 'CREDENTIAL_REDEEMED'[\s\S]*completion_capability_sha256/u
   );
   assert.match(
-    providerControl,
-    /'DISPATCH_GRANTED'[\s\S]*'ALREADY_TERMINAL_OR_CONSUMED'[\s\S]*owner_nonce <> p_owner_nonce[\s\S]*'UNKNOWN_DO_NOT_ACT'/u
+    providerComplete,
+    /session_user <> 'tp_provider_finalize_user'/u
+  );
+  assert.match(
+    providerUnknown,
+    /session_user <> 'tp_provider_finalize_user'/u
+  );
+  assert.match(
+    providerResolve,
+    /session_user <> 'tp_provider_reconcile_user'/u
+  );
+  assert.doesNotMatch(
+    providerResolve,
+    /execution_capability_sha256|owner_nonce|p_execution_capability/u
+  );
+  assert.equal(
+    statements.some((statement) =>
+      statement.includes(
+        "CREATE OR REPLACE FUNCTION tp_api.g1_transition_provider_dispatch_v1"
+      )
+    ),
+    false
   );
   assert.equal(
     statements.filter((statement) =>
@@ -804,7 +857,7 @@ test("recovery operator contract enumerates every exact private input", async ()
   assert.match(source, /race receipt `dvi\.authorityEvidenceBindingSha256`/u);
   assert.match(source, /race receipt `dvi\.selectedEvidenceBindingSha256`/u);
   assert.match(source, /The nine `RECOVERY_SOURCE_\*` values/u);
-  assert.match(source, /all 19[\s\S]*managed base-table read probes/u);
+  assert.match(source, /all 20[\s\S]*managed base-table read probes/u);
   assert.match(source, /administrator URL/u);
   assert.match(source, /exact shared private inputs/u);
   assert.match(source, /broker is invoked by the integrated-live[\s\S]*it alone also requires/u);
@@ -821,7 +874,7 @@ test("recovery operator contract enumerates every exact private input", async ()
 
 test("recovery broker verifies audit events only through the narrow resolver", async () => {
   const [source, primarySource] = await Promise.all([
-    readFile(recoveryScriptUrls[1], "utf8"),
+    readFile(recoveryBrokerUrl, "utf8"),
     readFile(primaryUrl, "utf8")
   ]);
   assert.match(source, /resolveCommittedRecoveryAuditEvent/u);

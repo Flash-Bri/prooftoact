@@ -10,5 +10,8 @@ main().catch((error) => {
       message: error?.message
     })}\n`
   );
-  process.exitCode = 1;
+  process.exitCode = error?.message ===
+      "INTEGRATED_LIVE_DRILL_SYSTEMD_BOUNDARY_REQUIRED"
+    ? 126
+    : 1;
 });

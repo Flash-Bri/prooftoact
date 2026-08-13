@@ -14,8 +14,8 @@ import {
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SCHEMA = "tideproof.integrated-live-drill-stress-receipt.v1";
 const TARGET =
-  "concurrent RESUMEs atomically choose stop or globally guarded reconciliation";
-const TEST_PATH = "test/integrated-live-drill.test.js";
+  "two real broker processes publish one execution grant after one global begin";
+const TEST_PATH = "test/integrated-live-drill-dispatch-broker.test.js";
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
 
@@ -214,7 +214,7 @@ export function runIntegratedLiveDrillStress({
     observedTargetPassCount: records.length,
     iterations: records,
     claimBoundary:
-      "This count-bound receipt proves only repeated local execution of one named fake-transport concurrency regression against one clean exact commit. It does not prove live provider behavior, cross-host database isolation, deployment, hostile-host safety, or release acceptance."
+      "This count-bound receipt proves only repeated local execution of one named two-OS-process broker race against one clean exact commit and a shared file-backed fake global control. It proves that this harness publishes one execution grant after one global begin; it does not prove live provider behavior, real cross-host CockroachDB isolation, deployment, hostile-host safety, or release acceptance."
   };
   return validateIntegratedLiveDrillStressReceipt(Object.freeze({
     ...body,

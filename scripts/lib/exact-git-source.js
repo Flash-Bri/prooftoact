@@ -51,9 +51,27 @@ const LOADERS = Object.freeze({
 const FORBIDDEN_TREE_PATH =
   /(^|\/)(?:\.gitattributes|\.gitmodules|\.npmrc)$/i;
 
-function isAllowedLocalGitConfiguration(name, value) {
+function originValuesForRepository(repository) {
+  if (repository === null) return OFFICIAL_REMOTE_VALUES;
+  requireCondition(
+    typeof repository === "string" &&
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(repository) &&
+      repository.split("/").every(
+        (part) => part !== "." && part !== ".." && !part.endsWith(".lock")
+      ),
+    "EXACT_GIT_SOURCE_LOCAL_CONFIG"
+  );
+  const base = `https://github.com/${repository}`;
+  return Object.freeze([base, `${base}.git`]);
+}
+
+function isAllowedLocalGitConfiguration(
+  name,
+  value,
+  expectedOriginValues
+) {
   return name === "remote.origin.url"
-    ? OFFICIAL_REMOTE_VALUES.includes(value)
+    ? expectedOriginValues.includes(value)
     : ALLOWED_LOCAL_GIT_CONFIGURATION.get(name) === value;
 }
 
@@ -176,16 +194,22 @@ export function parseLocalGitConfiguration(
 export function assertSafeLocalGitConfiguration(
   entries,
   {
+    expectedOriginRepository = null,
     requireOfficialOrigin = false,
     requireMainBranch = false
   } = {}
 ) {
   const code = "EXACT_GIT_SOURCE_LOCAL_CONFIG";
   requireCondition(
-    Array.isArray(entries) &&
+      Array.isArray(entries) &&
+      (expectedOriginRepository === null ||
+        typeof expectedOriginRepository === "string") &&
       typeof requireOfficialOrigin === "boolean" &&
       typeof requireMainBranch === "boolean",
     code
+  );
+  const expectedOriginValues = originValuesForRepository(
+    expectedOriginRepository
   );
   const configuration = new Map();
   for (const entry of entries) {
@@ -196,7 +220,11 @@ export function assertSafeLocalGitConfiguration(
         typeof entry.name === "string" &&
         entry.name === entry.name.toLowerCase() &&
         typeof entry.value === "string" &&
-        isAllowedLocalGitConfiguration(entry.name, entry.value) &&
+        isAllowedLocalGitConfiguration(
+          entry.name,
+          entry.value,
+          expectedOriginValues
+        ) &&
         !configuration.has(entry.name),
       code
     );
@@ -329,10 +357,13 @@ function readLocalGitConfiguration({
 
 export function assertExactGitRepositoryLayout({
   rootDir,
-  allowInactiveActionsWorktreeConfig = false
+  allowInactiveActionsWorktreeConfig = false,
+  expectedOriginRepository = null
 }) {
   requireCondition(
-    typeof allowInactiveActionsWorktreeConfig === "boolean",
+    typeof allowInactiveActionsWorktreeConfig === "boolean" &&
+      (expectedOriginRepository === null ||
+        typeof expectedOriginRepository === "string"),
     "EXACT_GIT_SOURCE_LAYOUT"
   );
   const resolvedRoot = path.resolve(rootDir);
@@ -375,7 +406,8 @@ export function assertExactGitRepositoryLayout({
     readLocalGitConfiguration({
       rootDir: resolvedRoot,
       config: expectedConfig
-    })
+    }),
+    { expectedOriginRepository }
   );
   const worktreeConfigStat = lstatIfPresent(
     expectedWorktreeConfig,

@@ -6,7 +6,7 @@ import {
   verifyIntegratedLiveDrillProcessBoundaries
 } from "../scripts/verify-integrated-live-drill-process-boundaries.js";
 
-test("provider worker, reconciler, and finalizer import graphs preserve process boundaries", () => {
+test("provider broker, worker, reconciler, and finalizer preserve authority boundaries", () => {
   const receipt = verifyIntegratedLiveDrillProcessBoundaries();
   assert.equal(
     receipt.schemaVersion,
@@ -22,8 +22,9 @@ test("provider worker, reconciler, and finalizer import graphs preserve process 
   );
   assert.equal(receipt.supervisor.legacyRecoveryEntryPointImported, false);
   assert.equal(receipt.supervisor.managedMcpClientConstructed, false);
-  assert.equal(receipt.supervisor.providerWorkerEnvironmentRequired, true);
-  assert.equal(receipt.supervisor.providerFinalizerEnvironmentRequired, true);
+  assert.equal(receipt.supervisor.providerWorkerEnvironmentRequired, false);
+  assert.equal(receipt.supervisor.providerFinalizerEnvironmentRequired, false);
+  assert.equal(receipt.supervisor.resumeDisabled, true);
   assert.equal(
     receipt.supervisor.directImports.includes("./gate1-recovery-broker.js"),
     false
@@ -49,7 +50,7 @@ test("provider worker, reconciler, and finalizer import graphs preserve process 
       forbidden
     );
   }
-  for (const graph of [receipt.finalizer, receipt.reconciler, receipt.worker]) {
+  for (const graph of [receipt.finalizer, receipt.reconciler]) {
     for (const forbidden of [
       "node:child_process",
       "node:dns",
@@ -61,6 +62,29 @@ test("provider worker, reconciler, and finalizer import graphs preserve process 
       assert.equal(graph.builtins.includes(forbidden), false, forbidden);
     }
   }
+  assert.deepEqual(receipt.worker.builtins.includes("node:net"), true);
+  assert.equal(
+    receipt.worker.modules.includes("src/cloud/managed-mcp-client.js"),
+    false
+  );
+  assert.equal(
+    receipt.worker.modules.includes(
+      "src/cloud/brokered-provider-operation-client.js"
+    ),
+    true
+  );
+  assert.equal(
+    receipt.providerOperation.modules.includes(
+      "src/cloud/managed-mcp-client.js"
+    ),
+    true
+  );
+  assert.equal(
+    receipt.providerOperation.modules.includes(
+      "src/cloud/provider-dispatch-redeem-control.js"
+    ),
+    true
+  );
   assert.equal(
     receipt.reconciler.modules.includes("src/cloud/managed-mcp-client.js"),
     false
@@ -68,6 +92,12 @@ test("provider worker, reconciler, and finalizer import graphs preserve process 
   assert.equal(
     receipt.reconciler.modules.includes(
       "src/cloud/provider-dispatch-control.js"
+    ),
+    false
+  );
+  assert.equal(
+    receipt.reconciler.modules.includes(
+      "src/cloud/provider-dispatch-resolver.js"
     ),
     true
   );
@@ -78,9 +108,7 @@ test("provider worker, reconciler, and finalizer import graphs preserve process 
     true
   );
   for (const required of [
-    "src/cloud/integrated-live-drill-provider-orchestration.js",
     "src/cloud/integrated-live-drill-provider-recovery.js",
-    "src/cloud/managed-mcp-client.js",
     "src/cloud/recovery-broker.js"
   ]) {
     assert.equal(receipt.worker.modules.includes(required), true, required);

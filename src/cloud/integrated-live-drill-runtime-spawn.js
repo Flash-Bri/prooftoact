@@ -54,7 +54,6 @@ export function spawnIntegratedLiveDrillRuntimeComponent({
     [
       path.join(runtime.stageRoot, runtime.manifest.launcher.file),
       component,
-      runtime.manifestSha256,
       ...args
     ],
     {

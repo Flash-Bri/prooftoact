@@ -22,15 +22,17 @@ const BUNDLED_COMPONENTS = Object.freeze({
   signer: "infra/aws/lambda/signer.cjs",
   runtimeAuthorityRace:
     "scripts/runtime-entries/integrated-live-drill-authority-race.js",
+  runtimeDispatchBroker:
+    "scripts/runtime-entries/integrated-live-drill-dispatch-broker.js",
   runtimeDvi: "scripts/runtime-entries/integrated-live-drill-dvi.js",
   runtimeFinalizer:
     "scripts/runtime-entries/integrated-live-drill-finalizer.js",
+  runtimeProviderOperation:
+    "scripts/runtime-entries/integrated-live-drill-provider-operation.js",
   runtimeOrchestrator:
     "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
   runtimeReconciler:
     "scripts/runtime-entries/integrated-live-drill-reconciler.js",
-  runtimeRecovery:
-    "scripts/runtime-entries/integrated-live-drill-recovery.js",
   runtimeSupervisor:
     "scripts/runtime-entries/integrated-live-drill-supervisor.js",
   runtimeWorker: "scripts/runtime-entries/integrated-live-drill-worker.js"

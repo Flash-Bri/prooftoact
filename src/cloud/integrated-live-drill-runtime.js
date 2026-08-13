@@ -19,20 +19,23 @@ const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const COMPONENTS = Object.freeze([
   "authority-race",
+  "dispatch-broker",
+  "provider-operation",
   "dvi",
   "finalizer",
   "orchestrator",
   "reconciler",
-  "recovery",
   "supervisor",
   "worker"
 ]);
 const SCRIPT_COMPONENTS = Object.freeze({
   "gate1-admissible-vector.js": "dvi",
+  "gate1-integrated-live-drill-dispatch-broker.js": "dispatch-broker",
+  "gate1-integrated-live-drill-provider-operation-broker.js":
+    "provider-operation",
   "gate1-integrated-live-drill-provider-supervisor.js": "supervisor",
   "gate1-integrated-live-drill-provider-worker.js": "worker",
   "gate1-integrated-live-drill-provider-reconciler.js": "reconciler",
-  "gate1-recovery-broker.js": "recovery",
   "gate2-authority-race.js": "authority-race",
   "gate2-integrated-live-drill-provider-finalizer.js": "finalizer"
 });

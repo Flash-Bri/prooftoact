@@ -535,7 +535,7 @@ function fixture() {
     treeDigest: TREE_DIGEST
   };
   const buildReceipt = {
-    schemaVersion: "tideproof.gate2-build.v7",
+    schemaVersion: "tideproof.gate2-build.v9",
     mode: "CLEAN_ARTIFACT_BUILD",
     projectSourceMode: "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
     sourceCommit: SOURCE_COMMIT,
@@ -563,7 +563,7 @@ function fixture() {
     outputPrivacy: {
       schemaVersion: "tideproof.gate2-build-output-privacy.v1",
       status: "PASS",
-      outputCount: 20,
+      outputCount: 21,
       inventorySha256: "8".repeat(64)
     },
     gate2Template: {

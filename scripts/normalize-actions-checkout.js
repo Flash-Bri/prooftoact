@@ -7,13 +7,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assertCleanExactGitCheckout,
   assertExactGitRepositoryLayout,
+  assertSafeLocalGitConfiguration,
   gitEnvironment,
   gitInvariantArguments,
+  parseLocalGitConfiguration,
   trustedGitExecutable
 } from "./lib/exact-git-source.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const RECEIPT_SCHEMA = "tideproof.actions-checkout-normalization.v1";
+const RECEIPT_SCHEMA = "tideproof.actions-checkout-normalization.v2";
 const OFFICIAL_REPOSITORY = "Flash-Bri/prooftoact";
 const OFFICIAL_REPOSITORY_ID = "1317716765";
 const CI_WORKFLOW_NAME = "CI";
@@ -35,6 +37,7 @@ const EXPECTED_WORKTREE_CONFIG_BYTES = Buffer.from(
 );
 const HEX_40 = /^[0-9a-f]{40}$/;
 const PULL_REQUEST_REF = /^refs\/pull\/[1-9][0-9]*\/merge$/;
+const GITHUB_REPOSITORY_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const PUBLIC_DIAGNOSTIC_CODES = Object.freeze([
   "ACTIONS_CHECKOUT_NORMALIZATION_ARGUMENT",
   "ACTIONS_CHECKOUT_NORMALIZATION_CONTEXT",
@@ -98,7 +101,7 @@ function resolveActionsContext({ rootDir, environment, platform }) {
     `${OFFICIAL_REPOSITORY}/${CI_WORKFLOW_PATH}@${ref}`;
   const readOnlyPreflightWorkflowRef =
     `${OFFICIAL_REPOSITORY}/${READ_ONLY_PREFLIGHT_WORKFLOW_PATH}@refs/heads/main`;
-  const ciContext =
+  const ciMergeOrMainContext =
     environment?.GITHUB_WORKFLOW === CI_WORKFLOW_NAME &&
     environment?.GITHUB_WORKFLOW_REF === ciWorkflowRef &&
     environment?.GITHUB_JOB === "verify" &&
@@ -106,6 +109,16 @@ function resolveActionsContext({ rootDir, environment, platform }) {
       PULL_REQUEST_REF.test(ref)) ||
       (environment?.GITHUB_EVENT_NAME === "push" &&
         ref === "refs/heads/main"));
+  const ciHeadContext =
+    environment?.GITHUB_WORKFLOW === CI_WORKFLOW_NAME &&
+    environment?.GITHUB_WORKFLOW_REF === ciWorkflowRef &&
+    environment?.GITHUB_JOB === "verify-pr-head-no-secrets" &&
+    environment?.GITHUB_EVENT_NAME === "pull_request" &&
+    PULL_REQUEST_REF.test(ref) &&
+    HEX_40.test(environment?.EXPECTED_PULL_REQUEST_HEAD_SHA ?? "") &&
+    GITHUB_REPOSITORY_NAME.test(
+      environment?.EXPECTED_PULL_REQUEST_HEAD_REPOSITORY ?? ""
+    );
   const readOnlyPreflightContext =
     environment?.GITHUB_WORKFLOW ===
       READ_ONLY_PREFLIGHT_WORKFLOW_NAME &&
@@ -130,7 +143,7 @@ function resolveActionsContext({ rootDir, environment, platform }) {
       environment.GITHUB_GRAPHQL_URL === "https://api.github.com/graphql" &&
       environment.GITHUB_REPOSITORY === OFFICIAL_REPOSITORY &&
       environment.GITHUB_REPOSITORY_ID === OFFICIAL_REPOSITORY_ID &&
-      (ciContext || readOnlyPreflightContext) &&
+      (ciMergeOrMainContext || ciHeadContext || readOnlyPreflightContext) &&
       [
         "NODE_COMPILE_CACHE",
         "NODE_EXTRA_CA_CERTS",
@@ -168,11 +181,96 @@ function resolveActionsContext({ rootDir, environment, platform }) {
     "ACTIONS_CHECKOUT_NORMALIZATION_WORKSPACE"
   );
   return Object.freeze({
-    expectedSourceCommit: environment.GITHUB_SHA,
+    checkoutMode: ciHeadContext ? "PULL_REQUEST_HEAD" : "EVENT_SHA",
+    expectedOriginRepository: ciHeadContext
+      ? environment.EXPECTED_PULL_REQUEST_HEAD_REPOSITORY
+      : null,
+    expectedSourceCommit: ciHeadContext
+      ? environment.EXPECTED_PULL_REQUEST_HEAD_SHA
+      : environment.GITHUB_SHA,
     eventName: environment.GITHUB_EVENT_NAME,
+    githubEventSha: environment.GITHUB_SHA,
     ref: environment.GITHUB_REF,
     rootDir: resolvedRoot
   });
+}
+
+function localConfiguration(rootDir, code) {
+  return parseLocalGitConfiguration(
+    gitOutput(
+      rootDir,
+      ["config", "--local", "--no-includes", "--null", "--list"],
+      code
+    ),
+    code
+  );
+}
+
+function normalizePullRequestHeadOrigin(context) {
+  if (
+    context.checkoutMode !== "PULL_REQUEST_HEAD" ||
+    context.expectedOriginRepository === OFFICIAL_REPOSITORY
+  ) {
+    return null;
+  }
+  const code = "ACTIONS_CHECKOUT_NORMALIZATION_SOURCE";
+  let layout;
+  try {
+    layout = assertExactGitRepositoryLayout({
+      rootDir: context.rootDir,
+      allowInactiveActionsWorktreeConfig: true,
+      expectedOriginRepository: context.expectedOriginRepository
+    });
+  } catch {
+    throw new Error(code);
+  }
+  const ownershipBefore = assertRepositoryOwnership({ context, layout });
+  const stateBefore = checkoutState(context, layout);
+  const configurationBefore = localConfiguration(context.rootDir, code);
+  const validated = assertSafeLocalGitConfiguration(configurationBefore, {
+    expectedOriginRepository: context.expectedOriginRepository,
+    requireOfficialOrigin: true
+  });
+  const result = spawnSync(
+    trustedGitExecutable(),
+    [
+      ...gitInvariantArguments(),
+      "config",
+      "--local",
+      "--remove-section",
+      "remote.origin"
+    ],
+    {
+      cwd: context.rootDir,
+      env: actionsGitEnvironment(),
+      stdio: ["ignore", "ignore", "ignore"]
+    }
+  );
+  assert(!result.error && result.status === 0, code);
+  const configurationAfter = localConfiguration(context.rootDir, code);
+  const expectedAfter = configurationBefore.filter(
+    ({ name }) => !name.startsWith("remote.origin.")
+  );
+  assert(
+    JSON.stringify(configurationAfter) === JSON.stringify(expectedAfter),
+    code
+  );
+  assertSafeLocalGitConfiguration(configurationAfter);
+  const normalizedLayout = assertExactGitRepositoryLayout({
+    rootDir: context.rootDir,
+    allowInactiveActionsWorktreeConfig: true
+  });
+  const ownershipAfter = assertRepositoryOwnership({
+    context,
+    layout: normalizedLayout
+  });
+  const stateAfter = checkoutState(context, normalizedLayout);
+  assert(
+    sameRepositoryOwnership(ownershipBefore, ownershipAfter) &&
+      sameCheckoutStateExceptCommonConfig(stateBefore, stateAfter),
+    code
+  );
+  return validated.remote;
 }
 
 function assertRepositoryOwnership({ context, layout }) {
@@ -217,6 +315,15 @@ function sameRepositoryOwnership(left, right) {
     (field) =>
       left.rootStat[field] === right.rootStat[field] &&
       left.gitDirStat[field] === right.gitDirStat[field]
+  );
+}
+
+function sameCheckoutStateExceptCommonConfig(left, right) {
+  const { commonConfigSha256: leftConfig, ...leftRest } = left;
+  const { commonConfigSha256: rightConfig, ...rightRest } = right;
+  return (
+    leftConfig !== rightConfig &&
+    JSON.stringify(leftRest) === JSON.stringify(rightRest)
   );
 }
 
@@ -428,6 +535,7 @@ function normalizeCheckout({
     environment,
     platform
   });
+  const normalizedOrigin = normalizePullRequestHeadOrigin(context);
 
   try {
     const strictLayout = assertExactGitRepositoryLayout({
@@ -438,7 +546,11 @@ function normalizeCheckout({
     return Object.freeze({
       schemaVersion: RECEIPT_SCHEMA,
       status: "ALREADY_STRICT",
+      checkoutMode: context.checkoutMode,
       eventName: context.eventName,
+      githubEventSha: context.githubEventSha,
+      headRepository: context.expectedOriginRepository,
+      normalizedOrigin,
       ref: context.ref,
       sourceCommit: state.sourceCommit,
       treeDigest: state.treeDigest,
@@ -579,7 +691,11 @@ function normalizeCheckout({
   return Object.freeze({
     schemaVersion: RECEIPT_SCHEMA,
     status: "NORMALIZED_INACTIVE_ACTIONS_RESIDUE",
+    checkoutMode: context.checkoutMode,
     eventName: context.eventName,
+    githubEventSha: context.githubEventSha,
+    headRepository: context.expectedOriginRepository,
+    normalizedOrigin,
     ref: context.ref,
     sourceCommit: stateAfter.sourceCommit,
     treeDigest: stateAfter.treeDigest,

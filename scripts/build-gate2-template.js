@@ -31,6 +31,7 @@ import {
   buildGate2Template,
   templateReceipt
 } from "../src/cloud/aws-gate2-template.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 import {
   assertExactGitSourceContext,
   exactGitSourcePlugin,
@@ -74,6 +75,14 @@ const runtimeComponentDefinitions = Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-authority-race.js",
     packageKey: "runtimeAuthorityRace"
   }),
+  "dispatch-broker": Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-dispatch-broker.js",
+    packageKey: "runtimeDispatchBroker"
+  }),
+  "provider-operation": Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-provider-operation.js",
+    packageKey: "runtimeProviderOperation"
+  }),
   dvi: Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-dvi.js",
     packageKey: "runtimeDvi"
@@ -89,10 +98,6 @@ const runtimeComponentDefinitions = Object.freeze({
   reconciler: Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-reconciler.js",
     packageKey: "runtimeReconciler"
-  }),
-  recovery: Object.freeze({
-    entry: "scripts/runtime-entries/integrated-live-drill-recovery.js",
-    packageKey: "runtimeRecovery"
   }),
   supervisor: Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-supervisor.js",
@@ -509,7 +514,6 @@ async function buildLiveDrillRuntime({
       bytes: bytes.length,
       exactGitInputs: exactSource.inputRecords(),
       externalImports,
-      file,
       path: `dist/runtime/${file}`,
       sha256: digest
     });
@@ -547,7 +551,7 @@ async function buildLiveDrillRuntime({
     treeDigest,
     packageLockDigest,
     toolchainSha256: crypto.createHash("sha256")
-      .update(JSON.stringify(toolchain))
+      .update(canonicalJson(toolchain))
       .digest("hex"),
     launcher: Object.freeze({
       file: launcherFile,
@@ -568,7 +572,7 @@ async function buildLiveDrillRuntime({
           bundledPackages: component.bundledPackages,
           bytes: component.bytes,
           externalImports: component.externalImports,
-          file: component.file,
+          file: path.posix.basename(component.path),
           sha256: component.sha256
         })
       ])

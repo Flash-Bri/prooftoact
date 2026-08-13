@@ -18,6 +18,11 @@ const ROLE_BINDINGS = [
   ["tp_dispatch_role", "tp_dispatch_user"],
   ["tp_recovery_source_role", "tp_recovery_source_user"],
   ["tp_recovery_audit_role", "tp_recovery_audit_user"],
+  ["tp_provider_claim_role", "tp_provider_claim_user"],
+  ["tp_provider_begin_role", "tp_provider_begin_user"],
+  ["tp_provider_redeem_role", "tp_provider_redeem_user"],
+  ["tp_provider_finalize_role", "tp_provider_finalize_user"],
+  ["tp_provider_reconcile_role", "tp_provider_reconcile_user"],
   ["tp_audit_role", "tp_audit_user"]
 ];
 
@@ -51,9 +56,9 @@ const CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
   "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
 const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
   "tideproof.primary-function-sql-batch.v1";
-const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 39;
+const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 45;
 const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
-  "8bb15fd3a92b602f69762237bbfb247e87f943da69415dcc0d48143ddf5c39a6";
+  "4c462a05114b01aac35ac36744756d82a7488324dc0d52e0c155968d411dcd06";
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -97,10 +102,35 @@ const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze({
   }),
   tp_recovery_audit_role: Object.freeze({
     functions: Object.freeze([
-      "g1_transition_provider_dispatch_v1(STRING, UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
       "g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
       "g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
       "g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)"
+    ])
+  }),
+  tp_provider_claim_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_claim_provider_dispatch_v2(UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)"
+    ])
+  }),
+  tp_provider_begin_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_begin_provider_dispatch_v2(UUID, UUID, STRING, STRING, STRING)"
+    ])
+  }),
+  tp_provider_redeem_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_redeem_provider_dispatch_v2(UUID, UUID, STRING, STRING, STRING, STRING)"
+    ])
+  }),
+  tp_provider_finalize_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_complete_provider_dispatch_v2(UUID, UUID, STRING, STRING, STRING, STRING)",
+      "g1_mark_provider_dispatch_unknown_v2(UUID, UUID, STRING, STRING)"
+    ])
+  }),
+  tp_provider_reconcile_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_resolve_provider_dispatch_v2(UUID, STRING)"
     ])
   }),
   tp_audit_role: Object.freeze({
@@ -113,6 +143,12 @@ const PRIMARY_PREFLIGHT_ROLE_GRANT_POLICIES = Object.freeze({
     functions: Object.freeze([
       LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE,
       CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
+    ])
+  }),
+  tp_recovery_audit_role: Object.freeze({
+    functions: Object.freeze([
+      "g1_transition_provider_dispatch_v1(STRING, UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
+      ...PRIMARY_ROLE_GRANT_POLICIES.tp_recovery_audit_role.functions
     ])
   })
 });
@@ -439,6 +475,123 @@ async function createAuditObjects(client, recoveryPublisherTrustRoot) {
         (
           state IN ('UNKNOWN_DO_NOT_ACT', 'EXPIRED')
           AND terminal_at IS NOT NULL
+          AND mcp_result_sha256 IS NULL
+          AND session_close_sha256 IS NULL
+        )
+      )
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS tp_ledger.g1_provider_dispatch_controls_v2 (
+      authorization_id UUID NOT NULL,
+      grant_id UUID NOT NULL,
+      tenant_id UUID NOT NULL,
+      run_id UUID NOT NULL,
+      interaction_id UUID NOT NULL,
+      control_binding_sha256 STRING(64) NOT NULL,
+      logical_mcp_request_sha256 STRING(64) NOT NULL,
+      provider_effect_key_sha256 STRING(64) NOT NULL,
+      provider_dispatch_authorization_sha256 STRING(64) NOT NULL,
+      source_commit STRING(40) NOT NULL,
+      tree_digest STRING(40) NOT NULL,
+      source_build_identity STRING(64) NOT NULL,
+      issued_at TIMESTAMPTZ NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      execution_capability_sha256 STRING(64) NOT NULL,
+      completion_capability_sha256 STRING(64) NULL,
+      worker_spec_sha256 STRING(64) NOT NULL,
+      state STRING NOT NULL,
+      granted_at TIMESTAMPTZ NULL,
+      executing_at TIMESTAMPTZ NULL,
+      credential_redeemed_at TIMESTAMPTZ NULL,
+      terminal_at TIMESTAMPTZ NULL,
+      mcp_result_sha256 STRING(64) NULL,
+      session_close_sha256 STRING(64) NULL,
+      PRIMARY KEY (authorization_id),
+      UNIQUE (grant_id),
+      UNIQUE (provider_effect_key_sha256),
+      CHECK (issued_at < expires_at),
+      CHECK (length(control_binding_sha256) = 64),
+      CHECK (length(logical_mcp_request_sha256) = 64),
+      CHECK (length(provider_effect_key_sha256) = 64),
+      CHECK (length(provider_dispatch_authorization_sha256) = 64),
+      CHECK (length(source_commit) = 40),
+      CHECK (length(tree_digest) = 40),
+      CHECK (length(source_build_identity) = 64),
+      CHECK (length(execution_capability_sha256) = 64),
+      CHECK (length(worker_spec_sha256) = 64),
+      CHECK (
+        state IN (
+          'GRANTED',
+          'EXECUTING',
+          'CREDENTIAL_REDEEMED',
+          'COMPLETED',
+          'UNKNOWN_DO_NOT_ACT',
+          'EXPIRED'
+        )
+      ),
+      CHECK (
+        (
+          state = 'GRANTED'
+          AND granted_at IS NOT NULL
+          AND executing_at IS NULL
+          AND credential_redeemed_at IS NULL
+          AND completion_capability_sha256 IS NULL
+          AND terminal_at IS NULL
+          AND mcp_result_sha256 IS NULL
+          AND session_close_sha256 IS NULL
+        )
+        OR
+        (
+          state = 'EXECUTING'
+          AND granted_at IS NOT NULL
+          AND executing_at IS NOT NULL
+          AND credential_redeemed_at IS NULL
+          AND completion_capability_sha256 IS NULL
+          AND terminal_at IS NULL
+          AND mcp_result_sha256 IS NULL
+          AND session_close_sha256 IS NULL
+        )
+        OR
+        (
+          state = 'CREDENTIAL_REDEEMED'
+          AND granted_at IS NOT NULL
+          AND executing_at IS NOT NULL
+          AND credential_redeemed_at IS NOT NULL
+          AND length(completion_capability_sha256) = 64
+          AND terminal_at IS NULL
+          AND mcp_result_sha256 IS NULL
+          AND session_close_sha256 IS NULL
+        )
+        OR
+        (
+          state = 'COMPLETED'
+          AND granted_at IS NOT NULL
+          AND executing_at IS NOT NULL
+          AND credential_redeemed_at IS NOT NULL
+          AND length(completion_capability_sha256) = 64
+          AND terminal_at IS NOT NULL
+          AND length(mcp_result_sha256) = 64
+          AND length(session_close_sha256) = 64
+        )
+        OR
+        (
+          state = 'UNKNOWN_DO_NOT_ACT'
+          AND granted_at IS NOT NULL
+          AND executing_at IS NOT NULL
+          AND credential_redeemed_at IS NOT NULL
+          AND length(completion_capability_sha256) = 64
+          AND terminal_at IS NOT NULL
+          AND mcp_result_sha256 IS NULL
+          AND session_close_sha256 IS NULL
+        )
+        OR
+        (
+          state = 'EXPIRED'
+          AND terminal_at IS NOT NULL
+          AND credential_redeemed_at IS NULL
+          AND completion_capability_sha256 IS NULL
           AND mcp_result_sha256 IS NULL
           AND session_close_sha256 IS NULL
         )
@@ -4009,13 +4162,19 @@ async function emitPrimaryFunctionSql(client) {
   `);
 
   await client.query(`
-    CREATE OR REPLACE FUNCTION tp_api.g1_transition_provider_dispatch_v1(
-      p_action STRING,
+    DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1(
+      STRING, UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING,
+      STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING
+    )
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_claim_provider_dispatch_v2(
       p_authorization_id UUID,
+      p_grant_id UUID,
       p_tenant_id UUID,
       p_run_id UUID,
       p_interaction_id UUID,
-      p_owner_nonce UUID,
       p_control_binding_sha256 STRING,
       p_logical_mcp_request_sha256 STRING,
       p_provider_effect_key_sha256 STRING,
@@ -4025,17 +4184,18 @@ async function emitPrimaryFunctionSql(client) {
       p_source_build_identity STRING,
       p_issued_at TIMESTAMPTZ,
       p_expires_at TIMESTAMPTZ,
-      p_mcp_result_sha256 STRING,
-      p_session_close_sha256 STRING
+      p_execution_capability_sha256 STRING,
+      p_worker_spec_sha256 STRING
     )
     RETURNS TABLE(
       authorization_id UUID,
+      grant_id UUID,
       control_binding_sha256 STRING,
       state STRING,
       transition_outcome STRING,
-      owner_nonce UUID,
       database_now TIMESTAMPTZ,
       expires_at TIMESTAMPTZ,
+      worker_spec_sha256 STRING,
       mcp_result_sha256 STRING,
       session_close_sha256 STRING
     )
@@ -4043,61 +4203,46 @@ async function emitPrimaryFunctionSql(client) {
     SECURITY DEFINER
     AS $$
     DECLARE
-      v_control tp_ledger.g1_provider_dispatch_controls%ROWTYPE;
+      v_control tp_ledger.g1_provider_dispatch_controls_v2%ROWTYPE;
       v_database_now TIMESTAMPTZ := clock_timestamp();
+      v_matches INT8 := 0;
       v_outcome STRING;
     BEGIN
-      IF session_user <> 'tp_recovery_audit_user' THEN
-        RAISE EXCEPTION 'recovery audit database session required'
+      IF session_user <> 'tp_provider_claim_user' THEN
+        RAISE EXCEPTION 'provider claim database session required'
           USING ERRCODE = '42501';
       END IF;
-      IF p_action NOT IN ('CONSUME', 'COMPLETE', 'MARK_UNKNOWN', 'RESOLVE')
-        OR length(p_control_binding_sha256) <> 64
+      IF length(p_control_binding_sha256) <> 64
         OR length(p_logical_mcp_request_sha256) <> 64
         OR length(p_provider_effect_key_sha256) <> 64
         OR length(p_provider_dispatch_authorization_sha256) <> 64
         OR length(p_source_commit) <> 40
         OR length(p_tree_digest) <> 40
         OR length(p_source_build_identity) <> 64
-        OR p_issued_at >= p_expires_at
-        OR (
-          p_action = 'COMPLETE'
-          AND (
-            length(p_mcp_result_sha256) <> 64
-            OR length(p_session_close_sha256) <> 64
-          )
-        )
-        OR (
-          p_action <> 'COMPLETE'
-          AND (
-            p_mcp_result_sha256 IS NOT NULL
-            OR p_session_close_sha256 IS NOT NULL
-          )
-        ) THEN
-        RAISE EXCEPTION 'provider dispatch transition input rejected'
+        OR length(p_execution_capability_sha256) <> 64
+        OR length(p_worker_spec_sha256) <> 64
+        OR p_issued_at >= p_expires_at THEN
+        RAISE EXCEPTION 'provider dispatch claim input rejected'
           USING ERRCODE = '22023';
       END IF;
 
-      SELECT control.*
-      INTO v_control
-      FROM tp_ledger.g1_provider_dispatch_controls AS control
+      SELECT count(*)
+      INTO v_matches
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
       WHERE control.authorization_id = p_authorization_id
-        OR control.provider_effect_key_sha256 = p_provider_effect_key_sha256
-      LIMIT 2
-      FOR UPDATE;
-
-      IF NOT FOUND THEN
-        IF p_action <> 'CONSUME' THEN
-          RAISE EXCEPTION 'provider dispatch control absent'
-            USING ERRCODE = '22023';
-        END IF;
+        OR control.provider_effect_key_sha256 = p_provider_effect_key_sha256;
+      IF v_matches > 1 THEN
+        RAISE EXCEPTION 'provider dispatch split binding conflict'
+          USING ERRCODE = '22023';
+      END IF;
+      IF v_matches = 0 THEN
         v_database_now := clock_timestamp();
-        INSERT INTO tp_ledger.g1_provider_dispatch_controls (
+        INSERT INTO tp_ledger.g1_provider_dispatch_controls_v2 (
           authorization_id,
+          grant_id,
           tenant_id,
           run_id,
           interaction_id,
-          owner_nonce,
           control_binding_sha256,
           logical_mcp_request_sha256,
           provider_effect_key_sha256,
@@ -4107,15 +4252,17 @@ async function emitPrimaryFunctionSql(client) {
           source_build_identity,
           issued_at,
           expires_at,
+          execution_capability_sha256,
+          worker_spec_sha256,
           state,
-          consumed_at,
+          granted_at,
           terminal_at
         ) VALUES (
           p_authorization_id,
+          p_grant_id,
           p_tenant_id,
           p_run_id,
           p_interaction_id,
-          p_owner_nonce,
           p_control_binding_sha256,
           p_logical_mcp_request_sha256,
           p_provider_effect_key_sha256,
@@ -4125,11 +4272,13 @@ async function emitPrimaryFunctionSql(client) {
           p_source_build_identity,
           p_issued_at,
           p_expires_at,
+          p_execution_capability_sha256,
+          p_worker_spec_sha256,
           CASE
             WHEN v_database_now < p_issued_at
               OR v_database_now >= p_expires_at
             THEN 'EXPIRED'
-            ELSE 'CONSUMED'
+            ELSE 'GRANTED'
           END,
           CASE
             WHEN v_database_now >= p_issued_at
@@ -4145,29 +4294,24 @@ async function emitPrimaryFunctionSql(client) {
           END
         )
         ON CONFLICT DO NOTHING;
-
-        SELECT control.*
-        INTO v_control
-        FROM tp_ledger.g1_provider_dispatch_controls AS control
-        WHERE control.authorization_id = p_authorization_id
-          OR control.provider_effect_key_sha256 =
-            p_provider_effect_key_sha256
-        LIMIT 2
-        FOR UPDATE;
-        IF NOT FOUND THEN
-          RAISE EXCEPTION 'provider dispatch control unavailable'
-            USING ERRCODE = '40001';
-        END IF;
-        v_outcome := CASE
-          WHEN v_control.authorization_id = p_authorization_id
-            AND v_control.owner_nonce = p_owner_nonce
-            AND v_control.state = 'CONSUMED'
-          THEN 'DISPATCH_GRANTED'
-          WHEN v_control.state = 'EXPIRED'
-          THEN 'AUTHORITY_NOT_CURRENT'
-          ELSE 'ALREADY_TERMINAL_OR_CONSUMED'
-        END;
       END IF;
+
+      SELECT count(*)
+      INTO v_matches
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id
+        OR control.provider_effect_key_sha256 = p_provider_effect_key_sha256;
+      IF v_matches <> 1 THEN
+        RAISE EXCEPTION 'provider dispatch claim unavailable'
+          USING ERRCODE = '40001';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id
+        OR control.provider_effect_key_sha256 = p_provider_effect_key_sha256
+      LIMIT 1
+      FOR UPDATE;
 
       IF v_control.authorization_id <> p_authorization_id
         OR v_control.tenant_id <> p_tenant_id
@@ -4184,70 +4328,492 @@ async function emitPrimaryFunctionSql(client) {
         OR v_control.tree_digest <> p_tree_digest
         OR v_control.source_build_identity <> p_source_build_identity
         OR v_control.issued_at <> p_issued_at
-        OR v_control.expires_at <> p_expires_at THEN
-        RAISE EXCEPTION 'provider dispatch control binding conflict'
+        OR v_control.expires_at <> p_expires_at
+        OR v_control.worker_spec_sha256 <> p_worker_spec_sha256 THEN
+        RAISE EXCEPTION 'provider dispatch claim binding conflict'
           USING ERRCODE = '22023';
       END IF;
 
-      IF p_action = 'CONSUME' AND v_outcome IS NULL THEN
-        v_outcome := CASE
-          WHEN v_control.state = 'EXPIRED'
-          THEN 'AUTHORITY_NOT_CURRENT'
-          ELSE 'ALREADY_TERMINAL_OR_CONSUMED'
-        END;
-      ELSIF p_action = 'COMPLETE' THEN
-        IF v_control.owner_nonce <> p_owner_nonce
-          OR v_control.state NOT IN ('CONSUMED', 'COMPLETED') THEN
-          RAISE EXCEPTION 'provider dispatch completion owner rejected'
-            USING ERRCODE = '42501';
-        END IF;
-        IF v_control.state = 'CONSUMED' THEN
-          UPDATE tp_ledger.g1_provider_dispatch_controls AS control
-          SET
-            state = 'COMPLETED',
-            terminal_at = v_database_now,
-            mcp_result_sha256 = p_mcp_result_sha256,
-            session_close_sha256 = p_session_close_sha256
-          WHERE control.authorization_id = p_authorization_id;
-        ELSIF v_control.mcp_result_sha256 <> p_mcp_result_sha256
-          OR v_control.session_close_sha256 <> p_session_close_sha256 THEN
-          RAISE EXCEPTION 'provider dispatch completion conflict'
-            USING ERRCODE = '22023';
-        END IF;
-        v_outcome := 'COMPLETED';
-      ELSIF p_action = 'MARK_UNKNOWN' THEN
-        IF v_control.owner_nonce <> p_owner_nonce THEN
-          RAISE EXCEPTION 'provider dispatch unknown owner rejected'
-            USING ERRCODE = '42501';
-        END IF;
-        IF v_control.state = 'CONSUMED' THEN
-          UPDATE tp_ledger.g1_provider_dispatch_controls AS control
-          SET
-            state = 'UNKNOWN_DO_NOT_ACT',
-            terminal_at = v_database_now
-          WHERE control.authorization_id = p_authorization_id;
-          v_outcome := 'UNKNOWN_RECORDED';
-        ELSE
-          v_outcome := 'ALREADY_TERMINAL_OR_CONSUMED';
-        END IF;
-      ELSIF p_action = 'RESOLVE' THEN
-        v_outcome := 'RESOLVED';
+      v_database_now := clock_timestamp();
+      IF v_control.state = 'GRANTED'
+        AND (
+          v_database_now < v_control.issued_at
+          OR v_database_now >= v_control.expires_at
+        ) THEN
+        UPDATE tp_ledger.g1_provider_dispatch_controls_v2 AS control
+        SET state = 'EXPIRED', terminal_at = v_database_now
+        WHERE control.authorization_id = p_authorization_id;
+        v_control.state := 'EXPIRED';
       END IF;
+      v_outcome := CASE
+        WHEN v_control.state = 'GRANTED'
+          AND v_control.grant_id = p_grant_id
+          AND v_control.execution_capability_sha256 =
+            p_execution_capability_sha256
+        THEN 'DISPATCH_GRANTED'
+        WHEN v_control.state = 'EXPIRED'
+        THEN 'AUTHORITY_NOT_CURRENT'
+        ELSE 'ALREADY_TERMINAL_OR_EXECUTING'
+      END;
 
       SELECT control.*
       INTO v_control
-      FROM tp_ledger.g1_provider_dispatch_controls AS control
-      WHERE control.authorization_id = p_authorization_id
-      FOR UPDATE;
-      v_database_now := clock_timestamp();
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id;
       RETURN QUERY SELECT
         v_control.authorization_id,
+        v_control.grant_id,
         v_control.control_binding_sha256,
         v_control.state,
         v_outcome,
-        v_control.owner_nonce,
         v_database_now,
         v_control.expires_at,
+        v_control.worker_spec_sha256,
+        v_control.mcp_result_sha256,
+        v_control.session_close_sha256;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_begin_provider_dispatch_v2(
+      p_authorization_id UUID,
+      p_grant_id UUID,
+      p_control_binding_sha256 STRING,
+      p_execution_capability STRING,
+      p_worker_spec_sha256 STRING
+    )
+    RETURNS TABLE(
+      authorization_id UUID,
+      grant_id UUID,
+      control_binding_sha256 STRING,
+      state STRING,
+      transition_outcome STRING,
+      database_now TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      worker_spec_sha256 STRING,
+      mcp_result_sha256 STRING,
+      session_close_sha256 STRING
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_control tp_ledger.g1_provider_dispatch_controls_v2%ROWTYPE;
+      v_database_now TIMESTAMPTZ := clock_timestamp();
+      v_outcome STRING;
+    BEGIN
+      IF session_user <> 'tp_provider_begin_user' THEN
+        RAISE EXCEPTION 'provider begin database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF length(p_control_binding_sha256) <> 64
+        OR length(p_execution_capability) <> 64
+        OR length(p_worker_spec_sha256) <> 64 THEN
+        RAISE EXCEPTION 'provider dispatch begin input rejected'
+          USING ERRCODE = '22023';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'provider dispatch control absent'
+          USING ERRCODE = '22023';
+      END IF;
+      IF v_control.grant_id <> p_grant_id
+        OR v_control.control_binding_sha256 <> p_control_binding_sha256
+        OR v_control.worker_spec_sha256 <> p_worker_spec_sha256
+        OR v_control.execution_capability_sha256 <>
+          encode(sha256(p_execution_capability::BYTES), 'hex') THEN
+        RAISE EXCEPTION 'provider dispatch begin capability rejected'
+          USING ERRCODE = '42501';
+      END IF;
+      v_database_now := clock_timestamp();
+      IF v_control.state = 'GRANTED'
+        AND v_database_now >= v_control.issued_at
+        AND v_database_now < v_control.expires_at THEN
+        UPDATE tp_ledger.g1_provider_dispatch_controls_v2 AS control
+        SET state = 'EXECUTING', executing_at = v_database_now
+        WHERE control.authorization_id = p_authorization_id;
+        v_outcome := 'EXECUTION_STARTED';
+      ELSIF v_control.state = 'GRANTED' THEN
+        UPDATE tp_ledger.g1_provider_dispatch_controls_v2 AS control
+        SET state = 'EXPIRED', terminal_at = v_database_now
+        WHERE control.authorization_id = p_authorization_id;
+        v_outcome := 'AUTHORITY_NOT_CURRENT';
+      ELSIF v_control.state = 'EXECUTING' THEN
+        v_outcome := 'ALREADY_EXECUTING_DO_NOT_START';
+      ELSIF v_control.state = 'EXPIRED' THEN
+        v_outcome := 'AUTHORITY_NOT_CURRENT';
+      ELSE
+        v_outcome := 'ALREADY_TERMINAL';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id;
+      RETURN QUERY SELECT
+        v_control.authorization_id,
+        v_control.grant_id,
+        v_control.control_binding_sha256,
+        v_control.state,
+        v_outcome,
+        v_database_now,
+        v_control.expires_at,
+        v_control.worker_spec_sha256,
+        v_control.mcp_result_sha256,
+        v_control.session_close_sha256;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_redeem_provider_dispatch_v2(
+      p_authorization_id UUID,
+      p_grant_id UUID,
+      p_control_binding_sha256 STRING,
+      p_execution_capability STRING,
+      p_completion_capability_sha256 STRING,
+      p_worker_spec_sha256 STRING
+    )
+    RETURNS TABLE(
+      authorization_id UUID,
+      grant_id UUID,
+      control_binding_sha256 STRING,
+      state STRING,
+      transition_outcome STRING,
+      database_now TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      worker_spec_sha256 STRING,
+      mcp_result_sha256 STRING,
+      session_close_sha256 STRING
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_control tp_ledger.g1_provider_dispatch_controls_v2%ROWTYPE;
+      v_database_now TIMESTAMPTZ := clock_timestamp();
+      v_outcome STRING;
+    BEGIN
+      IF session_user <> 'tp_provider_redeem_user' THEN
+        RAISE EXCEPTION 'provider redeem database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF length(p_control_binding_sha256) <> 64
+        OR length(p_execution_capability) <> 64
+        OR length(p_completion_capability_sha256) <> 64
+        OR length(p_worker_spec_sha256) <> 64 THEN
+        RAISE EXCEPTION 'provider dispatch redemption input rejected'
+          USING ERRCODE = '22023';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'provider dispatch control absent'
+          USING ERRCODE = '22023';
+      END IF;
+      IF v_control.grant_id <> p_grant_id
+        OR v_control.control_binding_sha256 <> p_control_binding_sha256
+        OR v_control.worker_spec_sha256 <> p_worker_spec_sha256
+        OR v_control.execution_capability_sha256 <>
+          encode(sha256(p_execution_capability::BYTES), 'hex') THEN
+        RAISE EXCEPTION 'provider dispatch redemption capability rejected'
+          USING ERRCODE = '42501';
+      END IF;
+      IF v_control.state = 'CREDENTIAL_REDEEMED'
+        AND v_control.completion_capability_sha256 <>
+          p_completion_capability_sha256 THEN
+        RAISE EXCEPTION 'provider dispatch redemption replay rejected'
+          USING ERRCODE = '42501';
+      END IF;
+      v_database_now := clock_timestamp();
+      IF v_control.state = 'EXECUTING'
+        AND v_database_now >= v_control.issued_at
+        AND v_database_now < v_control.expires_at THEN
+        UPDATE tp_ledger.g1_provider_dispatch_controls_v2 AS control
+        SET
+          state = 'CREDENTIAL_REDEEMED',
+          credential_redeemed_at = v_database_now,
+          completion_capability_sha256 = p_completion_capability_sha256
+        WHERE control.authorization_id = p_authorization_id;
+        v_outcome := 'CREDENTIAL_REDEEMED';
+      ELSIF v_control.state = 'EXECUTING' THEN
+        UPDATE tp_ledger.g1_provider_dispatch_controls_v2 AS control
+        SET state = 'EXPIRED', terminal_at = v_database_now
+        WHERE control.authorization_id = p_authorization_id;
+        v_outcome := 'AUTHORITY_NOT_CURRENT';
+      ELSIF v_control.state = 'CREDENTIAL_REDEEMED' THEN
+        v_outcome := 'ALREADY_REDEEMED_DO_NOT_DELIVER';
+      ELSE
+        v_outcome := 'ALREADY_TERMINAL_DO_NOT_DELIVER';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id;
+      RETURN QUERY SELECT
+        v_control.authorization_id,
+        v_control.grant_id,
+        v_control.control_binding_sha256,
+        v_control.state,
+        v_outcome,
+        v_database_now,
+        v_control.expires_at,
+        v_control.worker_spec_sha256,
+        v_control.mcp_result_sha256,
+        v_control.session_close_sha256;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_complete_provider_dispatch_v2(
+      p_authorization_id UUID,
+      p_grant_id UUID,
+      p_control_binding_sha256 STRING,
+      p_completion_capability STRING,
+      p_mcp_result_sha256 STRING,
+      p_session_close_sha256 STRING
+    )
+    RETURNS TABLE(
+      authorization_id UUID,
+      grant_id UUID,
+      control_binding_sha256 STRING,
+      state STRING,
+      transition_outcome STRING,
+      database_now TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      worker_spec_sha256 STRING,
+      mcp_result_sha256 STRING,
+      session_close_sha256 STRING
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_control tp_ledger.g1_provider_dispatch_controls_v2%ROWTYPE;
+      v_database_now TIMESTAMPTZ := clock_timestamp();
+      v_outcome STRING;
+    BEGIN
+      IF session_user <> 'tp_provider_finalize_user' THEN
+        RAISE EXCEPTION 'provider finalize database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF length(p_control_binding_sha256) <> 64
+        OR length(p_completion_capability) <> 64
+        OR length(p_mcp_result_sha256) <> 64
+        OR length(p_session_close_sha256) <> 64 THEN
+        RAISE EXCEPTION 'provider dispatch completion input rejected'
+          USING ERRCODE = '22023';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'provider dispatch control absent'
+          USING ERRCODE = '22023';
+      END IF;
+      IF v_control.grant_id <> p_grant_id
+        OR v_control.control_binding_sha256 <> p_control_binding_sha256
+        OR v_control.completion_capability_sha256 <>
+          encode(sha256(p_completion_capability::BYTES), 'hex') THEN
+        RAISE EXCEPTION 'provider dispatch completion capability rejected'
+          USING ERRCODE = '42501';
+      END IF;
+      v_database_now := clock_timestamp();
+      IF v_control.state = 'CREDENTIAL_REDEEMED' THEN
+        UPDATE tp_ledger.g1_provider_dispatch_controls_v2 AS control
+        SET
+          state = 'COMPLETED',
+          terminal_at = v_database_now,
+          mcp_result_sha256 = p_mcp_result_sha256,
+          session_close_sha256 = p_session_close_sha256
+        WHERE control.authorization_id = p_authorization_id;
+        v_outcome := 'COMPLETED';
+      ELSIF v_control.state = 'COMPLETED'
+        AND v_control.mcp_result_sha256 = p_mcp_result_sha256
+        AND v_control.session_close_sha256 = p_session_close_sha256 THEN
+        v_outcome := 'COMPLETED';
+      ELSIF v_control.state = 'COMPLETED' THEN
+        RAISE EXCEPTION 'provider dispatch completion conflict'
+          USING ERRCODE = '22023';
+      ELSE
+        RAISE EXCEPTION 'provider dispatch completion state rejected'
+          USING ERRCODE = '42501';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id;
+      RETURN QUERY SELECT
+        v_control.authorization_id,
+        v_control.grant_id,
+        v_control.control_binding_sha256,
+        v_control.state,
+        v_outcome,
+        v_database_now,
+        v_control.expires_at,
+        v_control.worker_spec_sha256,
+        v_control.mcp_result_sha256,
+        v_control.session_close_sha256;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_mark_provider_dispatch_unknown_v2(
+      p_authorization_id UUID,
+      p_grant_id UUID,
+      p_control_binding_sha256 STRING,
+      p_completion_capability STRING
+    )
+    RETURNS TABLE(
+      authorization_id UUID,
+      grant_id UUID,
+      control_binding_sha256 STRING,
+      state STRING,
+      transition_outcome STRING,
+      database_now TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      worker_spec_sha256 STRING,
+      mcp_result_sha256 STRING,
+      session_close_sha256 STRING
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_control tp_ledger.g1_provider_dispatch_controls_v2%ROWTYPE;
+      v_database_now TIMESTAMPTZ := clock_timestamp();
+      v_outcome STRING;
+    BEGIN
+      IF session_user <> 'tp_provider_finalize_user' THEN
+        RAISE EXCEPTION 'provider finalize database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF length(p_control_binding_sha256) <> 64
+        OR length(p_completion_capability) <> 64 THEN
+        RAISE EXCEPTION 'provider dispatch unknown input rejected'
+          USING ERRCODE = '22023';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'provider dispatch control absent'
+          USING ERRCODE = '22023';
+      END IF;
+      IF v_control.grant_id <> p_grant_id
+        OR v_control.control_binding_sha256 <> p_control_binding_sha256
+        OR v_control.completion_capability_sha256 <>
+          encode(sha256(p_completion_capability::BYTES), 'hex') THEN
+        RAISE EXCEPTION 'provider dispatch unknown capability rejected'
+          USING ERRCODE = '42501';
+      END IF;
+      v_database_now := clock_timestamp();
+      IF v_control.state = 'CREDENTIAL_REDEEMED' THEN
+        UPDATE tp_ledger.g1_provider_dispatch_controls_v2 AS control
+        SET state = 'UNKNOWN_DO_NOT_ACT', terminal_at = v_database_now
+        WHERE control.authorization_id = p_authorization_id;
+        v_outcome := 'UNKNOWN_RECORDED';
+      ELSIF v_control.state = 'UNKNOWN_DO_NOT_ACT' THEN
+        v_outcome := 'UNKNOWN_RECORDED';
+      ELSE
+        RAISE EXCEPTION 'provider dispatch unknown state rejected'
+          USING ERRCODE = '42501';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id;
+      RETURN QUERY SELECT
+        v_control.authorization_id,
+        v_control.grant_id,
+        v_control.control_binding_sha256,
+        v_control.state,
+        v_outcome,
+        v_database_now,
+        v_control.expires_at,
+        v_control.worker_spec_sha256,
+        v_control.mcp_result_sha256,
+        v_control.session_close_sha256;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_provider_dispatch_v2(
+      p_authorization_id UUID,
+      p_control_binding_sha256 STRING
+    )
+    RETURNS TABLE(
+      authorization_id UUID,
+      grant_id UUID,
+      control_binding_sha256 STRING,
+      state STRING,
+      transition_outcome STRING,
+      database_now TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      worker_spec_sha256 STRING,
+      mcp_result_sha256 STRING,
+      session_close_sha256 STRING
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_control tp_ledger.g1_provider_dispatch_controls_v2%ROWTYPE;
+      v_database_now TIMESTAMPTZ := clock_timestamp();
+    BEGIN
+      IF session_user <> 'tp_provider_reconcile_user' THEN
+        RAISE EXCEPTION 'provider reconcile database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      IF length(p_control_binding_sha256) <> 64 THEN
+        RAISE EXCEPTION 'provider dispatch resolve input rejected'
+          USING ERRCODE = '22023';
+      END IF;
+      SELECT control.*
+      INTO v_control
+      FROM tp_ledger.g1_provider_dispatch_controls_v2 AS control
+      WHERE control.authorization_id = p_authorization_id;
+      IF NOT FOUND THEN
+        RETURN QUERY SELECT
+          p_authorization_id,
+          NULL::UUID,
+          p_control_binding_sha256,
+          'ABSENT'::STRING,
+          'RESOLVED_ABSENT'::STRING,
+          v_database_now,
+          NULL::TIMESTAMPTZ,
+          NULL::STRING,
+          NULL::STRING,
+          NULL::STRING;
+        RETURN;
+      END IF;
+      IF v_control.control_binding_sha256 <> p_control_binding_sha256 THEN
+        RAISE EXCEPTION 'provider dispatch resolve binding conflict'
+          USING ERRCODE = '22023';
+      END IF;
+      RETURN QUERY SELECT
+        v_control.authorization_id,
+        v_control.grant_id,
+        v_control.control_binding_sha256,
+        v_control.state,
+        'RESOLVED'::STRING,
+        v_database_now,
+        v_control.expires_at,
+        v_control.worker_spec_sha256,
         v_control.mcp_result_sha256,
         v_control.session_close_sha256;
     END
@@ -5154,7 +5720,12 @@ async function transferOwnership(client) {
     "tp_api.g2_spend_authority_race_v1(UUID, UUID, STRING, JSONB, STRING, STRING, STRING, UUID, UUID, STRING, STRING, STRING, UUID, UUID, JSONB, STRING, STRING, INT8)",
     "tp_api.g1_resolve_request_v1(UUID, UUID, STRING, STRING)",
     "tp_api.g1_observe_authority_race_v1(UUID, UUID, STRING, UUID, STRING, UUID, STRING)",
-    "tp_api.g1_transition_provider_dispatch_v1(STRING, UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
+    "tp_api.g1_claim_provider_dispatch_v2(UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
+    "tp_api.g1_begin_provider_dispatch_v2(UUID, UUID, STRING, STRING, STRING)",
+    "tp_api.g1_redeem_provider_dispatch_v2(UUID, UUID, STRING, STRING, STRING, STRING)",
+    "tp_api.g1_complete_provider_dispatch_v2(UUID, UUID, STRING, STRING, STRING, STRING)",
+    "tp_api.g1_mark_provider_dispatch_unknown_v2(UUID, UUID, STRING, STRING)",
+    "tp_api.g1_resolve_provider_dispatch_v2(UUID, STRING)",
     "tp_api.g1_append_recovery_audit_v1(UUID, UUID, STRING, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING)",
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
@@ -5329,10 +5900,6 @@ async function applyGrants(client, bootstrapOwner) {
   `);
   await client.query(`
     GRANT EXECUTE ON FUNCTION
-      tp_api.g1_transition_provider_dispatch_v1(
-        STRING, UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING,
-        STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING
-      ),
       tp_api.g1_append_recovery_audit_event_v3(
         UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING,
         STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ,
@@ -5345,6 +5912,43 @@ async function applyGrants(client, bootstrapOwner) {
         STRING, STRING, STRING
       )
     TO tp_recovery_audit_role
+  `);
+  await client.query(`
+    GRANT EXECUTE ON FUNCTION
+      tp_api.g1_claim_provider_dispatch_v2(
+        UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, STRING,
+        STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING
+      )
+    TO tp_provider_claim_role
+  `);
+  await client.query(`
+    GRANT EXECUTE ON FUNCTION
+      tp_api.g1_begin_provider_dispatch_v2(
+        UUID, UUID, STRING, STRING, STRING
+      )
+    TO tp_provider_begin_role
+  `);
+  await client.query(`
+    GRANT EXECUTE ON FUNCTION
+      tp_api.g1_redeem_provider_dispatch_v2(
+        UUID, UUID, STRING, STRING, STRING, STRING
+      )
+    TO tp_provider_redeem_role
+  `);
+  await client.query(`
+    GRANT EXECUTE ON FUNCTION
+      tp_api.g1_complete_provider_dispatch_v2(
+        UUID, UUID, STRING, STRING, STRING, STRING
+      ),
+      tp_api.g1_mark_provider_dispatch_unknown_v2(
+        UUID, UUID, STRING, STRING
+      )
+    TO tp_provider_finalize_role
+  `);
+  await client.query(`
+    GRANT EXECUTE ON FUNCTION
+      tp_api.g1_resolve_provider_dispatch_v2(UUID, STRING)
+    TO tp_provider_reconcile_role
   `);
   await client.query(
     "GRANT SELECT ON tp_api.g1_receipt_audit_v1 TO tp_audit_role"

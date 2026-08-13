@@ -4,26 +4,17 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   appendIntegratedLiveDrillJournal,
-  buildIntegratedLiveDrillCandidateReceipt,
   parseIntegratedLiveDrillSpec,
-  persistIntegratedLiveDrillPrivateEvidence,
   startIntegratedLiveDrillJournal
 } from "../src/cloud/integrated-live-drill.js";
 import {
-  buildIntegratedLiveDrillProviderOrchestrationCompletion,
   buildIntegratedLiveDrillProviderOrchestrationPreparation,
-  claimIntegratedLiveDrillProviderOrchestrationAdmission,
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES,
-  persistIntegratedLiveDrillProviderOrchestrationStop,
+  integratedLiveDrillProviderDispatchRequest,
   persistIntegratedLiveDrillProviderOrchestrationPreparation,
-  persistIntegratedLiveDrillExactPrivateJson,
+  persistIntegratedLiveDrillProviderDispatchRequest,
   readIntegratedLiveDrillOrchestrationPrivateJson,
-  readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent,
   readIntegratedLiveDrillProviderOrchestrationPreparation,
   sanitizedIntegratedLiveDrillProviderOrchestrationHold,
-  validateIntegratedLiveDrillProviderOrchestrationCompletion,
-  validateIntegratedLiveDrillProviderSupervisorCompletion,
   validateIntegratedLiveDrillProviderSupervisorPreparation
 } from "../src/cloud/integrated-live-drill-provider-orchestration.js";
 import { canonicalJson } from "../src/cloud/canonical-json.js";
@@ -41,24 +32,24 @@ import {
   validateIntegratedLiveDrillProviderDispatchAuthorizationPure
 } from "../src/cloud/integrated-live-drill-provider-evidence.js";
 import {
+  integratedLiveDrillProviderAuthorityTimes,
   readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation
 } from "../src/cloud/integrated-live-drill-provider-recovery.js";
+import { buildProviderDispatchControlBinding } from
+  "../src/cloud/provider-dispatch-binding.js";
 import {
   consumeIntegratedLiveDrillRunAuthorization,
-  finalizeIntegratedLiveDrillControlLedger,
   reserveIntegratedLiveDrillSpend
 } from "../src/cloud/integrated-live-drill-control-ledger.js";
 import {
-  assertIntegratedLiveDrillRuntime
+  assertIntegratedLiveDrillRuntime,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
 } from "../src/cloud/integrated-live-drill-runtime.js";
 import { spawnIntegratedLiveDrillRuntimeComponent } from
   "../src/cloud/integrated-live-drill-runtime-spawn.js";
-import {
-  integratedLiveDrillProviderReconciliationEnvironment,
-  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_PATH_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA,
-  validateIntegratedLiveDrillProviderReconciliationReceipt
-} from "../src/cloud/integrated-live-drill-provider-reconciliation.js";
 import {
   INTEGRATED_LIVE_DRILL_CHILD_COMMITTED_TRUST_ROOT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_ENVIRONMENT,
@@ -80,6 +71,7 @@ import {
 } from "./gate2-authority-race.js";
 import { loadCommittedRecoveryPublisherTrustRoot } from
   "./lib/recovery-publisher-key.js";
+import { readSystemdCredential } from "../src/cloud/systemd-credential.js";
 
 const MODULE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -102,7 +94,6 @@ const AUTHORITY_ENVIRONMENT = Object.freeze([
 const RECOVERY_ENVIRONMENT = Object.freeze([
   "EXPECTED_PRIMARY_HOSTNAME",
   "EXPECTED_RECOVERY_HOSTNAME",
-  "MCP_API_KEY",
   "PRIMARY_AUDIT_DATABASE_URL",
   "PRIMARY_CLUSTER_ID",
   "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
@@ -113,12 +104,8 @@ const RECOVERY_ENVIRONMENT = Object.freeze([
   "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT"
 ]);
 const PROVIDER_PREPARATION_ENVIRONMENT = Object.freeze(
-  RECOVERY_ENVIRONMENT.filter((name) => name !== "MCP_API_KEY")
+  RECOVERY_ENVIRONMENT
 );
-const PROVIDER_RESUME_ENVIRONMENT = Object.freeze([
-  "MCP_API_KEY",
-  "PRIMARY_AUDIT_DATABASE_URL"
-]);
 const PROVIDER_ORCHESTRATION_MODE_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE";
 const PROVIDER_SUPERVISOR_MODE_ENVIRONMENT =
@@ -127,20 +114,64 @@ const PROVIDER_SUPERVISOR_CONTEXT_PATH_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_CONTEXT_PATH";
 const PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION";
-const PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_WORKER_INPUT_PATH";
-const PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_FINALIZATION_INPUT_PATH";
 const PROVIDER_ROOT_BINDING_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING";
-const PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256";
-const PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256";
-const PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256";
-const PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256";
+const PROVIDER_DISPATCH_REQUEST_PATH_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_PATH";
+const SYSTEMD_BOUNDARY_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_SYSTEMD_BOUNDARY";
+const SYSTEMD_INSTANCE_ENVIRONMENT =
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_SYSTEMD_INSTANCE";
+const SYSTEMD_ORCHESTRATOR_INPUT_SCHEMA =
+  "tideproof.integrated-live-drill-systemd-orchestrator-input.v1";
+const SYSTEMD_ORCHESTRATOR_INPUT_CREDENTIAL = "orchestrator-input";
+const PRE_EXECUTION_INJECTION_ENVIRONMENT =
+  /^(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*)$/u;
+const PROVIDER_CAPABILITY_ENVIRONMENT =
+  /^(?:MCP_API_KEY|PRIMARY_PROVIDER_(?:CLAIM|BEGIN|FINALIZE|RECONCILE)_DATABASE_URL)$/u;
+const SYSTEMD_PREPARE_INPUT_NAMES = new Set([
+  "AUTHORITY_ALPHA_LOGICAL_ACTION_DIGEST",
+  "AUTHORITY_ALPHA_PROPOSAL_DIGEST",
+  "AUTHORITY_BRAVO_LOGICAL_ACTION_DIGEST",
+  "AUTHORITY_BRAVO_PROPOSAL_DIGEST",
+  "AUTHORITY_EVIDENCE_ID",
+  "AUTHORITY_INCIDENT_ID",
+  "AUTHORITY_RESOURCE_ID",
+  "AUTHORITY_SELECTED_EVIDENCE_DIGEST",
+  "AUTHORITY_TENANT_ID",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_EVIDENCE_EXPECTED_ACCOUNT_ID",
+  "AWS_EVIDENCE_EXPECTED_AUTHORITY_CALLER_ARN",
+  "AWS_EVIDENCE_EXPECTED_AUTHORITY_CALLER_USER_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "CONFIG_DIGEST",
+  "DATABASE_URL",
+  "EXPECTED_PRIMARY_HOSTNAME",
+  "EXPECTED_RECOVERY_HOSTNAME",
+  "PRIMARY_AUDIT_DATABASE_URL",
+  "PRIMARY_CLUSTER_ID",
+  "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
+  "RECOVERY_CLUSTER_ID",
+  "RECOVERY_PUBLISHER_DATABASE_URL",
+  "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64",
+  "SOURCE_COMMIT",
+  "TIDEPROOF_ADMISSIBLE_VECTOR_PROOF_SPEC",
+  "TIDEPROOF_AUDITOR_DATABASE_URL",
+  "TIDEPROOF_GATE2_DEPLOYMENT_EXPECTATION",
+  "TIDEPROOF_GATE2_PRE_DEPLOYMENT_ATTESTATION",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_HUMAN_AUTHORIZATION_TRUST_ROOT",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUN_AUTHORIZATION",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNNER_IDENTITY",
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+  "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT",
+  "TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT_COMMITMENT"
+]);
+const SYSTEMD_RESUME_INPUT_NAMES = new Set([
+  PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT,
+  "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC"
+]);
 
 function boundaryRecord(value, allowedKeys, code) {
   if (
@@ -226,6 +257,150 @@ function parseJson(value, code) {
   }
 }
 
+function exactRecord(value, keys) {
+  return value && typeof value === "object" && !Array.isArray(value) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value)) &&
+    Reflect.ownKeys(value).length === keys.length &&
+    keys.every((key) => Object.hasOwn(value, key));
+}
+
+export function systemdIntegratedLiveDrillEnvironment(
+  processEnvironment = process.env
+) {
+  const code = "INTEGRATED_LIVE_DRILL_SYSTEMD_INPUT_REJECTED";
+  let ambient;
+  try {
+    ambient = normalizedOrchestratorEnvironment(processEnvironment);
+  } catch (cause) {
+    throw new Error(code, { cause });
+  }
+  if (Object.keys(ambient).some((name) =>
+    PRE_EXECUTION_INJECTION_ENVIRONMENT.test(name) ||
+      PROVIDER_CAPABILITY_ENVIRONMENT.test(name)
+  )) {
+    throw new Error(code);
+  }
+  const boundary = ambient[SYSTEMD_BOUNDARY_ENVIRONMENT];
+  const mode = boundary === "prepare-v1"
+    ? "PREPARE"
+    : boundary === "resume-v1"
+      ? "RESUME"
+      : null;
+  const instance = ambient[SYSTEMD_INSTANCE_ENVIRONMENT];
+  const credentialsDirectory = ambient.CREDENTIALS_DIRECTORY;
+  if (
+    mode === null ||
+    typeof instance !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[4-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+      .test(instance) ||
+    typeof credentialsDirectory !== "string" ||
+    !path.isAbsolute(credentialsDirectory) ||
+    path.resolve(credentialsDirectory) !== credentialsDirectory
+  ) {
+    throw new Error(code);
+  }
+  let input;
+  try {
+    input = JSON.parse(readSystemdCredential({
+      credentialsDirectory,
+      maximumBytes: 8 * 1024 * 1024,
+      name: SYSTEMD_ORCHESTRATOR_INPUT_CREDENTIAL
+    }).toString("utf8"));
+  } catch (cause) {
+    throw new Error(code, { cause });
+  }
+  if (
+    !exactRecord(input, ["environment", "schemaVersion"]) ||
+    input.schemaVersion !== SYSTEMD_ORCHESTRATOR_INPUT_SCHEMA ||
+    !input.environment || typeof input.environment !== "object" ||
+    Array.isArray(input.environment) ||
+    ![Object.prototype, null].includes(
+      Object.getPrototypeOf(input.environment)
+    )
+  ) {
+    throw new Error(code);
+  }
+  const supplied = normalizedOrchestratorEnvironment(input.environment);
+  const allowedInputNames = mode === "PREPARE"
+    ? SYSTEMD_PREPARE_INPUT_NAMES
+    : SYSTEMD_RESUME_INPUT_NAMES;
+  const forbiddenNames = new Set([
+    "CREDENTIALS_DIRECTORY",
+    SYSTEMD_BOUNDARY_ENVIRONMENT,
+    SYSTEMD_INSTANCE_ENVIRONMENT,
+    PROVIDER_ORCHESTRATION_MODE_ENVIRONMENT,
+    PROVIDER_DISPATCH_REQUEST_PATH_ENVIRONMENT,
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
+    INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
+  ]);
+  if (Object.keys(supplied).some((name) =>
+    !allowedInputNames.has(name) || forbiddenNames.has(name) ||
+      PRE_EXECUTION_INJECTION_ENVIRONMENT.test(name) ||
+      PROVIDER_CAPABILITY_ENVIRONMENT.test(name)
+  ) || Object.keys(supplied).length !== allowedInputNames.size) {
+    throw new Error(code);
+  }
+  const spec = parseIntegratedLiveDrillSpec(parseJson(
+    requiredEnvironment(
+      supplied,
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC",
+      8192
+    ),
+    code
+  ));
+  if (spec.runId !== instance) throw new Error(code);
+  const stateRoot = "/var/lib/prooftoact";
+  const evidenceRoot = `${stateRoot}/evidence/${instance}`;
+  const authorizationRoot = `${stateRoot}/authorization/${instance}`;
+  const runtime = Object.fromEntries([
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "NO_COLOR",
+    "PATH",
+    "TMPDIR",
+    INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+    INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
+  ].filter((name) => typeof ambient[name] === "string")
+    .map((name) => [name, ambient[name]]));
+  const environment = Object.freeze({
+    ...runtime,
+    ...supplied,
+    [PROVIDER_ORCHESTRATION_MODE_ENVIRONMENT]: mode,
+    [PROVIDER_DISPATCH_REQUEST_PATH_ENVIRONMENT]:
+      `${evidenceRoot}/dispatch-request.json`,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT:
+      authorizationRoot,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH:
+      `${evidenceRoot}/${instance}.journal`,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH:
+      `${evidenceRoot}/${instance}.private-evidence.json`,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT: evidenceRoot
+  });
+  if (
+    (mode === "PREPARE" && Object.hasOwn(
+      environment,
+      PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT
+    )) ||
+    (mode === "RESUME" && !Object.hasOwn(
+      environment,
+      PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT
+    ))
+  ) {
+    throw new Error(code);
+  }
+  return environment;
+}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -298,14 +473,6 @@ export function providerPreparationComponentEnvironment(
   return isolatedComponentEnvironment(
     environment,
     PROVIDER_PREPARATION_ENVIRONMENT,
-    additions
-  );
-}
-
-export function providerResumeComponentEnvironment(environment, additions) {
-  return isolatedComponentEnvironment(
-    environment,
-    PROVIDER_RESUME_ENVIRONMENT,
     additions
   );
 }
@@ -400,12 +567,11 @@ function providerOrchestrationMode(environment) {
   const dispatchPresent =
     environment?.[PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT] !== undefined;
   if (value === undefined) {
-    if (dispatchPresent) {
-      throw new Error(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PARTIAL_CONFIG_REJECTED"
-      );
-    }
-    return null;
+    throw new Error(
+      dispatchPresent
+        ? "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PARTIAL_CONFIG_REJECTED"
+        : "INTEGRATED_LIVE_DRILL_SYSTEMD_BOUNDARY_REQUIRED"
+    );
   }
   if (!['PREPARE', 'RESUME'].includes(value)) {
     throw new Error("INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE_REJECTED");
@@ -435,6 +601,14 @@ function providerOrchestrationPaths(privateEvidenceRootPath, spec) {
     finalizationInputPath: path.join(
       privateEvidenceRootPath,
       `${spec.runId}.provider-finalization-input.json`
+    ),
+    dispatchRequestPath: path.join(
+      privateEvidenceRootPath,
+      `${spec.runId}.provider-dispatch-request.json`
+    ),
+    executionGrantPath: path.join(
+      privateEvidenceRootPath,
+      "execution-grant.json"
     ),
     reconciliationInputPath: path.join(
       privateEvidenceRootPath,
@@ -517,8 +691,6 @@ export function verifyIntegratedLiveDrillProviderDispatchAdmission({
 async function resumeIntegratedLiveDrillProviderOrchestration({
   clock,
   environment,
-  rootDir,
-  runComponent,
   spec,
   verifiedRootDir,
   verifyProviderDispatchAuthorization,
@@ -531,51 +703,21 @@ async function resumeIntegratedLiveDrillProviderOrchestration({
     4096
   );
   const forbiddenRootPath = verifiedRootDir;
-  const requestedDecisionRootPath = requiredEnvironment(
-    environment,
-    "TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT",
-    4096
-  );
-  if (
-    pathIsWithin(requestedDecisionRootPath, privateEvidenceRootPath) ||
-    pathIsWithin(privateEvidenceRootPath, requestedDecisionRootPath)
-  ) {
-    throw new Error(
-      "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ROOT_SEPARATION_REJECTED"
-    );
-  }
   const paths = providerOrchestrationPaths(privateEvidenceRootPath, spec);
-  let completionPresent = false;
-  let decision = null;
-  let decisionPath = null;
-  let decisionRootBound = false;
-  let decisionRootLease;
-  let decisionRootPath = null;
-  let preparation = null;
-  let providerAdmissionClaimedHere = false;
-  let assertAdmissionMatches = null;
   const rootLease = acquireIntegratedLiveDrillPrivateRootLease({
     code: "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ROOT_BINDING_REJECTED",
     forbiddenRootPath,
     rootPath: privateEvidenceRootPath
   });
   try {
-    const completionObservation = rootLease.beginOperation();
-    completionPresent = strictPathEntryPresent(
-      paths.completionPath,
-      "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETION_REJECTED"
-    );
-    rootLease.assertOperation(completionObservation);
-    const checkpointObservation = rootLease.beginOperation();
     const checkpoint = readIntegratedLiveDrillProviderOrchestrationPreparation({
       checkpointPath: paths.checkpointPath,
       forbiddenRootPath,
       rootPath: privateEvidenceRootPath,
       spec
     });
-    rootLease.assertOperation(checkpointObservation);
-    ({ preparation } = checkpoint);
-    const { persistence } = checkpoint;
+    const preparation = checkpoint.preparation;
+    const persistence = checkpoint.persistence;
     if (
       canonicalJson(preparation.evidenceRootBinding) !==
         canonicalJson(rootLease.binding)
@@ -584,100 +726,7 @@ async function resumeIntegratedLiveDrillProviderOrchestration({
         "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ROOT_BINDING_REJECTED"
       );
     }
-    rootLease.assertCurrent();
-    const assertCheckpointCurrent = async () => {
-      const observation = rootLease.beginOperation();
-      const current = readIntegratedLiveDrillProviderOrchestrationPreparation({
-        checkpointPath: paths.checkpointPath,
-        forbiddenRootPath,
-        rootPath: privateEvidenceRootPath,
-        spec
-      });
-      rootLease.assertOperation(observation);
-      if (
-        canonicalJson(current.persistence) !== canonicalJson(persistence) ||
-        canonicalJson(current.preparation) !== canonicalJson(preparation)
-      ) {
-        throw new Error(
-          "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_UNKNOWN_DO_NOT_ACT"
-        );
-      }
-      await rootLease.assertSettled();
-    };
-    await assertCheckpointCurrent();
-    await rootLease.assertSettled();
-    decisionRootPath = requestedDecisionRootPath;
-    decisionPath = path.join(
-      decisionRootPath,
-      `${spec.runId}.provider-orchestration-decision.json`
-    );
-    if (
-      integratedLiveDrillCanonicalSha256(decisionRootPath) !==
-        preparation.decisionRootPathSha256 ||
-      integratedLiveDrillCanonicalSha256(decisionPath) !==
-        preparation.decisionPathSha256
-    ) {
-      throw new Error(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_ROOT_REJECTED"
-      );
-    }
-    decisionRootLease = acquireIntegratedLiveDrillPrivateRootLease({
-      binding: preparation.decisionRootBinding,
-      code:
-        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_ROOT_REJECTED",
-      forbiddenRootPath,
-      rootPath: decisionRootPath
-    });
-    await decisionRootLease.assertSettled();
-    decisionRootBound = true;
-    decision = readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent({
-      decisionPath,
-      forbiddenRootPath,
-      rootPath: decisionRootPath
-    });
-    if (
-      decision?.decision ===
-        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-          .STOPPED_BEFORE_PROVIDER_ADMISSION
-    ) {
-      return decision;
-    }
-    assertAdmissionMatches = (observed, dispatchSha256 = null) => {
-      if (
-        observed?.decision !==
-          INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-            .PROVIDER_ADMITTED ||
-        observed.authorizationId !== preparation.authorizationId ||
-        observed.runId !== preparation.runId ||
-        observed.preparationReceiptSha256 !== preparation.receiptSha256 ||
-        observed.preparationContextSha256 !==
-          preparation.gate1Preparation.preparationContextSha256 ||
-        observed.signingPayloadSha256 !==
-          preparation.gate1Preparation.signingPayloadSha256 ||
-        observed.checkpointPersistenceReceiptSha256 !==
-          persistence.receiptSha256 ||
-        observed.decisionPathSha256 !== preparation.decisionPathSha256 ||
-        observed.decisionRootBindingReceiptSha256 !==
-          preparation.decisionRootBinding.receiptSha256 ||
-        observed.decisionRootPathSha256 !==
-          preparation.decisionRootPathSha256 ||
-        observed.evidenceRootBindingReceiptSha256 !==
-          preparation.evidenceRootBinding.receiptSha256 ||
-        observed.sourceCommit !== preparation.sourceCommit ||
-        observed.treeDigest !== preparation.treeDigest ||
-        (
-          dispatchSha256 !== null &&
-          observed.dispatchAuthorizationSha256 !== dispatchSha256
-        )
-      ) {
-        throw new Error(
-          "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATE_CONFLICT"
-        );
-      }
-      return observed;
-    };
     const rebound = await verifyProviderPreparationEvidence({
-      decisionRootPath,
       forbiddenRootPath,
       gate1Preparation: preparation.gate1Preparation,
       paths,
@@ -692,339 +741,103 @@ async function resumeIntegratedLiveDrillProviderOrchestration({
         "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PREPARATION_REJECTED"
       );
     }
-    const reboundContext = rebound?.supervisorEvidence?.context;
-    if (
-      reboundContext?.ledgerRootPath !== decisionRootPath
-    ) {
-      throw new Error(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_ROOT_REJECTED"
-      );
-    }
-    if (
-      completionPresent &&
-      decision?.decision !==
-        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED
-    ) {
-      throw new Error(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATE_CONFLICT"
-      );
-    }
-    if (completionPresent) {
-      assertAdmissionMatches(decision);
-      const completionReadObservation = rootLease.beginOperation();
-      const existingCompletion =
-        validateIntegratedLiveDrillProviderOrchestrationCompletion(
-          readIntegratedLiveDrillOrchestrationPrivateJson({
-            code:
-              "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETION_REJECTED",
-            filePath: paths.completionPath,
-            forbiddenRootPath,
-            rootPath: privateEvidenceRootPath
-          }),
-          preparation,
-          spec
-        );
-      rootLease.assertOperation(completionReadObservation);
-      await assertCheckpointCurrent();
-      await rootLease.assertSettled();
-      await decisionRootLease.assertSettled();
-      return existingCompletion;
-    }
-    await assertCheckpointCurrent();
-    const preRelease = await verifyRelease(spec, verifiedRootDir);
-    const dispatchAuthorizationText = requiredEnvironment(
-      environment,
-      PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT,
-      1024 * 1024
-    );
     const dispatchAuthorization = parseJson(
-      dispatchAuthorizationText,
+      requiredEnvironment(
+        environment,
+        PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT,
+        1024 * 1024
+      ),
       "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_REJECTED"
     );
     const dispatchEvidence = await verifyProviderDispatchAuthorization({
       dispatchAuthorization,
       now: clock(),
-      requireCurrent: decision === null,
-      supervisorEvidence: rebound?.supervisorEvidence ?? null
+      requireCurrent: true,
+      supervisorEvidence: rebound.supervisorEvidence
     });
     if (!/^[0-9a-f]{64}$/u.test(dispatchEvidence?.attestationSha256 ?? "")) {
       throw new Error(
         "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_REJECTED"
       );
     }
-    if (decision === null) {
-      const admissionClaim =
-        claimIntegratedLiveDrillProviderOrchestrationAdmission({
-          decisionPath,
-          dispatchAuthorizationSha256: dispatchEvidence.attestationSha256,
-          forbiddenRootPath,
-          persistence,
-          preparation,
-          rootPath: decisionRootPath
-        });
-      decision = admissionClaim.decision;
-      providerAdmissionClaimedHere = admissionClaim.claimed;
-      if (
-        decision.decision ===
-            INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-              .STOPPED_BEFORE_PROVIDER_ADMISSION
-      ) {
-        return decision;
-      }
-      if (!admissionClaim.claimed) {
-        assertAdmissionMatches(decision, dispatchEvidence.attestationSha256);
-      }
-    }
-    assertAdmissionMatches(decision, dispatchEvidence.attestationSha256);
-    const currentDecision =
-      readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent({
-        decisionPath,
-        forbiddenRootPath,
-        rootPath: decisionRootPath
-      });
-    assertAdmissionMatches(
-      currentDecision,
-      dispatchEvidence.attestationSha256
-    );
-    if (canonicalJson(currentDecision) !== canonicalJson(decision)) {
+    if (!rebound?.supervisorEvidence?.context) {
       throw new Error(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATE_CONFLICT"
+        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_PREPARATION_REJECTED"
       );
     }
+    const context = normalizeIntegratedLiveDrillProviderContext({
+      ...rebound.supervisorEvidence.context,
+      providerDispatchAuthorization: dispatchAuthorization
+    });
+    const childAuthorizationIssuedAt =
+      context.preCallInputs.consumedChildAuthorization.attestation.payload
+        .issuedAt;
+    const authorityTimes = integratedLiveDrillProviderAuthorityTimes(
+      context,
+      context.preCallIntent,
+      dispatchEvidence,
+      Date.parse(childAuthorizationIssuedAt)
+    );
+    const binding = buildProviderDispatchControlBinding({
+      context,
+      dispatchAuthorizationSha256: dispatchEvidence.attestationSha256,
+      earliestControllingExpiry: authorityTimes.earliestControllingExpiry,
+      latestControllingIssuedAt: authorityTimes.latestControllingIssuedAt
+    });
+    const workerInput = Object.freeze({
+      authenticatedPrincipal: "principal://tideproof-demo-successor",
+      context
+    });
+    const workerSpecSha256 = integratedLiveDrillCanonicalSha256(workerInput);
+    const request = integratedLiveDrillProviderDispatchRequest({
+      binding,
+      packageLockDigest: spec.packageLockDigest,
+      workerInput,
+      workerSpecSha256
+    });
+    const configuredDispatchPath = requiredEnvironment(
+      environment,
+      PROVIDER_DISPATCH_REQUEST_PATH_ENVIRONMENT,
+      4096
+    );
+    if (
+      !path.isAbsolute(configuredDispatchPath) ||
+      path.resolve(configuredDispatchPath) !== configuredDispatchPath
+    ) {
+      throw new Error(
+        "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_REJECTED"
+      );
+    }
+    const requestRootPath = path.dirname(configuredDispatchPath);
+    const requestForbiddenRootPath = requestRootPath === privateEvidenceRootPath
+      ? forbiddenRootPath
+      : privateEvidenceRootPath;
+    const persistedRequest = persistIntegratedLiveDrillProviderDispatchRequest({
+      filePath: configuredDispatchPath,
+      forbiddenRootPath: requestForbiddenRootPath,
+      request,
+      rootPath: requestRootPath
+    });
+    await verifyRelease(spec, verifiedRootDir);
     await rootLease.assertSettled();
-    await decisionRootLease.assertSettled();
-    if (!providerAdmissionClaimedHere) {
-      const reconciliationInput = Object.freeze({
-        schemaVersion:
-          INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA,
-        context: Object.freeze({
-          ...rebound.supervisorEvidence.context,
-          providerDispatchAuthorization: dispatchAuthorization
-        }),
-        providerAdmissionReceiptSha256: decision.receiptSha256
-      });
-      const inputWriteObservation = rootLease.beginOperation();
-      persistIntegratedLiveDrillExactPrivateJson({
-        code: "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED",
-        filePath: paths.reconciliationInputPath,
-        forbiddenRootPath,
-        rootPath: privateEvidenceRootPath,
-        value: reconciliationInput
-      });
-      rootLease.assertOperation(inputWriteObservation);
-      const rawReconciliation = await runComponent(
-        path.join(
-          rootDir,
-          "scripts/gate1-integrated-live-drill-provider-reconciler.js"
-        ),
-        [],
-        integratedLiveDrillProviderReconciliationEnvironment(environment, {
-          [INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_PATH_ENVIRONMENT]:
-            paths.reconciliationInputPath,
-          TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT: forbiddenRootPath,
-          TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT:
-            privateEvidenceRootPath,
-          TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: canonicalJson(spec),
-          [INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]: "3",
-          [INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT]:
-            "4"
-        }),
-        verifiedRootDir,
-        {
-          capabilityRootPath: privateEvidenceRootPath,
-          decisionRootDescriptor: decisionRootLease.descriptor,
-          rootDescriptor: rootLease.descriptor,
-          spec
-        }
-      );
-      const reconciliation =
-        validateIntegratedLiveDrillProviderReconciliationReceipt(
-        rawReconciliation,
-        {
-          authorizationId: preparation.authorizationId,
-          runId: preparation.runId
-        }
-      );
-      if (reconciliation.providerCompletion === null) {
-        return reconciliation;
-      }
-      const completion = validateIntegratedLiveDrillProviderSupervisorCompletion(
-        reconciliation.providerCompletion
-      );
-      assertAdmissionMatches(
-        readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent({
-          decisionPath,
-          forbiddenRootPath,
-          rootPath: decisionRootPath
-        }),
-        dispatchEvidence.attestationSha256
-      );
-      await assertCheckpointCurrent();
-      const postRelease = await verifyRelease(spec, verifiedRootDir);
-      if (canonicalJson(preRelease) !== canonicalJson(postRelease)) {
-        throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
-      }
-      const receipt = buildIntegratedLiveDrillProviderOrchestrationCompletion({
-        completion,
-        preparation,
-        spec
-      });
-      const completionWriteObservation = rootLease.beginOperation();
-      const persistedCompletion = persistIntegratedLiveDrillExactPrivateJson({
-        code:
-          "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETION_REJECTED",
-        filePath: paths.completionPath,
-        forbiddenRootPath,
-        rootPath: privateEvidenceRootPath,
-        value: receipt
-      });
-      rootLease.assertOperation(completionWriteObservation);
-      await assertCheckpointCurrent();
-      return validateIntegratedLiveDrillProviderOrchestrationCompletion(
-        persistedCompletion,
-        preparation,
-        spec
-      );
-    }
-    const componentObservation = runComponent === defaultRunComponent
-      ? null
-      : rootLease.beginOperation();
-    const rawCompletion = await runComponent(
-        path.join(
-          rootDir,
-          "scripts/gate1-integrated-live-drill-provider-supervisor.js"
-        ),
-        [],
-        providerResumeComponentEnvironment(environment, {
-          [PROVIDER_SUPERVISOR_MODE_ENVIRONMENT]: "RESUME",
-          [PROVIDER_SUPERVISOR_CONTEXT_PATH_ENVIRONMENT]: paths.contextPath,
-          [PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT]:
-            dispatchAuthorizationText,
-          [PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT]:
-            preparation.gate1Preparation.preparationContextSha256,
-          [PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256_ENVIRONMENT]:
-            preparation.gate1Preparation.preparationReceiptSha256,
-          [PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256_ENVIRONMENT]:
-            preparation.gate1Preparation.signingPayloadSha256,
-          [PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT]:
-            decision.receiptSha256,
-          [PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT]: paths.workerInputPath,
-          [PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT]:
-            paths.finalizationInputPath,
-          TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT: forbiddenRootPath,
-          TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT:
-            privateEvidenceRootPath,
-          [PROVIDER_ROOT_BINDING_ENVIRONMENT]: canonicalJson(
-            rootLease.binding
-          ),
-          [INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]: "3",
-          [INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT]:
-            "4"
-        }),
-        verifiedRootDir,
-        {
-          capabilityRootPath: privateEvidenceRootPath,
-          decisionRootDescriptor: decisionRootLease.descriptor,
-          rootDescriptor: rootLease.descriptor,
-          spec
-        }
-      );
-    if (componentObservation === null) {
-      await rootLease.assertSettled();
-      await decisionRootLease.assertSettled();
-    } else {
-      rootLease.assertOperation(componentObservation);
-      decisionRootLease.assertCurrent();
-    }
-    const completion = validateIntegratedLiveDrillProviderSupervisorCompletion(
-      rawCompletion
-    );
-    assertAdmissionMatches(
-      readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent({
-        decisionPath,
-        forbiddenRootPath,
-        rootPath: decisionRootPath
-      }),
-      dispatchEvidence.attestationSha256
-    );
-    await assertCheckpointCurrent();
-    const postRelease = await verifyRelease(spec, verifiedRootDir);
-    if (canonicalJson(preRelease) !== canonicalJson(postRelease)) {
-      throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
-    }
-    const receipt = buildIntegratedLiveDrillProviderOrchestrationCompletion({
-      completion,
-      preparation,
-      spec
-    });
-    const completionWriteObservation = rootLease.beginOperation();
-    const persistedCompletion = persistIntegratedLiveDrillExactPrivateJson({
-      code: "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_COMPLETION_REJECTED",
-      filePath: paths.completionPath,
-      forbiddenRootPath,
-      rootPath: privateEvidenceRootPath,
-      value: receipt
-    });
-    rootLease.assertOperation(completionWriteObservation);
-    await assertCheckpointCurrent();
-    return validateIntegratedLiveDrillProviderOrchestrationCompletion(
-      persistedCompletion,
-      preparation,
-      spec
-    );
-  } catch (error) {
-    if (!decisionRootBound || preparation === null || completionPresent) {
-      throw error;
-    }
-    const causeCode = /^INTEGRATED_LIVE_DRILL_[A-Z0-9_]{1,140}$/u.test(
-      String(error?.message ?? "")
-    )
-      ? error.message
-      : "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_UNKNOWN_DO_NOT_ACT";
-    if (
-      causeCode.startsWith(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_"
-      )
-    ) {
-      throw error;
-    }
-    if (
-      environment.NODE_ENV === "test" &&
-      /SYNTHETIC_CRASH_AFTER_(?:PRE_READ_AUDIT_COMMIT|PROVIDER_EVIDENCE_DURABLE|TERMINAL_AUDIT_COMMIT)$/u.test(
-        causeCode
-      )
-    ) {
-      throw error;
-    }
-    decision = readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent({
-      decisionPath,
-      forbiddenRootPath,
-      rootPath: decisionRootPath
-    });
-    if (
-      decision?.decision ===
-        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED
-    ) {
-      if (assertAdmissionMatches === null) throw error;
-      return assertAdmissionMatches(decision);
-    }
-    const state = [
-      "INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED",
-      "INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_AUTHORIZATION_EXPIRED"
-    ].includes(causeCode)
-      ? INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-          .EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED
-      : INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.UNKNOWN_DO_NOT_ACT;
-    return persistIntegratedLiveDrillProviderOrchestrationStop({
-      causeCode,
-      forbiddenRootPath,
-      preparation,
-      rootPath: decisionRootPath,
-      state,
-      stopPath: decisionPath
+    return Object.freeze({
+      schemaVersion: "tideproof.highwater-drill-provider-dispatch-handoff.v1",
+      accepted: false,
+      authorizationId: preparation.authorizationId,
+      dispatchAuthorizationSha256: dispatchEvidence.attestationSha256,
+      dispatchRequestReceiptSha256: persistedRequest.receiptSha256,
+      finalReleaseReady: false,
+      globalGrantPresent: false,
+      providerApiCredentialPresent: false,
+      providerBacked: false,
+      retryPermitted: true,
+      runId: preparation.runId,
+      state: "AWAITING_GLOBAL_PROVIDER_DISPATCH",
+      status: "HOLD_AWAITING_GLOBAL_PROVIDER_DISPATCH",
+      workerSpecSha256,
+      checkpointPersistenceReceiptSha256: persistence.receiptSha256
     });
   } finally {
-    decisionRootLease?.release();
     rootLease.release();
   }
 }
@@ -1046,9 +859,13 @@ export async function runIntegratedLiveDrill(args = {}) {
   const clock = options.clock ?? Date.now;
   const sourceEnvironment = options.environment ?? process.env;
   const environment = normalizedOrchestratorEnvironment(sourceEnvironment);
-  const rootDir = options.rootDir ?? MODULE_ROOT;
   const runComponent = options.runComponent ?? defaultRunComponent;
-  const verifyRelease = options.verifyRelease ?? verifyIntegratedRelease;
+  const defaultRuntime = runComponent === defaultRunComponent;
+  const rootDir = options.rootDir ?? (
+    defaultRuntime
+      ? process.env[INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT]
+      : MODULE_ROOT
+  );
   const verifyProviderPreparationEvidence =
     options.verifyProviderPreparationEvidence ??
       verifyIntegratedLiveDrillProviderPreparationEvidence;
@@ -1057,11 +874,10 @@ export async function runIntegratedLiveDrill(args = {}) {
       verifyIntegratedLiveDrillProviderDispatchAdmission;
   if (
     typeof clock !== "function" ||
-    typeof rootDir !== "string" ||
+      typeof rootDir !== "string" ||
       typeof runComponent !== "function" ||
       typeof verifyProviderDispatchAuthorization !== "function" ||
-      typeof verifyProviderPreparationEvidence !== "function" ||
-    typeof verifyRelease !== "function"
+      typeof verifyProviderPreparationEvidence !== "function"
   ) {
     throw new Error("INTEGRATED_LIVE_DRILL_OPTIONS_REJECTED");
   }
@@ -1079,23 +895,32 @@ export async function runIntegratedLiveDrill(args = {}) {
       "INTEGRATED_LIVE_DRILL_SPEC_REJECTED"
     )
   );
-  if (runComponent === defaultRunComponent) {
-    if (sourceEnvironment !== process.env) {
-      throw new Error("INTEGRATED_LIVE_DRILL_RUNTIME_REJECTED");
-    }
-    assertIntegratedLiveDrillRuntime({
+  const runtime = defaultRuntime
+    ? assertIntegratedLiveDrillRuntime({
       environment: process.env,
       expectedComponent: "orchestrator",
       spec
-    });
+    })
+    : null;
+  const verifyRelease = options.verifyRelease ?? (
+    runtime === null
+      ? verifyIntegratedRelease
+      : async () => Object.freeze({
+          packageLockDigest: runtime.manifest.packageLockDigest,
+          runtimeBundleManifestSha256: runtime.manifestSha256,
+          sourceCommit: runtime.manifest.sourceCommit,
+          stageRoot: runtime.stageRoot,
+          treeDigest: runtime.manifest.treeDigest
+        })
+  );
+  if (typeof verifyRelease !== "function") {
+    throw new Error("INTEGRATED_LIVE_DRILL_OPTIONS_REJECTED");
   }
   const orchestrationMode = providerOrchestrationMode(environment);
   if (orchestrationMode === "RESUME") {
     return resumeIntegratedLiveDrillProviderOrchestration({
       clock,
       environment,
-      rootDir,
-      runComponent,
       spec,
       verifiedRootDir,
       verifyProviderDispatchAuthorization,
@@ -1638,92 +1463,13 @@ export async function runIntegratedLiveDrill(args = {}) {
       rootLease.release();
     }
   }
-  const recoveryEnvironment = recoveryComponentEnvironment(
-    environment,
-    recoveryAdditions
-  );
-  const recovery = await runComponent(
-    path.join(rootDir, "scripts/gate1-recovery-broker.js"),
-    [],
-    recoveryEnvironment,
-    verifiedRootDir,
-    { spec }
-  );
-  validateCurrentLaunchAuthorization();
-  appendIntegratedLiveDrillJournal({
-    journalPath,
-    evidenceRootPath: privateEvidenceRootPath,
-    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
-    spec,
-    phase: "RECOVERY_RESULT",
-    payload: recovery
-  });
-  const privateEvidencePath = requiredEnvironment(
-    environment,
-    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH",
-    4096
-  );
-  const privateEvidenceReceipt =
-    persistIntegratedLiveDrillPrivateEvidence({
-      destinationPath: privateEvidencePath,
-      evidenceRootPath: privateEvidenceRootPath,
-      forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
-      spec,
-      dvi,
-      race,
-      recovery,
-      authorityEvidenceId,
-      authoritySelectedEvidenceDigest
-    });
-  appendIntegratedLiveDrillJournal({
-    journalPath,
-    evidenceRootPath: privateEvidenceRootPath,
-    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
-    spec,
-    phase: "PRIVATE_EVIDENCE_RESULT",
-    payload: privateEvidenceReceipt
-  });
-  const postRelease = await verifyRelease(spec, verifiedRootDir);
-  if (JSON.stringify(postRelease) !== JSON.stringify(preRelease)) {
-    throw new Error("INTEGRATED_LIVE_DRILL_RELEASE_DRIFT");
-  }
-  const journalReceipt = appendIntegratedLiveDrillJournal({
-    journalPath,
-    evidenceRootPath: privateEvidenceRootPath,
-    forbiddenRootPath: forbiddenPrivateEvidenceRootPath,
-    spec,
-    phase: "POST_RELEASE_VERIFICATION",
-    payload: postRelease
-  });
-  const controlLedgerReceipt = finalizeIntegratedLiveDrillControlLedger({
-    authorization,
-    claim: authorizationClaim,
-    reservations: spendReservations,
-    ledgerRootPath: authorizationLedgerRootPath,
-    forbiddenRootPath: forbiddenPrivateEvidenceRootPath
-  });
-  return buildIntegratedLiveDrillCandidateReceipt({
-    spec,
-    dvi,
-    race,
-    recovery,
-    journalPath,
-    journalRootPath: privateEvidenceRootPath,
-    journalReceipt,
-    journalIntentBindingSha256,
-    postRelease,
-    privateEvidencePath,
-    privateEvidenceRootPath,
-    forbiddenPrivateEvidenceRootPath,
-    privateEvidenceReceipt,
-    controlLedgerReceipt,
-    authorityEvidenceId,
-    authoritySelectedEvidenceDigest
-  });
+  throw new Error("INTEGRATED_LIVE_DRILL_SYSTEMD_BOUNDARY_REQUIRED");
 }
 
 export async function main() {
-  const receipt = await runIntegratedLiveDrill();
+  const receipt = await runIntegratedLiveDrill({
+    environment: systemdIntegratedLiveDrillEnvironment(process.env)
+  });
   process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
   const exitCode = integratedLiveDrillCliExitCode(receipt);
   if (exitCode !== 0) {
@@ -1735,20 +1481,25 @@ export async function main() {
 }
 
 export function integratedLiveDrillCliExitCode(receipt) {
-  return (
-    receipt?.decision ===
-        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED &&
-      receipt?.status ===
-        INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED
-  ) || receipt?.status ===
-      "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED"
+  return [
+    "HOLD_AWAITING_EXACT_PROVIDER_DISPATCH_AUTHORIZATION",
+    "HOLD_AWAITING_GLOBAL_PROVIDER_DISPATCH",
+    "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED"
+  ].includes(receipt?.status)
     ? 3
     : 0;
 }
 
 export const __test = Object.freeze({
   defaultRunComponent,
-  integratedLiveDrillCliExitCode
+  integratedLiveDrillCliExitCode,
+  SYSTEMD_ORCHESTRATOR_INPUT_SCHEMA,
+  systemdPrepareInputNames: Object.freeze([
+    ...SYSTEMD_PREPARE_INPUT_NAMES
+  ]),
+  systemdResumeInputNames: Object.freeze([
+    ...SYSTEMD_RESUME_INPUT_NAMES
+  ])
 });
 
 const startedDirectly =

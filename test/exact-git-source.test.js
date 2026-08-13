@@ -62,7 +62,7 @@ test("exact build validates every staged output before copying", (t) => {
   ));
   t.after(() => fs.rmSync(stagingRoot, { recursive: true, force: true }));
   const expectedPaths = Array.from(
-    { length: 20 },
+    { length: 21 },
     (_, index) => `dist/output-${String(index + 1).padStart(2, "0")}.bin`
   );
   const outputs = expectedPaths.map((relativePath, index) => {
@@ -97,7 +97,7 @@ test("exact build validates every staged output before copying", (t) => {
       expectedPaths,
       privacy
     ).length,
-    20
+    21
   );
   fs.appendFileSync(path.join(stagingRoot, expectedPaths[0]), "tamper");
   assert.throws(

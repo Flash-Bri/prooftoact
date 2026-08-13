@@ -9,6 +9,9 @@ import {
 } from "../src/cloud/integrated-live-drill-runtime.js";
 import { __test as spawnTest } from
   "../src/cloud/integrated-live-drill-runtime-spawn.js";
+import {
+  verifyIntegratedLiveDrillSystemdBoundary
+} from "../scripts/verify-integrated-live-drill-systemd-boundary.js";
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
@@ -16,11 +19,12 @@ const OFFICIAL_NODE_SHA256 =
   "2e3f1286a7eb3736346ed1803e458a0ff909e2b2d5bc746144dcb76970e9b99d";
 const COMPONENTS = [
   "authority-race",
+  "dispatch-broker",
+  "provider-operation",
   "dvi",
   "finalizer",
   "orchestrator",
   "reconciler",
-  "recovery",
   "supervisor",
   "worker"
 ];
@@ -115,16 +119,25 @@ test("runtime stage rejects any mutable ancestor in its absolute path", () => {
   );
 });
 
-test("pre-execution launcher validates immutable ancestry before pathname exec", () => {
+test("launcher validates immutable ancestry and descriptor-execs verified Node", () => {
   const source = fs.readFileSync(
     new URL("../scripts/lib/verified-node-bundle-launcher.pl", import.meta.url),
     "utf8"
   );
   assert.match(source, /assert_root_owned_immutable_directory_chain\(\$stage_root\)/u);
-  assert.match(source, /exec \{\s*"\$stage_root\/\$node_name"/u);
+  assert.match(source, /my \$node_descriptor_path = "\/proc\/self\/fd\/"/u);
+  assert.match(source, /fcntl\(\$node_fh, F_SETFD, 0\)/u);
+  assert.match(source, /exec \{\s*\$node_descriptor_path/u);
+  assert.doesNotMatch(source, /exec \{\s*"\$stage_root\/\$node_name"/u);
 });
 
-test("script dispatch maps only the eight reviewed runtime entry roles", () => {
+test("script dispatch maps only the nine reviewed runtime entry roles", () => {
+  assert.equal(
+    stagedRuntimeComponentForScript(
+      "/immutable/gate1-integrated-live-drill-provider-operation-broker.js"
+    ),
+    "provider-operation"
+  );
   assert.equal(
     stagedRuntimeComponentForScript(
     "/immutable/gate1-integrated-live-drill-provider-worker.js"
@@ -174,4 +187,17 @@ test("child launch removes every pre-execution injection surface", () => {
     environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT,
     "/immutable/runtime"
   );
+});
+
+test("systemd launch graph retains each successful one-shot admission boundary", () => {
+  const receipt = verifyIntegratedLiveDrillSystemdBoundary();
+  assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.livePlatform, "linux-systemd");
+  assert.equal(receipt.controllerProviderCredentialPresent, false);
+  assert.equal(receipt.brokerProviderCredentialPresent, false);
+  assert.equal(
+    receipt.executorCredentialDelivery,
+    "ONE_SHOT_UNIX_SOCKET_NONCE_AFTER_GLOBAL_GRANT"
+  );
+  assert.equal(receipt.units.length, 8);
 });

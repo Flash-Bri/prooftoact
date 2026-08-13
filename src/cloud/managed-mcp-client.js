@@ -24,7 +24,7 @@ function sha256(value) {
   return createHash("sha256").update(String(value)).digest("hex");
 }
 
-function managedMcpLogicalRequest({ clusterId, query }) {
+export function managedMcpLogicalRequest({ clusterId, query }) {
   const bindings = recoveryQueryBindingsFor(query);
   const boundInputSha256 = sha256(canonicalJson({
     tenantId: bindings.tenantId,

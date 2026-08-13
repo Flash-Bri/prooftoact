@@ -71,16 +71,16 @@ accepted integrated receipt is the complete provider target.
 The current source runner emits only a
 `tideproof.highwater-drill-live-candidate.v2` receipt with status
 `INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
-The exact Gate Two v7 build now emits eight content-addressed live-drill ESM
+The exact Gate Two v9 build now emits nine content-addressed live-drill ESM
 bundles, a content-addressed manifest, the reviewed launcher, and a Node
 v22.23.1 executable whose byte digest must match one pinned official
 nodejs.org release for the exact `linux-x64` or `darwin-arm64` target. A
 Homebrew thin launcher, an unpinned Node executable, a different platform, or
-a changed digest fails the build. The build receipt inventories all 20
-generated files, scans the 19 non-Node outputs for the repository's bounded
+a changed digest fails the build. The build receipt inventories all 21
+generated files, scans the 20 non-Node outputs for the repository's bounded
 privacy signatures, and separately records the byte count of the one pinned
 official toolchain object; it does not mislabel that exemption as scanned.
-The outer builder checks all 20 staged paths, sizes, and digests before copying
+The outer builder checks all 21 staged paths, sizes, and digests before copying
 them into the release checkout. The DVI bundle replaces `pg`'s optional
 `pg-native` lookup with a tracked fail-closed module, preventing an ambient
 native peer from entering the reviewed runtime.
@@ -107,33 +107,33 @@ signed pre/post deployment-attestation pair around the drill, independently
 attests and recomputes the private evidence, and proves crash-safe recovery
 without a second Managed MCP read for the same canonical attempt.
 
-The live command must not execute a bundle, launcher, manifest, or Node binary
-directly from the mutable checkout or `dist/runtime`. Before credentials are
-introduced, an operator with separate root authority must copy the exact eleven
-live-runtime files named by the accepted build receipt into a dedicated stage
-whose complete absolute ancestor chain is root-owned and not group- or
-world-writable. The manifest is mode 0444; the launcher, Node executable, and
-eight bundles are mode 0555; every file is regular, root-owned, single-link,
-and named by its digest where applicable. The drill itself runs as a dedicated
-non-root identity. The system `/usr/bin/perl` launcher opens the manifest,
-bundle, and Node executable with `O_NOFOLLOW`, verifies ownership, mode, link
-count, and SHA-256 from file descriptors, passes the verified bundle through
-an already-open descriptor, and removes Node, Perl, and dynamic-loader
-injection variables from every child environment. Each component repeats the
-stage, manifest, Node, launcher, component, source, tree, lockfile, and spec
-bindings before provider work.
+The live command must not execute any runtime byte directly from the checkout
+or `dist/runtime`. This acceptance lane is Linux/systemd-only. Before a
+credential exists, a root operator runs
+`scripts/install-integrated-live-drill-stage.js` with the exact independently
+accepted build-receipt SHA-256, a UUID run ID, and the accepted checkout root.
+The installer walks each source component below an open root descriptor without
+following symlinks, verifies every receipt digest, atomically publishes the
+twelve runtime files and two-file verifier root, installs the eight exact
+systemd units, reloads the system manager, and emits one root-owned v4 receipt
+binding source commit, tree, lockfile, toolchain, accepted build receipt,
+inodes, owners, modes, link counts, and complete ancestor chains. A separate
+non-root verifier, executed by the installed official Node binary, reopens and
+recomputes the accepted build receipt, runtime, itself, its Node binary, and
+the installed unit files before PREPARE.
 
-The top-level launch must begin from a clean, allowlisted environment (for
-example an approved service supervisor or `/usr/bin/env -i`) and must inject
-secrets from private custody without putting them in shell history. The stage
-root path and manifest digest are copied exactly into
-`TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT` and
-`TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256`; the integrated spec
-must carry that same manifest digest. Do not improvise a stage under `/tmp`, a
-user-writable parent, the repository, or a linked worktree. These controls
-bound a non-hostile non-root runner. They trust the root account, kernel,
-system loader, system Perl, and system libraries and do not claim resistance
-to a malicious administrator or compromised host.
+Only the root-owned systemd units may invoke `/usr/bin/perl`. They explicitly
+construct the first dynamic interpreter environment and unset every reviewed
+Node, Perl, and loader injection variable before exec; `/usr/bin/env -i` and
+direct shell/CLI launch are not accepted substitutes. The Perl launcher then
+opens the manifest, component, and Node executable with `O_NOFOLLOW`, verifies
+them, and executes Node through the retained `/proc/self/fd/<fd>` descriptor.
+The controller, contenders, losers, worker, and reconciler never receive the
+MCP bearer. Only after the global database state commits `EXECUTING` may the
+socket-activated provider-operation unit receive it through systemd
+`LoadCredential=` for one bound sequence. These controls trust root, the
+kernel, systemd, the system loader, Perl, and system libraries; they do not
+claim resistance to a malicious administrator or compromised host.
 
 The live runner requires
 `TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH` to be one canonical
@@ -168,42 +168,37 @@ source commit, and tree digest. The signed payload also binds a canonical
 non-secret audit-target identity; the worker recomputes that identity from the
 credentialed audit URL before constructing either provider or database clients.
 
-Pre-provider failure and provider admission first compete for one owner-only,
-create-only, fsynced local decision path. Only `ENOENT` means no decision;
-malformed entries, dangling links, and other filesystem errors fail closed. A durable
-`STOPPED_BEFORE_PROVIDER_ADMISSION` decision permanently excludes admission.
-A durable `PROVIDER_ADMITTED` decision is the one-use dispatch claim and
-permanently excludes a later stop. Only the process that atomically creates
-that claim may spawn the supervisor; concurrent observers and later restarts
-enter reconciliation instead of returning early or silently redispatching.
-Immediately before the Managed MCP `tools/call`, the worker consumes one
-database-global control row through
-`tp_api.g1_transition_provider_dispatch_v1`. The row binds the authorization,
-run, tenant, interaction, logical request, provider-effect key, dispatch
-authorization, source commit, tree, and build identity. The authoritative
-database clock decides freshness, and one transaction can return
-`DISPATCH_GRANTED`; every other host, process, or restart observes a terminal
-or already-consumed state. The winning owner alone can bind completion
-digests. A crash after consumption without exact durable provider evidence
-becomes `UNKNOWN_DO_NOT_ACT` and sacrifices liveness rather than granting
-another call. Once an exact private provider result and close receipt are
-durable, the owner nonce is persisted with them. Any later admitted process
-runs the audit-only reconciler without `MCP_API_KEY`: it may complete the
-matching consumed database row with that durable owner, commit or resolve only
-the bound W3 terminal audit after database-global completion, and run
-provider-free W4/W5 finalization. Its provider client is deny-only, it never
-consumes a new dispatch, and the outer orchestrator persists the same terminal
-completion. The local W2 `O_EXCL` ledger remains defense in depth, not global
-authority.
+PREPARE persists only provider-free evidence. RESUME validates the signed
+authorization and writes a provider-free dispatch request, but does not create
+a permanent local admission. A dedicated broker uses separate claim-only and
+begin-only database identities. It boundedly retries only pre-effect `40001`,
+`08xxx`, and equivalent transport failures; after the database returns one
+`DISPATCH_GRANTED`, it durably seals a random execution capability, commits
+`GRANTED -> EXECUTING`, and only then publishes the local execution grant.
+Local decisions bind the database grant ID and capability hash, never raw
+provider authority. A crash before the global claim therefore leaves no local
+state that can suppress a safe fresh claim.
 
-Local tests model two independent hosts sharing one database and also cover
-database-time expiry followed by a process restart and local-clock rollback.
-The count-bound stress runner repeats the concurrent RESUME race from one exact
-clean commit. These are source and simulated-database controls. They do not
-yet prove the function's behavior on the exact CockroachDB Cloud version, a
-real cross-host race, one provider-global Managed MCP call, deployment,
-hostile-root safety, or an accepted submission result; the +1 drill must supply
-that evidence.
+The worker receives the global grant but no MCP credential or provider client.
+It creates one create-only provider-execution-attempt artifact, then connects
+over a nonce-bound Unix socket. The separately isolated provider-operation
+broker has the MCP bearer, redeem-only database identity, and finalize-only
+identity. It atomically moves `EXECUTING -> CREDENTIAL_REDEEMED` before the
+first provider request, performs exactly one fixed initialize/notification/
+tools-call/close sequence, durably records the transcript, and completes the
+exact result. A crash or ambiguity after redemption can only finalize the same
+result or become `UNKNOWN_DO_NOT_ACT`; it cannot redeem or dispatch again.
+
+The reconciler has a separate resolve-only database URL and imports only
+`ProviderDispatchResolver`. It cannot claim, begin, redeem, complete, mark
+unknown, read base tables, or receive an execution/completion capability. The
+legacy polymorphic v1 control is hard-disabled in JavaScript and explicitly
+dropped during the v2 migration; exact-version live privilege probes must
+show `42501` or `42883` for every forbidden operation and no nonce/capability
+columns in resolve output. Local OS-process tests cover concurrent claim,
+pre-row failure, restart, execution fencing, and provider-operation delivery.
+They remain simulation until the exact CockroachDB v26.2, two-host, systemd,
+and provider-backed receipts are independently accepted.
 
 ## Per-drill binding
 
@@ -243,10 +238,11 @@ replayed.
 
 Acceptance additionally requires:
 
-- an exact v7 build receipt whose 20-file output inventory and privacy boundary
-  recompute, followed by a root-owned immutable-stage receipt for the pinned
-  manifest, official Node target, launcher, and eight component bundles; the
-  live process must be non-root and begin with the reviewed clean environment;
+- an exact v9 build receipt whose 21-file output inventory and privacy boundary
+  recompute, followed by a v4 root-stage receipt for the accepted build
+  receipt, twelve runtime files, independent verifier, eight installed systemd
+  units, and successful daemon reload; each live process is non-root and may
+  begin only through the reviewed systemd environment;
 - one signed pre/post deployment-attestation pair whose exact expectation
   binds the source commit, tree, configuration, Authority numeric-version ARN,
   code hash, execution role, revisions, and alias target around the drill;
@@ -258,8 +254,9 @@ Acceptance additionally requires:
 - a database receipt for the global provider-dispatch control showing exactly
   one `DISPATCH_GRANTED` transition for the canonical effect key, its matching
   terminal state, and no second provider call across concurrent hosts and
-  restart; the count-bound clean-commit RESUME stress receipt is a local
-  prerequisite, not a substitute;
+  restart; the count-bound clean-commit two-OS-process broker stress receipt
+  against the shared file-backed fake global control is a local prerequisite,
+  not a live CockroachDB or provider substitute;
 - exact clean public `main`, tree, lockfile, artifacts, configuration, caller
   binding, primary cluster, and recovery cluster digests;
 - exactly one passing integrated run digest, all enumerated invariants true,
@@ -300,8 +297,9 @@ selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
 recomputing receipt validator now exist. The source now also contains a
 single-run integrated orchestrator, database-global dispatch-control source,
-content-addressed eight-component runtime, pinned official Node target,
-root-stage verifier, build-output inventory/privacy receipt, count-bound RESUME
+content-addressed nine-component runtime, pinned official Node target,
+root-stage installer/verifier, build-output inventory/privacy receipt,
+count-bound RESUME
 stress runner, owner-restricted external private-evidence source control,
 current-byte reread verifier, and strict sanitized candidate composer,
 but the provider-backed execution and accepted live receipt do not. The
@@ -699,7 +697,7 @@ the exact, database-time-current authority-receipt resolver; the separate
 `tp_recovery_audit_user` receives only the exact audit-event and trust-root
 resolvers plus the append-only audit surface. Neither receives base-table
 access. Before either runner reads source state or the trust root, it executes
-six rollback-bounded privilege-pure write probes and 19 managed-table read
+six rollback-bounded privilege-pure write probes and 20 managed-table read
 probes, requiring SQLSTATE `42501` from both primary credentials for each. The
 broker re-reads its two audit events only by their
 committed event IDs and digests. No recovery runner accepts
@@ -820,7 +818,7 @@ the winner operation and request digest onto tenant, incident, evidence, or
 resource values or DVI digests from another run, and do not reconstruct missing
 fields from a latest-row query. Before any resolver, signing, publication, recovery
 bootstrap, or MCP call, both primary credentials must independently return
-SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 19
+SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 20
 managed base-table read probes. The source resolver then joins the authority receipt
 to its outbox intent and exact DVI proposal across request, proposal,
 logical-action, authorization, run, incident, resource, agency, policy,

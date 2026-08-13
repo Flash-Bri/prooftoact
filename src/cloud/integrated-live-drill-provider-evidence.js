@@ -26,7 +26,7 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_HANDOFF_SCHEMA =
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_PRE_READ_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-pre-read.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_RESULT_SCHEMA =
-  "tideproof.highwater-drill-provider-recovery-result.v1";
+  "tideproof.highwater-drill-provider-recovery-result.v2";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_TERMINAL_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-terminal.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA =
@@ -1780,7 +1780,7 @@ function validateProviderArtifact(value, intent, context) {
       "logicalMcpRequestSha256",
       "mcpResultSha256",
       "observedTransportCounts",
-      "providerDispatchOwnerNonce",
+      "providerDispatchGrantId",
       "preCallIntentSha256",
       "providerDispatchAuthorizationSha256",
       "rawResult",
@@ -1808,7 +1808,7 @@ function validateProviderArtifact(value, intent, context) {
       HEX_64.test(context?.providerDispatchAuthorization?.attestationSha256 ?? "") &&
       value.providerDispatchAuthorizationSha256 ===
         context.providerDispatchAuthorization.attestationSha256 &&
-      UUID.test(value.providerDispatchOwnerNonce ?? "") &&
+      UUID.test(value.providerDispatchGrantId ?? "") &&
       value.mcpResultSha256 === integratedLiveDrillCanonicalSha256(rawResult) &&
       value.transportEvidence.rpcCalls[1].resultSha256 ===
         value.mcpResultSha256 &&

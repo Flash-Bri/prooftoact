@@ -1,43 +1,68 @@
 import { pathToFileURL } from "node:url";
 
 import {
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT
+  acquireIntegratedLiveDrillPrivateRootLease
 } from "../src/cloud/integrated-live-drill-provider-evidence.js";
 import {
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
-} from "../src/cloud/integrated-live-drill-provider-orchestration.js";
-import {
-  readIntegratedLiveDrillProviderReconciliationInput,
   runIntegratedLiveDrillProviderReconciliation
 } from "../src/cloud/integrated-live-drill-provider-reconciliation.js";
 import { assertIntegratedLiveDrillRuntime } from
   "../src/cloud/integrated-live-drill-runtime.js";
 import { parseIntegratedLiveDrillSpec } from
   "../src/cloud/integrated-live-drill.js";
+import {
+  readSystemdCredential,
+  readSystemdCredentialText
+} from "../src/cloud/systemd-credential.js";
 
 export async function main() {
-  const spec = parseIntegratedLiveDrillSpec(JSON.parse(
-    process.env.TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC
-  ));
+  const credentialsDirectory = process.env.CREDENTIALS_DIRECTORY;
+  const input = JSON.parse(readSystemdCredential({
+    credentialsDirectory,
+    maximumBytes: 8 * 1024 * 1024,
+    name: "provider-reconciliation-input"
+  }).toString("utf8"));
+  const spec = parseIntegratedLiveDrillSpec(input.context.trustedRunContext.spec);
+  const rootPath = input.context.recoveryEvidenceRootPath;
+  const forbiddenRootPath = input.context.forbiddenRootPath;
+  const rootLease = acquireIntegratedLiveDrillPrivateRootLease({
+    binding: input.context.evidenceRootBinding,
+    code: "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_ROOT_REJECTED",
+    forbiddenRootPath,
+    rootPath
+  });
+  const environment = Object.freeze({
+    ...Object.fromEntries([
+      "LANG", "LC_ALL", "LC_CTYPE", "NO_COLOR", "PATH", "TMPDIR",
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT",
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256",
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256",
+      "TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT"
+    ].filter((name) => typeof process.env[name] === "string")
+      .map((name) => [name, process.env[name]])),
+    PRIMARY_PROVIDER_RECONCILE_DATABASE_URL: readSystemdCredentialText({
+      credentialsDirectory,
+      name: "provider-reconcile-database-url"
+    }),
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT: rootPath,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT: forbiddenRootPath
+  });
   assertIntegratedLiveDrillRuntime({
-    environment: process.env,
+    environment,
     expectedComponent: "reconciler",
     spec
   });
-  const input = readIntegratedLiveDrillProviderReconciliationInput(process.env);
-  const result = await runIntegratedLiveDrillProviderReconciliation({
-    decisionRootDescriptor: Number(
-      process.env[
-        INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
-      ]
-    ),
-    environment: process.env,
-    evidenceRootDescriptor: Number(
-      process.env[INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]
-    ),
-    input
-  });
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  try {
+    await rootLease.assertSettled();
+    const result = await runIntegratedLiveDrillProviderReconciliation({
+      environment,
+      input
+    });
+    await rootLease.assertSettled();
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } finally {
+    rootLease.release();
+  }
 }
 
 const startedDirectly = process.argv[1] &&

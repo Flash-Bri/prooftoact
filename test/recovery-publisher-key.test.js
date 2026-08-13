@@ -373,7 +373,7 @@ test("every primary recovery runner credential must be denied protected base-tab
   assert.deepEqual(denied, {
     denied: true,
     sqlstate: "42501",
-    tableCount: 19
+    tableCount: 20
   });
   assert.equal(queries.length, denied.tableCount);
   for (const query of queries) {

@@ -24,7 +24,8 @@ const EXPECTED_REPOSITORY = Object.freeze({
   visibility: "public",
   defaultBranch: "main",
   requiredWorkflow: "CI",
-  requiredCheck: "verify"
+  requiredCheck: "verify",
+  candidateHeadCheck: "verify-pr-head-no-secrets"
 });
 
 const EXPECTED_SNAPSHOT_REPOSITORY = Object.freeze({
@@ -571,7 +572,8 @@ export function verifyReleaseGovernance({ rootDir = DEFAULT_ROOT } = {}) {
       "Public clean-room source. Not yet a contest submission or live AWS claim.",
       "npm run governance:verify",
       "CURRENT_REPOSITORY_GOVERNANCE_PASS",
-      "not current GitHub state or final release approval"
+      "not current GitHub state or final release approval",
+      "verify-pr-head-no-secrets"
     ],
     "RELEASE_GOVERNANCE_README"
   );
