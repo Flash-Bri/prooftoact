@@ -2074,6 +2074,11 @@ test("Gate One executes the protected-effect insert and replay routine", async (
   );
   assert.match(
     source,
+    /connectionStringForUser\(\s*adminConnectionString,\s*"tp_authorizer_user",\s*passwords\.tp_authorizer_user\s*\),\s*async \(authorizerClient\) => withClient\(/u
+  );
+  assert.doesNotMatch(source, /authorityCurrent\(\s*admin,/u);
+  assert.match(
+    source,
     /capabilitySnapshot\.effects\.length !== 1[\s\S]*protectedEffect\?\.effect_key !== normalizedCapabilityRequest\.effectKey[\s\S]*protectedEffect\?\.operation_id !== normalizedCapabilityRequest\.operationId/u
   );
 });

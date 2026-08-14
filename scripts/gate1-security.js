@@ -1220,8 +1220,12 @@ async function main() {
   }
 
   const dispatch = await withClient(
-    adminConnectionString,
-    async (admin) => withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_authorizer_user",
+      passwords.tp_authorizer_user
+    ),
+    async (authorizerClient) => withClient(
       connectionStringForUser(
         adminConnectionString,
         "tp_dispatch_user",
@@ -1312,7 +1316,7 @@ async function main() {
         resourceId: authorityFixture.resourceId
       });
       const currentAfterWrongDigest = await authorityCurrent(
-        admin,
+        authorizerClient,
         normalizedCapabilityRequest
       );
 
@@ -1328,7 +1332,7 @@ async function main() {
         resourceId: authorityFixture.resourceId
       });
       const currentAfterInsert = await authorityCurrent(
-        admin,
+        authorizerClient,
         normalizedCapabilityRequest
       );
 
@@ -1344,7 +1348,7 @@ async function main() {
         resourceId: authorityFixture.resourceId
       });
       const currentAfterReplay = await authorityCurrent(
-        admin,
+        authorizerClient,
         normalizedCapabilityRequest
       );
 
@@ -1361,7 +1365,7 @@ async function main() {
         resourceId: authorityFixture.resourceId
       });
       const currentAfterWrongDigestReplay = await authorityCurrent(
-        admin,
+        authorizerClient,
         normalizedCapabilityRequest
       );
       if (

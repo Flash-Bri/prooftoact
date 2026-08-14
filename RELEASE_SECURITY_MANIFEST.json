@@ -312,7 +312,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "adecfe5f2227776debd9b3b21cbe51d052071b041579baeb2a31823a78291c36"
+      "sha256": "2728973ed7afac2735534642735d2a3d2dd2d4a842b3043de91a69730782bacd"
     },
     {
       "id": "database-security-posture",
@@ -1026,7 +1026,7 @@
       "id": "primary-security-runner",
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
-      "sha256": "3594ee209606e06e0ec5c7cde882d397c6a2b70da87c18a2ed3925ff42159099"
+      "sha256": "a1b1c994ab9ab6dd5fc3e816ef39f75b48b27d4fa73d51d9378cc813bdc67f39"
     },
     {
       "id": "provider-dispatch-control",
