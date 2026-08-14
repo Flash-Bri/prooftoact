@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-claims-manifest.v1",
   "status": "CURRENT_PUBLIC_CLAIMS_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-12",
+  "reviewedOn": "2026-08-14",
   "claimBoundary": "This inventory binds only the current public claim surfaces to reviewed pending-state copy. It does not prove claim truth, authorize deployment or publication, or replace the exact-release private human review.",
   "finalReleaseRequirements": [
     "Accepted live AWS, public-demo, video, and submission receipts bound to the exact final release.",
@@ -12,7 +12,7 @@
       "id": "architecture-boundary",
       "path": "docs/ARCHITECTURE.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "0ad0fc511b478aa236ff3f7c6bc0a9e9d564902153ef160870c972ca7b946032"
+      "sha256": "8b74cc74adf235e278f8f9cbf333c4e3e84dd20c6f4db015eb418c9243b56608"
     },
     {
       "id": "aws-boundary",
@@ -42,7 +42,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "f4ffdbc521deca3281f46a5dbf760eba47198b8c099e675bc2ec2f84672b0b01"
+      "sha256": "20e4b19d6e629db707d3f9579006e58c275a8a2e4210bd6f9de2840764c34d8c"
     },
     {
       "id": "contest-matrix",
@@ -60,7 +60,7 @@
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
       "role": "EVIDENCE_BOUNDARY",
-      "sha256": "3fe308837e8cb76eb7d6e291d57eec2ca70ce82a7a85ca65e4688fef3cfcc0c4"
+      "sha256": "06bb76b0f6ee2ff6b08fbd54e054265de9a2216e6e1cf9b47fcc9d50194b05bb"
     },
     {
       "id": "public-demo-runtime",
@@ -72,7 +72,7 @@
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "4cb4e545e950720c7133c55b7384e3e9028a627cb2bb5a75e23d5a19b2fdf256"
+      "sha256": "7c38cfdeffaa42acaf00c5e8fa0fc99655000c89107d42a5971db0a0f8fdafb8"
     },
     {
       "id": "release-claims-ledger",
@@ -90,7 +90,7 @@
       "id": "submission-packet",
       "path": "docs/SUBMISSION_PACKET.md",
       "role": "SUBMISSION_DRAFT",
-      "sha256": "d0cf2916c18f224ea60f5b1003bc2c73694b67296e96efa8968dace9b753be15"
+      "sha256": "e432a470da677630f8cba10b8d6f79b13a75baa64d240bc7e948971b3be435cf"
     }
   ],
   "finalReleaseReady": false

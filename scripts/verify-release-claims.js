@@ -137,7 +137,8 @@ const REQUIRED_MARKERS = Object.freeze({
   ]),
   "readme-surface": Object.freeze([
     "**Public clean-room source. Not yet a contest submission or live AWS claim.**",
-    "This repository contains a deterministic local vertical slice, an accepted CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:",
+    "historical accepted CockroachDB Cloud Gate One receipts",
+    "one narrow local exact-version Final23 compatibility gate",
     "It does **not** yet contain or claim:",
     "a deployed public AWS judge URL;",
     "monitored aliases are not invocation authority",

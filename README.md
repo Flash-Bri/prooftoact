@@ -27,8 +27,9 @@ full rename and isolation boundary is recorded in
 
 ## What exists now
 
-This repository contains a deterministic local vertical slice, an accepted
-CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
+This repository contains a deterministic local vertical slice, historical
+accepted CockroachDB Cloud Gate One receipts, one narrow local exact-version
+Final23 compatibility gate, and a locally tested AWS Gate Two candidate:
 
 - provenance, validity-window, and scope checks before vector ranking;
 - unresolved-conflict detection and fail-closed authorization;
@@ -47,8 +48,14 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
 - an isolated CockroachDB recovery cluster and deterministic Managed MCP
   fixed-query broker with signed context-only bundles;
 - separate pre-read and terminal recovery-audit events on the primary cluster;
-- 100 live 50-contender races and 100 ambiguity runs at each transaction
-  boundary, with no invariant violation;
+- historical accepted Gate One receipts recording 100 live 50-contender races
+  and 100 runs at each ambiguity boundary with no invariant violation; Final23
+  did not repeat those concurrency or ambiguity drills;
+- a fresh-zero local QEMU-TCG x86-64 Final23 gate on CockroachDB CCL v26.2.0
+  that passed typed-definer access, direct-DML and cross-role denials, a simple
+  recovery resolver, DVI proposal-identity negatives, wrong-digest rejection,
+  one protected-effect insert, and sequential exact replay; it is not a
+  provider-hosted, DVI-plan, contention, ambiguity, or PID1 application proof;
 - a generated AWS CloudFormation candidate with private versioned artifacts,
   a signed-out content-only judge surface, IAM-separated Lambda roles, one bounded
   Amazon Nova Micro proposal path, P-256 KMS receipt signing with independently

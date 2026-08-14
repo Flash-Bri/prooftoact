@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-governance-manifest.v1",
   "status": "CURRENT_REPOSITORY_GOVERNANCE_REVIEWED_FINAL_RECHECK_PENDING",
-  "reviewedOn": "2026-08-12",
+  "reviewedOn": "2026-08-14",
   "claimBoundary": "This manifest binds sanitized historical and post-rename GitHub governance observations, the approved repository rename boundary, and reviewed repository surfaces. It does not query GitHub, prove settings remain unchanged, require human approval, establish vulnerability absence, authorize deployment, or approve publication or submission.",
   "repository": {
     "fullName": "Flash-Bri/prooftoact",
@@ -53,7 +53,7 @@
       "id": "public-readme",
       "path": "README.md",
       "role": "PUBLIC_PROJECT_SURFACE",
-      "sha256": "4cb4e545e950720c7133c55b7384e3e9028a627cb2bb5a75e23d5a19b2fdf256"
+      "sha256": "7c38cfdeffaa42acaf00c5e8fa0fc99655000c89107d42a5971db0a0f8fdafb8"
     },
     {
       "id": "security-policy",

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "tideproof.final23-local-cockroach-summary.v1",
+  "status": "NARROW_LOCAL_PASS",
+  "observedOn": "2026-08-14",
+  "candidate": {
+    "commit": "94ddaa2c217c8b9e11c6c69d0f31b616e2a894c2",
+    "tree": "b30f4bd96130d282d4fd0ee183196d33a3ecebe2"
+  },
+  "runtime": {
+    "execution": "QEMU-TCG x86-64",
+    "qemuVersion": "11.1.0",
+    "cockroachBuild": "v26.2.0-ccl-linux-amd64-3d277344",
+    "cockroachExecutableSha256": "069bd676edad45367442a3a4ca12b6a7a6bec202c7ffd4d38bed4b6f87a82cac",
+    "nodeVersion": "v22.23.1",
+    "nodeArchitecture": "x64"
+  },
+  "evidenceBindings": {
+    "freshZeroImageSha256": "4638225008af52d9a492145b758842a531e0eb79619b1b16bd2f9b0cc5ace1ce",
+    "primaryReceiptSha256": "b4ac2ec4e80e5ed3df2839bdaf3c561554dc01047a5fe6cc55eef3e8e960eeb8",
+    "collectionManifestSha256": "673dde43502976ed1389a9d5a31db80d3778c592ae8f6ee6c855f7b09e68c579",
+    "planSha256": "96f1850a8c6688b83ec33db27b2a9a344588f445048f3a4ebfa5cbb9347fe8cc",
+    "bundleSha256": "2b35b030189136b24b7220295ae286c6b5b164f48fba5cce2438ac4e496fda56"
+  },
+  "freshZeroCensus": {
+    "managedPrincipalCount": 0,
+    "managedMembershipCount": 0,
+    "managedSystemGrantCount": 0,
+    "managedDatabaseCount": 0
+  },
+  "stderr": {
+    "dependencyInstallBytes": 0,
+    "gateChildBytes": 0,
+    "gateWrapperBytes": 0,
+    "guestTransportBytes": 0,
+    "emptySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "boundary": "These zero counts cover the dependency install, gate child, wrapper, and guest transport. The expected QEMU shutdown signal line is lifecycle output and is not represented as test stderr."
+  },
+  "primaryCapabilityBoundaries": {
+    "typedSecurityDefinerAccessPassed": true,
+    "directBaseTableDmlDenied": true,
+    "directBaseTableDmlSqlstate": "42501",
+    "crossRoleCallsDenied": true,
+    "simpleRecoveryResolverRepeatedStably": true,
+    "openCursorCountAfterEachResolution": 0,
+    "dviProposalPayloadSubstitutionDenied": true,
+    "dviProposalAliasDenied": true,
+    "databaseDerivedRequestDigestMismatchSqlstate": "22023",
+    "nullIntentNonceMismatchSqlstate": "22023"
+  },
+  "protectedEffect": {
+    "wrongDigestBeforeInsertRows": 0,
+    "effectsAfterWrongDigestBeforeInsert": 0,
+    "validInsertRows": 1,
+    "effectsAfterValidInsert": 1,
+    "sequentialExactReplayRows": 0,
+    "effectsAfterSequentialExactReplay": 1,
+    "wrongDigestAfterReplayRows": 0,
+    "effectsAfterWrongDigestAfterReplay": 1,
+    "authorityCurrentAtEachProbe": true,
+    "durableProtectedEffectRows": 1,
+    "durableProtectedEffectBindingFieldCount": 15
+  },
+  "durableAuthorityState": {
+    "receiptCount": 2,
+    "outboxCount": 1,
+    "protectedEffectCount": 1,
+    "resourceFence": "1"
+  },
+  "independentNarrowReview": {
+    "status": "PASS",
+    "scope": "Receipt, collection-manifest, source/tree, runtime, fresh-zero census, stderr, exact narrow gate facts, and post-run cleanup were independently reconciled.",
+    "cleanup": "QEMU stopped, the forwarded port was vacant, the base image chain was unchanged, and the image check was clean."
+  },
+  "nonProofs": [
+    "final-head or 50-session contention",
+    "held-expiry and post-wait currentness",
+    "simultaneous collision of each protected-effect uniqueness key",
+    "commit-acknowledgment loss or ambiguity boundaries",
+    "integrated DVI plan, ranking, or exclusion behavior",
+    "provider-hosted or external CockroachDB behavior",
+    "AWS, provider-operation, or Managed MCP behavior",
+    "complete application systemd/PID1 isolation or root-stage publication",
+    "external exactly-once effects",
+    "deployment, public-demo availability, video, publication, or submission"
+  ],
+  "claimBoundary": "This sanitized record summarizes a narrow fresh-zero local compatibility gate for the bound predecessor source only. Raw receipts remain private and are bound only by digest. NARROW_LOCAL_PASS is not a provider, deployment, release, publication, or submission approval."
+}

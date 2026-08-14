@@ -538,9 +538,10 @@ official release.
   independent reviews must pass on the exact commit. Provider execution
   remains pending.
 - Residual risk and claim impact: source now preserves one DVI identity through
-  recovery publication and lookup, but no live CockroachDB, AWS, or Managed MCP
-  receipt proves that handoff. No live, batch, concurrency, or exactly-once
-  claim is added.
+  recovery publication and lookup. The narrow local Final23 compatibility gate
+  did not exercise that handoff, and no provider-hosted CockroachDB, AWS, or
+  Managed MCP receipt proves it. No batch, concurrency, or exactly-once claim is
+  added.
 
 ### Recovery export accepted stale or replaced authority
 
@@ -1007,12 +1008,19 @@ No provider-backed receipt from this lane exists yet.
   the post-clock decision. The emitted 55-statement SQL batch remains
   digest-pinned before any database query.
 - Verification boundary: the failed Final12 and Final13 receipts and server
-  traces were preserved and hashed locally. The successor must still pass the
-  complete exact-version
-  x86-64 Gate One run, positive protected-effect insert/replay probe, Linux
-  root publication suite, full source suite, and independent review on the
-  exact frozen bytes. No provider, AWS, deployment, public-demo, video, or
-  submission claim follows from this local finding or repair.
+  traces were preserved and hashed locally. Final23 then passed a fresh-zero
+  QEMU-TCG x86-64 CockroachDB CCL v26.2.0 primary-capability-boundaries gate on
+  commit `94ddaa2c217c8b9e11c6c69d0f31b616e2a894c2` and tree
+  `b30f4bd96130d282d4fd0ee183196d33a3ecebe2`, including the positive
+  protected-effect insert, sequential exact replay, wrong-digest negatives,
+  simple recovery resolution, and direct-DML/cross-role denials. The sanitized
+  record is [`../evidence/final23-local-cockroach-v26-2-x86-2026-08-14.json`](../evidence/final23-local-cockroach-v26-2-x86-2026-08-14.json),
+  and independent reconciliation returned only a narrow `PASS`. It did not run
+  the 50-session race, ambiguity or ACK-loss matrix, held-expiry waits,
+  simultaneous four-key uniqueness conflicts, integrated DVI plan/exclusions,
+  Linux root publication, or the complete application systemd/PID1 graph.
+  Those remain pending, and no provider, AWS, Managed MCP, deployment,
+  public-demo, video, publication, or submission claim follows.
 
 ## Snapshot-bound exclusion finding
 

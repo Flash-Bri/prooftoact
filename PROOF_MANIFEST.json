@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-13",
+  "reviewedOn": "2026-08-14",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -241,7 +241,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "f4ffdbc521deca3281f46a5dbf760eba47198b8c099e675bc2ec2f84672b0b01",
+      "sha256": "20e4b19d6e629db707d3f9579006e58c275a8a2e4210bd6f9de2840764c34d8c",
       "kind": "boundary-ledger"
     },
     {
@@ -329,9 +329,15 @@
       "kind": "verification-code"
     },
     {
+      "id": "final23-local-cockroach-gate",
+      "path": "evidence/final23-local-cockroach-v26-2-x86-2026-08-14.json",
+      "sha256": "67f2870e8e2f4fca8412aa48dabd1d794960260e7c023a62a0357806bdff7ee7",
+      "kind": "local-validation"
+    },
+    {
       "id": "full-drill-evidence",
       "path": "docs/FULL_DRILL_EVIDENCE.md",
-      "sha256": "3fe308837e8cb76eb7d6e291d57eec2ca70ce82a7a85ca65e4688fef3cfcc0c4",
+      "sha256": "06bb76b0f6ee2ff6b08fbd54e054265de9a2216e6e1cf9b47fcc9d50194b05bb",
       "kind": "boundary-ledger"
     },
     {
@@ -835,7 +841,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "aebbc582c57e376b0b788f9fd02720cdac096056eb62ff7cfef850cb6875ec1c",
+      "sha256": "86dcd7d30709b1bc70b8b846fe177f834f3c9fb373e990d3d0d551f87aa36f8e",
       "kind": "verification-code"
     },
     {
@@ -949,7 +955,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "af08e189d8741bc2973669b467e7447b9bbd4f0fc2a8093a0250f6f1366f5d19",
+      "sha256": "59047ae2cb1d35a7bc5aa550b5c4921a7f5c0144da5ca0eb8294bb680a82c6e4",
       "kind": "boundary-ledger"
     },
     {
@@ -961,7 +967,7 @@
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "f5626eecfbddb10c5a1977e39804ef6288a1f31e87335f88a61ca47cae888b01",
+      "sha256": "3d33321e3f421b6c2c9390acbf42082e2bb2aa6fa8cba88beb2556041a426188",
       "kind": "verification-code"
     },
     {
@@ -997,7 +1003,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "eca449f33ad58693d937ca91178e6f341360aba56a440447a122d748cfa05b9d",
+      "sha256": "1783c2da808f8a2d3ebcc7b205985c3d11986b491e179cd135868d9124b666a4",
       "kind": "boundary-ledger"
     },
     {
@@ -1063,7 +1069,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "c71cdeb65bff06d4c0bf4454524be59868ab9a1b3f3268cd5ffe8d86ee97b99f",
+      "sha256": "876819467860c8bbaeaca7d473b8a09d02e7a9d39846881a11f41ccd6d8588c2",
       "kind": "boundary-ledger"
     },
     {
@@ -1081,13 +1087,13 @@
     {
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
-      "sha256": "1f5ee4115c547f97e817635c31971c4ae6f9981f3dd61812a83a4aa736a0e07b",
+      "sha256": "5c6ac01e99551f5810a289d2d62a5e316bdff5c15b4c65a7d69a299976fabafa",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "db3cc5ef4da1270e353478055ee2a884571e829340bf70851868735a8bb78c89",
+      "sha256": "312fae2207317c692cbf2da8a2dfe9b51cea21c8b17939556ac7ba57824cb233",
       "kind": "boundary-ledger"
     },
     {
@@ -1111,7 +1117,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "8ecbe835db0a45e3164787b7ac41d01d7b37f54a4e9b735a82681766517ec251",
+      "sha256": "5b7b63503bb975f1557aa00896a343a50eec5319cde3373c114ba6d7d07ab6d0",
       "kind": "boundary-ledger"
     },
     {
@@ -1191,36 +1197,37 @@
     {
       "id": "serializable-authority-race",
       "claim": "Concurrent contenders produce one authority winner.",
-      "currentStatus": "Gate One verified, 100 × 50 live races",
-      "claimsLedgerRowSha256": "427712904ba3b89ed08befed4177999db4692745ad4c1008a47bcd7ec70051fc",
+      "currentStatus": "Historical Gate One verified, 100 × 50 live races; Final23 did not repeat this drill",
+      "claimsLedgerRowSha256": "4463c2a2d730139aa86b077a0b19e6b5f141f92c511c19eaa9378660a426d382",
       "proofState": "VERIFIED",
       "artifacts": [
         "gate1-authority-evidence"
       ],
-      "acceptanceBoundary": "The accepted CockroachDB Gate One run records exactly one winning lease, receipt, fence increment, and outbox intent for each synthetic 50-contender race.",
+      "acceptanceBoundary": "The historical accepted CockroachDB Gate One receipt records exactly one winning lease, receipt, fence increment, and outbox intent for each synthetic 50-contender race. Final23 did not repeat this contention drill.",
       "remainingRequirements": []
     },
     {
       "id": "commit-ambiguity",
       "claim": "Process death around COMMIT never triggers blind replay in the synthetic authority gate.",
-      "currentStatus": "Gate One verified, 100 runs per boundary",
-      "claimsLedgerRowSha256": "df0ffcb983419ffdf2459f99800388c2c9c1093ec52602280174ef905c80f2fa",
+      "currentStatus": "Historical Gate One verified, 100 runs per boundary; Final23 did not repeat this drill",
+      "claimsLedgerRowSha256": "8ddf09eb0a2a9e33cb3671646acdb59d7540b7fc371edf9b03ce25dc01a29c7c",
       "proofState": "VERIFIED",
       "artifacts": [
         "gate1-ambiguity-evidence"
       ],
-      "acceptanceBoundary": "The accepted failpoint receipt covers before-COMMIT, dispatched-COMMIT, and acknowledged-COMMIT boundaries without blind retry or a partial transaction.",
+      "acceptanceBoundary": "The historical accepted failpoint receipt covers before-COMMIT, dispatched-COMMIT, and acknowledged-COMMIT boundaries without blind retry or a partial transaction. Final23 did not repeat this ACK-loss drill.",
       "remainingRequirements": []
     },
     {
       "id": "full-highwater-drills",
       "claim": "The approved 100+1 high-water target binds 100 deterministic offline specifications plus one exact-release provider-backed integrated drill.",
       "currentStatus": "Partial; the recomputing offline receipt passes 100 unique runs and 1,100 invariant evaluations with zero violations, while the +1 provider execution and acceptance review remain pending",
-      "claimsLedgerRowSha256": "522a668398071467ec061383e5e2cd82ef12ff9de5a28003e32e9f1c651993c7",
+      "claimsLedgerRowSha256": "ba3899ccfd885c831e890424329c399889457fd77a3b10c5baed480ee7e32acd",
       "proofState": "PARTIAL",
       "artifacts": [
         "atomic-create-only-file",
         "deployment-config-digest",
+        "final23-local-cockroach-gate",
         "full-drill-evidence",
         "integrated-live-drill-harness",
         "integrated-live-drill-process-boundary-tests",
@@ -1290,7 +1297,7 @@
         "recovery-continuity-identity",
         "verified-node-bundle-launcher"
       ],
-      "acceptanceBoundary": "The validator-passing local receipt still satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The repaired source keeps PREPARE provider-capability-free, writes only a bound dispatch request, and moves global authority through separate claim, begin, redeem, finalize, activation, terminalization, and resolve-only database roles. A claim-only broker retries only classified pre-effect claim failures, commits GRANTED to EXECUTING, and only then publishes the bound local execution grant. The worker receives no MCP bearer or provider client, creates one create-only execution-attempt fence, and uses a nonce-bound Unix socket. The persistent provider-operation broker is provider-key-isolated: it receives redeem/finalize database URLs and the sealed execution capability but never the MCP bearer. It commits CREDENTIAL_REDEEMED, requests fresh database activation, and admits the fixed one-shot exchange only after exact READY receipt matching. The distinct exchange UID alone receives the bearer; after PROCEED_ONCE it rechecks freshness, creates a consumption fence, performs the fixed provider sequence, durably records the result, and only then returns callback success. A separate database-time terminalizer converges expiry and ambiguity without provider replay. The reconciler is resolve-only, receives no execution or completion capability, and cannot claim, begin, redeem, complete, mark unknown, or read base tables. The legacy polymorphic provider transition is dropped during migration. Seven distinct service identities isolate the runtime, dispatch broker, operation broker, activation, provider exchange, terminalizer, and reconciler. A crash before a global claim leaves no permanent local admission; begin ambiguity and every post-redemption ambiguity prohibit replay. The Linux/systemd-only launch boundary constructs a clean first-interpreter environment before dynamic Perl, the launcher descriptor-executes the verified Node binary, and the reviewed root-stage schema v5 installer plus independently implemented non-root verifier bind fifteen staged runtime files across fourteen units. Those files are twelve content-addressed ESM bundles, the launcher, canonical manifest, and pinned Node executable. The exact v9 build binds 24 outputs, and CI separates no-secrets exact PR-head verification from synthetic-merge and exact-main lanes. Focused local tests include real OS-process claim and execution fencing, activation/exchange/terminalization coordination, source privilege negatives, and a Linux root-stage container test. These are source and local-execution controls only. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. No live CockroachDB v26.2, real two-host race, provider call, accepted PID1 isolation receipt, accepted root-stage receipt, hosted candidate-head receipt, deployment, judge access, or accepted +1 integrated receipt exists yet. Provider origin, provider-global exact-call count, crash behavior on the live services, final pricing, acceptance, and release therefore remain unproven; the +1 and release claims stay pending.",
+      "acceptanceBoundary": "The validator-passing local receipt still satisfies only the offline half by recomputing 100 deterministic scenario runs and 1,100 invariant evaluations with zero violations. The repaired source keeps PREPARE provider-capability-free, writes only a bound dispatch request, and moves global authority through separate claim, begin, redeem, finalize, activation, terminalization, and resolve-only database roles. A claim-only broker retries only classified pre-effect claim failures, commits GRANTED to EXECUTING, and only then publishes the bound local execution grant. The worker receives no MCP bearer or provider client, creates one create-only execution-attempt fence, and uses a nonce-bound Unix socket. The persistent provider-operation broker is provider-key-isolated: it receives redeem/finalize database URLs and the sealed execution capability but never the MCP bearer. It commits CREDENTIAL_REDEEMED, requests fresh database activation, and admits the fixed one-shot exchange only after exact READY receipt matching. The distinct exchange UID alone receives the bearer; after PROCEED_ONCE it rechecks freshness, creates a consumption fence, performs the fixed provider sequence, durably records the result, and only then returns callback success. A separate database-time terminalizer converges expiry and ambiguity without provider replay. The reconciler is resolve-only, receives no execution or completion capability, and cannot claim, begin, redeem, complete, mark unknown, or read base tables. The legacy polymorphic provider transition is dropped during migration. Seven distinct service identities isolate the runtime, dispatch broker, operation broker, activation, provider exchange, terminalizer, and reconciler. A crash before a global claim leaves no permanent local admission; begin ambiguity and every post-redemption ambiguity prohibit replay. The Linux/systemd-only launch boundary constructs a clean first-interpreter environment before dynamic Perl, the launcher descriptor-executes the verified Node binary, and the reviewed root-stage schema v5 installer plus independently implemented non-root verifier bind fifteen staged runtime files across fourteen units. Those files are twelve content-addressed ESM bundles, the launcher, canonical manifest, and pinned Node executable. The exact v9 build binds 24 outputs, and CI separates no-secrets exact PR-head verification from synthetic-merge and exact-main lanes. Focused local tests include real OS-process claim and execution fencing, activation/exchange/terminalization coordination, source privilege negatives, and a Linux root-stage container test. These are source and local-execution controls only. The source path now consumes database-authorized DVI proposal identities and the exact selected-evidence digest, but no provider-backed receipt yet proves the live DVI-to-AWS handoff. Final23 adds only a fresh-zero local QEMU-TCG x86-64 CockroachDB CCL v26.2.0 primary-capability-boundaries pass with typed-definer access, direct-DML/cross-role denials, simple recovery resolution, DVI proposal-identity negatives, wrong-digest rejection, one protected-effect insert, and sequential exact replay. It did not run final-head 50-session contention, held-expiry waits, simultaneous four-key uniqueness conflicts, ambiguity/ACK-loss, or integrated DVI plan/exclusions. No provider-hosted or external CockroachDB receipt, real two-host race, provider call, accepted PID1 isolation receipt, accepted root-stage receipt, hosted candidate-head receipt, deployment, judge access, or accepted +1 integrated receipt exists yet. Provider origin, provider-global exact-call count, crash behavior on the live services, final pricing, acceptance, and release therefore remain unproven; the +1 and release claims stay pending.",
       "remainingRequirements": [
         "Execute and independently accept exactly one fresh tideproof.highwater-drill-live.v1 receipt from the exact clean release with integrated DVI, overlapping Lambda authority, exact replay, changed-input denial, one canonical exact-winner recovery bundle, one continuous digest-bound Managed MCP session, bounded cleanup, and zero invariant violations."
       ]
@@ -1310,13 +1317,14 @@
     {
       "id": "stale-fence-rejection",
       "claim": "Stale fencing tokens cannot produce a protected synthetic effect.",
-      "currentStatus": "Gate One verified, database sink only",
-      "claimsLedgerRowSha256": "e05d057cb8c644cb970b01ae57214f7c77a1341c96cdfb7c71eaaa6302d24bf6",
+      "currentStatus": "Historical Gate One broad fence matrix verified; Final23 exact-version local digest/replay subset passed",
+      "claimsLedgerRowSha256": "b639dbb8eba4726e6ccc77ae9b0b49095d3579788f1630ac41ed203510221622",
       "proofState": "VERIFIED",
       "artifacts": [
+        "final23-local-cockroach-gate",
         "gate1-authority-evidence"
       ],
-      "acceptanceBoundary": "The accepted evidence covers a protected synthetic database sink only and is not an exactly-once real-world effect claim.",
+      "acceptanceBoundary": "The historical accepted evidence covers the broad stale-fence matrix. Final23 narrowly proves on local CockroachDB CCL v26.2.0 that wrong-digest calls insert zero rows, one current valid call inserts one protected row, sequential exact replay inserts zero more, and direct table insertion is denied with SQLSTATE 42501. It does not prove held-wait, simultaneous four-key conflicts, final-head contention, provider behavior, or an exactly-once external effect.",
       "remainingRequirements": []
     },
     {
@@ -1720,7 +1728,7 @@
         "release-security-verifier",
         "strict-json-contract"
       ],
-      "boundary": "The exact current-source verifier hash-binds 213 reviewed security surfaces and requires the generated Gate Two template to match its source. It preserves the public/IAM route split, browser headers, negative probes, throttles, concurrency, numeric Lambda targets, exact-Git builds, dependency/toolchain snapshots, deployment-attestation contracts, bounded evidence roles, IAM denials, KMS, log retention, database posture, fixed Managed MCP transport, and the protected read-only OIDC lane. It separately binds a no-secrets exact PR-head job, synthetic-merge CI, and exact-main CI identity. For the integrated drill it binds the Linux/systemd first-exec boundary, descriptor-bound verified Node execution, root-stage schema v5, seven distinct service identities, the atomic root-stage installer, independent non-root verifier, fifteen staged runtime files, fourteen units, twelve ESM runtime bundles, and 24 outputs. It also binds provider dispatch v2: separate claim, begin, redeem, finalize, activation, terminalization, and resolve-only roles and routines; migration-time removal of the legacy generic transition; no MCP bearer in contenders, controllers, workers, losers, reconcilers, or the persistent provider-operation broker; a database EXECUTING grant before local publication; create-only worker execution fencing; a provider-key-isolated operation broker; a fixed one-shot exchange that alone receives the bearer after exact READY/PROCEED_ONCE coordination and a post-PROCEED freshness check; a consumption fence and durable result before callback success; database-time terminalization without provider replay; and a reconciler with no mutation method, base-table access, nonce, or capability. The receipt returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, accepted PID1 isolation receipt, accepted root-stage receipt, hosted-CI receipt, provider-origin proof, administrator-exclusion finding, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds 213 reviewed security surfaces and requires the generated Gate Two template to match its source. It preserves the public/IAM route split, browser headers, negative probes, throttles, concurrency, numeric Lambda targets, exact-Git builds, dependency/toolchain snapshots, deployment-attestation contracts, bounded evidence roles, IAM denials, KMS, log retention, database posture, fixed Managed MCP transport, and the protected read-only OIDC lane. It separately binds a no-secrets exact PR-head job, synthetic-merge CI, and exact-main CI identity. For the integrated drill it binds the Linux/systemd first-exec boundary, descriptor-bound verified Node execution, root-stage schema v5, seven distinct service identities, the atomic root-stage installer, independent non-root verifier, fifteen staged runtime files, fourteen units, twelve ESM runtime bundles, and 24 outputs. It also binds provider dispatch v2: separate claim, begin, redeem, finalize, activation, terminalization, and resolve-only roles and routines; migration-time removal of the legacy generic transition; no MCP bearer in contenders, controllers, workers, losers, reconcilers, or the persistent provider-operation broker; a database EXECUTING grant before local publication; create-only worker execution fencing; a provider-key-isolated operation broker; a fixed one-shot exchange that alone receives the bearer after exact READY/PROCEED_ONCE coordination and a post-PROCEED freshness check; a consumption fence and durable result before callback success; database-time terminalization without provider replay; and a reconciler with no mutation method, base-table access, nonce, or capability. The security ledger separately records the narrow fresh-zero local Final23 CockroachDB CCL v26.2.0 primary-capability result and its unexercised boundaries. The current-source receipt returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS receipt, provider-hosted or external CockroachDB receipt, broader Final23 contention/ambiguity/DVI/PID1 receipt, accepted root-stage receipt, hosted-CI receipt, provider-origin proof, administrator-exclusion finding, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]
