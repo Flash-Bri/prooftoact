@@ -215,16 +215,28 @@ function alternateDigest(digest) {
 
 async function authorityCurrent(client, request) {
   const result = await client.query(
-    `
-      SELECT authority_current
-      FROM tp_private.g1_authority_receipt_current_v2($1::UUID, $2::UUID)
-    `,
-    [request.tenantId, request.operationId]
+    SPEND_AUTHORITY_SQL,
+    spendAuthorityValues(request)
   );
-  if (result.rowCount !== 1) {
-    throw new Error("protected effect authority currentness was not singular");
+  const row = result.rows[0];
+  if (
+    result.rowCount !== 1 ||
+    row?.decision_outcome !== "resource_reserved" ||
+    row?.decision_operation_id !== request.operationId ||
+    row?.decision_request_digest !== request.requestDigest ||
+    row?.decision_replay_kind !== "operation_replay" ||
+    row?.decision_proposal_digest !== request.proposalDigest ||
+    row?.decision_logical_action_digest !== request.logicalActionDigest ||
+    row?.decision_authorization_epoch !== String(request.authorizationEpoch) ||
+    row?.decision_logical_authority_key_sha256 !==
+      request.logicalAuthorityKeySha256 ||
+    row?.decision_authorization_binding_sha256 !==
+      request.authorizationBindingSha256 ||
+    typeof row?.decision_authority_current !== "boolean"
+  ) {
+    throw new Error("protected effect authority replay was not exact");
   }
-  return result.rows[0].authority_current;
+  return row.decision_authority_current;
 }
 
 function requireEnvironment(name) {

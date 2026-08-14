@@ -2076,6 +2076,14 @@ test("Gate One executes the protected-effect insert and replay routine", async (
     source,
     /connectionStringForUser\(\s*adminConnectionString,\s*"tp_authorizer_user",\s*passwords\.tp_authorizer_user\s*\),\s*async \(authorizerClient\) => withClient\(/u
   );
+  assert.match(
+    source,
+    /async function authorityCurrent\([\s\S]*client\.query\(\s*SPEND_AUTHORITY_SQL,\s*spendAuthorityValues\(request\)[\s\S]*decision_replay_kind !== "operation_replay"[\s\S]*decision_authority_current/u
+  );
+  assert.doesNotMatch(
+    source,
+    /FROM tp_private\.g1_authority_receipt_current_v2/u
+  );
   assert.doesNotMatch(source, /authorityCurrent\(\s*admin,/u);
   assert.match(
     source,
