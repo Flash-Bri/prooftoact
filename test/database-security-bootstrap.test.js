@@ -664,9 +664,12 @@ test("recovery source resolver binds identity while separating policy domains", 
 
 test("recovery source resolver requires the exact live authority holder", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  const resolver = source.match(
-    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
-  )?.[1];
+  const resolverMatch = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?RETURNS TABLE\(([\s\S]*?)\)\s*LANGUAGE PLpgSQL[\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  );
+  const returnSignature = resolverMatch?.[1];
+  const resolver = resolverMatch?.[2];
+  assert.ok(returnSignature);
   assert.ok(resolver);
   assert.match(
     resolver,
@@ -696,7 +699,7 @@ test("recovery source resolver requires the exact live authority holder", async 
   );
   assert.match(
     resolver,
-    /SELECT count\(\*\)::INT8[\s\S]*INTO v_candidate_count[\s\S]*SELECT 1[\s\S]*LIMIT 2[\s\S]*AS bounded_candidates;[\s\S]*COALESCE\(v_candidate_count, 0\) <> 1[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_candidate_receipt_lease_expires_at <= v_database_now[\s\S]*v_candidate_resource_lease_expires_at <= v_database_now[\s\S]*v_candidate_proposal_expires_at <= v_database_now[\s\S]*RETURN QUERY SELECT/u
+    /SELECT count\(\*\)::INT8[\s\S]*INTO v_candidate_count[\s\S]*SELECT 1[\s\S]*LIMIT 2[\s\S]*AS bounded_candidates;[\s\S]*COALESCE\(v_candidate_count, 0\) <> 1[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_candidate_receipt_lease_expires_at <= v_database_now[\s\S]*v_candidate_resource_lease_expires_at <= v_database_now[\s\S]*v_candidate_proposal_expires_at <= v_database_now[\s\S]*tenant_id := v_candidate_tenant_id;[\s\S]*RETURN NEXT;[\s\S]*RETURN;/u
   );
   assert.doesNotMatch(resolver, /1::INT8 AS candidate_count/u);
   assert.doesNotMatch(
@@ -747,13 +750,14 @@ test("recovery source resolver requires the exact live authority holder", async 
     resolver,
     /jsonb_agg|jsonb_array_elements|FOR\s+\w+\s+IN\s+SELECT|\bEXECUTE\b/u
   );
-  const returnQueryStart = resolver.indexOf(
-    "RETURN QUERY SELECT",
+  const outputAssignmentStart = resolver.indexOf(
+    "tenant_id := v_candidate_tenant_id;",
     firstFreshClock
   );
+  assert.ok(outputAssignmentStart > firstFreshClock);
   const postClockDecision = resolver.slice(
     firstFreshClock,
-    returnQueryStart
+    outputAssignmentStart
   );
   assert.match(
     postClockDecision,
@@ -767,6 +771,83 @@ test("recovery source resolver requires the exact live authority holder", async 
   assert.doesNotMatch(postClockDecision, /\b(?:SELECT|FROM)\b/u);
   assert.doesNotMatch(resolver, /statement_timestamp\(\)/u);
   assert.doesNotMatch(resolver, /transaction_timestamp\(\)/u);
+
+  const outputAssignments = Object.freeze([
+    ["tenant_id", "v_candidate_tenant_id"],
+    ["run_id", "v_candidate_run_id"],
+    ["incident_id", "v_candidate_incident_id"],
+    ["evidence_id", "v_candidate_evidence_id"],
+    ["operation_id", "v_candidate_operation_id"],
+    ["recorded_at", "v_candidate_recorded_at"],
+    ["request_digest", "v_candidate_request_digest"],
+    ["proposal_digest", "v_candidate_proposal_digest"],
+    ["logical_action_digest", "v_candidate_logical_action_digest"],
+    ["authorization_epoch", "v_candidate_authorization_epoch"],
+    [
+      "logical_authority_key_sha256",
+      "v_candidate_logical_authority_key_sha256"
+    ],
+    [
+      "authorization_binding_sha256",
+      "v_candidate_authorization_binding_sha256"
+    ],
+    ["policy_version", "v_candidate_policy_version"],
+    ["agent_id", "v_candidate_agent_id"],
+    ["agency", "v_candidate_agency"],
+    ["outcome", "v_candidate_outcome"],
+    ["reason", "v_candidate_reason"],
+    ["evidence_digest", "v_candidate_evidence_digest"],
+    [
+      "authority_evidence_binding_sha256",
+      "v_candidate_authority_evidence_binding_sha256"
+    ],
+    ["resource_id", "v_candidate_resource_id"],
+    ["has_durable_intent", "v_candidate_has_durable_intent"],
+    ["admissibility", "v_candidate_admissibility"],
+    ["database_now", "v_database_now"]
+  ]);
+  const returnColumns = [...returnSignature.matchAll(
+    /^\s*([a-z][a-z0-9_]*)\s+(?:UUID|STRING|INT8|TIMESTAMPTZ|BOOL),?\s*$/gmu
+  )].map((match) => match[1]);
+  assert.equal(outputAssignments.length, 23);
+  assert.deepEqual(
+    returnColumns,
+    outputAssignments.map(([output]) => output)
+  );
+  assert.equal(
+    new Set(outputAssignments.map(([output]) => output)).size,
+    outputAssignments.length
+  );
+  assert.equal(
+    new Set(outputAssignments.map(([, sourceName]) => sourceName)).size,
+    outputAssignments.length
+  );
+  const normalizedOutput = resolver
+    .slice(outputAssignmentStart)
+    .replace(/\s+/gu, " ")
+    .trim();
+  let previousAssignment = -1;
+  for (const [output, sourceName] of outputAssignments) {
+    const assignment = `${output} := ${sourceName};`;
+    const assignmentIndex = normalizedOutput.indexOf(assignment);
+    assert.ok(assignmentIndex > previousAssignment, assignment);
+    assert.equal(
+      normalizedOutput.split(assignment).length - 1,
+      1,
+      assignment
+    );
+    previousAssignment = assignmentIndex;
+  }
+  assert.match(
+    normalizedOutput,
+    /database_now := v_database_now; RETURN NEXT; RETURN; END$/u
+  );
+  assert.equal(resolver.match(/\bRETURN NEXT;/gu)?.length, 1);
+  assert.ok(
+    resolver.lastIndexOf("CLOSE v_candidate_conflict_cursor;") <
+      outputAssignmentStart
+  );
+  assert.doesNotMatch(resolver, /\bRETURN QUERY\b/u);
 
   const admissibility = source.match(
     /CREATE OR REPLACE FUNCTION tp_private\.g1_list_admissibility_internal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
@@ -918,7 +999,7 @@ test("primary function SQL is digest-pinned before any database query", async ()
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
     statementCount: 55,
-    sha256: "126b075dd1994bb9020aa7d088b59d10dfc652abbbf43ebeb0055bf8ab8f2e2b"
+    sha256: "404773312f2cd1c9763566a1ee5ed9aca55c5d423b54c11e640a9350ceda3929"
   });
   const legacyProviderDrop = statements.find((statement) =>
     statement.includes("DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1")

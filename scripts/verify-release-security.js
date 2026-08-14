@@ -1938,7 +1938,11 @@ const SOURCE_MARKERS = Object.freeze({
     "body.match(/v_database_now := clock_timestamp\\(\\);/gu)?.length",
     "Gate One repeat stability compares equal database timestamps by value",
     "Gate One proves resolver cursor closure inside one transaction",
-    "assert.deepEqual(stableColumns, [...stableColumns].sort())"
+    "assert.deepEqual(stableColumns, [...stableColumns].sort())",
+    "const outputAssignments = Object.freeze([",
+    "assert.equal(outputAssignments.length, 23)",
+    "database_now := v_database_now; RETURN NEXT; RETURN;",
+    "assert.doesNotMatch(resolver, /\\bRETURN QUERY\\b/u)"
   ]),
   "database-security-posture": Object.freeze([
     "DATABASE_POSTURE_BOOTSTRAP_SESSION_UNSAFE",
@@ -3225,6 +3229,7 @@ const SOURCE_MARKERS = Object.freeze({
     "CLOSE v_candidate_conflict_cursor; IF NOT v_candidate_conflict_snapshot_valid THEN RETURN; END IF; v_database_now := clock_timestamp();",
     "WHILE v_candidate_conflict_index < jsonb_array_length(v_candidate_conflict_windows) LOOP v_candidate_conflict_window := v_candidate_conflict_windows->v_candidate_conflict_index;",
     "v_candidate_evidence_valid_until <= v_database_now",
+    "tenant_id := v_candidate_tenant_id; run_id := v_candidate_run_id; incident_id := v_candidate_incident_id; evidence_id := v_candidate_evidence_id; operation_id := v_candidate_operation_id; recorded_at := v_candidate_recorded_at; request_digest := v_candidate_request_digest; proposal_digest := v_candidate_proposal_digest; logical_action_digest := v_candidate_logical_action_digest; authorization_epoch := v_candidate_authorization_epoch; logical_authority_key_sha256 := v_candidate_logical_authority_key_sha256; authorization_binding_sha256 := v_candidate_authorization_binding_sha256; policy_version := v_candidate_policy_version; agent_id := v_candidate_agent_id; agency := v_candidate_agency; outcome := v_candidate_outcome; reason := v_candidate_reason; evidence_digest := v_candidate_evidence_digest; authority_evidence_binding_sha256 := v_candidate_authority_evidence_binding_sha256; resource_id := v_candidate_resource_id; has_durable_intent := v_candidate_has_durable_intent; admissibility := v_candidate_admissibility; database_now := v_database_now; RETURN NEXT; RETURN;",
     "tideproof.primary-function-sql-batch.v1",
     "PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED",
     "primaryFunctionSqlBatchSha256(statements)",
@@ -3714,6 +3719,7 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
     "SELECT COALESCE(jsonb_agg(jsonb_build_object(",
     "FROM pg_catalog.jsonb_array_elements(v_candidate_conflict_windows)",
     "FOR v_candidate_conflict_window IN SELECT",
+    "RETURN QUERY SELECT v_candidate_tenant_id, v_candidate_run_id, v_candidate_incident_id, v_candidate_evidence_id, v_candidate_operation_id, v_candidate_recorded_at, v_candidate_request_digest, v_candidate_proposal_digest, v_candidate_logical_action_digest, v_candidate_authorization_epoch, v_candidate_logical_authority_key_sha256, v_candidate_authorization_binding_sha256, v_candidate_policy_version, v_candidate_agent_id, v_candidate_agency, v_candidate_outcome, v_candidate_reason, v_candidate_evidence_digest, v_candidate_authority_evidence_binding_sha256, v_candidate_resource_id, v_candidate_has_durable_intent, v_candidate_admissibility, v_database_now",
     "INSERT INTO tp_ledger.g1_protected_effects AS inserted_effect ( tenant_id, effect_key, operation_id, request_digest, proposal_digest, logical_action_digest, authorization_epoch, logical_authority_key_sha256, authorization_binding_sha256, run_id, incident_id, resource_id, agent_id, fencing_token, payload_digest ) SELECT p_tenant_id, p_effect_key, p_operation_id, p_request_digest"
   ])
 });
