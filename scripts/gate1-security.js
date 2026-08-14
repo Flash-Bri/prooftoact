@@ -1238,6 +1238,25 @@ async function main() {
             normalizedCapabilityRequest.requestDigest
           ]
         );
+      const privateSnapshotDeniedOrAbsent =
+        await expectPrivilegeDeniedOrUndefined(
+          client,
+          `
+            SELECT tp_private.g1_resolve_recovery_source_snapshot_v1(
+              $1::UUID, $2::UUID, $3::UUID, $4::UUID,
+              $5, $6::UUID, $7
+            )
+          `,
+          [
+            authorityFixture.tenantId,
+            authorityFixture.runId,
+            authorityFixture.incidentId,
+            authorityFixture.evidenceId,
+            authorityFixture.resourceId,
+            normalizedCapabilityRequest.operationId,
+            normalizedCapabilityRequest.requestDigest
+          ]
+        );
       const recoverySourceQuery = `
           SELECT *
           FROM tp_api.g1_resolve_recovery_source_receipt_v2(
@@ -1329,6 +1348,7 @@ async function main() {
         directTrustRootWrite,
         auditResolverDenied,
         legacySourceResolverDeniedOrAbsent,
+        privateSnapshotDeniedOrAbsent,
         operationId: resolved.rows[0].operation_id,
         databaseNow: resolved.rows[0].database_now,
         cursorCountAfterFirst,

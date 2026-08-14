@@ -287,6 +287,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
+    ["g1_resolve_recovery_source_snapshot_v1", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_source_receipt_v2", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user <> 'tp_dispatch_user'/u]
@@ -588,12 +589,12 @@ test("Gate One SQL identity probes isolate one intended fault", async () => {
   );
 });
 
-test("recovery source resolver binds identity while separating policy domains", async () => {
+test("private recovery source snapshot binds identity while separating policy domains", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  const resolver = source.match(
-    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  const snapshot = source.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_resolve_recovery_source_snapshot_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
-  assert.ok(resolver);
+  assert.ok(snapshot);
   for (const field of [
     "request_digest",
     "proposal_digest",
@@ -609,7 +610,7 @@ test("recovery source resolver binds identity while separating policy domains", 
     "payload_digest"
   ]) {
     assert.match(
-      resolver,
+      snapshot,
       new RegExp(`outbox\\.${field}\\s*=\\s*receipt\\.${field}`, "u"),
       field
     );
@@ -626,53 +627,65 @@ test("recovery source resolver binds identity while separating policy domains", 
     "agency"
   ]) {
     assert.match(
-      resolver,
+      snapshot,
       new RegExp(`proposal\\.${field}\\s*=\\s*receipt\\.${field}`, "u"),
       `proposal.${field}`
     );
   }
   assert.match(
-    resolver,
+    snapshot,
     /proposal\.selected_evidence_id\s*=\s*receipt\.evidence_id/u
   );
   assert.match(
-    resolver,
+    snapshot,
     /proposal\.selected_evidence_digest\s*=\s*receipt\.evidence_digest/u
   );
   const statements = await primarySecurityContract.primaryFunctionSqlStatements();
-  const emittedResolver = statements.find((statement) =>
-    statement.includes("g1_resolve_recovery_source_receipt_v2")
+  const emittedSnapshot = statements.find((statement) =>
+    statement.includes("g1_resolve_recovery_source_snapshot_v1")
   );
-  assert.ok(emittedResolver);
+  assert.ok(emittedSnapshot);
   assert.equal(
-    emittedResolver.match(
+    emittedSnapshot.match(
       /proposal\.policy_version = 'g1-admissibility-v2'/gu
     )?.length,
     2
   );
   assert.equal(
-    emittedResolver.match(/receipt\.policy_version = 'gate1-policy-v2'/gu)
+    emittedSnapshot.match(/receipt\.policy_version = 'gate1-policy-v2'/gu)
       ?.length,
     2
   );
   assert.doesNotMatch(
-    emittedResolver,
+    emittedSnapshot,
     /proposal\.policy_version\s*=\s*receipt\.policy_version/u
   );
-  assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
+  assert.match(snapshot, /proposal\.authority_evidence_binding_sha256/u);
 });
 
-test("recovery source resolver requires the exact live authority holder", async () => {
+test("recovery source resolves through a private scalar snapshot and inert public boundary", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  const resolverMatch = source.match(
+  const snapshot = source.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_resolve_recovery_source_snapshot_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  const wrapperMatch = source.match(
     /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?RETURNS TABLE\(([\s\S]*?)\)\s*LANGUAGE PLpgSQL[\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   );
-  const returnSignature = resolverMatch?.[1];
-  const resolver = resolverMatch?.[2];
+  const returnSignature = wrapperMatch?.[1];
+  const wrapper = wrapperMatch?.[2];
+  assert.ok(snapshot);
   assert.ok(returnSignature);
-  assert.ok(resolver);
+  assert.ok(wrapper);
   assert.match(
-    resolver,
+    snapshot,
+    /IF NOT \(session_user = 'tp_recovery_source_user'\) THEN[\s\S]*42501/u
+  );
+  assert.match(
+    wrapper,
+    /IF NOT \(session_user = 'tp_recovery_source_user'\) THEN[\s\S]*42501/u
+  );
+  assert.match(
+    snapshot,
     /JOIN tp_private\.g1_resources AS resource\s+ON resource\.tenant_id = receipt\.tenant_id\s+AND resource\.resource_id = receipt\.resource_id/u
   );
   for (const [resourceField, receiptField] of [
@@ -685,7 +698,7 @@ test("recovery source resolver requires the exact live authority holder", async 
     ["current_fence", "fencing_token"]
   ]) {
     assert.match(
-      resolver,
+      snapshot,
       new RegExp(
         `resource\\.${resourceField}\\s*=\\s*receipt\\.${receiptField}`,
         "u"
@@ -694,160 +707,202 @@ test("recovery source resolver requires the exact live authority holder", async 
     );
   }
   assert.match(
-    resolver,
+    snapshot,
+    /SELECT count\(\*\)::INT8[\s\S]*INTO v_candidate_count[\s\S]*SELECT 1[\s\S]*LIMIT 2[\s\S]*AS bounded_candidates;[\s\S]*COALESCE\(v_candidate_count, 0\) <> 1 THEN[\s\S]*RETURN NULL;/u
+  );
+  assert.match(
+    snapshot,
     /receipt\.lease_expires_at AS receipt_lease_expires_at[\s\S]*resource\.lease_expires_at AS resource_lease_expires_at[\s\S]*proposal\.expires_at AS proposal_expires_at/u
   );
   assert.match(
-    resolver,
-    /SELECT count\(\*\)::INT8[\s\S]*INTO v_candidate_count[\s\S]*SELECT 1[\s\S]*LIMIT 2[\s\S]*AS bounded_candidates;[\s\S]*COALESCE\(v_candidate_count, 0\) <> 1[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_candidate_receipt_lease_expires_at <= v_database_now[\s\S]*v_candidate_resource_lease_expires_at <= v_database_now[\s\S]*v_candidate_proposal_expires_at <= v_database_now[\s\S]*tenant_id := v_candidate_tenant_id;[\s\S]*RETURN NEXT;[\s\S]*RETURN;/u
-  );
-  assert.doesNotMatch(resolver, /1::INT8 AS candidate_count/u);
-  assert.doesNotMatch(
-    resolver,
-    /g1_list_admissibility_internal_v1/u
-  );
-  assert.match(
-    resolver,
+    snapshot,
     /evidence\.observed_at AS evidence_observed_at[\s\S]*evidence\.valid_from AS evidence_valid_from[\s\S]*evidence\.valid_until AS evidence_valid_until[\s\S]*evidence\.conflict_status AS evidence_conflict_status[\s\S]*evidence\.claim_key AS evidence_claim_key[\s\S]*evidence\.claim_value AS evidence_claim_value/u
   );
-  const detailedCandidateStart = resolver.indexOf(
-    "SELECT\n        receipt.tenant_id"
-  );
-  const conflictSnapshotStart = resolver.indexOf(
-    "v_candidate_conflict_windows := '[]'::JSONB;"
-  );
-  const firstFreshClock = resolver.indexOf(
-    "v_database_now := clock_timestamp();"
-  );
-  assert.ok(
-    detailedCandidateStart >= 0 &&
-    conflictSnapshotStart > detailedCandidateStart &&
-    firstFreshClock > conflictSnapshotStart
-  );
-  const detailedCandidateSql = resolver.slice(
-    detailedCandidateStart,
-    conflictSnapshotStart
-  );
-  assert.doesNotMatch(detailedCandidateSql, /jsonb_agg/u);
   assert.match(
-    detailedCandidateSql,
-    /evidence\.claim_key AS evidence_claim_key,\s*evidence\.claim_value AS evidence_claim_value\s+INTO[\s\S]*v_candidate_evidence_conflict_status,\s*v_candidate_evidence_claim_key,\s*v_candidate_evidence_claim_value\s+FROM tp_ledger\.g1_authority_receipts/u
+    snapshot,
+    /OPEN v_candidate_conflict_cursor NO SCROLL FOR[\s\S]*other\.tenant_id = v_candidate_tenant_id[\s\S]*other\.incident_id = v_candidate_incident_id[\s\S]*other\.evidence_id <> v_candidate_evidence_id[\s\S]*other\.claim_key = v_candidate_evidence_claim_key[\s\S]*other\.claim_value <> v_candidate_evidence_claim_value[\s\S]*other_key\.status = 'active'[\s\S]*other\.agency_scope IN \(v_candidate_agency, '\*'\)[\s\S]*ORDER BY other\.evidence_id;[\s\S]*FETCH v_candidate_conflict_cursor INTO[\s\S]*v_candidate_conflict_count > 10000[\s\S]*CLOSE v_candidate_conflict_cursor;[\s\S]*IF NOT v_candidate_conflict_snapshot_valid THEN[\s\S]*RETURN NULL;/u
   );
-  assert.match(
-    detailedCandidateSql,
-    /IF v_candidate_tenant_id IS NULL[\s\S]*v_candidate_incident_id IS NULL[\s\S]*v_candidate_evidence_id IS NULL[\s\S]*v_candidate_agency IS NULL[\s\S]*v_candidate_evidence_claim_key IS NULL[\s\S]*v_candidate_evidence_claim_value IS NULL THEN[\s\S]*RETURN;/u
-  );
-  const conflictSnapshotSql = resolver.slice(
-    conflictSnapshotStart,
-    firstFreshClock
-  );
-  assert.match(
-    conflictSnapshotSql,
-    /v_candidate_conflict_windows := '\[\]'::JSONB;[\s\S]*v_candidate_conflict_count := 0;[\s\S]*v_candidate_conflict_snapshot_valid := true;[\s\S]*OPEN v_candidate_conflict_cursor NO SCROLL FOR[\s\S]*SELECT[\s\S]*other\.evidence_id,[\s\S]*other\.observed_at,[\s\S]*other\.valid_from,[\s\S]*other\.valid_until[\s\S]*other\.tenant_id = v_candidate_tenant_id[\s\S]*other\.incident_id = v_candidate_incident_id[\s\S]*other\.evidence_id <> v_candidate_evidence_id[\s\S]*other\.claim_key = v_candidate_evidence_claim_key[\s\S]*other\.claim_value <> v_candidate_evidence_claim_value[\s\S]*other_verification\.signature_digest =[\s\S]*other\.signature_digest[\s\S]*other_key\.status = 'active'[\s\S]*other\.agency_scope IN \(v_candidate_agency, '\*'\)[\s\S]*ORDER BY other\.evidence_id;[\s\S]*v_candidate_conflict_evidence_id := NULL;[\s\S]*v_candidate_conflict_observed_at := NULL;[\s\S]*v_candidate_conflict_valid_from := NULL;[\s\S]*v_candidate_conflict_valid_until := NULL;[\s\S]*FETCH v_candidate_conflict_cursor INTO[\s\S]*v_candidate_conflict_evidence_id,[\s\S]*v_candidate_conflict_observed_at,[\s\S]*v_candidate_conflict_valid_from,[\s\S]*v_candidate_conflict_valid_until;[\s\S]*EXIT WHEN v_candidate_conflict_evidence_id IS NULL;[\s\S]*v_candidate_conflict_count := v_candidate_conflict_count \+ 1;[\s\S]*v_candidate_conflict_count > 10000[\s\S]*v_candidate_conflict_observed_at IS NULL[\s\S]*v_candidate_conflict_valid_from IS NULL[\s\S]*v_candidate_conflict_valid_until IS NULL[\s\S]*v_candidate_conflict_snapshot_valid := false;[\s\S]*EXIT;[\s\S]*jsonb_build_array\(jsonb_build_object\([\s\S]*'observed_at'[\s\S]*'valid_from'[\s\S]*'valid_until'[\s\S]*END LOOP;[\s\S]*CLOSE v_candidate_conflict_cursor;[\s\S]*IF NOT v_candidate_conflict_snapshot_valid THEN[\s\S]*RETURN;/u
-  );
-  assert.doesNotMatch(conflictSnapshotSql, /\breceipt\.|\bevidence\./u);
-  assert.doesNotMatch(
-    resolver,
-    /jsonb_agg|jsonb_array_elements|FOR\s+\w+\s+IN\s+SELECT|\bEXECUTE\b/u
-  );
-  const outputAssignmentStart = resolver.indexOf(
-    "tenant_id := v_candidate_tenant_id;",
-    firstFreshClock
-  );
-  assert.ok(outputAssignmentStart > firstFreshClock);
-  const postClockDecision = resolver.slice(
-    firstFreshClock,
-    outputAssignmentStart
-  );
+  const freshClock = snapshot.indexOf("v_database_now := clock_timestamp();");
+  const snapshotReturn = snapshot.indexOf("RETURN jsonb_build_object(", freshClock);
+  assert.ok(freshClock > 0 && snapshotReturn > freshClock);
+  const postClockDecision = snapshot.slice(freshClock, snapshotReturn);
   assert.match(
     postClockDecision,
-    /v_database_now := clock_timestamp\(\);[\s\S]*v_candidate_evidence_observed_at >[\s\S]*v_database_now \+ INTERVAL '5 minutes'[\s\S]*v_candidate_evidence_valid_from > v_database_now[\s\S]*v_candidate_evidence_valid_until <= v_database_now[\s\S]*v_candidate_evidence_conflict_status = 'unresolved'[\s\S]*v_candidate_conflict_index := 0;[\s\S]*WHILE v_candidate_conflict_index <[\s\S]*jsonb_array_length\(v_candidate_conflict_windows\) LOOP[\s\S]*v_candidate_conflict_windows->v_candidate_conflict_index[\s\S]*v_candidate_conflict_window->>'observed_at'[\s\S]*v_candidate_conflict_window->>'valid_from'[\s\S]*v_candidate_conflict_window->>'valid_until'[\s\S]*RETURN;[\s\S]*v_candidate_conflict_index := v_candidate_conflict_index \+ 1;[\s\S]*END LOOP;/u
+    /v_candidate_evidence_observed_at >[\s\S]*v_database_now \+ INTERVAL '5 minutes'[\s\S]*v_candidate_evidence_valid_from > v_database_now[\s\S]*v_candidate_evidence_valid_until <= v_database_now[\s\S]*v_candidate_evidence_conflict_status = 'unresolved'[\s\S]*v_candidate_conflict_index := 0;[\s\S]*WHILE v_candidate_conflict_index <[\s\S]*jsonb_array_length\(v_candidate_conflict_windows\) LOOP[\s\S]*RETURN NULL;[\s\S]*END LOOP;/u
   );
   assert.equal(
-    resolver.match(/v_database_now := clock_timestamp\(\);/gu)?.length,
+    snapshot.match(/v_database_now := clock_timestamp\(\);/gu)?.length,
     1
   );
   assert.doesNotMatch(postClockDecision, /\btp_(?:api|private|ledger)\./u);
   assert.doesNotMatch(postClockDecision, /\b(?:SELECT|FROM)\b/u);
-  assert.doesNotMatch(resolver, /statement_timestamp\(\)/u);
-  assert.doesNotMatch(resolver, /transaction_timestamp\(\)/u);
+  assert.doesNotMatch(snapshot, /statement_timestamp\(\)|transaction_timestamp\(\)/u);
+  assert.doesNotMatch(snapshot, /\bRETURN NEXT\b|\bRETURN QUERY\b/u);
+
+  const snapshotKeys = Object.freeze([
+    "snapshot_schema",
+    "tenant_id",
+    "run_id",
+    "incident_id",
+    "evidence_id",
+    "operation_id",
+    "recorded_at",
+    "request_digest",
+    "proposal_digest",
+    "logical_action_digest",
+    "authorization_epoch",
+    "logical_authority_key_sha256",
+    "authorization_binding_sha256",
+    "policy_version",
+    "agent_id",
+    "agency",
+    "outcome",
+    "reason",
+    "evidence_digest",
+    "authority_evidence_binding_sha256",
+    "resource_id",
+    "has_durable_intent",
+    "admissibility",
+    "database_now"
+  ]);
+  const normalizedSnapshot = snapshot.replace(/\s+/gu, " ");
+  assert.match(
+    normalizedSnapshot,
+    /RETURN jsonb_build_object\( 'snapshot_schema', 'g1-recovery-source-snapshot-v1'/u
+  );
+  const snapshotPayload = normalizedSnapshot.slice(
+    normalizedSnapshot.indexOf("RETURN jsonb_build_object(")
+  );
+  for (const key of snapshotKeys) {
+    assert.equal(
+      snapshotPayload.split(`'${key}'`).length - 1,
+      1,
+      key
+    );
+  }
+
+  assert.match(
+    wrapper,
+    /v_snapshot := tp_private\.g1_resolve_recovery_source_snapshot_v1\([\s\S]*p_request_digest[\s\S]*\);/u
+  );
+  assert.match(
+    wrapper,
+    /v_snapshot IS DISTINCT FROM jsonb_build_object\([\s\S]*'snapshot_schema', v_snapshot->'snapshot_schema'[\s\S]*'database_now', v_snapshot->'database_now'[\s\S]*\)/u
+  );
+  assert.match(
+    wrapper,
+    /jsonb_typeof\(v_snapshot->'reason'\) IS DISTINCT FROM 'string'[\s\S]*jsonb_typeof\(v_snapshot->'reason'\) IS DISTINCT FROM 'null'/u
+  );
+  assert.doesNotMatch(
+    wrapper,
+    /\b(?:SELECT|OPEN|FETCH|CLOSE|RETURN QUERY|jsonb_object_keys|jsonb_array_elements|EXECUTE)\b/u
+  );
+  assert.doesNotMatch(
+    wrapper,
+    /\bFROM\s+(?:tp_|\()/u
+  );
+  for (const [key, value] of [
+    ["tenant_id", "p_tenant_id::STRING"],
+    ["run_id", "p_run_id::STRING"],
+    ["incident_id", "p_incident_id::STRING"],
+    ["evidence_id", "p_evidence_id::STRING"],
+    ["operation_id", "p_operation_id::STRING"],
+    ["resource_id", "p_resource_id"],
+    ["request_digest", "p_request_digest"]
+  ]) {
+    assert.match(
+      wrapper,
+      new RegExp(
+        `v_snapshot->>'${key}'\\s+IS DISTINCT FROM\\s+${value.replace(/[()]/gu, "\\$&")}`,
+        "u"
+      ),
+      key
+    );
+  }
+  assert.match(
+    wrapper,
+    /policy_version' IS DISTINCT FROM 'gate1-policy-v2'[\s\S]*outcome' IS DISTINCT FROM 'resource_reserved'[\s\S]*has_durable_intent' IS DISTINCT FROM 'true'[\s\S]*admissibility' IS DISTINCT FROM 'admissible'/u
+  );
 
   const outputAssignments = Object.freeze([
-    ["tenant_id", "v_candidate_tenant_id"],
-    ["run_id", "v_candidate_run_id"],
-    ["incident_id", "v_candidate_incident_id"],
-    ["evidence_id", "v_candidate_evidence_id"],
-    ["operation_id", "v_candidate_operation_id"],
-    ["recorded_at", "v_candidate_recorded_at"],
-    ["request_digest", "v_candidate_request_digest"],
-    ["proposal_digest", "v_candidate_proposal_digest"],
-    ["logical_action_digest", "v_candidate_logical_action_digest"],
-    ["authorization_epoch", "v_candidate_authorization_epoch"],
-    [
-      "logical_authority_key_sha256",
-      "v_candidate_logical_authority_key_sha256"
-    ],
-    [
-      "authorization_binding_sha256",
-      "v_candidate_authorization_binding_sha256"
-    ],
-    ["policy_version", "v_candidate_policy_version"],
-    ["agent_id", "v_candidate_agent_id"],
-    ["agency", "v_candidate_agency"],
-    ["outcome", "v_candidate_outcome"],
-    ["reason", "v_candidate_reason"],
-    ["evidence_digest", "v_candidate_evidence_digest"],
+    ["tenant_id", "(v_snapshot->>'tenant_id')::UUID"],
+    ["run_id", "(v_snapshot->>'run_id')::UUID"],
+    ["incident_id", "(v_snapshot->>'incident_id')::UUID"],
+    ["evidence_id", "(v_snapshot->>'evidence_id')::UUID"],
+    ["operation_id", "(v_snapshot->>'operation_id')::UUID"],
+    ["recorded_at", "(v_snapshot->>'recorded_at')::TIMESTAMPTZ"],
+    ["request_digest", "v_snapshot->>'request_digest'"],
+    ["proposal_digest", "v_snapshot->>'proposal_digest'"],
+    ["logical_action_digest", "v_snapshot->>'logical_action_digest'"],
+    ["authorization_epoch", "(v_snapshot->>'authorization_epoch')::INT8"],
+    ["logical_authority_key_sha256", "v_snapshot->>'logical_authority_key_sha256'"],
+    ["authorization_binding_sha256", "v_snapshot->>'authorization_binding_sha256'"],
+    ["policy_version", "v_snapshot->>'policy_version'"],
+    ["agent_id", "v_snapshot->>'agent_id'"],
+    ["agency", "v_snapshot->>'agency'"],
+    ["outcome", "v_snapshot->>'outcome'"],
+    ["reason", "v_snapshot->>'reason'"],
+    ["evidence_digest", "v_snapshot->>'evidence_digest'"],
     [
       "authority_evidence_binding_sha256",
-      "v_candidate_authority_evidence_binding_sha256"
+      "v_snapshot->>'authority_evidence_binding_sha256'"
     ],
-    ["resource_id", "v_candidate_resource_id"],
-    ["has_durable_intent", "v_candidate_has_durable_intent"],
-    ["admissibility", "v_candidate_admissibility"],
-    ["database_now", "v_database_now"]
+    ["resource_id", "v_snapshot->>'resource_id'"],
+    ["has_durable_intent", "(v_snapshot->>'has_durable_intent')::BOOL"],
+    ["admissibility", "v_snapshot->>'admissibility'"],
+    ["database_now", "(v_snapshot->>'database_now')::TIMESTAMPTZ"]
   ]);
   const returnColumns = [...returnSignature.matchAll(
     /^\s*([a-z][a-z0-9_]*)\s+(?:UUID|STRING|INT8|TIMESTAMPTZ|BOOL),?\s*$/gmu
   )].map((match) => match[1]);
   assert.equal(outputAssignments.length, 23);
-  assert.deepEqual(
-    returnColumns,
-    outputAssignments.map(([output]) => output)
-  );
-  assert.equal(
-    new Set(outputAssignments.map(([output]) => output)).size,
-    outputAssignments.length
-  );
-  assert.equal(
-    new Set(outputAssignments.map(([, sourceName]) => sourceName)).size,
-    outputAssignments.length
-  );
-  const normalizedOutput = resolver
-    .slice(outputAssignmentStart)
-    .replace(/\s+/gu, " ")
-    .trim();
+  assert.deepEqual(returnColumns, outputAssignments.map(([output]) => output));
+  const normalizedWrapper = wrapper.replace(/\s+/gu, " ").trim();
   let previousAssignment = -1;
   for (const [output, sourceName] of outputAssignments) {
     const assignment = `${output} := ${sourceName};`;
-    const assignmentIndex = normalizedOutput.indexOf(assignment);
+    const assignmentIndex = normalizedWrapper.indexOf(assignment);
     assert.ok(assignmentIndex > previousAssignment, assignment);
     assert.equal(
-      normalizedOutput.split(assignment).length - 1,
+      normalizedWrapper.split(assignment).length - 1,
       1,
       assignment
     );
     previousAssignment = assignmentIndex;
   }
   assert.match(
-    normalizedOutput,
-    /database_now := v_database_now; RETURN NEXT; RETURN; END$/u
+    normalizedWrapper,
+    /database_now := \(v_snapshot->>'database_now'\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$/u
   );
-  assert.equal(resolver.match(/\bRETURN NEXT;/gu)?.length, 1);
-  assert.ok(
-    resolver.lastIndexOf("CLOSE v_candidate_conflict_cursor;") <
-      outputAssignmentStart
+  assert.equal(wrapper.match(/\bRETURN NEXT;/gu)?.length, 1);
+  assert.doesNotMatch(wrapper, /\bRETURN QUERY\b/u);
+
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const emittedSnapshot = statements.filter((statement) =>
+    statement.includes(
+      "CREATE OR REPLACE FUNCTION tp_private.g1_resolve_recovery_source_snapshot_v1"
+    )
   );
-  assert.doesNotMatch(resolver, /\bRETURN QUERY\b/u);
+  const emittedWrapper = statements.filter((statement) =>
+    statement.includes(
+      "CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2"
+    )
+  );
+  assert.equal(emittedSnapshot.length, 1);
+  assert.equal(emittedWrapper.length, 1);
+  assert.doesNotMatch(
+    emittedWrapper[0],
+    /\b(?:SELECT|OPEN|FETCH|CLOSE)\b/u
+  );
+  assert.doesNotMatch(emittedWrapper[0], /\bFROM\s+(?:tp_|\()/u);
+  assert.match(
+    source,
+    /"tp_private\.g1_resolve_recovery_source_snapshot_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)"/u
+  );
+  assert.match(
+    source,
+    /tp_recovery_source_role: Object\.freeze\(\["tp_api"\]\)/u
+  );
 
   const admissibility = source.match(
     /CREATE OR REPLACE FUNCTION tp_private\.g1_list_admissibility_internal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
@@ -903,6 +958,10 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   assert.match(
     gate1Security,
     /expectPrivilegeDeniedOrUndefined[\s\S]*g1_resolve_recovery_source_receipt_v1\(/u
+  );
+  assert.match(
+    gate1Security,
+    /privateSnapshotDeniedOrAbsent[\s\S]*expectPrivilegeDeniedOrUndefined\([\s\S]*tp_private\.g1_resolve_recovery_source_snapshot_v1\(/u
   );
   assert.match(
     gate1Security,
@@ -998,8 +1057,8 @@ test("primary function SQL is digest-pinned before any database query", async ()
   );
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
-    statementCount: 55,
-    sha256: "404773312f2cd1c9763566a1ee5ed9aca55c5d423b54c11e640a9350ceda3929"
+    statementCount: 56,
+    sha256: "2c407976a54367e2db677d9ec07f7ce13547b292102b26f28b0db0c61a37d0ef"
   });
   const legacyProviderDrop = statements.find((statement) =>
     statement.includes("DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1")
@@ -1169,6 +1228,16 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
       .tp_recovery_source_role.functions;
   assert.deepEqual(finalPolicy, [currentSignature]);
   assert.deepEqual(preflightPolicy, [legacySignature, currentSignature]);
+  assert.deepEqual(
+    primarySecurityContract.primaryPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.schemas,
+    ["tp_api"]
+  );
+  assert.deepEqual(
+    primarySecurityContract.primaryPreflightPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.schemas,
+    ["tp_api", "tp_private", "tp_ledger"]
+  );
 
   const installedV1Grant = [{
     database_name: "tideproof",
@@ -1180,8 +1249,8 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
     privilege_type: "EXECUTE",
     is_grantable: false
   }];
-  const validateWith = (spec) => validateManagedObjectGrants(
-    installedV1Grant,
+  const validateWith = (spec, grants = installedV1Grant) => validateManagedObjectGrants(
+    grants,
     {
       databaseName: spec.databaseName,
       managedSchemas: spec.managedSchemas,
@@ -1203,6 +1272,25 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
     () => validateWith(primarySecurityContract.primaryPostureSpec),
     /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
   );
+  const privateSnapshotGrant = [{
+    database_name: "tideproof",
+    schema_name: "tp_private",
+    object_name:
+      "g1_resolve_recovery_source_snapshot_v1(uuid,uuid,uuid,uuid,string,uuid,string)",
+    object_type: "function",
+    grantee: "tp_recovery_source_role",
+    privilege_type: "EXECUTE",
+    is_grantable: false
+  }];
+  for (const spec of [
+    primarySecurityContract.primaryPreflightPostureSpec,
+    primarySecurityContract.primaryPostureSpec
+  ]) {
+    assert.throws(
+      () => validateWith(spec, privateSnapshotGrant),
+      /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
+    );
+  }
 });
 
 test("authorizer posture admits the exact DVI proposal capability it grants", () => {

@@ -58,9 +58,9 @@ const CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
   "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
 const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
   "tideproof.primary-function-sql-batch.v1";
-const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 55;
+const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 56;
 const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
-  "404773312f2cd1c9763566a1ee5ed9aca55c5d423b54c11e640a9350ceda3929";
+  "2c407976a54367e2db677d9ec07f7ce13547b292102b26f28b0db0c61a37d0ef";
 const PRIMARY_ROLE_FUNCTION_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -162,6 +162,7 @@ const PRIMARY_ROLE_SCHEMA_POLICIES = Object.freeze({
       ALL_RUNTIME_SCHEMAS
     ])
   ),
+  tp_recovery_source_role: Object.freeze(["tp_api"]),
   tp_recovery_audit_role: Object.freeze(["tp_api", "tp_ledger"]),
   tp_provider_activate_role: Object.freeze(["tp_api"]),
   tp_provider_terminalize_role: Object.freeze(["tp_api"]),
@@ -180,6 +181,7 @@ const PRIMARY_PREFLIGHT_ROLE_GRANT_POLICIES = Object.freeze({
   ...PRIMARY_ROLE_GRANT_POLICIES,
   tp_recovery_source_role: Object.freeze({
     ...PRIMARY_ROLE_GRANT_POLICIES.tp_recovery_source_role,
+    schemas: ALL_RUNTIME_SCHEMAS,
     functions: Object.freeze([
       LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE,
       CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
@@ -6503,7 +6505,7 @@ async function emitPrimaryFunctionSql(client) {
   `);
 
   await client.query(`
-    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2(
+    CREATE OR REPLACE FUNCTION tp_private.g1_resolve_recovery_source_snapshot_v1(
       p_tenant_id UUID,
       p_run_id UUID,
       p_incident_id UUID,
@@ -6512,31 +6514,7 @@ async function emitPrimaryFunctionSql(client) {
       p_operation_id UUID,
       p_request_digest STRING
     )
-    RETURNS TABLE(
-      tenant_id UUID,
-      run_id UUID,
-      incident_id UUID,
-      evidence_id UUID,
-      operation_id UUID,
-      recorded_at TIMESTAMPTZ,
-      request_digest STRING,
-      proposal_digest STRING,
-      logical_action_digest STRING,
-      authorization_epoch INT8,
-      logical_authority_key_sha256 STRING,
-      authorization_binding_sha256 STRING,
-      policy_version STRING,
-      agent_id STRING,
-      agency STRING,
-      outcome STRING,
-      reason STRING,
-      evidence_digest STRING,
-      authority_evidence_binding_sha256 STRING,
-      resource_id STRING,
-      has_durable_intent BOOL,
-      admissibility STRING,
-      database_now TIMESTAMPTZ
-    )
+    RETURNS JSONB
     LANGUAGE PLpgSQL
     SECURITY DEFINER
     AS $$
@@ -6599,7 +6577,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
       ) AS bounded_candidates;
 
       IF COALESCE(v_candidate_count, 0) <> 1 THEN
-        RETURN;
+        RETURN NULL;
       END IF;
 
       SELECT
@@ -6767,7 +6745,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
         OR v_candidate_agency IS NULL
         OR v_candidate_evidence_claim_key IS NULL
         OR v_candidate_evidence_claim_value IS NULL THEN
-        RETURN;
+        RETURN NULL;
       END IF;
 
       v_candidate_conflict_windows := '[]'::JSONB;
@@ -6843,7 +6821,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
       END LOOP;
       CLOSE v_candidate_conflict_cursor;
       IF NOT v_candidate_conflict_snapshot_valid THEN
-        RETURN;
+        RETURN NULL;
       END IF;
 
       v_database_now := clock_timestamp();
@@ -6857,7 +6835,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
         OR v_candidate_evidence_valid_from > v_database_now
         OR v_candidate_evidence_valid_until <= v_database_now
         OR v_candidate_evidence_conflict_status = 'unresolved' THEN
-        RETURN;
+        RETURN NULL;
       END IF;
 
       v_candidate_conflict_index := 0;
@@ -6871,37 +6849,207 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
             v_database_now
           AND (v_candidate_conflict_window->>'valid_until')::TIMESTAMPTZ >
             v_database_now THEN
-          RETURN;
+          RETURN NULL;
         END IF;
         v_candidate_conflict_index := v_candidate_conflict_index + 1;
       END LOOP;
 
-      tenant_id := v_candidate_tenant_id;
-      run_id := v_candidate_run_id;
-      incident_id := v_candidate_incident_id;
-      evidence_id := v_candidate_evidence_id;
-      operation_id := v_candidate_operation_id;
-      recorded_at := v_candidate_recorded_at;
-      request_digest := v_candidate_request_digest;
-      proposal_digest := v_candidate_proposal_digest;
-      logical_action_digest := v_candidate_logical_action_digest;
-      authorization_epoch := v_candidate_authorization_epoch;
+      RETURN jsonb_build_object(
+        'snapshot_schema', 'g1-recovery-source-snapshot-v1',
+        'tenant_id', v_candidate_tenant_id::STRING,
+        'run_id', v_candidate_run_id::STRING,
+        'incident_id', v_candidate_incident_id::STRING,
+        'evidence_id', v_candidate_evidence_id::STRING,
+        'operation_id', v_candidate_operation_id::STRING,
+        'recorded_at', v_candidate_recorded_at::STRING,
+        'request_digest', v_candidate_request_digest,
+        'proposal_digest', v_candidate_proposal_digest,
+        'logical_action_digest', v_candidate_logical_action_digest,
+        'authorization_epoch', v_candidate_authorization_epoch,
+        'logical_authority_key_sha256',
+          v_candidate_logical_authority_key_sha256,
+        'authorization_binding_sha256', v_candidate_authorization_binding_sha256,
+        'policy_version', v_candidate_policy_version,
+        'agent_id', v_candidate_agent_id,
+        'agency', v_candidate_agency,
+        'outcome', v_candidate_outcome,
+        'reason', v_candidate_reason,
+        'evidence_digest', v_candidate_evidence_digest,
+        'authority_evidence_binding_sha256',
+          v_candidate_authority_evidence_binding_sha256,
+        'resource_id', v_candidate_resource_id,
+        'has_durable_intent', v_candidate_has_durable_intent,
+        'admissibility', v_candidate_admissibility,
+        'database_now', v_database_now::STRING
+      );
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2(
+      p_tenant_id UUID,
+      p_run_id UUID,
+      p_incident_id UUID,
+      p_evidence_id UUID,
+      p_resource_id STRING,
+      p_operation_id UUID,
+      p_request_digest STRING
+    )
+    RETURNS TABLE(
+      tenant_id UUID,
+      run_id UUID,
+      incident_id UUID,
+      evidence_id UUID,
+      operation_id UUID,
+      recorded_at TIMESTAMPTZ,
+      request_digest STRING,
+      proposal_digest STRING,
+      logical_action_digest STRING,
+      authorization_epoch INT8,
+      logical_authority_key_sha256 STRING,
+      authorization_binding_sha256 STRING,
+      policy_version STRING,
+      agent_id STRING,
+      agency STRING,
+      outcome STRING,
+      reason STRING,
+      evidence_digest STRING,
+      authority_evidence_binding_sha256 STRING,
+      resource_id STRING,
+      has_durable_intent BOOL,
+      admissibility STRING,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+      v_snapshot JSONB;
+    BEGIN
+      IF NOT (session_user = 'tp_recovery_source_user') THEN
+        RAISE EXCEPTION 'recovery source database session required'
+          USING ERRCODE = '42501';
+      END IF;
+
+      v_snapshot := tp_private.g1_resolve_recovery_source_snapshot_v1(
+        p_tenant_id,
+        p_run_id,
+        p_incident_id,
+        p_evidence_id,
+        p_resource_id,
+        p_operation_id,
+        p_request_digest
+      );
+
+      IF v_snapshot IS NULL
+        OR jsonb_typeof(v_snapshot) IS DISTINCT FROM 'object'
+        OR v_snapshot IS DISTINCT FROM jsonb_build_object(
+          'snapshot_schema', v_snapshot->'snapshot_schema',
+          'tenant_id', v_snapshot->'tenant_id',
+          'run_id', v_snapshot->'run_id',
+          'incident_id', v_snapshot->'incident_id',
+          'evidence_id', v_snapshot->'evidence_id',
+          'operation_id', v_snapshot->'operation_id',
+          'recorded_at', v_snapshot->'recorded_at',
+          'request_digest', v_snapshot->'request_digest',
+          'proposal_digest', v_snapshot->'proposal_digest',
+          'logical_action_digest', v_snapshot->'logical_action_digest',
+          'authorization_epoch', v_snapshot->'authorization_epoch',
+          'logical_authority_key_sha256',
+            v_snapshot->'logical_authority_key_sha256',
+          'authorization_binding_sha256',
+            v_snapshot->'authorization_binding_sha256',
+          'policy_version', v_snapshot->'policy_version',
+          'agent_id', v_snapshot->'agent_id',
+          'agency', v_snapshot->'agency',
+          'outcome', v_snapshot->'outcome',
+          'reason', v_snapshot->'reason',
+          'evidence_digest', v_snapshot->'evidence_digest',
+          'authority_evidence_binding_sha256',
+            v_snapshot->'authority_evidence_binding_sha256',
+          'resource_id', v_snapshot->'resource_id',
+          'has_durable_intent', v_snapshot->'has_durable_intent',
+          'admissibility', v_snapshot->'admissibility',
+          'database_now', v_snapshot->'database_now'
+        )
+        OR v_snapshot->>'snapshot_schema' IS DISTINCT FROM
+          'g1-recovery-source-snapshot-v1'
+        OR jsonb_typeof(v_snapshot->'tenant_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'run_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'incident_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'evidence_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'operation_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'recorded_at') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'request_digest') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'proposal_digest') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'logical_action_digest') IS DISTINCT FROM
+          'string'
+        OR jsonb_typeof(v_snapshot->'authorization_epoch') IS DISTINCT FROM
+          'number'
+        OR jsonb_typeof(v_snapshot->'logical_authority_key_sha256') IS DISTINCT
+          FROM 'string'
+        OR jsonb_typeof(v_snapshot->'authorization_binding_sha256') IS DISTINCT
+          FROM 'string'
+        OR jsonb_typeof(v_snapshot->'policy_version') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'agent_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'agency') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'outcome') IS DISTINCT FROM 'string'
+        OR (
+          jsonb_typeof(v_snapshot->'reason') IS DISTINCT FROM 'string'
+          AND jsonb_typeof(v_snapshot->'reason') IS DISTINCT FROM 'null'
+        )
+        OR jsonb_typeof(v_snapshot->'evidence_digest') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(
+          v_snapshot->'authority_evidence_binding_sha256'
+        ) IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'resource_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'has_durable_intent') IS DISTINCT FROM
+          'boolean'
+        OR jsonb_typeof(v_snapshot->'admissibility') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'database_now') IS DISTINCT FROM 'string'
+        OR v_snapshot->>'tenant_id' IS DISTINCT FROM p_tenant_id::STRING
+        OR v_snapshot->>'run_id' IS DISTINCT FROM p_run_id::STRING
+        OR v_snapshot->>'incident_id' IS DISTINCT FROM p_incident_id::STRING
+        OR v_snapshot->>'evidence_id' IS DISTINCT FROM p_evidence_id::STRING
+        OR v_snapshot->>'operation_id' IS DISTINCT FROM p_operation_id::STRING
+        OR v_snapshot->>'resource_id' IS DISTINCT FROM p_resource_id
+        OR v_snapshot->>'request_digest' IS DISTINCT FROM p_request_digest
+        OR v_snapshot->>'policy_version' IS DISTINCT FROM 'gate1-policy-v2'
+        OR v_snapshot->>'outcome' IS DISTINCT FROM 'resource_reserved'
+        OR v_snapshot->>'has_durable_intent' IS DISTINCT FROM 'true'
+        OR v_snapshot->>'admissibility' IS DISTINCT FROM 'admissible'
+        OR v_snapshot->>'authorization_epoch' !~ '^[1-9][0-9]{0,17}$'
+      THEN
+        RETURN;
+      END IF;
+
+      tenant_id := (v_snapshot->>'tenant_id')::UUID;
+      run_id := (v_snapshot->>'run_id')::UUID;
+      incident_id := (v_snapshot->>'incident_id')::UUID;
+      evidence_id := (v_snapshot->>'evidence_id')::UUID;
+      operation_id := (v_snapshot->>'operation_id')::UUID;
+      recorded_at := (v_snapshot->>'recorded_at')::TIMESTAMPTZ;
+      request_digest := v_snapshot->>'request_digest';
+      proposal_digest := v_snapshot->>'proposal_digest';
+      logical_action_digest := v_snapshot->>'logical_action_digest';
+      authorization_epoch := (v_snapshot->>'authorization_epoch')::INT8;
       logical_authority_key_sha256 :=
-        v_candidate_logical_authority_key_sha256;
+        v_snapshot->>'logical_authority_key_sha256';
       authorization_binding_sha256 :=
-        v_candidate_authorization_binding_sha256;
-      policy_version := v_candidate_policy_version;
-      agent_id := v_candidate_agent_id;
-      agency := v_candidate_agency;
-      outcome := v_candidate_outcome;
-      reason := v_candidate_reason;
-      evidence_digest := v_candidate_evidence_digest;
+        v_snapshot->>'authorization_binding_sha256';
+      policy_version := v_snapshot->>'policy_version';
+      agent_id := v_snapshot->>'agent_id';
+      agency := v_snapshot->>'agency';
+      outcome := v_snapshot->>'outcome';
+      reason := v_snapshot->>'reason';
+      evidence_digest := v_snapshot->>'evidence_digest';
       authority_evidence_binding_sha256 :=
-        v_candidate_authority_evidence_binding_sha256;
-      resource_id := v_candidate_resource_id;
-      has_durable_intent := v_candidate_has_durable_intent;
-      admissibility := v_candidate_admissibility;
-      database_now := v_database_now;
+        v_snapshot->>'authority_evidence_binding_sha256';
+      resource_id := v_snapshot->>'resource_id';
+      has_durable_intent := (v_snapshot->>'has_durable_intent')::BOOL;
+      admissibility := v_snapshot->>'admissibility';
+      database_now := (v_snapshot->>'database_now')::TIMESTAMPTZ;
       RETURN NEXT;
       RETURN;
     END
@@ -7262,6 +7410,7 @@ async function transferOwnership(client) {
     "tp_api.g1_append_recovery_audit_v2(UUID, UUID, UUID, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, STRING, STRING)",
     "tp_api.g1_append_recovery_audit_event_v3(UUID, UUID, UUID, UUID, STRING, STRING, STRING, UUID, STRING, STRING, STRING, STRING, TIMESTAMPTZ, STRING, STRING, STRING, TIMESTAMPTZ, TIMESTAMPTZ)",
     "tp_api.g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
+    "tp_private.g1_resolve_recovery_source_snapshot_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tp_api.g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)",
     "tp_api.g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
