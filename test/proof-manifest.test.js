@@ -132,7 +132,7 @@ test("current proof manifest binds every claim and exact artifact", () => {
     PARTIAL: 7,
     PENDING: 0,
   });
-  assert.equal(receipt.artifactCount, 167);
+  assert.equal(receipt.artifactCount, 190);
   assert.equal(receipt.releaseControlCount, 17);
   assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/);
 });
@@ -308,12 +308,18 @@ test("release copy matches executable and generated source contracts", () => {
   assert(fullDrillClaim, "full drill proof claim missing");
   assert(dviClaim, "DVI proof claim missing");
   assert.deepEqual(fullDrillClaim.artifacts, [
+    "atomic-create-only-file",
     "deployment-config-digest",
     "full-drill-evidence",
     "integrated-live-drill-harness",
     "integrated-live-drill-process-boundary-tests",
     "integrated-live-drill-process-boundary-verifier",
+    "integrated-live-drill-provider-activation",
+    "integrated-live-drill-provider-activation-runner",
+    "integrated-live-drill-provider-activation-terminalization-tests",
     "integrated-live-drill-provider-evidence",
+    "integrated-live-drill-provider-exchange",
+    "integrated-live-drill-provider-exchange-runner",
     "integrated-live-drill-provider-finalization",
     "integrated-live-drill-provider-finalizer-runner",
     "integrated-live-drill-provider-orchestration",
@@ -324,6 +330,8 @@ test("release copy matches executable and generated source contracts", () => {
     "integrated-live-drill-provider-recovery",
     "integrated-live-drill-provider-recovery-tests",
     "integrated-live-drill-provider-supervisor-runner",
+    "integrated-live-drill-provider-terminalization",
+    "integrated-live-drill-provider-terminalizer-runner",
     "integrated-live-drill-provider-worker",
     "integrated-live-drill-provider-worker-runner",
     "integrated-live-drill-recovery-continuity",
@@ -332,10 +340,20 @@ test("release copy matches executable and generated source contracts", () => {
     "integrated-live-drill-recovery-continuity-worker",
     "integrated-live-drill-runner",
     "integrated-live-drill-runtime-contract",
+    "integrated-live-drill-runtime-provider-activation-entry",
+    "integrated-live-drill-runtime-provider-exchange-entry",
+    "integrated-live-drill-runtime-provider-terminalizer-entry",
     "integrated-live-drill-runtime-spawn",
     "integrated-live-drill-runtime-tests",
     "integrated-live-drill-stress-runner",
     "integrated-live-drill-stress-tests",
+    "integrated-live-drill-systemd-provider-activation-socket",
+    "integrated-live-drill-systemd-provider-activation-unit",
+    "integrated-live-drill-systemd-provider-callback-socket",
+    "integrated-live-drill-systemd-provider-exchange-unit",
+    "integrated-live-drill-systemd-provider-terminalizer-timer",
+    "integrated-live-drill-systemd-provider-terminalizer-unit",
+    "integrated-live-drill-sysusers",
     "integrated-live-drill-tests",
     "local-full-drill-harness",
     "local-full-drill-receipt",
@@ -347,8 +365,13 @@ test("release copy matches executable and generated source contracts", () => {
     "official-node-runtime-contract",
     "official-node-runtime-loader",
     "official-node-runtime-tests",
+    "provider-dispatch-activate-control",
     "provider-dispatch-control",
     "provider-dispatch-control-tests",
+    "provider-dispatch-reconciliation-input",
+    "provider-dispatch-resolve-database",
+    "provider-dispatch-result",
+    "provider-dispatch-terminalize-control",
     "recovery-broker",
     "recovery-broker-tests",
     "recovery-bundle-persistence-tests",

@@ -114,7 +114,7 @@ function canonicalRoutineIdentity(value, schemaName) {
     : signature;
 }
 
-function roleGrantKey(grant, databaseName, apiSchema) {
+function roleGrantKey(grant, databaseName, apiSchema, managedSchemas) {
   if (
     grant.databaseName === databaseName &&
     grant.objectType === "DATABASE" &&
@@ -127,11 +127,11 @@ function roleGrantKey(grant, databaseName, apiSchema) {
   if (
     grant.databaseName === databaseName &&
     grant.objectType === "SCHEMA" &&
-    grant.schemaName === apiSchema &&
+    managedSchemas.has(grant.schemaName) &&
     grant.objectName === "" &&
     grant.privilegeType === "USAGE"
   ) {
-    return `SCHEMA:${apiSchema}:USAGE`;
+    return `SCHEMA:${grant.schemaName}:USAGE`;
   }
   if (
     grant.databaseName === databaseName &&
@@ -158,7 +158,9 @@ function roleGrantKey(grant, databaseName, apiSchema) {
 function expectedRoleGrantKeys(policy, apiSchema) {
   return new Set([
     "DATABASE:CONNECT",
-    `SCHEMA:${apiSchema}:USAGE`,
+    ...(policy?.schemas ?? [apiSchema]).map(
+      (schemaName) => `SCHEMA:${schemaName}:USAGE`
+    ),
     ...(policy?.functions ?? []).map(
       (name) =>
         `FUNCTION:${apiSchema}.${canonicalRoutineIdentity(name, apiSchema)}:EXECUTE`
@@ -427,7 +429,7 @@ export function validateManagedObjectGrants(
       if (grant.isGrantable) {
         throw stablePostureError("DATABASE_POSTURE_GRANT_OPTION_UNSAFE");
       }
-      const key = roleGrantKey(grant, databaseName, apiSchema);
+      const key = roleGrantKey(grant, databaseName, apiSchema, schemas);
       if (key === "" || !expected.get(grant.grantee).has(key)) {
         throw stablePostureError("DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED");
       }
@@ -657,16 +659,15 @@ export async function collectDatabaseSecurityPosture(client) {
     `);
     const defaultGrantRows = await client.query(`
       SELECT
-        database_name,
-        schema_name,
+        current_database() AS database_name,
+        NULL::STRING AS schema_name,
         role,
         for_all_roles,
         object_type,
         grantee,
         privilege_type,
         is_grantable
-      FROM crdb_internal.default_privileges
-      WHERE database_name = current_database()
+      FROM [SHOW DEFAULT PRIVILEGES]
       ORDER BY
         database_name,
         schema_name,

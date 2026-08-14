@@ -3,7 +3,7 @@ use warnings;
 
 use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
-use Fcntl qw(F_SETFD O_RDONLY O_NOFOLLOW SEEK_SET);
+use Fcntl qw(F_SETFD O_RDONLY O_NOFOLLOW SEEK_SET S_ISREG);
 use File::Basename qw(dirname);
 use JSON::PP qw(decode_json);
 
@@ -38,11 +38,11 @@ $> != 0
 @ARGV >= 1
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_ARGUMENT_REJECTED");
 my ($component_name, @component_args) = @ARGV;
-$component_name =~ /\A(?:orchestrator|dvi|authority-race|dispatch-broker|provider-operation|supervisor|worker|finalizer|reconciler)\z/
+$component_name =~ /\A(?:orchestrator|dvi|authority-race|dispatch-broker|provider-activation|provider-exchange|provider-operation|provider-terminalizer|supervisor|worker|finalizer|reconciler)\z/
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_REJECTED");
 
 for my $name (keys %ENV) {
-  $name !~ /\A(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*)\z/
+  $name !~ /\A(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*|OPENSSL_.*|SSL_.*|SSLKEYLOGFILE|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|TZDIR|ICU_DATA|MALLOC_CONF|MALLOC_OPTIONS|ASAN_OPTIONS|LSAN_OPTIONS|MSAN_OPTIONS|TSAN_OPTIONS|UBSAN_OPTIONS)\z/
     or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_ENVIRONMENT_REJECTED");
 }
 
@@ -76,7 +76,7 @@ my $manifest_path = "$stage_root/$manifest_name";
 sysopen(my $manifest_fh, $manifest_path, O_RDONLY | O_NOFOLLOW)
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
 my @manifest_stat = stat($manifest_fh);
-@manifest_stat && -f _ && !-l _ && $manifest_stat[3] == 1
+@manifest_stat && S_ISREG($manifest_stat[2]) && $manifest_stat[3] == 1
   && $manifest_stat[4] == 0 && (($manifest_stat[2] & 0022) == 0)
   or fail_closed("INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_REJECTED");
 local $/;
@@ -118,7 +118,7 @@ sub open_root_owned_exact_file {
   my ($path, $expected_sha256, $code) = @_;
   sysopen(my $fh, $path, O_RDONLY | O_NOFOLLOW) or fail_closed($code);
   my @file_stat = stat($fh);
-  @file_stat && -f _ && !-l _ && $file_stat[3] == 1
+  @file_stat && S_ISREG($file_stat[2]) && $file_stat[3] == 1
     && $file_stat[4] == 0 && (($file_stat[2] & 0022) == 0)
     or fail_closed($code);
   my $digest = Digest::SHA->new(256);

@@ -1,10 +1,7 @@
 [Unit]
 Description=ProofToAct independent root-stage verification %i
 Documentation=https://github.com/Flash-Bri/prooftoact/blob/main/docs/FULL_DRILL_EVIDENCE.md
-ConditionPathExists=/etc/prooftoact/runs/%i/stage-receipt.json
-ConditionPathExists=/opt/prooftoact/builds/%i/gate2-build-receipt.json
-ConditionPathExists=/etc/prooftoact/runs/%i/accepted-build-receipt-sha256
-RequiresMountsFor=/opt/prooftoact/builds/%i /opt/prooftoact/runtime/runs/%i /opt/prooftoact/verifiers/%i /etc/prooftoact/runs/%i /etc/systemd/system
+RequiresMountsFor=/opt/prooftoact/builds/%i /opt/prooftoact/runtime/runs/%i /opt/prooftoact/verifiers/%i /etc/prooftoact/runs/%i /etc/systemd/system /etc/sysusers.d /var/lib/prooftoact
 
 [Service]
 Type=oneshot
@@ -15,10 +12,10 @@ UMask=0077
 Environment=LANG=C.UTF-8
 Environment=LC_ALL=C.UTF-8
 Environment=PATH=/usr/bin:/bin
-UnsetEnvironment=NODE_OPTIONS NODE_PATH NODE_EXTRA_CA_CERTS LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH GLIBC_TUNABLES GCONV_PATH PERL5OPT PERL5LIB PERLLIB
-UnsetEnvironment=MCP_API_KEY OPENAI_API_KEY DATABASE_URL AUTHORIZER_DATABASE_URL DISPATCH_DATABASE_URL RECOVERY_DATABASE_URL PRIMARY_AUDIT_DATABASE_URL PRIMARY_RECOVERY_SOURCE_DATABASE_URL RECOVERY_PUBLISHER_DATABASE_URL RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64 RECOVERY_PUBLISHER_PASSWORD TIDEPROOF_AUDITOR_DATABASE_URL TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64 PRIMARY_PROVIDER_CLAIM_DATABASE_URL PRIMARY_PROVIDER_BEGIN_DATABASE_URL PRIMARY_PROVIDER_REDEEM_DATABASE_URL PRIMARY_PROVIDER_FINALIZE_DATABASE_URL PRIMARY_PROVIDER_RECONCILE_DATABASE_URL PGPASSWORD PGPASSFILE PGSERVICE PGSERVICEFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_AUTHORIZATION_TOKEN AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE
+UnsetEnvironment=NODE_OPTIONS NODE_PATH NODE_EXTRA_CA_CERTS NODE_ICU_DATA ICU_DATA OPENSSL_CONF OPENSSL_MODULES SSL_CERT_FILE SSL_CERT_DIR SSLKEYLOGFILE CURL_CA_BUNDLE REQUESTS_CA_BUNDLE HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy TZDIR MALLOC_CONF MALLOC_OPTIONS ASAN_OPTIONS LSAN_OPTIONS MSAN_OPTIONS TSAN_OPTIONS UBSAN_OPTIONS LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH GLIBC_TUNABLES GCONV_PATH PERL5OPT PERL5LIB PERLLIB
+UnsetEnvironment=MCP_API_KEY OPENAI_API_KEY DATABASE_URL AUTHORIZER_DATABASE_URL DISPATCH_DATABASE_URL RECOVERY_DATABASE_URL PRIMARY_AUDIT_DATABASE_URL PRIMARY_RECOVERY_SOURCE_DATABASE_URL RECOVERY_PUBLISHER_DATABASE_URL RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64 RECOVERY_PUBLISHER_PASSWORD TIDEPROOF_AUDITOR_DATABASE_URL TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64 PRIMARY_PROVIDER_CLAIM_DATABASE_URL PRIMARY_PROVIDER_BEGIN_DATABASE_URL PRIMARY_PROVIDER_REDEEM_DATABASE_URL PRIMARY_PROVIDER_FINALIZE_DATABASE_URL PRIMARY_PROVIDER_RECONCILE_DATABASE_URL PRIMARY_PROVIDER_ACTIVATE_DATABASE_URL PRIMARY_PROVIDER_TERMINALIZE_DATABASE_URL PGPASSWORD PGPASSFILE PGSERVICE PGSERVICEFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_AUTHORIZATION_TOKEN AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE
 LoadCredential=accepted-build-receipt-sha256:/etc/prooftoact/runs/%i/accepted-build-receipt-sha256
-ExecStart=/opt/prooftoact/verifiers/%i/node /opt/prooftoact/verifiers/%i/verify-integrated-live-drill-stage.js --build-root /opt/prooftoact/builds/%i --build-receipt /opt/prooftoact/builds/%i/gate2-build-receipt.json --expected-build-receipt-sha256-path ${CREDENTIALS_DIRECTORY}/accepted-build-receipt-sha256 --stage-receipt /etc/prooftoact/runs/%i/stage-receipt.json --expected-stage-root /opt/prooftoact/runtime/runs/%i --unit-root /etc/systemd/system --verifier-root /opt/prooftoact/verifiers/%i
+ExecStart=/opt/prooftoact/verifiers/%i/node /opt/prooftoact/verifiers/%i/verify-integrated-live-drill-stage.js --build-root /opt/prooftoact/builds/%i --build-receipt /opt/prooftoact/builds/%i/gate2-build-receipt.json --expected-build-receipt-sha256-path ${CREDENTIALS_DIRECTORY}/accepted-build-receipt-sha256 --stage-receipt /etc/prooftoact/runs/%i/stage-receipt.json --expected-stage-root /opt/prooftoact/runtime/runs/%i --unit-root /etc/systemd/system --verifier-root /opt/prooftoact/verifiers/%i --state-root /var/lib/prooftoact --sysusers-root /etc/sysusers.d
 NoNewPrivileges=yes
 PrivateDevices=yes
 PrivateTmp=yes
@@ -31,14 +28,13 @@ ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectProc=invisible
 ProtectSystem=strict
-ReadOnlyPaths=/opt/prooftoact/builds/%i /opt/prooftoact/verifiers/%i /opt/prooftoact/runtime/runs/%i /etc/systemd/system /etc/prooftoact/runs/%i/accepted-build-receipt-sha256 /etc/prooftoact/runs/%i/stage-receipt.json
+ReadOnlyPaths=/opt/prooftoact/builds/%i /opt/prooftoact/verifiers/%i /opt/prooftoact/runtime/runs/%i /etc/systemd/system /etc/sysusers.d/prooftoact.conf /var/lib/prooftoact /etc/prooftoact/runs/%i/accepted-build-receipt-sha256 /etc/prooftoact/runs/%i/stage-receipt.json
 RestrictAddressFamilies=AF_UNIX
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
 RemoveIPC=yes
 CapabilityBoundingSet=
 AmbientCapabilities=

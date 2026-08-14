@@ -13,6 +13,7 @@ import {
 import {
   RECOVERY_DATABASE_FRESHNESS_SQL,
   RECOVERY_QUERY_TEMPLATE,
+  recoveryQueryBindingsFor,
   recoveryQueryTemplateDigest,
   recoverySourceBindingDigestFor,
   renderRecoveryQuery
@@ -27,6 +28,7 @@ import {
 
 export {
   RECOVERY_QUERY_TEMPLATE,
+  recoveryQueryBindingsFor,
   recoveryQueryTemplateDigest,
   recoverySourceBindingDigestFor,
   renderRecoveryQuery
@@ -133,26 +135,6 @@ function validateBundleFreshness(bundle, now = new Date()) {
   if (expiresMs - nowMs > RECOVERY_MAX_TTL_MS) {
     throw new Error("RECOVERY_EXPIRY_TOO_FAR");
   }
-}
-
-export function recoveryQueryBindingsFor(query) {
-  const text = requireText(query, "query");
-  const match = text.match(
-    /WHERE recovery_session_id = '([0-9a-f-]+)'::UUID\n  AND tenant_id = '([0-9a-f-]+)'::UUID\n  AND subject_binding_hash = '([a-f0-9]{64})'\n  AND source_digest = '([a-f0-9]{64})'/u
-  );
-  if (!match) {
-    throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
-  }
-  const bindings = {
-    recoverySessionId: requireUuid(match[1], "recoverySessionId"),
-    tenantId: requireUuid(match[2], "tenantId"),
-    subjectBindingHash: requireSha256(match[3], "subjectBindingHash"),
-    sourceDigest: requireSha256(match[4], "sourceDigest")
-  };
-  if (renderRecoveryQuery(bindings) !== text) {
-    throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
-  }
-  return bindings;
 }
 
 export function validateRecoveryRow(

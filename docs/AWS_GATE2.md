@@ -217,16 +217,16 @@ role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
 the 46-package union present across the six Lambda graphs, the separately
-content-addressed evidence-provider graph, and nine integrated-live runtime
+content-addressed evidence-provider graph, and twelve integrated-live runtime
 graphs. Over-inclusion in each ZIP
 is intentional so every independently distributed ZIP carries the complete
 reviewed notice set.
-The v9 receipt also binds nine content-addressed integrated-live ESM bundles,
+The v9 receipt also binds twelve content-addressed integrated-live ESM bundles,
 one content-addressed canonical manifest, the reviewed file-descriptor
 launcher, and one pinned official Node v22.23.1 executable for the exact
 `linux-x64` or `darwin-arm64` target. A platform package-manager shim or any
-unreviewed executable digest is rejected. The build inventories all 21
-generated outputs; it privacy-scans the 20 non-Node outputs and records the
+unreviewed executable digest is rejected. The build inventories all 24
+generated outputs; it privacy-scans the 23 non-Node outputs and records the
 one exact official Node binary as a pinned upstream toolchain exemption.
 Readiness independently recomputes those paths, sizes, hashes, package union,
 manifest bindings, scan results, and exemption before provider evidence.
@@ -247,7 +247,7 @@ imports. The receipt records:
 - ZIP SHA-256 in hexadecimal and base64;
 - immutable S3 key recommendation;
 - template formatted and canonical digests;
-- the integrated-live manifest, launcher, official Node target, and nine
+- the integrated-live manifest, launcher, official Node target, and twelve
   component graphs; and
 - the complete generated-output privacy inventory and explicit pinned-
   toolchain byte boundary.
@@ -265,15 +265,15 @@ still outside the claim and requires independent exact-release reproduction.
 
 Never run the integrated live drill from `dist/runtime` or a direct CLI. The
 accepted live target is Linux with a root-owned systemd manager. Run the
-reviewed root installer against the exact accepted v9 receipt digest; it uses
-descriptor-rooted no-follow reads, atomically publishes the twelve runtime
-files and separate verifier root, installs and hashes the eight exact systemd
+reviewed root installer against the exact accepted receipt digest; it uses
+descriptor-rooted no-follow reads, atomically publishes the fifteen runtime
+files and separate verifier root, installs and hashes the fourteen exact systemd
 units, reloads the manager, and emits the private stage receipt. The independent
 non-root verifier reopens the runtime, verifier, accepted build receipt, units,
 and complete ancestor chains before PREPARE. Only systemd may start the dynamic
 Perl boundary, with the injection environment removed before its first exec.
-The provider bearer is delivered only to the socket-activated operation broker
-after the durable database `EXECUTING` grant. This trusts root, the kernel,
+The provider bearer is delivered only to the fixed one-shot exchange after a
+fresh database activation and matching READY/PROCEED_ONCE handshake. This trusts root, the kernel,
 systemd, the system loader, Perl, and system libraries; it is not a
 hostile-administrator proof.
 
@@ -1052,11 +1052,11 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
    candidate, merge it to official `main`, and require hosted CI to pass on
    that exact `main` commit. Do not use a feature commit as live authority.
 3. Obtain a fresh, explicit pre-live GO for that exact official-main commit.
-   Build from the same clean commit. Require the v9 21-output inventory/privacy
+   Build from the same clean commit. Require the v9 24-output inventory/privacy
    receipt and the pinned official Node target. Before any integrated-live
    credential is introduced, run the reviewed root installer with the exact
-   accepted receipt digest. Require twelve runtime files, the isolated verifier,
-   eight exact installed systemd units, successful daemon reload, complete
+   accepted receipt digest. Require fifteen runtime files, the isolated verifier,
+   fourteen exact installed systemd units, successful daemon reload, complete
    ancestor/inode/mode/link checks, and an independent non-root PASS. Preserve
    the private stage receipt. Do not run from the checkout, CLI, or a
    package-manager Node shim.

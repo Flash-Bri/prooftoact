@@ -110,18 +110,16 @@ test("transport replacement cannot remint logical action or proposal identity", 
   assert.notEqual(replacement.requestDigest, first.requestDigest);
 });
 
-test("authority canonical JSON is independent of Unicode-key insertion order", () => {
-  const composed = "é";
-  const decomposed = "e\u0301";
+test("authority dispatch identity is independent of allowed-key insertion order", () => {
   const firstPayload = {
     scenario: "synthetic-highwater",
     action: "dispatch_rescue_unit",
-    [composed]: "composed",
-    [decomposed]: "decomposed"
+    destination: "synthetic-zone-delta",
+    logicalDispatch: "contender-001"
   };
   const secondPayload = {
-    [decomposed]: "decomposed",
-    [composed]: "composed",
+    logicalDispatch: "contender-001",
+    destination: "synthetic-zone-delta",
     action: "dispatch_rescue_unit",
     scenario: "synthetic-highwater"
   };
@@ -135,6 +133,15 @@ test("authority canonical JSON is independent of Unicode-key insertion order", (
   assert.equal(second.logicalActionDigest, first.logicalActionDigest);
   assert.equal(second.proposalDigest, first.proposalDigest);
   assert.equal(second.requestDigest, first.requestDigest);
+});
+
+test("authority dispatch identity rejects fields outside the domain schema", () => {
+  assert.throws(
+    () => normalizedAuthorityRequestFor(request({
+      payload: { ...PAYLOAD, alternateIdentity: "forbidden" }
+    })),
+    /AUTHORITY_DISPATCH_PAYLOAD_SHAPE/u
+  );
 });
 
 test("proposal and request context mismatches fail before database use", () => {

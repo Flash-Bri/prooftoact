@@ -2908,7 +2908,10 @@ test("failed expiry-burn persistence remains process-sticky after clock rollback
     const [candidate, flags] = openArgs;
     if (
       injectedFailures === 0 &&
-      candidate === burnPath &&
+      path.dirname(candidate) === path.dirname(burnPath) &&
+      path.basename(candidate).startsWith(
+        `.${path.basename(burnPath)}.publish-`
+      ) &&
       (flags & fs.constants.O_CREAT) !== 0
     ) {
       injectedFailures += 1;

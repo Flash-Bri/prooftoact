@@ -79,9 +79,21 @@ const runtimeComponentDefinitions = Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-dispatch-broker.js",
     packageKey: "runtimeDispatchBroker"
   }),
+  "provider-activation": Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-provider-activation.js",
+    packageKey: "runtimeProviderActivation"
+  }),
+  "provider-exchange": Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-provider-exchange.js",
+    packageKey: "runtimeProviderExchange"
+  }),
   "provider-operation": Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-provider-operation.js",
     packageKey: "runtimeProviderOperation"
+  }),
+  "provider-terminalizer": Object.freeze({
+    entry: "scripts/runtime-entries/integrated-live-drill-provider-terminalizer.js",
+    packageKey: "runtimeProviderTerminalizer"
   }),
   dvi: Object.freeze({
     entry: "scripts/runtime-entries/integrated-live-drill-dvi.js",

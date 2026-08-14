@@ -71,13 +71,13 @@ accepted integrated receipt is the complete provider target.
 The current source runner emits only a
 `tideproof.highwater-drill-live-candidate.v2` receipt with status
 `INCOMPLETE_LIVE_GATES_PENDING`. It cannot emit the accepted schema or `PASS`.
-The exact Gate Two v9 build now emits nine content-addressed live-drill ESM
+The exact Gate Two v9 build now emits twelve content-addressed live-drill ESM
 bundles, a content-addressed manifest, the reviewed launcher, and a Node
 v22.23.1 executable whose byte digest must match one pinned official
 nodejs.org release for the exact `linux-x64` or `darwin-arm64` target. A
 Homebrew thin launcher, an unpinned Node executable, a different platform, or
-a changed digest fails the build. The build receipt inventories all 21
-generated files, scans the 20 non-Node outputs for the repository's bounded
+a changed digest fails the build. The build receipt inventories all 24
+generated files, scans the 23 non-Node outputs for the repository's bounded
 privacy signatures, and separately records the byte count of the one pinned
 official toolchain object; it does not mislabel that exemption as scanned.
 The outer builder checks all 21 staged paths, sizes, and digests before copying
@@ -114,8 +114,8 @@ credential exists, a root operator runs
 accepted build-receipt SHA-256, a UUID run ID, and the accepted checkout root.
 The installer walks each source component below an open root descriptor without
 following symlinks, verifies every receipt digest, atomically publishes the
-twelve runtime files and two-file verifier root, installs the eight exact
-systemd units, reloads the system manager, and emits one root-owned v4 receipt
+fifteen runtime files and two-file verifier root, installs the fourteen exact
+systemd units, reloads the system manager, and emits one root-owned v5 receipt
 binding source commit, tree, lockfile, toolchain, accepted build receipt,
 inodes, owners, modes, link counts, and complete ancestor chains. A separate
 non-root verifier, executed by the installed official Node binary, reopens and
@@ -130,8 +130,9 @@ opens the manifest, component, and Node executable with `O_NOFOLLOW`, verifies
 them, and executes Node through the retained `/proc/self/fd/<fd>` descriptor.
 The controller, contenders, losers, worker, and reconciler never receive the
 MCP bearer. Only after the global database state commits `EXECUTING` may the
-socket-activated provider-operation unit receive it through systemd
-`LoadCredential=` for one bound sequence. These controls trust root, the
+fixed one-shot provider-exchange unit receive it through systemd
+`LoadCredential=` after a fresh database activation and exact READY/PROCEED_ONCE
+handshake. These controls trust root, the
 kernel, systemd, the system loader, Perl, and system libraries; they do not
 claim resistance to a malicious administrator or compromised host.
 
@@ -182,12 +183,13 @@ state that can suppress a safe fresh claim.
 The worker receives the global grant but no MCP credential or provider client.
 It creates one create-only provider-execution-attempt artifact, then connects
 over a nonce-bound Unix socket. The separately isolated provider-operation
-broker has the MCP bearer, redeem-only database identity, and finalize-only
-identity. It atomically moves `EXECUTING -> CREDENTIAL_REDEEMED` before the
-first provider request, performs exactly one fixed initialize/notification/
-tools-call/close sequence, durably records the transcript, and completes the
-exact result. A crash or ambiguity after redemption can only finalize the same
-result or become `UNKNOWN_DO_NOT_ACT`; it cannot redeem or dispatch again.
+broker has redeem/finalize database identities but no MCP bearer. It atomically
+moves `EXECUTING -> CREDENTIAL_REDEEMED`, requests fresh database activation,
+and admits the fixed one-shot exchange only after exact receipt matching. The
+exchange alone receives the bearer, fences consumption, performs the fixed
+sequence, and durably records its result before callback success. The separate
+database-time terminalizer converges expiry and ambiguity without provider
+replay.
 
 The reconciler has a separate resolve-only database URL and imports only
 `ProviderDispatchResolver`. It cannot claim, begin, redeem, complete, mark
@@ -238,9 +240,9 @@ replayed.
 
 Acceptance additionally requires:
 
-- an exact v9 build receipt whose 21-file output inventory and privacy boundary
-  recompute, followed by a v4 root-stage receipt for the accepted build
-  receipt, twelve runtime files, independent verifier, eight installed systemd
+- an exact v9 build receipt whose 24-file output inventory and privacy boundary
+  recompute, followed by a v5 root-stage receipt for the accepted build
+  receipt, fifteen runtime files, independent verifier, fourteen installed systemd
   units, and successful daemon reload; each live process is non-root and may
   begin only through the reviewed systemd environment;
 - one signed pre/post deployment-attestation pair whose exact expectation
@@ -297,7 +299,7 @@ selected-evidence digest, but no provider-backed receipt yet proves the live
 DVI-to-AWS handoff. The deterministic offline 100-run harness and its
 recomputing receipt validator now exist. The source now also contains a
 single-run integrated orchestrator, database-global dispatch-control source,
-content-addressed nine-component runtime, pinned official Node target,
+content-addressed twelve-component runtime, pinned official Node target,
 root-stage installer/verifier, build-output inventory/privacy receipt,
 count-bound RESUME
 stress runner, owner-restricted external private-evidence source control,
@@ -600,13 +602,87 @@ official release.
   expiry or conflict timing; connection setup therefore cannot satisfy the
   wait assertion. Failure cleanup first expires the synthetic proposal, then
   releases the blocker and drains the pending query, so no test transaction is
-  left running in the background. The reviewed 38-statement SQL batch digest also changes
-  whenever the emitted SQL changes.
+  left running in the background. At that repair stage the emitted batch
+  contained 38 statements; the current executable batch is separately pinned
+  at 55 statements and its digest changes whenever the emitted SQL changes.
 - Verification: the focused control and the complete local release gate set
   must pass on the exact commit; provider-backed CockroachDB v26.2 execution is
   still required.
 - Residual risk and claim impact: source rejects stale and replaced recovery
   authority, but no live provider receipt or exactly-once claim is added.
+
+### Recovery resolver conflated independent policy namespaces
+
+- Root cause: both recovery-source queries required
+  `proposal.policy_version = receipt.policy_version`. The DVI proposal is
+  intentionally governed by `g1-admissibility-v2`, while the authority receipt
+  is intentionally governed by `gate1-policy-v2`; requiring equality therefore
+  made an otherwise exact current authority impossible to resolve.
+- Why it was missed: the static relation test included `policy_version` in a
+  proposal-to-receipt equality loop, and the recovery-source mock incorrectly
+  returned the DVI policy as the authority policy. Those two fixtures encoded
+  the same false assumption as the implementation.
+- Earliest detection point: the exact local CockroachDB v26.2 x86-64 Final9
+  run passed the earlier protected-effect planner boundary and then stopped
+  fail-closed with `recovery source receipt was not resolved exactly`. A
+  predicate-by-predicate database audit found every identity, digest, holder,
+  evidence, outbox, and freshness predicate true except the cross-domain
+  policy equality. No recovery row or protected effect was produced.
+- Repair: both recovery-source relations now require the proposal policy to be
+  exactly `g1-admissibility-v2` and the authority-receipt policy to be exactly
+  `gate1-policy-v2`. They continue to bind proposal digest, request digest,
+  logical action, authorization epoch and binding, selected evidence, outbox,
+  payload, current holder, fence, and all lifetimes. The JavaScript resolver
+  independently rejects any returned authority policy other than
+  `gate1-policy-v2` before recovery evidence can be signed.
+- Regression and preventive control: static tests inspect both relation copies,
+  require both policy constants, and forbid the old equality. The runtime test
+  uses the authority policy for the valid row and rejects a DVI-policy
+  substitution. Release-security markers hash-bind those controls.
+- Verification: the focused bootstrap and recovery-publisher set passes 45/45,
+  and independent source-security review accepts the bounded repair. Final9 is
+  superseded because it predates these bytes; a fresh immutable candidate must
+  pass the complete exact CockroachDB v26.2 x86-64 gate.
+- Residual risk and claim impact: this is source and local-runtime diagnosis,
+  not provider evidence. It authorizes no AWS action, deployment, publication,
+  or submission and adds no live recovery or exactly-once claim.
+
+### Create-only publication cleanup raced between real contenders
+
+- Root cause: after one worker atomically linked its private temporary file to
+  the final execution-fence name, multiple peers could prove that temporary was
+  the same final inode and then race to unlink it. The first cleanup succeeded;
+  the second received `ENOENT` and treated the peer-completed cleanup as a hard
+  failure. A second schedule allowed an observer to see no final during its
+  cleanup pass and then see the winner's still-two-linked inode during exact
+  readback.
+- Why it was missed: the create-only destination and exact-read invariants were
+  covered, but cleanup was exercised only under favorable scheduling. A frozen
+  Final10 full-suite run exposed the first race; repeated real-process runs
+  exposed the adjacent settle race.
+- Repair: cleanup suppresses only `ENOENT` from unlinking a temporary already
+  proven to be the exact final inode. The observer performs a bounded
+  eight-attempt settle/read loop, while every accepted return still reopens
+  with `O_NOFOLLOW` and requires exact bytes, owner, mode, size, device, inode,
+  and `nlink=1` before directory fsync. The root-stage installer applies the
+  same narrow unlink rule. Only `ENOENT` from the initial no-follow open means
+  that the final file is absent; a private cause distinguishes it from every
+  later disappearance. Every other cleanup, permission, I/O, root, or exact
+  final-validation failure remains fatal.
+- Regression and preventive control: deterministic tests simulate a peer
+  completing the unlink and separately require a non-`ENOENT` failure to stay
+  fail-closed and recover only after the fault is removed. The four-process
+  winner test passes 100 consecutive local repetitions with one creator and
+  three exact readers, while a post-open final-path disappearance remains
+  fatal. The root installer has matching `ENOENT` convergence and non-`ENOENT`
+  rejection cases.
+- Verification: the focused non-root publication tests pass locally. The root
+  cases and the complete publication boundary still require the exact Linux
+  x86-64 root/PID1 rerun on the frozen successor.
+- Residual risk and claim impact: the original failure stranded a valid fence
+  without allowing overwrite or a second creator, so it was fail-closed but
+  nondeterministic. Final10 is superseded; no provider, deployment, recovery,
+  exactly-once, or release claim is added.
 
 ### Resolver return-shape upgrade initially used destructive migration DDL
 
@@ -627,12 +703,13 @@ official release.
   recoverable as database objects but inaccessible to the runtime. Static and
   upgrade-state controls require that exact transitional policy, v2-only final
   policy, v2 production call, an exact emitted-SQL batch pin, and a v1
-  denial-or-absence probe. Before the bootstrap issues any function DDL, it
-  materializes the exact 37 statements produced by `createFunctions` and
-  rejects the entire batch unless its framed SHA-256 digest matches the
-  reviewed batch. This control evaluates emitted SQL bytes, not JavaScript
-  source spelling; any SQL change therefore requires an explicit review and
-  digest update before the first database query.
+  denial-or-absence probe. At that migration repair stage, bootstrap
+  materialized 37 statements produced by `createFunctions`; the current
+  executable batch contains 55. In every version, bootstrap rejects the batch
+  unless its framed SHA-256 digest matches the reviewed bytes. This control
+  evaluates emitted SQL bytes, not JavaScript source spelling; any SQL change
+  therefore requires an explicit review and digest update before the first
+  database query.
 - Cutover procedure: this is an explicitly quiesced, roll-forward-only
   migration, not a zero-downtime or rollback-compatible change. Stop the
   recovery evidence runners, run bootstrap to completion, require v2 success
@@ -697,7 +774,7 @@ the exact, database-time-current authority-receipt resolver; the separate
 `tp_recovery_audit_user` receives only the exact audit-event and trust-root
 resolvers plus the append-only audit surface. Neither receives base-table
 access. Before either runner reads source state or the trust root, it executes
-six rollback-bounded privilege-pure write probes and 20 managed-table read
+six rollback-bounded privilege-pure write probes and 22 managed-table read
 probes, requiring SQLSTATE `42501` from both primary credentials for each. The
 broker re-reads its two audit events only by their
 committed event IDs and digests. No recovery runner accepts
@@ -892,6 +969,50 @@ AWS consumed the binding or satisfy the +1 integrated, authorization,
 production-safety, or final-release gates by itself.
 
 No provider-backed receipt from this lane exists yet.
+
+## Exact CockroachDB v26.2 recovery-resolver planner findings
+
+- First finding: the frozen Final12 local candidate reached the real CockroachDB
+  CCL v26.2.0 x86-64 recovery-source resolver and failed closed with SQLSTATE
+  `XX000`: `top-level relational expression cannot have outer columns`.
+  Final12 is superseded and is not release or submission evidence.
+- Second finding: frozen Final13 removed that correlation, but its standalone
+  conflict-window `jsonb_agg` still bound assigned PL/pgSQL scalars inside an
+  aggregate relation. On a fresh disposable database, CockroachDB accepted the
+  function definition and created the complete authority fixture, then failed
+  the first seven-argument recovery-source call with the same `XX000` planner
+  assertion. At that instant exactly one structurally bound live authority and
+  valid selected evidence row existed and the active-conflict count was zero.
+  Final13 is also superseded and is not release or submission evidence.
+- Root-cause chain: the Final12 detailed candidate projection embedded a correlated
+  `jsonb_agg` conflict-window subquery whose inner relation referenced outer
+  receipt and evidence columns. CockroachDB accepted the function definition
+  but rejected that relational shape when the corrected policy-domain
+  predicates allowed the success path to execute. Final13 proved that moving
+  the aggregate into a separate PL statement was insufficient: CockroachDB
+  still planned its assigned scalar bindings as outer columns. Its later
+  `count(*)` over `jsonb_array_elements` had the same risk class.
+- Repair: the resolver freezes the sole candidate's claim key, claim value,
+  agency, and identity into PL/pgSQL scalars and fails closed if any anchor is
+  absent. It then opens one `NO SCROLL` cursor over the identically constrained,
+  nonaggregate conflict relation, fetches raw IDs and validity timestamps, and
+  closes the cursor before taking the sole fresh database clock. A null fetch,
+  null timestamp, or more than 10,000 conflict rows fails closed. After the
+  clock, a scalar PL/pgSQL loop evaluates the captured JSON windows without a
+  relation read, aggregate, or second clock.
+- Preventive control: source tests forbid the correlated and standalone
+  aggregates, query-`FOR`, and post-clock `jsonb_array_elements`; require the
+  exact cursor, verification, signature, active-key, validity, agency, cap,
+  close, and scalar-window predicates; and require no `tp_*` relation read in
+  the post-clock decision. The emitted 55-statement SQL batch remains
+  digest-pinned before any database query.
+- Verification boundary: the failed Final12 and Final13 receipts and server
+  traces were preserved and hashed locally. The successor must still pass the
+  complete exact-version
+  x86-64 Gate One run, positive protected-effect insert/replay probe, Linux
+  root publication suite, full source suite, and independent review on the
+  exact frozen bytes. No provider, AWS, deployment, public-demo, video, or
+  submission claim follows from this local finding or repair.
 
 ## Snapshot-bound exclusion finding
 

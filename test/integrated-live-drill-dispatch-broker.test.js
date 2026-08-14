@@ -146,11 +146,19 @@ test("two real broker processes publish one execution grant after one global beg
     ),
     "utf8"
   ));
-  assert.deepEqual(reconciliationInput.context, request.workerInput.context);
-  assert.deepEqual(reconciliationInput.executionGrant, grant);
+  assert.deepEqual(reconciliationInput.binding, request.binding);
+  assert.deepEqual(reconciliationInput.admission, {
+    grantId: grant.grantId,
+    workerSpecSha256: grant.workerSpecSha256
+  });
+  assert.equal(reconciliationInput.packageLockDigest, request.packageLockDigest);
+  assert.equal("context" in reconciliationInput, false);
+  assert.equal("executionGrant" in reconciliationInput, false);
+  assert.equal("executionCapabilitySha256" in reconciliationInput, false);
+  assert.equal("operationNonceSha256" in reconciliationInput, false);
   assert.equal(
     reconciliationInput.schemaVersion,
-    "tideproof.highwater-drill-provider-reconciliation-input.v2"
+    "tideproof.highwater-drill-provider-reconciliation-input.v3"
   );
   const secret = readIntegratedLiveDrillExecutionCapability({
     authorizationId: request.binding.authorizationId,

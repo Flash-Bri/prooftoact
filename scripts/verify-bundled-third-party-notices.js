@@ -24,11 +24,17 @@ const BUNDLED_COMPONENTS = Object.freeze({
     "scripts/runtime-entries/integrated-live-drill-authority-race.js",
   runtimeDispatchBroker:
     "scripts/runtime-entries/integrated-live-drill-dispatch-broker.js",
+  runtimeProviderActivation:
+    "scripts/runtime-entries/integrated-live-drill-provider-activation.js",
+  runtimeProviderExchange:
+    "scripts/runtime-entries/integrated-live-drill-provider-exchange.js",
   runtimeDvi: "scripts/runtime-entries/integrated-live-drill-dvi.js",
   runtimeFinalizer:
     "scripts/runtime-entries/integrated-live-drill-finalizer.js",
   runtimeProviderOperation:
     "scripts/runtime-entries/integrated-live-drill-provider-operation.js",
+  runtimeProviderTerminalizer:
+    "scripts/runtime-entries/integrated-live-drill-provider-terminalizer.js",
   runtimeOrchestrator:
     "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
   runtimeReconciler:

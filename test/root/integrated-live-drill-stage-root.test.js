@@ -8,12 +8,14 @@ import { fileURLToPath } from "node:url";
 
 import { canonicalJson } from "../../src/cloud/canonical-json.js";
 import {
+  __test as installerTest,
   installIntegratedLiveDrillStage
 } from "../../scripts/install-integrated-live-drill-stage.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const COMPONENTS = Object.freeze([
-  "authority-race", "dispatch-broker", "provider-operation", "dvi", "finalizer", "orchestrator", "reconciler",
+  "authority-race", "dispatch-broker", "provider-activation", "provider-exchange",
+  "provider-operation", "provider-terminalizer", "dvi", "finalizer", "orchestrator", "reconciler",
   "supervisor", "worker"
 ]);
 const STAGE_CONTROLS = Object.freeze([
@@ -24,7 +26,14 @@ const STAGE_CONTROLS = Object.freeze([
   "infra/systemd/prooftoact-integrated-live-drill-executor@.service",
   "infra/systemd/prooftoact-integrated-live-drill-provider-operation@.service",
   "infra/systemd/prooftoact-integrated-live-drill-provider-operation@.socket",
+  "infra/systemd/prooftoact-integrated-live-drill-provider-activation@.service",
+  "infra/systemd/prooftoact-integrated-live-drill-provider-activation@.socket",
+  "infra/systemd/prooftoact-integrated-live-drill-provider-callback@.socket",
+  "infra/systemd/prooftoact-integrated-live-drill-provider-exchange@.service",
+  "infra/systemd/prooftoact-integrated-live-drill-provider-terminalizer@.service",
+  "infra/systemd/prooftoact-integrated-live-drill-provider-terminalizer@.timer",
   "infra/systemd/prooftoact-integrated-live-drill-reconcile@.service",
+  "infra/sysusers.d/prooftoact.conf",
   "scripts/install-integrated-live-drill-stage.js",
   "scripts/verify-integrated-live-drill-stage.js",
   "scripts/verify-integrated-live-drill-systemd-boundary.js"
@@ -47,6 +56,50 @@ function writeExact(filePath, bytes, mode = 0o444) {
   fs.chmodSync(filePath, mode);
 }
 
+function injectedFileSystem(method, {
+  beforeCall = null,
+  beforeFailure = null,
+  code = "EIO",
+  occurrence = 1,
+  persistent = false,
+  shortWriteBytes = null,
+  shortWriteOccurrence = null
+} = {}) {
+  let calls = 0;
+  return new Proxy(fs, {
+    get(target, property) {
+      const original = Reflect.get(target, property);
+      if (property !== method || typeof original !== "function") {
+        return original;
+      }
+      return (...args) => {
+        calls += 1;
+        beforeCall?.({ args, calls });
+        if (
+          calls === shortWriteOccurrence &&
+          Number.isSafeInteger(shortWriteBytes)
+        ) {
+          const [descriptor, bytes, offset, length, position] = args;
+          return fs.writeSync(
+            descriptor,
+            bytes,
+            offset,
+            Math.min(shortWriteBytes, length),
+            position
+          );
+        }
+        if (calls === occurrence || (persistent && calls >= occurrence)) {
+          beforeFailure?.({ args, calls });
+          const error = new Error(`injected ${String(method)} failure`);
+          error.code = code;
+          throw error;
+        }
+        return Reflect.apply(original, target, args);
+      };
+    }
+  });
+}
+
 function fixture(fixtureRoot) {
   const buildRoot = path.join(fixtureRoot, "build");
   const runtimeRoot = path.join(buildRoot, "dist/runtime");
@@ -54,10 +107,13 @@ function fixture(fixtureRoot) {
   const receiptRoot = path.join(fixtureRoot, "receipts");
   const verifierParent = path.join(fixtureRoot, "verifiers");
   const unitRoot = path.join(fixtureRoot, "systemd");
+  const sysusersRoot = path.join(fixtureRoot, "sysusers.d");
+  const stateParent = path.join(fixtureRoot, "var/lib");
+  const stateRoot = path.join(stateParent, "prooftoact");
   const acceptedBuildParent = path.join(fixtureRoot, "accepted-build");
   for (const directory of [
     acceptedBuildParent, buildRoot, runtimeRoot, stageParent, receiptRoot,
-    unitRoot, verifierParent
+    stateParent, sysusersRoot, unitRoot, verifierParent
   ]) {
     fs.mkdirSync(directory, { mode: 0o755, recursive: true });
     fs.chownSync(directory, 0, 0);
@@ -85,7 +141,13 @@ function fixture(fixtureRoot) {
   const manifestComponents = {};
   for (const [index, name] of COMPONENTS.entries()) {
     const bytes = Buffer.from(
-      `export const component = ${JSON.stringify(name)};\n`,
+      `import fs from "node:fs";\n` +
+        `export const component = ${JSON.stringify(name)};\n` +
+        `const executableStat = fs.statSync("/proc/self/exe", {bigint: true});\n` +
+        `process.stdout.write(JSON.stringify({component, argv0: process.argv0, ` +
+        `execPath: process.execPath, executableLink: fs.readlinkSync("/proc/self/exe"), ` +
+        `executableDev: String(executableStat.dev), ` +
+        `executableIno: String(executableStat.ino)}) + "\\n");\n`,
       "utf8"
     );
     const digest = sha256(bytes);
@@ -178,7 +240,7 @@ function fixture(fixtureRoot) {
     0o444
   );
   for (const controlPath of STAGE_CONTROLS.filter((candidate) =>
-    candidate.startsWith("infra/systemd/")
+    candidate.startsWith("infra/")
   )) {
     writeExact(
       path.join(buildRoot, controlPath),
@@ -199,6 +261,8 @@ function fixture(fixtureRoot) {
     manifestSha256,
     receiptRoot,
     stageRoot: path.join(stageParent, STAGE_INSTANCE),
+    stateRoot,
+    sysusersRoot,
     unitRoot,
     verifierRoot: path.join(verifierParent, STAGE_INSTANCE)
   });
@@ -208,15 +272,18 @@ function verifyAsUnprivileged(
   buildRoot,
   expectedBuildReceiptSha256Path,
   stageReceiptPath,
+  stateRoot,
+  sysusersRoot,
   unitRoot,
   verifierRoot,
-  stageRoot
+  stageRoot,
+  { gid, uid }
 ) {
   return spawnSync(
     "/usr/bin/setpriv",
     [
-      "--reuid=65534",
-      "--regid=65534",
+      `--reuid=${uid}`,
+      `--regid=${gid}`,
       "--clear-groups",
       path.join(verifierRoot, "node"),
       path.join(verifierRoot, "verify-integrated-live-drill-stage.js"),
@@ -230,6 +297,10 @@ function verifyAsUnprivileged(
       stageRoot,
       "--stage-receipt",
       stageReceiptPath,
+      "--state-root",
+      stateRoot,
+      "--sysusers-root",
+      sysusersRoot,
       "--unit-root",
       unitRoot,
       "--verifier-root",
@@ -239,8 +310,348 @@ function verifyAsUnprivileged(
   );
 }
 
+function launchComponentAsUnprivileged(stageRoot, manifestSha256, component, {
+  environment = {}
+} = {}) {
+  return spawnSync(
+    "/usr/bin/setpriv",
+    [
+      "--reuid=65534",
+      "--regid=65534",
+      "--clear-groups",
+      "/usr/bin/perl",
+      path.join(stageRoot, "verified-node-bundle-launcher.pl"),
+      component
+    ],
+    {
+      cwd: stageRoot,
+      encoding: "utf8",
+      env: {
+        LANG: "C.UTF-8",
+        LC_ALL: "C.UTF-8",
+        PATH: "/usr/bin:/bin",
+        TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256:
+          manifestSha256,
+        TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT: stageRoot,
+        ...environment
+      }
+    }
+  );
+}
+
+test("fresh persistent state creates private roots before guard validation", {
+  skip: process.geteuid?.() !== 0
+}, () => {
+  const fixtureRoot = `/opt/prooftoact-state-regression-${process.pid}`;
+  const stateRoot = path.join(fixtureRoot, "state");
+  fs.mkdirSync(fixtureRoot, { mode: 0o755 });
+  fs.chownSync(fixtureRoot, 0, 0);
+  fs.chmodSync(fixtureRoot, 0o755);
+  try {
+    const accounts = [
+      "prooftoact",
+      "prooftoact-broker",
+      "prooftoact-operation",
+      "prooftoact-activate",
+      "prooftoact-provider"
+    ].map((name) => Object.freeze({ gid: 0, name, uid: 0 }));
+    const records = installerTest.preparePersistentState({
+      accounts,
+      code: "INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED",
+      instance: STAGE_INSTANCE,
+      stateRoot
+    });
+    const guards = records.filter(({ role }) => role === "PRIVATE_GUARD");
+    assert.equal(guards.length, 2);
+    assert.deepEqual(guards.map(({ entries }) => entries), [["root"], ["root"]]);
+    for (const name of ["evidence", "authorization"]) {
+      assert.equal(
+        fs.lstatSync(path.join(stateRoot, name, STAGE_INSTANCE, "root"))
+          .isDirectory(),
+        true
+      );
+    }
+  } finally {
+    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+  }
+});
+
+test("root exact-file publication is failure-convergent across publication boundaries", {
+  skip: process.geteuid?.() !== 0
+}, () => {
+  const fixtureRoot = `/opt/prooftoact-publication-regression-${process.pid}`;
+  fs.mkdirSync(fixtureRoot, { mode: 0o755 });
+  fs.chownSync(fixtureRoot, 0, 0);
+  fs.chmodSync(fixtureRoot, 0o755);
+  const bytes = Buffer.from('{"schemaVersion":"publication-regression.v1"}\n');
+  const code = "INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED";
+  const publish = (filePath, fileSystem = fs) =>
+    installerTest.publishOrVerifyExactRootFile({
+      bytes,
+      code,
+      filePath,
+      fileSystem,
+      mode: 0o444
+    });
+  try {
+    const failures = [
+      ["openSync", { code: "EACCES" }],
+      ["writeSync", {
+        code: "ENOSPC",
+        occurrence: 2,
+        shortWriteBytes: 15,
+        shortWriteOccurrence: 1
+      }],
+      ["fchownSync", { code: "EPERM" }],
+      ["fchmodSync", { code: "EPERM" }],
+      ["fsyncSync", { code: "EIO" }],
+      ["readSync", { code: "EIO" }],
+      ["linkSync", { code: "EXDEV" }]
+    ];
+    for (const [index, [method, options]] of failures.entries()) {
+      const filePath = path.join(fixtureRoot, `prepublication-${index}.json`);
+      assert.throws(
+        () => publish(filePath, injectedFileSystem(method, options)),
+        /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u,
+        method
+      );
+      assert.equal(fs.existsSync(filePath), false, method);
+      assert.equal(
+        fs.readdirSync(fixtureRoot).some((name) =>
+          name.startsWith(`.${path.basename(filePath)}.publish-`)
+        ),
+        false,
+        `${method}: temporary cleanup`
+      );
+      assert.equal(publish(filePath).sha256, sha256(bytes));
+    }
+
+    const directoryFsyncPath = path.join(fixtureRoot, "directory-fsync.json");
+    assert.equal(
+      publish(
+        directoryFsyncPath,
+        injectedFileSystem("fsyncSync", { code: "EIO", occurrence: 2 })
+      ).sha256,
+      sha256(bytes)
+    );
+    assert.equal(publish(directoryFsyncPath).sha256, sha256(bytes));
+
+    const ambiguousPath = path.join(fixtureRoot, "ambiguous-fsync.json");
+    assert.throws(
+      () => publish(
+        ambiguousPath,
+        injectedFileSystem("fsyncSync", {
+          code: "EIO",
+          occurrence: 2,
+          persistent: true
+        })
+      ),
+      /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u
+    );
+    assert.equal(fs.readFileSync(ambiguousPath).equals(bytes), true);
+    assert.equal(publish(ambiguousPath).sha256, sha256(bytes));
+
+    const prelinkCrashPath = path.join(fixtureRoot, "prelink-crash.json");
+    const prelinkTemporary = path.join(
+      fixtureRoot,
+      `.${path.basename(prelinkCrashPath)}.publish-${"a".repeat(32)}`
+    );
+    fs.writeFileSync(prelinkTemporary, bytes.subarray(0, 15), {
+      flag: "wx",
+      mode: 0o600
+    });
+    fs.chownSync(prelinkTemporary, 0, 0);
+    assert.equal(publish(prelinkCrashPath).sha256, sha256(bytes));
+    assert.equal(fs.existsSync(prelinkTemporary), true);
+    assert.equal(fs.readFileSync(prelinkTemporary).length, 15);
+    fs.unlinkSync(prelinkTemporary);
+
+    const postlinkCrashPath = path.join(fixtureRoot, "postlink-crash.json");
+    const postlinkTemporary = path.join(
+      fixtureRoot,
+      `.${path.basename(postlinkCrashPath)}.publish-${"b".repeat(32)}`
+    );
+    fs.writeFileSync(postlinkTemporary, bytes, { flag: "wx", mode: 0o444 });
+    fs.chownSync(postlinkTemporary, 0, 0);
+    fs.chmodSync(postlinkTemporary, 0o444);
+    fs.linkSync(postlinkTemporary, postlinkCrashPath);
+    assert.equal(publish(postlinkCrashPath).sha256, sha256(bytes));
+    assert.equal(fs.existsSync(postlinkTemporary), false);
+    assert.equal(fs.statSync(postlinkCrashPath).nlink, 1);
+
+    const concurrentCleanupPath = path.join(
+      fixtureRoot,
+      "concurrent-cleanup.json"
+    );
+    const concurrentCleanupTemporary = path.join(
+      fixtureRoot,
+      `.${path.basename(concurrentCleanupPath)}.publish-${"d".repeat(32)}`
+    );
+    fs.writeFileSync(concurrentCleanupTemporary, bytes, {
+      flag: "wx",
+      mode: 0o444
+    });
+    fs.chownSync(concurrentCleanupTemporary, 0, 0);
+    fs.chmodSync(concurrentCleanupTemporary, 0o444);
+    fs.linkSync(concurrentCleanupTemporary, concurrentCleanupPath);
+    assert.equal(publish(
+      concurrentCleanupPath,
+      injectedFileSystem("unlinkSync", {
+        code: "ENOENT",
+        beforeFailure({ args }) {
+          fs.unlinkSync(args[0]);
+        }
+      })
+    ).sha256, sha256(bytes));
+    assert.equal(fs.existsSync(concurrentCleanupTemporary), false);
+    assert.equal(fs.statSync(concurrentCleanupPath).nlink, 1);
+
+    const cleanupIoErrorPath = path.join(
+      fixtureRoot,
+      "cleanup-io-error.json"
+    );
+    const cleanupIoErrorTemporary = path.join(
+      fixtureRoot,
+      `.${path.basename(cleanupIoErrorPath)}.publish-${"e".repeat(32)}`
+    );
+    fs.writeFileSync(cleanupIoErrorTemporary, bytes, {
+      flag: "wx",
+      mode: 0o444
+    });
+    fs.chownSync(cleanupIoErrorTemporary, 0, 0);
+    fs.chmodSync(cleanupIoErrorTemporary, 0o444);
+    fs.linkSync(cleanupIoErrorTemporary, cleanupIoErrorPath);
+    assert.throws(
+      () => publish(
+        cleanupIoErrorPath,
+        injectedFileSystem("unlinkSync", { code: "EIO" })
+      ),
+      /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u
+    );
+    assert.equal(fs.existsSync(cleanupIoErrorTemporary), true);
+    assert.equal(publish(cleanupIoErrorPath).sha256, sha256(bytes));
+    assert.equal(fs.existsSync(cleanupIoErrorTemporary), false);
+    assert.equal(fs.statSync(cleanupIoErrorPath).nlink, 1);
+
+    const concurrentPath = path.join(fixtureRoot, "concurrent.json");
+    const concurrentTemporary = path.join(
+      fixtureRoot,
+      `.${path.basename(concurrentPath)}.publish-${"c".repeat(32)}`
+    );
+    const concurrentDescriptor = fs.openSync(
+      concurrentTemporary,
+      fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL,
+      0o600
+    );
+    try {
+      fs.writeFileSync(concurrentDescriptor, bytes.subarray(0, 15));
+      fs.fchownSync(concurrentDescriptor, 0, 0);
+      assert.equal(publish(concurrentPath).sha256, sha256(bytes));
+      assert.equal(fs.existsSync(concurrentTemporary), true);
+      assert.equal(fs.fstatSync(concurrentDescriptor).nlink, 1);
+    } finally {
+      fs.closeSync(concurrentDescriptor);
+      fs.unlinkSync(concurrentTemporary);
+    }
+
+    const peerBytes = Buffer.from("peer-owned-temporary\n");
+    const collisionPath = path.join(fixtureRoot, "temporary-collision.json");
+    let collisionTemporary;
+    let collisionIdentity;
+    assert.throws(() => publish(collisionPath,
+      injectedFileSystem("openSync", {
+        occurrence: Number.MAX_SAFE_INTEGER,
+        beforeCall({ args, calls }) {
+          if (calls !== 1) return;
+          [collisionTemporary] = args;
+          const descriptor = fs.openSync(
+            collisionTemporary,
+            fs.constants.O_WRONLY | fs.constants.O_CREAT |
+              fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
+            0o600
+          );
+          try {
+            fs.writeFileSync(descriptor, peerBytes);
+            fs.fchownSync(descriptor, 0, 0);
+            fs.fchmodSync(descriptor, 0o600);
+            fs.fsyncSync(descriptor);
+            collisionIdentity = fs.fstatSync(descriptor);
+          } finally { fs.closeSync(descriptor); }
+        }
+      })), /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u);
+    assert.equal(fs.existsSync(collisionPath), false);
+    const collisionAfter = fs.lstatSync(collisionTemporary);
+    assert.equal(collisionAfter.dev, collisionIdentity.dev);
+    assert.equal(collisionAfter.ino, collisionIdentity.ino);
+    assert.equal(collisionAfter.nlink, 1);
+    assert.equal(collisionAfter.uid, 0);
+    assert.equal(collisionAfter.gid, 0);
+    assert.equal(collisionAfter.mode & 0o777, 0o600);
+    assert.equal(fs.readFileSync(collisionTemporary).equals(peerBytes), true);
+    fs.unlinkSync(collisionTemporary);
+    assert.equal(publish(collisionPath).sha256, sha256(bytes));
+
+    const substitutionPath = path.join(
+      fixtureRoot,
+      "temporary-substitution.json"
+    );
+    let substitutionTemporary;
+    let replacementIdentity;
+    assert.throws(() => publish(substitutionPath,
+      injectedFileSystem("writeSync", {
+        code: "EIO",
+        beforeFailure() {
+          const prefix = `.${path.basename(substitutionPath)}.publish-`;
+          const names = fs.readdirSync(fixtureRoot)
+            .filter((name) => name.startsWith(prefix));
+          assert.equal(names.length, 1);
+          substitutionTemporary = path.join(fixtureRoot, names[0]);
+          fs.unlinkSync(substitutionTemporary);
+          const descriptor = fs.openSync(
+            substitutionTemporary,
+            fs.constants.O_WRONLY | fs.constants.O_CREAT |
+              fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
+            0o600
+          );
+          try {
+            fs.writeFileSync(descriptor, peerBytes);
+            fs.fchownSync(descriptor, 0, 0);
+            fs.fchmodSync(descriptor, 0o600);
+            fs.fsyncSync(descriptor);
+            replacementIdentity = fs.fstatSync(descriptor);
+          } finally { fs.closeSync(descriptor); }
+        }
+      })), /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u);
+    assert.equal(fs.existsSync(substitutionPath), false);
+    const replacementAfter = fs.lstatSync(substitutionTemporary);
+    assert.equal(replacementAfter.dev, replacementIdentity.dev);
+    assert.equal(replacementAfter.ino, replacementIdentity.ino);
+    assert.equal(replacementAfter.nlink, 1);
+    assert.equal(replacementAfter.uid, 0);
+    assert.equal(replacementAfter.gid, 0);
+    assert.equal(replacementAfter.mode & 0o777, 0o600);
+    assert.equal(
+      fs.readFileSync(substitutionTemporary).equals(peerBytes),
+      true
+    );
+    fs.unlinkSync(substitutionTemporary);
+    assert.equal(publish(substitutionPath).sha256, sha256(bytes));
+
+    const conflictPath = path.join(fixtureRoot, "conflict.json");
+    writeExact(conflictPath, Buffer.from("different\n"));
+    assert.throws(
+      () => publish(conflictPath),
+      /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u
+    );
+  } finally {
+    fs.chmodSync(fixtureRoot, 0o700);
+    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+  }
+});
+
 test("root installer publishes one exact stage and independent non-root verification rejects drift", {
-  skip: process.geteuid?.() !== 0 || !fs.existsSync("/usr/bin/setpriv")
+  skip: process.geteuid?.() !== 0 || process.arch !== "x64" ||
+    !fs.existsSync("/usr/bin/setpriv")
 }, () => {
   const fixtureRoot = `/opt/prooftoact-stage-regression-${process.pid}`;
   assert.equal(fs.existsSync(fixtureRoot), false);
@@ -260,18 +671,28 @@ test("root installer publishes one exact stage and independent non-root verifica
       expectedBuildReceiptSha256: current.buildReceiptSha256,
       outputReceiptPath: stageReceiptPath,
       stageRoot: current.stageRoot,
+      stateRoot: current.stateRoot,
+      sysusersRoot: current.sysusersRoot,
       unitRoot: current.unitRoot,
       verifierRoot: current.verifierRoot
     }, {
       systemdReloader: () => true
     });
-    assert.equal(receipt.files.length, 12);
+    assert.equal(receipt.files.length, 15);
     assert.equal(receipt.manifestSha256, current.manifestSha256);
     assert.equal(receipt.stageInstance, STAGE_INSTANCE);
     assert.equal(receipt.stageRoot, current.stageRoot);
+    assert.equal(
+      receipt.schemaVersion,
+      "tideproof.integrated-live-drill-root-stage.v5"
+    );
+    assert.equal(receipt.accountRecords.length, 7);
+    assert.equal(new Set(receipt.accountRecords.map(({ uid }) => uid)).size, 7);
+    assert.equal(receipt.systemdSysusersExecuted, true);
+    assert.equal(receipt.stateRoot, current.stateRoot);
     assert.equal(receipt.verifierRoot, current.verifierRoot);
     assert.equal(receipt.unitRoot, current.unitRoot);
-    assert.equal(receipt.unitFiles.length, 8);
+    assert.equal(receipt.unitFiles.length, 14);
     assert.deepEqual(receipt.verifierFiles.map(({ name }) => name), [
       "node",
       "verify-integrated-live-drill-stage.js"
@@ -286,12 +707,51 @@ test("root installer publishes one exact stage and independent non-root verifica
       current.buildRoot,
       acceptedBuildReceiptSha256Path,
       stageReceiptPath,
+      current.stateRoot,
+      current.sysusersRoot,
       current.unitRoot,
       current.verifierRoot,
-      current.stageRoot
+      current.stageRoot,
+      receipt.accountRecords[0]
     );
     assert.equal(accepted.status, 0, accepted.stderr);
     assert.equal(JSON.parse(accepted.stdout).status, "PASS");
+
+    for (const component of COMPONENTS) {
+      const launched = launchComponentAsUnprivileged(
+        current.stageRoot,
+        current.manifestSha256,
+        component
+      );
+      assert.equal(launched.status, 0, `${component}: ${launched.stderr}`);
+      const entry = JSON.parse(launched.stdout);
+      const expectedNode = path.join(
+        current.stageRoot,
+        `node-${OFFICIAL_LINUX_X64_NODE_SHA256}`
+      );
+      const expectedNodeStat = fs.statSync(expectedNode, { bigint: true });
+      assert.equal(entry.component, component);
+      assert.match(entry.argv0, /^\/proc\/self\/fd\/\d+$/u);
+      assert.equal(entry.execPath, expectedNode);
+      assert.equal(entry.executableLink, expectedNode);
+      assert.equal(entry.executableDev, String(expectedNodeStat.dev));
+      assert.equal(entry.executableIno, String(expectedNodeStat.ino));
+      assert.equal(
+        sha256(fs.readFileSync(expectedNode)),
+        OFFICIAL_LINUX_X64_NODE_SHA256
+      );
+    }
+    const injected = launchComponentAsUnprivileged(
+      current.stageRoot,
+      current.manifestSha256,
+      "worker",
+      { environment: { OPENSSL_CONF: "/tmp/attacker-openssl.cnf" } }
+    );
+    assert.equal(injected.status, 126);
+    assert.equal(
+      injected.stderr.trim(),
+      "INTEGRATED_LIVE_DRILL_RUNTIME_ENVIRONMENT_REJECTED"
+    );
 
     const reusedReceiptPath = path.join(current.receiptRoot, "stage-2.json");
     const reused = installIntegratedLiveDrillStage({
@@ -300,6 +760,8 @@ test("root installer publishes one exact stage and independent non-root verifica
       expectedBuildReceiptSha256: current.buildReceiptSha256,
       outputReceiptPath: reusedReceiptPath,
       stageRoot: current.stageRoot,
+      stateRoot: current.stateRoot,
+      sysusersRoot: current.sysusersRoot,
       unitRoot: current.unitRoot,
       verifierRoot: current.verifierRoot
     }, {
@@ -316,9 +778,12 @@ test("root installer publishes one exact stage and independent non-root verifica
       current.buildRoot,
       acceptedBuildReceiptSha256Path,
       stageReceiptPath,
+      current.stateRoot,
+      current.sysusersRoot,
       current.unitRoot,
       current.verifierRoot,
-      current.stageRoot
+      current.stageRoot,
+      receipt.accountRecords[0]
     );
     assert.notEqual(wrongMode.status, 0);
     fs.chmodSync(executable, 0o555);
@@ -333,9 +798,12 @@ test("root installer publishes one exact stage and independent non-root verifica
       current.buildRoot,
       acceptedBuildReceiptSha256Path,
       stageReceiptPath,
+      current.stateRoot,
+      current.sysusersRoot,
       current.unitRoot,
       current.verifierRoot,
-      current.stageRoot
+      current.stageRoot,
+      receipt.accountRecords[0]
     );
     assert.notEqual(extra.status, 0);
     fs.chmodSync(receipt.stageRoot, 0o755);
@@ -351,9 +819,12 @@ test("root installer publishes one exact stage and independent non-root verifica
       current.buildRoot,
       acceptedBuildReceiptSha256Path,
       stageReceiptPath,
+      current.stateRoot,
+      current.sysusersRoot,
       current.unitRoot,
       current.verifierRoot,
-      current.stageRoot
+      current.stageRoot,
+      receipt.accountRecords[0]
     );
     assert.notEqual(symlink.status, 0);
     fs.chmodSync(receipt.stageRoot, 0o755);
@@ -369,9 +840,12 @@ test("root installer publishes one exact stage and independent non-root verifica
       current.buildRoot,
       acceptedBuildReceiptSha256Path,
       stageReceiptPath,
+      current.stateRoot,
+      current.sysusersRoot,
       current.unitRoot,
       current.verifierRoot,
-      current.stageRoot
+      current.stageRoot,
+      receipt.accountRecords[0]
     );
     assert.notEqual(linked.status, 0);
     fs.chmodSync(receipt.stageRoot, 0o755);
@@ -386,6 +860,8 @@ test("root installer publishes one exact stage and independent non-root verifica
         expectedBuildReceiptSha256: current.buildReceiptSha256,
         outputReceiptPath: path.join(current.receiptRoot, "conflict.json"),
         stageRoot: current.stageRoot,
+        stateRoot: current.stateRoot,
+        sysusersRoot: current.sysusersRoot,
         unitRoot: current.unitRoot,
         verifierRoot: current.verifierRoot
       }, {

@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-12",
+  "reviewedOn": "2026-08-13",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -24,7 +24,7 @@
       "id": "actions-ci-workflow",
       "path": ".github/workflows/ci.yml",
       "role": "GITHUB_ACTIONS_RELEASE_VERIFICATION_WORKFLOW",
-      "sha256": "416a0f128feeb68688bf890ce9aeb0d216660f219a32329cb2c5a215ed3a403b"
+      "sha256": "3cd4b9a7b1ec4354c41ad1f7fc9d2344ab1ae71f9bc88559e529cb264b8cb740"
     },
     {
       "id": "admissible-vector-retrieval",
@@ -42,7 +42,7 @@
       "id": "authority-identity-contract",
       "path": "src/cloud/authority-identity.js",
       "role": "AUTHORITY_IDENTITY_CONTRACT",
-      "sha256": "68e4ef01a2c9d783957106dd2e6752bcba61dc50355bf9506f3ed26519264f30"
+      "sha256": "2a14b9d4dea979b9a79e458584e66d3624f93d670f4166517a90dc4f7c00a8ec"
     },
     {
       "id": "authority-identity-ledger",
@@ -54,7 +54,7 @@
       "id": "authority-identity-tests",
       "path": "test/authority-identity.test.js",
       "role": "AUTHORITY_IDENTITY_VERIFICATION",
-      "sha256": "62ed37a3397990a6ee487446cd74ebc03c0ec339a668cd9a4f4950b18de990c4"
+      "sha256": "d57f1880d7ab12db9b38477ae2bb81f2ad7e6ddfb3fc06441b8e4f842f4f3b1b"
     },
     {
       "id": "authority-evidence-runner",
@@ -78,7 +78,7 @@
       "id": "authority-runtime-identity-tests",
       "path": "test/authority-runtime-identity.test.js",
       "role": "AUTHORITY_RUNTIME_IDENTITY_VERIFICATION",
-      "sha256": "3ffc2c31c45124ddb83b12bec88f8a051d04a128947534ac81daa9bf54445781"
+      "sha256": "bb0be782e9023dedbf085a081d3649d0dae2e93a42897d6dd8a3a796aa476899"
     },
     {
       "id": "authority-runtime-reconciliation-tests",
@@ -90,7 +90,7 @@
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "ef8c2a0fed39f112f8e597e4657d838705fa660033ff314ea7426bbb73f0eefa"
+      "sha256": "843e110bf7c14f3c7ff8313429275e924b3855ab456b02915d178b7723c9e973"
     },
     {
       "id": "aws-alternate-principal-denial-runner",
@@ -114,7 +114,7 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "9d7a7a90e32cada72c8588001fe08cc255bb6563e9e0425c33e2bc8e10a1eed4"
+      "sha256": "d18dff59e753b7013ea5f612bcd85abf5964946440b7ed06b129ff353c4fa991"
     },
     {
       "id": "aws-deployment-attestation",
@@ -132,7 +132,7 @@
       "id": "aws-deployment-attestation-tests",
       "path": "test/aws-deployment-attestation.test.js",
       "role": "AWS_DEPLOYMENT_ATTESTATION_VERIFICATION",
-      "sha256": "201e17c28f16f7e17d41d6566a72b52f43f14f40e0ac47c7484e4d96998f0bea"
+      "sha256": "8894bdd0404873645c0332b9c618322867139360a4d249141206df97876fbb58"
     },
     {
       "id": "aws-evidence-identity",
@@ -252,7 +252,7 @@
       "id": "aws-security-tests",
       "path": "test/aws-gate2.test.js",
       "role": "AWS_GATE2_SECURITY_VERIFICATION",
-      "sha256": "c652b154116000585ba55bb6b1fef08c8e9416ed4c2f02b23c72ab299f957dd8"
+      "sha256": "a05a6452a35b8734bb885aa4194d93258570f41db4490575b5aab3177af3c3bf"
     },
     {
       "id": "aws-template-generated",
@@ -312,19 +312,19 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "41225a97156440785974bfc8ddf96238b44a7f05d27b27e00f5595cd599be5c9"
+      "sha256": "43a4c35165e7af0b2280acd2a59860727cc4a63104fc425f28b364f21b6ea3d7"
     },
     {
       "id": "database-security-posture",
       "path": "src/cloud/database-security-posture.js",
       "role": "DATABASE_POSTURE_BOUNDARY",
-      "sha256": "8113a58753c5189234bdd7b1d75aa780f5382fb7e4243d60875151fad4037033"
+      "sha256": "45f642ae5ed20b12be3883a4b9912483a4fbcdf4ad83df9ad0a1924b4770a966"
     },
     {
       "id": "database-security-posture-tests",
       "path": "test/database-security-posture.test.js",
       "role": "DATABASE_POSTURE_VERIFICATION",
-      "sha256": "de16f3e51f1adf9c01ba557d0073376be9715cef781ed3cbd839435e3993ef36"
+      "sha256": "06fdda2fd752fef585697e5723da047662496dbd4ad09ab809c0a6002301816f"
     },
     {
       "id": "dependency-snapshot",
@@ -354,13 +354,13 @@
       "id": "dvi-proposal-authorization",
       "path": "src/cloud/dvi-proposal-authorization.js",
       "role": "DATABASE_OWNED_PROPOSAL_AUTHORIZATION",
-      "sha256": "012ae84fc2beb47cfa8ea48b2ed2357de37177f7dbfca479c16f6eb944e1c219"
+      "sha256": "243222e6045c69d0e6e938ebf57bfa8dd4ecb9c2225730e73bb9c9f590d7d5e4"
     },
     {
       "id": "dvi-proposal-authorization-tests",
       "path": "test/dvi-proposal-authorization.test.js",
       "role": "PROPOSAL_AUTHORIZATION_VERIFICATION",
-      "sha256": "966672308a8e63b93c5ea28b81103cde73c3d074e18a0e3cec35b23ca395a37c"
+      "sha256": "b5b052638a12d63c9ca414ef2516cbaedbca9bfcc8d22756628cc629d91d0ffc"
     },
     {
       "id": "dvi-selection-contract",
@@ -384,13 +384,13 @@
       "id": "exact-git-source-tests",
       "path": "test/exact-git-source.test.js",
       "role": "IMMUTABLE_GIT_BUILD_VERIFICATION",
-      "sha256": "25ce06cd2c6bf6d228eb5aeff820dfe6d77f31080fd75742f71f15cec2464212"
+      "sha256": "a7dce65f02f2e2500a7ecef30687738c809925704fddd4a1701bf3a097065c3a"
     },
     {
       "id": "gate2-build-runner",
       "path": "scripts/build-gate2-template.js",
       "role": "EXACT_GIT_ARTIFACT_BUILDER",
-      "sha256": "cfed7cf7f8319d551b8ac6a888d9cda695bfea56ce98e4b282fd1c5a130b32c4"
+      "sha256": "df6ed7fa6d05bf390305495ef77ab36a7d8c95ac30c24caa0c9dd77724fdd7dc"
     },
     {
       "id": "gate2-exact-build-bootstrap",
@@ -402,7 +402,7 @@
       "id": "gate2-build-contract",
       "path": "scripts/lib/gate2-build-contract.js",
       "role": "EXACT_BUILD_RECEIPT_AND_CONTROL_PATH_CONTRACT",
-      "sha256": "da832ae4f027cf7752da83a9fab53a3cc04787ed03e45bb20c9b417e65a6e3a4"
+      "sha256": "2329faf96263d9f37d08bfd6cf0ceeab59625d323d794dc1993bbebdba358957"
     },
     {
       "id": "official-node-runtime-contract",
@@ -432,19 +432,25 @@
       "id": "release-build-receipt-contract",
       "path": "src/cloud/release-build-receipt-contract.js",
       "role": "SHARED_EXACT_BUILD_RECEIPT_SHAPE",
-      "sha256": "0bfa6fb878caf12047bfd56ce0471e81f3cdda18982fa2c46066715800e15ad3"
+      "sha256": "3cdefb0cf1b72249b1512395b60ee243a5b63e5c9ac7c3bff08bb2b2ea717ab7"
     },
     {
       "id": "verified-node-bundle-launcher",
       "path": "scripts/lib/verified-node-bundle-launcher.pl",
       "role": "CONTENT_ADDRESSED_RUNTIME_EXECUTION_LAUNCHER",
-      "sha256": "b5009554176d131a75dacfd623afe92f4225c779a93e63a3e84ae673b7b49b6f"
+      "sha256": "fd5b755e976ce9539c98fbaa9d10bba88ac494f725f1b42b5d99ed5ba987552b"
     },
     {
       "id": "immutable-deployment-attestation-ledger",
       "path": "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
       "role": "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY",
       "sha256": "427286ab6ad83fdbd790adbc86a20ef1b888f674b74f75019c378172de91f3e2"
+    },
+    {
+      "id": "atomic-create-only-file",
+      "path": "src/cloud/atomic-create-only-file.js",
+      "role": "OWNER_ONLY_ATOMIC_CREATE_OR_EXACT_REUSE_PRIMITIVE",
+      "sha256": "332b377d51762e96bd355df4a6305425a97eba939b7aa2a898dafed759ac888e"
     },
     {
       "id": "integrated-live-drill-harness",
@@ -504,31 +510,31 @@
       "id": "integrated-live-drill-process-boundary-verifier",
       "path": "scripts/verify-integrated-live-drill-process-boundaries.js",
       "role": "INTEGRATED_PROVIDER_DRILL_RECURSIVE_PROCESS_IMPORT_GATE",
-      "sha256": "1425e52d5988155390c151b81163fef5df928022a4b67fb61b2f7a4d32c0321a"
+      "sha256": "e20f6f1565d6b4a60ba6c2fd2b4a78efb463e6490201c2d010887e2c8edeb366"
     },
     {
       "id": "integrated-live-drill-process-boundary-tests",
       "path": "test/integrated-live-drill-process-boundaries.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_PROCESS_ISOLATION_VERIFICATION",
-      "sha256": "76eb87abc9888fa00bed6afc6a115f44ad55402cbbbf2b7f27aa8a1f3d15c203"
+      "sha256": "434ae55bc7f913e841ae53fc124533376470f8bc6a9c962ae548898299ecbd8b"
     },
     {
       "id": "integrated-live-drill-runtime-contract",
       "path": "src/cloud/integrated-live-drill-runtime.js",
       "role": "INTEGRATED_PROVIDER_DRILL_IMMUTABLE_RUNTIME_VALIDATOR",
-      "sha256": "c0c72321c47993fd65cc9523dbe39bab26a7cdffbff17d756baddacdccef03de"
+      "sha256": "03dc82500bc171f88215ebe479a5857d7bfec378b5a04170c918e8adbeb67592"
     },
     {
       "id": "integrated-live-drill-runtime-spawn",
       "path": "src/cloud/integrated-live-drill-runtime-spawn.js",
       "role": "INTEGRATED_PROVIDER_DRILL_SANITIZED_RUNTIME_SPAWN",
-      "sha256": "f03e544d634559a3d4d6c9a0b276933f4f1cfe6de51fe6ab4646c6ffb719b732"
+      "sha256": "814a3f1cbd705adeae0c82e17ed30c9d25df4e9968f4d6c63621c64b877ba32a"
     },
     {
       "id": "integrated-live-drill-runtime-tests",
       "path": "test/integrated-live-drill-runtime.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_RUNTIME_TAMPER_VERIFICATION",
-      "sha256": "9c823221daf4a069a33b6ac925b000efeded16f14341cc683808463388f7e09f"
+      "sha256": "8bc347a2815382a5d7b10c5134d2c28f9d7004b5f28ffe8a6659091df028864b"
     },
     {
       "id": "integrated-live-drill-runtime-authority-race-entry",
@@ -543,10 +549,28 @@
       "sha256": "25e817c8a473971be5922bc1dab24ec27e0943c8197b9e552af6712698450aa2"
     },
     {
+      "id": "integrated-live-drill-runtime-provider-activation-entry",
+      "path": "scripts/runtime-entries/integrated-live-drill-provider-activation.js",
+      "role": "CONTENT_ADDRESSED_PROVIDER_ACTIVATION_ENTRY",
+      "sha256": "1808796e58cf81140f35609f6dc5961214cc625ed75546c894028d968a81f7dd"
+    },
+    {
+      "id": "integrated-live-drill-runtime-provider-exchange-entry",
+      "path": "scripts/runtime-entries/integrated-live-drill-provider-exchange.js",
+      "role": "CONTENT_ADDRESSED_PROVIDER_EXCHANGE_ENTRY",
+      "sha256": "e464dca56a7a73436c3ca2e9bdf5aac9576c75c5d0f627831f89909d820762d3"
+    },
+    {
       "id": "integrated-live-drill-runtime-provider-operation-entry",
       "path": "scripts/runtime-entries/integrated-live-drill-provider-operation.js",
       "role": "CONTENT_ADDRESSED_PROVIDER_OPERATION_ENTRY",
       "sha256": "b091c40d8fba549419f66dede170f2a0ecf53c555014755ada3530093a0f267c"
+    },
+    {
+      "id": "integrated-live-drill-runtime-provider-terminalizer-entry",
+      "path": "scripts/runtime-entries/integrated-live-drill-provider-terminalizer.js",
+      "role": "CONTENT_ADDRESSED_PROVIDER_TERMINALIZER_ENTRY",
+      "sha256": "1d6400eb22af25a5ebe5e814f180b2ba736110af4e65c75315b3979e4421f13a"
     },
     {
       "id": "integrated-live-drill-runtime-dvi-entry",
@@ -612,43 +636,43 @@
       "id": "integrated-live-drill-provider-recovery",
       "path": "src/cloud/integrated-live-drill-provider-recovery.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2A_SOURCE_WIRED_NOT_LIVE_PROVIDER_RECOVERY_LIBRARY",
-      "sha256": "e2d4d554896041316812db5134fea47507c5aa7777bb6b2fd8f555539d8748f2"
+      "sha256": "8cf56b98f9b69337fcea65f3584fbb9f85b8053a2f3149d68cb56ac8a1e7b225"
     },
     {
       "id": "integrated-live-drill-provider-recovery-tests",
       "path": "test/integrated-live-drill-provider-recovery.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2A_STRICT_LOCAL_FAKE_TRANSPORT_VERIFICATION",
-      "sha256": "2aef0de537ea8c839ed09727f294be7e779f4bba6a5c195548b8824b52a441d9"
+      "sha256": "bd054cca1fcd1599337afa87ad59757f635493c71fa07ab62f7866fe12022b37"
     },
     {
       "id": "integrated-live-drill-dispatch-broker",
       "path": "src/cloud/integrated-live-drill-dispatch-broker.js",
       "role": "PROVIDER_FREE_DATABASE_GLOBAL_DISPATCH_BROKER",
-      "sha256": "3b1d3b6d44ee0f02770b2de82699106aa54a02c1ed15f9927f1c60dfe3258016"
+      "sha256": "f4c305608bc30849bf2f08283202cb5b379750fceb699447c90375c1559bdf4f"
     },
     {
       "id": "integrated-live-drill-dispatch-broker-runner",
       "path": "scripts/gate1-integrated-live-drill-dispatch-broker.js",
       "role": "SYSTEMD_CREDENTIAL_FREE_GLOBAL_DISPATCH_RUNNER",
-      "sha256": "49d5ca00d6c31735eb9f018f1cbc46ac9fec0d1ec1db81e0c6883f69f73a128b"
+      "sha256": "664d46b6faab768d6bb0e14b3cf62c26458a8b33a82338762466845fd89db4ea"
     },
     {
       "id": "integrated-live-drill-dispatch-broker-tests",
       "path": "test/integrated-live-drill-dispatch-broker.test.js",
       "role": "REAL_PROCESS_GLOBAL_DISPATCH_AND_RETRY_VERIFICATION",
-      "sha256": "f6647210bab825c67f8d7e8d313c1a69b0c6f75d1aea8f8f6d34e12b22560968"
+      "sha256": "dd155d0ade8e4a4fc9f96abb9177d0895c6e491d5de6bcb778661f149f671ba5"
     },
     {
       "id": "integrated-live-drill-execution-fence-tests",
       "path": "test/integrated-live-drill-provider-execution-fence.test.js",
       "role": "REAL_PROCESS_PROVIDER_EXECUTION_FENCE_VERIFICATION",
-      "sha256": "868f869a5cb329be4d70fad99410b7d89d841a8b855763d004fc91c38bc87c9e"
+      "sha256": "2fa4820251aa76e0f623c23fa6c810023a23817e806b79816c9d3628b03bb362"
     },
     {
       "id": "integrated-live-drill-provider-operation-broker",
       "path": "src/cloud/integrated-live-drill-provider-operation-broker.js",
       "role": "ONE_SHOT_PROVIDER_CREDENTIAL_AND_OPERATION_BROKER",
-      "sha256": "3bc543c4ee594b357111dbc4e0eee6255edf8998e594b7494c70e8b797d16912"
+      "sha256": "f7fb6f7b13bef28b0c65798841431fb4d87625ad394c29067bfe3188c12e4f12"
     },
     {
       "id": "integrated-live-drill-provider-operation-client",
@@ -660,19 +684,61 @@
       "id": "integrated-live-drill-provider-operation-runner",
       "path": "scripts/gate1-integrated-live-drill-provider-operation-broker.js",
       "role": "SYSTEMD_PROVIDER_OPERATION_BROKER_RUNNER",
-      "sha256": "4d3ef0f606dded258790cc6df86cb44cebee7eda142bf5efca4c7400e71fe7f9"
+      "sha256": "1c6a64bb7567146c628b18973c5deb6e0666c156c749e33d2a2942a43a5bb8f9"
     },
     {
       "id": "integrated-live-drill-provider-operation-tests",
       "path": "test/provider-operation-broker.test.js",
       "role": "ONE_REDEMPTION_AMBIGUITY_AND_NO_REDISPATCH_VERIFICATION",
-      "sha256": "2f3008f34c6d279d840cc9071da1b873cb8b17d4052a202d3f8a2f1215798add"
+      "sha256": "dbb662f64f6d8908837e469f6e5602edcd96527e49209ad4cde566554a2b1aa4"
+    },
+    {
+      "id": "integrated-live-drill-provider-activation",
+      "path": "src/cloud/integrated-live-drill-provider-activation.js",
+      "role": "DATABASE_ACKNOWLEDGED_PROVIDER_ACTIVATION_CONTRACT",
+      "sha256": "52bca21fd4515bfbb127e204ed39735e5a142a04cf1aa95870abae62d11eb974"
+    },
+    {
+      "id": "integrated-live-drill-provider-activation-runner",
+      "path": "scripts/gate1-integrated-live-drill-provider-activation.js",
+      "role": "SYSTEMD_DATABASE_ACTIVATION_RUNNER",
+      "sha256": "8c45938d3d3fcbaa3a68d9b38d94e2564edbacf342a91aa23795d7f5c495351c"
+    },
+    {
+      "id": "integrated-live-drill-provider-exchange",
+      "path": "src/cloud/integrated-live-drill-provider-exchange.js",
+      "role": "ONE_SHOT_PROVIDER_BEARER_EXCHANGE",
+      "sha256": "9d6067ba1c99ce4da837b1cfb7ded576edce155b09f3a81574a3b11090690dcf"
+    },
+    {
+      "id": "integrated-live-drill-provider-exchange-runner",
+      "path": "scripts/gate1-integrated-live-drill-provider-exchange.js",
+      "role": "SYSTEMD_ONE_SHOT_PROVIDER_EXCHANGE_RUNNER",
+      "sha256": "0143f16069d6e4c85e513f72a9dd72e3f121de149d5a841323bb223e797a90c6"
+    },
+    {
+      "id": "integrated-live-drill-provider-terminalization",
+      "path": "src/cloud/integrated-live-drill-provider-terminalization.js",
+      "role": "DATABASE_TIME_PROVIDER_TERMINALIZATION_CONTRACT",
+      "sha256": "3e93404fbf569bef6e1a32ab77be0c9d26824ae712f72ce93249afce8a0a0c65"
+    },
+    {
+      "id": "integrated-live-drill-provider-terminalizer-runner",
+      "path": "scripts/gate1-integrated-live-drill-provider-terminalizer.js",
+      "role": "SYSTEMD_DATABASE_TERMINALIZATION_RUNNER",
+      "sha256": "0f28e36939ae5aad57ed9251a273ec18ffdef5ceb9280e3a22196eff17907757"
+    },
+    {
+      "id": "integrated-live-drill-provider-activation-terminalization-tests",
+      "path": "test/provider-dispatch-activation-terminalization.test.js",
+      "role": "ACTIVATION_TERMINALIZATION_AUTHORITY_AND_RACE_VERIFICATION",
+      "sha256": "3499d434e1bdea254657ab7419e479a13d8c04577ab3073fdf7a0fd58172b78b"
     },
     {
       "id": "integrated-live-drill-provider-finalization",
       "path": "src/cloud/integrated-live-drill-provider-finalization.js",
       "role": "INTEGRATED_PROVIDER_DRILL_B2_PROVIDER_FREE_W4_W5_FINALIZATION",
-      "sha256": "2aa2203b3bdbc6c371a8914aff41e73ba4c86cca53da121a712c785c4082719c"
+      "sha256": "44887bedde51dcaacddb16e1ff5523392fa5ce86a9272978a8cba594ff76d4a5"
     },
     {
       "id": "integrated-live-drill-provider-finalizer-runner",
@@ -696,19 +762,19 @@
       "id": "integrated-live-drill-provider-reconciliation",
       "path": "src/cloud/integrated-live-drill-provider-reconciliation.js",
       "role": "INTEGRATED_PROVIDER_DRILL_AUDIT_ONLY_RECONCILIATION",
-      "sha256": "a13f1136a8c9c0fe913781271be97cb125309369a01628b53249d21b60228fea"
+      "sha256": "0d6c3be961dcae31d2d0df79c83d29bf7aa54d0eea55430c92c2a8fba281795e"
     },
     {
       "id": "integrated-live-drill-provider-reconciliation-runner",
       "path": "scripts/gate1-integrated-live-drill-provider-reconciler.js",
       "role": "INTEGRATED_PROVIDER_DRILL_AUDIT_ONLY_RECONCILIATION_RUNNER",
-      "sha256": "8ea765a7b11a99482de7265918aaa26a5fdbf1a7f58f79e7957c4f25f0514141"
+      "sha256": "212c72cdb8faee3bf4f221c42d29f905c32cc2a1e197ef0a99f6200b465d38e5"
     },
     {
       "id": "integrated-live-drill-provider-reconciliation-tests",
       "path": "test/integrated-live-drill-provider-reconciliation.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_AUDIT_ONLY_RECONCILIATION_VERIFICATION",
-      "sha256": "b04561aac5712ce94e678843604e153d9803117709bf6c202a4d35397a501914"
+      "sha256": "fb02b3ca1280fe186f34cbf18b23d3a1cfb3cfd71640f04d6e0f26936d0e8df9"
     },
     {
       "id": "integrated-live-drill-provider-supervisor-runner",
@@ -732,73 +798,115 @@
       "id": "integrated-live-drill-root-stage-installer",
       "path": "scripts/install-integrated-live-drill-stage.js",
       "role": "ROOT_ONLY_ATOMIC_RUNTIME_STAGE_INSTALLER",
-      "sha256": "6c5e535d6ffdb0927f6af26528c9cb39bcd6d024794586f2b6d6ca7bff5d1e3f"
+      "sha256": "16d0b8a45e16bb1f6591d4b1716ac8971beb5b28f47ba2c1e226fce303c3f11e"
     },
     {
       "id": "integrated-live-drill-root-stage-verifier",
       "path": "scripts/verify-integrated-live-drill-stage.js",
       "role": "INDEPENDENT_NON_ROOT_RUNTIME_STAGE_VERIFIER",
-      "sha256": "f786a7b7cf268a03d260357e21e4df62a3241542379914cec10868b206fbcbc8"
+      "sha256": "f86944f10565c75122757a8aa814baa4a0e05546ec839f4b86e67f48180ca116"
     },
     {
       "id": "integrated-live-drill-root-stage-tests",
       "path": "test/root/integrated-live-drill-stage-root.test.js",
       "role": "LINUX_ROOT_STAGE_ADVERSARIAL_VERIFICATION",
-      "sha256": "982524f5317c05e08305190c96d9eb3875f919b4564892425187e2677cd6e4a5"
+      "sha256": "e56ae2a2137507a2d868c53cba59c65dd9a972dc25d4fab6bccc4ac4cda3da4b"
     },
     {
       "id": "integrated-live-drill-systemd-boundary-verifier",
       "path": "scripts/verify-integrated-live-drill-systemd-boundary.js",
       "role": "FIRST_EXEC_SYSTEMD_CREDENTIAL_BOUNDARY_VERIFIER",
-      "sha256": "4d5931398a4eb1151ffeded63690b64677850e1baa49f34b9ba20da0cd0a84a2"
+      "sha256": "71eb5db3388e5538fa3a54db68d32ef54a24d5111933d8b1cc594505a7b18903"
     },
     {
       "id": "integrated-live-drill-systemd-stage-verify-unit",
       "path": "infra/systemd/prooftoact-integrated-live-drill-stage-verify@.service",
       "role": "ROOT_STAGE_FIRST_EXEC_VERIFICATION_UNIT",
-      "sha256": "243c527a5d0b6a12534fb0877a084a9813a572074d36eed5f9199da2de199ee1"
+      "sha256": "8b4b0e7f8660228367d3d8515ff316f92e5320651690f43df8d83e179790d5fe"
     },
     {
       "id": "integrated-live-drill-systemd-controller-unit",
       "path": "infra/systemd/prooftoact-integrated-live-drill@.service",
       "role": "PROVIDER_FREE_PREPARATION_UNIT",
-      "sha256": "618a39a049f7d89134998990b694f245f874822ee635dce059959e8a8f52153b"
+      "sha256": "f4887f028437c70d36fb05fb7713c3f59aee3a6f649ba97f85f93ebd84eee364"
     },
     {
       "id": "integrated-live-drill-systemd-resume-unit",
       "path": "infra/systemd/prooftoact-integrated-live-drill-resume@.service",
       "role": "PROVIDER_FREE_RESUME_UNIT",
-      "sha256": "7e0a558d9a9c6e4e755d57ba57b9e88f6c358dfd03582495611bf6be36a8d2c4"
+      "sha256": "985c7b4c98c4f1faa4c03118a7ca0df3656f14318aeffaf8d73b0454d7235f49"
     },
     {
       "id": "integrated-live-drill-systemd-dispatch-broker-unit",
       "path": "infra/systemd/prooftoact-integrated-live-drill-dispatch-broker@.service",
       "role": "CLAIM_AND_BEGIN_ONLY_DISPATCH_UNIT",
-      "sha256": "d565db37b162edb0d3b27390fefb306756a5b9e1ff2584ac1c0002f41bf89007"
+      "sha256": "6b9adbbb54b832d89cb384f7ac12e603a31c2b7ad57f2050a6b325f2da64dc97"
     },
     {
       "id": "integrated-live-drill-systemd-executor-unit",
       "path": "infra/systemd/prooftoact-integrated-live-drill-executor@.service",
       "role": "PROVIDER_CREDENTIAL_FREE_EXECUTOR_UNIT",
-      "sha256": "cbc4a4ad98ef222c3942075971ad6fc7cbf2252965280043529c306b5d3a9dfb"
+      "sha256": "e927a344cc16fec4f88a1c368317cc8c692e087a24cc560d5f813afbf85622bc"
     },
     {
       "id": "integrated-live-drill-systemd-provider-operation-unit",
       "path": "infra/systemd/prooftoact-integrated-live-drill-provider-operation@.service",
       "role": "ONE_SHOT_PROVIDER_CREDENTIAL_UNIT",
-      "sha256": "78f10fb1c27e8f37e6cc6ee3f3b564bc049deba21f5dde475837a1626e2e3fa6"
+      "sha256": "80dc9657d226f760bd021d4abde561fd85b63341e895f17288d3d8d1a8d3d493"
     },
     {
       "id": "integrated-live-drill-systemd-provider-operation-socket",
       "path": "infra/systemd/prooftoact-integrated-live-drill-provider-operation@.socket",
       "role": "ONE_SHOT_PROVIDER_OPERATION_IPC_SOCKET",
-      "sha256": "15c81b806c8f7e9de2ba9eb3459131ba1bdc48c07860d532ca32d8943bac7d72"
+      "sha256": "e98bc1d2534790320bac189ad7ce9f0053bffba24af8538398cf8949d26de6b9"
+    },
+    {
+      "id": "integrated-live-drill-systemd-provider-activation-unit",
+      "path": "infra/systemd/prooftoact-integrated-live-drill-provider-activation@.service",
+      "role": "DATABASE_ACTIVATION_SERVICE_UNIT",
+      "sha256": "5536de29345933637fddc22db1ea7a901ed8a698200402911fb2f0deaf720341"
+    },
+    {
+      "id": "integrated-live-drill-systemd-provider-activation-socket",
+      "path": "infra/systemd/prooftoact-integrated-live-drill-provider-activation@.socket",
+      "role": "OPERATION_OWNED_ACTIVATION_SOCKET",
+      "sha256": "5d794c8e8f062359b7ab76f6ca5dc2c32cacc7c061fd1df9ab9cefbdb5cb9a95"
+    },
+    {
+      "id": "integrated-live-drill-systemd-provider-callback-socket",
+      "path": "infra/systemd/prooftoact-integrated-live-drill-provider-callback@.socket",
+      "role": "PROVIDER_OWNED_CALLBACK_SOCKET",
+      "sha256": "853164776db610d01a6819c4c3b8650c04c4bf288f1051e30cb8d0c448eab6fe"
+    },
+    {
+      "id": "integrated-live-drill-systemd-provider-exchange-unit",
+      "path": "infra/systemd/prooftoact-integrated-live-drill-provider-exchange@.service",
+      "role": "ONE_SHOT_PROVIDER_BEARER_SERVICE_UNIT",
+      "sha256": "d5c95301941c47756f5621d1dd135eb689640ce74fde04629cae35021d4a4bbd"
+    },
+    {
+      "id": "integrated-live-drill-systemd-provider-terminalizer-unit",
+      "path": "infra/systemd/prooftoact-integrated-live-drill-provider-terminalizer@.service",
+      "role": "DATABASE_TIME_TERMINALIZER_SERVICE_UNIT",
+      "sha256": "5337a3dce5a6f397102a2369df08d8c59ea8e354499a4459217e9b6affc01477"
+    },
+    {
+      "id": "integrated-live-drill-systemd-provider-terminalizer-timer",
+      "path": "infra/systemd/prooftoact-integrated-live-drill-provider-terminalizer@.timer",
+      "role": "DATABASE_TIME_TERMINALIZATION_TIMER",
+      "sha256": "3e43a4cdeab9f93eb942239064e2f3363509b6206a25ac281e1ffbfdb7726622"
+    },
+    {
+      "id": "integrated-live-drill-sysusers",
+      "path": "infra/sysusers.d/prooftoact.conf",
+      "role": "SEVEN_IDENTITY_SYSTEMD_SYSUSERS_CONTROL",
+      "sha256": "84ea6e95b21cafe1b05b7d29db20fe63a44c2307a18f1ed366827ff1c6d31770"
     },
     {
       "id": "integrated-live-drill-systemd-reconcile-unit",
       "path": "infra/systemd/prooftoact-integrated-live-drill-reconcile@.service",
       "role": "RESOLVE_ONLY_RECONCILIATION_UNIT",
-      "sha256": "e142404b0faac006f6e0f9dced92b9566957d75cae300a876eaef41fd63506e4"
+      "sha256": "351e69308823a69b9639d83d9e4fca464d37926e079028f12741049ffc62e701"
     },
     {
       "id": "integrated-live-drill-systemd-credential-reader",
@@ -846,13 +954,13 @@
       "id": "integrated-live-drill-runner",
       "path": "scripts/gate2-integrated-live-drill.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_RUNNER",
-      "sha256": "42cc98dc6d9b86308e1a5af9b9aeb1900c8a0e984dc26674106b3364cb854f90"
+      "sha256": "1758aa4310d3acf3ce1c7805e8a495cbf671f982ddc11f46ab3b951eaef21c2b"
     },
     {
       "id": "integrated-live-drill-tests",
       "path": "test/integrated-live-drill.test.js",
       "role": "INTEGRATED_PROVIDER_DRILL_EVIDENCE_VERIFICATION",
-      "sha256": "b98cbd3eda97eea4e9af365d01c20d5b90a42116c23f86d111c6f10043f2b28c"
+      "sha256": "a4848b527fee04e7aeca883e82ec2c80b675f3416b34e53f1846a2e4599a9da3"
     },
     {
       "id": "recovery-bundle-persistence-tests",
@@ -894,7 +1002,7 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "a98100b8ad81bc254cffeb8262bf0ed40b552be4258dae160fb63b323d95efc4"
+      "sha256": "3b671005ab48a5bbfb76b00c8963f7b188d31ff3df7fa72f9d8d9a996b181243"
     },
     {
       "id": "managed-mcp-client-tests",
@@ -906,13 +1014,13 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "01425e78ee7e6bd441195c9bdf6b8327e322341ed2de206450d969ed257622e8"
+      "sha256": "e3a613220afdd8ac01ea80ba4bf518a62f6c9dd35b920f7662acc6a375c7abe9"
     },
     {
       "id": "primary-security-runner",
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
-      "sha256": "925f3f16065282e9685d7a4453233bbf72a062fcb2fab06306ebb401002af1ce"
+      "sha256": "7e6b774efb44d21d5f8450ef990e71d22a43f6121d5e1be42dd2d4ca5b68ebd2"
     },
     {
       "id": "provider-dispatch-control",
@@ -930,7 +1038,7 @@
       "id": "provider-dispatch-client",
       "path": "src/cloud/provider-dispatch-client.js",
       "role": "SHARED_PROVIDER_DISPATCH_DATABASE_RESULT_VALIDATOR",
-      "sha256": "ed84c3e10f3730a4e87dda5353fb2f6b89b36909a03c48c68099898f0b0117aa"
+      "sha256": "055a2d6cdcead0e5e167a3f770aadd3219dc8a36972f10c44192b6f44b1f6055"
     },
     {
       "id": "provider-dispatch-claim-control",
@@ -957,10 +1065,40 @@
       "sha256": "1627787f6640a9cf1850913e393119dc63ab896e92257ce7005e3fb9567079ec"
     },
     {
+      "id": "provider-dispatch-activate-control",
+      "path": "src/cloud/provider-dispatch-activate-control.js",
+      "role": "ACTIVATE_ONLY_PROVIDER_DISPATCH_CLIENT",
+      "sha256": "46dc34129ba1a736cd12d9de593e311b00d4b7d7d19b0396aa6d03be6a9ff225"
+    },
+    {
+      "id": "provider-dispatch-reconciliation-input",
+      "path": "src/cloud/provider-dispatch-reconciliation-input.js",
+      "role": "SHARED_STRICT_PROVIDER_RECONCILIATION_INPUT",
+      "sha256": "c1d58e878d159b31fd0aed38b9688ab982415c783d71d66d68f63c28a6acfd2f"
+    },
+    {
+      "id": "provider-dispatch-resolve-database",
+      "path": "src/cloud/provider-dispatch-resolve-database.js",
+      "role": "RESOLVE_ONLY_DATABASE_CONNECTION_FACTORY",
+      "sha256": "c309fd9ce8aab64b809d73531f7181bff2e1c2cc00c9e9b7c1d8c8951cf6610b"
+    },
+    {
+      "id": "provider-dispatch-result",
+      "path": "src/cloud/provider-dispatch-result.js",
+      "role": "SHARED_STRICT_PROVIDER_DISPATCH_RESULT_VALIDATOR",
+      "sha256": "9f5e3d2888e5b7344ee056744bc65c71c79e43a6177193648c658b5db44e7415"
+    },
+    {
+      "id": "provider-dispatch-terminalize-control",
+      "path": "src/cloud/provider-dispatch-terminalize-control.js",
+      "role": "TERMINALIZE_ONLY_PROVIDER_DISPATCH_CLIENT",
+      "sha256": "75ce3ed54cdc17b5b997057836269cef777e83c5e3f47046027a50dd864dbca1"
+    },
+    {
       "id": "provider-dispatch-resolver",
       "path": "src/cloud/provider-dispatch-resolver.js",
       "role": "RESOLVE_ONLY_PROVIDER_DISPATCH_CLIENT",
-      "sha256": "b21e826ab27b8a4554485ddaf82de4ec5ccd8c483b7a1f43233f63e9fb15154c"
+      "sha256": "7d8c25ade798f76a59ad81924419ad0de707c872208c95b4931bc2464dd7c54f"
     },
     {
       "id": "provider-dispatch-control-tests",
@@ -972,7 +1110,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "c35f65931e5dd3e8d9cf6670b900dd2826fe6e8ea0a5d4e770d35899c5f4cc24"
+      "sha256": "aebbc582c57e376b0b788f9fd02720cdac096056eb62ff7cfef850cb6875ec1c"
     },
     {
       "id": "proof-manifest-verifier",
@@ -1026,7 +1164,7 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "cfe46e241788789c2e91d0a8dd1e5438e47d29525c7adabe0424b6477a767676"
+      "sha256": "a082914bcb63ea74945732144d31079d2be93b448a2754eb93927cd2ea49e114"
     },
     {
       "id": "recovery-broker-tests",
@@ -1044,13 +1182,13 @@
       "id": "recovery-continuity-identity",
       "path": "src/cloud/recovery-continuity-identity.js",
       "role": "PROVIDER_FREE_RECOVERY_PRE_CALL_IDENTITY_AND_BUNDLE_VERIFICATION",
-      "sha256": "ef1d26769c3eb31c2c346aaf89cfa718ee7406011938bb268df9640f330865ec"
+      "sha256": "c09ca29e7bed3bc96922185b72c60b9d993b179c1e94c7398fe82c24ce4d47d8"
     },
     {
       "id": "recovery-security-contract",
       "path": "src/cloud/recovery-security-contract.js",
       "role": "PRIMARY_MANAGED_TABLE_AND_RECOVERY_DENIAL_CONTRACT",
-      "sha256": "aa23249fd429e29cd39a9d4788ab7ec4638d0c1f3f24dd0defc2d79d1ed20c19"
+      "sha256": "96fb524ed07b738c51407c532911b369a3b08428c486708458660c8ac3fca7bf"
     },
     {
       "id": "recovery-broker-runner",
@@ -1080,7 +1218,7 @@
       "id": "recovery-publisher-key-tests",
       "path": "test/recovery-publisher-key.test.js",
       "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
-      "sha256": "e168ba6f218beb5baad0d2a5d15fe30a15c9eae372bc90215f5cf60d06a3f5ed"
+      "sha256": "84103f0e7f8ff499ca00fdeb6778427c279096dc968857ffbed723c9984f046e"
     },
     {
       "id": "recovery-publication-reconciliation-tests",
@@ -1092,7 +1230,7 @@
       "id": "recovery-store",
       "path": "src/cloud/recovery-store.js",
       "role": "RECOVERY_STORE_RUNTIME",
-      "sha256": "1bf79dca1df30b0913c3d22c985b9e68c1f7f6694005a0d6b4536f9e0b76362b"
+      "sha256": "ea32421c18511c88a97768b5f87f37dd463650a67300b4513e60d5554d9de399"
     },
     {
       "id": "recovery-store-tests",
@@ -1104,7 +1242,7 @@
       "id": "release-security-ledger",
       "path": "docs/RELEASE_SECURITY.md",
       "role": "SECURITY_CONTROL_LEDGER",
-      "sha256": "953590fe6c50f64aa2015512b59e0e0afea709576bde680d41386aa98d699379"
+      "sha256": "1f5ee4115c547f97e817635c31971c4ae6f9981f3dd61812a83a4aa736a0e07b"
     },
     {
       "id": "security-policy",

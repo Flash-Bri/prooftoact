@@ -126,7 +126,7 @@ const SYSTEMD_ORCHESTRATOR_INPUT_SCHEMA =
   "tideproof.integrated-live-drill-systemd-orchestrator-input.v1";
 const SYSTEMD_ORCHESTRATOR_INPUT_CREDENTIAL = "orchestrator-input";
 const PRE_EXECUTION_INJECTION_ENVIRONMENT =
-  /^(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*)$/u;
+  /^(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*|OPENSSL_.*|SSL_.*|SSLKEYLOGFILE|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|TZDIR|ICU_DATA|MALLOC_CONF|MALLOC_OPTIONS|ASAN_OPTIONS|LSAN_OPTIONS|MSAN_OPTIONS|TSAN_OPTIONS|UBSAN_OPTIONS)$/u;
 const PROVIDER_CAPABILITY_ENVIRONMENT =
   /^(?:MCP_API_KEY|PRIMARY_PROVIDER_(?:CLAIM|BEGIN|FINALIZE|RECONCILE)_DATABASE_URL)$/u;
 const SYSTEMD_PREPARE_INPUT_NAMES = new Set([
@@ -357,8 +357,8 @@ export function systemdIntegratedLiveDrillEnvironment(
   ));
   if (spec.runId !== instance) throw new Error(code);
   const stateRoot = "/var/lib/prooftoact";
-  const evidenceRoot = `${stateRoot}/evidence/${instance}`;
-  const authorizationRoot = `${stateRoot}/authorization/${instance}`;
+  const evidenceRoot = `${stateRoot}/evidence/${instance}/root`;
+  const authorizationRoot = `${stateRoot}/authorization/${instance}/root`;
   const runtime = Object.fromEntries([
     "LANG",
     "LC_ALL",

@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { publishOrReadExactOwnedFile } from "./atomic-create-only-file.js";
 
 import { canonicalJson } from "./canonical-json.js";
 import {
@@ -9,6 +10,15 @@ import {
   PROVIDER_DISPATCH_UUID,
   validateProviderDispatchControlBinding
 } from "./provider-dispatch-binding.js";
+import {
+  buildProviderDispatchReconciliationInput,
+  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA,
+  providerDispatchReconciliationInputBytes
+} from "./provider-dispatch-reconciliation-input.js";
+
+export {
+  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA
+} from "./provider-dispatch-reconciliation-input.js";
 
 export const INTEGRATED_LIVE_DRILL_DISPATCH_BROKER_REQUEST_SCHEMA =
   "tideproof.integrated-live-drill-dispatch-broker-request.v1";
@@ -16,8 +26,6 @@ export const INTEGRATED_LIVE_DRILL_DISPATCH_BROKER_RECEIPT_SCHEMA =
   "tideproof.integrated-live-drill-dispatch-broker-receipt.v1";
 export const INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_SCHEMA =
   "tideproof.integrated-live-drill-execution-grant.v1";
-export const INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA =
-  "tideproof.highwater-drill-provider-reconciliation-input.v2";
 
 const CAPABILITY_FILE_NAME = "execution-capability.json";
 const OPERATION_NONCE_FILE_NAME = "operation-nonce";
@@ -153,61 +161,21 @@ function readExactFile(filePath, { code, maximumBytes, mode, uid }) {
   }
 }
 
-function writeExactCreateOnly(filePath, bytes, { code, mode, root }) {
-  requireCondition(
-    Buffer.isBuffer(bytes) && bytes.length > 0 &&
-      path.dirname(filePath) === root.rootPath,
-    code
-  );
-  let descriptor;
-  try {
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY | fs.constants.O_CREAT |
-        fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
-      mode
-    );
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-    const stat = fs.fstatSync(descriptor);
-    assertExactFileStat(stat, { code, mode, uid: root.uid });
-  } catch (cause) {
-    if (String(cause?.message ?? "") === code) throw cause;
-    reject(code, cause);
-  } finally {
-    if (Number.isSafeInteger(descriptor)) fs.closeSync(descriptor);
-  }
-  let directoryDescriptor;
-  try {
-    directoryDescriptor = fs.openSync(
-      root.rootPath,
-      fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW
-    );
-    fs.fsyncSync(directoryDescriptor);
-  } catch (cause) {
-    reject(code, cause);
-  } finally {
-    if (Number.isSafeInteger(directoryDescriptor)) {
-      fs.closeSync(directoryDescriptor);
-    }
-  }
-}
-
 function createOrReadExact(filePath, bytes, options) {
-  try {
-    writeExactCreateOnly(filePath, bytes, options);
-    return Object.freeze({ bytes, created: true });
-  } catch (cause) {
-    if (cause?.cause?.code !== "EEXIST") throw cause;
-    const existing = readExactFile(filePath, {
-      code: options.code,
-      maximumBytes: Math.max(bytes.length, 16 * 1024 * 1024),
-      mode: options.mode,
-      uid: options.root.uid
-    });
-    requireCondition(existing.equals(bytes), options.code);
-    return Object.freeze({ bytes: existing, created: false });
-  }
+  const result = publishOrReadExactOwnedFile({
+    assertRoot: () => assertPrivateDirectory(
+      options.root.rootPath,
+      options.code
+    ),
+    bytes,
+    code: options.code,
+    filePath,
+    maximumBytes: Math.max(bytes.length, 16 * 1024 * 1024),
+    mode: options.mode,
+    rootPath: options.root.rootPath,
+    uid: options.root.uid
+  });
+  return Object.freeze({ bytes: result.bytes, created: result.created });
 }
 
 function uuidFromBytes(bytesInput) {
@@ -404,13 +372,13 @@ function createOrReadExecutionCapability({
       grantId: uuidFromBytes(candidate.subarray(32))
     });
     try {
-      writeExactCreateOnly(
-        filePath,
-        canonicalBytes(secret),
-        { code, mode: 0o600, root }
-      );
+      createOrReadExact(filePath, canonicalBytes(secret), {
+        code,
+        mode: 0o600,
+        root
+      });
     } catch (cause) {
-      if (cause?.cause?.code !== "EEXIST") throw cause;
+      if (!fs.existsSync(filePath)) throw cause;
     }
   }
   const secret = readIntegratedLiveDrillExecutionCapability({
@@ -444,8 +412,9 @@ export async function runIntegratedLiveDrillDispatchBroker({
     executionGrantRootPath,
     "provider-worker-input.json"
   ),
+  reconciliationInputRootPath = executionGrantRootPath,
   providerReconciliationInputPath = path.join(
-    executionGrantRootPath,
+    reconciliationInputRootPath,
     "provider-reconciliation-input.json"
   ),
   randomBytesImpl = randomBytes,
@@ -460,10 +429,15 @@ export async function runIntegratedLiveDrillDispatchBroker({
     code
   );
   const publicRoot = assertPrivateDirectory(executionGrantRootPath, code);
+  const reconciliationRoot = reconciliationInputRootPath ===
+    executionGrantRootPath
+    ? publicRoot
+    : assertPrivateDirectory(reconciliationInputRootPath, code);
   requireCondition(path.dirname(executionGrantPath) === publicRoot.rootPath, code);
   requireCondition(
     path.dirname(providerWorkerInputPath) === publicRoot.rootPath &&
-      path.dirname(providerReconciliationInputPath) === publicRoot.rootPath,
+      path.dirname(providerReconciliationInputPath) ===
+        reconciliationRoot.rootPath,
     code
   );
   const requestSha256 = sha256(canonicalJson(accepted));
@@ -555,15 +529,16 @@ export async function runIntegratedLiveDrillDispatchBroker({
     canonicalBytes(providerWorkerInput),
     { code, mode: 0o600, root: publicRoot }
   );
-  const providerReconciliationInput = Object.freeze({
-    context: accepted.workerInput.context,
-    executionGrant,
-    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_SCHEMA
+  const providerReconciliationInput = buildProviderDispatchReconciliationInput({
+    binding: accepted.binding,
+    grantId: local.grantId,
+    packageLockDigest: accepted.packageLockDigest,
+    workerSpecSha256: accepted.workerSpecSha256
   });
   createOrReadExact(
     providerReconciliationInputPath,
-    canonicalBytes(providerReconciliationInput),
-    { code, mode: 0o600, root: publicRoot }
+    providerDispatchReconciliationInputBytes(providerReconciliationInput),
+    { code, mode: 0o600, root: reconciliationRoot }
   );
   const body = Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_DISPATCH_BROKER_RECEIPT_SCHEMA,

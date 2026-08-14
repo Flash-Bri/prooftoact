@@ -92,6 +92,9 @@ export async function main({ clientFactory = null } = {}) {
   const executionGrantRootPath = exactAbsolute(
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_ROOT"
   );
+  const reconciliationInputRootPath = exactAbsolute(
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_RECONCILIATION_INPUT_ROOT"
+  );
   const result = await runIntegratedLiveDrillDispatchBroker({
     beginControl,
     brokerRootPath: exactAbsolute(
@@ -103,6 +106,11 @@ export async function main({ clientFactory = null } = {}) {
       "execution-grant.json"
     ),
     executionGrantRootPath,
+    providerReconciliationInputPath: path.join(
+      reconciliationInputRootPath,
+      "provider-reconciliation-input.json"
+    ),
+    reconciliationInputRootPath,
     request
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

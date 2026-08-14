@@ -1,27 +1,25 @@
 [Unit]
-Description=ProofToAct one-shot provider operation broker %i
-Documentation=https://github.com/Flash-Bri/prooftoact/blob/main/docs/FULL_DRILL_EVIDENCE.md
-Requires=prooftoact-integrated-live-drill-dispatch-broker@%i.service
-After=prooftoact-integrated-live-drill-dispatch-broker@%i.service network-online.target
-ConditionPathExists=/var/lib/prooftoact/executions/%i/execution-grant.json
-ConditionPathExists=/var/lib/prooftoact/executions/%i/provider-worker-input.json
-ConditionPathExists=/var/lib/prooftoact/evidence/%i/provider-execution-attempt.json
-RequiresMountsFor=/opt/prooftoact/runtime/runs/%i /var/lib/prooftoact/provider-operations/%i
+Description=ProofToAct provider-key-isolated operation broker %i
+Requires=prooftoact-integrated-live-drill-dispatch-broker@%i.service prooftoact-integrated-live-drill-provider-activation@%i.socket prooftoact-integrated-live-drill-provider-callback@%i.socket
+After=prooftoact-integrated-live-drill-dispatch-broker@%i.service prooftoact-integrated-live-drill-provider-activation@%i.socket prooftoact-integrated-live-drill-provider-callback@%i.socket network-online.target
+RequiresMountsFor=/opt/prooftoact/runtime/runs/%i /var/lib/prooftoact/dispatch-broker/%i /var/lib/prooftoact/reconciliation-inputs/%i
 
 [Service]
 Type=simple
-User=prooftoact-provider
-Group=prooftoact-provider
+User=prooftoact-operation
+Group=prooftoact-operation
 UMask=0077
 Environment=LANG=C.UTF-8
 Environment=LC_ALL=C.UTF-8
 Environment=PATH=/usr/bin:/bin
-UnsetEnvironment=NODE_OPTIONS NODE_PATH NODE_EXTRA_CA_CERTS LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH GLIBC_TUNABLES GCONV_PATH PERL5OPT PERL5LIB PERLLIB
-UnsetEnvironment=MCP_API_KEY OPENAI_API_KEY DATABASE_URL AUTHORIZER_DATABASE_URL DISPATCH_DATABASE_URL RECOVERY_DATABASE_URL PRIMARY_AUDIT_DATABASE_URL PRIMARY_RECOVERY_SOURCE_DATABASE_URL RECOVERY_PUBLISHER_DATABASE_URL RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64 RECOVERY_PUBLISHER_PASSWORD TIDEPROOF_AUDITOR_DATABASE_URL TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64 PRIMARY_PROVIDER_CLAIM_DATABASE_URL PRIMARY_PROVIDER_BEGIN_DATABASE_URL PRIMARY_PROVIDER_REDEEM_DATABASE_URL PRIMARY_PROVIDER_FINALIZE_DATABASE_URL PRIMARY_PROVIDER_RECONCILE_DATABASE_URL PGPASSWORD PGPASSFILE PGSERVICE PGSERVICEFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_AUTHORIZATION_TOKEN AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE
+UnsetEnvironment=NODE_DEBUG NODE_TLS_REJECT_UNAUTHORIZED
+UnsetEnvironment=NODE_OPTIONS NODE_PATH NODE_EXTRA_CA_CERTS NODE_ICU_DATA ICU_DATA OPENSSL_CONF OPENSSL_MODULES SSL_CERT_FILE SSL_CERT_DIR SSLKEYLOGFILE CURL_CA_BUNDLE REQUESTS_CA_BUNDLE HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy TZDIR MALLOC_CONF MALLOC_OPTIONS ASAN_OPTIONS LSAN_OPTIONS MSAN_OPTIONS TSAN_OPTIONS UBSAN_OPTIONS LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH GLIBC_TUNABLES GCONV_PATH PERL5OPT PERL5LIB PERLLIB
+UnsetEnvironment=MCP_API_KEY OPENAI_API_KEY DATABASE_URL AUTHORIZER_DATABASE_URL DISPATCH_DATABASE_URL RECOVERY_DATABASE_URL PRIMARY_AUDIT_DATABASE_URL PRIMARY_RECOVERY_SOURCE_DATABASE_URL RECOVERY_PUBLISHER_DATABASE_URL RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64 RECOVERY_PUBLISHER_PASSWORD TIDEPROOF_AUDITOR_DATABASE_URL TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64 PRIMARY_PROVIDER_CLAIM_DATABASE_URL PRIMARY_PROVIDER_BEGIN_DATABASE_URL PRIMARY_PROVIDER_REDEEM_DATABASE_URL PRIMARY_PROVIDER_FINALIZE_DATABASE_URL PRIMARY_PROVIDER_RECONCILE_DATABASE_URL PRIMARY_PROVIDER_ACTIVATE_DATABASE_URL PRIMARY_PROVIDER_TERMINALIZE_DATABASE_URL PGPASSWORD PGPASSFILE PGSERVICE PGSERVICEFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_AUTHORIZATION_TOKEN AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE
+Environment=TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_SOCKET=/run/prooftoact/%i/provider-activation.sock
 Environment=TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_ROOT=/var/lib/prooftoact/provider-operations/%i
-LoadCredential=mcp-api-key:/etc/prooftoact/runs/%i/mcp-api-key
 LoadCredential=provider-worker-input:/var/lib/prooftoact/executions/%i/provider-worker-input.json
-LoadCredential=provider-execution-attempt:/var/lib/prooftoact/evidence/%i/provider-execution-attempt.json
+LoadCredential=provider-execution-attempt:/var/lib/prooftoact/evidence/%i/root/provider-execution-attempt.json
+LoadCredential=provider-reconciliation-input:/var/lib/prooftoact/reconciliation-inputs/%i/provider-reconciliation-input.json
 LoadCredential=execution-capability:/var/lib/prooftoact/dispatch-broker/%i/execution-capability.json
 LoadCredential=provider-redeem-database-url:/etc/prooftoact/runs/%i/provider-redeem-database-url
 LoadCredential=provider-finalize-database-url:/etc/prooftoact/runs/%i/provider-finalize-database-url
@@ -36,17 +34,17 @@ ProtectHostname=yes
 ProtectKernelLogs=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
-ProtectProc=invisible
 ProtectSystem=strict
-ReadOnlyPaths=/opt/prooftoact/runtime/runs/%i /var/lib/prooftoact/executions/%i/execution-grant.json /var/lib/prooftoact/executions/%i/provider-worker-input.json /var/lib/prooftoact/evidence/%i/provider-execution-attempt.json /etc/prooftoact/runs/%i/mcp-api-key /etc/prooftoact/runs/%i/provider-redeem-database-url /etc/prooftoact/runs/%i/provider-finalize-database-url
+ProtectProc=invisible
+ReadOnlyPaths=/opt/prooftoact/runtime/runs/%i
 ReadWritePaths=/var/lib/prooftoact/provider-operations/%i
+InaccessiblePaths=/etc/prooftoact/runs/%i /var/lib/prooftoact/evidence /var/lib/prooftoact/executions /var/lib/prooftoact/provider-activations /var/lib/prooftoact/provider-exchanges /var/lib/prooftoact/reconciliation-inputs
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
 RemoveIPC=yes
 CapabilityBoundingSet=
 AmbientCapabilities=

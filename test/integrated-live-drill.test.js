@@ -1339,15 +1339,15 @@ test("systemd orchestrator input admits exact provider-free PREPARE and RESUME p
   );
   assert.equal(
     prepared.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT,
-    `/var/lib/prooftoact/evidence/${runId}`
+    `/var/lib/prooftoact/evidence/${runId}/root`
   );
   assert.equal(
     prepared.TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT,
-    `/var/lib/prooftoact/authorization/${runId}`
+    `/var/lib/prooftoact/authorization/${runId}/root`
   );
   assert.equal(
     prepared.TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_PATH,
-    `/var/lib/prooftoact/evidence/${runId}/dispatch-request.json`
+    `/var/lib/prooftoact/evidence/${runId}/root/dispatch-request.json`
   );
   for (const name of [
     "MCP_API_KEY",

@@ -94,6 +94,12 @@ jobs:
       - name: Run deterministic tests
         run: npm test
 
+      - name: Verify installed-process boundaries
+        run: npm run process-boundaries:verify
+
+      - name: Run privileged installed-stage tests
+        run: sudo "$(command -v node)" "$(command -v npm)" run test:root-stage
+
       - name: Audit locked dependencies
         run: npm audit --audit-level=low
 
@@ -176,6 +182,12 @@ jobs:
 
       - name: Run deterministic tests
         run: npm test
+
+      - name: Verify installed-process boundaries
+        run: npm run process-boundaries:verify
+
+      - name: Run privileged installed-stage tests
+        run: sudo "$(command -v node)" "$(command -v npm)" run test:root-stage
 
       - name: Audit locked dependencies
         run: npm audit --audit-level=low

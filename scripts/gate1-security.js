@@ -9,7 +9,8 @@ import {
   connectionStringForUser
 } from "../src/cloud/primary-security.js";
 import {
-  authorizeDviProposalWithClient
+  authorizeDviProposalWithClient,
+  DVI_PROPOSAL_AUTHORIZATION_SQL
 } from "../src/cloud/dvi-proposal-authorization.js";
 import {
   assertRecoveryPublisherTrustRootWriteDeniedWithClient
@@ -28,7 +29,9 @@ const USERS = [
   "tp_provider_claim_user",
   "tp_provider_begin_user",
   "tp_provider_redeem_user",
+  "tp_provider_activate_user",
   "tp_provider_finalize_user",
+  "tp_provider_terminalize_user",
   "tp_provider_reconcile_user",
   "tp_audit_user"
 ];
@@ -93,6 +96,40 @@ function spendAuthorityValues(request) {
   ];
 }
 
+function assertSqlProbeRequestBindings(values) {
+  if (!Array.isArray(values) || values.length !== 18) {
+    throw new TypeError("SQL authority probe values must contain 18 fields");
+  }
+  const requestPayload = JSON.parse(values[3]);
+  const payload = JSON.parse(values[14]);
+  const expectedBindings = {
+    tenantId: values[0],
+    proposalDigest: values[4],
+    logicalActionDigest: values[5],
+    selectedEvidenceDigest: values[6],
+    runId: values[7],
+    incidentId: values[8],
+    resourceId: values[9],
+    agentId: values[10],
+    agency: values[11],
+    evidenceId: values[12],
+    selectedEvidenceId: values[12],
+    effectKey: values[13],
+    payloadDigest: values[15],
+    policyVersion: values[16],
+    leaseMs: values[17]
+  };
+  if (
+    Object.keys(requestPayload).length !== 18 ||
+    Object.entries(expectedBindings).some(
+      ([field, expected]) => requestPayload[field] !== expected
+    ) ||
+    requestPayload.actionKind !== payload.action
+  ) {
+    throw new Error("SQL authority probe request bindings diverged");
+  }
+}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -115,12 +152,25 @@ async function withClient(connectionString, work) {
   }
 }
 
-async function expectSqlState(client, query, values, sqlstate) {
+async function expectSqlState(
+  client,
+  query,
+  values,
+  sqlstate,
+  expectedMessage
+) {
   try {
     await client.query(query, values);
   } catch (error) {
-    if (error.code === sqlstate) {
-      return { denied: true, sqlstate: error.code };
+    if (
+      error.code === sqlstate &&
+      (expectedMessage === undefined || error.message === expectedMessage)
+    ) {
+      return {
+        denied: true,
+        sqlstate: error.code,
+        message: error.message
+      };
     }
     throw error;
   }
@@ -512,7 +562,14 @@ async function main() {
       destination: "synthetic-zone-capability"
     }
   };
-  const mismatchRetrievalId = randomUUID();
+  const mismatchSelectionNow = Date.now();
+  const mismatchSelectionWindow = {
+    retrievalId: randomUUID(),
+    admittedAt: new Date(mismatchSelectionNow - 1_000).toISOString(),
+    expiresAt: new Date(
+      mismatchSelectionNow + 5 * 60_000
+    ).toISOString()
+  };
   const beforeSelectionMismatch =
     await authorityStore.authorityIdentityStateForTest(authorityFixture);
   const selectionMismatch = await authorizeSyntheticProposal(
@@ -521,7 +578,7 @@ async function main() {
     {
       allowDenied: true,
       proposalAuthorizer,
-      retrievalId: mismatchRetrievalId,
+      ...mismatchSelectionWindow,
       requestedSelectedEvidenceId: randomUUID(),
       requestedSelectedEvidenceDigest: "f".repeat(64)
     }
@@ -555,9 +612,154 @@ async function main() {
     capabilityRequest,
     {
       proposalAuthorizer,
-      retrievalId: mismatchRetrievalId
+      ...mismatchSelectionWindow
     }
   );
+  const payloadVariantAuthorizations = [];
+  for (const [name, payload] of [
+    ["required-only", {
+      action: "dispatch_rescue_unit",
+      scenario: "synthetic-highwater"
+    }],
+    ["logical-dispatch-only", {
+      action: "dispatch_rescue_unit",
+      logicalDispatch: "contender-001",
+      scenario: "synthetic-highwater"
+    }],
+    ["all-fields", {
+      action: "dispatch_rescue_unit",
+      destination: "synthetic-zone-capability",
+      logicalDispatch: "contender-001",
+      scenario: "synthetic-highwater"
+    }]
+  ]) {
+    const variant = await authorizeSyntheticProposal(
+      authorityStore,
+      { ...capabilityRequest, payload },
+      { proposalAuthorizer, ...mismatchSelectionWindow }
+    );
+    payloadVariantAuthorizations.push({
+      name,
+      outcome: variant.authorization.outcome,
+      proposalDigest: variant.authorization.identity.proposalDigest
+    });
+  }
+  payloadVariantAuthorizations.unshift({
+    name: "destination-only",
+    outcome: capabilityAuthorization.authorization.outcome,
+    proposalDigest:
+      capabilityAuthorization.authorization.identity.proposalDigest
+  });
+
+  const beforePayloadCanonicalizationNegatives =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  const payloadCanonicalizationDatabase = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_authorizer_user",
+      passwords.tp_authorizer_user
+    ),
+    async (client) => {
+      const values = [
+        authorityFixture.tenantId,
+        mismatchSelectionWindow.retrievalId,
+        authorityFixture.runId,
+        authorityFixture.incidentId,
+        authorityFixture.evidenceId,
+        capabilityAuthorization.dviAuthorization.selectedEvidenceDigest,
+        authorityFixture.resourceId,
+        "rescue",
+        "dispatch_rescue_unit",
+        '{ "scenario" : "synthetic-highwater", "destination" : "synthetic-zone-capability", "action" : "dispatch_rescue_unit" }'
+      ];
+      const replay = await client.query(
+        DVI_PROPOSAL_AUTHORIZATION_SQL,
+        values
+      );
+      const invalidPayloads = [
+        {
+          action: "dispatch_rescue_unit",
+          scenario: "synthetic-highwater",
+          extra: "alternate-identity"
+        },
+        { action: "dispatch_rescue_unit" },
+        {
+          action: "dispatch_rescue_unit",
+          scenario: 123
+        },
+        {
+          action: "dispatch_rescue_unit",
+          destination: null,
+          scenario: "synthetic-highwater"
+        },
+        {
+          action: "dispatch_rescue_unit",
+          scenario: "unsafe/value"
+        },
+        {
+          action: "dispatch_rescue_unit",
+          scenario: "x".repeat(129)
+        }
+      ];
+      const invalidSqlstates = [];
+      for (const payload of invalidPayloads) {
+        const invalidValues = [...values];
+        invalidValues[9] = JSON.stringify(payload);
+        const rejected = await expectSqlState(
+          client,
+          DVI_PROPOSAL_AUTHORIZATION_SQL,
+          invalidValues,
+          "22023"
+        );
+        invalidSqlstates.push(rejected.sqlstate);
+      }
+      return {
+        outcome: replay.rows[0]?.decision_outcome,
+        proposalDigest: replay.rows[0]?.decision_proposal_digest,
+        logicalActionDigest:
+          replay.rows[0]?.decision_logical_action_digest,
+        payloadDigest: replay.rows[0]?.decision_payload_digest,
+        authorityCurrent: replay.rows[0]?.decision_authority_current,
+        invalidSqlstates
+      };
+    }
+  );
+  const afterPayloadCanonicalizationNegatives =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  if (
+    payloadVariantAuthorizations.length !== 4 ||
+    payloadVariantAuthorizations.some(({ outcome }) =>
+      !["proposal_authorized", "proposal_authorization_replay"].includes(
+        outcome
+      )
+    ) ||
+    new Set(
+      payloadVariantAuthorizations.map(({ proposalDigest }) => proposalDigest)
+    ).size !== 4 ||
+    payloadCanonicalizationDatabase.outcome !==
+      "proposal_authorization_replay" ||
+    payloadCanonicalizationDatabase.proposalDigest !==
+      capabilityAuthorization.authorization.identity.proposalDigest ||
+    payloadCanonicalizationDatabase.logicalActionDigest !==
+      capabilityAuthorization.authorization.identity.logicalActionDigest ||
+    payloadCanonicalizationDatabase.payloadDigest !==
+      "5d1c79211961c5702709a3219cb1e533761d64f22cb022a8ef8c291b456d4986" ||
+    payloadCanonicalizationDatabase.authorityCurrent !== true ||
+    payloadCanonicalizationDatabase.invalidSqlstates.length !== 6 ||
+    payloadCanonicalizationDatabase.invalidSqlstates.some(
+      (sqlstate) => sqlstate !== "22023"
+    ) ||
+    JSON.stringify(afterPayloadCanonicalizationNegatives) !==
+      JSON.stringify(beforePayloadCanonicalizationNegatives)
+  ) {
+    throw new Error("DVI payload canonicalization invariant failed");
+  }
+  const payloadCanonicalization = {
+    acceptedVariants: payloadVariantAuthorizations.map(({ name }) => name),
+    replayOutcome: payloadCanonicalizationDatabase.outcome,
+    payloadDigest: payloadCanonicalizationDatabase.payloadDigest,
+    invalidPayloadsRejectedWithoutMutation: 6
+  };
   const authorizedCapabilityRequest = {
     ...capabilityRequest,
     dviAuthorization: capabilityAuthorization.dviAuthorization
@@ -608,9 +810,9 @@ async function main() {
         ...normalizedCapabilityRequest.requestPayload,
         payloadDigest: "b".repeat(64)
       });
-      payloadSubstitution[13] = randomUUID();
       payloadSubstitution[14] = JSON.stringify(substitutedPayload);
       payloadSubstitution[15] = "b".repeat(64);
+      assertSqlProbeRequestBindings(payloadSubstitution);
       const substituted = await client.query(
         SPEND_AUTHORITY_SQL,
         payloadSubstitution
@@ -626,7 +828,7 @@ async function main() {
         proposalDigest: normalizedDeniedRequest.proposalDigest
       });
       proposalAlias[4] = normalizedDeniedRequest.proposalDigest;
-      proposalAlias[13] = randomUUID();
+      assertSqlProbeRequestBindings(proposalAlias);
       const aliased = await client.query(
         SPEND_AUTHORITY_SQL,
         proposalAlias
@@ -637,12 +839,13 @@ async function main() {
       );
       forgedRequestDigest[1] = randomUUID();
       forgedRequestDigest[2] = "d".repeat(64);
-      forgedRequestDigest[13] = randomUUID();
+      assertSqlProbeRequestBindings(forgedRequestDigest);
       const requestDigestRejected = await expectSqlState(
         client,
         SPEND_AUTHORITY_SQL,
         forgedRequestDigest,
-        "22023"
+        "22023",
+        "database-derived authority identity mismatch"
       );
 
       const nullIntentNonce = spendAuthorityValues(
@@ -654,17 +857,21 @@ async function main() {
         ...normalizedCapabilityRequest.requestPayload,
         intentNonce: null
       });
-      nullIntentNonce[13] = randomUUID();
+      assertSqlProbeRequestBindings(nullIntentNonce);
       const nullIntentNonceRejected = await expectSqlState(
         client,
         SPEND_AUTHORITY_SQL,
         nullIntentNonce,
-        "22023"
+        "22023",
+        "authority request identity binding mismatch"
       );
       return {
         payloadSubstitutionOutcome:
           substituted.rows[0]?.decision_outcome,
+        payloadSubstitutionReason:
+          substituted.rows[0]?.decision_reason,
         proposalAliasOutcome: aliased.rows[0]?.decision_outcome,
+        proposalAliasReason: aliased.rows[0]?.decision_reason,
         requestDigestRejected,
         nullIntentNonceRejected
       };
@@ -675,9 +882,17 @@ async function main() {
   if (
     sqlBindingNegatives.payloadSubstitutionOutcome !==
         "authorization_denied" ||
+    sqlBindingNegatives.payloadSubstitutionReason !==
+        "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.proposalAliasOutcome !== "authorization_denied" ||
+    sqlBindingNegatives.proposalAliasReason !==
+        "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.requestDigestRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.requestDigestRejected?.message !==
+        "database-derived authority identity mismatch" ||
     sqlBindingNegatives.nullIntentNonceRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.nullIntentNonceRejected?.message !==
+        "authority request identity binding mismatch" ||
     JSON.stringify(afterSqlBindingNegatives) !==
       JSON.stringify(beforeSqlBindingNegatives)
   ) {
@@ -823,9 +1038,17 @@ async function main() {
     authorizer.durableProof?.protected_effect_count !== "0" ||
     sqlBindingNegatives.payloadSubstitutionOutcome !==
       "authorization_denied" ||
+    sqlBindingNegatives.payloadSubstitutionReason !==
+      "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.proposalAliasOutcome !== "authorization_denied" ||
+    sqlBindingNegatives.proposalAliasReason !==
+      "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.requestDigestRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.requestDigestRejected?.message !==
+      "database-derived authority identity mismatch" ||
     sqlBindingNegatives.nullIntentNonceRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.nullIntentNonceRejected?.message !==
+      "authority request identity binding mismatch" ||
     authorizer.durableProof
       ?.bravo_observed_holder_operation_id !==
       normalizedCapabilityRequest.operationId ||
@@ -966,29 +1189,52 @@ async function main() {
             normalizedCapabilityRequest.requestDigest
           ]
         );
-      const resolved = await client.query(
-        `
+      const recoverySourceQuery = `
           SELECT *
           FROM tp_api.g1_resolve_recovery_source_receipt_v2(
             $1::UUID, $2::UUID, $3::UUID, $4::UUID,
             $5, $6::UUID, $7
           )
-        `,
-        [
-          authorityFixture.tenantId,
-          authorityFixture.runId,
-          authorityFixture.incidentId,
-          authorityFixture.evidenceId,
-          authorityFixture.resourceId,
-          normalizedCapabilityRequest.operationId,
-          normalizedCapabilityRequest.requestDigest
-        ]
+        `;
+      const recoverySourceValues = Object.freeze([
+        authorityFixture.tenantId,
+        authorityFixture.runId,
+        authorityFixture.incidentId,
+        authorityFixture.evidenceId,
+        authorityFixture.resourceId,
+        normalizedCapabilityRequest.operationId,
+        normalizedCapabilityRequest.requestDigest
+      ]);
+      const resolved = await client.query(
+        recoverySourceQuery,
+        recoverySourceValues
       );
+      const resolvedAgain = await client.query(
+        recoverySourceQuery,
+        recoverySourceValues
+      );
+      const stableColumns = Object.keys(resolved.rows[0] ?? {})
+        .filter((column) => column !== "database_now")
+        .sort();
       if (
         resolved.rowCount !== 1 ||
+        resolvedAgain.rowCount !== 1 ||
         resolved.rows[0]?.outcome !== "resource_reserved" ||
         resolved.rows[0]?.admissibility !== "admissible" ||
-        resolved.rows[0]?.has_durable_intent !== true
+        resolved.rows[0]?.has_durable_intent !== true ||
+        resolvedAgain.rows[0]?.outcome !== "resource_reserved" ||
+        resolvedAgain.rows[0]?.admissibility !== "admissible" ||
+        resolvedAgain.rows[0]?.has_durable_intent !== true ||
+        stableColumns.length !== 22 ||
+        JSON.stringify(stableColumns) !== JSON.stringify(
+          Object.keys(resolvedAgain.rows[0] ?? {})
+            .filter((column) => column !== "database_now")
+            .sort()
+        ) ||
+        stableColumns.some(
+          (column) =>
+            resolved.rows[0]?.[column] !== resolvedAgain.rows[0]?.[column]
+        )
       ) {
         throw new Error("recovery source receipt was not resolved exactly");
       }
@@ -998,7 +1244,8 @@ async function main() {
         auditResolverDenied,
         legacySourceResolverDeniedOrAbsent,
         operationId: resolved.rows[0].operation_id,
-        databaseNow: resolved.rows[0].database_now
+        databaseNow: resolved.rows[0].database_now,
+        resolverRepeatStable: true
       };
     }
   );
@@ -1454,6 +1701,7 @@ async function main() {
         roles: bootstrap.roles,
         ingest,
         authorizer,
+        payloadCanonicalization,
         sqlBindingNegatives,
         gateTwoAuthorizer,
         dispatch,

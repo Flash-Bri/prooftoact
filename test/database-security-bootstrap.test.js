@@ -4,6 +4,9 @@ import test from "node:test";
 
 import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
 import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
+import { dviSelectionBindingSha256For } from "../src/cloud/dvi-selection.js";
+import { authorizeSyntheticProposal } from
+  "../scripts/lib/synthetic-authority-proposal.js";
 
 const primaryUrl = new URL("../src/cloud/primary-security.js", import.meta.url);
 const authorityStoreUrl = new URL(
@@ -271,12 +274,14 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g2_spend_authority_race_v1", /session_user <> 'tp_gate2_authorizer_user'/u],
     ["g1_resolve_request_v1", sharedAuthorizerGuard],
     ["g1_observe_authority_race_v1", sharedAuthorizerGuard],
-    ["g1_claim_provider_dispatch_v2", /session_user <> 'tp_provider_claim_user'/u],
-    ["g1_begin_provider_dispatch_v2", /session_user <> 'tp_provider_begin_user'/u],
-    ["g1_redeem_provider_dispatch_v2", /session_user <> 'tp_provider_redeem_user'/u],
-    ["g1_complete_provider_dispatch_v2", /session_user <> 'tp_provider_finalize_user'/u],
-    ["g1_mark_provider_dispatch_unknown_v2", /session_user <> 'tp_provider_finalize_user'/u],
-    ["g1_resolve_provider_dispatch_v2", /session_user <> 'tp_provider_reconcile_user'/u],
+    ["g1_claim_provider_dispatch_inner_v2", /session_user <> 'tp_provider_claim_user'/u],
+    ["g1_begin_provider_dispatch_inner_v2", /session_user <> 'tp_provider_begin_user'/u],
+    ["g1_redeem_provider_dispatch_inner_v2", /session_user <> 'tp_provider_redeem_user'/u],
+    ["g1_activate_provider_dispatch_inner_v2", /session_user <> 'tp_provider_activate_user'/u],
+    ["g1_complete_provider_dispatch_inner_v2", /session_user <> 'tp_provider_finalize_user'/u],
+    ["g1_mark_provider_dispatch_unknown_inner_v2", /session_user <> 'tp_provider_finalize_user'/u],
+    ["g1_terminalize_provider_dispatch_inner_v2", /session_user <> 'tp_provider_terminalize_user'/u],
+    ["g1_resolve_provider_dispatch_inner_v2", /session_user <> 'tp_provider_reconcile_user'/u],
     ["g1_append_recovery_audit_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
@@ -395,7 +400,194 @@ test("Gate One trust-root write probes use the shared rollback-bounded verifier"
   );
 });
 
-test("recovery source resolver binds the full receipt and outbox identity", async () => {
+test("Gate One selection mismatch replay uses one immutable time window", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.match(
+    source,
+    /const mismatchSelectionWindow = \{[\s\S]*retrievalId: randomUUID\(\),[\s\S]*admittedAt:[\s\S]*expiresAt:/u
+  );
+  assert.equal(
+    source.match(/\.\.\.mismatchSelectionWindow/gu)?.length,
+    3
+  );
+  assert.doesNotMatch(source, /retrievalId: mismatchRetrievalId/u);
+});
+
+test("DVI proposal payload identity uses one exact compact dispatch schema", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const authorize = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_authorize_dvi_proposal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(authorize);
+  assert.match(
+    authorize,
+    /FROM jsonb_object_keys\(p_payload\)[\s\S]*field\.key NOT IN \([\s\S]*'action'[\s\S]*'destination'[\s\S]*'logicalDispatch'[\s\S]*'scenario'[\s\S]*\)/u
+  );
+  assert.match(
+    authorize,
+    /jsonb_typeof\(p_payload->'scenario'\) IS DISTINCT FROM 'string'[\s\S]*octet_length\(p_payload->>'scenario'\) NOT BETWEEN 1 AND 128[\s\S]*p_payload->>'scenario' !~ '\^\[A-Za-z0-9\._:-\]\+\$'/u
+  );
+  assert.match(
+    authorize,
+    /v_payload_canonical :=[\s\S]*'\{"action":'[\s\S]*',"destination":'[\s\S]*',"logicalDispatch":'[\s\S]*',"scenario":'[\s\S]*v_payload_digest := sha256\(v_payload_canonical::BYTES\)/u
+  );
+  assert.doesNotMatch(authorize, /v_payload_canonical := p_payload::STRING/u);
+});
+
+test("bootstrap fails closed on legacy DVI payload identities before installing functions", async () => {
+  const compatible = await primarySecurityContract
+    .assertDviProposalPayloadCompatibility({
+      responses: [
+        { rowCount: 1, rows: [{ incompatible_count: "0" }] },
+        { rowCount: 1, rows: [{ incompatible_count: "0" }] }
+      ],
+      async query() {
+        return this.responses.shift();
+      }
+    });
+  assert.deepEqual(compatible, {
+    compatible: true,
+    inspectedIncompatibleRows: 0
+  });
+
+  for (const responses of [
+    [{ rowCount: 1, rows: [{ incompatible_count: "1" }] }],
+    [
+      { rowCount: 1, rows: [{ incompatible_count: "0" }] },
+      { rowCount: 1, rows: [{ incompatible_count: "1" }] }
+    ]
+  ]) {
+    await assert.rejects(
+      primarySecurityContract.assertDviProposalPayloadCompatibility({
+        responses: [...responses],
+        async query() {
+          return this.responses.shift();
+        }
+      }),
+      /DVI_PROPOSAL_PAYLOAD_CANONICALIZATION_INCOMPATIBLE/u
+    );
+  }
+
+  const source = await readFile(primaryUrl, "utf8");
+  const scrub = source.indexOf("await scrubManagedPrivileges(client);");
+  const compatibility = source.indexOf(
+    "await assertDviProposalPayloadCompatibility(client);"
+  );
+  const install = source.indexOf("await createFunctions(client);");
+  assert.ok(scrub !== -1 && scrub < compatibility && compatibility < install);
+});
+
+test("synthetic denial and authorization replay one durable DVI selection", async () => {
+  const request = {
+    tenantId: "00000000-0000-4000-8000-000000000011",
+    runId: "00000000-0000-4000-8000-000000000012",
+    incidentId: "00000000-0000-4000-8000-000000000013",
+    resourceId: "synthetic-resource",
+    evidenceId: "00000000-0000-4000-8000-000000000014",
+    agency: "rescue",
+    payload: {
+      action: "dispatch_rescue_unit",
+      scenario: "synthetic-highwater"
+    }
+  };
+  const selectionWindow = {
+    retrievalId: "00000000-0000-4000-8000-000000000015",
+    admittedAt: "2026-08-13T20:00:00.000Z",
+    expiresAt: "2026-08-13T20:05:00.000Z"
+  };
+  const durableSelections = new Map();
+  const observedBindings = [];
+  const durableStore = {
+    async recordDviSelectionReceiptForTest(selection) {
+      const key = `${selection.tenantId}:${selection.retrievalId}`;
+      const binding = dviSelectionBindingSha256For(selection);
+      observedBindings.push(binding);
+      const existing = durableSelections.get(key);
+      if (existing !== undefined && existing !== binding) {
+        throw new Error(
+          "synthetic DVI selection receipt conflicted with durable state"
+        );
+      }
+      durableSelections.set(key, binding);
+    }
+  };
+  const proposalAuthorizer = async ({ requestedSelectedEvidenceId }) =>
+    requestedSelectedEvidenceId === request.evidenceId
+      ? {
+          outcome: "proposal_authorized",
+          authorizationCurrent: true
+        }
+      : {
+          outcome: "proposal_authorization_denied",
+          reason: "dvi_selection_request_mismatch",
+          authorizationCurrent: false
+        };
+  const sharedOptions = {
+    ...selectionWindow,
+    evidenceDigest: "a".repeat(64),
+    proposalAuthorizer
+  };
+
+  const denied = await authorizeSyntheticProposal(
+    durableStore,
+    request,
+    {
+      ...sharedOptions,
+      allowDenied: true,
+      requestedSelectedEvidenceId:
+        "00000000-0000-4000-8000-000000000016"
+    }
+  );
+  assert.equal(denied.authorization.reason, "dvi_selection_request_mismatch");
+
+  const authorized = await authorizeSyntheticProposal(
+    durableStore,
+    request,
+    sharedOptions
+  );
+  assert.equal(authorized.authorization.outcome, "proposal_authorized");
+  assert.equal(observedBindings[0], observedBindings[1]);
+  assert.equal(durableSelections.size, 1);
+
+  await assert.rejects(
+    authorizeSyntheticProposal(durableStore, request, {
+      ...sharedOptions,
+      admittedAt: "2026-08-13T20:00:00.001Z"
+    }),
+    /synthetic DVI selection receipt conflicted with durable state/u
+  );
+});
+
+test("Gate One SQL identity probes isolate one intended fault", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.doesNotMatch(
+    source,
+    /(payloadSubstitution|proposalAlias|forgedRequestDigest|nullIntentNonce)\[13\] = randomUUID\(\)/u
+  );
+  assert.match(
+    source,
+    /function assertSqlProbeRequestBindings\(values\)[\s\S]*effectKey: values\[13\][\s\S]*requestPayload\[field\] !== expected[\s\S]*requestPayload\.actionKind !== payload\.action/u
+  );
+  assert.equal(
+    source.match(/assertSqlProbeRequestBindings\(/gu)?.length,
+    5,
+    "the pre-query binding assertion must cover all four probes"
+  );
+  assert.match(
+    source,
+    /payloadSubstitutionReason:[\s\S]*proposal_authorization_missing_or_stale/u
+  );
+  assert.match(
+    source,
+    /forgedRequestDigest,[\s\S]*"22023",[\s\S]*"database-derived authority identity mismatch"/u
+  );
+  assert.match(
+    source,
+    /nullIntentNonce,[\s\S]*"22023",[\s\S]*"authority request identity binding mismatch"/u
+  );
+});
+
+test("recovery source resolver binds identity while separating policy domains", async () => {
   const source = await readFile(primaryUrl, "utf8");
   const resolver = source.match(
     /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
@@ -430,8 +622,7 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
     "run_id",
     "incident_id",
     "resource_id",
-    "agency",
-    "policy_version"
+    "agency"
   ]) {
     assert.match(
       resolver,
@@ -446,6 +637,26 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
   assert.match(
     resolver,
     /proposal\.selected_evidence_digest\s*=\s*receipt\.evidence_digest/u
+  );
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const emittedResolver = statements.find((statement) =>
+    statement.includes("g1_resolve_recovery_source_receipt_v2")
+  );
+  assert.ok(emittedResolver);
+  assert.equal(
+    emittedResolver.match(
+      /proposal\.policy_version = 'g1-admissibility-v2'/gu
+    )?.length,
+    2
+  );
+  assert.equal(
+    emittedResolver.match(/receipt\.policy_version = 'gate1-policy-v2'/gu)
+      ?.length,
+    2
+  );
+  assert.doesNotMatch(
+    emittedResolver,
+    /proposal\.policy_version\s*=\s*receipt\.policy_version/u
   );
   assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
 });
@@ -484,28 +695,75 @@ test("recovery source resolver requires the exact live authority holder", async 
   );
   assert.match(
     resolver,
-    /INTO v_candidate[\s\S]*LIMIT 2;[\s\S]*IF NOT FOUND OR v_candidate\.candidate_count <> 1[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_candidate\.receipt_lease_expires_at <= v_database_now[\s\S]*v_candidate\.resource_lease_expires_at <= v_database_now[\s\S]*v_candidate\.proposal_expires_at <= v_database_now[\s\S]*RETURN QUERY SELECT/u
+    /SELECT count\(\*\)::INT8[\s\S]*INTO v_candidate_count[\s\S]*SELECT 1[\s\S]*LIMIT 2[\s\S]*AS bounded_candidates;[\s\S]*COALESCE\(v_candidate_count, 0\) <> 1[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_candidate_receipt_lease_expires_at <= v_database_now[\s\S]*v_candidate_resource_lease_expires_at <= v_database_now[\s\S]*v_candidate_proposal_expires_at <= v_database_now[\s\S]*RETURN QUERY SELECT/u
   );
+  assert.doesNotMatch(resolver, /1::INT8 AS candidate_count/u);
   assert.doesNotMatch(
     resolver,
     /g1_list_admissibility_internal_v1/u
   );
   assert.match(
     resolver,
-    /evidence\.observed_at AS evidence_observed_at[\s\S]*evidence\.valid_from AS evidence_valid_from[\s\S]*evidence\.valid_until AS evidence_valid_until[\s\S]*evidence\.conflict_status AS evidence_conflict_status/u
+    /evidence\.observed_at AS evidence_observed_at[\s\S]*evidence\.valid_from AS evidence_valid_from[\s\S]*evidence\.valid_until AS evidence_valid_until[\s\S]*evidence\.conflict_status AS evidence_conflict_status[\s\S]*evidence\.claim_key AS evidence_claim_key[\s\S]*evidence\.claim_value AS evidence_claim_value/u
+  );
+  const detailedCandidateStart = resolver.indexOf(
+    "SELECT\n        receipt.tenant_id"
+  );
+  const conflictSnapshotStart = resolver.indexOf(
+    "v_candidate_conflict_windows := '[]'::JSONB;"
+  );
+  const firstFreshClock = resolver.indexOf(
+    "v_database_now := clock_timestamp();"
+  );
+  assert.ok(
+    detailedCandidateStart >= 0 &&
+    conflictSnapshotStart > detailedCandidateStart &&
+    firstFreshClock > conflictSnapshotStart
+  );
+  const detailedCandidateSql = resolver.slice(
+    detailedCandidateStart,
+    conflictSnapshotStart
+  );
+  assert.doesNotMatch(detailedCandidateSql, /jsonb_agg/u);
+  assert.match(
+    detailedCandidateSql,
+    /evidence\.claim_key AS evidence_claim_key,\s*evidence\.claim_value AS evidence_claim_value\s+INTO[\s\S]*v_candidate_evidence_conflict_status,\s*v_candidate_evidence_claim_key,\s*v_candidate_evidence_claim_value\s+FROM tp_ledger\.g1_authority_receipts/u
   );
   assert.match(
-    resolver,
-    /jsonb_agg\(jsonb_build_object\([\s\S]*'observed_at'[\s\S]*'valid_from'[\s\S]*'valid_until'[\s\S]*other_verification\.signature_digest =[\s\S]*other\.signature_digest[\s\S]*other_key\.status = 'active'[\s\S]*other\.agency_scope IN \(receipt\.agency, '\*'\)[\s\S]*'\[\]'::JSONB\) AS conflict_windows/u
+    detailedCandidateSql,
+    /IF v_candidate_tenant_id IS NULL[\s\S]*v_candidate_incident_id IS NULL[\s\S]*v_candidate_evidence_id IS NULL[\s\S]*v_candidate_agency IS NULL[\s\S]*v_candidate_evidence_claim_key IS NULL[\s\S]*v_candidate_evidence_claim_value IS NULL THEN[\s\S]*RETURN;/u
+  );
+  const conflictSnapshotSql = resolver.slice(
+    conflictSnapshotStart,
+    firstFreshClock
   );
   assert.match(
+    conflictSnapshotSql,
+    /v_candidate_conflict_windows := '\[\]'::JSONB;[\s\S]*v_candidate_conflict_count := 0;[\s\S]*v_candidate_conflict_snapshot_valid := true;[\s\S]*OPEN v_candidate_conflict_cursor NO SCROLL FOR[\s\S]*SELECT[\s\S]*other\.evidence_id,[\s\S]*other\.observed_at,[\s\S]*other\.valid_from,[\s\S]*other\.valid_until[\s\S]*other\.tenant_id = v_candidate_tenant_id[\s\S]*other\.incident_id = v_candidate_incident_id[\s\S]*other\.evidence_id <> v_candidate_evidence_id[\s\S]*other\.claim_key = v_candidate_evidence_claim_key[\s\S]*other\.claim_value <> v_candidate_evidence_claim_value[\s\S]*other_verification\.signature_digest =[\s\S]*other\.signature_digest[\s\S]*other_key\.status = 'active'[\s\S]*other\.agency_scope IN \(v_candidate_agency, '\*'\)[\s\S]*ORDER BY other\.evidence_id;[\s\S]*v_candidate_conflict_evidence_id := NULL;[\s\S]*v_candidate_conflict_observed_at := NULL;[\s\S]*v_candidate_conflict_valid_from := NULL;[\s\S]*v_candidate_conflict_valid_until := NULL;[\s\S]*FETCH v_candidate_conflict_cursor INTO[\s\S]*v_candidate_conflict_evidence_id,[\s\S]*v_candidate_conflict_observed_at,[\s\S]*v_candidate_conflict_valid_from,[\s\S]*v_candidate_conflict_valid_until;[\s\S]*EXIT WHEN v_candidate_conflict_evidence_id IS NULL;[\s\S]*v_candidate_conflict_count := v_candidate_conflict_count \+ 1;[\s\S]*v_candidate_conflict_count > 10000[\s\S]*v_candidate_conflict_observed_at IS NULL[\s\S]*v_candidate_conflict_valid_from IS NULL[\s\S]*v_candidate_conflict_valid_until IS NULL[\s\S]*v_candidate_conflict_snapshot_valid := false;[\s\S]*EXIT;[\s\S]*jsonb_build_array\(jsonb_build_object\([\s\S]*'observed_at'[\s\S]*'valid_from'[\s\S]*'valid_until'[\s\S]*END LOOP;[\s\S]*CLOSE v_candidate_conflict_cursor;[\s\S]*IF NOT v_candidate_conflict_snapshot_valid THEN[\s\S]*RETURN;/u
+  );
+  assert.doesNotMatch(conflictSnapshotSql, /\breceipt\.|\bevidence\./u);
+  assert.doesNotMatch(
     resolver,
-    /v_database_now := clock_timestamp\(\);[\s\S]*v_candidate\.evidence_observed_at >[\s\S]*v_database_now \+ INTERVAL '5 minutes'[\s\S]*v_candidate\.evidence_valid_from > v_database_now[\s\S]*v_candidate\.evidence_valid_until <= v_database_now[\s\S]*v_candidate\.evidence_conflict_status = 'unresolved'[\s\S]*jsonb_array_elements\(v_candidate\.conflict_windows\)[\s\S]*window_value->>'observed_at'[\s\S]*window_value->>'valid_from'[\s\S]*window_value->>'valid_until'[\s\S]*v_active_conflict_count > 0/u
+    /jsonb_agg|jsonb_array_elements|FOR\s+\w+\s+IN\s+SELECT|\bEXECUTE\b/u
   );
-  const postWaitDecision = resolver.slice(
-    resolver.indexOf("v_database_now := clock_timestamp();")
+  const returnQueryStart = resolver.indexOf(
+    "RETURN QUERY SELECT",
+    firstFreshClock
   );
-  assert.doesNotMatch(postWaitDecision, /\bFROM\s+tp_/u);
+  const postClockDecision = resolver.slice(
+    firstFreshClock,
+    returnQueryStart
+  );
+  assert.match(
+    postClockDecision,
+    /v_database_now := clock_timestamp\(\);[\s\S]*v_candidate_evidence_observed_at >[\s\S]*v_database_now \+ INTERVAL '5 minutes'[\s\S]*v_candidate_evidence_valid_from > v_database_now[\s\S]*v_candidate_evidence_valid_until <= v_database_now[\s\S]*v_candidate_evidence_conflict_status = 'unresolved'[\s\S]*v_candidate_conflict_index := 0;[\s\S]*WHILE v_candidate_conflict_index <[\s\S]*jsonb_array_length\(v_candidate_conflict_windows\) LOOP[\s\S]*v_candidate_conflict_windows->v_candidate_conflict_index[\s\S]*v_candidate_conflict_window->>'observed_at'[\s\S]*v_candidate_conflict_window->>'valid_from'[\s\S]*v_candidate_conflict_window->>'valid_until'[\s\S]*RETURN;[\s\S]*v_candidate_conflict_index := v_candidate_conflict_index \+ 1;[\s\S]*END LOOP;/u
+  );
+  assert.equal(
+    resolver.match(/v_database_now := clock_timestamp\(\);/gu)?.length,
+    1
+  );
+  assert.doesNotMatch(postClockDecision, /\btp_(?:api|private|ledger)\./u);
+  assert.doesNotMatch(postClockDecision, /\b(?:SELECT|FROM)\b/u);
   assert.doesNotMatch(resolver, /statement_timestamp\(\)/u);
   assert.doesNotMatch(resolver, /transaction_timestamp\(\)/u);
 
@@ -572,6 +830,10 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
     gate1Security,
     /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
   );
+  assert.match(
+    gate1Security,
+    /const recoverySourceQuery =[\s\S]*const resolved = await client\.query\([\s\S]*const resolvedAgain = await client\.query\([\s\S]*stableColumns\.length !== 22[\s\S]*stableColumns\.some\([\s\S]*resolverRepeatStable: true/u
+  );
 
   assert.match(source, /PRIMARY_PREFLIGHT_POSTURE_SPEC/u);
   assert.equal(
@@ -591,8 +853,8 @@ test("primary function SQL is digest-pinned before any database query", async ()
   );
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
-    statementCount: 45,
-    sha256: "4c462a05114b01aac35ac36744756d82a7488324dc0d52e0c155968d411dcd06"
+    statementCount: 55,
+    sha256: "126b075dd1994bb9020aa7d088b59d10dfc652abbbf43ebeb0055bf8ab8f2e2b"
   });
   const legacyProviderDrop = statements.find((statement) =>
     statement.includes("DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1")
@@ -602,22 +864,22 @@ test("primary function SQL is digest-pinned before any database query", async ()
     /DROP FUNCTION IF EXISTS tp_api\.g1_transition_provider_dispatch_v1/u
   );
   const providerClaim = statements.find((statement) =>
-    statement.includes("g1_claim_provider_dispatch_v2")
+    statement.includes("g1_claim_provider_dispatch_inner_v2")
   );
   const providerBegin = statements.find((statement) =>
-    statement.includes("g1_begin_provider_dispatch_v2")
+    statement.includes("g1_begin_provider_dispatch_inner_v2")
   );
   const providerRedeem = statements.find((statement) =>
-    statement.includes("g1_redeem_provider_dispatch_v2")
+    statement.includes("g1_redeem_provider_dispatch_inner_v2")
   );
   const providerComplete = statements.find((statement) =>
-    statement.includes("g1_complete_provider_dispatch_v2")
+    statement.includes("g1_complete_provider_dispatch_inner_v2")
   );
   const providerUnknown = statements.find((statement) =>
-    statement.includes("g1_mark_provider_dispatch_unknown_v2")
+    statement.includes("g1_mark_provider_dispatch_unknown_inner_v2")
   );
   const providerResolve = statements.find((statement) =>
-    statement.includes("g1_resolve_provider_dispatch_v2")
+    statement.includes("g1_resolve_provider_dispatch_inner_v2")
   );
   assert.match(providerClaim, /session_user <> 'tp_provider_claim_user'/u);
   assert.match(providerBegin, /session_user <> 'tp_provider_begin_user'/u);
@@ -798,6 +1060,40 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
   );
 });
 
+test("authorizer posture admits the exact DVI proposal capability it grants", () => {
+  const signature =
+    "g1_authorize_dvi_proposal_v1(UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB)";
+  const finalPolicy =
+    primarySecurityContract.primaryPostureSpec.roleGrantPolicies
+      .tp_authorizer_role.functions;
+  assert.ok(finalPolicy.includes(signature));
+  assert.doesNotThrow(() => validateManagedObjectGrants([{
+    database_name: "tideproof",
+    schema_name: "tp_api",
+    object_name:
+      "g1_authorize_dvi_proposal_v1(uuid,uuid,uuid,uuid,uuid,string,string,string,string,jsonb)",
+    object_type: "function",
+    grantee: "tp_authorizer_role",
+    privilege_type: "EXECUTE",
+    is_grantable: false
+  }], {
+    databaseName: primarySecurityContract.primaryPostureSpec.databaseName,
+    managedSchemas: primarySecurityContract.primaryPostureSpec.managedSchemas,
+    managedPrefixes: primarySecurityContract.primaryPostureSpec.managedPrefixes,
+    apiSchema: primarySecurityContract.primaryPostureSpec.apiSchema,
+    ownerRoles: primarySecurityContract.primaryPostureSpec.ownerRoles,
+    roleGrantPolicies:
+      primarySecurityContract.primaryPostureSpec.roleGrantPolicies,
+    runtimeUsers: primarySecurityContract.primaryPostureSpec.users,
+    knownManagedPrincipals: [
+      ...primarySecurityContract.primaryPostureSpec.roles,
+      ...primarySecurityContract.primaryPostureSpec.users
+    ],
+    trustedPrincipals: ["cluster_admin"],
+    allowMissingExpected: true
+  }));
+});
+
 test("recovery storage enforces one row per exact broker lookup identity", async () => {
   const source = await readFile(recoveryStoreUrl, "utf8");
   assert.match(
@@ -956,11 +1252,11 @@ test("expired unspent proposals cannot implicitly mint a replacement epoch", asy
   assert.ok(authorizeBody);
   assert.match(
     authorizeBody,
-    /v_epoch\.current_epoch = 1[\s\S]*'explicit_new_authorization_required'/u
+    /v_epoch_current_epoch = 1[\s\S]*'explicit_new_authorization_required'/u
   );
   assert.doesNotMatch(
     authorizeBody,
-    /v_authorization_epoch := v_epoch\.current_epoch \+ 1/u
+    /v_authorization_epoch := v_epoch_current_epoch \+ 1/u
   );
   assert.match(
     gate1AuthoritySource,
@@ -1294,6 +1590,32 @@ test("protected-effect SQL denies the exact proposal-expiry boundary", async () 
     /CREATE OR REPLACE FUNCTION tp_api\.g1_record_protected_effect_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
   assert.ok(body);
+  const insertStart = body.indexOf(
+    "INSERT INTO tp_ledger.g1_protected_effects AS inserted_effect"
+  );
+  const conflictEnd = body.indexOf("ON CONFLICT DO NOTHING", insertStart);
+  assert.notEqual(insertStart, -1);
+  assert.notEqual(conflictEnd, -1);
+  const preInsert = body.slice(0, insertStart);
+  const insertSource = body.slice(insertStart, conflictEnd);
+  const postInsert = body.slice(conflictEnd);
+  assert.match(
+    preInsert,
+    /SELECT\s+count\(\*\)::INT8,\s*min\(outbox\.proposal_digest\),\s*min\(outbox\.logical_action_digest\),\s*min\(outbox\.authorization_epoch\),\s*min\(outbox\.logical_authority_key_sha256\),\s*min\(outbox\.authorization_binding_sha256\),\s*min\(receipt\.lease_expires_at\),\s*min\(resource\.lease_expires_at\),\s*min\(proposal\.expires_at\)\s+INTO\s+v_authority_count,\s*v_proposal_digest,\s*v_logical_action_digest,\s*v_authorization_epoch,\s*v_logical_authority_key_sha256,\s*v_authorization_binding_sha256,\s*v_receipt_lease_expires_at,\s*v_resource_lease_expires_at,\s*v_proposal_expires_at/u
+  );
+  assert.match(
+    preInsert,
+    /v_database_now := clock_timestamp\(\);\s*IF v_authority_count <> 1[\s\S]*v_receipt_lease_expires_at <= v_database_now[\s\S]*v_resource_lease_expires_at <= v_database_now[\s\S]*v_proposal_expires_at <= v_database_now THEN\s*RETURN;/u
+  );
+  assert.match(
+    insertSource,
+    /VALUES \(\s*p_tenant_id,\s*p_effect_key,\s*p_operation_id,\s*p_request_digest,\s*v_proposal_digest,\s*v_logical_action_digest,\s*v_authorization_epoch,\s*v_logical_authority_key_sha256,\s*v_authorization_binding_sha256,\s*p_run_id,\s*p_incident_id,\s*p_resource_id,\s*p_agent_id,\s*p_fencing_token,\s*p_payload_digest\s*\)/u
+  );
+  assert.doesNotMatch(insertSource, /\)\s*SELECT\b/u);
+  assert.match(
+    postInsert,
+    /SELECT\s+count\(\*\)::INT8,\s*min\(receipt\.lease_expires_at\),\s*min\(resource\.lease_expires_at\),\s*min\(proposal\.expires_at\)[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*IF v_authority_count <> 1[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
+  );
   assert.match(
     body,
     /JOIN tp_ledger\.g1_dvi_proposal_receipts AS proposal[\s\S]*proposal\.proposal_digest = outbox\.proposal_digest[\s\S]*proposal\.authorization_epoch = outbox\.authorization_epoch/u
@@ -1309,4 +1631,133 @@ test("protected-effect SQL denies the exact proposal-expiry boundary", async () 
     /v_database_now := clock_timestamp\(\);[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
   );
   assert.doesNotMatch(body, /proposal\.expires_at >= clock_timestamp\(\)/u);
+});
+
+test("protected-effect SQL snapshots one exact authority before a value-only insert", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const body = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_record_protected_effect_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(body);
+
+  const normalizedBody = body.replace(/\s+/gu, " ").trim();
+  const insertStart = normalizedBody.indexOf(
+    "INSERT INTO tp_ledger.g1_protected_effects AS inserted_effect"
+  );
+  const conflictStart = normalizedBody.indexOf(
+    "ON CONFLICT DO NOTHING",
+    insertStart
+  );
+  const postInsertStart = normalizedBody.indexOf(
+    "IF v_effect_key IS NULL OR v_operation_id IS NULL",
+    conflictStart
+  );
+  assert.ok(
+    insertStart > 0 &&
+    conflictStart > insertStart &&
+    postInsertStart > conflictStart
+  );
+
+  const preInsert = normalizedBody.slice(0, insertStart).trimEnd();
+  const insertClause = normalizedBody.slice(insertStart, conflictStart);
+  const postInsert = normalizedBody.slice(postInsertStart);
+
+  const ledgerSnapshotProjection =
+    "SELECT count(*)::INT8, " +
+    "min(outbox.proposal_digest), " +
+    "min(outbox.logical_action_digest), " +
+    "min(outbox.authorization_epoch), " +
+    "min(outbox.logical_authority_key_sha256), " +
+    "min(outbox.authorization_binding_sha256), " +
+    "min(receipt.lease_expires_at), " +
+    "min(resource.lease_expires_at), " +
+    "min(proposal.expires_at) " +
+    "INTO v_authority_count, " +
+    "v_proposal_digest, " +
+    "v_logical_action_digest, " +
+    "v_authorization_epoch, " +
+    "v_logical_authority_key_sha256, " +
+    "v_authorization_binding_sha256, " +
+    "v_receipt_lease_expires_at, " +
+    "v_resource_lease_expires_at, " +
+    "v_proposal_expires_at " +
+    "FROM tp_private.g1_resources AS resource " +
+    "JOIN tp_ledger.g1_outbox_intents AS outbox";
+  assert.ok(preInsert.includes(ledgerSnapshotProjection));
+
+  const exactPreInsertGuard =
+    "v_database_now := clock_timestamp(); " +
+    "IF v_authority_count <> 1 " +
+    "OR v_proposal_digest IS NULL " +
+    "OR v_receipt_lease_expires_at <= v_database_now " +
+    "OR v_resource_lease_expires_at <= v_database_now " +
+    "OR v_proposal_expires_at <= v_database_now THEN " +
+    "RETURN; END IF;";
+  assert.ok(preInsert.endsWith(exactPreInsertGuard));
+
+  const exactValues =
+    "VALUES ( " +
+    "p_tenant_id, p_effect_key, p_operation_id, p_request_digest, " +
+    "v_proposal_digest, v_logical_action_digest, v_authorization_epoch, " +
+    "v_logical_authority_key_sha256, v_authorization_binding_sha256, " +
+    "p_run_id, p_incident_id, p_resource_id, p_agent_id, " +
+    "p_fencing_token, p_payload_digest )";
+  assert.ok(insertClause.includes(exactValues));
+  assert.doesNotMatch(insertClause, /\bSELECT\b/u);
+  assert.equal(
+    body.match(/v_database_now := clock_timestamp\(\);/gu)?.length,
+    2
+  );
+
+  const postProjection =
+    "SELECT count(*)::INT8, " +
+    "min(receipt.lease_expires_at), " +
+    "min(resource.lease_expires_at), " +
+    "min(proposal.expires_at) " +
+    "INTO v_authority_count, " +
+    "v_receipt_lease_expires_at, " +
+    "v_resource_lease_expires_at, " +
+    "v_proposal_expires_at " +
+    "FROM tp_private.g1_resources AS resource";
+  assert.ok(postInsert.includes(postProjection));
+
+  const retainedPostInsertClauses = Object.freeze([
+    "receipt.proposal_digest = resource.holder_proposal_digest",
+    "receipt.logical_authority_key_sha256 = resource.holder_logical_authority_key_sha256",
+    "receipt.outcome = 'resource_reserved'",
+    "outbox.request_digest = receipt.request_digest",
+    "outbox.proposal_digest = receipt.proposal_digest",
+    "outbox.logical_action_digest = receipt.logical_action_digest",
+    "outbox.authorization_epoch = receipt.authorization_epoch",
+    "outbox.logical_authority_key_sha256 = receipt.logical_authority_key_sha256",
+    "outbox.authorization_binding_sha256 = receipt.authorization_binding_sha256",
+    "proposal.proposal_digest = receipt.proposal_digest",
+    "proposal.logical_action_digest = receipt.logical_action_digest",
+    "proposal.authorization_epoch = receipt.authorization_epoch",
+    "proposal.logical_authority_key_sha256 = receipt.logical_authority_key_sha256",
+    "proposal.authorization_binding_sha256 = receipt.authorization_binding_sha256",
+    "proposal.payload = outbox.payload",
+    "proposal.payload_digest = outbox.payload_digest",
+    "receipt.request_digest = p_request_digest",
+    "receipt.effect_key = p_effect_key",
+    "receipt.payload_digest = p_payload_digest",
+    "sha256(proposal.payload_canonical::BYTES) = outbox.payload_digest"
+  ]);
+  for (const clause of retainedPostInsertClauses) {
+    assert.ok(postInsert.includes(clause), clause);
+  }
+
+  const exactPostInsertGuard =
+    "v_database_now := clock_timestamp(); " +
+    "IF v_authority_count <> 1 " +
+    "OR v_receipt_lease_expires_at <= v_database_now " +
+    "OR v_resource_lease_expires_at <= v_database_now " +
+    "OR v_proposal_expires_at <= v_database_now THEN " +
+    "DELETE FROM tp_ledger.g1_protected_effects AS effect " +
+    "WHERE effect.tenant_id = p_tenant_id " +
+    "AND effect.effect_key = v_effect_key " +
+    "AND effect.operation_id = v_operation_id; " +
+    "RETURN; END IF; " +
+    "RETURN QUERY SELECT v_effect_key, v_operation_id;";
+  assert.ok(postInsert.includes(exactPostInsertGuard));
 });

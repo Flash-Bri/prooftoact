@@ -60,7 +60,10 @@ test("synthetic denied diagnostics omit reusable authorization material", async 
       resourceId: "synthetic-resource",
       evidenceId: "00000000-0000-4000-8000-000000000004",
       agency: "rescue",
-      payload: { action: "dispatch_rescue_unit" }
+      payload: {
+        action: "dispatch_rescue_unit",
+        scenario: "synthetic-highwater"
+      }
     },
     {
       allowDenied: true,
@@ -276,7 +279,7 @@ test("DVI selection becomes a durable source-bound authorization input", () => {
     commit,
     /SELECT candidate\.evidence_id, candidate\.evidence_digest[\s\S]*ORDER BY[\s\S]*candidate\.embedding <=> p_query_embedding::VECTOR\(3\),[\s\S]*candidate\.evidence_id[\s\S]*LIMIT 1/
   );
-  assert.match(commit, /v_query_embedding_sha256 := encode/);
+  assert.match(commit, /v_query_embedding_sha256 := sha256/);
   assert.match(commit, /DVI selection binding mismatch/);
   assert.match(commit, /query_embedding_sha256,[\s\S]*result_limit/);
   assert.match(commit, /INSERT INTO tp_ledger\.g1_dvi_selection_receipts/);
@@ -309,7 +312,7 @@ test("DVI selection becomes a durable source-bound authorization input", () => {
   );
   assert.match(
     authorize,
-    /FROM tp_private\.g1_list_admissibility_internal_v1\([\s\S]*v_evidence\.admissibility IS DISTINCT FROM 'admissible'/
+    /FROM tp_private\.g1_list_admissibility_internal_v1\([\s\S]*INTO v_evidence_admissibility, v_evidence_digest[\s\S]*v_evidence_admissibility IS DISTINCT FROM 'admissible'/
   );
   assert.match(
     authorize,
@@ -321,7 +324,7 @@ test("DVI selection becomes a durable source-bound authorization input", () => {
   );
   assert.match(
     authorize,
-    /logical_authority_already_spent[\s\S]*v_epoch\.current_epoch = 1[\s\S]*explicit_new_authorization_required[\s\S]*v_authorization_epoch := 1/
+    /logical_authority_already_spent[\s\S]*v_epoch_current_epoch = 1[\s\S]*explicit_new_authorization_required[\s\S]*v_authorization_epoch := 1/
   );
   assert.equal(
     (authorize.match(/v_prior_spend_count > 0/g) ?? []).length,
@@ -329,7 +332,7 @@ test("DVI selection becomes a durable source-bound authorization input", () => {
     "every initial, raced, and new authorization path must deny prior spend"
   );
   assert.equal(
-    (authorize.match(/v_existing\.expires_at <= v_database_now/g) ?? []).length,
+    (authorize.match(/v_existing_expires_at <= v_database_now/g) ?? []).length,
     2,
     "both replay paths must deny expired durable history"
   );

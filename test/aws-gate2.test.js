@@ -1497,7 +1497,7 @@ test("primary security separates Gate One and Gate Two database authority", () =
   );
   assert.match(
     source,
-    /v_expected_payload_digest := encode[\s\S]*v_expected_logical_action_digest := encode[\s\S]*v_expected_request_digest := encode/
+    /v_expected_payload_digest := sha256[\s\S]*v_expected_logical_action_digest := sha256[\s\S]*v_expected_request_digest := sha256/
   );
   assert.match(
     source,
@@ -1517,7 +1517,7 @@ test("primary security separates Gate One and Gate Two database authority", () =
   );
   assert.match(
     gateTwoSpend,
-    /decision_durable_receipt BOOL,[\s\S]*decision_authority_evidence_binding_sha256 STRING,[\s\S]*proposal\.authority_evidence_binding_sha256,[\s\S]*proposal\.tenant_id = receipt\.tenant_id[\s\S]*proposal\.proposal_digest = receipt\.proposal_digest[\s\S]*proposal\.proposal_digest = decision\.decision_proposal_digest/
+    /decision_durable_receipt BOOL,[\s\S]*decision_authority_evidence_binding_sha256 STRING,[\s\S]*proposal\.authority_evidence_binding_sha256::STRING,[\s\S]*proposal\.tenant_id = receipt\.tenant_id[\s\S]*proposal\.proposal_digest = receipt\.proposal_digest[\s\S]*proposal\.proposal_digest = decision\.decision_proposal_digest/
   );
 });
 
@@ -1542,7 +1542,10 @@ test("SECURITY DEFINER bodies resolve every application relation by schema", () 
       for (const match of body.matchAll(
         /^\s*(?:FROM|(?:LEFT\s+|RIGHT\s+|FULL\s+|INNER\s+|CROSS\s+)?JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([A-Za-z_][A-Za-z0-9_.]*)/gim
       )) {
-        if (cteNames.has(match[1].toLowerCase())) {
+        if (
+          cteNames.has(match[1].toLowerCase()) ||
+          match[1].toLowerCase() === "jsonb_object_keys"
+        ) {
           continue;
         }
         assert.match(match[1], /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/i, `${file}: ${match[0]}`);

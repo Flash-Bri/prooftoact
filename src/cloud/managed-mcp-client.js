@@ -4,7 +4,7 @@ import { parseStrictJson } from "./strict-json.js";
 import {
   recoveryQueryBindingsFor,
   recoveryQueryTemplateDigest
-} from "./recovery-store.js";
+} from "./recovery-continuity-identity.js";
 
 const MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
 const MCP_PROTOCOL_VERSION = "2025-03-26";

@@ -20,7 +20,10 @@ const OFFICIAL_NODE_SHA256 =
 const COMPONENTS = [
   "authority-race",
   "dispatch-broker",
+  "provider-activation",
+  "provider-exchange",
   "provider-operation",
+  "provider-terminalizer",
   "dvi",
   "finalizer",
   "orchestrator",
@@ -31,6 +34,7 @@ const COMPONENTS = [
 const require = createRequire(import.meta.url);
 
 function manifest() {
+  const digestFor = (index) => (index + 1).toString(16).repeat(64);
   return {
     schemaVersion: "tideproof.integrated-live-drill-runtime-manifest.v1",
     sourceCommit: "1".repeat(40),
@@ -55,8 +59,8 @@ function manifest() {
         bundledPackages: [4, 7].includes(index) ? ["pg"] : [],
         bytes: index + 1,
         externalImports: ["node:fs"],
-        file: `${name}-${String(index + 1).repeat(64)}.mjs`,
-        sha256: String(index + 1).repeat(64)
+        file: `${name}-${digestFor(index)}.mjs`,
+        sha256: digestFor(index)
       }
     ]))
   };
@@ -131,12 +135,18 @@ test("launcher validates immutable ancestry and descriptor-execs verified Node",
   assert.doesNotMatch(source, /exec \{\s*"\$stage_root\/\$node_name"/u);
 });
 
-test("script dispatch maps only the nine reviewed runtime entry roles", () => {
+test("script dispatch maps only the twelve reviewed runtime entry roles", () => {
   assert.equal(
     stagedRuntimeComponentForScript(
       "/immutable/gate1-integrated-live-drill-provider-operation-broker.js"
     ),
     "provider-operation"
+  );
+  assert.equal(
+    stagedRuntimeComponentForScript(
+      "/immutable/gate1-integrated-live-drill-provider-exchange.js"
+    ),
+    "provider-exchange"
   );
   assert.equal(
     stagedRuntimeComponentForScript(
@@ -165,11 +175,16 @@ test("child launch removes every pre-execution injection surface", () => {
     LD_AUDIT: "/tmp/audit.so",
     LD_LIBRARY_PATH: "/tmp/lib",
     LD_PRELOAD: "/tmp/inject.so",
+    OPENSSL_CONF: "/tmp/openssl.cnf",
+    OPENSSL_MODULES: "/tmp/openssl-modules",
+    HTTP_PROXY: "http://127.0.0.1:1",
+    SSLKEYLOGFILE: "/tmp/tls.keys",
     NODE_EXTRA_CA_CERTS: "/tmp/ca.pem",
     NODE_OPTIONS: "--require=/tmp/inject.cjs",
     NODE_PATH: "/tmp/modules",
     PERL5LIB: "/tmp/perl",
-    PERL5OPT: "-MInject"
+    PERL5OPT: "-MInject",
+    TZDIR: "/tmp/tz"
   };
   const environment = spawnTest.runtimeChildEnvironment(injected, {
     manifestSha256: SHA_A,
@@ -199,5 +214,5 @@ test("systemd launch graph retains each successful one-shot admission boundary",
     receipt.executorCredentialDelivery,
     "ONE_SHOT_UNIX_SOCKET_NONCE_AFTER_GLOBAL_GRANT"
   );
-  assert.equal(receipt.units.length, 8);
+  assert.equal(receipt.units.length, 14);
 });

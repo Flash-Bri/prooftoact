@@ -155,7 +155,7 @@ identifiers, optional state, and install-script flag. Run
 non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
 The generated [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) separately
 binds the 46-package union whose source is actually present across the six Gate
-Two Lambda bundles, the evidence-provider runtime, and the nine integrated-
+Two Lambda bundles, the evidence-provider runtime, and the twelve integrated-
 live runtime bundles, including exact license-text hashes and five explicit fallbacks
 for published packages that omit a standalone license file. Run
 `npm run licenses:verify` to rebuild the esbuild input graph and reject package,
@@ -179,19 +179,19 @@ and the alternate-principal denial described in
 [`docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md`](docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md).
 
 The exact Gate Two v9 build also produces a content-addressed integrated-live
-runtime manifest, nine ESM component bundles, the reviewed descriptor
+runtime manifest, twelve ESM component bundles, the reviewed descriptor
 launcher, and a pinned official Node v22.23.1 executable for the exact
-`linux-x64` or `darwin-arm64` target. Its receipt inventories all 21 generated
-outputs, privacy-scans the 20 non-Node outputs, and labels the exact official
+`linux-x64` or `darwin-arm64` target. Its receipt inventories all 24 generated
+outputs, privacy-scans the 23 non-Node outputs, and labels the exact official
 Node bytes as a pinned toolchain exemption. Readiness recomputes those facts.
 Before copying anything out of the isolated child build, the parent rehashes
-and size-checks the complete 21-output inventory. The DVI bundle resolves
+and size-checks the complete 24-output inventory. The DVI bundle resolves
 `pg`'s optional `pg-native` peer to a tracked fail-closed module, so no
 unreviewed native database binding remains discoverable at runtime.
 The live drill is Linux/systemd-only and may run only as dedicated non-root
-identities from the twelve receipt-named runtime files copied by the reviewed
+identities from the fifteen receipt-named runtime files copied by the reviewed
 root installer into a root-owned, non-writable-ancestor stage. The same
-receipt binds the independently installed verifier and eight exact systemd
+receipt binds the independently installed verifier and fourteen exact systemd
 units; direct CLI execution, checkout execution, and package-manager Node shims
 are rejected.
 This is a source and build boundary, not proof of a live provider drill or a

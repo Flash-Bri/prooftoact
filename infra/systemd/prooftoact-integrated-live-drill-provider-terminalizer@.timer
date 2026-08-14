@@ -1,0 +1,8 @@
+[Unit]
+Description=ProofToAct provider terminalization cadence %i
+
+[Timer]
+OnUnitInactiveSec=60s
+AccuracySec=1s
+Unit=prooftoact-integrated-live-drill-provider-terminalizer@%i.service
+Persistent=no

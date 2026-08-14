@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { publishOrReadExactOwnedFile } from "./atomic-create-only-file.js";
 
 import { canonicalJson } from "./canonical-json.js";
 import { parseStrictJson } from "./strict-json.js";
@@ -594,31 +595,16 @@ function createOrReadExact(filePath, value, secure) {
     serialized.length > 0 && serialized.length <= MAX_PRIVATE_ARTIFACT_BYTES,
     "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED"
   );
-  let descriptor;
-  try {
-    assertSameRoot(secure);
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY |
-        fs.constants.O_CREAT |
-        fs.constants.O_EXCL |
-        fs.constants.O_NOFOLLOW,
-      0o600
-    );
-    fs.writeFileSync(descriptor, serialized);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    syncDirectory(secure);
-  } catch (cause) {
-    if (descriptor !== undefined) {
-      try { fs.closeSync(descriptor); } catch { /* Preserve first error. */ }
-    }
-    if (cause?.code !== "EEXIST") {
-      if (cause?.message?.startsWith("INTEGRATED_LIVE_DRILL_")) throw cause;
-      reject("INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED", cause);
-    }
-  }
+  publishOrReadExactOwnedFile({
+    assertRoot: () => assertSameRoot(secure),
+    bytes: serialized,
+    code: "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED",
+    filePath,
+    maximumBytes: MAX_PRIVATE_ARTIFACT_BYTES,
+    mode: 0o600,
+    rootPath: secure.rootPath,
+    uid: secure.expectedUid
+  });
   const reread = readArtifact(filePath, secure);
   requireCondition(
     canonicalJson(reread) === canonicalJson(value),
@@ -633,46 +619,22 @@ function claimCreateOnlyExact(filePath, value, secure) {
     serialized.length > 0 && serialized.length <= MAX_PRIVATE_ARTIFACT_BYTES,
     "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED"
   );
-  let descriptor;
-  try {
-    assertSameRoot(secure);
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY |
-        fs.constants.O_CREAT |
-        fs.constants.O_EXCL |
-        fs.constants.O_NOFOLLOW,
-      0o600
-    );
-    fs.writeFileSync(descriptor, serialized);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    syncDirectory(secure);
-  } catch (cause) {
-    if (descriptor !== undefined) {
-      try { fs.closeSync(descriptor); } catch { /* Preserve first error. */ }
-    }
-    if (cause?.code === "EEXIST") {
-      // A concurrent loser may reuse only an exact, fully readable attempt to
-      // ask the provider-operation broker for its durable transcript. The
-      // broker's database redemption fence—not this file—prevents redispatch.
-      const existing = readArtifact(filePath, secure);
-      requireCondition(
-        canonicalJson(existing) === canonicalJson(value),
-        "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS"
-      );
-      return Object.freeze({ created: false, value: existing });
-    }
-    if (cause?.message?.startsWith("INTEGRATED_LIVE_DRILL_")) throw cause;
-    reject("INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED", cause);
-  }
+  const persisted = publishOrReadExactOwnedFile({
+    assertRoot: () => assertSameRoot(secure),
+    bytes: serialized,
+    code: "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_WRITE_REJECTED",
+    filePath,
+    maximumBytes: MAX_PRIVATE_ARTIFACT_BYTES,
+    mode: 0o600,
+    rootPath: secure.rootPath,
+    uid: secure.expectedUid
+  });
   const reread = readArtifact(filePath, secure);
   requireCondition(
     canonicalJson(reread) === canonicalJson(value),
     "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS"
   );
-  return Object.freeze({ created: true, value: reread });
+  return Object.freeze({ created: persisted.created, value: reread });
 }
 
 function artifactPath(secure, authorizationId, suffix) {

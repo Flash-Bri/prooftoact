@@ -11,7 +11,7 @@ import {
 } from "./integrated-live-drill-runtime.js";
 
 const PRE_EXECUTION_INJECTION_ENVIRONMENT =
-  /^(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*)$/u;
+  /^(?:NODE_.*|LD_.*|DYLD_.*|GLIBC_TUNABLES|GCONV_PATH|PERL.*|OPENSSL_.*|SSL_.*|SSLKEYLOGFILE|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|TZDIR|ICU_DATA|MALLOC_CONF|MALLOC_OPTIONS|ASAN_OPTIONS|LSAN_OPTIONS|MSAN_OPTIONS|TSAN_OPTIONS|UBSAN_OPTIONS)$/u;
 
 function runtimeChildEnvironment(childEnvironment, runtime) {
   const environment = {

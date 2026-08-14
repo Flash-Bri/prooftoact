@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA =
-  "tideproof.highwater-drill-process-boundary-verification.v4";
+  "tideproof.highwater-drill-process-boundary-verification.v5";
 
 const ROOT = fs.realpathSync(path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -23,6 +23,18 @@ const WORKER_ROOTS = Object.freeze([
 const PROVIDER_OPERATION_ROOTS = Object.freeze([
   "scripts/gate1-integrated-live-drill-provider-operation-broker.js",
   "src/cloud/integrated-live-drill-provider-operation-broker.js"
+]);
+const PROVIDER_ACTIVATION_ROOTS = Object.freeze([
+  "scripts/gate1-integrated-live-drill-provider-activation.js",
+  "src/cloud/integrated-live-drill-provider-activation.js"
+]);
+const PROVIDER_EXCHANGE_ROOTS = Object.freeze([
+  "scripts/gate1-integrated-live-drill-provider-exchange.js",
+  "src/cloud/integrated-live-drill-provider-exchange.js"
+]);
+const PROVIDER_TERMINALIZER_ROOTS = Object.freeze([
+  "scripts/gate1-integrated-live-drill-provider-terminalizer.js",
+  "src/cloud/integrated-live-drill-provider-terminalization.js"
 ]);
 const RECONCILER_ROOTS = Object.freeze([
   "scripts/gate1-integrated-live-drill-provider-reconciler.js",
@@ -62,8 +74,34 @@ const WORKER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
   /(?:^|\/)provider-dispatch-redeem-control\.js$/u
 ]);
 const RECONCILER_FORBIDDEN_PATH_PATTERNS = Object.freeze([
+  /(?:^|\/)authority-store\.js$/u,
+  /(?:^|\/)database-runtime\.js$/u,
+  /(?:^|\/)provider-dispatch-client\.js$/u,
+  /(?:^|\/)integrated-live-drill-dispatch-broker\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-evidence\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-finalization\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-orchestration\.js$/u,
+  /(?:^|\/)integrated-live-drill-provider-recovery\.js$/u,
   /(?:^|\/)integrated-live-drill-provider-worker\.js$/u,
-  /(?:^|\/)managed-mcp-client\.js$/u
+  /(?:^|\/)managed-mcp-client\.js$/u,
+  /(?:^|\/)provider-dispatch-begin-control\.js$/u,
+  /(?:^|\/)provider-dispatch-claim-control\.js$/u,
+  /(?:^|\/)provider-dispatch-finalize-control\.js$/u,
+  /(?:^|\/)provider-dispatch-redeem-control\.js$/u,
+  /(?:^|\/)recovery-broker\.js$/u
+]);
+const RECONCILER_EXACT_MODULES = Object.freeze([
+  "scripts/gate1-integrated-live-drill-provider-reconciler.js",
+  "src/cloud/canonical-json.js",
+  "src/cloud/integrated-live-drill-provider-reconciliation.js",
+  "src/cloud/integrated-live-drill-runtime.js",
+  "src/cloud/official-node-runtime-contract.js",
+  "src/cloud/provider-dispatch-binding.js",
+  "src/cloud/provider-dispatch-reconciliation-input.js",
+  "src/cloud/provider-dispatch-resolve-database.js",
+  "src/cloud/provider-dispatch-resolver.js",
+  "src/cloud/provider-dispatch-result.js",
+  "src/cloud/systemd-credential.js"
 ]);
 
 function reject(code, detail) {
@@ -260,9 +298,53 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
       allowedBuiltins: PROVIDER_OPERATION_SAFE_BUILTINS,
       allowedExternalPackages: new Set(["pg"]),
       forbiddenPathPatterns: Object.freeze([
-        /(?:^|\/)integrated-live-drill-provider-reconciliation\.js$/u
+        /(?:^|\/)integrated-live-drill-provider-reconciliation\.js$/u,
+        /(?:^|\/)integrated-live-drill-provider-exchange\.js$/u,
+        /(?:^|\/)managed-mcp-client\.js$/u,
+        /(?:^|\/)provider-dispatch-activate-control\.js$/u,
+        /(?:^|\/)provider-dispatch-terminalize-control\.js$/u
       ]),
       name: "provider-operation"
+    }
+  );
+  const providerActivation = validateGraph(
+    collectGraph(PROVIDER_ACTIVATION_ROOTS),
+    {
+      allowedBuiltins: PROVIDER_OPERATION_SAFE_BUILTINS,
+      allowedExternalPackages: new Set(["pg"]),
+      forbiddenPathPatterns: Object.freeze([
+        /(?:^|\/)managed-mcp-client\.js$/u,
+        /(?:^|\/)provider-dispatch-finalize-control\.js$/u,
+        /(?:^|\/)provider-dispatch-redeem-control\.js$/u,
+        /(?:^|\/)provider-dispatch-terminalize-control\.js$/u
+      ]),
+      name: "provider-activation"
+    }
+  );
+  const providerExchange = validateGraph(
+    collectGraph(PROVIDER_EXCHANGE_ROOTS),
+    {
+      allowedBuiltins: PROVIDER_OPERATION_SAFE_BUILTINS,
+      allowedExternalPackages: new Set(),
+      forbiddenPathPatterns: Object.freeze([
+        /(?:^|\/)database-runtime\.js$/u,
+        /(?:^|\/)provider-dispatch-(?:activate|finalize|redeem|terminalize)-control\.js$/u,
+        /(?:^|\/)recovery-store\.js$/u
+      ]),
+      name: "provider-exchange"
+    }
+  );
+  const providerTerminalizer = validateGraph(
+    collectGraph(PROVIDER_TERMINALIZER_ROOTS),
+    {
+      allowedExternalPackages: new Set(["pg"]),
+      forbiddenPathPatterns: Object.freeze([
+        /(?:^|\/)managed-mcp-client\.js$/u,
+        /(?:^|\/)provider-dispatch-activate-control\.js$/u,
+        /(?:^|\/)provider-dispatch-finalize-control\.js$/u,
+        /(?:^|\/)provider-dispatch-redeem-control\.js$/u
+      ]),
+      name: "provider-terminalizer"
     }
   );
   const reconciler = validateGraph(collectGraph(RECONCILER_ROOTS), {
@@ -283,16 +365,31 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
     !worker.modules.includes(
       "src/cloud/brokered-provider-operation-client.js"
     ) ||
-    !providerOperation.modules.includes("src/cloud/managed-mcp-client.js") ||
+    providerOperation.modules.includes("src/cloud/managed-mcp-client.js") ||
     !providerOperation.modules.includes(
       "src/cloud/provider-dispatch-redeem-control.js"
     ) ||
     !providerOperation.modules.includes(
       "src/cloud/provider-dispatch-finalize-control.js"
     ) ||
+    !providerActivation.modules.includes(
+      "src/cloud/provider-dispatch-activate-control.js"
+    ) ||
+    providerActivation.modules.includes("src/cloud/managed-mcp-client.js") ||
+    !providerExchange.modules.includes("src/cloud/managed-mcp-client.js") ||
+    providerExchange.externalPackages.length !== 0 ||
+    providerExchange.modules.includes("src/cloud/database-runtime.js") ||
+    !providerTerminalizer.modules.includes(
+      "src/cloud/provider-dispatch-terminalize-control.js"
+    ) ||
+    providerTerminalizer.modules.includes("src/cloud/managed-mcp-client.js") ||
     !reconciler.modules.includes(
       "src/cloud/provider-dispatch-resolver.js"
     ) ||
+    !reconciler.modules.includes(
+      "src/cloud/provider-dispatch-reconciliation-input.js"
+    ) ||
+    reconciler.modules.join("\n") !== RECONCILER_EXACT_MODULES.join("\n") ||
     reconciler.modules.includes(
       "src/cloud/provider-dispatch-control.js"
     ) ||
@@ -303,7 +400,10 @@ export function verifyIntegratedLiveDrillProcessBoundaries() {
   return Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_SCHEMA,
     finalizer,
+    providerActivation,
+    providerExchange,
     providerOperation,
+    providerTerminalizer,
     reconciler,
     supervisor,
     worker,

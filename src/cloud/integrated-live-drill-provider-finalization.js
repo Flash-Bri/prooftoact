@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { publishOrReadExactOwnedFile } from "./atomic-create-only-file.js";
 
 import { canonicalJson } from "./canonical-json.js";
 import {
@@ -323,34 +324,16 @@ function createOrReadCanonicalReceipt(filePath, value, secure) {
     bytes.length > 0 && bytes.length <= MAX_RECEIPT_BYTES,
     "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED"
   );
-  let descriptor;
-  try {
-    assertSameRoot(secure);
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY |
-        fs.constants.O_CREAT |
-        fs.constants.O_EXCL |
-        fs.constants.O_NOFOLLOW,
-      0o600
-    );
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    syncDirectory(secure);
-  } catch (cause) {
-    if (descriptor !== undefined) {
-      try { fs.closeSync(descriptor); } catch { /* Preserve first error. */ }
-    }
-    if (cause?.code !== "EEXIST") {
-      if (cause?.message?.startsWith("INTEGRATED_LIVE_DRILL_")) throw cause;
-      reject(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED",
-        cause
-      );
-    }
-  }
+  publishOrReadExactOwnedFile({
+    assertRoot: () => assertSameRoot(secure),
+    bytes,
+    code: "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED",
+    filePath,
+    maximumBytes: MAX_RECEIPT_BYTES,
+    mode: 0o600,
+    rootPath: secure.rootPath,
+    uid: secure.expectedUid
+  });
   const reread = readCanonicalReceipt(filePath, secure);
   requireCondition(
     canonicalJson(reread) === canonicalJson(value),

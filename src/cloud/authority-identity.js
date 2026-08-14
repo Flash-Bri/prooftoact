@@ -15,6 +15,20 @@ const UUID =
 const SHA256 = /^[0-9a-f]{64}$/;
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u;
 const ACTION_KIND = "dispatch_rescue_unit";
+const DISPATCH_PAYLOAD_REQUIRED_FIELDS = Object.freeze([
+  "action",
+  "scenario"
+]);
+const DISPATCH_PAYLOAD_OPTIONAL_FIELDS = Object.freeze([
+  "destination",
+  "logicalDispatch"
+]);
+const DISPATCH_PAYLOAD_ALLOWED_FIELDS = Object.freeze([
+  ...DISPATCH_PAYLOAD_REQUIRED_FIELDS,
+  ...DISPATCH_PAYLOAD_OPTIONAL_FIELDS
+]);
+const DISPATCH_PAYLOAD_SAFE_TEXT = /^[A-Za-z0-9._:-]+$/u;
+const DISPATCH_PAYLOAD_TEXT_MAXIMUM = 128;
 const MAX_AUTHORIZATION_EPOCH = 9_007_199_254_740_991;
 
 const LOGICAL_ACTION_FIELDS = Object.freeze([
@@ -145,12 +159,58 @@ function requireAuthorizationEpoch(value) {
   return value;
 }
 
+function requireDispatchPayloadText(value, name) {
+  const text = requireText(value, name, DISPATCH_PAYLOAD_TEXT_MAXIMUM);
+  assert(
+    DISPATCH_PAYLOAD_SAFE_TEXT.test(text),
+    "AUTHORITY_DISPATCH_PAYLOAD_TEXT"
+  );
+  return text;
+}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
 function identityDigest(value) {
   return sha256(canonicalJson(value));
+}
+
+export function dispatchPayloadFor(input) {
+  assert(
+    input && typeof input === "object" && !Array.isArray(input),
+    "AUTHORITY_DISPATCH_PAYLOAD_SHAPE"
+  );
+  const keys = Object.keys(input);
+  assert(
+    DISPATCH_PAYLOAD_REQUIRED_FIELDS.every((field) =>
+      Object.hasOwn(input, field)
+    ) &&
+      keys.every((field) => DISPATCH_PAYLOAD_ALLOWED_FIELDS.includes(field)) &&
+      keys.length >= DISPATCH_PAYLOAD_REQUIRED_FIELDS.length &&
+      keys.length <= DISPATCH_PAYLOAD_ALLOWED_FIELDS.length,
+    "AUTHORITY_DISPATCH_PAYLOAD_SHAPE"
+  );
+  const action = requireDispatchPayloadText(input.action, "payload.action");
+  assert(action === ACTION_KIND, "AUTHORITY_ACTION_KIND_UNSUPPORTED");
+  const payload = { action };
+  if (Object.hasOwn(input, "destination")) {
+    payload.destination = requireDispatchPayloadText(
+      input.destination,
+      "payload.destination"
+    );
+  }
+  if (Object.hasOwn(input, "logicalDispatch")) {
+    payload.logicalDispatch = requireDispatchPayloadText(
+      input.logicalDispatch,
+      "payload.logicalDispatch"
+    );
+  }
+  payload.scenario = requireDispatchPayloadText(
+    input.scenario,
+    "payload.scenario"
+  );
+  return Object.freeze(payload);
 }
 
 export function logicalActionIdentityFor(input) {

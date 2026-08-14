@@ -77,6 +77,12 @@ test("provider broker, worker, reconciler, and finalizer preserve authority boun
     receipt.providerOperation.modules.includes(
       "src/cloud/managed-mcp-client.js"
     ),
+    false
+  );
+  assert.equal(
+    receipt.providerExchange.modules.includes(
+      "src/cloud/managed-mcp-client.js"
+    ),
     true
   );
   assert.equal(

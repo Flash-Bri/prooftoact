@@ -266,6 +266,7 @@ export async function resolveCommittedRecoverySourceReceipt({
       row.resource_id !== expected.resourceId ||
       row.operation_id !== expected.operationId ||
       row.request_digest !== expected.requestDigest ||
+      row.policy_version !== "gate1-policy-v2" ||
       row.outcome !== "resource_reserved" ||
       row.admissibility !== "admissible" ||
       row.has_durable_intent !== true ||

@@ -1,36 +1,56 @@
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
-  acquireIntegratedLiveDrillPrivateRootLease
-} from "../src/cloud/integrated-live-drill-provider-evidence.js";
-import {
-  runIntegratedLiveDrillProviderReconciliation
+  runIntegratedLiveDrillProviderReconciliation,
+  validateIntegratedLiveDrillProviderReconciliationInput
 } from "../src/cloud/integrated-live-drill-provider-reconciliation.js";
+import { providerDispatchReconciliationInputBytes } from
+  "../src/cloud/provider-dispatch-reconciliation-input.js";
 import { assertIntegratedLiveDrillRuntime } from
   "../src/cloud/integrated-live-drill-runtime.js";
-import { parseIntegratedLiveDrillSpec } from
-  "../src/cloud/integrated-live-drill.js";
 import {
   readSystemdCredential,
   readSystemdCredentialText
 } from "../src/cloud/systemd-credential.js";
 
-export async function main() {
-  const credentialsDirectory = process.env.CREDENTIALS_DIRECTORY;
-  const input = JSON.parse(readSystemdCredential({
-    credentialsDirectory,
-    maximumBytes: 8 * 1024 * 1024,
-    name: "provider-reconciliation-input"
-  }).toString("utf8"));
-  const spec = parseIntegratedLiveDrillSpec(input.context.trustedRunContext.spec);
-  const rootPath = input.context.recoveryEvidenceRootPath;
-  const forbiddenRootPath = input.context.forbiddenRootPath;
-  const rootLease = acquireIntegratedLiveDrillPrivateRootLease({
-    binding: input.context.evidenceRootBinding,
-    code: "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_ROOT_REJECTED",
-    forbiddenRootPath,
-    rootPath
-  });
+function requiredAbsoluteEnvironment(name) {
+  const value = process.env[name];
+  if (
+    typeof value !== "string" || !path.isAbsolute(value) ||
+    path.resolve(value) !== value || value.length > 4096
+  ) {
+    throw new Error(
+      "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_ENVIRONMENT_REJECTED"
+    );
+  }
+  return value;
+}
+
+export async function main({ clientFactory = null } = {}) {
+  const credentialsDirectory = requiredAbsoluteEnvironment(
+    "CREDENTIALS_DIRECTORY"
+  );
+  let input;
+  let inputBytes;
+  try {
+    inputBytes = readSystemdCredential({
+        credentialsDirectory,
+        maximumBytes: 64 * 1024,
+        name: "provider-reconciliation-input"
+      });
+    input = validateIntegratedLiveDrillProviderReconciliationInput(JSON.parse(
+      inputBytes.toString("utf8")
+    ));
+    if (!providerDispatchReconciliationInputBytes(input).equals(inputBytes)) {
+      throw new Error("noncanonical reconciliation input");
+    }
+  } catch (cause) {
+    throw new Error(
+      "INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED",
+      { cause }
+    );
+  }
   const environment = Object.freeze({
     ...Object.fromEntries([
       "LANG", "LC_ALL", "LC_CTYPE", "NO_COLOR", "PATH", "TMPDIR",
@@ -43,26 +63,25 @@ export async function main() {
     PRIMARY_PROVIDER_RECONCILE_DATABASE_URL: readSystemdCredentialText({
       credentialsDirectory,
       name: "provider-reconcile-database-url"
-    }),
-    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT: rootPath,
-    TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT: forbiddenRootPath
+    })
   });
   assertIntegratedLiveDrillRuntime({
     environment,
     expectedComponent: "reconciler",
-    spec
+    spec: Object.freeze({
+      packageLockDigest: input.packageLockDigest,
+      runtimeBundleManifestSha256:
+        environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256,
+      sourceCommit: input.binding.sourceCommit,
+      treeDigest: input.binding.treeDigest
+    })
   });
-  try {
-    await rootLease.assertSettled();
-    const result = await runIntegratedLiveDrillProviderReconciliation({
-      environment,
-      input
-    });
-    await rootLease.assertSettled();
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  } finally {
-    rootLease.release();
-  }
+  const result = await runIntegratedLiveDrillProviderReconciliation({
+    auditClientFactory: clientFactory,
+    environment,
+    input
+  });
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 const startedDirectly = process.argv[1] &&

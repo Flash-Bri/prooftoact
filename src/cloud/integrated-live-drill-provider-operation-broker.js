@@ -2,23 +2,30 @@ import { createHash, createHmac } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { publishOrReadExactOwnedFile } from "./atomic-create-only-file.js";
 
 import { canonicalJson } from "./canonical-json.js";
 import {
   __test as clientContract
 } from "./brokered-provider-operation-client.js";
 import {
-  validateIntegratedLiveDrillExecutionGrant
-} from "./integrated-live-drill-dispatch-broker.js";
-import {
-  CockroachManagedMcpRecoveryClient,
-  managedMcpLogicalRequest
-} from "./managed-mcp-client.js";
+  INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_REQUEST_SCHEMA,
+  INTEGRATED_LIVE_DRILL_PROVIDER_READY_SCHEMA,
+  INTEGRATED_LIVE_DRILL_PROVIDER_RESULT_SCHEMA,
+  validateIntegratedLiveDrillProviderActivationReceipt,
+  validateIntegratedLiveDrillProviderExecutionGrant,
+  validateIntegratedLiveDrillProviderReady,
+  validateIntegratedLiveDrillProviderResult
+} from "./integrated-live-drill-provider-activation.js";
 import {
   PROVIDER_DISPATCH_CONTROL_STATES,
   PROVIDER_DISPATCH_HEX_64,
   validateProviderDispatchControlBinding
 } from "./provider-dispatch-binding.js";
+import {
+  recoveryQueryBindingsFor,
+  recoveryQueryTemplateDigest
+} from "./recovery-continuity-identity.js";
 
 const TRANSCRIPT_SCHEMA = "tideproof.provider-operation-broker-transcript.v1";
 const TRANSCRIPT_NAME = "provider-operation-transcript.json";
@@ -41,6 +48,30 @@ function exactRecord(value, keys) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+// Keep logical-request binding validation in the provider-key-isolated broker
+// without importing any MCP transport/client implementation into its graph.
+function providerLogicalRequest({ clusterId, query }) {
+  const bindings = recoveryQueryBindingsFor(query);
+  return Object.freeze({
+    schemaVersion: "tideproof.highwater-drill-logical-managed-mcp-request.v1",
+    boundInputSha256: sha256(canonicalJson({
+      tenantId: bindings.tenantId,
+      recoverySessionId: bindings.recoverySessionId,
+      subjectBindingHash: bindings.subjectBindingHash,
+      sourceDigest: bindings.sourceDigest
+    })),
+    databaseNameSha256: sha256("tideproof_recovery"),
+    queryTemplateSha256: recoveryQueryTemplateDigest(),
+    recoveryClusterId: clusterId,
+    recoverySessionId: bindings.recoverySessionId,
+    renderedQuerySha256: sha256(query),
+    sourceDigest: bindings.sourceDigest,
+    subjectBindingSha256: bindings.subjectBindingHash,
+    tenantId: bindings.tenantId,
+    toolNameSha256: sha256("select_query")
+  });
 }
 
 function derive(executionCapability, grantId, purpose) {
@@ -115,29 +146,16 @@ function persistTranscript(root, value) {
     bytes.length > 0 && bytes.length <= MAX_TRANSCRIPT_BYTES,
     "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_TRANSCRIPT_REJECTED"
   );
-  let descriptor;
-  try {
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY | fs.constants.O_CREAT |
-        fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
-      0o600
-    );
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    const directory = fs.openSync(
-      root.rootPath,
-      fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW
-    );
-    try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
-  } catch (cause) {
-    if (Number.isSafeInteger(descriptor)) fs.closeSync(descriptor);
-    if (cause?.code !== "EEXIST") {
-      reject("INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_TRANSCRIPT_REJECTED", cause);
-    }
-  }
+  publishOrReadExactOwnedFile({
+    assertRoot: () => secureRoot(root.rootPath),
+    bytes,
+    code: "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_TRANSCRIPT_REJECTED",
+    filePath,
+    maximumBytes: MAX_TRANSCRIPT_BYTES,
+    mode: 0o600,
+    rootPath: root.rootPath,
+    uid: root.uid
+  });
   const reread = readTranscript(root);
   requireCondition(
     canonicalJson(reread) === canonicalJson(value),
@@ -161,7 +179,9 @@ function validateRequest(value, secrets) {
     code
   );
   const binding = validateProviderDispatchControlBinding(value.binding);
-  const grant = validateIntegratedLiveDrillExecutionGrant(value.executionGrant);
+  const grant = validateIntegratedLiveDrillProviderExecutionGrant(
+    value.executionGrant
+  );
   requireCondition(
     grant.authorizationId === binding.authorizationId &&
       grant.controlBindingSha256 === binding.controlBindingSha256 &&
@@ -208,19 +228,18 @@ function transcriptResult(value, accepted) {
 }
 
 export async function runIntegratedLiveDrillProviderOperationBroker({
-  apiKey,
+  activateExchange,
   executionCapability,
-  fetchImpl,
   finalizeControl,
   grantId,
+  packageLockDigest,
   request,
   rootPath,
   redeemControl
 }) {
   requireCondition(
-    typeof apiKey === "string" && apiKey.length >= 24 &&
+    typeof activateExchange === "function" &&
       PROVIDER_DISPATCH_HEX_64.test(executionCapability ?? "") &&
-      typeof fetchImpl === "function" &&
       typeof redeemControl?.redeem === "function" &&
       typeof finalizeControl?.complete === "function" &&
       typeof finalizeControl?.markUnknown === "function",
@@ -250,7 +269,7 @@ export async function runIntegratedLiveDrillProviderOperationBroker({
         payload.database === "tideproof_recovery" &&
         typeof payload.query === "string" && payload.query.length > 0 &&
         payload.query.length <= 1024 * 1024 &&
-        sha256(canonicalJson(managedMcpLogicalRequest({
+        sha256(canonicalJson(providerLogicalRequest({
           clusterId: payload.clusterId,
           query: payload.query
         }))) === accepted.binding.logicalMcpRequestSha256,
@@ -268,26 +287,37 @@ export async function runIntegratedLiveDrillProviderOperationBroker({
       redeemed.state !== PROVIDER_DISPATCH_CONTROL_STATES.CREDENTIAL_REDEEMED ||
       redeemed.transitionOutcome !== "CREDENTIAL_REDEEMED"
     ) {
-      await finalizeControl.markUnknown(accepted.binding, completionGrant)
-        .catch(() => {});
+      // A duplicate/replay may observe the original execution's redemption.
+      // It must never terminalize beneath an already-issued activation receipt.
+      // Only the database-time terminalizer may converge this state at expiry.
       reject("INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_ALREADY_REDEEMED");
     }
-    const client = new CockroachManagedMcpRecoveryClient({
-      apiKey,
-      clusterId: payload.clusterId,
-      fetchImpl
-    });
+    requireCondition(
+      PROVIDER_DISPATCH_HEX_64.test(packageLockDigest ?? ""),
+      "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_INPUT_REJECTED"
+    );
     try {
-      const rawResult = await client.selectQuery(payload);
-      await client.close();
+      const providerResult = await activateExchange(Object.freeze({
+        packageLockDigest,
+        request: Object.freeze({
+          action: request.action,
+          binding: accepted.binding,
+          executionGrant: accepted.executionGrant,
+          operationNonce: request.operationNonce,
+          payload: Object.freeze({ ...payload }),
+          schemaVersion: request.schemaVersion
+        }),
+        schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_REQUEST_SCHEMA
+      }));
+      const result = providerResult.result;
       const body = Object.freeze({
         schemaVersion: TRANSCRIPT_SCHEMA,
         authorizationId: accepted.binding.authorizationId,
         controlBindingSha256: accepted.binding.controlBindingSha256,
         grantId,
-        rawResult,
-        semanticRequestEvidence: client.semanticRequestEvidence(),
-        transportEvidence: client.transportEvidence(),
+        rawResult: result.rawResult,
+        semanticRequestEvidence: result.semanticRequestEvidence,
+        transportEvidence: result.transportEvidence,
         workerSpecSha256: accepted.executionGrant.workerSpecSha256
       });
       return transcriptResult(
@@ -295,9 +325,10 @@ export async function runIntegratedLiveDrillProviderOperationBroker({
         accepted
       );
     } catch (cause) {
-      await client.close().catch(() => {});
-      await finalizeControl.markUnknown(accepted.binding, completionGrant)
-        .catch(() => {});
+      // Activation has its own database one-shot and the provider must obtain
+      // a broker PROCEED_ONCE handshake before any external call. Never
+      // terminalize here: after PROCEED the effect may be in flight. The
+      // separate database-time terminalizer owns expiry/unknown resolution.
       reject("INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_UNKNOWN_DO_NOT_ACT", cause);
     }
   }
@@ -308,7 +339,9 @@ export async function runIntegratedLiveDrillProviderOperationBroker({
   );
   const result = transcriptResult(existing, accepted);
   if (accepted.action === "MARK_UNKNOWN") {
-    return finalizeControl.markUnknown(accepted.binding, completionGrant);
+    reject(
+      "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_TERMINALIZER_REQUIRED"
+    );
   }
   requireCondition(
     exactRecord(accepted.payload, ["mcpResultSha256", "sessionCloseSha256"]) &&
@@ -328,10 +361,14 @@ export async function runIntegratedLiveDrillProviderOperationBroker({
 
 export function serveIntegratedLiveDrillProviderOperationBroker({
   listen,
-  operation
+  operation,
+  providerReady = null,
+  providerResult = null
 }) {
   requireCondition(
     typeof operation === "function" &&
+      (providerResult === null || typeof providerResult === "function") &&
+      (providerReady === null || typeof providerReady === "function") &&
       listen && typeof listen === "object" &&
       (Number.isSafeInteger(listen.fd) || typeof listen.path === "string"),
     "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_SERVER_REJECTED"
@@ -360,7 +397,13 @@ export function serveIntegratedLiveDrillProviderOperationBroker({
               !requestText.slice(0, -1).includes("\n"),
             "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_REQUEST_REJECTED"
           );
-          const result = await operation(JSON.parse(requestText));
+          const parsed = JSON.parse(requestText);
+          const result = parsed?.schemaVersion ===
+              INTEGRATED_LIVE_DRILL_PROVIDER_RESULT_SCHEMA
+            ? await providerResult(parsed)
+            : parsed?.schemaVersion === INTEGRATED_LIVE_DRILL_PROVIDER_READY_SCHEMA
+              ? await providerReady(parsed)
+              : await operation(parsed);
           response = Object.freeze({
             errorCode: null,
             result,
@@ -380,15 +423,204 @@ export function serveIntegratedLiveDrillProviderOperationBroker({
         }
         if (!socket.destroyed) socket.end(`${canonicalJson(response)}\n`);
       };
-      queue = queue.then(respond, respond);
+      let parsed;
+      try { parsed = JSON.parse(requestText); } catch {}
+      if (
+        (providerResult !== null && parsed?.schemaVersion ===
+          INTEGRATED_LIVE_DRILL_PROVIDER_RESULT_SCHEMA) ||
+        (providerReady !== null && parsed?.schemaVersion ===
+          INTEGRATED_LIVE_DRILL_PROVIDER_READY_SCHEMA)
+      ) {
+        void respond();
+      } else {
+        queue = queue.then(respond, respond);
+      }
     });
   });
   server.listen(listen);
   return server;
 }
 
+export function createIntegratedLiveDrillProviderActivationCoordinator({
+  activationRpc,
+  activationTimeoutMilliseconds = 30_000,
+  timeoutMilliseconds = 90_000
+}) {
+  requireCondition(
+    typeof activationRpc === "function" &&
+      Number.isSafeInteger(activationTimeoutMilliseconds) &&
+      activationTimeoutMilliseconds >= 1 &&
+      activationTimeoutMilliseconds <= 60_000 &&
+      Number.isSafeInteger(timeoutMilliseconds) &&
+      timeoutMilliseconds >= 1 && timeoutMilliseconds <= 300_000,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_COORDINATOR_REJECTED"
+  );
+  const pending = new Map();
+  async function activateExchange(envelope) {
+    const requestKey = sha256(canonicalJson(envelope));
+    requireCondition(
+      !pending.has(requestKey),
+      "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_REPLAY_REJECTED"
+    );
+    let resolveResult;
+    let rejectResult;
+    const resultPromise = new Promise((resolve, rejectPromise) => {
+      resolveResult = resolve;
+      rejectResult = rejectPromise;
+    });
+    pending.set(requestKey, {
+      activationReceipt: null,
+      envelope,
+      phase: "ACTIVATING",
+      reject: rejectResult,
+      resolve: resolveResult,
+      result: null,
+      ready: null,
+      timer: null
+    });
+    let response;
+    try {
+      response = await Promise.race([
+        activationRpc(envelope),
+        new Promise((_, rejectPromise) => setTimeout(
+          () => rejectPromise(new Error(
+            "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_ACK_TIMEOUT"
+          )),
+          activationTimeoutMilliseconds
+        ))
+      ]);
+    } catch (cause) {
+      pending.get(requestKey)?.ready?.reject(new Error(
+        "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_ACK_REQUIRED"
+      ));
+      pending.delete(requestKey);
+      throw cause;
+    }
+    let activationReceipt;
+    try {
+      activationReceipt = validateIntegratedLiveDrillProviderActivationReceipt(
+        response?.activationReceipt
+      );
+      requireCondition(
+        canonicalJson(response) === canonicalJson({ activationReceipt }),
+        "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_RESPONSE_REJECTED"
+      );
+      requireCondition(
+        activationReceipt.activationRequestSha256 === requestKey,
+        "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_RESPONSE_REJECTED"
+      );
+    } catch (cause) {
+      pending.get(requestKey)?.ready?.reject(new Error(
+        "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_ACK_REQUIRED"
+      ));
+      pending.delete(requestKey);
+      throw cause;
+    }
+    const waiting = pending.get(requestKey);
+    requireCondition(
+      waiting !== undefined,
+      "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_RESPONSE_REJECTED"
+    );
+    waiting.activationReceipt = activationReceipt;
+    waiting.phase = "ACTIVATION_ACKNOWLEDGED";
+    if (waiting.ready !== null) {
+      if (canonicalJson(waiting.ready.activationReceipt) !==
+          canonicalJson(activationReceipt)) {
+        waiting.ready.reject(new Error(
+          "INTEGRATED_LIVE_DRILL_PROVIDER_READY_REJECTED"
+        ));
+        pending.delete(requestKey);
+        waiting.reject(new Error(
+          "INTEGRATED_LIVE_DRILL_PROVIDER_READY_REJECTED"
+        ));
+        return resultPromise;
+      }
+      waiting.ready.resolve(Object.freeze({
+        activationReceiptSha256: activationReceipt.receiptSha256,
+        disposition: "PROCEED_ONCE"
+      }));
+      waiting.ready = null;
+      waiting.phase = "PROCEED_GRANTED";
+    }
+    if (waiting.result !== null) {
+      const accepted = validateIntegratedLiveDrillProviderResult(
+        waiting.result,
+        { activationReceipt }
+      );
+      pending.delete(requestKey);
+      waiting.resolve(accepted);
+      return resultPromise;
+    }
+    waiting.timer = setTimeout(() => {
+      pending.delete(requestKey);
+      if (waiting.ready !== null) {
+        waiting.ready.reject(new Error(
+          "INTEGRATED_LIVE_DRILL_PROVIDER_RESULT_TIMEOUT_DO_NOT_RETRY"
+        ));
+        waiting.ready = null;
+      }
+      waiting.timer = null;
+      waiting.phase = "TIMED_OUT_BLOCKED";
+      waiting.reject(new Error(
+        "INTEGRATED_LIVE_DRILL_PROVIDER_RESULT_TIMEOUT_DO_NOT_RETRY"
+      ));
+    }, timeoutMilliseconds);
+    return resultPromise;
+  }
+  async function providerReady(value) {
+    const accepted = validateIntegratedLiveDrillProviderReady(value);
+    const waiting = pending.get(accepted.activationRequestSha256);
+    requireCondition(
+      waiting !== undefined &&
+        ["ACTIVATING", "ACTIVATION_ACKNOWLEDGED"].includes(waiting.phase) &&
+        waiting.ready === null,
+      "INTEGRATED_LIVE_DRILL_PROVIDER_READY_UNSOLICITED"
+    );
+    if (waiting.activationReceipt !== null) {
+      requireCondition(
+        canonicalJson(accepted.activationReceipt) ===
+          canonicalJson(waiting.activationReceipt),
+        "INTEGRATED_LIVE_DRILL_PROVIDER_READY_REJECTED"
+      );
+      waiting.phase = "PROCEED_GRANTED";
+      return Object.freeze({
+        activationReceiptSha256: accepted.activationReceipt.receiptSha256,
+        disposition: "PROCEED_ONCE"
+      });
+    }
+    return new Promise((resolve, rejectPromise) => {
+      waiting.ready = Object.freeze({
+        activationReceipt: accepted.activationReceipt,
+        reject: rejectPromise,
+        resolve
+      });
+    });
+  }
+  async function providerResult(value) {
+    const requestKey = value?.activationRequestSha256;
+    const waiting = pending.get(requestKey);
+    requireCondition(
+      waiting !== undefined && waiting.phase === "PROCEED_GRANTED",
+      "INTEGRATED_LIVE_DRILL_PROVIDER_RESULT_UNSOLICITED"
+    );
+    if (waiting.activationReceipt === null) {
+      waiting.result = value;
+      return Object.freeze({ accepted: true });
+    }
+    const accepted = validateIntegratedLiveDrillProviderResult(value, {
+      activationReceipt: waiting.activationReceipt
+    });
+    clearTimeout(waiting.timer);
+    pending.delete(requestKey);
+    waiting.resolve(accepted);
+    return Object.freeze({ accepted: true });
+  }
+  return Object.freeze({ activateExchange, providerReady, providerResult });
+}
+
 export const __test = Object.freeze({
   TRANSCRIPT_NAME,
   TRANSCRIPT_SCHEMA,
-  derive
+  derive,
+  validateRequest
 });

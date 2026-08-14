@@ -314,6 +314,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md",
     role: "IMMUTABLE_DEPLOYMENT_ATTESTATION_BOUNDARY"
   }),
+  "atomic-create-only-file": Object.freeze({
+    path: "src/cloud/atomic-create-only-file.js",
+    role: "OWNER_ONLY_ATOMIC_CREATE_OR_EXACT_REUSE_PRIMITIVE"
+  }),
   "integrated-live-drill-harness": Object.freeze({
     path: "src/cloud/integrated-live-drill.js",
     role: "INTEGRATED_PROVIDER_DRILL_EVIDENCE_CONTRACT"
@@ -378,9 +382,21 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/runtime-entries/integrated-live-drill-dispatch-broker.js",
     role: "CONTENT_ADDRESSED_DISPATCH_BROKER_ENTRY"
   }),
+  "integrated-live-drill-runtime-provider-activation-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-provider-activation.js",
+    role: "CONTENT_ADDRESSED_PROVIDER_ACTIVATION_ENTRY"
+  }),
+  "integrated-live-drill-runtime-provider-exchange-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-provider-exchange.js",
+    role: "CONTENT_ADDRESSED_PROVIDER_EXCHANGE_ENTRY"
+  }),
   "integrated-live-drill-runtime-provider-operation-entry": Object.freeze({
     path: "scripts/runtime-entries/integrated-live-drill-provider-operation.js",
     role: "CONTENT_ADDRESSED_PROVIDER_OPERATION_ENTRY"
+  }),
+  "integrated-live-drill-runtime-provider-terminalizer-entry": Object.freeze({
+    path: "scripts/runtime-entries/integrated-live-drill-provider-terminalizer.js",
+    role: "CONTENT_ADDRESSED_PROVIDER_TERMINALIZER_ENTRY"
   }),
   "integrated-live-drill-runtime-dvi-entry": Object.freeze({
     path: "scripts/runtime-entries/integrated-live-drill-dvi.js",
@@ -463,6 +479,34 @@ const EXPECTED_SURFACES = Object.freeze({
   "integrated-live-drill-provider-operation-tests": Object.freeze({
     path: "test/provider-operation-broker.test.js",
     role: "ONE_REDEMPTION_AMBIGUITY_AND_NO_REDISPATCH_VERIFICATION"
+  }),
+  "integrated-live-drill-provider-activation": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-activation.js",
+    role: "DATABASE_ACKNOWLEDGED_PROVIDER_ACTIVATION_CONTRACT"
+  }),
+  "integrated-live-drill-provider-activation-runner": Object.freeze({
+    path: "scripts/gate1-integrated-live-drill-provider-activation.js",
+    role: "SYSTEMD_DATABASE_ACTIVATION_RUNNER"
+  }),
+  "integrated-live-drill-provider-exchange": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-exchange.js",
+    role: "ONE_SHOT_PROVIDER_BEARER_EXCHANGE"
+  }),
+  "integrated-live-drill-provider-exchange-runner": Object.freeze({
+    path: "scripts/gate1-integrated-live-drill-provider-exchange.js",
+    role: "SYSTEMD_ONE_SHOT_PROVIDER_EXCHANGE_RUNNER"
+  }),
+  "integrated-live-drill-provider-terminalization": Object.freeze({
+    path: "src/cloud/integrated-live-drill-provider-terminalization.js",
+    role: "DATABASE_TIME_PROVIDER_TERMINALIZATION_CONTRACT"
+  }),
+  "integrated-live-drill-provider-terminalizer-runner": Object.freeze({
+    path: "scripts/gate1-integrated-live-drill-provider-terminalizer.js",
+    role: "SYSTEMD_DATABASE_TERMINALIZATION_RUNNER"
+  }),
+  "integrated-live-drill-provider-activation-terminalization-tests": Object.freeze({
+    path: "test/provider-dispatch-activation-terminalization.test.js",
+    role: "ACTIVATION_TERMINALIZATION_AUTHORITY_AND_RACE_VERIFICATION"
   }),
   "integrated-live-drill-provider-finalization": Object.freeze({
     path: "src/cloud/integrated-live-drill-provider-finalization.js",
@@ -554,6 +598,34 @@ const EXPECTED_SURFACES = Object.freeze({
   "integrated-live-drill-systemd-provider-operation-socket": Object.freeze({
     path: "infra/systemd/prooftoact-integrated-live-drill-provider-operation@.socket",
     role: "ONE_SHOT_PROVIDER_OPERATION_IPC_SOCKET"
+  }),
+  "integrated-live-drill-systemd-provider-activation-unit": Object.freeze({
+    path: "infra/systemd/prooftoact-integrated-live-drill-provider-activation@.service",
+    role: "DATABASE_ACTIVATION_SERVICE_UNIT"
+  }),
+  "integrated-live-drill-systemd-provider-activation-socket": Object.freeze({
+    path: "infra/systemd/prooftoact-integrated-live-drill-provider-activation@.socket",
+    role: "OPERATION_OWNED_ACTIVATION_SOCKET"
+  }),
+  "integrated-live-drill-systemd-provider-callback-socket": Object.freeze({
+    path: "infra/systemd/prooftoact-integrated-live-drill-provider-callback@.socket",
+    role: "PROVIDER_OWNED_CALLBACK_SOCKET"
+  }),
+  "integrated-live-drill-systemd-provider-exchange-unit": Object.freeze({
+    path: "infra/systemd/prooftoact-integrated-live-drill-provider-exchange@.service",
+    role: "ONE_SHOT_PROVIDER_BEARER_SERVICE_UNIT"
+  }),
+  "integrated-live-drill-systemd-provider-terminalizer-unit": Object.freeze({
+    path: "infra/systemd/prooftoact-integrated-live-drill-provider-terminalizer@.service",
+    role: "DATABASE_TIME_TERMINALIZER_SERVICE_UNIT"
+  }),
+  "integrated-live-drill-systemd-provider-terminalizer-timer": Object.freeze({
+    path: "infra/systemd/prooftoact-integrated-live-drill-provider-terminalizer@.timer",
+    role: "DATABASE_TIME_TERMINALIZATION_TIMER"
+  }),
+  "integrated-live-drill-sysusers": Object.freeze({
+    path: "infra/sysusers.d/prooftoact.conf",
+    role: "SEVEN_IDENTITY_SYSTEMD_SYSUSERS_CONTROL"
   }),
   "integrated-live-drill-systemd-reconcile-unit": Object.freeze({
     path: "infra/systemd/prooftoact-integrated-live-drill-reconcile@.service",
@@ -662,6 +734,26 @@ const EXPECTED_SURFACES = Object.freeze({
   "provider-dispatch-finalize-control": Object.freeze({
     path: "src/cloud/provider-dispatch-finalize-control.js",
     role: "OWNER_BOUND_PROVIDER_FINALIZATION_CLIENT"
+  }),
+  "provider-dispatch-activate-control": Object.freeze({
+    path: "src/cloud/provider-dispatch-activate-control.js",
+    role: "ACTIVATE_ONLY_PROVIDER_DISPATCH_CLIENT"
+  }),
+  "provider-dispatch-reconciliation-input": Object.freeze({
+    path: "src/cloud/provider-dispatch-reconciliation-input.js",
+    role: "SHARED_STRICT_PROVIDER_RECONCILIATION_INPUT"
+  }),
+  "provider-dispatch-resolve-database": Object.freeze({
+    path: "src/cloud/provider-dispatch-resolve-database.js",
+    role: "RESOLVE_ONLY_DATABASE_CONNECTION_FACTORY"
+  }),
+  "provider-dispatch-result": Object.freeze({
+    path: "src/cloud/provider-dispatch-result.js",
+    role: "SHARED_STRICT_PROVIDER_DISPATCH_RESULT_VALIDATOR"
+  }),
+  "provider-dispatch-terminalize-control": Object.freeze({
+    path: "src/cloud/provider-dispatch-terminalize-control.js",
+    role: "TERMINALIZE_ONLY_PROVIDER_DISPATCH_CLIENT"
   }),
   "provider-dispatch-resolver": Object.freeze({
     path: "src/cloud/provider-dispatch-resolver.js",
@@ -1144,6 +1236,9 @@ const SOURCE_MARKERS = Object.freeze({
     "attemptOnlyFields",
     "databaseOwnedFields",
     "AUTHORITY_DVI_PROPOSAL_TIME",
+    "dispatchPayloadFor",
+    "AUTHORITY_DISPATCH_PAYLOAD_SHAPE",
+    "AUTHORITY_DISPATCH_PAYLOAD_TEXT",
     "logicalAuthorityKeySha256",
     "authorizationBindingSha256"
   ]),
@@ -1156,6 +1251,8 @@ const SOURCE_MARKERS = Object.freeze({
     "CockroachDB v26.2 execution remains pending"
   ]),
   "authority-identity-tests": Object.freeze([
+    "dispatch payload canonicalization accepts only the bounded domain schema",
+    "dispatch payload canonicalization rejects ambiguous or unsafe values",
     "attempt and proposal context cannot enter logical action identity",
     "only an explicit authorization epoch remints a logical authority key",
     "a new proposal changes authorization binding but not the authority key",
@@ -1242,7 +1339,8 @@ const SOURCE_MARKERS = Object.freeze({
   "authority-runtime-identity-tests": Object.freeze([
     "derives all identity digests without a client epoch",
     "transport replacement cannot remint logical action or proposal identity",
-    "Unicode-key insertion order",
+    "allowed-key insertion order",
+    "rejects fields outside the domain schema",
     "AUTHORITY_DVI_SELECTION_MISMATCH"
   ]),
   "authority-runtime-reconciliation-tests": Object.freeze([
@@ -1278,6 +1376,8 @@ const SOURCE_MARKERS = Object.freeze({
     "waitForProposalExpiryForTest",
     "unknownDatabaseResult({",
     "requiresFreshAuthorization",
+    "dispatchPayloadFor(input.payload)",
+    "Object.hasOwn(input, \"payload\")",
     "payload_canonical STRING NOT NULL",
     "const exactOutbox =",
     "canonicalJson(state.outbox_payload)",
@@ -1824,11 +1924,18 @@ const SOURCE_MARKERS = Object.freeze({
     "expectedPrimaryGuards",
     "sharedAuthorizerGuard",
     "schemaDefaultLock",
+    "recovery source resolver binds identity while separating policy domains",
     "direct authority replay currentness requires the exact outbox payload",
     "g1_authority_receipt_current_v2",
     "new QueryReadyBarrier",
     "post-COMMIT ambiguity cannot enter a rollback branch",
-    "proposal\\.payload = outbox\\.payload"
+    "proposal\\.payload = outbox\\.payload",
+    "bootstrap fails closed on legacy DVI payload identities before installing functions",
+    "DVI proposal payload identity uses one exact compact dispatch schema",
+    "protected-effect SQL snapshots one exact authority before a value-only insert",
+    "const retainedPostInsertClauses = Object.freeze([",
+    "assert.doesNotMatch(insertClause, /\\bSELECT\\b/u)",
+    "body.match(/v_database_now := clock_timestamp\\(\\);/gu)?.length"
   ]),
   "database-security-posture": Object.freeze([
     "DATABASE_POSTURE_BOOTSTRAP_SESSION_UNSAFE",
@@ -1853,7 +1960,7 @@ const SOURCE_MARKERS = Object.freeze({
     "FROM [SHOW GRANTS ON ROLE]",
     "FROM [SHOW SYSTEM GRANTS]",
     "WHERE database_name = current_database()",
-    "FROM crdb_internal.default_privileges",
+    "FROM [SHOW DEFAULT PRIVILEGES]",
     "FROM [SHOW DATABASES]",
     "collectClusterManagedGrantPosture",
     "canonicalRoutineIdentity",
@@ -2038,8 +2145,8 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "release-build-receipt-contract": Object.freeze([
     "tideproof.gate2-build.v9",
-    "GATE2_BUILD_CONTROL_INPUT_COUNT = 65",
-    "GATE2_BUILD_OUTPUT_COUNT = 21"
+    "GATE2_BUILD_CONTROL_INPUT_COUNT = 83",
+    "GATE2_BUILD_OUTPUT_COUNT = 24"
   ]),
   "verified-node-bundle-launcher": Object.freeze([
     "tideproof.integrated-live-drill-runtime-manifest.v1",
@@ -2066,6 +2173,17 @@ const SOURCE_MARKERS = Object.freeze({
     "Accepted semantic-monitoring finding",
     "CloudWatch Embedded Metric Format",
     "alarm state transition"
+  ]),
+  "atomic-create-only-file": Object.freeze([
+    "readExactOwnedFile",
+    "publishOrReadExactOwnedFile",
+    "publishOrReadExactOwnedFile",
+    "PUBLICATION_SETTLE_ATTEMPTS",
+    "PUBLICATION_ABSENT_CAUSE",
+    "PUBLICATION_SETTLE_CAUSE",
+    "hasPublishedTemporaryLink",
+    "unlinkTemporaryIfPresent",
+    "fs.constants.O_NOFOLLOW"
   ]),
   "integrated-live-drill-harness": Object.freeze([
     "INTEGRATED_LIVE_DRILL_SCHEMA",
@@ -2253,7 +2371,7 @@ const SOURCE_MARKERS = Object.freeze({
     "--packet"
   ]),
   "integrated-live-drill-process-boundary-verifier": Object.freeze([
-    "tideproof.highwater-drill-process-boundary-verification.v4",
+    "tideproof.highwater-drill-process-boundary-verification.v5",
     "verifyIntegratedLiveDrillProcessBoundaries",
     "FINALIZER_FORBIDDEN_PATH_PATTERNS",
     "RECONCILER_FORBIDDEN_PATH_PATTERNS",
@@ -2262,6 +2380,9 @@ const SOURCE_MARKERS = Object.freeze({
     "providerFinalizerEnvironmentRequired: false",
     "providerWorkerEnvironmentRequired: false",
     "name: \"provider-operation\"",
+    "name: \"provider-activation\"",
+    "name: \"provider-exchange\"",
+    "name: \"provider-terminalizer\"",
     "name: \"reconciler\"",
     "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_BUILTIN_REJECTED",
     "INTEGRATED_LIVE_DRILL_PROCESS_BOUNDARY_PACKAGE_REJECTED",
@@ -2307,9 +2428,21 @@ const SOURCE_MARKERS = Object.freeze({
     "../gate1-integrated-live-drill-dispatch-broker.js",
     "INTEGRATED_LIVE_DRILL_DISPATCH_BROKER_UNKNOWN"
   ]),
+  "integrated-live-drill-runtime-provider-activation-entry": Object.freeze([
+    "../gate1-integrated-live-drill-provider-activation.js",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_ACTIVATION_UNKNOWN"
+  ]),
+  "integrated-live-drill-runtime-provider-exchange-entry": Object.freeze([
+    "../gate1-integrated-live-drill-provider-exchange.js",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EXCHANGE_UNKNOWN"
+  ]),
   "integrated-live-drill-runtime-provider-operation-entry": Object.freeze([
     "../gate1-integrated-live-drill-provider-operation-broker.js",
     "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_UNKNOWN"
+  ]),
+  "integrated-live-drill-runtime-provider-terminalizer-entry": Object.freeze([
+    "../gate1-integrated-live-drill-provider-terminalizer.js",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_TERMINALIZATION_UNKNOWN"
   ]),
   "integrated-live-drill-runtime-dvi-entry": Object.freeze([
     "../gate1-admissible-vector.js",
@@ -2400,7 +2533,7 @@ const SOURCE_MARKERS = Object.freeze({
     "preparationContextStrictlyAllowlisted: true",
     "normalizeIntegratedLiveDrillProviderContext",
     "MAX_PROVIDER_DISPATCH_AUTHORIZATION_MS",
-    "fs.constants.O_EXCL",
+    "publishOrReadExactOwnedFile",
     "fs.constants.O_NOFOLLOW",
     "after.nlink === 1",
     "named.nlink === 1",
@@ -2509,14 +2642,31 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "integrated-live-drill-execution-fence-tests": Object.freeze([
     "real worker contenders have one create-only execution-attempt winner",
-    "created.filter(Boolean).length, 1"
+    "created.filter(Boolean).length, 1",
+    "published temporary-link cleanup tolerates an exact concurrent unlink",
+    "simulated concurrent unlink",
+    "exact read settles only a winner linked after cleanup observed absence",
+    "simulated pre-publication absence",
+    "rootAssertions, 4",
+    "exact read settles a two-link descriptor after peer cleanup",
+    "peerCleanupSimulated",
+    "published temporary-link cleanup rejects every non-ENOENT failure",
+    "simulated cleanup I/O failure",
+    "exact published-file read does not retry transient I/O failure",
+    "simulated exact-read I/O failure",
+    "post-open final disappearance is fatal rather than initial absence",
+    "simulated post-open disappearance",
+    "conflicting two-link file never enters publication settle retry",
+    "simulated conflict cleanup absence",
+    "exact owned-file primitive rejects an empty expected file",
+    "exact read rejects a new matching hardlink after one-link open"
   ]),
   "integrated-live-drill-provider-operation-broker": Object.freeze([
     "tideproof.provider-operation-broker-transcript.v1",
     "INTEGRATED_LIVE_DRILL_PROVIDER_OPERATION_ALREADY_REDEEMED",
     "CREDENTIAL_REDEEMED",
     "persistTranscript",
-    "markUnknown"
+    "activateExchange"
   ]),
   "integrated-live-drill-provider-operation-client": Object.freeze([
     "tideproof.provider-operation-broker-request.v1",
@@ -2528,12 +2678,62 @@ const SOURCE_MARKERS = Object.freeze({
     "readSystemdCredential",
     "ProviderDispatchRedeemControl",
     "ProviderDispatchFinalizeControl",
-    "name: \"mcp-api-key\""
+    "name: \"execution-capability\""
   ]),
   "integrated-live-drill-provider-operation-tests": Object.freeze([
-    "concurrent socket clients cause one redemption and one provider sequence",
-    "restart after credential redemption without a transcript marks unknown and never calls provider",
-    "counter.calls, 0"
+    "READY before activation ACK blocks and then exactly one result resolves",
+    "result timeout removes pending state and refuses every late result",
+    "already redeemed duplicate never terminalizes beneath an activation receipt",
+    "PROCEED delayed past activation age creates no fence and makes no provider call",
+    "exchange durably publishes one result and create-only fence blocks restart",
+    "assert.equal(unknowns, 0)",
+    "assert.equal(counter.calls, 0)",
+    "assert.equal(counter.calls, calls)"
+  ]),
+  "integrated-live-drill-provider-activation": Object.freeze([
+    "tideproof.provider-activation-request.v1",
+    "tideproof.provider-activation-receipt.v1",
+    "tideproof.provider-exchange-ready.v1",
+    "tideproof.provider-exchange-result.v1",
+    "runIntegratedLiveDrillProviderActivation"
+  ]),
+  "integrated-live-drill-provider-activation-runner": Object.freeze([
+    "expectedComponent: \"provider-activation\"",
+    "ProviderDispatchActivateControl",
+    "name: \"provider-activate-database-url\"",
+    "provider-exchange-input.json"
+  ]),
+  "integrated-live-drill-provider-exchange": Object.freeze([
+    "PROVIDER_ACTIVATION_MAX_AGE_MILLISECONDS",
+    "PROCEED_ONCE",
+    "tideproof.provider-exchange-consumption-fence.v1",
+    "publishOrReadExactOwnedFile",
+    "RESULT_NAME"
+  ]),
+  "integrated-live-drill-provider-exchange-runner": Object.freeze([
+    "expectedComponent: \"provider-exchange\"",
+    "name: \"mcp-api-key\"",
+    "provider-exchange-input",
+    "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_CALLBACK_SOCKET"
+  ]),
+  "integrated-live-drill-provider-terminalization": Object.freeze([
+    "tideproof.highwater-drill-provider-terminalization.v1",
+    "terminalizeIntegratedLiveDrillProviderDispatch",
+    "TERMINAL_EXPIRED",
+    "TERMINAL_UNKNOWN_DO_NOT_ACT"
+  ]),
+  "integrated-live-drill-provider-terminalizer-runner": Object.freeze([
+    "expectedComponent: \"provider-terminalizer\"",
+    "ProviderDispatchTerminalizeControl",
+    "name: \"provider-terminalize-database-url\""
+  ]),
+  "integrated-live-drill-provider-activation-terminalization-tests": Object.freeze([
+    "activation authorizes credential delivery only for one fresh database grant",
+    "effect-then-ACK-loss and conflicting activation replay can never deliver",
+    "database time exactly at expiry cannot authorize credential delivery",
+    "terminalization is exact-idempotent for immutable terminal states",
+    "terminalizer retries transient database failure but rejects identity and SQL denials",
+    "activation and terminalization transitive import closures exclude provider and raw evidence code"
   ]),
   "integrated-live-drill-provider-finalization": Object.freeze([
     "tideproof.highwater-drill-provider-component-receipt.v2",
@@ -2567,7 +2767,7 @@ const SOURCE_MARKERS = Object.freeze({
     "Reflect.ownKeys(environment)",
     "environment === process.env",
     "FINALIZER_ENVIRONMENT_NAMES",
-    "fs.constants.O_EXCL",
+    "publishOrReadExactOwnedFile",
     "fs.constants.O_NOFOLLOW",
     "fs.fsyncSync",
     "providerBacked: false",
@@ -2608,14 +2808,14 @@ const SOURCE_MARKERS = Object.freeze({
     "orchestration boundaries reject accessors, exotic keys, prototypes, and coercible scalars before hashing"
   ]),
   "integrated-live-drill-provider-reconciliation": Object.freeze([
-    "tideproof.highwater-drill-provider-reconciliation.v2",
+    "tideproof.highwater-drill-provider-reconciliation.v3",
     "providerApiCredentialPresent: false",
     "PRIMARY_PROVIDER_RECONCILE_DATABASE_URL",
     "!Object.hasOwn(environment, \"MCP_API_KEY\")",
     "ProviderDispatchResolver",
     "reconcileIntegratedLiveDrillProviderDispatchControl",
-    "resolved = await resolver.resolve(binding)",
-    "validated.executionGrant.state === \"EXECUTING\"",
+    "return await resolver.resolve(binding)",
+    "Object.values(PROVIDER_DISPATCH_CONTROL_STATES).includes(value.state)",
     "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED"
   ]),
   "integrated-live-drill-provider-reconciliation-runner": Object.freeze([
@@ -2625,10 +2825,11 @@ const SOURCE_MARKERS = Object.freeze({
     "name: \"provider-reconcile-database-url\""
   ]),
   "integrated-live-drill-provider-reconciliation-tests": Object.freeze([
-    "reconciliation environment carries resolve-only authority without provider API authority",
-    "reconciliation receipt is exact, non-accepting, and capability-reduced",
-    "audit-only reconciliation observes with a resolver that has no mutation surface",
-    "audit-only reconciliation never mutates an executing row with durable evidence"
+    "reconciliation environment carries only resolve authority",
+    "sanitized reconciliation input is canonical, digest-bound, and secret-free",
+    "reconciliation receipt accepts every canonical resolver state",
+    "audit-only reconciliation exposes no mutation surface",
+    "run reconciliation reports only database-observed state and digests"
   ]),
   "integrated-live-drill-provider-supervisor-runner": Object.freeze([
     "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_MODE",
@@ -2676,28 +2877,37 @@ const SOURCE_MARKERS = Object.freeze({
     "CREDENTIALS_DIRECTORY"
   ]),
   "integrated-live-drill-root-stage-installer": Object.freeze([
-    "tideproof.integrated-live-drill-root-stage.v4",
+    "tideproof.integrated-live-drill-root-stage.v5",
     "fs.constants.O_NOFOLLOW",
     "fs.constants.O_EXCL",
-    "fs.renameSync(temporaryRoot, finalRoot)",
+    "fileSystem.linkSync(temporary, filePath)",
+    "unlinkPublishedTemporaryIfPresent",
+    "systemdSysusersExecuted: true",
     "daemon-reload"
   ]),
   "integrated-live-drill-root-stage-verifier": Object.freeze([
-    "tideproof.integrated-live-drill-root-stage.v4",
+    "tideproof.integrated-live-drill-root-stage.v5",
     "observedAncestors",
+    "validateAccountRecords",
+    "observedStateDirectories",
     "receipt.unitFiles.length === expectedUnits.length",
     "receipt.verifierFiles.length === expectedVerifier.length"
   ]),
   "integrated-live-drill-root-stage-tests": Object.freeze([
     "root installer publishes one exact stage and independent non-root verification rejects drift",
-    "receipt.unitFiles.length, 8",
+    "concurrent-cleanup.json",
+    "cleanup-io-error.json",
+    "receipt.unitFiles.length, 14",
     "assert.notEqual(wrongMode.status, 0)"
   ]),
   "integrated-live-drill-systemd-boundary-verifier": Object.freeze([
     "EXACT_UNSET_CAPABILITIES",
     "LoadCredential=mcp-api-key",
     "LoadCredential=provider-reconcile-database-url",
-    "units: Object.freeze"
+    "units: Object.freeze",
+    "provider-activation@.service",
+    "provider-exchange@.service",
+    "provider-terminalizer@.timer"
   ]),
   "integrated-live-drill-systemd-stage-verify-unit": Object.freeze([
     "User=prooftoact",
@@ -2725,13 +2935,49 @@ const SOURCE_MARKERS = Object.freeze({
     "RestrictAddressFamilies=AF_UNIX"
   ]),
   "integrated-live-drill-systemd-provider-operation-unit": Object.freeze([
-    "User=prooftoact-provider",
-    "LoadCredential=mcp-api-key",
+    "User=prooftoact-operation",
     "LoadCredential=provider-redeem-database-url"
   ]),
   "integrated-live-drill-systemd-provider-operation-socket": Object.freeze([
     "ListenStream=/run/prooftoact/%i/provider-operation.sock",
     "SocketMode=0600"
+  ]),
+  "integrated-live-drill-systemd-provider-activation-unit": Object.freeze([
+    "User=prooftoact-activate",
+    "LoadCredential=provider-activate-database-url",
+    "provider-activation"
+  ]),
+  "integrated-live-drill-systemd-provider-activation-socket": Object.freeze([
+    "ListenStream=/run/prooftoact/%i/provider-activation.sock",
+    "SocketUser=prooftoact-operation",
+    "SocketMode=0600"
+  ]),
+  "integrated-live-drill-systemd-provider-callback-socket": Object.freeze([
+    "ListenStream=/run/prooftoact/%i/provider-callback.sock",
+    "SocketUser=prooftoact-provider",
+    "SocketMode=0600"
+  ]),
+  "integrated-live-drill-systemd-provider-exchange-unit": Object.freeze([
+    "User=prooftoact-provider",
+    "LoadCredential=mcp-api-key",
+    "provider-exchange"
+  ]),
+  "integrated-live-drill-systemd-provider-terminalizer-unit": Object.freeze([
+    "User=prooftoact-terminalize",
+    "LoadCredential=provider-terminalize-database-url",
+    "provider-terminalizer"
+  ]),
+  "integrated-live-drill-systemd-provider-terminalizer-timer": Object.freeze([
+    "OnUnitInactiveSec=60s",
+    "AccuracySec=1s",
+    "Persistent=no"
+  ]),
+  "integrated-live-drill-sysusers": Object.freeze([
+    "u prooftoact-operation",
+    "u prooftoact-activate",
+    "u prooftoact-provider",
+    "u prooftoact-terminalize",
+    "u prooftoact-reconcile"
   ]),
   "integrated-live-drill-systemd-reconcile-unit": Object.freeze([
     "User=prooftoact-reconcile",
@@ -2872,6 +3118,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "dvi-proposal-authorization": Object.freeze([
     "FROM tp_api.g1_authorize_dvi_proposal_v1(",
+    "dispatchPayloadFor(logicalAction.payload)",
     "normalizedDviAuthorizationFor({",
     "logicalAuthorityKeyFor({",
     "authorizationBindingFor({",
@@ -2880,6 +3127,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "dvi-proposal-authorization-tests": Object.freeze([
     "least-privilege runtime accepts only a database-derived proposal identity",
+    "dispatch payload violations fail before any database query",
     "selection mismatch returns no runtime authorization",
     "runtime rejects a database row with a forged logical binding"
   ]),
@@ -2924,6 +3172,8 @@ const SOURCE_MARKERS = Object.freeze({
     "SECURITY DEFINER",
     "PRIMARY_ROLE_GRANT_POLICIES",
     "lockInitialPublicCapability(client, bootstrapOwner)",
+    "assertDviProposalPayloadCompatibility(client)",
+    "DVI_PROPOSAL_PAYLOAD_CANONICALIZATION_INCOMPATIBLE",
     "clusterPreflightPostureDigest: clusterPreflight.postureDigest",
     "lockPublicRoutineDefaults(client, principals, schemas = [])",
     "ALTER DEFAULT PRIVILEGES ${scope} REVOKE EXECUTE ON FUNCTIONS FROM public",
@@ -2947,7 +3197,7 @@ const SOURCE_MARKERS = Object.freeze({
     "collectValidatedPosture(",
     "ALTER ROLE ${role} WITH NOLOGIN",
     "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA tp_private, tp_ledger, tp_api FROM ${principal}",
-    "GRANT USAGE ON SCHEMA tp_api TO ${role}",
+    "GRANT USAGE ON SCHEMA ${schemaName} TO ${role}",
     "FROM tp_authorizer_role",
     "FROM tp_gate2_authorizer_role",
     "TO tp_gate2_authorizer_role",
@@ -2958,9 +3208,20 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_vector_set_v1",
     "tp_api.g1_resolve_recovery_audit_event_v1",
     "tp_api.g1_resolve_recovery_source_receipt_v2",
-    "jsonb_agg(jsonb_build_object(",
-    "jsonb_array_elements(v_candidate.conflict_windows)",
-    "v_candidate.evidence_valid_until <= v_database_now",
+    "proposal.policy_version = 'g1-admissibility-v2'",
+    "receipt.policy_version = 'gate1-policy-v2'",
+    "evidence.claim_key AS evidence_claim_key",
+    "evidence.claim_value AS evidence_claim_value",
+    "IF v_candidate_tenant_id IS NULL OR v_candidate_incident_id IS NULL OR v_candidate_evidence_id IS NULL OR v_candidate_agency IS NULL OR v_candidate_evidence_claim_key IS NULL OR v_candidate_evidence_claim_value IS NULL THEN RETURN; END IF;",
+    "v_candidate_conflict_windows := '[]'::JSONB; v_candidate_conflict_count := 0; v_candidate_conflict_snapshot_valid := true; OPEN v_candidate_conflict_cursor NO SCROLL FOR SELECT other.evidence_id, other.observed_at, other.valid_from, other.valid_until FROM tp_private.g1_evidence AS other",
+    "other.claim_key = v_candidate_evidence_claim_key",
+    "other.claim_value <> v_candidate_evidence_claim_value",
+    "other.agency_scope IN (v_candidate_agency, '*')",
+    "FETCH v_candidate_conflict_cursor INTO v_candidate_conflict_evidence_id, v_candidate_conflict_observed_at, v_candidate_conflict_valid_from, v_candidate_conflict_valid_until; EXIT WHEN v_candidate_conflict_evidence_id IS NULL;",
+    "IF v_candidate_conflict_count > 10000 OR v_candidate_conflict_observed_at IS NULL OR v_candidate_conflict_valid_from IS NULL OR v_candidate_conflict_valid_until IS NULL THEN v_candidate_conflict_snapshot_valid := false; EXIT; END IF;",
+    "CLOSE v_candidate_conflict_cursor; IF NOT v_candidate_conflict_snapshot_valid THEN RETURN; END IF; v_database_now := clock_timestamp();",
+    "WHILE v_candidate_conflict_index < jsonb_array_length(v_candidate_conflict_windows) LOOP v_candidate_conflict_window := v_candidate_conflict_windows->v_candidate_conflict_index;",
+    "v_candidate_evidence_valid_until <= v_database_now",
     "tideproof.primary-function-sql-batch.v1",
     "PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED",
     "primaryFunctionSqlBatchSha256(statements)",
@@ -2977,7 +3238,7 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_private.g1_authority_receipt_current_v2",
     "SELECT currentness.authority_current, currentness.database_now",
     "dvi_selection_request_mismatch",
-    "IF v_epoch.current_epoch = 1 THEN",
+    "IF v_epoch_current_epoch = 1 THEN",
     "'explicit_new_authorization_required'::STRING",
     "v_authorization_epoch := 1",
     "v_expected_payload_digest",
@@ -2992,11 +3253,16 @@ const SOURCE_MARKERS = Object.freeze({
     "receipt_proposal_authorization_binding_sha256 STRING",
     "observed_holder_operation_id UUID",
     "observed_fence INT8",
+    "SELECT count(*)::INT8, min(outbox.proposal_digest), min(outbox.logical_action_digest), min(outbox.authorization_epoch), min(outbox.logical_authority_key_sha256), min(outbox.authorization_binding_sha256), min(receipt.lease_expires_at), min(resource.lease_expires_at), min(proposal.expires_at) INTO v_authority_count, v_proposal_digest, v_logical_action_digest, v_authorization_epoch, v_logical_authority_key_sha256, v_authorization_binding_sha256, v_receipt_lease_expires_at, v_resource_lease_expires_at, v_proposal_expires_at",
+    "v_database_now := clock_timestamp(); IF v_authority_count <> 1 OR v_proposal_digest IS NULL OR v_receipt_lease_expires_at <= v_database_now OR v_resource_lease_expires_at <= v_database_now OR v_proposal_expires_at <= v_database_now THEN RETURN; END IF; INSERT INTO tp_ledger.g1_protected_effects AS inserted_effect",
+    "VALUES ( p_tenant_id, p_effect_key, p_operation_id, p_request_digest, v_proposal_digest, v_logical_action_digest, v_authorization_epoch, v_logical_authority_key_sha256, v_authorization_binding_sha256, p_run_id, p_incident_id, p_resource_id, p_agent_id, p_fencing_token, p_payload_digest ) ON CONFLICT DO NOTHING",
+    "v_database_now := clock_timestamp(); IF v_authority_count <> 1 OR v_receipt_lease_expires_at <= v_database_now OR v_resource_lease_expires_at <= v_database_now OR v_proposal_expires_at <= v_database_now THEN DELETE FROM tp_ledger.g1_protected_effects AS effect WHERE effect.tenant_id = p_tenant_id AND effect.effect_key = v_effect_key AND effect.operation_id = v_operation_id; RETURN; END IF; RETURN QUERY SELECT v_effect_key, v_operation_id;",
     "proposal.payload = outbox.payload",
     "sha256(proposal.payload_canonical::BYTES)"
   ]),
   "primary-security-runner": Object.freeze([
     "sqlBindingNegatives",
+    "assertSqlProbeRequestBindings",
     "TIDEPROOF_RECOVERY_PUBLISHER_KEY_SET_DIGEST",
     "assertRecoveryPublisherTrustRootWriteDeniedWithClient",
     "directTrustRootWrite",
@@ -3016,12 +3282,20 @@ const SOURCE_MARKERS = Object.freeze({
     "/nonce|capability/u.test(name)",
     "g1_resolve_recovery_source_receipt_v1",
     "g1_resolve_recovery_source_receipt_v2",
+    "const resolvedAgain = await client.query(",
+    "resolverRepeatStable: true",
     "g1_resolve_recovery_publisher_trust_root_v1",
     "payloadSubstitutionOutcome",
+    "payloadSubstitutionReason",
     "proposalAliasOutcome",
+    "proposalAliasReason",
     "DVI selection mismatch mutated authority state",
     "requestDigestRejected?.sqlstate",
+    "requestDigestRejected?.message",
     "nullIntentNonceRejected?.sqlstate",
+    "nullIntentNonceRejected?.message",
+    "database-derived authority identity mismatch",
+    "authority request identity binding mismatch",
     "tp_authorizer_user"
   ]),
   "provider-dispatch-control": Object.freeze([
@@ -3038,7 +3312,7 @@ const SOURCE_MARKERS = Object.freeze({
   "provider-dispatch-client": Object.freeze([
     "ProviderDispatchDatabaseClient",
     "validateProviderDispatchResult",
-    "RESULT_KEYS"
+    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_QUERY_REJECTED"
   ]),
   "provider-dispatch-claim-control": Object.freeze([
     "ProviderDispatchClaimControl",
@@ -3059,6 +3333,34 @@ const SOURCE_MARKERS = Object.freeze({
     "ProviderDispatchFinalizeControl",
     "g1_complete_provider_dispatch_v2",
     "g1_mark_provider_dispatch_unknown_v2"
+  ]),
+  "provider-dispatch-activate-control": Object.freeze([
+    "ProviderDispatchActivateControl",
+    "tp_api.g1_activate_provider_dispatch_v2",
+    "DELIVER_CREDENTIAL_ONCE",
+    "ACTIVATION_ALREADY_CONSUMED"
+  ]),
+  "provider-dispatch-reconciliation-input": Object.freeze([
+    "tideproof.highwater-drill-provider-reconciliation-input.v3",
+    "validateProviderDispatchReconciliationInput",
+    "providerDispatchReconciliationInputBytes"
+  ]),
+  "provider-dispatch-resolve-database": Object.freeze([
+    "tideproof-provider-dispatch-resolve",
+    "ProviderDispatchResolveDatabase",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_DATABASE_REJECTED"
+  ]),
+  "provider-dispatch-result": Object.freeze([
+    "validateProviderDispatchResult",
+    "INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_RESULT_REJECTED",
+    "mcp_result_sha256",
+    "session_close_sha256"
+  ]),
+  "provider-dispatch-terminalize-control": Object.freeze([
+    "ProviderDispatchTerminalizeControl",
+    "tp_api.g1_terminalize_provider_dispatch_v2",
+    "EXPIRED_RECORDED",
+    "ALREADY_TERMINAL"
   ]),
   "provider-dispatch-resolver": Object.freeze([
     "ProviderDispatchResolver",
@@ -3156,6 +3458,7 @@ const SOURCE_MARKERS = Object.freeze({
     "g1_resolve_recovery_audit_event_v1",
     "g1_resolve_recovery_source_receipt_v2",
     "resolveCommittedRecoverySourceReceipt",
+    "row.policy_version !== \"gate1-policy-v2\"",
     "RECOVERY_SOURCE_DVI_BINDING_INVALID",
     "selected_evidence_binding_sha256",
     "resolveCommittedRecoveryAuditEvent",
@@ -3254,7 +3557,9 @@ const SOURCE_MARKERS = Object.freeze({
     "recovery publisher rejects a signing key outside the committed root",
     "recovery publisher environment loader keeps commitment and key separate",
     "recovery publisher rejects noncanonical PKCS8 base64 padding",
-    "primary-ledger commitment rejects coordinated root commitment and key replacement"
+    "primary-ledger commitment rejects coordinated root commitment and key replacement",
+    "policy_version: \"g1-admissibility-v2\"",
+    "RECOVERY_SOURCE_RECEIPT_INVALID"
   ]),
   "recovery-publication-reconciliation-tests": Object.freeze([
     "recovery publisher resolves an exact receipt after COMMIT ACK loss",
@@ -3390,7 +3695,13 @@ const FORBIDDEN_SOURCE_MARKERS = Object.freeze({
   ]),
   "primary-security-bootstrap": Object.freeze([
     "v_authorization_epoch := v_epoch.current_epoch + 1",
-    "CREATE OR REPLACE FUNCTION tp_api.g1_transition_provider_dispatch_v1"
+    "CREATE OR REPLACE FUNCTION tp_api.g1_transition_provider_dispatch_v1",
+    "proposal.policy_version = receipt.policy_version",
+    "COALESCE(( SELECT jsonb_agg(jsonb_build_object(",
+    "SELECT COALESCE(jsonb_agg(jsonb_build_object(",
+    "FROM pg_catalog.jsonb_array_elements(v_candidate_conflict_windows)",
+    "FOR v_candidate_conflict_window IN SELECT",
+    "INSERT INTO tp_ledger.g1_protected_effects AS inserted_effect ( tenant_id, effect_key, operation_id, request_digest, proposal_digest, logical_action_digest, authorization_epoch, logical_authority_key_sha256, authorization_binding_sha256, run_id, incident_id, resource_id, agent_id, fencing_token, payload_digest ) SELECT p_tenant_id, p_effect_key, p_operation_id, p_request_digest"
   ])
 });
 

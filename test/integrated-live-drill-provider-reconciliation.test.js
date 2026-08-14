@@ -8,96 +8,166 @@ import {
   INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA,
   runIntegratedLiveDrillProviderReconciliation
 } from "../src/cloud/integrated-live-drill-provider-reconciliation.js";
-import { integratedLiveDrillCanonicalSha256 } from
-  "../src/cloud/integrated-live-drill-authorization.js";
 import {
-  INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_SCHEMA
-} from "../src/cloud/integrated-live-drill-dispatch-broker.js";
+  PROVIDER_DISPATCH_CONTROL_BINDING_SCHEMA,
+  PROVIDER_DISPATCH_CONTROL_STATES,
+  providerDispatchSha256
+} from "../src/cloud/provider-dispatch-binding.js";
+import {
+  buildProviderDispatchReconciliationInput,
+  providerDispatchReconciliationInputBytes,
+  validateProviderDispatchReconciliationInput
+} from "../src/cloud/provider-dispatch-reconciliation-input.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 
 const AUTHORIZATION_ID = "11111111-1111-4111-8111-111111111111";
 const RUN_ID = "22222222-2222-4222-8222-222222222222";
+const GRANT_ID = "33333333-3333-4333-8333-333333333333";
+const WORKER_SPEC = "e".repeat(64);
 
-function executionGrant() {
+function binding() {
   const body = Object.freeze({
     authorizationId: AUTHORIZATION_ID,
-    controlBindingSha256: "a".repeat(64),
-    executionCapabilitySha256: "b".repeat(64),
-    grantId: "33333333-3333-4333-8333-333333333333",
-    operationNonceSha256: "c".repeat(64),
-    requestSha256: "d".repeat(64),
-    schemaVersion: INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_SCHEMA,
-    state: "EXECUTING",
-    workerSpecSha256: "e".repeat(64)
+    expiresAt: "2026-08-12T17:00:00.000Z",
+    interactionId: "44444444-4444-4444-8444-444444444444",
+    issuedAt: "2026-08-12T16:00:00.000Z",
+    logicalMcpRequestSha256: "a".repeat(64),
+    providerDispatchAuthorizationSha256: "b".repeat(64),
+    providerEffectKeySha256: "c".repeat(64),
+    runId: RUN_ID,
+    schemaVersion: PROVIDER_DISPATCH_CONTROL_BINDING_SCHEMA,
+    sourceBuildIdentity: "d".repeat(64),
+    sourceCommit: "e".repeat(40),
+    tenantId: "55555555-5555-4555-8555-555555555555",
+    treeDigest: "f".repeat(40)
   });
   return Object.freeze({
     ...body,
-    receiptSha256: integratedLiveDrillCanonicalSha256(body)
+    controlBindingSha256: providerDispatchSha256(canonicalJson(body))
   });
 }
 
-function receipt() {
+function input() {
+  return buildProviderDispatchReconciliationInput({
+    binding: binding(),
+    grantId: GRANT_ID,
+    packageLockDigest: "9".repeat(64),
+    workerSpecSha256: WORKER_SPEC
+  });
+}
+
+function receipt(state = PROVIDER_DISPATCH_CONTROL_STATES.GRANTED) {
+  const completed = state === PROVIDER_DISPATCH_CONTROL_STATES.COMPLETED;
   const body = Object.freeze({
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA,
     accepted: false,
     authorizationId: AUTHORIZATION_ID,
-    controlBindingSha256: "a".repeat(64),
+    controlBindingSha256: binding().controlBindingSha256,
     databaseNow: "2026-08-12T12:00:00.000Z",
     finalReleaseReady: false,
-    mcpResultSha256: null,
-    providerCompletion: null,
+    mcpResultSha256: completed ? "6".repeat(64) : null,
     providerApiCredentialPresent: false,
     providerBacked: false,
     runId: RUN_ID,
-    sessionCloseSha256: null,
-    state: "GRANTED",
+    sessionCloseSha256: completed ? "7".repeat(64) : null,
+    state,
     status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED",
-    transitionOutcome: "RESOLVED"
+    transitionOutcome: state === PROVIDER_DISPATCH_CONTROL_STATES.ABSENT
+      ? "RESOLVED_ABSENT"
+      : "RESOLVED"
   });
   return Object.freeze({
     ...body,
-    receiptSha256: integratedLiveDrillCanonicalSha256(body)
+    receiptSha256: providerDispatchSha256(canonicalJson(body))
   });
 }
 
-test("reconciliation environment carries resolve-only authority without provider API authority", () => {
+test("reconciliation environment carries only resolve authority", () => {
   const environment = integratedLiveDrillProviderReconciliationEnvironment({
     LANG: "C",
     MCP_API_KEY: "must-not-cross-boundary",
     PRIMARY_PROVIDER_RECONCILE_DATABASE_URL:
-      "postgresql://reconcile.invalid/tideproof"
-  }, {});
+      "postgresql://reconcile.invalid/tideproof?sslmode=verify-full"
+  });
   assert.equal(environment.LANG, "C");
-  assert.deepEqual(
-    environment.PRIMARY_PROVIDER_RECONCILE_DATABASE_URL,
-    "postgresql://reconcile.invalid/tideproof"
-  );
+  assert.match(environment.PRIMARY_PROVIDER_RECONCILE_DATABASE_URL, /reconcile/u);
   assert.equal("MCP_API_KEY" in environment, false);
 });
 
-test("reconciliation receipt is exact, non-accepting, and capability-reduced", () => {
-  const value = receipt();
-  assert.deepEqual(
-    validateIntegratedLiveDrillProviderReconciliationReceipt(value, {
-      authorizationId: AUTHORIZATION_ID,
-      runId: RUN_ID
-    }),
-    value
+test("sanitized reconciliation input is canonical, digest-bound, and secret-free", () => {
+  const value = input();
+  assert.deepEqual(validateProviderDispatchReconciliationInput(value), value);
+  assert.equal(
+    providerDispatchReconciliationInputBytes(value).toString("utf8"),
+    `${canonicalJson(value)}\n`
   );
+  for (const forbidden of [
+    "context",
+    "executionCapability",
+    "executionCapabilitySha256",
+    "operationNonce",
+    "operationNonceSha256",
+    "completionCapability",
+    "rawResult",
+    "providerCompletion"
+  ]) {
+    assert.equal(canonicalJson(value).includes(forbidden), false, forbidden);
+  }
   for (const mutate of [
-    (candidate) => { candidate.providerApiCredentialPresent = true; },
-    (candidate) => { candidate.accepted = true; },
-    (candidate) => { candidate.state = "DISPATCH_GRANTED"; },
-    (candidate) => { candidate.unbound = true; }
+    (candidate) => { candidate.packageLockDigest = "8".repeat(64); },
+    (candidate) => { candidate.admission.grantId = RUN_ID; },
+    (candidate) => { candidate.context = { rawResult: "forbidden" }; }
   ]) {
     const changed = structuredClone(value);
     mutate(changed);
-    if (!Object.hasOwn(changed, "unbound")) {
-      delete changed.receiptSha256;
-      changed.receiptSha256 = integratedLiveDrillCanonicalSha256(changed);
-    }
+    assert.throws(
+      () => validateProviderDispatchReconciliationInput(changed),
+      /INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED/u
+    );
+  }
+});
+
+test("reconciliation receipt accepts every canonical resolver state", () => {
+  for (const state of Object.values(PROVIDER_DISPATCH_CONTROL_STATES)) {
+    const value = receipt(state);
+    assert.deepEqual(
+      validateIntegratedLiveDrillProviderReconciliationReceipt(value, {
+        authorizationId: AUTHORIZATION_ID,
+        runId: RUN_ID
+      }),
+      value,
+      state
+    );
+  }
+  const changed = structuredClone(receipt());
+  changed.providerApiCredentialPresent = true;
+  changed.receiptSha256 = providerDispatchSha256(canonicalJson(
+    Object.fromEntries(Object.entries(changed).filter(([key]) =>
+      key !== "receiptSha256"
+    ))
+  ));
+  assert.throws(
+    () => validateIntegratedLiveDrillProviderReconciliationReceipt(changed, {
+      authorizationId: AUTHORIZATION_ID,
+      runId: RUN_ID
+    }),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_OUTPUT_REJECTED/u
+  );
+  for (const mutate of [
+    (candidate) => { candidate.mcpResultSha256 = "1".repeat(64); },
+    (candidate) => {
+      candidate.state = "COMPLETED";
+      candidate.transitionOutcome = "RESOLVED";
+    },
+    (candidate) => { candidate.transitionOutcome = "RESOLVED_ABSENT"; }
+  ]) {
+    const impossible = structuredClone(receipt());
+    mutate(impossible);
+    const { receiptSha256: _ignored, ...body } = impossible;
+    impossible.receiptSha256 = providerDispatchSha256(canonicalJson(body));
     assert.throws(
       () => validateIntegratedLiveDrillProviderReconciliationReceipt(
-        changed,
+        impossible,
         { authorizationId: AUTHORIZATION_ID, runId: RUN_ID }
       ),
       /INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_OUTPUT_REJECTED/u
@@ -105,74 +175,52 @@ test("reconciliation receipt is exact, non-accepting, and capability-reduced", (
   }
 });
 
-test("audit-only reconciliation observes with a resolver that has no mutation surface", async () => {
+test("audit-only reconciliation exposes no mutation surface", async () => {
   const calls = [];
-  const resolved = Object.freeze({
-    mcpResultSha256: null,
-    sessionCloseSha256: null,
-    state: "GRANTED"
-  });
+  const resolved = Object.freeze({ state: "GRANTED" });
   const actual = await reconcileIntegratedLiveDrillProviderDispatchControl({
-    binding: Object.freeze({ controlBindingSha256: "b".repeat(64) }),
-    resolver: {
-      async resolve() {
-        calls.push("resolve");
-        return resolved;
-      }
-    },
-    durable: null
-  });
-  assert.equal(actual, resolved);
-  assert.deepEqual(calls, ["resolve"]);
-});
-
-test("audit-only reconciliation never mutates an executing row with durable evidence", async () => {
-  const calls = [];
-  const binding = Object.freeze({ controlBindingSha256: "b".repeat(64) });
-  const durable = Object.freeze({
-    mcpResultSha256: "c".repeat(64),
-    sessionCloseSha256: "d".repeat(64)
-  });
-  const actual = await reconcileIntegratedLiveDrillProviderDispatchControl({
-    binding,
+    binding: binding(),
     resolver: {
       async resolve(actualBinding) {
-        calls.push(["resolve", actualBinding]);
-        return Object.freeze({
-          mcpResultSha256: null,
-          sessionCloseSha256: null,
-          state: "EXECUTING"
-        });
+        calls.push(actualBinding);
+        return resolved;
       }
-    },
-    durable
+    }
   });
-  assert.equal(actual.state, "EXECUTING");
-  assert.deepEqual(calls, [
-    ["resolve", binding]
-  ]);
+  assert.equal(actual, resolved);
+  assert.deepEqual(calls, [binding()]);
 });
 
-test("reconciliation input accepts only an exact global EXECUTING grant", async () => {
-  const { validateIntegratedLiveDrillProviderReconciliationInput } =
-    await import("../src/cloud/integrated-live-drill-provider-reconciliation.js");
-  const fixture = Object.freeze({
-    context: Object.freeze({ marker: "invalid-context-is-checked-first" }),
-    executionGrant: executionGrant(),
-    schemaVersion: "tideproof.highwater-drill-provider-reconciliation-input.v2"
+test("run reconciliation reports only database-observed state and digests", async () => {
+  const value = input();
+  const databaseRows = [{
+    authorization_id: AUTHORIZATION_ID,
+    control_binding_sha256: value.binding.controlBindingSha256,
+    database_now: "2026-08-12T16:30:00.000Z",
+    expires_at: value.binding.expiresAt,
+    grant_id: GRANT_ID,
+    mcp_result_sha256: "6".repeat(64),
+    session_close_sha256: "7".repeat(64),
+    state: "COMPLETED",
+    transition_outcome: "RESOLVED",
+    worker_spec_sha256: WORKER_SPEC
+  }];
+  const clientFactory = () => ({
+    async connect() {},
+    async end() {},
+    async query() { return { rowCount: 1, rows: databaseRows }; }
   });
-  assert.throws(
-    () => validateIntegratedLiveDrillProviderReconciliationInput(fixture),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_CONTEXT_REJECTED/u
-  );
-  const withLegacyLocalReceipt = Object.freeze({
-    ...fixture,
-    providerAdmissionReceiptSha256: "f".repeat(64)
+  const result = await runIntegratedLiveDrillProviderReconciliation({
+    auditClientFactory: clientFactory,
+    environment: Object.freeze({
+      PRIMARY_PROVIDER_RECONCILE_DATABASE_URL:
+        "postgresql://reconcile.invalid/tideproof?sslmode=verify-full"
+    }),
+    input: value
   });
-  assert.throws(
-    () => validateIntegratedLiveDrillProviderReconciliationInput(
-      withLegacyLocalReceipt
-    ),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_INPUT_REJECTED/u
-  );
+  assert.equal(result.state, "COMPLETED");
+  assert.equal(result.mcpResultSha256, "6".repeat(64));
+  assert.equal(result.sessionCloseSha256, "7".repeat(64));
+  assert.equal("providerCompletion" in result, false);
+  assert.equal(result.providerBacked, false);
 });

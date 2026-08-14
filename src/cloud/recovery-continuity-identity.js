@@ -518,6 +518,24 @@ export function renderRecoveryQuery({
     .replace(QUERY_SOURCE_TOKEN, boundSourceDigest);
 }
 
+export function recoveryQueryBindingsFor(query) {
+  const text = requireText(query, "query");
+  const match = text.match(
+    /WHERE recovery_session_id = '([0-9a-f-]+)'::UUID\n  AND tenant_id = '([0-9a-f-]+)'::UUID\n  AND subject_binding_hash = '([a-f0-9]{64})'\n  AND source_digest = '([a-f0-9]{64})'/u
+  );
+  if (!match) throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
+  const bindings = Object.freeze({
+    recoverySessionId: requireUuid(match[1], "recoverySessionId"),
+    tenantId: requireUuid(match[2], "tenantId"),
+    subjectBindingHash: requireSha256(match[3], "subjectBindingHash"),
+    sourceDigest: requireSha256(match[4], "sourceDigest")
+  });
+  if (renderRecoveryQuery(bindings) !== text) {
+    throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
+  }
+  return bindings;
+}
+
 function exactKeys(value, keys) {
   return (
     value &&
