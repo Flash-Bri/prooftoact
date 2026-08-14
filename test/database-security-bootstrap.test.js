@@ -1062,7 +1062,7 @@ test("primary function SQL is digest-pinned before any database query", async ()
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
     statementCount: 56,
-    sha256: "2c407976a54367e2db677d9ec07f7ce13547b292102b26f28b0db0c61a37d0ef"
+    sha256: "cf77ee3af31d939c134fd49061c2555d34c3caccb3b3a627807c459b6c0fd6e4"
   });
   const legacyProviderDrop = statements.find((statement) =>
     statement.includes("DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1")
@@ -1687,7 +1687,7 @@ test("authority spend, replay, and protected effects refresh database time", asy
   assert.doesNotMatch(resolveBody, /statement_timestamp\(\)/u);
   assert.match(
     effectBody,
-    /ON CONFLICT DO NOTHING[\s\S]*INTO v_effect_key, v_operation_id;[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_receipt_lease_expires_at <= v_database_now[\s\S]*v_resource_lease_expires_at <= v_database_now[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
+    /ON CONFLICT DO NOTHING[\s\S]*RETURNING 1::INT8 INTO v_inserted_count;[\s\S]*v_effect_key := p_effect_key;[\s\S]*v_operation_id := p_operation_id;[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_receipt_lease_expires_at <= v_database_now[\s\S]*v_resource_lease_expires_at <= v_database_now[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
   );
   assert.equal(
     spendBody.match(
@@ -1929,7 +1929,7 @@ test("protected-effect SQL snapshots one exact authority before a value-only ins
     insertStart
   );
   const postInsertStart = normalizedBody.indexOf(
-    "IF v_effect_key IS NULL OR v_operation_id IS NULL",
+    "IF v_inserted_count IS NULL",
     conflictStart
   );
   assert.ok(
@@ -1984,6 +1984,18 @@ test("protected-effect SQL snapshots one exact authority before a value-only ins
     "p_fencing_token, p_payload_digest )";
   assert.ok(insertClause.includes(exactValues));
   assert.doesNotMatch(insertClause, /\bSELECT\b/u);
+  assert.ok(normalizedBody.includes("v_inserted_count INT8;"));
+  assert.ok(normalizedBody.includes(
+    "ON CONFLICT DO NOTHING " +
+    "RETURNING 1::INT8 INTO v_inserted_count; " +
+    "IF v_inserted_count IS NULL THEN RETURN; END IF; " +
+    "v_effect_key := p_effect_key; " +
+    "v_operation_id := p_operation_id;"
+  ));
+  assert.doesNotMatch(
+    normalizedBody,
+    /RETURNING inserted_effect\.(?:effect_key|operation_id)/u
+  );
   assert.equal(
     body.match(/v_database_now := clock_timestamp\(\);/gu)?.length,
     2
@@ -2040,4 +2052,28 @@ test("protected-effect SQL snapshots one exact authority before a value-only ins
     "RETURN; END IF; " +
     "RETURN QUERY SELECT v_effect_key, v_operation_id;";
   assert.ok(postInsert.includes(exactPostInsertGuard));
+});
+
+test("Gate One executes the protected-effect insert and replay routine", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.match(
+    source,
+    /const PROTECTED_EFFECT_SQL = `[\s\S]*g1_record_protected_effect_v1/u
+  );
+  assert.match(
+    source,
+    /wrongDigestBeforeInsert = await client\.query\([\s\S]*inserted = await client\.query\([\s\S]*replay = await client\.query\([\s\S]*wrongDigestAfterReplay = await client\.query\(/u
+  );
+  assert.match(
+    source,
+    /wrongDigestBeforeInsert\.rowCount !== 0[\s\S]*inserted\.rowCount !== 1[\s\S]*replay\.rowCount !== 0[\s\S]*wrongDigestAfterReplay\.rowCount !== 0/u
+  );
+  assert.match(
+    source,
+    /currentAfterWrongDigest !== true[\s\S]*currentAfterInsert !== true[\s\S]*currentAfterReplay !== true[\s\S]*currentAfterWrongDigestReplay !== true/u
+  );
+  assert.match(
+    source,
+    /capabilitySnapshot\.effects\.length !== 1[\s\S]*protectedEffect\?\.effect_key !== normalizedCapabilityRequest\.effectKey[\s\S]*protectedEffect\?\.operation_id !== normalizedCapabilityRequest\.operationId/u
+  );
 });

@@ -60,7 +60,7 @@ const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
   "tideproof.primary-function-sql-batch.v1";
 const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 56;
 const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
-  "2c407976a54367e2db677d9ec07f7ce13547b292102b26f28b0db0c61a37d0ef";
+  "cf77ee3af31d939c134fd49061c2555d34c3caccb3b3a627807c459b6c0fd6e4";
 const PRIMARY_ROLE_FUNCTION_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -7123,6 +7123,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
       v_resource_lease_expires_at TIMESTAMPTZ;
       v_proposal_expires_at TIMESTAMPTZ;
       v_authority_count INT8;
+      v_inserted_count INT8;
       v_database_now TIMESTAMPTZ;
     BEGIN
       IF session_user <> 'tp_dispatch_user' THEN
@@ -7247,12 +7248,13 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
         p_payload_digest
       )
       ON CONFLICT DO NOTHING
-      RETURNING inserted_effect.effect_key, inserted_effect.operation_id
-      INTO v_effect_key, v_operation_id;
+      RETURNING 1::INT8 INTO v_inserted_count;
 
-      IF v_effect_key IS NULL OR v_operation_id IS NULL THEN
+      IF v_inserted_count IS NULL THEN
         RETURN;
       END IF;
+      v_effect_key := p_effect_key;
+      v_operation_id := p_operation_id;
 
       SELECT
         count(*)::INT8,

@@ -114,6 +114,14 @@ const GATE2_SPEND_AUTHORITY_SQL = SPEND_AUTHORITY_SQL.replace(
   "tp_api.g2_spend_authority_race_v1"
 );
 
+const PROTECTED_EFFECT_SQL = `
+  SELECT *
+  FROM tp_api.g1_record_protected_effect_v1(
+    $1::UUID, $2::UUID, $3::UUID, $4,
+    $5::UUID, $6::UUID, $7, $8, $9::INT8, $10
+  )
+`;
+
 const OBSERVE_AUTHORITY_RACE_SQL = `
   SELECT *
   FROM tp_api.g1_observe_authority_race_v1(
@@ -181,6 +189,42 @@ function assertSqlProbeRequestBindings(values) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function protectedEffectValues(request, fencingToken, payloadDigest) {
+  return [
+    request.tenantId,
+    request.effectKey,
+    request.operationId,
+    request.requestDigest,
+    request.runId,
+    request.incidentId,
+    request.resourceId,
+    request.agentId,
+    fencingToken,
+    payloadDigest ?? request.payloadDigest
+  ];
+}
+
+function alternateDigest(digest) {
+  if (!/^[a-f0-9]{64}$/u.test(digest)) {
+    throw new Error("protected effect payload digest invalid");
+  }
+  return `${digest[0] === "0" ? "1" : "0"}${digest.slice(1)}`;
+}
+
+async function authorityCurrent(client, request) {
+  const result = await client.query(
+    `
+      SELECT authority_current
+      FROM tp_private.g1_authority_receipt_current_v2($1::UUID, $2::UUID)
+    `,
+    [request.tenantId, request.operationId]
+  );
+  if (result.rowCount !== 1) {
+    throw new Error("protected effect authority currentness was not singular");
+  }
+  return result.rows[0].authority_current;
 }
 
 function requireEnvironment(name) {
@@ -1131,11 +1175,10 @@ async function main() {
       return { gateOneDirect, nestedGateOneReached };
     }
   );
-  const capabilitySnapshot = await authorityStore.snapshot({
+  const capabilitySnapshotBeforeEffect = await authorityStore.snapshot({
     tenantId: authorityFixture.tenantId,
     resourceId: authorityFixture.resourceId
   });
-  await authorityStore.close();
   if (
     authorizer.spendOutcome !== "resource_reserved" ||
     authorizer.spendFence !== "1" ||
@@ -1168,21 +1211,23 @@ async function main() {
       ?.bravo_observed_holder_operation_id !==
       normalizedCapabilityRequest.operationId ||
     authorizer.durableProof?.bravo_observed_fence !== "1" ||
-    capabilitySnapshot.receipts.length !== 2 ||
-    capabilitySnapshot.outbox.length !== 1 ||
-    capabilitySnapshot.effects.length !== 0 ||
-    capabilitySnapshot.resource.current_fence !== "1"
+    capabilitySnapshotBeforeEffect.receipts.length !== 2 ||
+    capabilitySnapshotBeforeEffect.outbox.length !== 1 ||
+    capabilitySnapshotBeforeEffect.effects.length !== 0 ||
+    capabilitySnapshotBeforeEffect.resource.current_fence !== "1"
   ) {
     throw new Error("least-privilege authority spend invariant failed");
   }
 
   const dispatch = await withClient(
-    connectionStringForUser(
-      adminConnectionString,
-      "tp_dispatch_user",
-      passwords.tp_dispatch_user
-    ),
-    async (client) => {
+    adminConnectionString,
+    async (admin) => withClient(
+      connectionStringForUser(
+        adminConnectionString,
+        "tp_dispatch_user",
+        passwords.tp_dispatch_user
+      ),
+      async (client) => {
       const directWrite = await expectPrivilegeDenied(
         client,
         `
@@ -1251,12 +1296,155 @@ async function main() {
           "b".repeat(64)
         ]
       );
+      const wrongPayloadDigest = alternateDigest(
+        normalizedCapabilityRequest.payloadDigest
+      );
+      const wrongDigestBeforeInsert = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence,
+          wrongPayloadDigest
+        )
+      );
+      const snapshotAfterWrongDigest = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterWrongDigest = await authorityCurrent(
+        admin,
+        normalizedCapabilityRequest
+      );
+
+      const inserted = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence
+        )
+      );
+      const snapshotAfterInsert = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterInsert = await authorityCurrent(
+        admin,
+        normalizedCapabilityRequest
+      );
+
+      const replay = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence
+        )
+      );
+      const snapshotAfterReplay = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterReplay = await authorityCurrent(
+        admin,
+        normalizedCapabilityRequest
+      );
+
+      const wrongDigestAfterReplay = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence,
+          wrongPayloadDigest
+        )
+      );
+      const snapshotAfterWrongDigestReplay = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterWrongDigestReplay = await authorityCurrent(
+        admin,
+        normalizedCapabilityRequest
+      );
+      if (
+        wrongDigestBeforeInsert.rowCount !== 0 ||
+        snapshotAfterWrongDigest.effects.length !== 0 ||
+        inserted.rowCount !== 1 ||
+        inserted.rows[0]?.effect_key !== normalizedCapabilityRequest.effectKey ||
+        inserted.rows[0]?.operation_id !==
+          normalizedCapabilityRequest.operationId ||
+        snapshotAfterInsert.effects.length !== 1 ||
+        replay.rowCount !== 0 ||
+        snapshotAfterReplay.effects.length !== 1 ||
+        wrongDigestAfterReplay.rowCount !== 0 ||
+        snapshotAfterWrongDigestReplay.effects.length !== 1 ||
+        currentAfterWrongDigest !== true ||
+        currentAfterInsert !== true ||
+        currentAfterReplay !== true ||
+        currentAfterWrongDigestReplay !== true
+      ) {
+        throw new Error("protected effect execution regression failed");
+      }
       return {
         directWrite,
-        unauthorizedFunctionRows: bounded.rowCount
+        unauthorizedFunctionRows: bounded.rowCount,
+        positiveProtectedEffect: {
+          wrongDigestBeforeInsertRows: wrongDigestBeforeInsert.rowCount,
+          effectsAfterWrongDigest: snapshotAfterWrongDigest.effects.length,
+          insertRows: inserted.rowCount,
+          exactReplayRows: replay.rowCount,
+          wrongDigestAfterReplayRows: wrongDigestAfterReplay.rowCount,
+          currentAfterWrongDigest,
+          currentAfterInsert,
+          currentAfterReplay,
+          currentAfterWrongDigestReplay,
+          effectsAfterInsert: snapshotAfterInsert.effects.length,
+          effectsAfterReplay: snapshotAfterReplay.effects.length,
+          effectsAfterWrongDigestReplay:
+            snapshotAfterWrongDigestReplay.effects.length,
+          effectKey: inserted.rows[0].effect_key,
+          operationId: inserted.rows[0].operation_id
+        }
       };
-    }
+      }
+    )
   );
+
+  const capabilitySnapshot = await authorityStore.snapshot({
+    tenantId: authorityFixture.tenantId,
+    resourceId: authorityFixture.resourceId
+  });
+  await authorityStore.close();
+  const protectedEffect = capabilitySnapshot.effects[0];
+  if (
+    dispatch.directWrite?.denied !== true ||
+    dispatch.unauthorizedFunctionRows !== 0 ||
+    capabilitySnapshot.receipts.length !== 2 ||
+    capabilitySnapshot.outbox.length !== 1 ||
+    capabilitySnapshot.effects.length !== 1 ||
+    capabilitySnapshot.resource.current_fence !== "1" ||
+    protectedEffect?.tenant_id !== normalizedCapabilityRequest.tenantId ||
+    protectedEffect?.effect_key !== normalizedCapabilityRequest.effectKey ||
+    protectedEffect?.operation_id !== normalizedCapabilityRequest.operationId ||
+    protectedEffect?.request_digest !==
+      normalizedCapabilityRequest.requestDigest ||
+    protectedEffect?.proposal_digest !==
+      normalizedCapabilityRequest.proposalDigest ||
+    protectedEffect?.logical_action_digest !==
+      normalizedCapabilityRequest.logicalActionDigest ||
+    protectedEffect?.authorization_epoch !==
+      String(normalizedCapabilityRequest.authorizationEpoch) ||
+    protectedEffect?.logical_authority_key_sha256 !==
+      normalizedCapabilityRequest.logicalAuthorityKeySha256 ||
+    protectedEffect?.authorization_binding_sha256 !==
+      normalizedCapabilityRequest.authorizationBindingSha256 ||
+    protectedEffect?.run_id !== normalizedCapabilityRequest.runId ||
+    protectedEffect?.incident_id !== normalizedCapabilityRequest.incidentId ||
+    protectedEffect?.resource_id !== normalizedCapabilityRequest.resourceId ||
+    protectedEffect?.agent_id !== normalizedCapabilityRequest.agentId ||
+    protectedEffect?.fencing_token !== authorizer.spendFence ||
+    protectedEffect?.payload_digest !== normalizedCapabilityRequest.payloadDigest
+  ) {
+    throw new Error("protected effect durable identity regression failed");
+  }
 
   const recoverySource = await withClient(
     connectionStringForUser(
