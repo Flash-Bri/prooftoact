@@ -36,6 +36,55 @@ const USERS = [
   "tp_audit_user"
 ];
 
+const RECOVERY_SOURCE_STABLE_COLUMNS = Object.freeze([
+  "admissibility",
+  "agency",
+  "agent_id",
+  "authorization_binding_sha256",
+  "authorization_epoch",
+  "authority_evidence_binding_sha256",
+  "evidence_digest",
+  "evidence_id",
+  "has_durable_intent",
+  "incident_id",
+  "logical_action_digest",
+  "logical_authority_key_sha256",
+  "operation_id",
+  "outcome",
+  "policy_version",
+  "proposal_digest",
+  "reason",
+  "recorded_at",
+  "request_digest",
+  "resource_id",
+  "run_id",
+  "tenant_id"
+]);
+
+function sameStableDatabaseValue(left, right) {
+  const normalized = (value) => {
+    if (value instanceof Date) {
+      const milliseconds = value.getTime();
+      if (!Number.isFinite(milliseconds)) {
+        throw new TypeError("stable database timestamp invalid");
+      }
+      return ["timestamptz", new Date(milliseconds).toISOString()];
+    }
+    if (value === null) return ["null", ""];
+    if (
+      typeof value === "string" ||
+      typeof value === "boolean" ||
+      (typeof value === "number" && Number.isFinite(value))
+    ) {
+      return [typeof value, value];
+    }
+    throw new TypeError("stable database value invalid");
+  };
+  const [leftType, leftValue] = normalized(left);
+  const [rightType, rightValue] = normalized(right);
+  return leftType === rightType && leftValue === rightValue;
+}
+
 const SPEND_AUTHORITY_SQL = `
   SELECT *
   FROM tp_api.g1_spend_authority_v1(
@@ -1205,14 +1254,47 @@ async function main() {
         normalizedCapabilityRequest.operationId,
         normalizedCapabilityRequest.requestDigest
       ]);
-      const resolved = await client.query(
-        recoverySourceQuery,
-        recoverySourceValues
-      );
-      const resolvedAgain = await client.query(
-        recoverySourceQuery,
-        recoverySourceValues
-      );
+      let resolved;
+      let resolvedAgain;
+      let cursorCountAfterFirst;
+      let cursorCountAfterSecond;
+      await client.query("BEGIN");
+      try {
+        resolved = await client.query(
+          recoverySourceQuery,
+          recoverySourceValues
+        );
+        const cursorsAfterFirst = await client.query(
+          "SELECT count(*)::INT8 AS cursor_count FROM pg_catalog.pg_cursors"
+        );
+        resolvedAgain = await client.query(
+          recoverySourceQuery,
+          recoverySourceValues
+        );
+        const cursorsAfterSecond = await client.query(
+          "SELECT count(*)::INT8 AS cursor_count FROM pg_catalog.pg_cursors"
+        );
+        cursorCountAfterFirst = Number(
+          cursorsAfterFirst.rows[0]?.cursor_count
+        );
+        cursorCountAfterSecond = Number(
+          cursorsAfterSecond.rows[0]?.cursor_count
+        );
+        if (
+          cursorsAfterFirst.rowCount !== 1 ||
+          cursorsAfterSecond.rowCount !== 1 ||
+          !Number.isSafeInteger(cursorCountAfterFirst) ||
+          !Number.isSafeInteger(cursorCountAfterSecond) ||
+          cursorCountAfterFirst !== 0 ||
+          cursorCountAfterSecond !== 0
+        ) {
+          throw new Error("recovery source cursor was not closed exactly");
+        }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
       const stableColumns = Object.keys(resolved.rows[0] ?? {})
         .filter((column) => column !== "database_now")
         .sort();
@@ -1225,15 +1307,19 @@ async function main() {
         resolvedAgain.rows[0]?.outcome !== "resource_reserved" ||
         resolvedAgain.rows[0]?.admissibility !== "admissible" ||
         resolvedAgain.rows[0]?.has_durable_intent !== true ||
-        stableColumns.length !== 22 ||
-        JSON.stringify(stableColumns) !== JSON.stringify(
+        JSON.stringify(stableColumns) !==
+          JSON.stringify(RECOVERY_SOURCE_STABLE_COLUMNS) ||
+        JSON.stringify(
           Object.keys(resolvedAgain.rows[0] ?? {})
             .filter((column) => column !== "database_now")
             .sort()
-        ) ||
+        ) !== JSON.stringify(RECOVERY_SOURCE_STABLE_COLUMNS) ||
         stableColumns.some(
           (column) =>
-            resolved.rows[0]?.[column] !== resolvedAgain.rows[0]?.[column]
+            !sameStableDatabaseValue(
+              resolved.rows[0]?.[column],
+              resolvedAgain.rows[0]?.[column]
+            )
         )
       ) {
         throw new Error("recovery source receipt was not resolved exactly");
@@ -1245,6 +1331,8 @@ async function main() {
         legacySourceResolverDeniedOrAbsent,
         operationId: resolved.rows[0].operation_id,
         databaseNow: resolved.rows[0].database_now,
+        cursorCountAfterFirst,
+        cursorCountAfterSecond,
         resolverRepeatStable: true
       };
     }

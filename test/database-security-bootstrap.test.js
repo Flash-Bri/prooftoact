@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
 import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
@@ -832,7 +833,7 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   );
   assert.match(
     gate1Security,
-    /const recoverySourceQuery =[\s\S]*const resolved = await client\.query\([\s\S]*const resolvedAgain = await client\.query\([\s\S]*stableColumns\.length !== 22[\s\S]*stableColumns\.some\([\s\S]*resolverRepeatStable: true/u
+    /const recoverySourceQuery =[\s\S]*await client\.query\("BEGIN"\)[\s\S]*resolved = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*resolvedAgain = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*cursorCountAfterFirst !== 0[\s\S]*cursorCountAfterSecond !== 0[\s\S]*await client\.query\("COMMIT"\)[\s\S]*RECOVERY_SOURCE_STABLE_COLUMNS[\s\S]*stableColumns\.some\([\s\S]*resolverRepeatStable: true/u
   );
 
   assert.match(source, /PRIMARY_PREFLIGHT_POSTURE_SPEC/u);
@@ -843,6 +844,61 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   assert.match(
     source,
     /LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE[\s\S]*CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE/u
+  );
+});
+
+test("Gate One repeat stability compares equal database timestamps by value", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  const helperSource = source.match(
+    /function sameStableDatabaseValue\(left, right\) \{[\s\S]*?^\}/mu
+  )?.[0];
+  assert.ok(helperSource);
+  const sameStableDatabaseValue = runInNewContext(
+    `(${helperSource})`,
+    { Date, Number }
+  );
+  const first = new Date("2026-08-13T23:59:59.123Z");
+  const equalButDistinct = new Date("2026-08-13T23:59:59.123Z");
+  const drifted = new Date("2026-08-13T23:59:59.124Z");
+
+  assert.notStrictEqual(first, equalButDistinct);
+  assert.equal(sameStableDatabaseValue(first, equalButDistinct), true);
+  assert.equal(sameStableDatabaseValue(first, drifted), false);
+  assert.equal(sameStableDatabaseValue(first, first.toISOString()), false);
+  assert.throws(
+    () => sameStableDatabaseValue(new Date(NaN), new Date(NaN)),
+    /stable database timestamp invalid/u
+  );
+  assert.equal(sameStableDatabaseValue("stable", "stable"), true);
+  assert.equal(sameStableDatabaseValue(null, null), true);
+  assert.throws(
+    () => sameStableDatabaseValue({}, {}),
+    /stable database value invalid/u
+  );
+  assert.match(
+    source,
+    /const RECOVERY_SOURCE_STABLE_COLUMNS = Object\.freeze\(\[[\s\S]*"recorded_at"[\s\S]*"tenant_id"[\s\S]*JSON\.stringify\(stableColumns\) !==[\s\S]*JSON\.stringify\(RECOVERY_SOURCE_STABLE_COLUMNS\)/u
+  );
+  assert.match(
+    source,
+    /stableColumns\.some\([\s\S]*!sameStableDatabaseValue\([\s\S]*resolved\.rows\[0\]\?\.\[column\][\s\S]*resolvedAgain\.rows\[0\]\?\.\[column\]/u
+  );
+});
+
+test("Gate One proves resolver cursor closure inside one transaction", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  const recoveryLane = source.slice(
+    source.indexOf("const recoverySource = await withClient("),
+    source.indexOf("const recoveryAudit = await withClient(")
+  );
+  assert.ok(recoveryLane.length > 0);
+  assert.equal(recoveryLane.match(/await client\.query\("BEGIN"\)/gu)?.length, 1);
+  assert.equal(recoveryLane.match(/pg_catalog\.pg_cursors/gu)?.length, 2);
+  assert.equal(recoveryLane.match(/await client\.query\("COMMIT"\)/gu)?.length, 1);
+  assert.equal(recoveryLane.match(/await client\.query\("ROLLBACK"\)/gu)?.length, 1);
+  assert.match(
+    recoveryLane,
+    /cursorCountAfterFirst !== 0[\s\S]*cursorCountAfterSecond !== 0[\s\S]*cursorCountAfterFirst,[\s\S]*cursorCountAfterSecond,[\s\S]*resolverRepeatStable: true/u
   );
 });
 
