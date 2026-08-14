@@ -961,7 +961,7 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   );
   assert.match(
     gate1Security,
-    /privateSnapshotDeniedOrAbsent[\s\S]*expectPrivilegeDeniedOrUndefined\([\s\S]*tp_private\.g1_resolve_recovery_source_snapshot_v1\(/u
+    /privateSnapshotDenied[\s\S]*expectPrivilegeDenied\([\s\S]*tp_private\.g1_resolve_recovery_source_snapshot_v1\(/u
   );
   assert.match(
     gate1Security,
