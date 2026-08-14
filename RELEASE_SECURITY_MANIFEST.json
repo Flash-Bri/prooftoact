@@ -666,7 +666,13 @@
       "id": "integrated-live-drill-execution-fence-tests",
       "path": "test/integrated-live-drill-provider-execution-fence.test.js",
       "role": "REAL_PROCESS_PROVIDER_EXECUTION_FENCE_VERIFICATION",
-      "sha256": "2fa4820251aa76e0f623c23fa6c810023a23817e806b79816c9d3628b03bb362"
+      "sha256": "530129e721fdb89e8692ce7e0eece0f2bda89d24989ea5626d3a9f41f36854cd"
+    },
+    {
+      "id": "integrated-live-drill-atomic-publication-crash-fixture",
+      "path": "test/fixtures/atomic-publication-crash-child.js",
+      "role": "ATOMIC_PUBLICATION_CRASH_RECOVERY_SUBPROCESS_FIXTURE",
+      "sha256": "6b42bb77d4a9437f100da3af8a487655ddad342106dc8df4ab7b67a5628ddcd6"
     },
     {
       "id": "integrated-live-drill-provider-operation-broker",

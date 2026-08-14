@@ -1033,7 +1033,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "9a0a8223a9c57b2b3b7a941f8c89e599c6f7ecbfbd09bd29701a24fac2c7ad08",
+      "sha256": "a185dbe754610a5740a22b54e51309c77284005ef84f39603ed90b44649ed214",
       "kind": "boundary-ledger"
     },
     {
@@ -1087,7 +1087,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "2e73a6e9d409d3247bb1bb05dd0ec7e34a79c7d73834a46ceb77a7c090770edc",
+      "sha256": "80e5d0da41dc34613cfc9a6801e7d32d16dd4baeb4338a036a115b0d57c5c8a7",
       "kind": "boundary-ledger"
     },
     {
@@ -1099,7 +1099,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "106a5ba74092927bf82ce62e7518ba1ef1610126d1b27be1ec27b240fa111654",
+      "sha256": "72ce15d322baa3cd319a43a0970c4f0a8056e053fb3c6e9f3bf95e14c890c286",
       "kind": "verification-code"
     },
     {
@@ -1720,7 +1720,7 @@
         "release-security-verifier",
         "strict-json-contract"
       ],
-      "boundary": "The exact current-source verifier hash-binds 212 reviewed security surfaces and requires the generated Gate Two template to match its source. It preserves the public/IAM route split, browser headers, negative probes, throttles, concurrency, numeric Lambda targets, exact-Git builds, dependency/toolchain snapshots, deployment-attestation contracts, bounded evidence roles, IAM denials, KMS, log retention, database posture, fixed Managed MCP transport, and the protected read-only OIDC lane. It separately binds a no-secrets exact PR-head job, synthetic-merge CI, and exact-main CI identity. For the integrated drill it binds the Linux/systemd first-exec boundary, descriptor-bound verified Node execution, root-stage schema v5, seven distinct service identities, the atomic root-stage installer, independent non-root verifier, fifteen staged runtime files, fourteen units, twelve ESM runtime bundles, and 24 outputs. It also binds provider dispatch v2: separate claim, begin, redeem, finalize, activation, terminalization, and resolve-only roles and routines; migration-time removal of the legacy generic transition; no MCP bearer in contenders, controllers, workers, losers, reconcilers, or the persistent provider-operation broker; a database EXECUTING grant before local publication; create-only worker execution fencing; a provider-key-isolated operation broker; a fixed one-shot exchange that alone receives the bearer after exact READY/PROCEED_ONCE coordination and a post-PROCEED freshness check; a consumption fence and durable result before callback success; database-time terminalization without provider replay; and a reconciler with no mutation method, base-table access, nonce, or capability. The receipt returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, accepted PID1 isolation receipt, accepted root-stage receipt, hosted-CI receipt, provider-origin proof, administrator-exclusion finding, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
+      "boundary": "The exact current-source verifier hash-binds 213 reviewed security surfaces and requires the generated Gate Two template to match its source. It preserves the public/IAM route split, browser headers, negative probes, throttles, concurrency, numeric Lambda targets, exact-Git builds, dependency/toolchain snapshots, deployment-attestation contracts, bounded evidence roles, IAM denials, KMS, log retention, database posture, fixed Managed MCP transport, and the protected read-only OIDC lane. It separately binds a no-secrets exact PR-head job, synthetic-merge CI, and exact-main CI identity. For the integrated drill it binds the Linux/systemd first-exec boundary, descriptor-bound verified Node execution, root-stage schema v5, seven distinct service identities, the atomic root-stage installer, independent non-root verifier, fifteen staged runtime files, fourteen units, twelve ESM runtime bundles, and 24 outputs. It also binds provider dispatch v2: separate claim, begin, redeem, finalize, activation, terminalization, and resolve-only roles and routines; migration-time removal of the legacy generic transition; no MCP bearer in contenders, controllers, workers, losers, reconcilers, or the persistent provider-operation broker; a database EXECUTING grant before local publication; create-only worker execution fencing; a provider-key-isolated operation broker; a fixed one-shot exchange that alone receives the bearer after exact READY/PROCEED_ONCE coordination and a post-PROCEED freshness check; a consumption fence and durable result before callback success; database-time terminalization without provider replay; and a reconciler with no mutation method, base-table access, nonce, or capability. The receipt returns CURRENT_SOURCE_SECURITY_PASS with finalReleaseReady false. It is not a vulnerability-free claim, penetration test, live AWS or CockroachDB receipt, accepted PID1 isolation receipt, accepted root-stage receipt, hosted-CI receipt, provider-origin proof, administrator-exclusion finding, availability guarantee, production-suitability finding, or authorization to deploy, publish, or submit.",
       "remainingRequirements": [
         "Bind the exact-release pre/post deployment attestation, alternate-principal denial, live security receipts, and a separate private human security and abuse review to the final public release, deployed resources, logs, repository metadata, media, URLs, and submission fields."
       ]

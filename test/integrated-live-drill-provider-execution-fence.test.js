@@ -13,6 +13,10 @@ const CHILD = path.join(
   ROOT,
   "test/fixtures/provider-execution-attempt-child.js"
 );
+const PUBLICATION_CRASH_CHILD = path.join(
+  ROOT,
+  "test/fixtures/atomic-publication-crash-child.js"
+);
 
 function privateDirectory(parent, name) {
   const value = path.join(parent, name);
@@ -44,6 +48,107 @@ function runChild(environment) {
     child.on("close", (code) => resolve({ code, stderr, stdout }));
   });
 }
+
+function runPublicationCrashChild(environment) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [PUBLICATION_CRASH_CHILD], {
+      cwd: ROOT,
+      env: Object.freeze({
+        LANG: "C",
+        PATH: process.env.PATH,
+        ...environment
+      }),
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.setEncoding("utf8").on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code, signal) => resolve({
+      code,
+      signal,
+      stderr,
+      stdout
+    }));
+  });
+}
+
+test("atomic publication converges after a hard crash at every fault phase", async (t) => {
+  const phases = Object.freeze([
+    "after-open",
+    "after-write",
+    "after-mode",
+    "after-file-fsync",
+    "after-readback",
+    "after-link",
+    "after-temp-unlink",
+    "after-directory-fsync"
+  ]);
+  const finalExistsAtCrash = new Set([
+    "after-link",
+    "after-temp-unlink",
+    "after-directory-fsync"
+  ]);
+  const bytes = Buffer.from(
+    '{"marker":"atomic-publication-crash-matrix-v1"}\n',
+    "utf8"
+  );
+
+  for (const phase of phases) {
+    await t.test(phase, async (t) => {
+      const temporaryRoot = fs.mkdtempSync(path.join(
+        fs.realpathSync(os.tmpdir()),
+        `prooftoact-publication-crash-${phase}-`
+      ));
+      fs.chmodSync(temporaryRoot, 0o700);
+      t.after(() => fs.rmSync(temporaryRoot, {
+        force: true,
+        recursive: true
+      }));
+      const filePath = path.join(temporaryRoot, "final-receipt.json");
+      const environment = Object.freeze({
+        PUBLICATION_FAULT_PHASE: phase,
+        PUBLICATION_PATH: filePath,
+        PUBLICATION_ROOT: temporaryRoot
+      });
+
+      const crashed = await runPublicationCrashChild(environment);
+      assert.equal(crashed.code, 73, crashed.stderr);
+      assert.equal(crashed.signal, null);
+      assert.equal(crashed.stdout, "");
+      assert.equal(fs.existsSync(filePath), finalExistsAtCrash.has(phase));
+
+      const recovered = await runPublicationCrashChild({
+        ...environment,
+        PUBLICATION_FAULT_PHASE: ""
+      });
+      assert.equal(recovered.code, 0, recovered.stderr);
+      assert.equal(recovered.signal, null);
+      assert.deepEqual(JSON.parse(recovered.stdout), {
+        created: !finalExistsAtCrash.has(phase)
+      });
+      assert.deepEqual(fs.readFileSync(filePath), bytes);
+      const stat = fs.statSync(filePath);
+      assert.equal(stat.mode & 0o777, 0o600);
+      assert.equal(stat.nlink, 1);
+
+      const rerun = await runPublicationCrashChild({
+        ...environment,
+        PUBLICATION_FAULT_PHASE: ""
+      });
+      assert.equal(rerun.code, 0, rerun.stderr);
+      assert.equal(rerun.signal, null);
+      assert.deepEqual(JSON.parse(rerun.stdout), { created: false });
+      assert.deepEqual(fs.readFileSync(filePath), bytes);
+      assert.equal(fs.statSync(filePath).nlink, 1);
+    });
+  }
+});
 
 test("real worker contenders have one create-only execution-attempt winner", async (t) => {
   const temporaryRoot = fs.mkdtempSync(

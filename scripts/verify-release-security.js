@@ -464,6 +464,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/integrated-live-drill-provider-execution-fence.test.js",
     role: "REAL_PROCESS_PROVIDER_EXECUTION_FENCE_VERIFICATION"
   }),
+  "integrated-live-drill-atomic-publication-crash-fixture": Object.freeze({
+    path: "test/fixtures/atomic-publication-crash-child.js",
+    role: "ATOMIC_PUBLICATION_CRASH_RECOVERY_SUBPROCESS_FIXTURE"
+  }),
   "integrated-live-drill-provider-operation-broker": Object.freeze({
     path: "src/cloud/integrated-live-drill-provider-operation-broker.js",
     role: "ONE_SHOT_PROVIDER_CREDENTIAL_AND_OPERATION_BROKER"
@@ -2653,6 +2657,10 @@ const SOURCE_MARKERS = Object.freeze({
     "provider-reconciliation-input.json"
   ]),
   "integrated-live-drill-execution-fence-tests": Object.freeze([
+    "atomic publication converges after a hard crash at every fault phase",
+    "after-directory-fsync",
+    "PUBLICATION_FAULT_PHASE",
+    "created: !finalExistsAtCrash.has(phase)",
     "real worker contenders have one create-only execution-attempt winner",
     "created.filter(Boolean).length, 1",
     "published temporary-link cleanup tolerates an exact concurrent unlink",
@@ -2672,6 +2680,14 @@ const SOURCE_MARKERS = Object.freeze({
     "simulated conflict cleanup absence",
     "exact owned-file primitive rejects an empty expected file",
     "exact read rejects a new matching hardlink after one-link open"
+  ]),
+  "integrated-live-drill-atomic-publication-crash-fixture": Object.freeze([
+    "publishOrReadExactOwnedFile",
+    "ATOMIC_PUBLICATION_FIXTURE_PATH_REJECTED",
+    "atomic-publication-crash-matrix-v1",
+    "PUBLICATION_FAULT_PHASE",
+    "if (observed === phase) process.exit(73)",
+    "JSON.stringify({ created: result.created })"
   ]),
   "integrated-live-drill-provider-operation-broker": Object.freeze([
     "tideproof.provider-operation-broker-transcript.v1",
