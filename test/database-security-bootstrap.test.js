@@ -849,6 +849,14 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
 
 test("Gate One repeat stability compares equal database timestamps by value", async () => {
   const source = await readFile(gate1SecurityUrl, "utf8");
+  const stableColumnsSource = source.match(
+    /const RECOVERY_SOURCE_STABLE_COLUMNS = Object\.freeze\((\[[\s\S]*?\])\);/u
+  )?.[1];
+  assert.ok(stableColumnsSource);
+  const stableColumns = JSON.parse(stableColumnsSource);
+  assert.equal(stableColumns.length, 22);
+  assert.equal(new Set(stableColumns).size, 22);
+  assert.deepEqual(stableColumns, [...stableColumns].sort());
   const helperSource = source.match(
     /function sameStableDatabaseValue\(left, right\) \{[\s\S]*?^\}/mu
   )?.[0];

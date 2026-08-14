@@ -1937,7 +1937,8 @@ const SOURCE_MARKERS = Object.freeze({
     "assert.doesNotMatch(insertClause, /\\bSELECT\\b/u)",
     "body.match(/v_database_now := clock_timestamp\\(\\);/gu)?.length",
     "Gate One repeat stability compares equal database timestamps by value",
-    "Gate One proves resolver cursor closure inside one transaction"
+    "Gate One proves resolver cursor closure inside one transaction",
+    "assert.deepEqual(stableColumns, [...stableColumns].sort())"
   ]),
   "database-security-posture": Object.freeze([
     "DATABASE_POSTURE_BOOTSTRAP_SESSION_UNSAFE",
