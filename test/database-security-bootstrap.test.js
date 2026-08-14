@@ -1297,6 +1297,49 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
   }
 });
 
+test("Cockroach schema closure preserves typed public surfaces and direct denials", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const gate1Security = await readFile(gate1SecurityUrl, "utf8");
+  const policies = primarySecurityContract.primaryPostureSpec.roleGrantPolicies;
+
+  for (const role of [
+    "tp_provider_activate_role",
+    "tp_provider_terminalize_role",
+    "tp_audit_role"
+  ]) {
+    assert.deepEqual(policies[role].schemas, ["tp_api", "tp_ledger"]);
+  }
+  assert.deepEqual(policies.tp_audit_role.relations, ["g1_receipt_audit_v1"]);
+  assert.deepEqual(
+    policies.tp_provider_activate_role.functions,
+    ["g1_activate_provider_dispatch_v2(UUID, UUID, STRING, STRING)"]
+  );
+  assert.deepEqual(
+    policies.tp_provider_terminalize_role.functions,
+    ["g1_terminalize_provider_dispatch_v2(UUID, UUID, STRING, STRING)"]
+  );
+  assert.match(
+    source,
+    /tp_audit_role: Object\.freeze\(\["tp_api", "tp_ledger"\]\)/u
+  );
+  assert.match(
+    gate1Security,
+    /const PROVIDER_RUNTIME_CLOSURE_PROBES = Object\.freeze\(/u
+  );
+  assert.match(
+    gate1Security,
+    /async function assertProviderRuntimeClosure\([\s\S]*directLedgerRead[\s\S]*directPrivateFunction[\s\S]*publicControlAbsent/u
+  );
+  assert.match(
+    gate1Security,
+    /expectSqlState\([\s\S]*"provider dispatch control absent"/u
+  );
+  assert.match(
+    gate1Security,
+    /providerActivate,[\s\S]*providerTerminalize,[\s\S]*audit,/u
+  );
+});
+
 test("authorizer posture admits the exact DVI proposal capability it grants", () => {
   const signature =
     "g1_authorize_dvi_proposal_v1(UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB)";
@@ -1390,7 +1433,7 @@ test("recovery operator contract enumerates every exact private input", async ()
   assert.match(source, /race receipt `dvi\.authorityEvidenceBindingSha256`/u);
   assert.match(source, /race receipt `dvi\.selectedEvidenceBindingSha256`/u);
   assert.match(source, /The nine `RECOVERY_SOURCE_\*` values/u);
-  assert.match(source, /all 20[\s\S]*managed base-table read probes/u);
+  assert.match(source, /all 22[\s\S]*managed base-table read probes/u);
   assert.match(source, /administrator URL/u);
   assert.match(source, /exact shared private inputs/u);
   assert.match(source, /broker is invoked by the integrated-live[\s\S]*it alone also requires/u);

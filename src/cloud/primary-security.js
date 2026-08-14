@@ -168,9 +168,13 @@ const PRIMARY_ROLE_SCHEMA_POLICIES = Object.freeze({
   // retain schema visibility required to execute that routine safely.
   tp_recovery_source_role: ALL_RUNTIME_SCHEMAS,
   tp_recovery_audit_role: Object.freeze(["tp_api", "tp_ledger"]),
-  tp_provider_activate_role: Object.freeze(["tp_api"]),
-  tp_provider_terminalize_role: Object.freeze(["tp_api"]),
-  tp_audit_role: Object.freeze(["tp_api"])
+  // CockroachDB evaluates the ledger relation used by these public entry
+  // points against the invoking session. Schema USAGE does not grant table
+  // access or private-function EXECUTE; those remain scrubbed and allowlisted
+  // separately below.
+  tp_provider_activate_role: Object.freeze(["tp_api", "tp_ledger"]),
+  tp_provider_terminalize_role: Object.freeze(["tp_api", "tp_ledger"]),
+  tp_audit_role: Object.freeze(["tp_api", "tp_ledger"])
 });
 const PRIMARY_ROLE_GRANT_POLICIES = Object.freeze(Object.fromEntries(
   Object.entries(PRIMARY_ROLE_FUNCTION_POLICIES).map(([role, policy]) => [

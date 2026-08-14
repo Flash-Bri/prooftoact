@@ -895,7 +895,7 @@ the winner operation and request digest onto tenant, incident, evidence, or
 resource values or DVI digests from another run, and do not reconstruct missing
 fields from a latest-row query. Before any resolver, signing, publication, recovery
 bootstrap, or MCP call, both primary credentials must independently return
-SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 20
+SQLSTATE `42501` for all six privilege-pure trust-root write probes and all 22
 managed base-table read probes. The source resolver then joins the authority receipt
 to its outbox intent and exact DVI proposal across request, proposal,
 logical-action, authorization, run, incident, resource, agency, policy,

@@ -387,6 +387,72 @@ async function providerMutationDenials(client) {
   return denials;
 }
 
+const PROVIDER_RUNTIME_CLOSURE_PROBES = Object.freeze({
+  activate: Object.freeze({
+    privateSql: `
+      SELECT tp_private.g1_activate_provider_dispatch_inner_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    publicSql: `
+      SELECT * FROM tp_api.g1_activate_provider_dispatch_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    values: Object.freeze([
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      "a".repeat(64)
+    ])
+  }),
+  terminalize: Object.freeze({
+    privateSql: `
+      SELECT tp_private.g1_terminalize_provider_dispatch_inner_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    publicSql: `
+      SELECT * FROM tp_api.g1_terminalize_provider_dispatch_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    values: Object.freeze([
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.workerSpecSha256
+    ])
+  })
+});
+
+async function assertProviderRuntimeClosure(client, probe) {
+  const directLedgerRead = await expectPrivilegeDenied(
+    client,
+    "SELECT * FROM tp_ledger.g1_provider_dispatch_controls_v2 LIMIT 1"
+  );
+  const directPrivateFunction = await expectPrivilegeDenied(
+    client,
+    probe.privateSql,
+    probe.values
+  );
+  const publicControlAbsent = await expectSqlState(
+    client,
+    probe.publicSql,
+    probe.values,
+    "22023",
+    "provider dispatch control absent"
+  );
+  return {
+    directLedgerRead,
+    directPrivateFunction,
+    publicControlAbsent: {
+      reached: true,
+      sqlstate: publicControlAbsent.sqlstate
+    }
+  };
+}
+
 async function main() {
   const adminConnectionString = requireEnvironment("DATABASE_URL");
   const passwords = Object.fromEntries(
@@ -1784,6 +1850,30 @@ async function main() {
     }
   );
 
+  const providerActivate = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_provider_activate_user",
+      passwords.tp_provider_activate_user
+    ),
+    async (client) => assertProviderRuntimeClosure(
+      client,
+      PROVIDER_RUNTIME_CLOSURE_PROBES.activate
+    )
+  );
+
+  const providerTerminalize = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_provider_terminalize_user",
+      passwords.tp_provider_terminalize_user
+    ),
+    async (client) => assertProviderRuntimeClosure(
+      client,
+      PROVIDER_RUNTIME_CLOSURE_PROBES.terminalize
+    )
+  );
+
   const audit = await withClient(
     connectionStringForUser(
       adminConnectionString,
@@ -1820,6 +1910,8 @@ async function main() {
         recoverySource,
         recoveryAudit,
         providerReconcile,
+        providerActivate,
+        providerTerminalize,
         audit,
         capabilityAuthority: {
           receiptCount: capabilitySnapshot.receipts.length,
