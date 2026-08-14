@@ -1203,6 +1203,10 @@ async function main() {
         client,
         "SELECT * FROM tp_ledger.g1_authority_receipts LIMIT 1"
       );
+      const directPrivateRead = await expectPrivilegeDenied(
+        client,
+        "SELECT * FROM tp_private.g1_resources LIMIT 1"
+      );
       const directTrustRootWrite =
         await assertRecoveryPublisherTrustRootWriteDeniedWithClient(client);
       const auditResolverDenied = await expectPrivilegeDenied(
@@ -1345,6 +1349,7 @@ async function main() {
       }
       return {
         directRead,
+        directPrivateRead,
         directTrustRootWrite,
         auditResolverDenied,
         legacySourceResolverDeniedOrAbsent,

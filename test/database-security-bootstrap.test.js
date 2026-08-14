@@ -965,6 +965,10 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   );
   assert.match(
     gate1Security,
+    /const directPrivateRead = await expectPrivilegeDenied\([\s\S]*SELECT \* FROM tp_private\.g1_resources LIMIT 1/u
+  );
+  assert.match(
+    gate1Security,
     /error\.code === "42501" \|\| error\.code === "42883"/u
   );
   assert.match(
@@ -973,7 +977,7 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   );
   assert.match(
     gate1Security,
-    /const recoverySourceQuery =[\s\S]*await client\.query\("BEGIN"\)[\s\S]*resolved = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*resolvedAgain = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*cursorCountAfterFirst !== 0[\s\S]*cursorCountAfterSecond !== 0[\s\S]*await client\.query\("COMMIT"\)[\s\S]*RECOVERY_SOURCE_STABLE_COLUMNS[\s\S]*stableColumns\.some\([\s\S]*resolverRepeatStable: true/u
+    /const recoverySourceQuery =[\s\S]*await client\.query\("BEGIN"\)[\s\S]*resolved = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*resolvedAgain = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*cursorCountAfterFirst !== 0[\s\S]*cursorCountAfterSecond !== 0[\s\S]*await client\.query\("COMMIT"\)[\s\S]*RECOVERY_SOURCE_STABLE_COLUMNS[\s\S]*stableColumns\.some\([\s\S]*directPrivateRead,[\s\S]*resolverRepeatStable: true/u
   );
 
   assert.match(source, /PRIMARY_PREFLIGHT_POSTURE_SPEC/u);
