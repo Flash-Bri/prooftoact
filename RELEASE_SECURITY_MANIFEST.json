@@ -312,7 +312,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "5613cd2dca23ba77cd96ad4033554b62172ccf9f1cf6ca8209ac47423fe06091"
+      "sha256": "5ba5b6c99f2d7adb2850ef87978b9df781154faf2553ccce578601fb6b5142dc"
     },
     {
       "id": "database-security-posture",
@@ -1014,7 +1014,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "74cecd24f93da4dae518b338ed3659a8aef5de2d17041278fb30fc7c99f2dc0b"
+      "sha256": "8319b60af3202cc53433ba5514a33c3a3f231a8632981ecdcd0dcac785f03031"
     },
     {
       "id": "primary-security-runner",

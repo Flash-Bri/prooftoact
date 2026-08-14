@@ -3218,7 +3218,7 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_recovery_audit_event_v1",
     "tp_private.g1_resolve_recovery_source_snapshot_v1",
     "tp_api.g1_resolve_recovery_source_receipt_v2",
-    "tp_recovery_source_role: Object.freeze([\"tp_api\"])",
+    "tp_recovery_source_role: ALL_RUNTIME_SCHEMAS,",
     "proposal.policy_version = 'g1-admissibility-v2'",
     "receipt.policy_version = 'gate1-policy-v2'",
     "evidence.claim_key AS evidence_claim_key",

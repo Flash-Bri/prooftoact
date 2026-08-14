@@ -901,7 +901,7 @@ test("recovery source resolves through a private scalar snapshot and inert publi
   );
   assert.match(
     source,
-    /tp_recovery_source_role: Object\.freeze\(\["tp_api"\]\)/u
+    /tp_recovery_source_role: ALL_RUNTIME_SCHEMAS,/u
   );
 
   const admissibility = source.match(
@@ -1231,7 +1231,7 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
   assert.deepEqual(
     primarySecurityContract.primaryPostureSpec.roleGrantPolicies
       .tp_recovery_source_role.schemas,
-    ["tp_api"]
+    ["tp_api", "tp_private", "tp_ledger"]
   );
   assert.deepEqual(
     primarySecurityContract.primaryPreflightPostureSpec.roleGrantPolicies

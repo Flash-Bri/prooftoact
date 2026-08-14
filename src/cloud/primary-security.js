@@ -162,7 +162,11 @@ const PRIMARY_ROLE_SCHEMA_POLICIES = Object.freeze({
       ALL_RUNTIME_SCHEMAS
     ])
   ),
-  tp_recovery_source_role: Object.freeze(["tp_api"]),
+  // CockroachDB checks schema USAGE against the invoking session even when
+  // the only executable surface is a SECURITY DEFINER API routine.  Keep
+  // the role's capability surface constrained by function/table grants, but
+  // retain schema visibility required to execute that routine safely.
+  tp_recovery_source_role: ALL_RUNTIME_SCHEMAS,
   tp_recovery_audit_role: Object.freeze(["tp_api", "tp_ledger"]),
   tp_provider_activate_role: Object.freeze(["tp_api"]),
   tp_provider_terminalize_role: Object.freeze(["tp_api"]),
