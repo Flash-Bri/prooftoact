@@ -213,7 +213,7 @@ function alternateDigest(digest) {
   return `${digest[0] === "0" ? "1" : "0"}${digest.slice(1)}`;
 }
 
-async function authorityCurrent(client, request) {
+async function authorityCurrent(client, request, authorityIdentity) {
   const result = await client.query(
     SPEND_AUTHORITY_SQL,
     spendAuthorityValues(request)
@@ -227,11 +227,12 @@ async function authorityCurrent(client, request) {
     row?.decision_replay_kind !== "operation_replay" ||
     row?.decision_proposal_digest !== request.proposalDigest ||
     row?.decision_logical_action_digest !== request.logicalActionDigest ||
-    row?.decision_authorization_epoch !== String(request.authorizationEpoch) ||
+    row?.decision_authorization_epoch !==
+      authorityIdentity.authorizationEpoch ||
     row?.decision_logical_authority_key_sha256 !==
-      request.logicalAuthorityKeySha256 ||
+      authorityIdentity.logicalAuthorityKeySha256 ||
     row?.decision_authorization_binding_sha256 !==
-      request.authorizationBindingSha256 ||
+      authorityIdentity.authorizationBindingSha256 ||
     typeof row?.decision_authority_current !== "boolean"
   ) {
     throw new Error("protected effect authority replay was not exact");
@@ -1151,6 +1152,13 @@ async function main() {
         spendOutcome: spent.rows[0]?.decision_outcome,
         spendFence: spent.rows[0]?.decision_fencing_token,
         replayKind: replay.rows[0]?.decision_replay_kind,
+        authorityIdentity: {
+          authorizationEpoch: spent.rows[0]?.decision_authorization_epoch,
+          logicalAuthorityKeySha256:
+            spent.rows[0]?.decision_logical_authority_key_sha256,
+          authorizationBindingSha256:
+            spent.rows[0]?.decision_authorization_binding_sha256
+        },
         deniedOutcome: denied.rows[0]?.decision_outcome,
         durableProof: durableProof.rows[0],
         gateTwoDirect
@@ -1195,6 +1203,13 @@ async function main() {
     authorizer.spendOutcome !== "resource_reserved" ||
     authorizer.spendFence !== "1" ||
     authorizer.replayKind !== "operation_replay" ||
+    authorizer.authorityIdentity?.authorizationEpoch !== "1" ||
+    !/^[a-f0-9]{64}$/u.test(
+      authorizer.authorityIdentity?.logicalAuthorityKeySha256 ?? ""
+    ) ||
+    !/^[a-f0-9]{64}$/u.test(
+      authorizer.authorityIdentity?.authorizationBindingSha256 ?? ""
+    ) ||
     authorizer.deniedOutcome !== "resource_held_denied" ||
     authorizer.gateTwoDirect?.denied !== true ||
     gateTwoAuthorizer.gateOneDirect?.denied !== true ||
@@ -1329,7 +1344,8 @@ async function main() {
       });
       const currentAfterWrongDigest = await authorityCurrent(
         authorizerClient,
-        normalizedCapabilityRequest
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
       );
 
       const inserted = await client.query(
@@ -1345,7 +1361,8 @@ async function main() {
       });
       const currentAfterInsert = await authorityCurrent(
         authorizerClient,
-        normalizedCapabilityRequest
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
       );
 
       const replay = await client.query(
@@ -1361,7 +1378,8 @@ async function main() {
       });
       const currentAfterReplay = await authorityCurrent(
         authorizerClient,
-        normalizedCapabilityRequest
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
       );
 
       const wrongDigestAfterReplay = await client.query(
@@ -1378,7 +1396,8 @@ async function main() {
       });
       const currentAfterWrongDigestReplay = await authorityCurrent(
         authorizerClient,
-        normalizedCapabilityRequest
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
       );
       if (
         wrongDigestBeforeInsert.rowCount !== 0 ||
@@ -1447,11 +1466,11 @@ async function main() {
     protectedEffect?.logical_action_digest !==
       normalizedCapabilityRequest.logicalActionDigest ||
     protectedEffect?.authorization_epoch !==
-      String(normalizedCapabilityRequest.authorizationEpoch) ||
+      authorizer.authorityIdentity.authorizationEpoch ||
     protectedEffect?.logical_authority_key_sha256 !==
-      normalizedCapabilityRequest.logicalAuthorityKeySha256 ||
+      authorizer.authorityIdentity.logicalAuthorityKeySha256 ||
     protectedEffect?.authorization_binding_sha256 !==
-      normalizedCapabilityRequest.authorizationBindingSha256 ||
+      authorizer.authorityIdentity.authorizationBindingSha256 ||
     protectedEffect?.run_id !== normalizedCapabilityRequest.runId ||
     protectedEffect?.incident_id !== normalizedCapabilityRequest.incidentId ||
     protectedEffect?.resource_id !== normalizedCapabilityRequest.resourceId ||

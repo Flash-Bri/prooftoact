@@ -2078,13 +2078,21 @@ test("Gate One executes the protected-effect insert and replay routine", async (
   );
   assert.match(
     source,
-    /async function authorityCurrent\([\s\S]*client\.query\(\s*SPEND_AUTHORITY_SQL,\s*spendAuthorityValues\(request\)[\s\S]*decision_replay_kind !== "operation_replay"[\s\S]*decision_authority_current/u
+    /async function authorityCurrent\(client, request, authorityIdentity\)[\s\S]*client\.query\(\s*SPEND_AUTHORITY_SQL,\s*spendAuthorityValues\(request\)[\s\S]*decision_replay_kind !== "operation_replay"[\s\S]*authorityIdentity\.authorizationEpoch[\s\S]*authorityIdentity\.logicalAuthorityKeySha256[\s\S]*authorityIdentity\.authorizationBindingSha256[\s\S]*decision_authority_current/u
   );
   assert.doesNotMatch(
     source,
     /FROM tp_private\.g1_authority_receipt_current_v2/u
   );
   assert.doesNotMatch(source, /authorityCurrent\(\s*admin,/u);
+  assert.match(
+    source,
+    /authorityIdentity: \{[\s\S]*authorizationEpoch: spent\.rows\[0\]\?\.decision_authorization_epoch[\s\S]*logicalAuthorityKeySha256:[\s\S]*decision_logical_authority_key_sha256[\s\S]*authorizationBindingSha256:[\s\S]*decision_authorization_binding_sha256/u
+  );
+  assert.doesNotMatch(
+    source,
+    /normalizedCapabilityRequest\.(?:authorizationEpoch|logicalAuthorityKeySha256|authorizationBindingSha256)/u
+  );
   assert.match(
     source,
     /capabilitySnapshot\.effects\.length !== 1[\s\S]*protectedEffect\?\.effect_key !== normalizedCapabilityRequest\.effectKey[\s\S]*protectedEffect\?\.operation_id !== normalizedCapabilityRequest\.operationId/u
