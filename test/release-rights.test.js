@@ -153,7 +153,13 @@ function initializeExactRepository(rootDir) {
 
 function actionsEnvironment(
   rootDir,
-  { eventName = "pull_request", sourceCommit } = {}
+  {
+    eventName = "pull_request",
+    headRepository = null,
+    headSha = null,
+    job = "verify",
+    sourceCommit
+  } = {}
 ) {
   const resolvedSourceCommit =
     sourceCommit ?? git(rootDir, "rev-parse", "HEAD");
@@ -163,7 +169,7 @@ function actionsEnvironment(
     GITHUB_API_URL: "https://api.github.com",
     GITHUB_EVENT_NAME: eventName,
     GITHUB_GRAPHQL_URL: "https://api.github.com/graphql",
-    GITHUB_JOB: "verify",
+    GITHUB_JOB: job,
     GITHUB_REF:
       eventName === "pull_request"
         ? "refs/pull/61/merge"
@@ -180,7 +186,13 @@ function actionsEnvironment(
     }`,
     GITHUB_WORKSPACE: rootDir,
     RUNNER_ENVIRONMENT: "github-hosted",
-    RUNNER_OS: "Linux"
+    RUNNER_OS: "Linux",
+    ...(headRepository === null
+      ? {}
+      : { EXPECTED_PULL_REQUEST_HEAD_REPOSITORY: headRepository }),
+    ...(headSha === null
+      ? {}
+      : { EXPECTED_PULL_REQUEST_HEAD_SHA: headSha })
   };
 }
 
@@ -344,6 +356,112 @@ test("Actions main-push normalization is a strict no-op without residue", () => 
       verifyReleaseRights({ rootDir: fixture.rootDir }).status,
       "CURRENT_SURFACES_PASS"
     );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("Actions exact PR-head normalization binds head separately from merge SHA", () => {
+  const fixture = copyFixture();
+  try {
+    initializeExactRepository(fixture.rootDir);
+    const headSha = git(fixture.rootDir, "rev-parse", "HEAD");
+    const mergeSha = "a".repeat(40);
+    const environment = actionsEnvironment(fixture.rootDir, {
+      headRepository: "Flash-Bri/prooftoact",
+      headSha,
+      job: "verify-pr-head-no-secrets",
+      sourceCommit: mergeSha
+    });
+    const receipt = normalizeFixture(fixture.rootDir, environment);
+
+    assert.equal(receipt.status, "ALREADY_STRICT");
+    assert.equal(receipt.checkoutMode, "PULL_REQUEST_HEAD");
+    assert.equal(receipt.githubEventSha, mergeSha);
+    assert.equal(receipt.sourceCommit, headSha);
+    assert.equal(receipt.headRepository, "Flash-Bri/prooftoact");
+    assert.equal(receipt.normalizedOrigin, null);
+    assert.notEqual(receipt.githubEventSha, receipt.sourceCommit);
+
+    assert.throws(
+      () => normalizeFixture(fixture.rootDir, {
+        ...environment,
+        EXPECTED_PULL_REQUEST_HEAD_SHA: mergeSha
+      }),
+      /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/u
+    );
+    assert.throws(
+      () => normalizeFixture(fixture.rootDir, {
+        ...environment,
+        GITHUB_JOB: "verify"
+      }),
+      /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/u
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("Actions fork PR-head normalization validates then removes fork origin", () => {
+  const fixture = copyFixture();
+  try {
+    initializeExactRepository(fixture.rootDir);
+    const headSha = git(fixture.rootDir, "rev-parse", "HEAD");
+    const forkRepository = "example-contributor/prooftoact-fork";
+    git(
+      fixture.rootDir,
+      "remote",
+      "add",
+      "origin",
+      `https://github.com/${forkRepository}.git`
+    );
+    const environment = actionsEnvironment(fixture.rootDir, {
+      headRepository: forkRepository,
+      headSha,
+      job: "verify-pr-head-no-secrets",
+      sourceCommit: "b".repeat(40)
+    });
+    const receipt = normalizeFixture(fixture.rootDir, environment);
+
+    assert.equal(receipt.checkoutMode, "PULL_REQUEST_HEAD");
+    assert.equal(receipt.sourceCommit, headSha);
+    assert.equal(receipt.headRepository, forkRepository);
+    assert.equal(
+      receipt.normalizedOrigin,
+      `https://github.com/${forkRepository}.git`
+    );
+    assert.equal(git(fixture.rootDir, "remote"), "");
+
+    const hostile = copyFixture();
+    try {
+      initializeExactRepository(hostile.rootDir);
+      git(
+        hostile.rootDir,
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/attacker/substitution.git"
+      );
+      const hostileHead = git(hostile.rootDir, "rev-parse", "HEAD");
+      assert.throws(
+        () => normalizeFixture(
+          hostile.rootDir,
+          actionsEnvironment(hostile.rootDir, {
+            headRepository: forkRepository,
+            headSha: hostileHead,
+            job: "verify-pr-head-no-secrets",
+            sourceCommit: "c".repeat(40)
+          })
+        ),
+        /ACTIONS_CHECKOUT_NORMALIZATION_SOURCE/u
+      );
+      assert.equal(
+        git(hostile.rootDir, "remote", "get-url", "origin"),
+        "https://github.com/attacker/substitution.git"
+      );
+    } finally {
+      hostile.cleanup();
+    }
   } finally {
     fixture.cleanup();
   }
@@ -739,7 +857,7 @@ test("Actions normalization rejects dirty and hidden index state before unlink",
   }
 });
 
-test("CI and read-only preflight order one fail-closed normalizer before strict verification", () => {
+test("CI head, merge, and read-only lanes normalize before strict verification", () => {
   const workflow = fs.readFileSync(
     path.join(ROOT, ".github", "workflows", "ci.yml"),
     "utf8"
@@ -760,8 +878,29 @@ test("CI and read-only preflight order one fail-closed normalizer before strict 
   }
   assert.equal(
     workflow.match(/node scripts\/normalize-actions-checkout\.js/g)?.length,
-    1
+    2
   );
+  for (const marker of [
+    "verify-pr-head-no-secrets:",
+    "if: github.event_name == 'pull_request'",
+    "repository: ${{ github.event.pull_request.head.repo.full_name }}",
+    "ref: ${{ github.event.pull_request.head.sha }}",
+    "EXPECTED_PULL_REQUEST_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}",
+    "EXPECTED_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}",
+    "lfs: false",
+    "submodules: false"
+  ]) {
+    assert(workflow.includes(marker), marker);
+  }
+  for (const forbidden of [
+    "pull_request_target:",
+    "id-token: write",
+    "contents: write",
+    "secrets.",
+    "environment:"
+  ]) {
+    assert.equal(workflow.includes(forbidden), false, forbidden);
+  }
   assert.equal(workflow.includes("npm run ci:normalize-actions-checkout"), false);
   for (const marker of [
     'GIT_OPTIONAL_LOCKS: "0"',

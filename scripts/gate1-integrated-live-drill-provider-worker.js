@@ -1,23 +1,20 @@
 import { pathToFileURL } from "node:url";
 
 import {
-  acquireIntegratedLiveDrillPrivateRootLease,
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT
+  acquireIntegratedLiveDrillPrivateRootLease
 } from "../src/cloud/integrated-live-drill-provider-evidence.js";
-import {
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
-} from "../src/cloud/integrated-live-drill-provider-orchestration.js";
+import { assertIntegratedLiveDrillRuntime } from
+  "../src/cloud/integrated-live-drill-runtime.js";
 
 import {
   assertIntegratedLiveDrillProviderWorkerEnvironment,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT,
-  readIntegratedLiveDrillProviderWorkerInput,
-  runIntegratedLiveDrillProviderWorker
+  runIntegratedLiveDrillProviderWorker,
+  validateIntegratedLiveDrillProviderWorkerInput
 } from "../src/cloud/integrated-live-drill-provider-worker.js";
+import {
+  readSystemdCredential
+} from "../src/cloud/systemd-credential.js";
 
 function requiredEnvironment(name) {
   const value = process.env[name];
@@ -33,73 +30,55 @@ function requiredEnvironment(name) {
 }
 
 export async function main() {
-  const authenticatedPrincipal = requiredEnvironment(
-    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT
-  );
-  const forbiddenRootPath = requiredEnvironment(
-    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT
-  );
   const rootPath = requiredEnvironment(
     INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT
   );
-  let rootBinding;
+  const credentialsDirectory = requiredEnvironment("CREDENTIALS_DIRECTORY");
+  let input;
   try {
-    rootBinding = JSON.parse(requiredEnvironment(
-      INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT
-    ));
+    input = JSON.parse(readSystemdCredential({
+      credentialsDirectory,
+      maximumBytes: 8 * 1024 * 1024,
+      name: "provider-worker-input"
+    }).toString("utf8"));
   } catch (cause) {
     throw new Error(
       "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED",
       { cause }
     );
   }
+  input = validateIntegratedLiveDrillProviderWorkerInput(input);
+  const forbiddenRootPath = input.context.forbiddenRootPath;
   const rootLease = acquireIntegratedLiveDrillPrivateRootLease({
-    binding: rootBinding,
+    binding: input.context.evidenceRootBinding,
     code: "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_REJECTED",
-    descriptor: Number(requiredEnvironment(
-      INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT
-    )),
     forbiddenRootPath,
     rootPath
   });
-  const decisionRootDescriptor = Number(requiredEnvironment(
-    INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
-  ));
-  if (decisionRootDescriptor !== 4) {
-    throw new Error(
-      "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ADMISSION_REJECTED"
-    );
-  }
   try {
-  const environment = assertIntegratedLiveDrillProviderWorkerEnvironment(
-    process.env,
-    { authenticatedPrincipal, forbiddenRootPath, rootBinding, rootPath }
-  );
-  const inputObservation = rootLease.beginOperation();
-  const input = readIntegratedLiveDrillProviderWorkerInput({
-    forbiddenRootPath,
-    inputPath: requiredEnvironment(
-      INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT
-    ),
-    rootPath
-  });
-  rootLease.assertOperation(inputObservation);
-  if (
-    input.authenticatedPrincipal !== authenticatedPrincipal
-  ) {
-    throw new Error(
-      "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED"
+    const environment = assertIntegratedLiveDrillProviderWorkerEnvironment(
+      process.env,
+      { forbiddenRootPath, rootPath }
     );
-  }
-  await rootLease.assertSettled();
-  const result = await runIntegratedLiveDrillProviderWorker({
-    decisionRootDescriptor,
-    evidenceRootDescriptor: rootLease.descriptor,
-    environment,
-    input
-  });
-  await rootLease.assertSettled();
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    assertIntegratedLiveDrillRuntime({
+      environment: process.env,
+      expectedComponent: "worker",
+      spec: input.context.trustedRunContext.spec
+    });
+    if (
+      input.context.recoveryEvidenceRootPath !== rootPath
+    ) {
+      throw new Error(
+        "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_REJECTED"
+      );
+    }
+    await rootLease.assertSettled();
+    const result = await runIntegratedLiveDrillProviderWorker({
+      environment,
+      input
+    });
+    await rootLease.assertSettled();
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } finally {
     rootLease.release();
   }

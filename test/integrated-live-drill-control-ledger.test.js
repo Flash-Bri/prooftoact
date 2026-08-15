@@ -97,6 +97,7 @@ function fixture(ledgerRootPath) {
     packageLockDigest: "d".repeat(64),
     authoritySourceDigest: "e".repeat(64),
     authorityArtifactDigest: "f".repeat(64),
+    runtimeBundleManifestSha256: "6".repeat(64),
     functionArn: expectationTemplate.functions.authority.numericVersionArn,
     raceId: "11111111-1111-4111-8111-111111111111",
     runId: "22222222-2222-4222-8222-222222222222",

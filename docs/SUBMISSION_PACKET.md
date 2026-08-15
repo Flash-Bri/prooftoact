@@ -227,8 +227,9 @@ yet a live-cloud or live-database claim.
 The hardest failure was ambiguity around transaction commit: after a
 connection loss, retrying blindly can spend authority twice. ProofToAct
 classifies the result as empty, complete, or unknown and refuses to invent
-certainty. The proof exercises connection loss before commit, after commit is
-dispatched, and after acknowledgement.
+certainty. The historical accepted Gate One receipt exercises connection loss
+before commit, after commit is dispatched, and after acknowledgement; Final23
+did not repeat that ambiguity drill.
 
 A second challenge was making recovery useful without turning “read-only
 memory” into inherited operational capability. The recovery path therefore
@@ -241,10 +242,17 @@ watermark, and two audit phases before returning sanitized context.
   plan, and Gate One separately proves deterministic admissibility. The
   integrated admissible-snapshot implementation is source-tested locally but
   remains blocked on a fresh live plan and exclusion receipt.
-- One hundred live 50-contender races produced one authority winner each, with
-  no invariant violation.
-- One hundred live runs at each ambiguous-commit boundary produced no partial
-  transaction and no blind replay.
+- Historical accepted Gate One receipts record one hundred live 50-contender
+  races with one authority winner each and no invariant violation. Final23 did
+  not repeat that contention drill.
+- The historical ambiguity receipt records one hundred live runs at each
+  ambiguous-commit boundary with no partial transaction and no blind replay.
+- The sanitized Final23 local record binds a fresh-zero QEMU-TCG x86-64
+  CockroachDB CCL v26.2.0 primary-capability gate, including typed-definer
+  access, direct-DML and cross-role denials, DVI proposal-identity negatives,
+  wrong-digest rejection, one protected-effect insert, and sequential exact
+  replay. It is not provider-hosted, integrated DVI, contention, ambiguity,
+  AWS, Managed MCP, complete application PID1, deployment, or submission proof.
 - A machine-authenticated Managed MCP fixed-query recovery read returned
   signed context only after its pre-read and terminal audits committed.
 - The public MIT repository has deterministic tests, exact dependency

@@ -1,0 +1,18 @@
+[Unit]
+Description=ProofToAct one-shot provider operation socket %i
+Documentation=https://github.com/Flash-Bri/prooftoact/blob/main/docs/FULL_DRILL_EVIDENCE.md
+Requires=prooftoact-integrated-live-drill-dispatch-broker@%i.service
+After=prooftoact-integrated-live-drill-dispatch-broker@%i.service
+
+[Socket]
+ListenStream=/run/prooftoact/%i/provider-operation.sock
+FileDescriptorName=worker
+SocketUser=prooftoact
+SocketGroup=prooftoact
+SocketMode=0600
+DirectoryMode=0711
+RemoveOnStop=yes
+Service=prooftoact-integrated-live-drill-provider-operation@%i.service
+
+[Install]
+WantedBy=sockets.target

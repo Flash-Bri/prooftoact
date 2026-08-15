@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
   AUTHORITY_IDENTITY_CONTRACT,
   authorizationBindingFor,
+  dispatchPayloadFor,
   dviProposalIdentityDigestFor,
   logicalActionDigestFor,
   logicalActionIdentityFor,
   logicalAuthorityKeyFor
 } from "../src/cloud/authority-identity.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
 
 const ACTION = Object.freeze({
   tenantId: "11111111-1111-4111-8111-111111111111",
@@ -36,6 +39,86 @@ function proposal(overrides = {}) {
     ...overrides
   };
 }
+
+test("dispatch payload canonicalization accepts only the bounded domain schema", () => {
+  const variants = [
+    {
+      input: {
+        scenario: "synthetic-highwater",
+        action: "dispatch_rescue_unit"
+      },
+      fields: ["action", "scenario"]
+    },
+    {
+      input: {
+        destination: "synthetic-zone-capability",
+        action: "dispatch_rescue_unit",
+        scenario: "synthetic-highwater"
+      },
+      fields: ["action", "destination", "scenario"]
+    },
+    {
+      input: {
+        logicalDispatch: "contender-001",
+        scenario: "synthetic-highwater",
+        action: "dispatch_rescue_unit"
+      },
+      fields: ["action", "logicalDispatch", "scenario"]
+    },
+    {
+      input: {
+        scenario: "synthetic-highwater",
+        logicalDispatch: "contender-001",
+        action: "dispatch_rescue_unit",
+        destination: "synthetic-zone-capability"
+      },
+      fields: ["action", "destination", "logicalDispatch", "scenario"]
+    }
+  ];
+  for (const { input, fields } of variants) {
+    assert.deepEqual(Object.keys(dispatchPayloadFor(input)), fields);
+  }
+
+  const livePayload = dispatchPayloadFor({
+    scenario: "synthetic-highwater",
+    action: "dispatch_rescue_unit",
+    destination: "synthetic-zone-capability"
+  });
+  const canonical = canonicalJson(livePayload);
+  assert.equal(
+    canonical,
+    '{"action":"dispatch_rescue_unit","destination":"synthetic-zone-capability","scenario":"synthetic-highwater"}'
+  );
+  assert.equal(
+    createHash("sha256").update(canonical).digest("hex"),
+    "5d1c79211961c5702709a3219cb1e533761d64f22cb022a8ef8c291b456d4986"
+  );
+});
+
+test("dispatch payload canonicalization rejects ambiguous or unsafe values", () => {
+  const valid = {
+    action: "dispatch_rescue_unit",
+    scenario: "synthetic-highwater"
+  };
+  for (const invalid of [
+    { action: valid.action },
+    { ...valid, extra: "alternate-identity" },
+    { ...valid, scenario: null },
+    { ...valid, destination: 7 },
+    { ...valid, logicalDispatch: " padded " },
+    { ...valid, scenario: "unsafe/value" },
+    { ...valid, scenario: "x".repeat(129) }
+  ]) {
+    assert.throws(
+      () => dispatchPayloadFor(invalid),
+      /AUTHORITY_DISPATCH_PAYLOAD_(?:SHAPE|TEXT)|bounded canonical text/u
+    );
+  }
+  assert.throws(
+    () => dispatchPayloadFor({ ...valid, action: "other" }),
+    /AUTHORITY_ACTION_KIND_UNSUPPORTED/u
+  );
+});
 
 test("logical action identity has one strict canonical field set", () => {
   const identity = logicalActionIdentityFor({

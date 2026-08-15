@@ -12,6 +12,7 @@ import {
 } from "./database-commit-result.js";
 import {
   canonicalRecoveryAttempt,
+  recoveryAuditEventDigest,
   recoveryBrokerConfigDigest
 } from "./recovery-continuity-identity.js";
 import {
@@ -32,6 +33,7 @@ const RECOVERY_PUBLISHER_TRUST_ROOT_ID =
   "gate1-recovery-publisher-v1";
 export {
   canonicalRecoveryAttempt,
+  recoveryAuditEventDigest,
   recoveryBrokerConfigDigest
 } from "./recovery-continuity-identity.js";
 
@@ -264,6 +266,7 @@ export async function resolveCommittedRecoverySourceReceipt({
       row.resource_id !== expected.resourceId ||
       row.operation_id !== expected.operationId ||
       row.request_digest !== expected.requestDigest ||
+      row.policy_version !== "gate1-policy-v2" ||
       row.outcome !== "resource_reserved" ||
       row.admissibility !== "admissible" ||
       row.has_durable_intent !== true ||
@@ -580,57 +583,6 @@ export function assertSeparatedDatabaseEndpoints({
   };
 }
 
-export function recoveryAuditEventDigest(event) {
-  return sha256(
-    canonicalJson({
-      eventId: requireUuid(event.eventId, "event.eventId"),
-      interactionId: requireUuid(event.interactionId, "event.interactionId"),
-      tenantId: requireUuid(event.tenantId, "event.tenantId"),
-      recoverySessionId: requireUuid(
-        event.recoverySessionId,
-        "event.recoverySessionId"
-      ),
-      callerSubjectHash: requireSha256(
-        event.callerSubjectHash,
-        "event.callerSubjectHash"
-      ),
-      phase: requireText(event.phase, "event.phase"),
-      toolName: FIXED_TOOL,
-      recoveryClusterId: requireUuid(
-        event.recoveryClusterId,
-        "event.recoveryClusterId"
-      ),
-      brokerConfigDigest: requireSha256(
-        event.brokerConfigDigest,
-        "event.brokerConfigDigest"
-      ),
-      queryTemplateDigest: requireSha256(
-        event.queryTemplateDigest,
-        "event.queryTemplateDigest"
-      ),
-      boundInputDigest: requireSha256(
-        event.boundInputDigest,
-        "event.boundInputDigest"
-      ),
-      resultDigest:
-        event.resultDigest === null
-          ? null
-          : requireSha256(event.resultDigest, "event.resultDigest"),
-      sourceWatermark:
-        event.sourceWatermark === null
-          ? null
-          : new Date(event.sourceWatermark).toISOString(),
-      outcome: requireText(event.outcome, "event.outcome"),
-      errorCode:
-        event.errorCode === null
-          ? null
-          : requireText(event.errorCode, "event.errorCode"),
-      startedAt: new Date(event.startedAt).toISOString(),
-      completedAt: new Date(event.completedAt).toISOString()
-    })
-  );
-}
-
 export class RecoveryAuditSink {
   #clientFactory;
   #connectionString;
@@ -856,6 +808,7 @@ export class DeterministicRecoveryBroker {
   #buildIdentity;
   #expectedSourceClusterId;
   #mcpClient;
+  #providerDispatchFinalizer;
   #recoveryClusterId;
   #sessionResolver;
   #trustedPublisherKeys;
@@ -866,6 +819,7 @@ export class DeterministicRecoveryBroker {
     auditSink,
     auditTargetIdentity = null,
     buildIdentity,
+    providerDispatchFinalizer = null,
     recoveryClusterId,
     expectedSourceClusterId,
     trustedPublisherKeys
@@ -884,6 +838,16 @@ export class DeterministicRecoveryBroker {
     this.#auditSink = auditSink;
     this.#auditTargetIdentity = auditTargetIdentity;
     this.#buildIdentity = requireText(buildIdentity, "buildIdentity");
+    if (
+      providerDispatchFinalizer !== null &&
+      (
+        typeof providerDispatchFinalizer.complete !== "function" ||
+        typeof providerDispatchFinalizer.markUnknown !== "function"
+      )
+    ) {
+      throw new TypeError("providerDispatchFinalizer is invalid");
+    }
+    this.#providerDispatchFinalizer = providerDispatchFinalizer;
     this.#recoveryClusterId = requireUuid(
       recoveryClusterId,
       "recoveryClusterId"
@@ -893,6 +857,28 @@ export class DeterministicRecoveryBroker {
       "expectedSourceClusterId"
     );
     this.#trustedPublisherKeys = trustedPublisherKeys;
+  }
+
+  #requiredProviderDispatchFinalizer() {
+    if (this.#providerDispatchFinalizer === null) {
+      throw new Error("RECOVERY_PROVIDER_DISPATCH_FINALIZER_REQUIRED");
+    }
+    return this.#providerDispatchFinalizer;
+  }
+
+  completeProviderDispatch(binding, grant, terminal) {
+    return this.#requiredProviderDispatchFinalizer().complete(
+      binding,
+      grant,
+      terminal
+    );
+  }
+
+  markProviderDispatchUnknown(binding, grant) {
+    return this.#requiredProviderDispatchFinalizer().markUnknown(
+      binding,
+      grant
+    );
   }
 
   #unknown(reason) {

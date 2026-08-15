@@ -23,7 +23,6 @@ import {
 } from "../src/cloud/integrated-live-drill-provider-recovery.js";
 import {
   buildIntegratedLiveDrillProviderOrchestrationPreparation,
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
   INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_HOLD,
   INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES,
@@ -42,23 +41,19 @@ import {
 } from "../src/cloud/integrated-live-drill.js";
 import {
   __test as supervisorTest,
-  INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_CONTEXT_PATH_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT,
   persistIntegratedLiveDrillProviderSupervisorPreparation,
   prepareIntegratedLiveDrillProviderSupervisor,
   resumeIntegratedLiveDrillProviderSupervisor
 } from "../scripts/gate1-integrated-live-drill-provider-supervisor.js";
 import { principalBindingHash } from "../src/cloud/recovery-broker.js";
 import {
-  createRecoveryContinuityFixture,
-  persistFixtureProviderOrchestrationAdmission
+  createRecoveryContinuityFixture
 } from
   "./helpers/integrated-live-drill-recovery-continuity-fixture.js";
 
@@ -76,6 +71,7 @@ const functionArn = "arn:aws:lambda:us-east-1:111111111111:function:test:7";
 const specWithoutIdentity = Object.freeze({
   schemaVersion: INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   authorityArtifactDigest: "3".repeat(64),
+  runtimeBundleManifestSha256: "7".repeat(64),
   authoritySourceDigest: "2".repeat(64),
   configDigest: "0".repeat(64),
   functionArn,
@@ -718,7 +714,7 @@ test("held root lease synchronously rejects swap-out use and exact-path restorat
   }
 });
 
-test("UNKNOWN and expired orchestration stops are durable and permanently nonretryable", (t) => {
+test("pre-execution UNKNOWN and expired stops are durable and permanently nonretryable", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pta-orchestration-stop-"));
   fs.chmodSync(root, 0o700);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -767,175 +763,15 @@ test("UNKNOWN and expired orchestration stops are durable and permanently nonret
   }
 });
 
-test("supervisor snapshots options and rejects accessor-bearing worker output before dereference", async (t) => {
-  const fixture = createRecoveryContinuityFixture(t, {
-    prefix: "pta-orchestration-supervisor-",
-    subjectBindingSha256: principalBindingHash(
-      "principal://tideproof-demo-successor"
-    )
-  });
-  const contextPath = path.join(
-    fixture.context.recoveryEvidenceRootPath,
-    "provider-supervisor-context.json"
-  );
-  const issuedAt = fixture.context.preCallInputs.consumedChildAuthorization
-    .attestation.payload.issuedAt;
-  const preparation = persistIntegratedLiveDrillProviderSupervisorPreparation({
-    context: fixture.context,
-    contextPath,
-    forbiddenRootPath: fixture.context.forbiddenRootPath,
-    issuedAt,
-    rootPath: fixture.context.recoveryEvidenceRootPath
-  });
-  const dispatch = signIntegratedLiveDrillEvidence(
-    preparation.signingPayload,
-    fixture.testOnly.human.privateKeyPkcs8DerBase64,
-    fixture.testOnly.human.publicKey
-  );
-  const dispatchPreparation =
-    readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
-      fixture.context
-    );
-  const { admission, decisionRootLease } =
-    persistFixtureProviderOrchestrationAdmission(t, {
-      context: Object.freeze({
-        ...fixture.context,
-        providerDispatchAuthorization: dispatch
-      }),
-      dispatchAuthorization: dispatch,
-      dispatchPreparation,
-      gate1Preparation: preparation
-    });
-  const environment = {
-    PATH: process.env.PATH,
-    MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
-    PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof",
-    TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT:
-      fixture.context.forbiddenRootPath,
-    TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT:
-      fixture.context.recoveryEvidenceRootPath,
-    [INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING_ENVIRONMENT]:
-      canonicalJson(fixture.context.evidenceRootBinding),
-    [INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_CONTEXT_PATH_ENVIRONMENT]:
-      contextPath,
-    [INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_ENVIRONMENT]:
-      canonicalJson(dispatch),
-    [INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT]:
-      preparation.preparationContextSha256,
-    [INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_RECEIPT_SHA256_ENVIRONMENT]:
-      preparation.preparationReceiptSha256,
-    [INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_SIGNING_PAYLOAD_SHA256_ENVIRONMENT]:
-      preparation.signingPayloadSha256,
-    [INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT]:
-      admission.receiptSha256,
-    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT]: path.join(
-      fixture.context.recoveryEvidenceRootPath,
-      "provider-worker-input.json"
-    ),
-    [INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_PATH_ENVIRONMENT]:
-      path.join(
-        fixture.context.recoveryEvidenceRootPath,
-        "provider-finalization-input.json"
-      )
-  };
-  const expectedContextSha256 =
-    environment[
-      INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT
-    ];
-  environment[
-    INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT
-  ] = "f".repeat(64);
-  let substitutedPreparationWorkerCalls = 0;
-  await assert.rejects(
+test("supervisor RESUME is disabled and accessor-bearing options are never read", async () => {
+  assert.throws(
     () => resumeIntegratedLiveDrillProviderSupervisor({
-      clock: () => Date.parse(issuedAt) + 1,
-      decisionRootDescriptor: decisionRootLease.descriptor,
-      environment,
-      rootDir: fs.realpathSync(process.cwd()),
-      runComponent: async () => {
-        substitutedPreparationWorkerCalls += 1;
-        return {};
+      environment: {
+        MCP_API_KEY: "must-never-be-read"
       }
     }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_REJECTED/u
+    /INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_RESUME_DISABLED/u
   );
-  assert.equal(substitutedPreparationWorkerCalls, 0);
-  environment[
-    INTEGRATED_LIVE_DRILL_PROVIDER_EXPECTED_PREPARATION_CONTEXT_SHA256_ENVIRONMENT
-  ] = expectedContextSha256;
-  const expectedAdmissionReceiptSha256 =
-    environment[INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT];
-  environment[
-    INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT
-  ] = "f".repeat(64);
-  let forgedAdmissionWorkerCalls = 0;
-  await assert.rejects(
-    () => resumeIntegratedLiveDrillProviderSupervisor({
-      clock: () => Date.parse(issuedAt) + 1,
-      decisionRootDescriptor: decisionRootLease.descriptor,
-      environment,
-      rootDir: fs.realpathSync(process.cwd()),
-      runComponent: async () => {
-        forgedAdmissionWorkerCalls += 1;
-        return {};
-      }
-    }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED/u
-  );
-  assert.equal(forgedAdmissionWorkerCalls, 0);
-  environment[
-    INTEGRATED_LIVE_DRILL_PROVIDER_ADMISSION_RECEIPT_SHA256_ENVIRONMENT
-  ] = expectedAdmissionReceiptSha256;
-  let getterRuns = 0;
-  let observedWorkerEnvironment;
-  await assert.rejects(
-    () => resumeIntegratedLiveDrillProviderSupervisor({
-      clock: () => Date.parse(issuedAt) + 1,
-      decisionRootDescriptor: decisionRootLease.descriptor,
-      environment,
-      rootDir: fs.realpathSync(process.cwd()),
-      runComponent: async (_script, childEnvironment) => {
-        observedWorkerEnvironment = childEnvironment;
-        const result = { recovery: {} };
-        Object.defineProperty(result, "providerContinuity", {
-          enumerable: true,
-          get() {
-            getterRuns += 1;
-            return {};
-          }
-        });
-        return result;
-      }
-    }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_INPUT_REJECTED/u
-  );
-  assert.equal(getterRuns, 0);
-  assert.deepEqual(
-    Object.keys(observedWorkerEnvironment).sort(),
-    [
-      "MCP_API_KEY",
-      "PATH",
-      "PRIMARY_AUDIT_DATABASE_URL",
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT",
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT",
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT_FD",
-      INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT,
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING",
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH",
-      "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL"
-    ].sort()
-  );
-  for (const forbidden of [
-    "AWS_ACCESS_KEY_ID",
-    "HOME",
-    "NODE_OPTIONS",
-    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
-    "RECOVERY_PUBLISHER_DATABASE_URL",
-    "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64"
-  ]) {
-    assert.equal(forbidden in observedWorkerEnvironment, false, forbidden);
-  }
-
   let environmentGetterRuns = 0;
   const options = {};
   Object.defineProperty(options, "environment", {
@@ -952,18 +788,10 @@ test("supervisor snapshots options and rejects accessor-bearing worker output be
   assert.equal(environmentGetterRuns, 0);
 });
 
-test("supervisor preserves one exact bounded worker stop code", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pta-supervisor-stop-"));
-  fs.chmodSync(root, 0o700);
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const script = path.join(root, "fail-closed-worker.js");
-  fs.writeFileSync(
-    script,
-    "process.stderr.write('INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED\\n'); process.exitCode = 1;\n",
-    { mode: 0o600 }
-  );
-  assert.throws(
-    () => supervisorTest.defaultRunComponent(script, {}, root),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+test("supervisor exposes no mutable source-path component runner", () => {
+  assert.equal(Object.hasOwn(supervisorTest, "defaultRunComponent"), false);
+  assert.deepEqual(
+    Object.keys(supervisorTest).sort(),
+    ["exactSourceBinding", "supervisorPreparationBody"]
   );
 });

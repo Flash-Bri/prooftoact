@@ -27,8 +27,9 @@ full rename and isolation boundary is recorded in
 
 ## What exists now
 
-This repository contains a deterministic local vertical slice, an accepted
-CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
+This repository contains a deterministic local vertical slice, historical
+accepted CockroachDB Cloud Gate One receipts, one narrow local exact-version
+Final23 compatibility gate, and a locally tested AWS Gate Two candidate:
 
 - provenance, validity-window, and scope checks before vector ranking;
 - unresolved-conflict detection and fail-closed authorization;
@@ -47,8 +48,14 @@ CockroachDB Cloud Gate One proof, and a locally tested AWS Gate Two candidate:
 - an isolated CockroachDB recovery cluster and deterministic Managed MCP
   fixed-query broker with signed context-only bundles;
 - separate pre-read and terminal recovery-audit events on the primary cluster;
-- 100 live 50-contender races and 100 ambiguity runs at each transaction
-  boundary, with no invariant violation;
+- historical accepted Gate One receipts recording 100 live 50-contender races
+  and 100 runs at each ambiguity boundary with no invariant violation; Final23
+  did not repeat those concurrency or ambiguity drills;
+- a fresh-zero local QEMU-TCG x86-64 Final23 gate on CockroachDB CCL v26.2.0
+  that passed typed-definer access, direct-DML and cross-role denials, a simple
+  recovery resolver, DVI proposal-identity negatives, wrong-digest rejection,
+  one protected-effect insert, and sequential exact replay; it is not a
+  provider-hosted, DVI-plan, contention, ambiguity, or PID1 application proof;
 - a generated AWS CloudFormation candidate with private versioned artifacts,
   a signed-out content-only judge surface, IAM-separated Lambda roles, one bounded
   Amazon Nova Micro proposal path, P-256 KMS receipt signing with independently
@@ -80,7 +87,9 @@ Those are explicit build gates, not implied capabilities.
 
 ## Run locally
 
-Requires Node.js 22 or newer. Local tests and the browser demo need no cloud
+Requires the pinned official Node.js v22.23.1 runtime and npm 10.9.8 declared
+in `package.json`. Install the exact lockfile without lifecycle scripts first:
+`npm ci --ignore-scripts`. Local tests and the browser demo need no cloud
 credentials. Live Gate One scripts use the `pg` dependency and explicit
 project credentials supplied through the environment; secrets must remain in
 a secret store and never enter the repository.
@@ -141,8 +150,9 @@ repository, security policy, and required CI workflow. Run
 setting, workflow-identity, or surface-hash drift. Its
 `CURRENT_REPOSITORY_GOVERNANCE_PASS` result verifies a historical checkpoint,
 not current GitHub state or final release approval; the exact final commit
-still requires a fresh API observation, successful hosted CI, and signed-out
-repository review.
+still requires a fresh API observation, a successful no-secrets
+`verify-pr-head-no-secrets` run at the exact candidate head, a distinct
+synthetic-merge run, exact-main hosted CI, and signed-out repository review.
 
 The deterministic
 [`docs/DEPENDENCY_INVENTORY.md`](docs/DEPENDENCY_INVENTORY.md) enumerates all
@@ -151,8 +161,9 @@ identifiers, optional state, and install-script flag. Run
 `npm run dependencies:verify` to reject drift, unreviewed license identifiers,
 non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
 The generated [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) separately
-binds the 46-package union whose source is actually present in the six Gate
-Two bundles, including exact license-text hashes and five explicit fallbacks
+binds the 46-package union whose source is actually present across the six Gate
+Two Lambda bundles, the evidence-provider runtime, and the twelve integrated-
+live runtime bundles, including exact license-text hashes and five explicit fallbacks
 for published packages that omit a standalone license file. Run
 `npm run licenses:verify` to rebuild the esbuild input graph and reject package,
 version, integrity, license-source, fallback, or notice-byte drift. Every Gate
@@ -164,7 +175,7 @@ inventory, and bundle notice inputs to the exact public checkout. The final
 release must rerun that control with the zero-vulnerability and exact-head
 build gates, then bind the uploaded object versions and deployed Lambda
 `CodeSha256` values. Gate Two artifact builds execute the committed builder in
-a detached exact-commit worktree, read project inputs from regular tracked Git
+a standalone exact-commit checkout, read project inputs from regular tracked Git
 blobs, reject host-filesystem path escape, and record both builder and project
 blob identities. The generated deployment invokes numeric Lambda versions;
 monitored aliases are not invocation authority. Credentialed acceptance still
@@ -173,6 +184,25 @@ fenced provider observations per phase, exact censuses of the five primary
 runtime functions plus their shared roles and the two evidence roles,
 and the alternate-principal denial described in
 [`docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md`](docs/IMMUTABLE_DEPLOYMENT_ATTESTATION.md).
+
+The exact Gate Two v9 build also produces a content-addressed integrated-live
+runtime manifest, twelve ESM component bundles, the reviewed descriptor
+launcher, and a pinned official Node v22.23.1 executable for the exact
+`linux-x64` or `darwin-arm64` target. Its receipt inventories all 24 generated
+outputs, privacy-scans the 23 non-Node outputs, and labels the exact official
+Node bytes as a pinned toolchain exemption. Readiness recomputes those facts.
+Before copying anything out of the isolated child build, the parent rehashes
+and size-checks the complete 24-output inventory. The DVI bundle resolves
+`pg`'s optional `pg-native` peer to a tracked fail-closed module, so no
+unreviewed native database binding remains discoverable at runtime.
+The live drill is Linux/systemd-only and may run only as dedicated non-root
+identities from the fifteen receipt-named runtime files copied by the reviewed
+root installer into a root-owned, non-writable-ancestor stage. The same
+receipt binds the independently installed verifier and fourteen exact systemd
+units; direct CLI execution, checkout execution, and package-manager Node shims
+are rejected.
+This is a source and build boundary, not proof of a live provider drill or a
+hostile-administrator defense.
 
 The machine-readable
 [`docs/media/RIGHTS_MANIFEST.json`](docs/media/RIGHTS_MANIFEST.json) binds the

@@ -1,0 +1,14 @@
+[Unit]
+Description=ProofToAct provider activation socket %i
+Requires=prooftoact-integrated-live-drill-dispatch-broker@%i.service
+After=prooftoact-integrated-live-drill-dispatch-broker@%i.service
+
+[Socket]
+ListenStream=/run/prooftoact/%i/provider-activation.sock
+FileDescriptorName=activation
+SocketUser=prooftoact-operation
+SocketGroup=prooftoact-operation
+SocketMode=0600
+DirectoryMode=0711
+RemoveOnStop=yes
+Service=prooftoact-integrated-live-drill-provider-activation@%i.service

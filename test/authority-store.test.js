@@ -433,14 +433,20 @@ test("authority connections are pinned to the requested database", () => {
   assert.equal(parsed.searchParams.get("sslmode"), "verify-full");
 });
 
-test("authority payloads reject values that JSON would silently alter", () => {
+test("authority payloads reject values outside the exact dispatch schema", () => {
+  for (const payload of [null, undefined]) {
+    assert.throws(
+      () => requestDigestFor({ ...REQUEST, payload }),
+      /AUTHORITY_DISPATCH_PAYLOAD_SHAPE/
+    );
+  }
   assert.throws(
     () =>
       requestDigestFor({
         ...REQUEST,
         payload: { ...REQUEST.payload, unsafe: undefined }
       }),
-    /not JSON-safe/
+    /AUTHORITY_DISPATCH_PAYLOAD_SHAPE/
   );
   assert.throws(
     () =>
@@ -448,13 +454,13 @@ test("authority payloads reject values that JSON would silently alter", () => {
         ...REQUEST,
         payload: { ...REQUEST.payload, unsafe: Number.NaN }
       }),
-    /must be finite/
+    /AUTHORITY_DISPATCH_PAYLOAD_SHAPE/
   );
   const cyclic = { ...REQUEST.payload };
   cyclic.self = cyclic;
   assert.throws(
     () => requestDigestFor({ ...REQUEST, payload: cyclic }),
-    /must not contain a cycle/
+    /AUTHORITY_DISPATCH_PAYLOAD_SHAPE/
   );
   assert.throws(
     () =>

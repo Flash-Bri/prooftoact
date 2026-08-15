@@ -200,7 +200,7 @@ test("recovery source principal resolves one current exact authority receipt", a
     authorization_epoch: "1",
     logical_authority_key_sha256: "d".repeat(64),
     authorization_binding_sha256: "e".repeat(64),
-    policy_version: "g1-admissibility-v2",
+    policy_version: "gate1-policy-v2",
     agent_id: "synthetic-agent",
     agency: "rescue",
     outcome: "resource_reserved",
@@ -213,7 +213,7 @@ test("recovery source principal resolves one current exact authority receipt", a
     recorded_at: new Date("2026-08-03T05:00:00.000Z"),
     database_now: new Date("2026-08-03T05:01:00.000Z")
   };
-  const clientFactory = () => ({
+  const clientFactoryFor = (resolvedRow = row) => () => ({
     async connect() {},
     async end() {},
     async query(text, values) {
@@ -227,9 +227,10 @@ test("recovery source principal resolves one current exact authority receipt", a
         binding.operationId,
         binding.requestDigest
       ]);
-      return { rowCount: 1, rows: [row] };
+      return { rowCount: 1, rows: [resolvedRow] };
     }
   });
+  const clientFactory = clientFactoryFor();
 
   const resolved = await resolveCommittedRecoverySourceReceipt({
     binding,
@@ -262,6 +263,16 @@ test("recovery source principal resolves one current exact authority receipt", a
       clientFactory
     }),
     /RECOVERY_SOURCE_DVI_BINDING_INVALID/
+  );
+  await assert.rejects(
+    resolveCommittedRecoverySourceReceipt({
+      binding,
+      clientFactory: clientFactoryFor({
+        ...row,
+        policy_version: "g1-admissibility-v2"
+      })
+    }),
+    /RECOVERY_SOURCE_RECEIPT_INVALID/
   );
 });
 
@@ -373,9 +384,9 @@ test("every primary recovery runner credential must be denied protected base-tab
   assert.deepEqual(denied, {
     denied: true,
     sqlstate: "42501",
-    tableCount: 18
+    tableCount: 22
   });
-  assert.equal(queries.length, 18);
+  assert.equal(queries.length, denied.tableCount);
   for (const query of queries) {
     assert.match(query, /^SELECT 1 FROM (?:tp_private|tp_ledger)\./u);
     assert.match(query, / LIMIT 1$/u);

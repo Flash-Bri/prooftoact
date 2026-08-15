@@ -28,7 +28,8 @@ import { canonicalJson } from "../src/cloud/canonical-json.js";
 import {
   __test as integratedLiveDrillRunnerTest,
   runIntegratedLiveDrill,
-  safeIntegratedLiveDrillFailureCode
+  safeIntegratedLiveDrillFailureCode,
+  systemdIntegratedLiveDrillEnvironment
 } from "../scripts/gate2-integrated-live-drill.js";
 import { canonicalRecoveryAttempt } from "../src/cloud/recovery-broker.js";
 import {
@@ -89,6 +90,9 @@ import {
   INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_PREPARATION_SCHEMA
 } from "../src/cloud/integrated-live-drill-provider-orchestration.js";
 import {
+  INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA
+} from "../src/cloud/integrated-live-drill-provider-reconciliation.js";
+import {
   INTEGRATED_LIVE_DRILL_PACKET_A_INPUT_SCHEMA,
   INTEGRATED_LIVE_DRILL_PACKET_A_TRUSTED_CONTEXT_SCHEMA,
   loadIntegratedLiveDrillPacketAFinalizerTrustedContext,
@@ -121,6 +125,7 @@ const specWithoutIdentity = {
   packageLockDigest: "1".repeat(64),
   authoritySourceDigest: "2".repeat(64),
   authorityArtifactDigest: "3".repeat(64),
+  runtimeBundleManifestSha256: "7".repeat(64),
   functionArn: preAttestationFixture.expectation.functions.authority
     .numericVersionArn,
   raceId,
@@ -797,7 +802,6 @@ function orchestratorEnvironment(privateDirectory, launch) {
     PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/db",
     PRIMARY_CLUSTER_ID: "88888888-8888-4888-8888-888888888888",
     RECOVERY_CLUSTER_ID: "99999999-9999-4999-8999-999999999999",
-    MCP_API_KEY: "mcp-secret-example-value-123456",
     EXPECTED_PRIMARY_HOSTNAME: "primary.invalid",
     EXPECTED_RECOVERY_HOSTNAME: "recovery.invalid",
     TIDEPROOF_RECOVERY_PUBLISHER_TRUST_ROOT: launch.trustRootJson,
@@ -808,6 +812,49 @@ function orchestratorEnvironment(privateDirectory, launch) {
     SOURCE_COMMIT: sourceCommit,
     CONFIG_DIGEST: configDigest
   };
+}
+
+function systemdOrchestratorInput(t, mode, environment) {
+  const directory = fs.mkdtempSync(path.join(
+    fs.realpathSync(os.tmpdir()),
+    "prooftoact-systemd-orchestrator-input-"
+  ));
+  fs.chmodSync(directory, 0o700);
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const credentialPath = path.join(directory, "orchestrator-input");
+  fs.writeFileSync(credentialPath, canonicalJson({
+    environment,
+    schemaVersion:
+      integratedLiveDrillRunnerTest.SYSTEMD_ORCHESTRATOR_INPUT_SCHEMA
+  }), { mode: 0o600 });
+  fs.chmodSync(credentialPath, 0o600);
+  return Object.freeze({
+    CREDENTIALS_DIRECTORY: fs.realpathSync(directory),
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    PATH: "/usr/bin:/bin",
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_SYSTEMD_BOUNDARY:
+      mode === "PREPARE" ? "prepare-v1" : "resume-v1",
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_SYSTEMD_INSTANCE: runId
+  });
+}
+
+function exactSystemdPrepareInput(privateDirectory, launch) {
+  const source = orchestratorEnvironment(privateDirectory, launch);
+  return Object.freeze(Object.fromEntries(
+    integratedLiveDrillRunnerTest.systemdPrepareInputNames.map((name) => [
+      name,
+      source[name]
+    ])
+  ));
+}
+
+function exactSystemdResumeInput(dispatchAuthorization = "{}") {
+  return Object.freeze({
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION:
+      dispatchAuthorization,
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec)
+  });
 }
 
 function orchestrationReceipt(body) {
@@ -892,6 +939,47 @@ function providerSupervisorCompletion(preparation) {
         .PROVIDER_FINALIZATION_DURABLE
     ],
     status: "LOCAL_PROVIDER_SUPERVISOR_COMPLETED_NOT_RELEASED"
+  }));
+}
+
+function providerReconciliationReceipt(preparation, state = "CONSUMED") {
+  return orchestrationReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA,
+    accepted: false,
+    authorizationId: preparation.authorizationId,
+    controlBindingSha256: "9".repeat(64),
+    databaseNow: "2026-08-10T16:01:00.000Z",
+    finalReleaseReady: false,
+    mcpResultSha256: null,
+    providerCompletion: null,
+    providerApiCredentialPresent: false,
+    providerBacked: false,
+    runId,
+    sessionCloseSha256: null,
+    state,
+    status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED",
+    transitionOutcome: "RESOLVED"
+  }));
+}
+
+function completedProviderReconciliationReceipt(preparation) {
+  const completion = providerSupervisorCompletion(preparation);
+  return orchestrationReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECONCILIATION_SCHEMA,
+    accepted: false,
+    authorizationId: preparation.authorizationId,
+    controlBindingSha256: "9".repeat(64),
+    databaseNow: "2026-08-10T16:01:00.000Z",
+    finalReleaseReady: false,
+    mcpResultSha256: "e".repeat(64),
+    providerCompletion: completion,
+    providerApiCredentialPresent: false,
+    providerBacked: false,
+    runId,
+    sessionCloseSha256: "f".repeat(64),
+    state: "COMPLETED",
+    status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED",
+    transitionOutcome: "COMPLETED"
   }));
 }
 
@@ -1232,495 +1320,111 @@ test("integrated receipt fails closed on every cross-act boundary", () => {
   }
 });
 
-test("orchestrator executes exactly DVI, race, then exact-winner recovery", async (t) => {
-  const values = components();
-  const calls = [];
-  const childAuthorizations = [];
+test("systemd orchestrator input admits exact provider-free PREPARE and RESUME payloads", (t) => {
   const privateDirectory = privateEvidenceDirectory();
+  const ledgerDirectory = privateEvidenceDirectory();
   const launch = integratedLaunchEvidence(
-    authorizationLedgerDirectory(privateDirectory)
+    authorizationLedgerDirectory(ledgerDirectory)
   );
-  t.after(() => fs.rmSync(privateDirectory, { recursive: true, force: true }));
-  const environment = orchestratorEnvironment(privateDirectory, launch);
-  const outputs = [values.dvi, values.race, values.recovery];
-  const receipt = await runIntegratedLiveDrill({
-    clock: () => launch.checkedAt,
-    environment,
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => ({
-      sourceCommit,
-      treeDigest,
-      packageLockDigest: spec.packageLockDigest
-    }),
-    runComponent: async (script, args, childEnvironment) => {
-      const scopeId = [
-        "DVI_PROOF",
-        "AWS_AUTHORITY_RACE",
-        "MANAGED_MCP_RECOVERY"
-      ][calls.length];
-      const authorizeChild = scopeId === "MANAGED_MCP_RECOVERY"
-        ? authorizeOrVerifyIntegratedLiveDrillChildLaunch
-        : authorizeIntegratedLiveDrillChildLaunch;
-      childAuthorizations.push(authorizeChild(
-        childEnvironment,
-        scopeId,
-        {
-          now: launch.checkedAt,
-          forbiddenRootPath: fs.realpathSync(process.cwd())
-        }
-      ));
-      calls.push({ script, args, environment: childEnvironment });
-      if (calls.length === 1) {
-        const journalNames = fs.readdirSync(
-          environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH
-        );
-        assert.deepEqual(journalNames, [
-          "00-pre-provider-intent.json"
-        ]);
-        const intent = JSON.parse(fs.readFileSync(path.join(
-          environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH,
-          journalNames[0]
-        ), "utf8"));
-        assert.equal(intent.phase, "PRE_PROVIDER_INTENT");
-      }
-      return outputs[calls.length - 1];
-    }
+  t.after(() => {
+    fs.rmSync(privateDirectory, { recursive: true, force: true });
+    fs.rmSync(ledgerDirectory, { recursive: true, force: true });
   });
-  assert.equal(receipt.status, "INCOMPLETE_LIVE_GATES_PENDING");
-  assert.equal(receipt.acceptance.accepted, false);
-  assert.equal(receipt.acceptance.privateEvidencePersisted, false);
-  assert.deepEqual(receipt.acceptance.blockers, [
-    "SIGNED_PRE_POST_DEPLOYMENT_ATTESTATION_NOT_BOUND",
-    "PRIVATE_RAW_EVIDENCE_NOT_INDEPENDENTLY_ATTESTED",
-    "RESTART_STABLE_SIGNED_BUNDLE_REUSE_NOT_PROVEN",
-    "CRASH_SAFE_RECOVERY_NOT_PROVEN",
-    "CROSS_HOST_STRONGLY_CONSISTENT_AUTHORIZATION_CLAIM_AUTHORITY_NOT_PROVEN",
-    "DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN",
-    "PROVIDER_PRICING_AND_BILLING_NOT_PROVEN"
-  ]);
-  assert.equal(calls.length, 3);
-  assert.match(calls[0].script, /gate1-admissible-vector\.js$/u);
-  assert.match(calls[1].script, /gate2-authority-race\.js$/u);
-  assert.match(calls[2].script, /gate1-recovery-broker\.js$/u);
-  for (const [index, scope] of [
-    "DVI_PROOF",
-    "AWS_AUTHORITY_RACE",
-    "MANAGED_MCP_RECOVERY"
-  ].entries()) {
-    const childAuthorization = parseIntegratedLiveDrillChildAuthorization(
-      calls[index].environment,
-      scope,
-      { now: launch.checkedAt }
-    );
-    assert.equal(childAuthorization.value.runId, spec.runId);
-    assert.equal(childAuthorization.value.scope.sequence, index + 1);
-    assert.equal(
-      childAuthorizations[index].launchReceipt.sequence,
-      index + 1
-    );
-    if (scope === "MANAGED_MCP_RECOVERY") {
-      assert.equal(childAuthorizations[index].launchConsumedNow, true);
-      const resumedChildAuthorization =
-        authorizeOrVerifyIntegratedLiveDrillChildLaunch(
-          calls[index].environment,
-          scope,
-          {
-            now: launch.checkedAt,
-            forbiddenRootPath: fs.realpathSync(process.cwd())
-          }
-        );
-      assert.equal(resumedChildAuthorization.launchConsumedNow, false);
-      assert.equal(
-        resumedChildAuthorization.launchReceipt.receiptSha256,
-        childAuthorizations[index].launchReceipt.receiptSha256
-      );
-    }
-    assert.throws(
-      () => authorizeIntegratedLiveDrillChildLaunch(
-        calls[index].environment,
-        scope,
-        {
-          now: launch.checkedAt,
-          forbiddenRootPath: fs.realpathSync(process.cwd())
-        }
-      ),
-      /INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_ALREADY_CONSUMED/u
-    );
+  const prepareInput = exactSystemdPrepareInput(privateDirectory, launch);
+  const prepareProcess = systemdOrchestratorInput(t, "PREPARE", prepareInput);
+  const prepared = systemdIntegratedLiveDrillEnvironment(prepareProcess);
+  assert.equal(
+    prepared.TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE,
+    "PREPARE"
+  );
+  assert.equal(
+    prepared.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT,
+    `/var/lib/prooftoact/evidence/${runId}/root`
+  );
+  assert.equal(
+    prepared.TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT,
+    `/var/lib/prooftoact/authorization/${runId}/root`
+  );
+  assert.equal(
+    prepared.TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_PATH,
+    `/var/lib/prooftoact/evidence/${runId}/root/dispatch-request.json`
+  );
+  for (const name of [
+    "MCP_API_KEY",
+    "PRIMARY_PROVIDER_CLAIM_DATABASE_URL",
+    "PRIMARY_PROVIDER_BEGIN_DATABASE_URL",
+    "PRIMARY_PROVIDER_FINALIZE_DATABASE_URL",
+    "LD_PRELOAD",
+    "PERL5OPT"
+  ]) {
+    assert.equal(Object.hasOwn(prepared, name), false, name);
   }
-  const tamperedChildEnvironment = { ...calls[0].environment };
-  const tamperedLaunchToken = JSON.parse(
-    tamperedChildEnvironment
-      .TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION
-  );
-  tamperedLaunchToken.payload.nonceSha256 = "0".repeat(64);
-  tamperedChildEnvironment
-    .TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION =
-      canonicalJson(tamperedLaunchToken);
-  assert.throws(
-    () => authorizeIntegratedLiveDrillChildLaunch(
-      tamperedChildEnvironment,
-      "DVI_PROOF",
-      {
-        now: launch.checkedAt,
-        forbiddenRootPath: fs.realpathSync(process.cwd())
-      }
-    ),
-    /INTEGRATED_LIVE_DRILL_CHILD_AUTHORIZATION_SIGNATURE_REJECTED/u
-  );
-  assert.equal(
-    calls[2].environment.RECOVERY_SOURCE_OPERATION_ID,
-    operationId
-  );
-  assert.equal(
-    calls[2].environment.RECOVERY_SOURCE_REQUEST_DIGEST,
-    requestDigest
-  );
-  assert.equal(
-    calls[2].environment
-      .TIDEPROOF_INTEGRATED_LIVE_DRILL_RECOVERY_BUNDLE_PATH,
-    path.join(
-      privateDirectory,
-      `${runId}.signed-recovery-bundle.json`
-    )
-  );
-  assert.equal(
-    calls[2].environment
-      .TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT,
-    privateDirectory
-  );
-  assert.deepEqual(
-    JSON.parse(
-      calls[2].environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC
-    ),
-    spec
-  );
-  assert.equal(
-    calls[2].environment.RECOVERY_SOURCE_AUTHORITY_EVIDENCE_BINDING_SHA256,
-    authorityBinding
-  );
-  assert.equal(calls.every(({ environment: child }) =>
-    !("LEAK_SENTINEL" in child)), true);
-  assert.equal(calls.every(({ environment: child }) =>
-    !("TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64" in
-      child)), true);
-  assert.equal("AWS_ACCESS_KEY_ID" in calls[0].environment, false);
-  assert.equal("MCP_API_KEY" in calls[0].environment, false);
-  assert.equal("DATABASE_URL" in calls[1].environment, false);
-  assert.equal("MCP_API_KEY" in calls[1].environment, false);
-  assert.equal("AWS_ACCESS_KEY_ID" in calls[2].environment, false);
-  assert.equal(
-    "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64" in
-      calls[0].environment,
-    false
-  );
-  assert.equal(
-    fs.statSync(
-      environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH
-    ).mode & 0o777,
-    0o600
-  );
-  assert.equal(
-    fs.statSync(
-      environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH
-    ).mode & 0o777,
-    0o700
-  );
-  assert.equal(
-    fs.readdirSync(
-      environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH
-    ).length,
-    6
-  );
 
-  const finalizerNow = Date.parse("2026-08-09T16:30:00.000Z");
-  const authorization = validateIntegratedLiveDrillRunAuthorization(
-    launch.authorizationAttestation,
+  const resumeInput = exactSystemdResumeInput();
+  const resumed = systemdIntegratedLiveDrillEnvironment(
+    systemdOrchestratorInput(t, "RESUME", resumeInput)
+  );
+  assert.equal(
+    resumed.TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE,
+    "RESUME"
+  );
+  assert.equal(
+    resumed.TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION,
+    "{}"
+  );
+  assert.deepEqual(
+    Object.keys(resumeInput).sort(),
+    [...integratedLiveDrillRunnerTest.systemdResumeInputNames].sort()
+  );
+  assert.equal(Object.hasOwn(resumed, "MCP_API_KEY"), false);
+});
+
+test("systemd orchestrator input rejects extra, missing, ambient, and substituted capability data", (t) => {
+  const privateDirectory = privateEvidenceDirectory();
+  const ledgerDirectory = privateEvidenceDirectory();
+  const launch = integratedLaunchEvidence(
+    authorizationLedgerDirectory(ledgerDirectory)
+  );
+  t.after(() => {
+    fs.rmSync(privateDirectory, { recursive: true, force: true });
+    fs.rmSync(ledgerDirectory, { recursive: true, force: true });
+  });
+  const exact = exactSystemdPrepareInput(privateDirectory, launch);
+  const first = integratedLiveDrillRunnerTest.systemdPrepareInputNames[0];
+  for (const changed of [
+    Object.fromEntries(Object.entries(exact).filter(([name]) => name !== first)),
+    { ...exact, MCP_API_KEY: "forbidden-provider-bearer" },
+    { ...exact, LD_PRELOAD: "/tmp/forbidden.so" },
     {
-      spec,
-      expectation: launch.expectation,
-      committedTrustRoot: launch.committedTrustRoot,
-      humanAuthorizationTrustRoot: launch.humanAuthorizationTrustRoot,
-      authorizationLedgerRootPath: launch.ledgerRootPath,
-      now: finalizerNow
+      ...exact,
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT: "/tmp/substitute"
     }
-  );
-  const ledger = validateIntegratedLiveDrillConsumedControlLedger({
-    authorization,
-    ledgerRootPath: launch.ledgerRootPath,
-    forbiddenRootPath: fs.realpathSync(process.cwd())
-  });
-  assert.equal(
-    ledger.controlLedgerReceipt.receiptSha256,
-    receipt.costControl.authorizationControlLedgerReceiptSha256
-  );
-  // Packet B1 continuity is intentionally non-circular and must be created
-  // before the real recovery call. This orchestrator remains the existing
-  // post-call candidate path, so it must not fabricate a local continuity
-  // journal from the completed candidate.
-  const deploymentAttestationPair = signedSyntheticDeploymentPair(launch);
-  const subjects = integratedLiveDrillTypedEvidenceSubjects({
-    authorization,
-    candidateReceipt: receipt,
-    controlLedgerReceipt: ledger.controlLedgerReceipt,
-    deploymentAttestationPair,
-    expectation: launch.expectation
-  });
-  const evidenceAttestations = Object.freeze(Object.fromEntries(
-    INTEGRATED_LIVE_DRILL_EVIDENCE_KEY_NAMES.map((name, index) => {
-      const subject = subjects[name];
-      const payload = Object.freeze({
-        schemaVersion: INTEGRATED_LIVE_DRILL_TYPED_EVIDENCE[name].schemaVersion,
-        authorizationAttestationSha256:
-          integratedLiveDrillAuthorizationAttestationDigest(
-            launch.authorizationAttestation
-          ),
-        authorizationId: authorization.payload.authorizationId,
-        candidateReceiptSha256: receipt.receiptSha256,
-        configDigest: spec.configDigest,
-        observedAt: new Date(
-          Date.parse("2026-08-09T16:21:00.000Z") + (index * 60_000)
-        ).toISOString(),
-        runId: spec.runId,
-        sourceCommit: spec.sourceCommit,
-        status: INTEGRATED_LIVE_DRILL_TYPED_EVIDENCE[name].status,
-        subject,
-        subjectSha256: integratedLiveDrillCanonicalSha256(subject),
-        treeDigest: spec.treeDigest
-      });
-      return [name, signIntegratedLiveDrillEvidence(
-        payload,
-        launch.evidenceKeys[name].privateKeyPkcs8DerBase64,
-        launch.evidenceKeys[name].publicKey
-      )];
-    })
-  ));
-  const evidenceDigests = Object.freeze({
-    acceptedReceipt: integratedLiveDrillCanonicalSha256(
-      evidenceAttestations.acceptedReceipt
-    ),
-    billingSettlement: integratedLiveDrillCanonicalSha256(
-      evidenceAttestations.billingSettlement
-    ),
-    costUpperBound: integratedLiveDrillCanonicalSha256(
-      evidenceAttestations.costUpperBound
-    ),
-    deploymentPair: integratedLiveDrillCanonicalSha256(
-      deploymentAttestationPair
-    ),
-    latestObservedAt: Date.parse("2026-08-09T16:25:00.000Z"),
-    privateEvidence: integratedLiveDrillCanonicalSha256(
-      evidenceAttestations.privateEvidence
-    ),
-    recoveryContinuity: integratedLiveDrillCanonicalSha256(
-      evidenceAttestations.recoveryContinuity
-    )
-  });
-  const finalizationPayload = Object.freeze({
-    schemaVersion: INTEGRATED_LIVE_DRILL_FINALIZATION_STATEMENT_SCHEMA,
-    statementId: "77777777-7777-4777-8777-777777777777",
-    authorizationId: authorization.payload.authorizationId,
-    authorizationAttestationSha256:
-      integratedLiveDrillAuthorizationAttestationDigest(
-        launch.authorizationAttestation
-      ),
-    sourceCommit: spec.sourceCommit,
-    treeDigest: spec.treeDigest,
-    configDigest: spec.configDigest,
-    runId: spec.runId,
-    candidateReceiptSha256: receipt.receiptSha256,
-    acceptedReceiptAttestationSha256: evidenceDigests.acceptedReceipt,
-    billingStatus: "PENDING",
-    billingSettlementAttestationSha256:
-      evidenceDigests.billingSettlement,
-    privateEvidenceAttestationSha256: evidenceDigests.privateEvidence,
-    recoveryContinuityAttestationSha256:
-      evidenceDigests.recoveryContinuity,
-    costUpperBoundAttestationSha256: evidenceDigests.costUpperBound,
-    deploymentAttestationPairSha256: evidenceDigests.deploymentPair,
-    acceptanceCoreSha256: integratedLiveDrillCanonicalSha256(
-      integratedLiveDrillAcceptanceCore({
-        authorization,
-        evidenceDigests,
-        candidateReceiptSha256: receipt.receiptSha256
-      })
-    ),
-    issuedAt: "2026-08-09T16:27:00.000Z"
-  });
-  const finalizationStatement = signIntegratedLiveDrillEvidence(
-    finalizationPayload,
-    launch.postReceiptKey.privateKeyPkcs8DerBase64,
-    launch.postReceiptKey.publicKey
-  );
-  const finalizerInput = {
-    schemaVersion: INTEGRATED_LIVE_DRILL_PACKET_A_INPUT_SCHEMA,
-    authorizationAttestation: launch.authorizationAttestation,
-    candidateReceipt: receipt,
-    deploymentAttestationPair,
-    evidenceAttestations,
-    expectation: launch.expectation,
-    finalizationStatement
-  };
-  const finalizerTrustedContext = {
-    schemaVersion:
-      INTEGRATED_LIVE_DRILL_PACKET_A_TRUSTED_CONTEXT_SCHEMA,
-    committedTrustRoot: launch.committedTrustRoot,
-    forbiddenRootPath: fs.realpathSync(process.cwd()),
-    humanAuthorizationTrustRoot: launch.humanAuthorizationTrustRoot,
-    ledgerRootPath: launch.ledgerRootPath,
-    runnerIdentity,
-    spec
-  };
-  const finalizerEnvironment = orchestratorEnvironment(
-    privateDirectory,
-    launch
-  );
-  finalizerEnvironment.TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC =
-    canonicalJson(spec);
-  finalizerEnvironment
-    .TIDEPROOF_INTEGRATED_LIVE_DRILL_HUMAN_AUTHORIZATION_TRUST_ROOT =
-      canonicalJson(launch.humanAuthorizationTrustRoot);
-  const loadedFinalizerTrustedContext =
-    loadIntegratedLiveDrillPacketAFinalizerTrustedContext(
-      finalizerEnvironment
-    );
-  assert.equal(
-    loadedFinalizerTrustedContext.forbiddenRootPath,
-    fs.realpathSync(process.cwd())
-  );
-  assert.deepEqual(
-    loadedFinalizerTrustedContext.committedTrustRoot,
-    launch.committedTrustRoot
-  );
-  assert.deepEqual(
-    loadedFinalizerTrustedContext.humanAuthorizationTrustRoot,
-    launch.humanAuthorizationTrustRoot
-  );
-  assert.equal(loadedFinalizerTrustedContext.ledgerRootPath, launch.ledgerRootPath);
-  assert.equal(loadedFinalizerTrustedContext.runnerIdentity, runnerIdentity);
-  assert.deepEqual(loadedFinalizerTrustedContext.spec, spec);
-  const packetA = runIntegratedLiveDrillPacketAFinalizer(
-    finalizerInput,
-    finalizerTrustedContext,
-    { now: finalizerNow }
-  );
-  assert.equal(packetA.accepted, false);
-  assert.equal(packetA.finalReleaseReady, false);
-  assert.equal(packetA.providerBacked, false);
-  assert.equal(packetA.liveProviderBoundW1W5ContinuityProven, false);
-  assert.equal(packetA.localSameHostScaffoldValidated, false);
-  assert.equal(
-    packetA.status,
-    "PACKET_B_PROVIDER_ACCEPTANCE_PENDING"
-  );
-  assert.equal(
-    packetA.recoveryContinuityDisposition,
-    "NOT_PROVEN"
-  );
-  assert.equal(packetA.recoveryContinuityJournalReceiptSha256, null);
-  assert.deepEqual(packetA.packetBBlockers, [
-    INTEGRATED_LIVE_DRILL_PACKET_B_BLOCKER
-  ]);
-  assert.match(packetA.claimBoundary, /Packet B must independently prove/u);
-  assert.match(
-    packetA.claimBoundary,
-    /durable exact-one Managed MCP behavior/u
-  );
-  assert.deepEqual(packetA.packetABoundaryBlockers, [
-    "CROSS_HOST_STRONGLY_CONSISTENT_AUTHORIZATION_CLAIM_AUTHORITY_NOT_PROVEN"
-  ]);
-  assert.equal(
-    packetA.authorizationControlLedgerReceiptSha256,
-    ledger.controlLedgerReceipt.receiptSha256
-  );
-  for (const [field, value] of Object.entries({
-    committedTrustRoot: launch.committedTrustRoot,
-    forbiddenRootPath: privateDirectory,
-    humanAuthorizationTrustRoot: launch.humanAuthorizationTrustRoot,
-    ledgerRootPath: launch.ledgerRootPath,
-    runnerIdentity,
-    spec
-  })) {
+  ]) {
     assert.throws(
-      () => runIntegratedLiveDrillPacketAFinalizer(
-        { ...finalizerInput, [field]: value },
-        finalizerTrustedContext,
-        { now: finalizerNow }
+      () => systemdIntegratedLiveDrillEnvironment(
+        systemdOrchestratorInput(t, "PREPARE", changed)
       ),
-      /INTEGRATED_LIVE_DRILL_PACKET_A_INPUT_REJECTED/u,
-      `untrusted packet field ${field}`
+      /INTEGRATED_LIVE_DRILL_SYSTEMD_INPUT_REJECTED/u
     );
   }
-  const mutatedAuthorizationInput = structuredClone(finalizerInput);
-  mutatedAuthorizationInput.authorizationAttestation.payload
-    .maximumAwsCostUsd = "0.010000";
   assert.throws(
-    () => runIntegratedLiveDrillPacketAFinalizer(
-      mutatedAuthorizationInput,
-      finalizerTrustedContext,
-      { now: finalizerNow }
-    ),
-    /INTEGRATED_LIVE_DRILL_AUTHORIZATION_SIGNATURE_REJECTED/u
+    () => systemdIntegratedLiveDrillEnvironment({
+      ...systemdOrchestratorInput(t, "RESUME", exactSystemdResumeInput()),
+      MCP_API_KEY: "ambient-provider-bearer"
+    }),
+    /INTEGRATED_LIVE_DRILL_SYSTEMD_INPUT_REJECTED/u
   );
   assert.throws(
-    () => runIntegratedLiveDrillPacketAFinalizer(
-      finalizerInput,
-      {
-        ...finalizerTrustedContext,
-        runnerIdentity: `${runnerIdentity}-substituted`
-      },
-      { now: finalizerNow }
-    ),
-    /INTEGRATED_LIVE_DRILL_RUNNER_IDENTITY_REJECTED/u
-  );
-  const substitutedHuman = generateSyntheticTestOnlyEd25519Key();
-  assert.throws(
-    () => runIntegratedLiveDrillPacketAFinalizer(
-      finalizerInput,
-      {
-        ...finalizerTrustedContext,
-        humanAuthorizationTrustRoot: {
-          ...launch.humanAuthorizationTrustRoot,
-          ...substitutedHuman.publicKey
-        }
-      },
-      { now: finalizerNow }
-    ),
-    /INTEGRATED_LIVE_DRILL_AUTHORIZATION_SIGNATURE_REJECTED/u
-  );
-  const substitutedPublisherKeys = {
-    substituted: generateSyntheticTestOnlyP256PublicKey()
-  };
-  assert.throws(
-    () => runIntegratedLiveDrillPacketAFinalizer(
-      finalizerInput,
-      {
-        ...finalizerTrustedContext,
-        committedTrustRoot: {
-          ...finalizerTrustedContext.committedTrustRoot,
-          publisherKeySetDigest: trustedPublisherKeysDigest(
-            substitutedPublisherKeys
-          ),
-          trustedPublisherKeys: substitutedPublisherKeys
-        }
-      },
-      { now: finalizerNow }
-    ),
-    /INTEGRATED_LIVE_DRILL_AUTHORIZATION_REJECTED/u
-  );
-  assert.throws(
-    () => runIntegratedLiveDrillPacketAFinalizer(
-      finalizerInput,
-      {
-        ...finalizerTrustedContext,
-        forbiddenRootPath: privateDirectory
-      },
-      { now: finalizerNow }
-    ),
-    /INTEGRATED_LIVE_DRILL_CONTROL_LEDGER_ROOT_REJECTED/u
+    () => systemdIntegratedLiveDrillEnvironment({
+      ...systemdOrchestratorInput(t, "PREPARE", exact),
+      TIDEPROOF_INTEGRATED_LIVE_DRILL_SYSTEMD_INSTANCE:
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    }),
+    /INTEGRATED_LIVE_DRILL_SYSTEMD_INPUT_REJECTED/u
   );
 });
 
-test("provider orchestration PREPARE holds after durable DVI/race and RESUME does not rerun them", async (t) => {
+test("PREPARE executes only DVI, authority race, and provider-free preparation", async (t) => {
   const values = components();
   const preparation = providerSupervisorPreparation();
   const privateDirectory = privateEvidenceDirectory();
@@ -1732,30 +1436,26 @@ test("provider orchestration PREPARE holds after durable DVI/race and RESUME doe
     fs.rmSync(privateDirectory, { recursive: true, force: true });
     fs.rmSync(ledgerDirectory, { recursive: true, force: true });
   });
-  const baseEnvironment = orchestratorEnvironment(privateDirectory, launch);
-  const prepareCalls = [];
-  let prepareReleaseChecks = 0;
+  const environment = {
+    ...orchestratorEnvironment(privateDirectory, launch),
+    TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
+  };
+  const calls = [];
+  let releaseChecks = 0;
   const hold = await runIntegratedLiveDrill({
     clock: () => launch.checkedAt,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
-    },
+    environment,
     rootDir: fs.realpathSync(process.cwd()),
     verifyProviderPreparationEvidence: ({ gate1Preparation }) => ({
       gate1Preparation
     }),
     verifyRelease: async () => {
-      prepareReleaseChecks += 1;
-      return {
-        sourceCommit,
-        treeDigest,
-        packageLockDigest: spec.packageLockDigest
-      };
+      releaseChecks += 1;
+      return postRelease;
     },
     runComponent: async (script, args, childEnvironment) => {
-      prepareCalls.push({ args, childEnvironment, script });
-      return [values.dvi, values.race, preparation][prepareCalls.length - 1];
+      calls.push({ args, childEnvironment, script });
+      return [values.dvi, values.race, preparation][calls.length - 1];
     }
   });
   assert.equal(
@@ -1765,120 +1465,56 @@ test("provider orchestration PREPARE holds after durable DVI/race and RESUME doe
   assert.equal(hold.accepted, false);
   assert.equal(hold.providerBacked, false);
   assert.equal(hold.finalReleaseReady, false);
-  assert.equal(prepareCalls.length, 3);
-  assert.equal(prepareReleaseChecks, 5);
-  assert.match(prepareCalls[0].script, /gate1-admissible-vector\.js$/u);
-  assert.match(prepareCalls[1].script, /gate2-authority-race\.js$/u);
+  assert.equal(calls.length, 3);
+  assert.equal(releaseChecks, 5);
+  assert.match(calls[0].script, /gate1-admissible-vector\.js$/u);
+  assert.match(calls[1].script, /gate2-authority-race\.js$/u);
   assert.match(
-    prepareCalls[2].script,
+    calls[2].script,
     /gate1-integrated-live-drill-provider-supervisor\.js$/u
   );
-  assert.equal("MCP_API_KEY" in prepareCalls[2].childEnvironment, false);
-  assert.equal("AWS_ACCESS_KEY_ID" in prepareCalls[2].childEnvironment, false);
-  assert.equal("LEAK_SENTINEL" in prepareCalls[2].childEnvironment, false);
+  for (const { childEnvironment } of calls) {
+    for (const name of [
+      "MCP_API_KEY",
+      "PRIMARY_PROVIDER_CLAIM_DATABASE_URL",
+      "PRIMARY_PROVIDER_BEGIN_DATABASE_URL",
+      "PRIMARY_PROVIDER_FINALIZE_DATABASE_URL",
+      "LEAK_SENTINEL"
+    ]) {
+      assert.equal(Object.hasOwn(childEnvironment, name), false, name);
+    }
+  }
   assert.equal(
-    prepareCalls[2].childEnvironment
+    calls[2].childEnvironment
       .TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_MODE,
     "PREPARE"
   );
-  const journalNames = fs.readdirSync(
-    baseEnvironment.TIDEPROOF_INTEGRATED_LIVE_DRILL_JOURNAL_PATH
-  );
-  assert.equal(journalNames.length, 3);
   assert.equal(
-    journalNames.some((name) => name.includes("recovery-result")),
+    fs.existsSync(
+      environment.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH
+    ),
     false
   );
-  assert.equal(
-    fs.existsSync(baseEnvironment.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_PATH),
-    false
-  );
+});
 
-  const resumeCalls = [];
-  const completion = providerSupervisorCompletion(preparation);
-  const completed = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => ({
-      sourceCommit,
-      treeDigest,
-      packageLockDigest: spec.packageLockDigest
+test("direct non-systemd launch fails before any component or provider capability use", async (t) => {
+  const privateDirectory = privateEvidenceDirectory();
+  const launch = integratedLaunchEvidence(
+    authorizationLedgerDirectory(privateDirectory)
+  );
+  t.after(() => fs.rmSync(privateDirectory, { recursive: true, force: true }));
+  let componentCalls = 0;
+  await assert.rejects(
+    () => runIntegratedLiveDrill({
+      environment: orchestratorEnvironment(privateDirectory, launch),
+      rootDir: fs.realpathSync(process.cwd()),
+      runComponent: async () => {
+        componentCalls += 1;
+      }
     }),
-    runComponent: async (script, args, childEnvironment) => {
-      resumeCalls.push({ args, childEnvironment, script });
-      return completion;
-    }
-  });
-  assert.equal(
-    completed.status,
-    "LOCAL_PROVIDER_ORCHESTRATION_COMPLETED_NOT_RELEASED"
+    /INTEGRATED_LIVE_DRILL_SYSTEMD_BOUNDARY_REQUIRED/u
   );
-  assert.equal(completed.accepted, false);
-  assert.equal(completed.providerBacked, false);
-  assert.equal(completed.finalReleaseReady, false);
-  assert.equal(resumeCalls.length, 1);
-  assert.match(
-    resumeCalls[0].script,
-    /gate1-integrated-live-drill-provider-supervisor\.js$/u
-  );
-  assert.equal(resumeCalls[0].childEnvironment.MCP_API_KEY,
-    baseEnvironment.MCP_API_KEY);
-  assert.equal(
-    resumeCalls[0].childEnvironment.PRIMARY_AUDIT_DATABASE_URL,
-    baseEnvironment.PRIMARY_AUDIT_DATABASE_URL
-  );
-  for (const name of [
-    "AWS_ACCESS_KEY_ID",
-    "HOME",
-    "NODE_OPTIONS",
-    "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
-    "RECOVERY_PUBLISHER_DATABASE_URL",
-    "RECOVERY_PUBLISHER_PRIVATE_KEY_PKCS8_BASE64",
-    "TIDEPROOF_INTEGRATED_LIVE_DRILL_CHILD_LAUNCH_PRIVATE_KEY_PKCS8_BASE64"
-  ]) {
-    assert.equal(name in resumeCalls[0].childEnvironment, false, name);
-  }
-
-  let idempotentResumeCalls = 0;
-  const replayedCompletion = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => {
-      throw new Error("idempotent completion must not reverify release");
-    },
-    runComponent: async () => {
-      idempotentResumeCalls += 1;
-      throw new Error("idempotent completion must not respawn supervisor");
-    }
-  });
-  assert.deepEqual(replayedCompletion, completed);
-  assert.equal(idempotentResumeCalls, 0);
-
-  const legacyStopPath = path.join(
-    launch.ledgerRootPath,
-    `${runId}.provider-orchestration-stop.json`
-  );
-  fs.writeFileSync(legacyStopPath, "{}\n", { mode: 0o600 });
-  const replayWithLegacyNoise = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    runComponent: async () => completion,
-    verifyRelease: async () => postRelease
-  });
-  assert.deepEqual(replayWithLegacyNoise, completed);
+  assert.equal(componentCalls, 0);
 });
 
 test("provider orchestration mode/environment accessors fail before execution", async () => {
@@ -1902,584 +1538,31 @@ test("provider orchestration mode/environment accessors fail before execution", 
   assert.equal(getterRuns, 0);
 });
 
-test("concurrent RESUMEs atomically choose stop or admission without provider overlap", async () => {
-  const stopWinsCase = await preparedProviderOrchestrationCase();
-  let releaseBlockedVerifier;
-  let signalBlockedVerifier;
-  const blockedVerifierReached = new Promise((resolve) => {
-    signalBlockedVerifier = resolve;
-  });
-  const unblockVerifier = new Promise((resolve) => {
-    releaseBlockedVerifier = resolve;
-  });
-  let blockedReleaseChecks = 0;
-  let providerCalls = 0;
-  const blockedResume = runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...stopWinsCase.environment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => {
-      blockedReleaseChecks += 1;
-      if (blockedReleaseChecks === 1) {
-        signalBlockedVerifier();
-        await unblockVerifier;
-      }
-      return postRelease;
-    },
-    runComponent: async () => {
-      providerCalls += 1;
-      return providerSupervisorCompletion(stopWinsCase.preparation);
-    }
-  });
-  await blockedVerifierReached;
-  const stopWinner = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    verifyProviderDispatchAuthorization: async () => {
-      throw new Error(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_UNKNOWN_DO_NOT_ACT"
-      );
-    },
-    environment: {
-      ...stopWinsCase.environment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => {
-      providerCalls += 1;
-      return providerSupervisorCompletion(stopWinsCase.preparation);
-    }
-  });
-  releaseBlockedVerifier();
-  const stopObservedByBlockedResume = await blockedResume;
-  assert.equal(stopWinner.decision, "STOPPED_BEFORE_PROVIDER_ADMISSION");
-  assert.deepEqual(stopObservedByBlockedResume, stopWinner);
-  assert.equal(providerCalls, 0);
-
-  const admissionWinsCase = await preparedProviderOrchestrationCase();
-  let releaseProvider;
-  let signalProvider;
-  const providerReached = new Promise((resolve) => {
-    signalProvider = resolve;
-  });
-  const unblockProvider = new Promise((resolve) => {
-    releaseProvider = resolve;
-  });
-  let ownerCalls = 0;
-  let contenderCalls = 0;
-  const admissionOwner = runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...admissionWinsCase.environment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => {
-      ownerCalls += 1;
-      signalProvider();
-      await unblockProvider;
-      return providerSupervisorCompletion(admissionWinsCase.preparation);
-    }
-  });
-  await providerReached;
-  const admissionObservedByContender = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...admissionWinsCase.environment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => {
-      contenderCalls += 1;
-      return providerSupervisorCompletion(admissionWinsCase.preparation);
-    }
-  });
-  assert.equal(admissionObservedByContender.decision, "PROVIDER_ADMITTED");
-  releaseProvider();
-  const admissionCompletion = await admissionOwner;
+test("an admitted-but-incomplete CLI result is a nonzero checkpoint", () => {
   assert.equal(
-    admissionCompletion.status,
-    "LOCAL_PROVIDER_ORCHESTRATION_COMPLETED_NOT_RELEASED"
-  );
-  assert.equal(ownerCalls, 1);
-  assert.equal(contenderCalls, 0);
-});
-
-test("RESUME catch path never returns a mismatched admitted decision", async () => {
-  const prepared = await preparedProviderOrchestrationCase();
-  const decisionPath = path.join(
-    prepared.launch.ledgerRootPath,
-    `${runId}.provider-orchestration-decision.json`
-  );
-  let componentCalls = 0;
-  await assert.rejects(
-    () => runIntegratedLiveDrill({
-      ...providerResumeVerification,
-      environment: {
-        ...prepared.environment,
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-      },
-      rootDir: fs.realpathSync(process.cwd()),
-      verifyRelease: async () => postRelease,
-      runComponent: async () => {
-        componentCalls += 1;
-        const changed = JSON.parse(fs.readFileSync(decisionPath, "utf8"));
-        changed.preparationReceiptSha256 = "e".repeat(64);
-        delete changed.receiptSha256;
-        changed.receiptSha256 = integratedLiveDrillCanonicalSha256(changed);
-        fs.writeFileSync(decisionPath, `${canonicalJson(changed)}\n`, {
-          mode: 0o600
-        });
-        throw new Error(
-          "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_UNKNOWN_DO_NOT_ACT"
-        );
-      }
+    integratedLiveDrillRunnerTest.integratedLiveDrillCliExitCode({
+      accepted: false,
+      status: "HOLD_AWAITING_GLOBAL_PROVIDER_DISPATCH"
     }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATE_CONFLICT/u
-  );
-  assert.equal(componentCalls, 1);
-});
-
-test("RESUME rejects authorization-ledger substitution before provider admission", async () => {
-  const prepared = await preparedProviderOrchestrationCase();
-  const substitutedLedgerParent = privateEvidenceDirectory();
-  const substitutedLedger = authorizationLedgerDirectory(
-    substitutedLedgerParent
-  );
-  let dispatchChecks = 0;
-  let providerCalls = 0;
-  await assert.rejects(
-    () => runIntegratedLiveDrill({
-      ...providerResumeVerification,
-      verifyProviderDispatchAuthorization: async () => {
-        dispatchChecks += 1;
-        return { attestationSha256: "d".repeat(64) };
-      },
-      environment: {
-        ...prepared.environment,
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_AUTHORIZATION_LEDGER_ROOT:
-          substitutedLedger,
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-      },
-      rootDir: fs.realpathSync(process.cwd()),
-      verifyRelease: async () => postRelease,
-      runComponent: async () => {
-        providerCalls += 1;
-        return providerSupervisorCompletion(prepared.preparation);
-      }
-    }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_ROOT_REJECTED/u
-  );
-  assert.equal(dispatchChecks, 0);
-  assert.equal(providerCalls, 0);
-});
-
-test("RESUME rebind and terminal path anomalies fail before provider admission", async () => {
-  const substitutedCase = await preparedProviderOrchestrationCase();
-  let dispatchChecks = 0;
-  let providerCalls = 0;
-  const substituted = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    verifyProviderPreparationEvidence: async ({ gate1Preparation }) => ({
-      gate1Preparation: { ...gate1Preparation, status: "SUBSTITUTED" }
-    }),
-    verifyProviderDispatchAuthorization: async () => {
-      dispatchChecks += 1;
-      return { attestationSha256: "d".repeat(64) };
-    },
-    environment: {
-      ...substitutedCase.environment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => {
-      providerCalls += 1;
-      return providerSupervisorCompletion(substitutedCase.preparation);
-    }
-  });
-  assert.equal(substituted.decision, "STOPPED_BEFORE_PROVIDER_ADMISSION");
-  assert.equal(dispatchChecks, 0);
-  assert.equal(providerCalls, 0);
-
-  for (const terminal of ["decision", "completion"]) {
-    const anomalousCase = await preparedProviderOrchestrationCase();
-    const anomalousPath = terminal === "decision"
-      ? path.join(
-        anomalousCase.launch.ledgerRootPath,
-        `${runId}.provider-orchestration-decision.json`
-      )
-      : path.join(
-        anomalousCase.privateDirectory,
-        `${runId}.provider-orchestration-completion.json`
-      );
-    fs.symlinkSync(`${anomalousPath}.missing`, anomalousPath);
-    let anomalousProviderCalls = 0;
-    await assert.rejects(
-      () => runIntegratedLiveDrill({
-        ...providerResumeVerification,
-        environment: {
-          ...anomalousCase.environment,
-          TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION:
-            "{}",
-          TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-        },
-        rootDir: fs.realpathSync(process.cwd()),
-        verifyRelease: async () => postRelease,
-        runComponent: async () => {
-          anomalousProviderCalls += 1;
-          return providerSupervisorCompletion(anomalousCase.preparation);
-        }
-      }),
-      /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_(?:DECISION|STATE_CONFLICT)/u,
-      terminal
-    );
-    assert.equal(anomalousProviderCalls, 0, terminal);
-  }
-});
-
-test("checkpoint root swap after atomic admission remains durably admitted", async (t) => {
-  const values = components();
-  const preparation = providerSupervisorPreparation();
-  const privateDirectory = privateEvidenceDirectory();
-  const movedDirectory = `${privateDirectory}.moved`;
-  const ledgerDirectory = privateEvidenceDirectory();
-  const launch = integratedLaunchEvidence(
-    authorizationLedgerDirectory(ledgerDirectory)
-  );
-  t.after(() => {
-    fs.rmSync(privateDirectory, { recursive: true, force: true });
-    fs.rmSync(movedDirectory, { recursive: true, force: true });
-    fs.rmSync(ledgerDirectory, { recursive: true, force: true });
-  });
-  const baseEnvironment = orchestratorEnvironment(privateDirectory, launch);
-  const prepareOutputs = [values.dvi, values.race, preparation];
-  await runIntegratedLiveDrill({
-    clock: () => launch.checkedAt,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyProviderPreparationEvidence: ({ gate1Preparation }) => ({
-      gate1Preparation
-    }),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => prepareOutputs.shift()
-  });
-  let call = 0;
-  const decision = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => {
-      call += 1;
-      fs.renameSync(privateDirectory, movedDirectory);
-      fs.mkdirSync(privateDirectory, { mode: 0o700 });
-      return providerSupervisorCompletion(preparation);
-    }
-  });
-  assert.equal(call, 1);
-  assert.equal(decision.state, "PROVIDER_ADMITTED");
-  assert.equal(decision.retryPermitted, false);
-  const durableDecisionPath = path.join(
-    launch.ledgerRootPath,
-    `${runId}.provider-orchestration-decision.json`
-  );
-  assert.equal(fs.existsSync(durableDecisionPath), true);
-  fs.rmSync(privateDirectory, { recursive: true, force: true });
-  fs.renameSync(movedDirectory, privateDirectory);
-});
-
-test("checkpoint root swap during completion cannot contradict admission", async (t) => {
-  const values = components();
-  const preparation = providerSupervisorPreparation();
-  const privateDirectory = privateEvidenceDirectory();
-  const movedDirectory = `${privateDirectory}.moved`;
-  const ledgerDirectory = privateEvidenceDirectory();
-  const launch = integratedLaunchEvidence(
-    authorizationLedgerDirectory(ledgerDirectory)
-  );
-  t.after(() => {
-    fs.rmSync(privateDirectory, { recursive: true, force: true });
-    fs.rmSync(movedDirectory, { recursive: true, force: true });
-    fs.rmSync(ledgerDirectory, { recursive: true, force: true });
-  });
-  const baseEnvironment = orchestratorEnvironment(privateDirectory, launch);
-  const prepareOutputs = [values.dvi, values.race, preparation];
-  await runIntegratedLiveDrill({
-    clock: () => launch.checkedAt,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyProviderPreparationEvidence: ({ gate1Preparation }) => ({
-      gate1Preparation
-    }),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => prepareOutputs.shift()
-  });
-  let releaseChecks = 0;
-  const decision = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => {
-      releaseChecks += 1;
-      if (releaseChecks === 2) {
-        fs.renameSync(privateDirectory, movedDirectory);
-        fs.mkdirSync(privateDirectory, { mode: 0o700 });
-      }
-      return postRelease;
-    },
-    runComponent: async () => providerSupervisorCompletion(preparation)
-  });
-  assert.equal(releaseChecks, 2);
-  assert.equal(decision.state, "PROVIDER_ADMITTED");
-  assert.equal(decision.retryPermitted, false);
-  assert.equal(
-    fs.existsSync(path.join(
-      launch.ledgerRootPath,
-      `${runId}.provider-orchestration-decision.json`
-    )),
-    true
-  );
-  fs.rmSync(privateDirectory, { recursive: true, force: true });
-  fs.renameSync(movedDirectory, privateDirectory);
-});
-
-test("transient root swap-out after admission cannot create a stop", async (t) => {
-  const values = components();
-  const preparation = providerSupervisorPreparation();
-  const privateDirectory = privateEvidenceDirectory();
-  const movedDirectory = `${privateDirectory}.moved`;
-  const ledgerDirectory = privateEvidenceDirectory();
-  const launch = integratedLaunchEvidence(
-    authorizationLedgerDirectory(ledgerDirectory)
-  );
-  t.after(() => {
-    fs.rmSync(privateDirectory, { recursive: true, force: true });
-    fs.rmSync(movedDirectory, { recursive: true, force: true });
-    fs.rmSync(ledgerDirectory, { recursive: true, force: true });
-  });
-  const baseEnvironment = orchestratorEnvironment(privateDirectory, launch);
-  const prepareOutputs = [values.dvi, values.race, preparation];
-  await runIntegratedLiveDrill({
-    clock: () => launch.checkedAt,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyProviderPreparationEvidence: ({ gate1Preparation }) => ({
-      gate1Preparation
-    }),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => prepareOutputs.shift()
-  });
-  let calls = 0;
-  const decision = await runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => postRelease,
-    runComponent: async (_script, _args, _environment, boundary) => {
-      calls += 1;
-      assert.equal(boundary.capabilityRootPath, privateDirectory);
-      assert.equal(Number.isInteger(boundary.rootDescriptor), true);
-      fs.renameSync(privateDirectory, movedDirectory);
-      fs.mkdirSync(privateDirectory, { mode: 0o700 });
-      fs.writeFileSync(path.join(privateDirectory, "replacement.json"), "{}\n", {
-        mode: 0o600
-      });
-      fs.rmSync(privateDirectory, { recursive: true, force: true });
-      fs.renameSync(movedDirectory, privateDirectory);
-      return providerSupervisorCompletion(preparation);
-    }
-  });
-  assert.equal(calls, 1);
-  assert.equal(decision.state, "PROVIDER_ADMITTED");
-  assert.equal(decision.retryPermitted, false);
-  assert.equal(
-    fs.existsSync(path.join(
-      privateDirectory,
-      `${runId}.provider-orchestration-completion.json`
-    )),
-    false
-  );
-});
-
-test("synthetic crash codes escape only under test and one-use admission prevents production redispatch", async (t) => {
-  const makePreparedCase = async (prefix) => {
-    const values = components();
-    const preparation = providerSupervisorPreparation();
-    const privateDirectory = privateEvidenceDirectory();
-    const ledgerDirectory = privateEvidenceDirectory();
-    const launch = integratedLaunchEvidence(
-      authorizationLedgerDirectory(ledgerDirectory)
-    );
-    t.after(() => {
-      fs.rmSync(privateDirectory, { recursive: true, force: true });
-      fs.rmSync(ledgerDirectory, { recursive: true, force: true });
-    });
-    const environment = orchestratorEnvironment(privateDirectory, launch);
-    const outputs = [values.dvi, values.race, preparation];
-    await runIntegratedLiveDrill({
-      clock: () => launch.checkedAt,
-      environment: {
-        ...environment,
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
-      },
-      rootDir: fs.realpathSync(process.cwd()),
-      verifyProviderPreparationEvidence: ({ gate1Preparation }) => ({
-        gate1Preparation
-      }),
-      verifyRelease: async () => postRelease,
-      runComponent: async () => outputs.shift()
-    });
-    return { environment, launch, preparation, prefix };
-  };
-  const crashCode =
-    "INTEGRATED_LIVE_DRILL_SYNTHETIC_CRASH_AFTER_PROVIDER_EVIDENCE_DURABLE";
-
-  const testCase = await makePreparedCase("test");
-  await assert.rejects(
-    () => runIntegratedLiveDrill({
-      ...providerResumeVerification,
-      environment: {
-        ...testCase.environment,
-        NODE_ENV: "test",
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-      },
-      rootDir: fs.realpathSync(process.cwd()),
-      verifyRelease: async () => postRelease,
-      runComponent: async () => { throw new Error(crashCode); }
-    }),
-    new RegExp(crashCode, "u")
+    3
   );
   assert.equal(
-    fs.existsSync(path.join(
-      testCase.launch.ledgerRootPath,
-      `${runId}.provider-orchestration-decision.json`
-    )),
-    true
-  );
-
-  for (const productionCrashCode of [
-    "INTEGRATED_LIVE_DRILL_SYNTHETIC_CRASH_AFTER_PRE_READ_AUDIT_COMMIT",
-    crashCode,
-    "INTEGRATED_LIVE_DRILL_SYNTHETIC_CRASH_AFTER_TERMINAL_AUDIT_COMMIT"
-  ]) {
-    const productionCase = await makePreparedCase(productionCrashCode);
-    let productionCalls = 0;
-    const resumeProduction = () => runIntegratedLiveDrill({
-      ...providerResumeVerification,
-      environment: {
-        ...productionCase.environment,
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-      },
-      rootDir: fs.realpathSync(process.cwd()),
-      verifyRelease: async () => postRelease,
-      runComponent: async () => {
-        productionCalls += 1;
-        throw new Error(productionCrashCode);
-      }
-    });
-    const first = await resumeProduction();
-    assert.equal(first.state, "PROVIDER_ADMITTED");
-    assert.equal(first.retryPermitted, false);
-    assert.equal(productionCalls, 1);
-    const second = await resumeProduction();
-    assert.deepEqual(second, first);
-    assert.equal(productionCalls, 1);
-  }
-});
-
-test("pre-admission expiry persists a fresh-audit-authority stop and never runs", async (t) => {
-  const values = components();
-  const preparation = providerSupervisorPreparation();
-  const privateDirectory = privateEvidenceDirectory();
-  const ledgerDirectory = privateEvidenceDirectory();
-  const launch = integratedLaunchEvidence(
-    authorizationLedgerDirectory(ledgerDirectory)
-  );
-  t.after(() => {
-    fs.rmSync(privateDirectory, { recursive: true, force: true });
-    fs.rmSync(ledgerDirectory, { recursive: true, force: true });
-  });
-  const baseEnvironment = orchestratorEnvironment(privateDirectory, launch);
-  const prepareOutputs = [values.dvi, values.race, preparation];
-  await runIntegratedLiveDrill({
-    clock: () => launch.checkedAt,
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyProviderPreparationEvidence: ({ gate1Preparation }) => ({
-      gate1Preparation
+    integratedLiveDrillRunnerTest.integratedLiveDrillCliExitCode({
+      accepted: false,
+      status: "AUDIT_ONLY_PROVIDER_RECONCILIATION_NOT_RELEASED"
     }),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => prepareOutputs.shift()
-  });
-  let componentCalls = 0;
-  const resume = () => runIntegratedLiveDrill({
-    ...providerResumeVerification,
-    verifyProviderDispatchAuthorization: async () => {
-      throw new Error(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED"
-      );
-    },
-    environment: {
-      ...baseEnvironment,
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION: "{}",
-      TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "RESUME"
-    },
-    rootDir: fs.realpathSync(process.cwd()),
-    verifyRelease: async () => postRelease,
-    runComponent: async () => {
-      componentCalls += 1;
-      return providerSupervisorCompletion(preparation);
-    }
-  });
-  const first = await resume();
-  assert.equal(first.state, "EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED");
-  assert.equal(first.retryPermitted, false);
-  assert.equal(componentCalls, 0);
-  const second = await resume();
-  assert.deepEqual(second, first);
-  assert.equal(componentCalls, 0);
+    3
+  );
+  assert.equal(
+    integratedLiveDrillRunnerTest.integratedLiveDrillCliExitCode({
+      decision: "PROVIDER_COMPLETED",
+      status: "PROVIDER_COMPLETED"
+    }),
+    0
+  );
 });
 
-test("Gate2 preserves one exact bounded child stop code without stderr detail", (t) => {
+test("Gate2 refuses mutable source-path child execution", (t) => {
   const directory = privateEvidenceDirectory();
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const script = path.join(directory, "fail-closed-child.js");
@@ -2495,7 +1578,7 @@ test("Gate2 preserves one exact bounded child stop code without stderr detail", 
       {},
       fs.realpathSync(process.cwd())
     ),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+    /INTEGRATED_LIVE_DRILL_RUNTIME_REJECTED/u
   );
 });
 
@@ -2503,10 +1586,14 @@ test("orchestrator rejects authorization expiry between provider components", as
   const values = components();
   const calls = [];
   const privateDirectory = privateEvidenceDirectory();
+  const ledgerDirectory = privateEvidenceDirectory();
   const launch = integratedLaunchEvidence(
-    authorizationLedgerDirectory(privateDirectory)
+    authorizationLedgerDirectory(ledgerDirectory)
   );
-  t.after(() => fs.rmSync(privateDirectory, { recursive: true, force: true }));
+  t.after(() => {
+    fs.rmSync(privateDirectory, { recursive: true, force: true });
+    fs.rmSync(ledgerDirectory, { recursive: true, force: true });
+  });
   const clockValues = [
     launch.checkedAt,
     launch.checkedAt + 1,
@@ -2519,7 +1606,10 @@ test("orchestrator rejects authorization expiry between provider components", as
   await assert.rejects(
     runIntegratedLiveDrill({
       clock: () => clockValues.shift(),
-      environment: orchestratorEnvironment(privateDirectory, launch),
+      environment: {
+        ...orchestratorEnvironment(privateDirectory, launch),
+        TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_MODE: "PREPARE"
+      },
       rootDir: fs.realpathSync(process.cwd()),
       verifyRelease: async () => ({
         sourceCommit,

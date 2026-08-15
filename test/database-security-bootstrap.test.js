@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
 import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
+import { dviSelectionBindingSha256For } from "../src/cloud/dvi-selection.js";
+import { authorizeSyntheticProposal } from
+  "../scripts/lib/synthetic-authority-proposal.js";
 
 const primaryUrl = new URL("../src/cloud/primary-security.js", import.meta.url);
 const authorityStoreUrl = new URL(
@@ -271,10 +275,19 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g2_spend_authority_race_v1", /session_user <> 'tp_gate2_authorizer_user'/u],
     ["g1_resolve_request_v1", sharedAuthorizerGuard],
     ["g1_observe_authority_race_v1", sharedAuthorizerGuard],
+    ["g1_claim_provider_dispatch_inner_v2", /session_user <> 'tp_provider_claim_user'/u],
+    ["g1_begin_provider_dispatch_inner_v2", /session_user <> 'tp_provider_begin_user'/u],
+    ["g1_redeem_provider_dispatch_inner_v2", /session_user <> 'tp_provider_redeem_user'/u],
+    ["g1_activate_provider_dispatch_inner_v2", /session_user <> 'tp_provider_activate_user'/u],
+    ["g1_complete_provider_dispatch_inner_v2", /session_user <> 'tp_provider_finalize_user'/u],
+    ["g1_mark_provider_dispatch_unknown_inner_v2", /session_user <> 'tp_provider_finalize_user'/u],
+    ["g1_terminalize_provider_dispatch_inner_v2", /session_user <> 'tp_provider_terminalize_user'/u],
+    ["g1_resolve_provider_dispatch_inner_v2", /session_user <> 'tp_provider_reconcile_user'/u],
     ["g1_append_recovery_audit_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_v2", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_append_recovery_audit_event_v3", /session_user <> 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
+    ["g1_resolve_recovery_source_snapshot_v1", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_source_receipt_v2", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user <> 'tp_dispatch_user'/u]
@@ -306,7 +319,10 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
 });
 
 test("recovery evidence selects one exact upstream authority receipt", async () => {
-  for (const url of recoveryScriptUrls) {
+  // The standalone recovery publisher remains the only source-receipt
+  // constructor. The former direct provider broker entry now intentionally
+  // fails closed behind the root-managed systemd boundary.
+  for (const url of [recoveryScriptUrls[0]]) {
     const source = await readFile(url, "utf8");
     for (const field of [
       "RECOVERY_SOURCE_TENANT_ID",
@@ -386,12 +402,199 @@ test("Gate One trust-root write probes use the shared rollback-bounded verifier"
   );
 });
 
-test("recovery source resolver binds the full receipt and outbox identity", async () => {
+test("Gate One selection mismatch replay uses one immutable time window", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.match(
+    source,
+    /const mismatchSelectionWindow = \{[\s\S]*retrievalId: randomUUID\(\),[\s\S]*admittedAt:[\s\S]*expiresAt:/u
+  );
+  assert.equal(
+    source.match(/\.\.\.mismatchSelectionWindow/gu)?.length,
+    3
+  );
+  assert.doesNotMatch(source, /retrievalId: mismatchRetrievalId/u);
+});
+
+test("DVI proposal payload identity uses one exact compact dispatch schema", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  const resolver = source.match(
-    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  const authorize = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_authorize_dvi_proposal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
-  assert.ok(resolver);
+  assert.ok(authorize);
+  assert.match(
+    authorize,
+    /FROM jsonb_object_keys\(p_payload\)[\s\S]*field\.key NOT IN \([\s\S]*'action'[\s\S]*'destination'[\s\S]*'logicalDispatch'[\s\S]*'scenario'[\s\S]*\)/u
+  );
+  assert.match(
+    authorize,
+    /jsonb_typeof\(p_payload->'scenario'\) IS DISTINCT FROM 'string'[\s\S]*octet_length\(p_payload->>'scenario'\) NOT BETWEEN 1 AND 128[\s\S]*p_payload->>'scenario' !~ '\^\[A-Za-z0-9\._:-\]\+\$'/u
+  );
+  assert.match(
+    authorize,
+    /v_payload_canonical :=[\s\S]*'\{"action":'[\s\S]*',"destination":'[\s\S]*',"logicalDispatch":'[\s\S]*',"scenario":'[\s\S]*v_payload_digest := sha256\(v_payload_canonical::BYTES\)/u
+  );
+  assert.doesNotMatch(authorize, /v_payload_canonical := p_payload::STRING/u);
+});
+
+test("bootstrap fails closed on legacy DVI payload identities before installing functions", async () => {
+  const compatible = await primarySecurityContract
+    .assertDviProposalPayloadCompatibility({
+      responses: [
+        { rowCount: 1, rows: [{ incompatible_count: "0" }] },
+        { rowCount: 1, rows: [{ incompatible_count: "0" }] }
+      ],
+      async query() {
+        return this.responses.shift();
+      }
+    });
+  assert.deepEqual(compatible, {
+    compatible: true,
+    inspectedIncompatibleRows: 0
+  });
+
+  for (const responses of [
+    [{ rowCount: 1, rows: [{ incompatible_count: "1" }] }],
+    [
+      { rowCount: 1, rows: [{ incompatible_count: "0" }] },
+      { rowCount: 1, rows: [{ incompatible_count: "1" }] }
+    ]
+  ]) {
+    await assert.rejects(
+      primarySecurityContract.assertDviProposalPayloadCompatibility({
+        responses: [...responses],
+        async query() {
+          return this.responses.shift();
+        }
+      }),
+      /DVI_PROPOSAL_PAYLOAD_CANONICALIZATION_INCOMPATIBLE/u
+    );
+  }
+
+  const source = await readFile(primaryUrl, "utf8");
+  const scrub = source.indexOf("await scrubManagedPrivileges(client);");
+  const compatibility = source.indexOf(
+    "await assertDviProposalPayloadCompatibility(client);"
+  );
+  const install = source.indexOf("await createFunctions(client);");
+  assert.ok(scrub !== -1 && scrub < compatibility && compatibility < install);
+});
+
+test("synthetic denial and authorization replay one durable DVI selection", async () => {
+  const request = {
+    tenantId: "00000000-0000-4000-8000-000000000011",
+    runId: "00000000-0000-4000-8000-000000000012",
+    incidentId: "00000000-0000-4000-8000-000000000013",
+    resourceId: "synthetic-resource",
+    evidenceId: "00000000-0000-4000-8000-000000000014",
+    agency: "rescue",
+    payload: {
+      action: "dispatch_rescue_unit",
+      scenario: "synthetic-highwater"
+    }
+  };
+  const selectionWindow = {
+    retrievalId: "00000000-0000-4000-8000-000000000015",
+    admittedAt: "2026-08-13T20:00:00.000Z",
+    expiresAt: "2026-08-13T20:05:00.000Z"
+  };
+  const durableSelections = new Map();
+  const observedBindings = [];
+  const durableStore = {
+    async recordDviSelectionReceiptForTest(selection) {
+      const key = `${selection.tenantId}:${selection.retrievalId}`;
+      const binding = dviSelectionBindingSha256For(selection);
+      observedBindings.push(binding);
+      const existing = durableSelections.get(key);
+      if (existing !== undefined && existing !== binding) {
+        throw new Error(
+          "synthetic DVI selection receipt conflicted with durable state"
+        );
+      }
+      durableSelections.set(key, binding);
+    }
+  };
+  const proposalAuthorizer = async ({ requestedSelectedEvidenceId }) =>
+    requestedSelectedEvidenceId === request.evidenceId
+      ? {
+          outcome: "proposal_authorized",
+          authorizationCurrent: true
+        }
+      : {
+          outcome: "proposal_authorization_denied",
+          reason: "dvi_selection_request_mismatch",
+          authorizationCurrent: false
+        };
+  const sharedOptions = {
+    ...selectionWindow,
+    evidenceDigest: "a".repeat(64),
+    proposalAuthorizer
+  };
+
+  const denied = await authorizeSyntheticProposal(
+    durableStore,
+    request,
+    {
+      ...sharedOptions,
+      allowDenied: true,
+      requestedSelectedEvidenceId:
+        "00000000-0000-4000-8000-000000000016"
+    }
+  );
+  assert.equal(denied.authorization.reason, "dvi_selection_request_mismatch");
+
+  const authorized = await authorizeSyntheticProposal(
+    durableStore,
+    request,
+    sharedOptions
+  );
+  assert.equal(authorized.authorization.outcome, "proposal_authorized");
+  assert.equal(observedBindings[0], observedBindings[1]);
+  assert.equal(durableSelections.size, 1);
+
+  await assert.rejects(
+    authorizeSyntheticProposal(durableStore, request, {
+      ...sharedOptions,
+      admittedAt: "2026-08-13T20:00:00.001Z"
+    }),
+    /synthetic DVI selection receipt conflicted with durable state/u
+  );
+});
+
+test("Gate One SQL identity probes isolate one intended fault", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.doesNotMatch(
+    source,
+    /(payloadSubstitution|proposalAlias|forgedRequestDigest|nullIntentNonce)\[13\] = randomUUID\(\)/u
+  );
+  assert.match(
+    source,
+    /function assertSqlProbeRequestBindings\(values\)[\s\S]*effectKey: values\[13\][\s\S]*requestPayload\[field\] !== expected[\s\S]*requestPayload\.actionKind !== payload\.action/u
+  );
+  assert.equal(
+    source.match(/assertSqlProbeRequestBindings\(/gu)?.length,
+    5,
+    "the pre-query binding assertion must cover all four probes"
+  );
+  assert.match(
+    source,
+    /payloadSubstitutionReason:[\s\S]*proposal_authorization_missing_or_stale/u
+  );
+  assert.match(
+    source,
+    /forgedRequestDigest,[\s\S]*"22023",[\s\S]*"database-derived authority identity mismatch"/u
+  );
+  assert.match(
+    source,
+    /nullIntentNonce,[\s\S]*"22023",[\s\S]*"authority request identity binding mismatch"/u
+  );
+});
+
+test("private recovery source snapshot binds identity while separating policy domains", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const snapshot = source.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_resolve_recovery_source_snapshot_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(snapshot);
   for (const field of [
     "request_digest",
     "proposal_digest",
@@ -407,7 +610,7 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
     "payload_digest"
   ]) {
     assert.match(
-      resolver,
+      snapshot,
       new RegExp(`outbox\\.${field}\\s*=\\s*receipt\\.${field}`, "u"),
       field
     );
@@ -421,34 +624,68 @@ test("recovery source resolver binds the full receipt and outbox identity", asyn
     "run_id",
     "incident_id",
     "resource_id",
-    "agency",
-    "policy_version"
+    "agency"
   ]) {
     assert.match(
-      resolver,
+      snapshot,
       new RegExp(`proposal\\.${field}\\s*=\\s*receipt\\.${field}`, "u"),
       `proposal.${field}`
     );
   }
   assert.match(
-    resolver,
+    snapshot,
     /proposal\.selected_evidence_id\s*=\s*receipt\.evidence_id/u
   );
   assert.match(
-    resolver,
+    snapshot,
     /proposal\.selected_evidence_digest\s*=\s*receipt\.evidence_digest/u
   );
-  assert.match(resolver, /proposal\.authority_evidence_binding_sha256/u);
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const emittedSnapshot = statements.find((statement) =>
+    statement.includes("g1_resolve_recovery_source_snapshot_v1")
+  );
+  assert.ok(emittedSnapshot);
+  assert.equal(
+    emittedSnapshot.match(
+      /proposal\.policy_version = 'g1-admissibility-v2'/gu
+    )?.length,
+    2
+  );
+  assert.equal(
+    emittedSnapshot.match(/receipt\.policy_version = 'gate1-policy-v2'/gu)
+      ?.length,
+    2
+  );
+  assert.doesNotMatch(
+    emittedSnapshot,
+    /proposal\.policy_version\s*=\s*receipt\.policy_version/u
+  );
+  assert.match(snapshot, /proposal\.authority_evidence_binding_sha256/u);
 });
 
-test("recovery source resolver requires the exact live authority holder", async () => {
+test("recovery source resolves through a private scalar snapshot and inert public boundary", async () => {
   const source = await readFile(primaryUrl, "utf8");
-  const resolver = source.match(
-    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  const snapshot = source.match(
+    /CREATE OR REPLACE FUNCTION tp_private\.g1_resolve_recovery_source_snapshot_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
-  assert.ok(resolver);
+  const wrapperMatch = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?RETURNS TABLE\(([\s\S]*?)\)\s*LANGUAGE PLpgSQL[\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  );
+  const returnSignature = wrapperMatch?.[1];
+  const wrapper = wrapperMatch?.[2];
+  assert.ok(snapshot);
+  assert.ok(returnSignature);
+  assert.ok(wrapper);
   assert.match(
-    resolver,
+    snapshot,
+    /IF NOT \(session_user = 'tp_recovery_source_user'\) THEN[\s\S]*42501/u
+  );
+  assert.match(
+    wrapper,
+    /IF NOT \(session_user = 'tp_recovery_source_user'\) THEN[\s\S]*42501/u
+  );
+  assert.match(
+    snapshot,
     /JOIN tp_private\.g1_resources AS resource\s+ON resource\.tenant_id = receipt\.tenant_id\s+AND resource\.resource_id = receipt\.resource_id/u
   );
   for (const [resourceField, receiptField] of [
@@ -461,7 +698,7 @@ test("recovery source resolver requires the exact live authority holder", async 
     ["current_fence", "fencing_token"]
   ]) {
     assert.match(
-      resolver,
+      snapshot,
       new RegExp(
         `resource\\.${resourceField}\\s*=\\s*receipt\\.${receiptField}`,
         "u"
@@ -470,35 +707,202 @@ test("recovery source resolver requires the exact live authority holder", async 
     );
   }
   assert.match(
-    resolver,
+    snapshot,
+    /SELECT count\(\*\)::INT8[\s\S]*INTO v_candidate_count[\s\S]*SELECT 1[\s\S]*LIMIT 2[\s\S]*AS bounded_candidates;[\s\S]*COALESCE\(v_candidate_count, 0\) <> 1 THEN[\s\S]*RETURN NULL;/u
+  );
+  assert.match(
+    snapshot,
     /receipt\.lease_expires_at AS receipt_lease_expires_at[\s\S]*resource\.lease_expires_at AS resource_lease_expires_at[\s\S]*proposal\.expires_at AS proposal_expires_at/u
   );
   assert.match(
-    resolver,
-    /INTO v_candidate[\s\S]*LIMIT 2;[\s\S]*IF NOT FOUND OR v_candidate\.candidate_count <> 1[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_candidate\.receipt_lease_expires_at <= v_database_now[\s\S]*v_candidate\.resource_lease_expires_at <= v_database_now[\s\S]*v_candidate\.proposal_expires_at <= v_database_now[\s\S]*RETURN QUERY SELECT/u
+    snapshot,
+    /evidence\.observed_at AS evidence_observed_at[\s\S]*evidence\.valid_from AS evidence_valid_from[\s\S]*evidence\.valid_until AS evidence_valid_until[\s\S]*evidence\.conflict_status AS evidence_conflict_status[\s\S]*evidence\.claim_key AS evidence_claim_key[\s\S]*evidence\.claim_value AS evidence_claim_value/u
+  );
+  assert.match(
+    snapshot,
+    /OPEN v_candidate_conflict_cursor NO SCROLL FOR[\s\S]*other\.tenant_id = v_candidate_tenant_id[\s\S]*other\.incident_id = v_candidate_incident_id[\s\S]*other\.evidence_id <> v_candidate_evidence_id[\s\S]*other\.claim_key = v_candidate_evidence_claim_key[\s\S]*other\.claim_value <> v_candidate_evidence_claim_value[\s\S]*other_key\.status = 'active'[\s\S]*other\.agency_scope IN \(v_candidate_agency, '\*'\)[\s\S]*ORDER BY other\.evidence_id;[\s\S]*FETCH v_candidate_conflict_cursor INTO[\s\S]*v_candidate_conflict_count > 10000[\s\S]*CLOSE v_candidate_conflict_cursor;[\s\S]*IF NOT v_candidate_conflict_snapshot_valid THEN[\s\S]*RETURN NULL;/u
+  );
+  const freshClock = snapshot.indexOf("v_database_now := clock_timestamp();");
+  const snapshotReturn = snapshot.indexOf("RETURN jsonb_build_object(", freshClock);
+  assert.ok(freshClock > 0 && snapshotReturn > freshClock);
+  const postClockDecision = snapshot.slice(freshClock, snapshotReturn);
+  assert.match(
+    postClockDecision,
+    /v_candidate_evidence_observed_at >[\s\S]*v_database_now \+ INTERVAL '5 minutes'[\s\S]*v_candidate_evidence_valid_from > v_database_now[\s\S]*v_candidate_evidence_valid_until <= v_database_now[\s\S]*v_candidate_evidence_conflict_status = 'unresolved'[\s\S]*v_candidate_conflict_index := 0;[\s\S]*WHILE v_candidate_conflict_index <[\s\S]*jsonb_array_length\(v_candidate_conflict_windows\) LOOP[\s\S]*RETURN NULL;[\s\S]*END LOOP;/u
+  );
+  assert.equal(
+    snapshot.match(/v_database_now := clock_timestamp\(\);/gu)?.length,
+    1
+  );
+  assert.doesNotMatch(postClockDecision, /\btp_(?:api|private|ledger)\./u);
+  assert.doesNotMatch(postClockDecision, /\b(?:SELECT|FROM)\b/u);
+  assert.doesNotMatch(snapshot, /statement_timestamp\(\)|transaction_timestamp\(\)/u);
+  assert.doesNotMatch(snapshot, /\bRETURN NEXT\b|\bRETURN QUERY\b/u);
+
+  const snapshotKeys = Object.freeze([
+    "snapshot_schema",
+    "tenant_id",
+    "run_id",
+    "incident_id",
+    "evidence_id",
+    "operation_id",
+    "recorded_at",
+    "request_digest",
+    "proposal_digest",
+    "logical_action_digest",
+    "authorization_epoch",
+    "logical_authority_key_sha256",
+    "authorization_binding_sha256",
+    "policy_version",
+    "agent_id",
+    "agency",
+    "outcome",
+    "reason",
+    "evidence_digest",
+    "authority_evidence_binding_sha256",
+    "resource_id",
+    "has_durable_intent",
+    "admissibility",
+    "database_now"
+  ]);
+  const normalizedSnapshot = snapshot.replace(/\s+/gu, " ");
+  assert.match(
+    normalizedSnapshot,
+    /RETURN jsonb_build_object\( 'snapshot_schema', 'g1-recovery-source-snapshot-v1'/u
+  );
+  const snapshotPayload = normalizedSnapshot.slice(
+    normalizedSnapshot.indexOf("RETURN jsonb_build_object(")
+  );
+  for (const key of snapshotKeys) {
+    assert.equal(
+      snapshotPayload.split(`'${key}'`).length - 1,
+      1,
+      key
+    );
+  }
+
+  assert.match(
+    wrapper,
+    /v_snapshot := tp_private\.g1_resolve_recovery_source_snapshot_v1\([\s\S]*p_request_digest[\s\S]*\);/u
+  );
+  assert.match(
+    wrapper,
+    /v_snapshot IS DISTINCT FROM jsonb_build_object\([\s\S]*'snapshot_schema', v_snapshot->'snapshot_schema'[\s\S]*'database_now', v_snapshot->'database_now'[\s\S]*\)/u
+  );
+  assert.match(
+    wrapper,
+    /jsonb_typeof\(v_snapshot->'reason'\) IS DISTINCT FROM 'string'[\s\S]*jsonb_typeof\(v_snapshot->'reason'\) IS DISTINCT FROM 'null'/u
   );
   assert.doesNotMatch(
-    resolver,
-    /g1_list_admissibility_internal_v1/u
+    wrapper,
+    /\b(?:SELECT|OPEN|FETCH|CLOSE|RETURN QUERY|jsonb_object_keys|jsonb_array_elements|EXECUTE)\b/u
+  );
+  assert.doesNotMatch(
+    wrapper,
+    /\bFROM\s+(?:tp_|\()/u
+  );
+  for (const [key, value] of [
+    ["tenant_id", "p_tenant_id::STRING"],
+    ["run_id", "p_run_id::STRING"],
+    ["incident_id", "p_incident_id::STRING"],
+    ["evidence_id", "p_evidence_id::STRING"],
+    ["operation_id", "p_operation_id::STRING"],
+    ["resource_id", "p_resource_id"],
+    ["request_digest", "p_request_digest"]
+  ]) {
+    assert.match(
+      wrapper,
+      new RegExp(
+        `v_snapshot->>'${key}'\\s+IS DISTINCT FROM\\s+${value.replace(/[()]/gu, "\\$&")}`,
+        "u"
+      ),
+      key
+    );
+  }
+  assert.match(
+    wrapper,
+    /policy_version' IS DISTINCT FROM 'gate1-policy-v2'[\s\S]*outcome' IS DISTINCT FROM 'resource_reserved'[\s\S]*has_durable_intent' IS DISTINCT FROM 'true'[\s\S]*admissibility' IS DISTINCT FROM 'admissible'/u
+  );
+
+  const outputAssignments = Object.freeze([
+    ["tenant_id", "(v_snapshot->>'tenant_id')::UUID"],
+    ["run_id", "(v_snapshot->>'run_id')::UUID"],
+    ["incident_id", "(v_snapshot->>'incident_id')::UUID"],
+    ["evidence_id", "(v_snapshot->>'evidence_id')::UUID"],
+    ["operation_id", "(v_snapshot->>'operation_id')::UUID"],
+    ["recorded_at", "(v_snapshot->>'recorded_at')::TIMESTAMPTZ"],
+    ["request_digest", "v_snapshot->>'request_digest'"],
+    ["proposal_digest", "v_snapshot->>'proposal_digest'"],
+    ["logical_action_digest", "v_snapshot->>'logical_action_digest'"],
+    ["authorization_epoch", "(v_snapshot->>'authorization_epoch')::INT8"],
+    ["logical_authority_key_sha256", "v_snapshot->>'logical_authority_key_sha256'"],
+    ["authorization_binding_sha256", "v_snapshot->>'authorization_binding_sha256'"],
+    ["policy_version", "v_snapshot->>'policy_version'"],
+    ["agent_id", "v_snapshot->>'agent_id'"],
+    ["agency", "v_snapshot->>'agency'"],
+    ["outcome", "v_snapshot->>'outcome'"],
+    ["reason", "v_snapshot->>'reason'"],
+    ["evidence_digest", "v_snapshot->>'evidence_digest'"],
+    [
+      "authority_evidence_binding_sha256",
+      "v_snapshot->>'authority_evidence_binding_sha256'"
+    ],
+    ["resource_id", "v_snapshot->>'resource_id'"],
+    ["has_durable_intent", "(v_snapshot->>'has_durable_intent')::BOOL"],
+    ["admissibility", "v_snapshot->>'admissibility'"],
+    ["database_now", "(v_snapshot->>'database_now')::TIMESTAMPTZ"]
+  ]);
+  const returnColumns = [...returnSignature.matchAll(
+    /^\s*([a-z][a-z0-9_]*)\s+(?:UUID|STRING|INT8|TIMESTAMPTZ|BOOL),?\s*$/gmu
+  )].map((match) => match[1]);
+  assert.equal(outputAssignments.length, 23);
+  assert.deepEqual(returnColumns, outputAssignments.map(([output]) => output));
+  const normalizedWrapper = wrapper.replace(/\s+/gu, " ").trim();
+  let previousAssignment = -1;
+  for (const [output, sourceName] of outputAssignments) {
+    const assignment = `${output} := ${sourceName};`;
+    const assignmentIndex = normalizedWrapper.indexOf(assignment);
+    assert.ok(assignmentIndex > previousAssignment, assignment);
+    assert.equal(
+      normalizedWrapper.split(assignment).length - 1,
+      1,
+      assignment
+    );
+    previousAssignment = assignmentIndex;
+  }
+  assert.match(
+    normalizedWrapper,
+    /database_now := \(v_snapshot->>'database_now'\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$/u
+  );
+  assert.equal(wrapper.match(/\bRETURN NEXT;/gu)?.length, 1);
+  assert.doesNotMatch(wrapper, /\bRETURN QUERY\b/u);
+
+  const statements = await primarySecurityContract.primaryFunctionSqlStatements();
+  const emittedSnapshot = statements.filter((statement) =>
+    statement.includes(
+      "CREATE OR REPLACE FUNCTION tp_private.g1_resolve_recovery_source_snapshot_v1"
+    )
+  );
+  const emittedWrapper = statements.filter((statement) =>
+    statement.includes(
+      "CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2"
+    )
+  );
+  assert.equal(emittedSnapshot.length, 1);
+  assert.equal(emittedWrapper.length, 1);
+  assert.doesNotMatch(
+    emittedWrapper[0],
+    /\b(?:SELECT|OPEN|FETCH|CLOSE)\b/u
+  );
+  assert.doesNotMatch(emittedWrapper[0], /\bFROM\s+(?:tp_|\()/u);
+  assert.match(
+    source,
+    /"tp_private\.g1_resolve_recovery_source_snapshot_v1\(UUID, UUID, UUID, UUID, STRING, UUID, STRING\)"/u
   );
   assert.match(
-    resolver,
-    /evidence\.observed_at AS evidence_observed_at[\s\S]*evidence\.valid_from AS evidence_valid_from[\s\S]*evidence\.valid_until AS evidence_valid_until[\s\S]*evidence\.conflict_status AS evidence_conflict_status/u
+    source,
+    /tp_recovery_source_role: ALL_RUNTIME_SCHEMAS,/u
   );
-  assert.match(
-    resolver,
-    /jsonb_agg\(jsonb_build_object\([\s\S]*'observed_at'[\s\S]*'valid_from'[\s\S]*'valid_until'[\s\S]*other_verification\.signature_digest =[\s\S]*other\.signature_digest[\s\S]*other_key\.status = 'active'[\s\S]*other\.agency_scope IN \(receipt\.agency, '\*'\)[\s\S]*'\[\]'::JSONB\) AS conflict_windows/u
-  );
-  assert.match(
-    resolver,
-    /v_database_now := clock_timestamp\(\);[\s\S]*v_candidate\.evidence_observed_at >[\s\S]*v_database_now \+ INTERVAL '5 minutes'[\s\S]*v_candidate\.evidence_valid_from > v_database_now[\s\S]*v_candidate\.evidence_valid_until <= v_database_now[\s\S]*v_candidate\.evidence_conflict_status = 'unresolved'[\s\S]*jsonb_array_elements\(v_candidate\.conflict_windows\)[\s\S]*window_value->>'observed_at'[\s\S]*window_value->>'valid_from'[\s\S]*window_value->>'valid_until'[\s\S]*v_active_conflict_count > 0/u
-  );
-  const postWaitDecision = resolver.slice(
-    resolver.indexOf("v_database_now := clock_timestamp();")
-  );
-  assert.doesNotMatch(postWaitDecision, /\bFROM\s+tp_/u);
-  assert.doesNotMatch(resolver, /statement_timestamp\(\)/u);
-  assert.doesNotMatch(resolver, /transaction_timestamp\(\)/u);
 
   const admissibility = source.match(
     /CREATE OR REPLACE FUNCTION tp_private\.g1_list_admissibility_internal_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
@@ -557,11 +961,23 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   );
   assert.match(
     gate1Security,
+    /privateSnapshotDenied[\s\S]*expectPrivilegeDenied\([\s\S]*tp_private\.g1_resolve_recovery_source_snapshot_v1\(/u
+  );
+  assert.match(
+    gate1Security,
+    /const directPrivateRead = await expectPrivilegeDenied\([\s\S]*SELECT \* FROM tp_private\.g1_resources LIMIT 1/u
+  );
+  assert.match(
+    gate1Security,
     /error\.code === "42501" \|\| error\.code === "42883"/u
   );
   assert.match(
     gate1Security,
     /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
+  );
+  assert.match(
+    gate1Security,
+    /const recoverySourceQuery =[\s\S]*await client\.query\("BEGIN"\)[\s\S]*resolved = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*resolvedAgain = await client\.query\([\s\S]*pg_catalog\.pg_cursors[\s\S]*cursorCountAfterFirst !== 0[\s\S]*cursorCountAfterSecond !== 0[\s\S]*await client\.query\("COMMIT"\)[\s\S]*RECOVERY_SOURCE_STABLE_COLUMNS[\s\S]*stableColumns\.some\([\s\S]*directPrivateRead,[\s\S]*resolverRepeatStable: true/u
   );
 
   assert.match(source, /PRIMARY_PREFLIGHT_POSTURE_SPEC/u);
@@ -575,6 +991,69 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   );
 });
 
+test("Gate One repeat stability compares equal database timestamps by value", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  const stableColumnsSource = source.match(
+    /const RECOVERY_SOURCE_STABLE_COLUMNS = Object\.freeze\((\[[\s\S]*?\])\);/u
+  )?.[1];
+  assert.ok(stableColumnsSource);
+  const stableColumns = JSON.parse(stableColumnsSource);
+  assert.equal(stableColumns.length, 22);
+  assert.equal(new Set(stableColumns).size, 22);
+  assert.deepEqual(stableColumns, [...stableColumns].sort());
+  const helperSource = source.match(
+    /function sameStableDatabaseValue\(left, right\) \{[\s\S]*?^\}/mu
+  )?.[0];
+  assert.ok(helperSource);
+  const sameStableDatabaseValue = runInNewContext(
+    `(${helperSource})`,
+    { Date, Number }
+  );
+  const first = new Date("2026-08-13T23:59:59.123Z");
+  const equalButDistinct = new Date("2026-08-13T23:59:59.123Z");
+  const drifted = new Date("2026-08-13T23:59:59.124Z");
+
+  assert.notStrictEqual(first, equalButDistinct);
+  assert.equal(sameStableDatabaseValue(first, equalButDistinct), true);
+  assert.equal(sameStableDatabaseValue(first, drifted), false);
+  assert.equal(sameStableDatabaseValue(first, first.toISOString()), false);
+  assert.throws(
+    () => sameStableDatabaseValue(new Date(NaN), new Date(NaN)),
+    /stable database timestamp invalid/u
+  );
+  assert.equal(sameStableDatabaseValue("stable", "stable"), true);
+  assert.equal(sameStableDatabaseValue(null, null), true);
+  assert.throws(
+    () => sameStableDatabaseValue({}, {}),
+    /stable database value invalid/u
+  );
+  assert.match(
+    source,
+    /const RECOVERY_SOURCE_STABLE_COLUMNS = Object\.freeze\(\[[\s\S]*"recorded_at"[\s\S]*"tenant_id"[\s\S]*JSON\.stringify\(stableColumns\) !==[\s\S]*JSON\.stringify\(RECOVERY_SOURCE_STABLE_COLUMNS\)/u
+  );
+  assert.match(
+    source,
+    /stableColumns\.some\([\s\S]*!sameStableDatabaseValue\([\s\S]*resolved\.rows\[0\]\?\.\[column\][\s\S]*resolvedAgain\.rows\[0\]\?\.\[column\]/u
+  );
+});
+
+test("Gate One proves resolver cursor closure inside one transaction", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  const recoveryLane = source.slice(
+    source.indexOf("const recoverySource = await withClient("),
+    source.indexOf("const recoveryAudit = await withClient(")
+  );
+  assert.ok(recoveryLane.length > 0);
+  assert.equal(recoveryLane.match(/await client\.query\("BEGIN"\)/gu)?.length, 1);
+  assert.equal(recoveryLane.match(/pg_catalog\.pg_cursors/gu)?.length, 2);
+  assert.equal(recoveryLane.match(/await client\.query\("COMMIT"\)/gu)?.length, 1);
+  assert.equal(recoveryLane.match(/await client\.query\("ROLLBACK"\)/gu)?.length, 1);
+  assert.match(
+    recoveryLane,
+    /cursorCountAfterFirst !== 0[\s\S]*cursorCountAfterSecond !== 0[\s\S]*cursorCountAfterFirst,[\s\S]*cursorCountAfterSecond,[\s\S]*resolverRepeatStable: true/u
+  );
+});
+
 test("primary function SQL is digest-pinned before any database query", async () => {
   const statements = await primarySecurityContract.primaryFunctionSqlStatements();
   const receipt = primarySecurityContract.validatePrimaryFunctionSqlStatements(
@@ -582,9 +1061,65 @@ test("primary function SQL is digest-pinned before any database query", async ()
   );
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
-    statementCount: 38,
-    sha256: "8e81ea155fc206367c9b6e84c790acbcc8e0b859adc754177ab97c3010f42ce8"
+    statementCount: 56,
+    sha256: "cf77ee3af31d939c134fd49061c2555d34c3caccb3b3a627807c459b6c0fd6e4"
   });
+  const legacyProviderDrop = statements.find((statement) =>
+    statement.includes("DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1")
+  );
+  assert.match(
+    legacyProviderDrop,
+    /DROP FUNCTION IF EXISTS tp_api\.g1_transition_provider_dispatch_v1/u
+  );
+  const providerClaim = statements.find((statement) =>
+    statement.includes("g1_claim_provider_dispatch_inner_v2")
+  );
+  const providerBegin = statements.find((statement) =>
+    statement.includes("g1_begin_provider_dispatch_inner_v2")
+  );
+  const providerRedeem = statements.find((statement) =>
+    statement.includes("g1_redeem_provider_dispatch_inner_v2")
+  );
+  const providerComplete = statements.find((statement) =>
+    statement.includes("g1_complete_provider_dispatch_inner_v2")
+  );
+  const providerUnknown = statements.find((statement) =>
+    statement.includes("g1_mark_provider_dispatch_unknown_inner_v2")
+  );
+  const providerResolve = statements.find((statement) =>
+    statement.includes("g1_resolve_provider_dispatch_inner_v2")
+  );
+  assert.match(providerClaim, /session_user <> 'tp_provider_claim_user'/u);
+  assert.match(providerBegin, /session_user <> 'tp_provider_begin_user'/u);
+  assert.match(providerRedeem, /session_user <> 'tp_provider_redeem_user'/u);
+  assert.match(
+    providerRedeem,
+    /state = 'CREDENTIAL_REDEEMED'[\s\S]*completion_capability_sha256/u
+  );
+  assert.match(
+    providerComplete,
+    /session_user <> 'tp_provider_finalize_user'/u
+  );
+  assert.match(
+    providerUnknown,
+    /session_user <> 'tp_provider_finalize_user'/u
+  );
+  assert.match(
+    providerResolve,
+    /session_user <> 'tp_provider_reconcile_user'/u
+  );
+  assert.doesNotMatch(
+    providerResolve,
+    /execution_capability_sha256|owner_nonce|p_execution_capability/u
+  );
+  assert.equal(
+    statements.some((statement) =>
+      statement.includes(
+        "CREATE OR REPLACE FUNCTION tp_api.g1_transition_provider_dispatch_v1"
+      )
+    ),
+    false
+  );
   assert.equal(
     statements.filter((statement) =>
       statement.includes("g1_resolve_recovery_source_receipt_v2")
@@ -697,6 +1232,16 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
       .tp_recovery_source_role.functions;
   assert.deepEqual(finalPolicy, [currentSignature]);
   assert.deepEqual(preflightPolicy, [legacySignature, currentSignature]);
+  assert.deepEqual(
+    primarySecurityContract.primaryPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.schemas,
+    ["tp_api", "tp_private", "tp_ledger"]
+  );
+  assert.deepEqual(
+    primarySecurityContract.primaryPreflightPostureSpec.roleGrantPolicies
+      .tp_recovery_source_role.schemas,
+    ["tp_api", "tp_private", "tp_ledger"]
+  );
 
   const installedV1Grant = [{
     database_name: "tideproof",
@@ -708,8 +1253,8 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
     privilege_type: "EXECUTE",
     is_grantable: false
   }];
-  const validateWith = (spec) => validateManagedObjectGrants(
-    installedV1Grant,
+  const validateWith = (spec, grants = installedV1Grant) => validateManagedObjectGrants(
+    grants,
     {
       databaseName: spec.databaseName,
       managedSchemas: spec.managedSchemas,
@@ -731,6 +1276,102 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
     () => validateWith(primarySecurityContract.primaryPostureSpec),
     /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
   );
+  const privateSnapshotGrant = [{
+    database_name: "tideproof",
+    schema_name: "tp_private",
+    object_name:
+      "g1_resolve_recovery_source_snapshot_v1(uuid,uuid,uuid,uuid,string,uuid,string)",
+    object_type: "function",
+    grantee: "tp_recovery_source_role",
+    privilege_type: "EXECUTE",
+    is_grantable: false
+  }];
+  for (const spec of [
+    primarySecurityContract.primaryPreflightPostureSpec,
+    primarySecurityContract.primaryPostureSpec
+  ]) {
+    assert.throws(
+      () => validateWith(spec, privateSnapshotGrant),
+      /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
+    );
+  }
+});
+
+test("Cockroach schema closure preserves typed public surfaces and direct denials", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const gate1Security = await readFile(gate1SecurityUrl, "utf8");
+  const policies = primarySecurityContract.primaryPostureSpec.roleGrantPolicies;
+
+  for (const role of [
+    "tp_provider_activate_role",
+    "tp_provider_terminalize_role",
+    "tp_audit_role"
+  ]) {
+    assert.deepEqual(policies[role].schemas, ["tp_api", "tp_ledger"]);
+  }
+  assert.deepEqual(policies.tp_audit_role.relations, ["g1_receipt_audit_v1"]);
+  assert.deepEqual(
+    policies.tp_provider_activate_role.functions,
+    ["g1_activate_provider_dispatch_v2(UUID, UUID, STRING, STRING)"]
+  );
+  assert.deepEqual(
+    policies.tp_provider_terminalize_role.functions,
+    ["g1_terminalize_provider_dispatch_v2(UUID, UUID, STRING, STRING)"]
+  );
+  assert.match(
+    source,
+    /tp_audit_role: Object\.freeze\(\["tp_api", "tp_ledger"\]\)/u
+  );
+  assert.match(
+    gate1Security,
+    /const PROVIDER_RUNTIME_CLOSURE_PROBES = Object\.freeze\(/u
+  );
+  assert.match(
+    gate1Security,
+    /async function assertProviderRuntimeClosure\([\s\S]*directLedgerRead[\s\S]*directPrivateFunction[\s\S]*publicControlAbsent/u
+  );
+  assert.match(
+    gate1Security,
+    /expectSqlState\([\s\S]*"provider dispatch control absent"/u
+  );
+  assert.match(
+    gate1Security,
+    /providerActivate,[\s\S]*providerTerminalize,[\s\S]*audit,/u
+  );
+});
+
+test("authorizer posture admits the exact DVI proposal capability it grants", () => {
+  const signature =
+    "g1_authorize_dvi_proposal_v1(UUID, UUID, UUID, UUID, UUID, STRING, STRING, STRING, STRING, JSONB)";
+  const finalPolicy =
+    primarySecurityContract.primaryPostureSpec.roleGrantPolicies
+      .tp_authorizer_role.functions;
+  assert.ok(finalPolicy.includes(signature));
+  assert.doesNotThrow(() => validateManagedObjectGrants([{
+    database_name: "tideproof",
+    schema_name: "tp_api",
+    object_name:
+      "g1_authorize_dvi_proposal_v1(uuid,uuid,uuid,uuid,uuid,string,string,string,string,jsonb)",
+    object_type: "function",
+    grantee: "tp_authorizer_role",
+    privilege_type: "EXECUTE",
+    is_grantable: false
+  }], {
+    databaseName: primarySecurityContract.primaryPostureSpec.databaseName,
+    managedSchemas: primarySecurityContract.primaryPostureSpec.managedSchemas,
+    managedPrefixes: primarySecurityContract.primaryPostureSpec.managedPrefixes,
+    apiSchema: primarySecurityContract.primaryPostureSpec.apiSchema,
+    ownerRoles: primarySecurityContract.primaryPostureSpec.ownerRoles,
+    roleGrantPolicies:
+      primarySecurityContract.primaryPostureSpec.roleGrantPolicies,
+    runtimeUsers: primarySecurityContract.primaryPostureSpec.users,
+    knownManagedPrincipals: [
+      ...primarySecurityContract.primaryPostureSpec.roles,
+      ...primarySecurityContract.primaryPostureSpec.users
+    ],
+    trustedPrincipals: ["cluster_admin"],
+    allowMissingExpected: true
+  }));
 });
 
 test("recovery storage enforces one row per exact broker lookup identity", async () => {
@@ -792,7 +1433,7 @@ test("recovery operator contract enumerates every exact private input", async ()
   assert.match(source, /race receipt `dvi\.authorityEvidenceBindingSha256`/u);
   assert.match(source, /race receipt `dvi\.selectedEvidenceBindingSha256`/u);
   assert.match(source, /The nine `RECOVERY_SOURCE_\*` values/u);
-  assert.match(source, /all 18[\s\S]*managed base-table read probes/u);
+  assert.match(source, /all 22[\s\S]*managed base-table read probes/u);
   assert.match(source, /administrator URL/u);
   assert.match(source, /exact shared private inputs/u);
   assert.match(source, /broker is invoked by the integrated-live[\s\S]*it alone also requires/u);
@@ -809,7 +1450,7 @@ test("recovery operator contract enumerates every exact private input", async ()
 
 test("recovery broker verifies audit events only through the narrow resolver", async () => {
   const [source, primarySource] = await Promise.all([
-    readFile(recoveryScriptUrls[1], "utf8"),
+    readFile(recoveryBrokerUrl, "utf8"),
     readFile(primaryUrl, "utf8")
   ]);
   assert.match(source, /resolveCommittedRecoveryAuditEvent/u);
@@ -891,11 +1532,11 @@ test("expired unspent proposals cannot implicitly mint a replacement epoch", asy
   assert.ok(authorizeBody);
   assert.match(
     authorizeBody,
-    /v_epoch\.current_epoch = 1[\s\S]*'explicit_new_authorization_required'/u
+    /v_epoch_current_epoch = 1[\s\S]*'explicit_new_authorization_required'/u
   );
   assert.doesNotMatch(
     authorizeBody,
-    /v_authorization_epoch := v_epoch\.current_epoch \+ 1/u
+    /v_authorization_epoch := v_epoch_current_epoch \+ 1/u
   );
   assert.match(
     gate1AuthoritySource,
@@ -1046,7 +1687,7 @@ test("authority spend, replay, and protected effects refresh database time", asy
   assert.doesNotMatch(resolveBody, /statement_timestamp\(\)/u);
   assert.match(
     effectBody,
-    /ON CONFLICT DO NOTHING[\s\S]*INTO v_effect_key, v_operation_id;[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_receipt_lease_expires_at <= v_database_now[\s\S]*v_resource_lease_expires_at <= v_database_now[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
+    /ON CONFLICT DO NOTHING[\s\S]*RETURNING 1::INT8 INTO v_inserted_count;[\s\S]*v_effect_key := p_effect_key;[\s\S]*v_operation_id := p_operation_id;[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*v_receipt_lease_expires_at <= v_database_now[\s\S]*v_resource_lease_expires_at <= v_database_now[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
   );
   assert.equal(
     spendBody.match(
@@ -1229,6 +1870,32 @@ test("protected-effect SQL denies the exact proposal-expiry boundary", async () 
     /CREATE OR REPLACE FUNCTION tp_api\.g1_record_protected_effect_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
   assert.ok(body);
+  const insertStart = body.indexOf(
+    "INSERT INTO tp_ledger.g1_protected_effects AS inserted_effect"
+  );
+  const conflictEnd = body.indexOf("ON CONFLICT DO NOTHING", insertStart);
+  assert.notEqual(insertStart, -1);
+  assert.notEqual(conflictEnd, -1);
+  const preInsert = body.slice(0, insertStart);
+  const insertSource = body.slice(insertStart, conflictEnd);
+  const postInsert = body.slice(conflictEnd);
+  assert.match(
+    preInsert,
+    /SELECT\s+count\(\*\)::INT8,\s*min\(outbox\.proposal_digest\),\s*min\(outbox\.logical_action_digest\),\s*min\(outbox\.authorization_epoch\),\s*min\(outbox\.logical_authority_key_sha256\),\s*min\(outbox\.authorization_binding_sha256\),\s*min\(receipt\.lease_expires_at\),\s*min\(resource\.lease_expires_at\),\s*min\(proposal\.expires_at\)\s+INTO\s+v_authority_count,\s*v_proposal_digest,\s*v_logical_action_digest,\s*v_authorization_epoch,\s*v_logical_authority_key_sha256,\s*v_authorization_binding_sha256,\s*v_receipt_lease_expires_at,\s*v_resource_lease_expires_at,\s*v_proposal_expires_at/u
+  );
+  assert.match(
+    preInsert,
+    /v_database_now := clock_timestamp\(\);\s*IF v_authority_count <> 1[\s\S]*v_receipt_lease_expires_at <= v_database_now[\s\S]*v_resource_lease_expires_at <= v_database_now[\s\S]*v_proposal_expires_at <= v_database_now THEN\s*RETURN;/u
+  );
+  assert.match(
+    insertSource,
+    /VALUES \(\s*p_tenant_id,\s*p_effect_key,\s*p_operation_id,\s*p_request_digest,\s*v_proposal_digest,\s*v_logical_action_digest,\s*v_authorization_epoch,\s*v_logical_authority_key_sha256,\s*v_authorization_binding_sha256,\s*p_run_id,\s*p_incident_id,\s*p_resource_id,\s*p_agent_id,\s*p_fencing_token,\s*p_payload_digest\s*\)/u
+  );
+  assert.doesNotMatch(insertSource, /\)\s*SELECT\b/u);
+  assert.match(
+    postInsert,
+    /SELECT\s+count\(\*\)::INT8,\s*min\(receipt\.lease_expires_at\),\s*min\(resource\.lease_expires_at\),\s*min\(proposal\.expires_at\)[\s\S]*v_database_now := clock_timestamp\(\);[\s\S]*IF v_authority_count <> 1[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
+  );
   assert.match(
     body,
     /JOIN tp_ledger\.g1_dvi_proposal_receipts AS proposal[\s\S]*proposal\.proposal_digest = outbox\.proposal_digest[\s\S]*proposal\.authorization_epoch = outbox\.authorization_epoch/u
@@ -1244,4 +1911,190 @@ test("protected-effect SQL denies the exact proposal-expiry boundary", async () 
     /v_database_now := clock_timestamp\(\);[\s\S]*v_proposal_expires_at <= v_database_now[\s\S]*DELETE FROM tp_ledger\.g1_protected_effects/u
   );
   assert.doesNotMatch(body, /proposal\.expires_at >= clock_timestamp\(\)/u);
+});
+
+test("protected-effect SQL snapshots one exact authority before a value-only insert", async () => {
+  const source = await readFile(primaryUrl, "utf8");
+  const body = source.match(
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_record_protected_effect_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+  )?.[1];
+  assert.ok(body);
+
+  const normalizedBody = body.replace(/\s+/gu, " ").trim();
+  const insertStart = normalizedBody.indexOf(
+    "INSERT INTO tp_ledger.g1_protected_effects AS inserted_effect"
+  );
+  const conflictStart = normalizedBody.indexOf(
+    "ON CONFLICT DO NOTHING",
+    insertStart
+  );
+  const postInsertStart = normalizedBody.indexOf(
+    "IF v_inserted_count IS NULL",
+    conflictStart
+  );
+  assert.ok(
+    insertStart > 0 &&
+    conflictStart > insertStart &&
+    postInsertStart > conflictStart
+  );
+
+  const preInsert = normalizedBody.slice(0, insertStart).trimEnd();
+  const insertClause = normalizedBody.slice(insertStart, conflictStart);
+  const postInsert = normalizedBody.slice(postInsertStart);
+
+  const ledgerSnapshotProjection =
+    "SELECT count(*)::INT8, " +
+    "min(outbox.proposal_digest), " +
+    "min(outbox.logical_action_digest), " +
+    "min(outbox.authorization_epoch), " +
+    "min(outbox.logical_authority_key_sha256), " +
+    "min(outbox.authorization_binding_sha256), " +
+    "min(receipt.lease_expires_at), " +
+    "min(resource.lease_expires_at), " +
+    "min(proposal.expires_at) " +
+    "INTO v_authority_count, " +
+    "v_proposal_digest, " +
+    "v_logical_action_digest, " +
+    "v_authorization_epoch, " +
+    "v_logical_authority_key_sha256, " +
+    "v_authorization_binding_sha256, " +
+    "v_receipt_lease_expires_at, " +
+    "v_resource_lease_expires_at, " +
+    "v_proposal_expires_at " +
+    "FROM tp_private.g1_resources AS resource " +
+    "JOIN tp_ledger.g1_outbox_intents AS outbox";
+  assert.ok(preInsert.includes(ledgerSnapshotProjection));
+
+  const exactPreInsertGuard =
+    "v_database_now := clock_timestamp(); " +
+    "IF v_authority_count <> 1 " +
+    "OR v_proposal_digest IS NULL " +
+    "OR v_receipt_lease_expires_at <= v_database_now " +
+    "OR v_resource_lease_expires_at <= v_database_now " +
+    "OR v_proposal_expires_at <= v_database_now THEN " +
+    "RETURN; END IF;";
+  assert.ok(preInsert.endsWith(exactPreInsertGuard));
+
+  const exactValues =
+    "VALUES ( " +
+    "p_tenant_id, p_effect_key, p_operation_id, p_request_digest, " +
+    "v_proposal_digest, v_logical_action_digest, v_authorization_epoch, " +
+    "v_logical_authority_key_sha256, v_authorization_binding_sha256, " +
+    "p_run_id, p_incident_id, p_resource_id, p_agent_id, " +
+    "p_fencing_token, p_payload_digest )";
+  assert.ok(insertClause.includes(exactValues));
+  assert.doesNotMatch(insertClause, /\bSELECT\b/u);
+  assert.ok(normalizedBody.includes("v_inserted_count INT8;"));
+  assert.ok(normalizedBody.includes(
+    "ON CONFLICT DO NOTHING " +
+    "RETURNING 1::INT8 INTO v_inserted_count; " +
+    "IF v_inserted_count IS NULL THEN RETURN; END IF; " +
+    "v_effect_key := p_effect_key; " +
+    "v_operation_id := p_operation_id;"
+  ));
+  assert.doesNotMatch(
+    normalizedBody,
+    /RETURNING inserted_effect\.(?:effect_key|operation_id)/u
+  );
+  assert.equal(
+    body.match(/v_database_now := clock_timestamp\(\);/gu)?.length,
+    2
+  );
+
+  const postProjection =
+    "SELECT count(*)::INT8, " +
+    "min(receipt.lease_expires_at), " +
+    "min(resource.lease_expires_at), " +
+    "min(proposal.expires_at) " +
+    "INTO v_authority_count, " +
+    "v_receipt_lease_expires_at, " +
+    "v_resource_lease_expires_at, " +
+    "v_proposal_expires_at " +
+    "FROM tp_private.g1_resources AS resource";
+  assert.ok(postInsert.includes(postProjection));
+
+  const retainedPostInsertClauses = Object.freeze([
+    "receipt.proposal_digest = resource.holder_proposal_digest",
+    "receipt.logical_authority_key_sha256 = resource.holder_logical_authority_key_sha256",
+    "receipt.outcome = 'resource_reserved'",
+    "outbox.request_digest = receipt.request_digest",
+    "outbox.proposal_digest = receipt.proposal_digest",
+    "outbox.logical_action_digest = receipt.logical_action_digest",
+    "outbox.authorization_epoch = receipt.authorization_epoch",
+    "outbox.logical_authority_key_sha256 = receipt.logical_authority_key_sha256",
+    "outbox.authorization_binding_sha256 = receipt.authorization_binding_sha256",
+    "proposal.proposal_digest = receipt.proposal_digest",
+    "proposal.logical_action_digest = receipt.logical_action_digest",
+    "proposal.authorization_epoch = receipt.authorization_epoch",
+    "proposal.logical_authority_key_sha256 = receipt.logical_authority_key_sha256",
+    "proposal.authorization_binding_sha256 = receipt.authorization_binding_sha256",
+    "proposal.payload = outbox.payload",
+    "proposal.payload_digest = outbox.payload_digest",
+    "receipt.request_digest = p_request_digest",
+    "receipt.effect_key = p_effect_key",
+    "receipt.payload_digest = p_payload_digest",
+    "sha256(proposal.payload_canonical::BYTES) = outbox.payload_digest"
+  ]);
+  for (const clause of retainedPostInsertClauses) {
+    assert.ok(postInsert.includes(clause), clause);
+  }
+
+  const exactPostInsertGuard =
+    "v_database_now := clock_timestamp(); " +
+    "IF v_authority_count <> 1 " +
+    "OR v_receipt_lease_expires_at <= v_database_now " +
+    "OR v_resource_lease_expires_at <= v_database_now " +
+    "OR v_proposal_expires_at <= v_database_now THEN " +
+    "DELETE FROM tp_ledger.g1_protected_effects AS effect " +
+    "WHERE effect.tenant_id = p_tenant_id " +
+    "AND effect.effect_key = v_effect_key " +
+    "AND effect.operation_id = v_operation_id; " +
+    "RETURN; END IF; " +
+    "RETURN QUERY SELECT v_effect_key, v_operation_id;";
+  assert.ok(postInsert.includes(exactPostInsertGuard));
+});
+
+test("Gate One executes the protected-effect insert and replay routine", async () => {
+  const source = await readFile(gate1SecurityUrl, "utf8");
+  assert.match(
+    source,
+    /const PROTECTED_EFFECT_SQL = `[\s\S]*g1_record_protected_effect_v1/u
+  );
+  assert.match(
+    source,
+    /wrongDigestBeforeInsert = await client\.query\([\s\S]*inserted = await client\.query\([\s\S]*replay = await client\.query\([\s\S]*wrongDigestAfterReplay = await client\.query\(/u
+  );
+  assert.match(
+    source,
+    /wrongDigestBeforeInsert\.rowCount !== 0[\s\S]*inserted\.rowCount !== 1[\s\S]*replay\.rowCount !== 0[\s\S]*wrongDigestAfterReplay\.rowCount !== 0/u
+  );
+  assert.match(
+    source,
+    /currentAfterWrongDigest !== true[\s\S]*currentAfterInsert !== true[\s\S]*currentAfterReplay !== true[\s\S]*currentAfterWrongDigestReplay !== true/u
+  );
+  assert.match(
+    source,
+    /connectionStringForUser\(\s*adminConnectionString,\s*"tp_authorizer_user",\s*passwords\.tp_authorizer_user\s*\),\s*async \(authorizerClient\) => withClient\(/u
+  );
+  assert.match(
+    source,
+    /async function authorityCurrent\(client, request, authorityIdentity\)[\s\S]*client\.query\(\s*SPEND_AUTHORITY_SQL,\s*spendAuthorityValues\(request\)[\s\S]*decision_replay_kind !== "operation_replay"[\s\S]*authorityIdentity\.authorizationEpoch[\s\S]*authorityIdentity\.logicalAuthorityKeySha256[\s\S]*authorityIdentity\.authorizationBindingSha256[\s\S]*decision_authority_current/u
+  );
+  assert.doesNotMatch(
+    source,
+    /FROM tp_private\.g1_authority_receipt_current_v2/u
+  );
+  assert.doesNotMatch(source, /authorityCurrent\(\s*admin,/u);
+  assert.match(
+    source,
+    /authorityIdentity: \{[\s\S]*authorizationEpoch: spent\.rows\[0\]\?\.decision_authorization_epoch[\s\S]*logicalAuthorityKeySha256:[\s\S]*decision_logical_authority_key_sha256[\s\S]*authorizationBindingSha256:[\s\S]*decision_authorization_binding_sha256/u
+  );
+  assert.doesNotMatch(
+    source,
+    /normalizedCapabilityRequest\.(?:authorizationEpoch|logicalAuthorityKeySha256|authorizationBindingSha256)/u
+  );
+  assert.match(
+    source,
+    /capabilitySnapshot\.effects\.length !== 1[\s\S]*protectedEffect\?\.effect_key !== normalizedCapabilityRequest\.effectKey[\s\S]*protectedEffect\?\.operation_id !== normalizedCapabilityRequest\.operationId/u
+  );
 });

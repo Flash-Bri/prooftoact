@@ -86,6 +86,52 @@ function requireUuid(value, name) {
   return text;
 }
 
+export function recoveryAuditEventDigest(event) {
+  return sha256(canonicalJson({
+    eventId: requireUuid(event.eventId, "event.eventId"),
+    interactionId: requireUuid(event.interactionId, "event.interactionId"),
+    tenantId: requireUuid(event.tenantId, "event.tenantId"),
+    recoverySessionId: requireUuid(
+      event.recoverySessionId,
+      "event.recoverySessionId"
+    ),
+    callerSubjectHash: requireSha256(
+      event.callerSubjectHash,
+      "event.callerSubjectHash"
+    ),
+    phase: requireText(event.phase, "event.phase"),
+    toolName: "select_query",
+    recoveryClusterId: requireUuid(
+      event.recoveryClusterId,
+      "event.recoveryClusterId"
+    ),
+    brokerConfigDigest: requireSha256(
+      event.brokerConfigDigest,
+      "event.brokerConfigDigest"
+    ),
+    queryTemplateDigest: requireSha256(
+      event.queryTemplateDigest,
+      "event.queryTemplateDigest"
+    ),
+    boundInputDigest: requireSha256(
+      event.boundInputDigest,
+      "event.boundInputDigest"
+    ),
+    resultDigest: event.resultDigest === null
+      ? null
+      : requireSha256(event.resultDigest, "event.resultDigest"),
+    sourceWatermark: event.sourceWatermark === null
+      ? null
+      : new Date(event.sourceWatermark).toISOString(),
+    outcome: requireText(event.outcome, "event.outcome"),
+    errorCode: event.errorCode === null
+      ? null
+      : requireText(event.errorCode, "event.errorCode"),
+    startedAt: new Date(event.startedAt).toISOString(),
+    completedAt: new Date(event.completedAt).toISOString()
+  }));
+}
+
 function requireSha256(value, name) {
   const text = requireText(value, name).toLowerCase();
   if (!/^[a-f0-9]{64}$/u.test(text)) {
@@ -470,6 +516,24 @@ export function renderRecoveryQuery({
     .replace(QUERY_TENANT_TOKEN, boundTenantId)
     .replace(QUERY_SUBJECT_TOKEN, boundSubjectHash)
     .replace(QUERY_SOURCE_TOKEN, boundSourceDigest);
+}
+
+export function recoveryQueryBindingsFor(query) {
+  const text = requireText(query, "query");
+  const match = text.match(
+    /WHERE recovery_session_id = '([0-9a-f-]+)'::UUID\n  AND tenant_id = '([0-9a-f-]+)'::UUID\n  AND subject_binding_hash = '([a-f0-9]{64})'\n  AND source_digest = '([a-f0-9]{64})'/u
+  );
+  if (!match) throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
+  const bindings = Object.freeze({
+    recoverySessionId: requireUuid(match[1], "recoverySessionId"),
+    tenantId: requireUuid(match[2], "tenantId"),
+    subjectBindingHash: requireSha256(match[3], "subjectBindingHash"),
+    sourceDigest: requireSha256(match[4], "sourceDigest")
+  });
+  if (renderRecoveryQuery(bindings) !== text) {
+    throw new Error("RECOVERY_QUERY_TEMPLATE_MISMATCH");
+  }
+  return bindings;
 }
 
 function exactKeys(value, keys) {

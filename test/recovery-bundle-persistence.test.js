@@ -28,6 +28,7 @@ const specWithoutIdentity = {
   packageLockDigest: "d".repeat(64),
   authoritySourceDigest: "e".repeat(64),
   authorityArtifactDigest: "f".repeat(64),
+  runtimeBundleManifestSha256: "6".repeat(64),
   functionArn:
     "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-authority:7",
   raceId: "22222222-2222-4222-8222-222222222222",
@@ -83,7 +84,7 @@ test("standalone recovery broker does not require integrated persistence inputs"
     () => integratedPersistenceEnvironment({
       TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec)
     }),
-    /persistence inputs must be supplied together/
+    /INTEGRATED_LIVE_DRILL_RECOVERY_BROKER_PARTIAL_CONFIG_REJECTED/
   );
   const environment = {
     TIDEPROOF_INTEGRATED_LIVE_DRILL_SPEC: JSON.stringify(spec),

@@ -1,52 +1,63 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { canonicalJson } from "./canonical-json.js";
-
 import {
   validateIntegratedLiveDrillRecoveryContinuityPreCallIntent
 } from "./integrated-live-drill-recovery-continuity.js";
 import {
   assertIntegratedLiveDrillPrivateRootCurrent,
   assertIntegratedLiveDrillPrivateRootMatchesBinding,
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
   normalizeIntegratedLiveDrillProviderContext,
   readIntegratedLiveDrillExactPrivateJson,
   secureIntegratedLiveDrillPrivateRoot
 } from "./integrated-live-drill-provider-evidence.js";
 import {
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT,
-  readBoundIntegratedLiveDrillProviderOrchestrationAdmission
-} from "./integrated-live-drill-provider-orchestration.js";
-import { runIntegratedLiveDrillProviderRecovery } from
-  "./integrated-live-drill-provider-recovery.js";
-import { CockroachManagedMcpRecoveryClient } from
-  "./managed-mcp-client.js";
+  integratedLiveDrillProviderAuthorityTimes,
+  runIntegratedLiveDrillProviderRecovery
+} from "./integrated-live-drill-provider-recovery.js";
+import { readSystemdCredentialText } from "./systemd-credential.js";
+import { BrokeredProviderOperationClient } from
+  "./brokered-provider-operation-client.js";
 import {
   DeterministicRecoveryBroker,
   principalBindingHash,
   RecoveryAuditSink
 } from "./recovery-broker.js";
 import {
+  buildProviderDispatchControlBinding,
+  PROVIDER_DISPATCH_HEX_64
+} from "./provider-dispatch-binding.js";
+import {
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
+} from "./integrated-live-drill-runtime.js";
+import {
   recoveryAuditTargetIdentity
 } from "./recovery-continuity-identity.js";
+import {
+  INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_SCHEMA,
+  validateIntegratedLiveDrillExecutionGrant
+} from "./integrated-live-drill-dispatch-broker.js";
+import {
+  validateIntegratedLiveDrillProviderDispatchAuthorizationPure
+} from "./integrated-live-drill-provider-evidence.js";
 
 export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA =
-  "tideproof.highwater-drill-provider-worker-input.v2";
+  "tideproof.highwater-drill-provider-worker-input.v3";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH";
-export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_FORBIDDEN_ROOT";
-export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT =
-  "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIALS_DIRECTORY =
+  "CREDENTIALS_DIRECTORY";
 
 const MAX_WORKER_INPUT_BYTES = 8 * 1024 * 1024;
-const HEX_64 = /^[0-9a-f]{64}$/u;
 const SAFE_PROCESS_ENVIRONMENT_NAMES = Object.freeze([
-  "__CF_USER_TEXT_ENCODING",
   "LANG",
   "LC_ALL",
   "LC_CTYPE",
@@ -54,19 +65,15 @@ const SAFE_PROCESS_ENVIRONMENT_NAMES = Object.freeze([
   "PATH",
   "TMPDIR"
 ]);
-const WORKER_ENVIRONMENT_NAMES = Object.freeze([
+const WORKER_ENVIRONMENT_NAMES = new Set([
   ...SAFE_PROCESS_ENVIRONMENT_NAMES,
-  "MCP_API_KEY",
-  "PRIMARY_AUDIT_DATABASE_URL",
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIALS_DIRECTORY,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT
 ]);
-const WORKER_ENVIRONMENT_NAME_SET = new Set(WORKER_ENVIRONMENT_NAMES);
 
 function reject(code, cause) {
   throw new Error(code, cause === undefined ? undefined : { cause });
@@ -77,99 +84,96 @@ function requireCondition(condition, code) {
 }
 
 function exactKeys(value, keys) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
-  ) {
-    return false;
-  }
-  const ownKeys = Reflect.ownKeys(value);
-  return ownKeys.length === keys.length &&
-    ownKeys.every((key) => typeof key === "string") &&
-    keys.every((key) => Object.hasOwn(value, key)) &&
-    ownKeys.every((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      return descriptor !== undefined &&
-        Object.hasOwn(descriptor, "value") &&
-        descriptor.enumerable === true;
-    });
+  return value && typeof value === "object" && !Array.isArray(value) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value)) &&
+    Reflect.ownKeys(value).length === keys.length &&
+    Reflect.ownKeys(value).every((key) =>
+      typeof key === "string" && keys.includes(key)
+    ) && keys.every((key) => Object.hasOwn(value, key));
 }
 
-function normalizeWorkerEnvironment(environment, code) {
-  const realProcessEnvironment = environment === process.env;
+function requiredText(value, code, maximum = 8192) {
   requireCondition(
-    environment &&
-      typeof environment === "object" &&
-      !Array.isArray(environment) &&
-      (
-        realProcessEnvironment ||
-        [Object.prototype, null].includes(Object.getPrototypeOf(environment))
-      ),
-    code
-  );
-  const ownKeys = Reflect.ownKeys(environment);
-  requireCondition(
-    ownKeys.every((key) => {
-      if (
-        typeof key !== "string"
-      ) {
-        return false;
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(environment, key);
-      return descriptor !== undefined &&
-        Object.hasOwn(descriptor, "value") &&
-        descriptor.enumerable === true &&
-        typeof descriptor.value === "string" &&
-        WORKER_ENVIRONMENT_NAME_SET.has(key);
-    }),
-    code
-  );
-  return Object.freeze(Object.fromEntries(
-    ownKeys
-      .filter((key) => WORKER_ENVIRONMENT_NAME_SET.has(key))
-      .map((key) => [
-        key,
-        Object.getOwnPropertyDescriptor(environment, key).value
-      ])
-  ));
-}
-
-function requiredText(value, code, maximum = 4096) {
-  requireCondition(
-    typeof value === "string" &&
-      value.length > 0 &&
-      value.length <= maximum &&
+    typeof value === "string" && value.length > 0 && value.length <= maximum &&
       !/[\0\r\n]/u.test(value),
     code
   );
   return value;
 }
 
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function normalizedWorkerEnvironment(environment) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED";
+  const real = environment === process.env;
+  requireCondition(
+    environment && typeof environment === "object" && !Array.isArray(environment) &&
+      (real || [Object.prototype, null].includes(Object.getPrototypeOf(environment))),
+    code
+  );
+  const keys = Reflect.ownKeys(environment);
+  requireCondition(
+    keys.every((key) => {
+      const descriptor = typeof key === "string"
+        ? Object.getOwnPropertyDescriptor(environment, key)
+        : null;
+      return typeof key === "string" && WORKER_ENVIRONMENT_NAMES.has(key) &&
+        descriptor && Object.hasOwn(descriptor, "value") &&
+        descriptor.enumerable === true && typeof descriptor.value === "string";
+    }) &&
+      !Object.hasOwn(environment, "MCP_API_KEY") &&
+      !Object.hasOwn(environment, "PRIMARY_AUDIT_DATABASE_URL") &&
+      !Object.hasOwn(environment, "PRIMARY_PROVIDER_FINALIZE_DATABASE_URL"),
+    code
+  );
+  return Object.freeze(Object.fromEntries(keys.map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(environment, key).value
+  ])));
+}
+
+function normalizeExecutionGrant(value) {
+  const grant = validateIntegratedLiveDrillExecutionGrant(value);
+  requireCondition(
+    grant.schemaVersion === INTEGRATED_LIVE_DRILL_EXECUTION_GRANT_SCHEMA,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_EXECUTION_GRANT_REJECTED"
+  );
+  return grant;
+}
+
 export function validateIntegratedLiveDrillProviderWorkerInput(value) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED";
   requireCondition(
     exactKeys(value, [
       "authenticatedPrincipal",
       "context",
-      "providerAdmissionReceiptSha256",
+      "executionGrant",
       "schemaVersion"
-    ]) &&
-      value.schemaVersion ===
-        INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED"
+    ]),
+    code
+  );
+  const descriptors = Object.fromEntries(Reflect.ownKeys(value).map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(value, key)
+  ]));
+  requireCondition(
+    Object.values(descriptors).every((descriptor) =>
+      descriptor && Object.hasOwn(descriptor, "value") &&
+        descriptor.enumerable === true
+    ) && descriptors.schemaVersion.value ===
+      INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA,
+    code
   );
   const authenticatedPrincipal = requiredText(
-    value.authenticatedPrincipal,
+    descriptors.authenticatedPrincipal.value,
     "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED",
     512
   );
-  let context;
-  try {
-    context = normalizeIntegratedLiveDrillProviderContext(value.context);
-  } catch (cause) {
-    reject("INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED", cause);
-  }
+  const context = normalizeIntegratedLiveDrillProviderContext(
+    descriptors.context.value
+  );
   const intent = validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
     context.preCallIntent,
     {
@@ -177,17 +181,19 @@ export function validateIntegratedLiveDrillProviderWorkerInput(value) {
       controlLedgerReceipt: context.controlLedgerReceipt
     }
   );
+  const executionGrant = normalizeExecutionGrant(
+    descriptors.executionGrant.value
+  );
   requireCondition(
-    principalBindingHash(authenticatedPrincipal) ===
-        intent.subjectBindingSha256 &&
-      HEX_64.test(value.providerAdmissionReceiptSha256 ?? ""),
+    principalBindingHash(authenticatedPrincipal) === intent.subjectBindingSha256 &&
+      executionGrant.authorizationId === intent.authorizationId,
     "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED"
   );
   return Object.freeze({
     authenticatedPrincipal,
     context,
-    providerAdmissionReceiptSha256: value.providerAdmissionReceiptSha256,
-    schemaVersion: value.schemaVersion
+    executionGrant,
+    schemaVersion: descriptors.schemaVersion.value
   });
 }
 
@@ -197,11 +203,7 @@ export function readIntegratedLiveDrillProviderWorkerInput({
   rootPath
 }) {
   const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED";
-  const secure = secureIntegratedLiveDrillPrivateRoot(
-    rootPath,
-    forbiddenRootPath,
-    code
-  );
+  const secure = secureIntegratedLiveDrillPrivateRoot(rootPath, forbiddenRootPath, code);
   const input = validateIntegratedLiveDrillProviderWorkerInput(
     readIntegratedLiveDrillExactPrivateJson({
       code,
@@ -211,8 +213,8 @@ export function readIntegratedLiveDrillProviderWorkerInput({
     })
   );
   requireCondition(
-    input.context?.recoveryEvidenceRootPath === secure.rootPath &&
-      input.context?.forbiddenRootPath === secure.forbiddenRootPath,
+    input.context.recoveryEvidenceRootPath === secure.rootPath &&
+      input.context.forbiddenRootPath === secure.forbiddenRootPath,
     code
   );
   assertIntegratedLiveDrillPrivateRootMatchesBinding(
@@ -224,201 +226,158 @@ export function readIntegratedLiveDrillProviderWorkerInput({
   return input;
 }
 
-export function integratedLiveDrillProviderWorkerEnvironment(
-  sourceEnvironment,
-  {
-    authenticatedPrincipal,
-    forbiddenRootPath,
-    inputPath,
-    rootBinding,
-    rootPath
-  }
-) {
-  const apiKey = requiredText(
-    sourceEnvironment?.MCP_API_KEY,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED",
-    8192
-  );
-  requireCondition(
-    apiKey.length >= 24,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED"
-  );
-  const auditDatabaseUrl = requiredText(
-    sourceEnvironment?.PRIMARY_AUDIT_DATABASE_URL,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_DATABASE_REJECTED",
-    8192
-  );
-  const value = {
-    ...Object.fromEntries(
-      Object.entries(sourceEnvironment ?? {}).filter(([name]) =>
-        SAFE_PROCESS_ENVIRONMENT_NAMES.includes(name)
-      )
-    ),
-    MCP_API_KEY: apiKey,
-    PRIMARY_AUDIT_DATABASE_URL: auditDatabaseUrl,
-    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT]:
-      requiredText(
-        inputPath,
-        "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED"
-      ),
-    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT]:
-      requiredText(
-        authenticatedPrincipal,
-        "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_REJECTED",
-        512
-      ),
-    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT]:
-      requiredText(
-        rootPath,
-        "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED"
-      ),
-    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT]:
-      requiredText(
-        forbiddenRootPath,
-        "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED"
-      ),
-    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT]:
-      canonicalJson(rootBinding),
-    [INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]: "3",
-    [INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT]: "4"
-  };
+export function integratedLiveDrillProviderWorkerEnvironment(sourceEnvironment, {
+  credentialsDirectory,
+  forbiddenRootPath,
+  rootPath
+}) {
+  void forbiddenRootPath;
+  const value = Object.freeze({
+    ...Object.fromEntries(SAFE_PROCESS_ENVIRONMENT_NAMES
+      .filter((name) => typeof sourceEnvironment?.[name] === "string")
+      .map((name) => [name, sourceEnvironment[name]])),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIALS_DIRECTORY]:
+      requiredText(credentialsDirectory, "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED"),
+    [INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT]: rootPath
+  });
   return assertIntegratedLiveDrillProviderWorkerEnvironment(value, {
-    authenticatedPrincipal,
     forbiddenRootPath,
-    rootBinding,
     rootPath
   });
 }
 
 export function assertIntegratedLiveDrillProviderWorkerEnvironment(
   environment,
-  { authenticatedPrincipal, forbiddenRootPath, rootBinding, rootPath }
+  { forbiddenRootPath, rootPath }
 ) {
   const code = "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED";
-  const normalized = normalizeWorkerEnvironment(environment, code);
-  const inputPath = normalized[
-    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_PATH_ENVIRONMENT
+  const value = normalizedWorkerEnvironment(environment);
+  const credentialsDirectory = value[
+    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIALS_DIRECTORY
   ];
   requireCondition(
-    normalized[
-        INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_PRINCIPAL_ENVIRONMENT
-      ] === authenticatedPrincipal &&
-      normalized[
-        INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT
-      ] === rootPath &&
-      normalized[
+    value[INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_ENVIRONMENT] === rootPath &&
+      !Object.hasOwn(
+        value,
         INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_FORBIDDEN_ROOT_ENVIRONMENT
-      ] === forbiddenRootPath &&
-      typeof inputPath === "string" &&
-      path.isAbsolute(inputPath) &&
-      path.resolve(inputPath) === inputPath &&
-      path.dirname(inputPath) === rootPath &&
-      normalized[
-        INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT
-      ] === canonicalJson(rootBinding) &&
-      normalized[INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT] ===
-        "3" &&
-      normalized[
-        INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
-      ] === "4",
+      ) &&
+      [credentialsDirectory].every((candidate) =>
+        typeof candidate === "string" && path.isAbsolute(candidate) &&
+        path.resolve(candidate) === candidate
+      ),
     code
   );
-  requiredText(
-    normalized.MCP_API_KEY,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED",
-    8192
-  );
+  return value;
+}
+
+function readExecutorCredentials(environment, input) {
+  const credentialsDirectory = environment[
+    INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIALS_DIRECTORY
+  ];
+  const operationNonce = readSystemdCredentialText({
+    credentialsDirectory,
+    maximumBytes: 65,
+    name: "operation-nonce"
+  });
   requireCondition(
-    normalized.MCP_API_KEY.length >= 24,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED"
+    PROVIDER_DISPATCH_HEX_64.test(operationNonce) &&
+      sha256(operationNonce) === input.executionGrant.operationNonceSha256,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_EXECUTION_GRANT_REJECTED"
   );
-  requiredText(
-    normalized.PRIMARY_AUDIT_DATABASE_URL,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_DATABASE_REJECTED",
-    8192
-  );
-  requiredText(inputPath, code, 8192);
-  requiredText(rootPath, code, 8192);
-  requiredText(forbiddenRootPath, code, 8192);
-  requiredText(authenticatedPrincipal, code, 512);
-  return normalized;
+  return Object.freeze({
+    operationNonce,
+    providerOperationSocket: readSystemdCredentialText({
+      credentialsDirectory,
+      maximumBytes: 4097,
+      name: "provider-operation-socket"
+    }),
+    recoveryAuditDatabaseUrl: readSystemdCredentialText({
+      credentialsDirectory,
+      name: "recovery-audit-database-url"
+    })
+  });
 }
 
 async function runIntegratedLiveDrillProviderWorkerInternal({
-  decisionRootDescriptor,
-  evidenceRootDescriptor,
-  input,
-  environment
-}, {
-  fetchImpl,
-  auditClientFactory
-}) {
+  environment,
+  input
+}, { auditClientFactory, fetchImpl }) {
   const validated = validateIntegratedLiveDrillProviderWorkerInput(input);
-  const isolatedEnvironment =
-    assertIntegratedLiveDrillProviderWorkerEnvironment(environment, {
-      authenticatedPrincipal: validated.authenticatedPrincipal,
+  const isolated = assertIntegratedLiveDrillProviderWorkerEnvironment(
+    environment,
+    {
       forbiddenRootPath: validated.context.forbiddenRootPath,
-      rootBinding: validated.context.evidenceRootBinding,
       rootPath: validated.context.recoveryEvidenceRootPath
-    });
-  const intent = validated.context.preCallIntent;
+    }
+  );
+  const assertProviderAdmission = () => validated.executionGrant;
+  const context = validated.context;
+  const intent = context.preCallIntent;
+  const dispatch = validateIntegratedLiveDrillProviderDispatchAuthorizationPure(
+    context.providerDispatchAuthorization,
+    {
+      childAuthorizationIssuedAt:
+        context.preCallInputs.consumedChildAuthorization.attestation.payload.issuedAt,
+      humanAuthorizationTrustRoot: context.trustedRunContext.humanAuthorizationTrustRoot,
+      intent,
+      requireCurrent: false
+    }
+  );
+  const authorityTimes = integratedLiveDrillProviderAuthorityTimes(
+    context,
+    intent,
+    dispatch,
+    Date.parse(
+      context.preCallInputs.consumedChildAuthorization.attestation.payload.issuedAt
+    )
+  );
+  const binding = buildProviderDispatchControlBinding({
+    context,
+    dispatchAuthorizationSha256: dispatch.attestationSha256,
+    earliestControllingExpiry: authorityTimes.earliestControllingExpiry,
+    latestControllingIssuedAt: authorityTimes.latestControllingIssuedAt
+  });
   requireCondition(
-    Number.isSafeInteger(decisionRootDescriptor) &&
-      decisionRootDescriptor >= 0 &&
-      Number.isSafeInteger(evidenceRootDescriptor) &&
-      evidenceRootDescriptor >= 0,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ADMISSION_REJECTED"
+    binding.controlBindingSha256 === validated.executionGrant.controlBindingSha256,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_EXECUTION_GRANT_REJECTED"
   );
-  const assertProviderAdmission = () =>
-    readBoundIntegratedLiveDrillProviderOrchestrationAdmission({
-      context: validated.context,
-      decisionRootDescriptor,
-      evidenceRootDescriptor,
-      expectedReceiptSha256: validated.providerAdmissionReceiptSha256,
-      forbiddenRootPath: validated.context.forbiddenRootPath
-    });
-  assertProviderAdmission();
-  const apiKey = requiredText(
-    isolatedEnvironment.MCP_API_KEY,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED",
-    8192
-  );
-  requireCondition(
-    apiKey.length >= 24 && typeof fetchImpl === "function",
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_REJECTED"
-  );
-  const auditDatabaseUrl = requiredText(
-    isolatedEnvironment.PRIMARY_AUDIT_DATABASE_URL,
-    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_DATABASE_REJECTED",
-    8192
-  );
-  const trustedRunContext = validated.context.trustedRunContext;
+
+  // No provider client or raw provider credential exists in JavaScript before
+  // the exact database EXECUTING grant and local admission have been rebound.
+  const credentials = readExecutorCredentials(isolated, validated);
   const currentAuditTargetIdentity = recoveryAuditTargetIdentity({
-    connectionString: auditDatabaseUrl,
+    connectionString: credentials.recoveryAuditDatabaseUrl,
     primaryClusterId:
-      trustedRunContext.recoveryBrokerConfiguration.expectedSourceClusterId
+      context.trustedRunContext.recoveryBrokerConfiguration.expectedSourceClusterId
   });
   requireCondition(
     canonicalJson(currentAuditTargetIdentity) === canonicalJson(
-      trustedRunContext.recoveryBrokerConfiguration.auditTargetIdentity
+      context.trustedRunContext.recoveryBrokerConfiguration.auditTargetIdentity
     ),
     "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_TARGET_REJECTED"
   );
-  const client = new CockroachManagedMcpRecoveryClient({
-    apiKey,
+  requireCondition(
+    fetchImpl === null,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_NETWORK_REJECTED"
+  );
+  const client = new BrokeredProviderOperationClient({
+    binding,
     clusterId: intent.recoveryClusterId,
-    fetchImpl
+    executionGrant: validated.executionGrant,
+    operationNonce: credentials.operationNonce,
+    socketPath: credentials.providerOperationSocket
   });
   const broker = new DeterministicRecoveryBroker({
     auditSink: new RecoveryAuditSink({
-      connectionString: auditDatabaseUrl,
+      connectionString: credentials.recoveryAuditDatabaseUrl,
       clientFactory: auditClientFactory
     }),
     auditTargetIdentity: currentAuditTargetIdentity,
-    buildIdentity: trustedRunContext.spec.sourceBuildIdentity,
+    buildIdentity: context.trustedRunContext.spec.sourceBuildIdentity,
     expectedSourceClusterId:
-      trustedRunContext.recoveryBrokerConfiguration.expectedSourceClusterId,
+      context.trustedRunContext.recoveryBrokerConfiguration.expectedSourceClusterId,
     mcpClient: client,
+    providerDispatchFinalizer: client,
     recoveryClusterId: intent.recoveryClusterId,
     sessionResolver: Object.freeze({
       async resolve({ authenticatedPrincipal }) {
@@ -436,18 +395,24 @@ async function runIntegratedLiveDrillProviderWorkerInternal({
         });
       }
     }),
-    trustedPublisherKeys:
-      trustedRunContext.committedTrustRoot.trustedPublisherKeys
+    trustedPublisherKeys: context.trustedRunContext.committedTrustRoot.trustedPublisherKeys
   });
   try {
     const result = await runIntegratedLiveDrillProviderRecovery({
       authenticatedPrincipal: validated.authenticatedPrincipal,
       assertProviderAdmission,
       broker,
-      context: validated.context
+      context,
+      executionGrant: Object.freeze({
+        executionCapabilitySha256:
+          validated.executionGrant.executionCapabilitySha256,
+        grantId: validated.executionGrant.grantId,
+        operationNonceSha256: validated.executionGrant.operationNonceSha256,
+        workerSpecSha256: validated.executionGrant.workerSpecSha256
+      })
     });
     requireCondition(
-      !JSON.stringify(result).includes(apiKey),
+      !JSON.stringify(result).includes(credentials.operationNonce),
       "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_CREDENTIAL_LEAK_REJECTED"
     );
     return result;
@@ -456,18 +421,17 @@ async function runIntegratedLiveDrillProviderWorkerInternal({
   }
 }
 
-export async function runIntegratedLiveDrillProviderWorker(args) {
+export function runIntegratedLiveDrillProviderWorker(args) {
   return runIntegratedLiveDrillProviderWorkerInternal(args, {
     auditClientFactory: null,
-    fetchImpl: globalThis.fetch
+    fetchImpl: null
   });
 }
 
 export const __test = Object.freeze({
   runWithLocalTransports(args, { auditClientFactory, fetchImpl }) {
     requireCondition(
-      typeof auditClientFactory === "function" &&
-        typeof fetchImpl === "function",
+      typeof auditClientFactory === "function" && fetchImpl === null,
       "INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_TEST_TRANSPORT_REJECTED"
     );
     return runIntegratedLiveDrillProviderWorkerInternal(args, {

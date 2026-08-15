@@ -216,10 +216,24 @@ remain outside this local source claim. On that commit it bundles each runtime
 role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
-the 46-package union present across the six Lambda graphs and the separately
-content-addressed evidence-provider runtime graph. Over-inclusion in each ZIP
+the 46-package union present across the six Lambda graphs, the separately
+content-addressed evidence-provider graph, and twelve integrated-live runtime
+graphs. Over-inclusion in each ZIP
 is intentional so every independently distributed ZIP carries the complete
 reviewed notice set.
+The v9 receipt also binds twelve content-addressed integrated-live ESM bundles,
+one content-addressed canonical manifest, the reviewed file-descriptor
+launcher, and one pinned official Node v22.23.1 executable for the exact
+`linux-x64` or `darwin-arm64` target. A platform package-manager shim or any
+unreviewed executable digest is rejected. The build inventories all 24
+generated outputs; it privacy-scans the 23 non-Node outputs and records the
+one exact official Node binary as a pinned upstream toolchain exemption.
+Readiness independently recomputes those paths, sizes, hashes, package union,
+manifest bindings, scan results, and exemption before provider evidence.
+The outer exact builder also verifies every staged output byte against that
+inventory before copying it into the release checkout. For the DVI graph,
+`pg`'s optional `pg-native` peer resolves to a tracked module that raises
+`MODULE_NOT_FOUND`; only the reviewed pure-JavaScript driver is available.
 The Demo artifact embeds the exact reviewed browser source, scenario
 implementation, claims ledger, and Gate One evidence through build-time raw
 imports. The receipt records:
@@ -232,7 +246,11 @@ imports. The receipt records:
 - every bundled project input's path, Git blob ID, and SHA-256;
 - ZIP SHA-256 in hexadecimal and base64;
 - immutable S3 key recommendation;
-- template formatted and canonical digests.
+- template formatted and canonical digests;
+- the integrated-live manifest, launcher, official Node target, and twelve
+  component graphs; and
+- the complete generated-output privacy inventory and explicit pinned-
+  toolchain byte boundary.
 
 Each Lambda Version uses CloudFormation `CodeSha256`, so a version cannot be
 published when the deployed code hash differs from the reviewed artifact.
@@ -244,6 +262,20 @@ source, blob, and artifact digests. The receipt measures but does not
 independently certify the local Node/npm/esbuild/Git toolchain. Component-walk
 checks reject symlinked artifact parents, but a same-identity hostile host is
 still outside the claim and requires independent exact-release reproduction.
+
+Never run the integrated live drill from `dist/runtime` or a direct CLI. The
+accepted live target is Linux with a root-owned systemd manager. Run the
+reviewed root installer against the exact accepted receipt digest; it uses
+descriptor-rooted no-follow reads, atomically publishes the fifteen runtime
+files and separate verifier root, installs and hashes the fourteen exact systemd
+units, reloads the manager, and emits the private stage receipt. The independent
+non-root verifier reopens the runtime, verifier, accepted build receipt, units,
+and complete ancestor chains before PREPARE. Only systemd may start the dynamic
+Perl boundary, with the injection environment removed before its first exec.
+The provider bearer is delivered only to the fixed one-shot exchange after a
+fresh database activation and matching READY/PROCEED_ONCE handshake. This trusts root, the kernel,
+systemd, the system loader, Perl, and system libraries; it is not a
+hostile-administrator proof.
 
 The reviewed JSON is pretty printed for auditability and is larger than
 CloudFormation's 51,200-byte inline `TemplateBody` limit. Deploy it through a
@@ -1003,11 +1035,31 @@ in `evidence/gate2-console-stop-receipt-2026-07-30.md`.
 
 ## Live acceptance sequence
 
-1. Re-run all local tests, syntax checks, dependency audit,
+1. In an ordinary standalone clone (not a linked worktree), use the pinned
+   official Node.js v22.23.1 and npm 10.9.8, run `npm ci --ignore-scripts`,
+   then re-run all local tests, syntax checks, dependency audit,
    `npm run privacy:verify`,
-   CloudFormation lint, and generated-template equality.
-2. Commit the accepted local candidate.
-3. Build from that clean commit.
+   CloudFormation lint and generated-template equality. Run the
+   `gate2:integrated-live-drill` PREPARE/RESUME commands only with their exact
+   reviewed private fixture, ledger, authorization, and provider environments;
+   they are not a credential-free unit-test command. Also run
+   `npm run stress:provider-resume`. Require a count-bound 20/20 stress
+   receipt for the exact candidate commit and tree. That receipt repeats the
+   named two-OS-process broker race against a shared file-backed fake global
+   control; it is a local prerequisite, not live cross-host CockroachDB or
+   provider evidence.
+2. Obtain independent Packet C source acceptance. Commit the accepted local
+   candidate, merge it to official `main`, and require hosted CI to pass on
+   that exact `main` commit. Do not use a feature commit as live authority.
+3. Obtain a fresh, explicit pre-live GO for that exact official-main commit.
+   Build from the same clean commit. Require the v9 24-output inventory/privacy
+   receipt and the pinned official Node target. Before any integrated-live
+   credential is introduced, run the reviewed root installer with the exact
+   accepted receipt digest. Require fifteen runtime files, the isolated verifier,
+   fourteen exact installed systemd units, successful daemon reload, complete
+   ancestor/inode/mode/link checks, and an independent non-root PASS. Preserve
+   the private stage receipt. Do not run from the checkout, CLI, or a
+   package-manager Node shim.
 4. Reuse the prerequisite bootstrap stack under its preserved legacy physical
    name. Do not update it merely to change descriptions or tags. Verify its
    account-wide $15 budget and $1/$5/$10 actual plus $15 forecast notifications

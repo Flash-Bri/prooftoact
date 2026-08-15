@@ -16,14 +16,17 @@ import {
   validateIntegratedLiveDrillRecoveryContinuityJournal,
   validateIntegratedLiveDrillRecoveryContinuityPreCallIntent
 } from "./integrated-live-drill-recovery-continuity.js";
-import { renderRecoveryQuery } from "./recovery-continuity-identity.js";
+import {
+  recoveryAuditEventDigest,
+  renderRecoveryQuery
+} from "./recovery-continuity-identity.js";
 
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_HANDOFF_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-handoff.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_PRE_READ_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-pre-read.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_RESULT_SCHEMA =
-  "tideproof.highwater-drill-provider-recovery-result.v1";
+  "tideproof.highwater-drill-provider-recovery-result.v2";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_TERMINAL_SCHEMA =
   "tideproof.highwater-drill-provider-recovery-terminal.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA =
@@ -89,8 +92,7 @@ const FINALIZER_CONTEXT_FORBIDDEN_KEY_CLASSES = Object.freeze({
     /^(?:broker|databaseclient|fetchimpl|mcpclient|providercapability|providerclient)$/u,
   rawProviderResultAbsent:
     /(?:providerresult|rawproviderresult|rawresult|transportevidence)/u,
-  retryAuthorityAbsent:
-    /(?:allowretry|retryafter|retryauthority|retrycapability|retrypermitted|retrypermission)/u
+  retryNamedKeyAbsent: /retry/u
 });
 const HANDOFF_KEYS = Object.freeze([
   "accepted",
@@ -293,7 +295,7 @@ function contextKeyAssertions(value, seen = new Set()) {
     credentialMaterialAbsent: true,
     providerCapabilityAbsent: true,
     rawProviderResultAbsent: true,
-    retryAuthorityAbsent: true
+    retryNamedKeyAbsent: true
   };
   const visit = (entry) => {
     if (
@@ -1778,6 +1780,7 @@ function validateProviderArtifact(value, intent, context) {
       "logicalMcpRequestSha256",
       "mcpResultSha256",
       "observedTransportCounts",
+      "providerDispatchGrantId",
       "preCallIntentSha256",
       "providerDispatchAuthorizationSha256",
       "rawResult",
@@ -1805,6 +1808,7 @@ function validateProviderArtifact(value, intent, context) {
       HEX_64.test(context?.providerDispatchAuthorization?.attestationSha256 ?? "") &&
       value.providerDispatchAuthorizationSha256 ===
         context.providerDispatchAuthorization.attestationSha256 &&
+      UUID.test(value.providerDispatchGrantId ?? "") &&
       value.mcpResultSha256 === integratedLiveDrillCanonicalSha256(rawResult) &&
       value.transportEvidence.rpcCalls[1].resultSha256 ===
         value.mcpResultSha256 &&
@@ -1881,6 +1885,101 @@ function withReceipt(body) {
     ...body,
     receiptSha256: integratedLiveDrillCanonicalSha256(body)
   });
+}
+
+export function reconstructIntegratedLiveDrillProviderRecoveryHandoff(
+  context
+) {
+  const normalizedContext = normalizeIntegratedLiveDrillProviderContext(
+    context,
+    { requireDispatchAuthorization: true }
+  );
+  const intent = validateIntegratedLiveDrillRecoveryContinuityPreCallIntent(
+    normalizedContext.preCallIntent,
+    {
+      authorization: normalizedContext.authorization,
+      controlLedgerReceipt: normalizedContext.controlLedgerReceipt
+    }
+  );
+  const childAuthorizationIssuedAt =
+    normalizedContext.preCallInputs.consumedChildAuthorization.attestation
+      .payload.issuedAt;
+  const dispatchAuthorization =
+    validateIntegratedLiveDrillProviderDispatchAuthorizationPure(
+      normalizedContext.providerDispatchAuthorization,
+      {
+        childAuthorizationIssuedAt,
+        humanAuthorizationTrustRoot:
+          normalizedContext.trustedRunContext.humanAuthorizationTrustRoot,
+        intent,
+        requireCurrent: false
+      }
+    );
+  const secure = secureIntegratedLiveDrillPrivateRoot(
+    normalizedContext.recoveryEvidenceRootPath,
+    normalizedContext.forbiddenRootPath
+  );
+  assertIntegratedLiveDrillPrivateRootMatchesBinding(
+    secure,
+    normalizedContext.evidenceRootBinding,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_ROOT_BINDING_REJECTED"
+  );
+  const preRead = validatePreReadArtifact(
+    readIntegratedLiveDrillExactPrivateJson({
+      code: "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS",
+      filePath: artifactPath(secure, intent.authorizationId, "pre-read"),
+      secure
+    }),
+    intent
+  );
+  const provider = validateProviderArtifact(
+    readIntegratedLiveDrillExactPrivateJson({
+      code: "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS",
+      filePath: artifactPath(secure, intent.authorizationId, "mcp"),
+      secure
+    }),
+    intent,
+    Object.freeze({ providerDispatchAuthorization: dispatchAuthorization })
+  );
+  const terminal = validateTerminalArtifact(
+    readIntegratedLiveDrillExactPrivateJson({
+      code: "INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS",
+      filePath: artifactPath(secure, intent.authorizationId, "terminal"),
+      secure
+    }),
+    intent,
+    preRead
+  );
+  const observed = provider.observedTransportCounts;
+  assertIntegratedLiveDrillPrivateRootCurrent(secure);
+  return withReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_HANDOFF_SCHEMA,
+    authorizationId: intent.authorizationId,
+    preCallIntentSha256: intent.intentSha256,
+    logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
+    preReadEvidenceReceiptSha256: preRead.receiptSha256,
+    providerEvidenceReceiptSha256: provider.receiptSha256,
+    providerDispatchAuthorizationSha256:
+      provider.providerDispatchAuthorizationSha256,
+    terminalEvidenceReceiptSha256: terminal.receiptSha256,
+    transportEvidenceSha256: provider.transportEvidenceSha256,
+    observedInitializeCount: observed.initializeCount,
+    observedInitializedNotificationCount: observed.initializedNotificationCount,
+    observedToolsCallCount: observed.toolsCallCount,
+    observedSessionCloseCount: observed.sessionCloseCount,
+    sessionClosed: observed.sessionClosed,
+    preReadAuditReconciled: true,
+    terminalAuditReconciled: true,
+    w1W3ActualProviderPathIntegrated: true,
+    runAuthorizationDirectlyBindsExactRecoveryRequest: false,
+    separateExactProviderDispatchAuthorizationRequired: true,
+    separateExactProviderDispatchAuthorizationValidated: true,
+    postPrivateEvidenceReconciliationPathAvailable: true,
+    providerBacked: false,
+    accepted: false,
+    finalReleaseReady: false,
+    claimBoundary: INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_CLAIM_BOUNDARY
+  }));
 }
 
 export function validateIntegratedLiveDrillProviderRecoveryHandoff(value) {
@@ -2076,14 +2175,13 @@ export function verifyIntegratedLiveDrillProviderEvidenceBundle(value) {
   const reported = validateIntegratedLiveDrillProviderRecoveryHandoff(
     providerContinuity
   );
-  const childAuthorizationIssuedAt =
-    normalizedContext.preCallInputs.consumedChildAuthorization.attestation
-      .payload.issuedAt;
   const dispatchAuthorization =
     validateIntegratedLiveDrillProviderDispatchAuthorizationPure(
       normalizedContext.providerDispatchAuthorization,
       {
-        childAuthorizationIssuedAt,
+        childAuthorizationIssuedAt:
+          normalizedContext.preCallInputs.consumedChildAuthorization.attestation
+            .payload.issuedAt,
         humanAuthorizationTrustRoot:
           normalizedContext.trustedRunContext.humanAuthorizationTrustRoot,
         intent,
@@ -2123,35 +2221,9 @@ export function verifyIntegratedLiveDrillProviderEvidenceBundle(value) {
     preRead
   );
   const observed = provider.observedTransportCounts;
-  const recomputed = withReceipt(Object.freeze({
-    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_RECOVERY_HANDOFF_SCHEMA,
-    authorizationId: intent.authorizationId,
-    preCallIntentSha256: intent.intentSha256,
-    logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
-    preReadEvidenceReceiptSha256: preRead.receiptSha256,
-    providerEvidenceReceiptSha256: provider.receiptSha256,
-    providerDispatchAuthorizationSha256:
-      provider.providerDispatchAuthorizationSha256,
-    terminalEvidenceReceiptSha256: terminal.receiptSha256,
-    transportEvidenceSha256: provider.transportEvidenceSha256,
-    observedInitializeCount: observed.initializeCount,
-    observedInitializedNotificationCount:
-      observed.initializedNotificationCount,
-    observedToolsCallCount: observed.toolsCallCount,
-    observedSessionCloseCount: observed.sessionCloseCount,
-    sessionClosed: observed.sessionClosed,
-    preReadAuditReconciled: true,
-    terminalAuditReconciled: true,
-    w1W3ActualProviderPathIntegrated: true,
-    runAuthorizationDirectlyBindsExactRecoveryRequest: false,
-    separateExactProviderDispatchAuthorizationRequired: true,
-    separateExactProviderDispatchAuthorizationValidated: true,
-    postPrivateEvidenceReconciliationPathAvailable: true,
-    providerBacked: false,
-    accepted: false,
-    finalReleaseReady: false,
-    claimBoundary: INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_CLAIM_BOUNDARY
-  }));
+  const recomputed = reconstructIntegratedLiveDrillProviderRecoveryHandoff(
+    normalizedContext
+  );
   requireCondition(
     canonicalJson(recomputed) === canonicalJson(reported),
     "INTEGRATED_LIVE_DRILL_PROVIDER_HANDOFF_BINDING_REJECTED"

@@ -75,7 +75,7 @@
       "id": "aws-gate2-template",
       "path": "infra/aws/gate2-template.json",
       "role": "BOUNDED_DEPLOYMENT_CANDIDATE",
-      "sha256": "13a2df296d9d5faec2009698523df7da5aab50c70e45e0618bcefd623aeb4798"
+      "sha256": "a10066b23925cf2921b15eaa0d52e7ac8ef7a5f46e0ab260431a340e897cc3a1"
     },
     {
       "id": "aws-oidc-read-only-ledger",
@@ -99,7 +99,7 @@
       "id": "aws-oidc-read-only-workflow",
       "path": ".github/workflows/aws-oidc-read-only-preflight.yml",
       "role": "MANUAL_TIME_BOUNDED_PREFLIGHT_WORKFLOW",
-      "sha256": "808345d893310a12220d7ad0dbb847e79d23dfedf9ccd07dae7a61ae2d55c0c6"
+      "sha256": "9d70a33c100ae3cd275217f7f2477323942903ad268ee9dcfddd0ba9ac60fe3d"
     },
     {
       "id": "aws-preflight-library",
@@ -117,7 +117,7 @@
       "id": "aws-readiness-runner",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_RELEASE_GATE",
-      "sha256": "257a547d476f99872d7a59a7ebf2a725da3a22353f2e8b7c51dd351a5ad5872f"
+      "sha256": "f4eff0d6bc40431e1054bdbf41de2a3c699cfce63d7c205c1875d195e1473ec3"
     },
     {
       "id": "boundary-semantic-metric-runtime",

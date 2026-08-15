@@ -1,5 +1,6 @@
 import {
   authorizationBindingFor,
+  dispatchPayloadFor,
   logicalAuthorityKeyFor
 } from "./authority-identity.js";
 import { normalizedDviAuthorizationFor } from "./authority-store.js";
@@ -80,13 +81,6 @@ function sha256(value, name) {
   return accepted;
 }
 
-function jsonObject(value, name) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`${name} must be a JSON object`);
-  }
-  return JSON.parse(JSON.stringify(value));
-}
-
 function timestamp(value, name) {
   if (typeof value !== "string" && !(value instanceof Date)) {
     throw new TypeError(`${name} must be a database timestamp`);
@@ -132,7 +126,7 @@ function normalizeInput(input) {
     resourceId: text(logicalAction.resourceId, "resourceId", 256),
     agency: text(logicalAction.agency, "agency", 128),
     actionKind: text(logicalAction.actionKind, "actionKind", 64),
-    payload: jsonObject(logicalAction.payload, "payload")
+    payload: dispatchPayloadFor(logicalAction.payload)
   };
   assert(
     normalizedAction.actionKind === ACTION_KIND,

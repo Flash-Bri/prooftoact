@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-rights.v1",
   "status": "CURRENT_SURFACES_REVIEWED_FINAL_RELEASE_PENDING",
-  "reviewedOn": "2026-08-03",
+  "reviewedOn": "2026-08-14",
   "claimBoundary": "This inventory binds only the current repository, README, and browser surfaces to the reviewed ledger. It grants no rights, clears no future asset, and does not replace the exact-release private review.",
   "finalReleaseRequirements": [
     "Exact-release private rights review receipt.",
@@ -105,7 +105,7 @@
     {
       "id": "readme-surface",
       "path": "README.md",
-      "sha256": "e4e75e37d9e13df8dd26745a49520263daffae0f2def256bfabbd5b4ceb03eec"
+      "sha256": "7c38cfdeffaa42acaf00c5e8fa0fc99655000c89107d42a5971db0a0f8fdafb8"
     },
     {
       "id": "server-surface",

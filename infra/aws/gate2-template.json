@@ -1827,10 +1827,17 @@
               "Effect": "Allow",
               "Principal": {
                 "AWS": {
-                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                  "Ref": "EvidenceOperatorPrincipalArn"
                 }
               },
-              "Action": "sts:AssumeRole"
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalArn": {
+                    "Ref": "EvidenceOperatorPrincipalArn"
+                  }
+                }
+              }
             }
           ]
         },
@@ -1945,10 +1952,17 @@
               "Effect": "Allow",
               "Principal": {
                 "AWS": {
-                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                  "Ref": "EvidenceOperatorPrincipalArn"
                 }
               },
-              "Action": "sts:AssumeRole"
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalArn": {
+                    "Ref": "EvidenceOperatorPrincipalArn"
+                  }
+                }
+              }
             }
           ]
         },
@@ -2366,10 +2380,17 @@
               "Effect": "Allow",
               "Principal": {
                 "AWS": {
-                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                  "Ref": "EvidenceOperatorPrincipalArn"
                 }
               },
-              "Action": "sts:AssumeRole"
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalArn": {
+                    "Ref": "EvidenceOperatorPrincipalArn"
+                  }
+                }
+              }
             }
           ]
         },

@@ -16,6 +16,18 @@ redisplaying identity values. A new finding, identity, path, oversized blob,
 shallow checkout, dirty tree, stale allowance, or malformed manifest fails the
 gate.
 
+The exact Gate Two v9 build applies a second boundary to generated outputs.
+Its receipt enumerates every one of the 21 template, Lambda, evidence-provider,
+and live-drill runtime files by path, byte count, and SHA-256. It scans the 20
+non-Node outputs with the same bounded signature rules and permits only
+already-reviewed public upstream attribution hashes. The remaining file is an
+official Node v22.23.1 executable: the build accepts only one of the pinned
+nodejs.org release digests for the exact supported platform and records its
+byte count as a pinned toolchain exemption, not as scanned content. Readiness
+recomputes the inventory, all file digests, the scan result, and the exemption.
+An unpinned Node binary, missing output, added output, stale count, changed
+byte, or non-attribution finding fails closed.
+
 Run:
 
 ```sh
@@ -29,6 +41,7 @@ authorize publication. The final release still requires:
 
 1. an exact official-main rerun bound to hosted CI and deployed hashes; and
 2. a private human review of repository bytes, metadata, live receipts,
+   generated output inventory (including the pinned Node executable),
    screenshots, video, public URLs, and every Devpost field.
 
 If the automated gate finds an actual secret, stop publication, revoke or

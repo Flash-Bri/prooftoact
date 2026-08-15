@@ -239,7 +239,7 @@ const EXPECTED_UNDERLYING_PREFLIGHT_RUNNER_SHA256 =
 const EXPECTED_UNDERLYING_PREFLIGHT_VALIDATOR_SHA256 =
   "c0068e1a63279bab81179e052860a8b39717e29fe012a7c18d9df6da9b4b9985";
 const EXPECTED_ACTIONS_CHECKOUT_NORMALIZER_SHA256 =
-  "fbe8c57b9aa166c70d16a558160d1e47373de30b8e1bda9fd537c6fbe57c8ad6";
+  "bbbaac78c1dd29a4e6d46d49c366863a6c4064a9433fb06a1551ecb70f6def8f";
 
 const EXPECTED_ROLE_STATEMENT_SIDS = Object.freeze([
   "ReadCallerIdentity",
@@ -1293,6 +1293,10 @@ export function validateActionsCheckoutNormalizer(source) {
       '"AWS Read-Only OIDC Preflight"',
       '".github/workflows/aws-oidc-read-only-preflight.yml"',
       'environment?.GITHUB_JOB === "read-only-preflight"',
+      'environment?.GITHUB_JOB === "verify-pr-head-no-secrets"',
+      'EXPECTED_PULL_REQUEST_HEAD_REPOSITORY',
+      'EXPECTED_PULL_REQUEST_HEAD_SHA',
+      'normalizePullRequestHeadOrigin(context)',
       'environment?.GITHUB_EVENT_NAME === "workflow_dispatch"',
       'ref === "refs/heads/main"',
       'environment?.EXPECTED_OFFICIAL_MAIN_COMMIT ===',

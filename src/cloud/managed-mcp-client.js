@@ -4,7 +4,7 @@ import { parseStrictJson } from "./strict-json.js";
 import {
   recoveryQueryBindingsFor,
   recoveryQueryTemplateDigest
-} from "./recovery-store.js";
+} from "./recovery-continuity-identity.js";
 
 const MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
 const MCP_PROTOCOL_VERSION = "2025-03-26";
@@ -24,7 +24,7 @@ function sha256(value) {
   return createHash("sha256").update(String(value)).digest("hex");
 }
 
-function managedMcpLogicalRequest({ clusterId, query }) {
+export function managedMcpLogicalRequest({ clusterId, query }) {
   const bindings = recoveryQueryBindingsFor(query);
   const boundInputSha256 = sha256(canonicalJson({
     tenantId: bindings.tenantId,

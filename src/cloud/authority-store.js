@@ -17,6 +17,7 @@ import {
 } from "./database-commit-result.js";
 import {
   authorizationBindingFor,
+  dispatchPayloadFor,
   dviProposalIdentityDigestFor,
   dviProposalIdentityFor,
   logicalActionDigestFor,
@@ -150,43 +151,6 @@ function requireBase64(value, name) {
   return { text, bytes };
 }
 
-function requireJsonObject(value, name) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError(`${name} must be a JSON object`);
-  }
-  const seen = new WeakSet();
-  const inspect = (nested, path) => {
-    if (
-      nested === undefined ||
-      typeof nested === "function" ||
-      typeof nested === "symbol" ||
-      typeof nested === "bigint"
-    ) {
-      throw new TypeError(`${path} is not JSON-safe`);
-    }
-    if (typeof nested === "number" && !Number.isFinite(nested)) {
-      throw new TypeError(`${path} must be finite`);
-    }
-    if (!nested || typeof nested !== "object") {
-      return;
-    }
-    if (seen.has(nested)) {
-      throw new TypeError(`${path} must not contain a cycle`);
-    }
-    seen.add(nested);
-    if (Array.isArray(nested)) {
-      nested.forEach((entry, index) => inspect(entry, `${path}[${index}]`));
-    } else {
-      Object.entries(nested).forEach(([key, entry]) =>
-        inspect(entry, `${path}.${key}`)
-      );
-    }
-    seen.delete(nested);
-  };
-  inspect(value, name);
-  return JSON.parse(JSON.stringify(value));
-}
-
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -201,7 +165,7 @@ function normalizeLogicalActionInput(input) {
     LOGICAL_ACTION_INPUT_FIELDS,
     "AUTHORITY_LOGICAL_ACTION_INPUT_SHAPE"
   );
-  const payload = requireJsonObject(input.payload, "logicalAction.payload");
+  const payload = dispatchPayloadFor(input.payload);
   const actionKind = requireText(input.actionKind, "logicalAction.actionKind");
   if (actionKind !== ACTION_KIND) {
     throw new TypeError("AUTHORITY_ACTION_KIND_UNSUPPORTED");
@@ -428,12 +392,13 @@ function normalizeRequest(input) {
       "authorization and lease time are database-controlled"
     );
   }
-  const payload = requireJsonObject(
-    input.payload ?? {
-      scenario: "synthetic-highwater",
-      action: ACTION_KIND
-    },
-    "payload"
+  const payload = dispatchPayloadFor(
+    Object.hasOwn(input, "payload")
+      ? input.payload
+      : {
+          scenario: "synthetic-highwater",
+          action: ACTION_KIND
+        }
   );
   const dviAuthorization = requireExactObject(
     input.dviAuthorization,
@@ -643,9 +608,8 @@ export function normalizeAuthorityReconciliationRow(row, request) {
   });
   let proposalExpiresAt;
   try {
-    const proposalPayload = requireJsonObject(
-      row.receipt_proposal_payload,
-      "receiptProposal.payload"
+    const proposalPayload = dispatchPayloadFor(
+      row.receipt_proposal_payload
     );
     const proposalPayloadDigest = requireSha256(
       row.receipt_proposal_payload_digest,

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { publishOrReadExactOwnedFile } from "./atomic-create-only-file.js";
 
 import { canonicalJson } from "./canonical-json.js";
 import {
@@ -17,10 +18,17 @@ import {
   integratedLiveDrillProviderContextAssertions,
   normalizeIntegratedLiveDrillProviderContext,
   readIntegratedLiveDrillExactPrivateJson,
+  reconstructIntegratedLiveDrillProviderRecoveryHandoff,
   secureIntegratedLiveDrillPrivateRoot,
   validateIntegratedLiveDrillProviderRecoveryHandoff,
   verifyIntegratedLiveDrillProviderEvidenceBundle
 } from "./integrated-live-drill-provider-evidence.js";
+import {
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
+} from "./integrated-live-drill-runtime.js";
 
 export { validateIntegratedLiveDrillProviderRecoveryHandoff } from
   "./integrated-live-drill-provider-evidence.js";
@@ -40,9 +48,13 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONM
 export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_ROOT_BINDING";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_CLAIM_BOUNDARY =
-  "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. It accepts no provider client, key, raw result, or retry authority. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release.";
+  "This provider-free W5 finalization process treats the supplied handoff as untrusted, rereads the exact owner-only W1 pre-read, W2 raw-result/transport/session-close, and W3 terminal artifacts from the bound evidence root, recomputes their receipt digests and observed counts, and cross-binds the W2 result and close digests to the complete continuity journal before writing the sanitized W4 component receipt. Its exact schema rejects provider clients, credential material, raw provider results, and every supplied context key whose normalized name contains retry; the key-name check does not prove that arbitrary data cannot semantically encode retry intent. The finalizer exposes no retry or provider operation. It does not independently prove provider origin, live provider execution, process-level network denial, cross-host continuity, deployment, acceptance, or release.";
 
 const MAX_RECEIPT_BYTES = 64 * 1024;
+const PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER =
+  "DURABLE_EXACT_ONE_MCP_CRASH_RESTART_AMBIGUOUS_RESULT_RECONCILIATION_NOT_PROVEN";
+const PROVIDER_SUPERVISOR_COMPLETION_SCHEMA =
+  "tideproof.highwater-drill-provider-supervisor-completion.v1";
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const SAFE_PROCESS_ENVIRONMENT_NAMES = Object.freeze([
   "__CF_USER_TEXT_ENCODING",
@@ -59,7 +71,11 @@ const FINALIZER_ENVIRONMENT_NAMES = new Set([
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_FORBIDDEN_ROOT_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_ROOT_BINDING_ENVIRONMENT,
-  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT
+  INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_COMPONENT_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_MANIFEST_SHA256_ENVIRONMENT,
+  INTEGRATED_LIVE_DRILL_RUNTIME_STAGE_ROOT_ENVIRONMENT
 ]);
 
 function reject(code, cause) {
@@ -308,34 +324,16 @@ function createOrReadCanonicalReceipt(filePath, value, secure) {
     bytes.length > 0 && bytes.length <= MAX_RECEIPT_BYTES,
     "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED"
   );
-  let descriptor;
-  try {
-    assertSameRoot(secure);
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY |
-        fs.constants.O_CREAT |
-        fs.constants.O_EXCL |
-        fs.constants.O_NOFOLLOW,
-      0o600
-    );
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    syncDirectory(secure);
-  } catch (cause) {
-    if (descriptor !== undefined) {
-      try { fs.closeSync(descriptor); } catch { /* Preserve first error. */ }
-    }
-    if (cause?.code !== "EEXIST") {
-      if (cause?.message?.startsWith("INTEGRATED_LIVE_DRILL_")) throw cause;
-      reject(
-        "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED",
-        cause
-      );
-    }
-  }
+  publishOrReadExactOwnedFile({
+    assertRoot: () => assertSameRoot(secure),
+    bytes,
+    code: "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_WRITE_REJECTED",
+    filePath,
+    maximumBytes: MAX_RECEIPT_BYTES,
+    mode: 0o600,
+    rootPath: secure.rootPath,
+    uid: secure.expectedUid
+  });
   const reread = readCanonicalReceipt(filePath, secure);
   requireCondition(
     canonicalJson(reread) === canonicalJson(value),
@@ -348,6 +346,57 @@ function withReceipt(body) {
   return Object.freeze({
     ...body,
     receiptSha256: integratedLiveDrillCanonicalSha256(body)
+  });
+}
+
+export function reconstructIntegratedLiveDrillProviderFinalizationCompletion({
+  context,
+  schemaVersion
+}) {
+  requireCondition(
+    schemaVersion === INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_SCHEMA,
+    "INTEGRATED_LIVE_DRILL_PROVIDER_FINALIZATION_INPUT_REJECTED"
+  );
+  const normalizedContext = normalizeIntegratedLiveDrillProviderContext(
+    context,
+    { requireDispatchAuthorization: true }
+  );
+  const providerContinuity =
+    reconstructIntegratedLiveDrillProviderRecoveryHandoff(normalizedContext);
+  const verified = verifyIntegratedLiveDrillProviderEvidenceBundle({
+    context: normalizedContext,
+    providerContinuity,
+    requireCompleteJournal: false
+  });
+  const recovery = verified.terminal.recovery;
+  const finalization = finalizeIntegratedLiveDrillProviderRecovery({
+    context: normalizedContext,
+    providerContinuity
+  });
+  return withReceipt({
+    schemaVersion: PROVIDER_SUPERVISOR_COMPLETION_SCHEMA,
+    accepted: false,
+    ambiguityBlocker:
+      PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
+    authorizationId: normalizedContext.preCallIntent.authorizationId,
+    finalReleaseReady: false,
+    finalizationReceiptSha256: finalization.receiptSha256,
+    observedInitializeCount: finalization.observedInitializeCount,
+    observedInitializedNotificationCount:
+      finalization.observedInitializedNotificationCount,
+    observedSessionCloseCount: finalization.observedSessionCloseCount,
+    observedToolsCallCount: finalization.observedToolsCallCount,
+    preCallIntentSha256: normalizedContext.preCallIntent.intentSha256,
+    providerBacked: false,
+    providerHandoffReceiptSha256: providerContinuity.receiptSha256,
+    recoveryReceiptSha256: integratedLiveDrillCanonicalSha256(recovery),
+    runId: normalizedContext.preCallIntent.runId,
+    stateHistory: Object.freeze([
+      "DISPATCH_AUTHORIZATION_ACCEPTED",
+      "PROVIDER_WORKER_HANDOFF_DURABLE",
+      "PROVIDER_FINALIZATION_DURABLE"
+    ]),
+    status: "LOCAL_PROVIDER_SUPERVISOR_COMPLETED_NOT_RELEASED"
   });
 }
 
@@ -461,7 +510,7 @@ export function validateIntegratedLiveDrillProviderFinalizationReceipt(
     "contextExactSchemaValidated",
     "contextProviderCapabilityAbsent",
     "contextRawProviderResultAbsent",
-    "contextRetryAuthorityAbsent",
+    "contextRetryNamedKeyAbsent",
     "credentialOptionAccepted",
     "finalReleaseReady",
     "journalReceiptSha256",
@@ -477,7 +526,7 @@ export function validateIntegratedLiveDrillProviderFinalizationReceipt(
     "providerWorkerImportGraphProvenAbsent",
     "rawProviderResultAccepted",
     "receiptSha256",
-    "retryAuthorityAccepted",
+    "retryNamedKeyAccepted",
     "runId",
     "schemaVersion",
     "status"
@@ -506,11 +555,11 @@ export function validateIntegratedLiveDrillProviderFinalizationReceipt(
       normalized.contextExactSchemaValidated === true &&
       normalized.contextProviderCapabilityAbsent === true &&
       normalized.contextRawProviderResultAbsent === true &&
-      normalized.contextRetryAuthorityAbsent === true &&
+      normalized.contextRetryNamedKeyAbsent === true &&
       normalized.credentialOptionAccepted === false &&
       normalized.providerCapabilityAccepted === false &&
       normalized.rawProviderResultAccepted === false &&
-      normalized.retryAuthorityAccepted === false &&
+      normalized.retryNamedKeyAccepted === false &&
       normalized.providerWorkerImportGraphProvenAbsent === false &&
       [
         normalized.componentReceiptSha256,
@@ -604,8 +653,8 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
       contextAssertions.providerCapabilityAbsent,
     contextRawProviderResultAbsent:
       contextAssertions.rawProviderResultAbsent,
-    contextRetryAuthorityAbsent:
-      contextAssertions.retryAuthorityAbsent,
+    contextRetryNamedKeyAbsent:
+      contextAssertions.retryNamedKeyAbsent,
     finalReleaseReady: false,
     logicalMcpRequestSha256: intent.logicalMcpRequestSha256,
     observedInitializeCount: handoff.observedInitializeCount,
@@ -647,8 +696,8 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
       contextAssertions.providerCapabilityAbsent,
     contextRawProviderResultAbsent:
       contextAssertions.rawProviderResultAbsent,
-    contextRetryAuthorityAbsent:
-      contextAssertions.retryAuthorityAbsent,
+    contextRetryNamedKeyAbsent:
+      contextAssertions.retryNamedKeyAbsent,
     credentialOptionAccepted:
       !contextAssertions.credentialMaterialAbsent,
     finalReleaseReady: false,
@@ -665,8 +714,8 @@ export function finalizeIntegratedLiveDrillProviderRecovery(args) {
       !contextAssertions.providerCapabilityAbsent,
     rawProviderResultAccepted:
       !contextAssertions.rawProviderResultAbsent,
-    retryAuthorityAccepted:
-      !contextAssertions.retryAuthorityAbsent,
+    retryNamedKeyAccepted:
+      !contextAssertions.retryNamedKeyAbsent,
     providerHandoffReceiptSha256: handoff.receiptSha256,
     providerWorkerImportGraphProvenAbsent: false,
     runId: intent.runId,

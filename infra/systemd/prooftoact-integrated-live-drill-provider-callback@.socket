@@ -1,0 +1,14 @@
+[Unit]
+Description=ProofToAct provider-only callback socket %i
+Requires=prooftoact-integrated-live-drill-dispatch-broker@%i.service
+After=prooftoact-integrated-live-drill-dispatch-broker@%i.service
+
+[Socket]
+ListenStream=/run/prooftoact/%i/provider-callback.sock
+FileDescriptorName=provider-callback
+SocketUser=prooftoact-provider
+SocketGroup=prooftoact-provider
+SocketMode=0600
+DirectoryMode=0711
+RemoveOnStop=yes
+Service=prooftoact-integrated-live-drill-provider-operation@%i.service

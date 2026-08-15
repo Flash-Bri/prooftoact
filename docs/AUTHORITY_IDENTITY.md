@@ -16,6 +16,14 @@ Gate Two deployment, and provider evidence acceptance remain blocked until the
 exact CockroachDB version and the remaining review gates pass their negative
 tests.
 
+The sanitized Final23 record narrows that blanket boundary: a fresh-zero local
+QEMU-TCG x86-64 CockroachDB CCL v26.2.0 gate exercised the primary typed
+authorizer, DVI proposal payload/alias and database-derived digest negatives,
+direct-DML and cross-role denials, one protected-effect insert, and sequential
+exact replay. It did not exercise integrated DVI ranking/exclusions,
+expired-unspent remint, cross-epoch concurrency, held-wait currentness,
+50-session contention, ACK loss, or any provider-hosted path.
+
 ## Identity layers
 
 1. `tideproof.authority.logical-action.v1` names the business effect. Its
@@ -99,8 +107,11 @@ contender in the resource race.
 - Repair/control: durable structured DVI selection receipt, shared recomputed
   binding, selected evidence in proposal identity, and a zero-mutation A/B
   negative.
-- Verification/residual/claim: source tests and Gate One drill are required;
-  CockroachDB v26.2 execution remains pending and no live-DVI claim is added.
+- Verification/residual/claim: Final23 exercised the DVI proposal
+  payload/alias and database-derived request-digest mismatch negatives on local
+  CockroachDB CCL v26.2.0 with no authorized replacement. Integrated DVI
+  ranking and plan/exclusion evidence remain pending. Provider-backed
+  CockroachDB v26.2 execution remains pending, so no live-DVI claim is added.
 
 ### Automatic proposal-to-epoch remint
 
@@ -134,8 +145,10 @@ contender in the resource race.
 - Repair/control: proposal rows persist canonical action/payload fields; SQL
   hashes stored canonical payload, derives logical/request digests, rejects
   lowercase-hex violations, and returns stored identity on every replay.
-- Verification/residual/claim: direct SQL negatives must show zero receipt,
-  outbox, effect, or fence mutation; provider SQL compatibility remains open.
+- Verification/residual/claim: Final23 exercised the direct SQL payload,
+  proposal-alias, request-digest, null-nonce, base-table-DML, and cross-role
+  negatives on local CockroachDB CCL v26.2.0. Provider SQL compatibility and
+  the unexercised temporal/concurrency matrices remain open.
 
 ### Locale-sensitive canonical JSON
 

@@ -123,10 +123,44 @@ test("least-privilege runtime accepts only a database-derived proposal identity"
     IDS.evidence,
     "b".repeat(64)
   ]);
+  assert.equal(
+    observed.values[9],
+    '{"action":"dispatch_rescue_unit","destination":"synthetic-zone-delta","scenario":"synthetic-highwater"}'
+  );
   assert.equal(result.outcome, "proposal_authorized");
   assert.equal(result.authorizationCurrent, true);
   assert.equal(result.identity.authorizationEpoch, 1);
   assert.equal(result.dviAuthorization.selectedEvidenceId, IDS.evidence);
+});
+
+test("dispatch payload violations fail before any database query", async () => {
+  let queries = 0;
+  const client = {
+    async query() {
+      queries += 1;
+      throw new Error("query must not run");
+    }
+  };
+  for (const payload of [
+    { action: "dispatch_rescue_unit" },
+    {
+      action: "dispatch_rescue_unit",
+      scenario: "synthetic-highwater",
+      extra: "alternate-identity"
+    },
+    {
+      action: "dispatch_rescue_unit",
+      scenario: "unsafe/value"
+    }
+  ]) {
+    await assert.rejects(
+      authorizeDviProposalWithClient(client, input({
+        logicalAction: { ...input().logicalAction, payload }
+      })),
+      /AUTHORITY_DISPATCH_PAYLOAD_(?:SHAPE|TEXT)/u
+    );
+  }
+  assert.equal(queries, 0);
 });
 
 test("selection mismatch returns no runtime authorization", async () => {

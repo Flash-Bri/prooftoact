@@ -19,7 +19,29 @@ const BUNDLED_COMPONENTS = Object.freeze({
   demo: "infra/aws/lambda/demo.js",
   evidenceProvider: "scripts/lib/aws-provider-bundle-entry.js",
   probe: "infra/aws/lambda/probe.cjs",
-  signer: "infra/aws/lambda/signer.cjs"
+  signer: "infra/aws/lambda/signer.cjs",
+  runtimeAuthorityRace:
+    "scripts/runtime-entries/integrated-live-drill-authority-race.js",
+  runtimeDispatchBroker:
+    "scripts/runtime-entries/integrated-live-drill-dispatch-broker.js",
+  runtimeProviderActivation:
+    "scripts/runtime-entries/integrated-live-drill-provider-activation.js",
+  runtimeProviderExchange:
+    "scripts/runtime-entries/integrated-live-drill-provider-exchange.js",
+  runtimeDvi: "scripts/runtime-entries/integrated-live-drill-dvi.js",
+  runtimeFinalizer:
+    "scripts/runtime-entries/integrated-live-drill-finalizer.js",
+  runtimeProviderOperation:
+    "scripts/runtime-entries/integrated-live-drill-provider-operation.js",
+  runtimeProviderTerminalizer:
+    "scripts/runtime-entries/integrated-live-drill-provider-terminalizer.js",
+  runtimeOrchestrator:
+    "scripts/runtime-entries/integrated-live-drill-orchestrator.js",
+  runtimeReconciler:
+    "scripts/runtime-entries/integrated-live-drill-reconciler.js",
+  runtimeSupervisor:
+    "scripts/runtime-entries/integrated-live-drill-supervisor.js",
+  runtimeWorker: "scripts/runtime-entries/integrated-live-drill-worker.js"
 });
 
 function assert(condition, message) {
@@ -41,7 +63,8 @@ export async function collectBundledPackageNames({
   const artifactPackages = {};
   const packageUnion = new Set();
   for (const [name, entryPoint] of Object.entries(BUNDLED_COMPONENTS)) {
-    const providerRuntime = name === "evidenceProvider";
+    const providerRuntime =
+      name === "evidenceProvider" || name.startsWith("runtime");
     const result = await build({
       absWorkingDir: resolvedRoot,
       entryPoints: [entryPoint],

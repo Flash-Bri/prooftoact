@@ -700,7 +700,9 @@ test("collector uses one read-only transaction with cache-versioned role introsp
   assert.match(source, /object_name,\s+object_type,/u);
   assert.match(source, /WHERE database_name = current_database\(\)/u);
   assert.match(source, /schema_name NOT IN/u);
-  assert.match(source, /FROM crdb_internal\.default_privileges/u);
+  assert.match(source, /FROM \[SHOW DEFAULT PRIVILEGES\]/u);
+  assert.match(source, /current_database\(\) AS database_name/u);
+  assert.match(source, /NULL::STRING AS schema_name/u);
   assert.match(source, /schema_name,\s+role,\s+for_all_roles,/u);
   assert.doesNotMatch(source, /WHERE (?:username|role_name|grantee) IN/u);
 });

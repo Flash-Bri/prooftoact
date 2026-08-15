@@ -34,11 +34,11 @@ ProofToActMemory
         +--> local three-act judge UI
 ```
 
-The in-memory implementation is a behavioral specification. Distributed
-correctness is supported separately by the accepted CockroachDB Gate One
-evidence; the local model alone is not that evidence.
+The in-memory implementation is a behavioral specification. Historical
+accepted CockroachDB Gate One receipts support the broader recorded
+distributed claims; the local model alone is not that evidence.
 
-## Accepted CockroachDB Gate One
+## Historical accepted CockroachDB Gate One
 
 ```text
 Primary CockroachDB cluster
@@ -54,6 +54,16 @@ Primary CockroachDB cluster
 Separate recovery cluster --> fixed-query Managed MCP broker
                                 context only; no authority transfer
 ```
+
+The sanitized Final23 record is narrower. On a fresh-zero local QEMU-TCG
+x86-64 guest, the bound predecessor source installed on CockroachDB CCL
+v26.2.0 and passed the primary-capability-boundaries gate: typed-definer
+access, direct-DML and cross-role denials, a simple recovery resolver, DVI
+proposal-identity negatives, wrong-digest rejection, one protected-effect
+insert, and sequential exact replay. It did not rerun the historical
+50-contender or ambiguity drills, the integrated DVI plan/exclusion proof,
+provider-hosted behavior, AWS, Managed MCP, or complete application PID1
+isolation.
 
 ## Local AWS Gate Two candidate
 

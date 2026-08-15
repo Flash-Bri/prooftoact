@@ -5,6 +5,11 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { assertNoAwsEndpointOverrides } from "../src/cloud/aws-evidence-identity.js";
 import { templateReceipt } from "../src/cloud/aws-gate2-template.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
+import { validateIntegratedLiveDrillRuntimeManifest } from
+  "../src/cloud/integrated-live-drill-runtime.js";
+import { validateOfficialNodeRuntimeMetadata } from
+  "../src/cloud/official-node-runtime-contract.js";
 import { exactNpmCli } from "./build-gate2-exact.js";
 import {
   validateBuildToolchain,
@@ -21,9 +26,22 @@ import {
   trustedGitExecutable,
   trustedTemporaryRoot
 } from "./lib/exact-git-source.js";
+import {
+  GATE2_BUILD_CONTROL_PATHS,
+  GATE2_BUILD_OUTPUT_COUNT,
+  GATE2_BUILD_SCHEMA,
+  GATE2_LIVE_RUNTIME_COMPONENTS
+} from "./lib/gate2-build-contract.js";
+import { validateIntegratedLiveDrillStressReceipt } from
+  "./run-integrated-live-drill-stress.js";
 import { validateReleaseClaimsReceipt } from "./verify-release-claims.js";
 import { validateReleaseCostReceipt } from "./verify-release-cost.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
+import {
+  reviewBuildOutputFindings,
+  scanBuildOutputBuffer,
+  validateManifest as validatePrivacyManifest
+} from "./verify-release-privacy.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -465,14 +483,297 @@ function validateThirdPartyNotices(
   };
 }
 
+function validateLiveRuntimeInputs(projectRoot, inputs, code) {
+  requireCondition(
+    Array.isArray(inputs) &&
+      inputs.length > 0 &&
+      inputs.length <= 512 &&
+      JSON.stringify(inputs.map((input) => input?.path)) ===
+        JSON.stringify(inputs.map((input) => input?.path).sort()) &&
+      new Set(inputs.map((input) => input?.path)).size === inputs.length,
+    code
+  );
+  return inputs.map((input) => {
+    requireCondition(
+      exactKeys(input, ["gitBlobId", "path", "sha256"]) &&
+        /^[0-9a-f]{40}$/u.test(input.gitBlobId) &&
+        HEX_64.test(input.sha256) &&
+        typeof input.path === "string" &&
+        !input.path.split("/").includes("node_modules"),
+      code
+    );
+    const file = resolvedFile(projectRoot, input.path, code);
+    const bytes = fs.readFileSync(file.resolved);
+    requireCondition(
+      sha256(bytes) === input.sha256 &&
+        gitBlobId(bytes) === input.gitBlobId,
+      code
+    );
+    return Object.freeze({ ...input });
+  });
+}
+
+function validateLiveDrillRuntime(
+  projectRoot,
+  runtime,
+  {
+    packageLockDigest,
+    sourceCommit,
+    toolchain,
+    treeDigest,
+    validateRuntimeManifest,
+    validateRuntimeNodeMetadata
+  }
+) {
+  const code = "AWS_READINESS_LIVE_RUNTIME";
+  requireCondition(
+    exactKeys(runtime, [
+      "components",
+      "launcher",
+      "manifestPath",
+      "manifestSha256",
+      "node"
+    ]) &&
+      HEX_64.test(runtime.manifestSha256) &&
+      runtime.manifestPath ===
+        `dist/runtime/runtime-manifest-${runtime.manifestSha256}.json` &&
+      exactKeys(runtime.components, GATE2_LIVE_RUNTIME_COMPONENTS) &&
+      exactKeys(runtime.launcher, ["path", "sha256"]) &&
+      runtime.launcher.path ===
+        "dist/runtime/verified-node-bundle-launcher.pl" &&
+      HEX_64.test(runtime.launcher.sha256) &&
+      exactKeys(runtime.node, [
+        "architecture",
+        "distribution",
+        "path",
+        "platform",
+        "sha256",
+        "version"
+      ]) &&
+      runtime.node.path === `dist/runtime/node-${runtime.node.sha256}`,
+    code
+  );
+  try {
+    validateRuntimeNodeMetadata({
+      architecture: runtime.node.architecture,
+      distribution: runtime.node.distribution,
+      platform: runtime.node.platform,
+      sha256: runtime.node.sha256,
+      version: runtime.node.version
+    });
+  } catch (cause) {
+    throw new Error(code, { cause });
+  }
+  const manifestFile = resolvedFile(
+    projectRoot,
+    runtime.manifestPath,
+    code
+  );
+  const manifestBytes = fs.readFileSync(manifestFile.resolved);
+  requireCondition(
+    sha256(manifestBytes) === runtime.manifestSha256,
+    code
+  );
+  let manifest;
+  try {
+    manifest = validateRuntimeManifest(
+      JSON.parse(manifestBytes.toString("utf8"))
+    );
+  } catch (cause) {
+    throw new Error(code, { cause });
+  }
+  requireCondition(
+    `${JSON.stringify(manifest, null, 2)}\n` ===
+      manifestBytes.toString("utf8") &&
+      manifest.sourceCommit === sourceCommit &&
+      manifest.treeDigest === treeDigest &&
+      manifest.packageLockDigest === packageLockDigest &&
+      manifest.toolchainSha256 === sha256(canonicalJson(toolchain)) &&
+      manifest.launcher.file === path.basename(runtime.launcher.path) &&
+      manifest.launcher.sha256 === runtime.launcher.sha256 &&
+      manifest.node.file === path.basename(runtime.node.path) &&
+      [
+        "architecture",
+        "distribution",
+        "platform",
+        "sha256",
+        "version"
+      ].every((key) => manifest.node[key] === runtime.node[key]),
+    code
+  );
+  const launcherFile = resolvedFile(projectRoot, runtime.launcher.path, code);
+  const nodeFile = resolvedFile(projectRoot, runtime.node.path, code);
+  requireCondition(
+    sha256File(launcherFile.resolved) === runtime.launcher.sha256 &&
+      nodeFile.stat.size > 0 &&
+      nodeFile.stat.size <= 160 * 1024 * 1024 &&
+      sha256File(nodeFile.resolved) === runtime.node.sha256,
+    code
+  );
+  const acceptedComponents = {};
+  const bundledPackages = new Set();
+  for (const name of GATE2_LIVE_RUNTIME_COMPONENTS) {
+    const component = runtime.components[name];
+    const manifestComponent = manifest.components[name];
+    requireCondition(
+      exactKeys(component, [
+        "bundledPackages",
+        "bytes",
+        "exactGitInputs",
+        "externalImports",
+        "path",
+        "sha256"
+      ]) &&
+        component.path === `dist/runtime/${manifestComponent.file}` &&
+        component.sha256 === manifestComponent.sha256 &&
+        component.bytes === manifestComponent.bytes &&
+        JSON.stringify(component.bundledPackages) ===
+          JSON.stringify(manifestComponent.bundledPackages) &&
+        JSON.stringify(component.externalImports) ===
+          JSON.stringify(manifestComponent.externalImports) &&
+        component.bytes > 0 &&
+        component.bytes <= 64 * 1024 * 1024,
+      code
+    );
+    const file = resolvedFile(projectRoot, component.path, code);
+    requireCondition(
+      file.stat.size === component.bytes &&
+        sha256File(file.resolved) === component.sha256,
+      code
+    );
+    const exactGitInputs = validateLiveRuntimeInputs(
+      projectRoot,
+      component.exactGitInputs,
+      code
+    );
+    component.bundledPackages.forEach((packageName) =>
+      bundledPackages.add(packageName)
+    );
+    acceptedComponents[name] = Object.freeze({
+      ...component,
+      exactGitInputs
+    });
+  }
+  return Object.freeze({
+    accepted: Object.freeze({
+      components: Object.freeze(acceptedComponents),
+      launcher: Object.freeze({ ...runtime.launcher }),
+      manifestPath: runtime.manifestPath,
+      manifestSha256: runtime.manifestSha256,
+      node: Object.freeze({ ...runtime.node })
+    }),
+    bundledPackages
+  });
+}
+
+function validateBuildOutputPrivacy(projectRoot, receipt) {
+  const code = "AWS_READINESS_BUILD_OUTPUT_PRIVACY";
+  const privacy = receipt.outputPrivacy;
+  const expectedPaths = [
+    receipt.bootstrapTemplate.path,
+    receipt.gate2Template.path,
+    receipt.evidenceProviderRuntime.path,
+    receipt.liveDrillRuntime.manifestPath,
+    receipt.liveDrillRuntime.launcher.path,
+    receipt.liveDrillRuntime.node.path,
+    ...Object.values(receipt.liveDrillRuntime.components).map(
+      ({ path: runtimePath }) => runtimePath
+    ),
+    ...receipt.artifacts.map(({ artifactPath }) => artifactPath)
+  ].sort();
+  requireCondition(
+    exactKeys(privacy, [
+      "allowedUpstreamAttributionFindingCount",
+      "findingCount",
+      "inventorySha256",
+      "outputCount",
+      "outputs",
+      "pinnedOfficialToolchainBytes",
+      "pinnedOfficialToolchainOutputCount",
+      "scannedBytes",
+      "schemaVersion",
+      "status"
+    ]) &&
+      privacy.schemaVersion ===
+        "tideproof.gate2-build-output-privacy.v1" &&
+      privacy.status === "PASS" &&
+      privacy.outputCount === GATE2_BUILD_OUTPUT_COUNT &&
+      privacy.pinnedOfficialToolchainOutputCount === 1 &&
+      expectedPaths.length === GATE2_BUILD_OUTPUT_COUNT &&
+      Array.isArray(privacy.outputs) &&
+      privacy.outputs.length === expectedPaths.length &&
+      JSON.stringify(privacy.outputs.map((output) => output?.path)) ===
+        JSON.stringify(expectedPaths) &&
+      privacy.inventorySha256 === sha256(JSON.stringify(privacy.outputs)),
+    code
+  );
+  const findings = [];
+  let scannedBytes = 0;
+  let pinnedOfficialToolchainBytes = 0;
+  let pinnedOfficialToolchainOutputCount = 0;
+  const acceptedOutputs = privacy.outputs.map((output) => {
+    requireCondition(
+      exactKeys(output, ["bytes", "path", "sha256"]) &&
+        Number.isSafeInteger(output.bytes) &&
+        output.bytes > 0 &&
+        HEX_64.test(output.sha256),
+      code
+    );
+    const file = resolvedFile(projectRoot, output.path, code);
+    const bytes = fs.readFileSync(file.resolved);
+    requireCondition(
+      bytes.length === output.bytes && sha256(bytes) === output.sha256,
+      code
+    );
+    if (output.path === receipt.liveDrillRuntime.node.path) {
+      pinnedOfficialToolchainBytes += bytes.length;
+      pinnedOfficialToolchainOutputCount += 1;
+    } else {
+      scannedBytes += bytes.length;
+      findings.push(...scanBuildOutputBuffer(bytes, output.path));
+    }
+    return Object.freeze({ ...output });
+  });
+  let manifest;
+  try {
+    manifest = validatePrivacyManifest(JSON.parse(fs.readFileSync(
+      path.join(projectRoot, "RELEASE_PRIVACY_MANIFEST.json"),
+      "utf8"
+    )));
+  } catch (cause) {
+    throw new Error(code, { cause });
+  }
+  const review = reviewBuildOutputFindings(findings, manifest);
+  requireCondition(
+    scannedBytes === privacy.scannedBytes &&
+      pinnedOfficialToolchainBytes ===
+        privacy.pinnedOfficialToolchainBytes &&
+      pinnedOfficialToolchainOutputCount ===
+        privacy.pinnedOfficialToolchainOutputCount &&
+      review.findingCount === privacy.findingCount &&
+      review.allowedUpstreamAttributionFindingCount ===
+        privacy.allowedUpstreamAttributionFindingCount,
+    code
+  );
+  return Object.freeze({ ...privacy, outputs: acceptedOutputs });
+}
+
 export function validateBuildReceipt(
   receipt,
   {
     projectRoot = root,
     sourceCommit,
-    treeDigest
+    treeDigest,
+    validateRuntimeManifest =
+      validateIntegratedLiveDrillRuntimeManifest,
+    validateRuntimeNodeMetadata = validateOfficialNodeRuntimeMetadata
   }
 ) {
+  requireCondition(
+    typeof validateRuntimeManifest === "function" &&
+      typeof validateRuntimeNodeMetadata === "function",
+    "AWS_READINESS_BUILD_VALIDATOR"
+  );
   requireCondition(
     exactKeys(receipt, [
       "archiveFormat",
@@ -482,7 +783,9 @@ export function validateBuildReceipt(
       "dependencySnapshot",
       "evidenceProviderRuntime",
       "gate2Template",
+      "liveDrillRuntime",
       "mode",
+      "outputPrivacy",
       "packageJsonDigest",
       "packageLockDigest",
       "projectSourceMode",
@@ -494,7 +797,7 @@ export function validateBuildReceipt(
       "workingTreeClean",
       "workingTreeCleanBeforeGeneration"
     ]) &&
-      receipt.schemaVersion === "tideproof.gate2-build.v6" &&
+      receipt.schemaVersion === GATE2_BUILD_SCHEMA &&
       receipt.mode === "CLEAN_ARTIFACT_BUILD" &&
       receipt.projectSourceMode ===
         "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS" &&
@@ -507,29 +810,12 @@ export function validateBuildReceipt(
       HEX_64.test(receipt.packageLockDigest),
     "AWS_READINESS_BUILD_RECEIPT"
   );
-  const expectedBuildControlPaths = [
-    "infra/aws/lambda/agent.cjs",
-    "scripts/build-gate2-exact.js",
-    "scripts/build-gate2-template.js",
-    "scripts/lib/aws-provider-bundle-entry.js",
-    "scripts/lib/aws-provider-runtime.js",
-    "scripts/lib/aws-provider-runtime-loader.js",
-    "scripts/lib/bundled-third-party-notices.js",
-    "scripts/lib/dependency-snapshot.js",
-    "scripts/lib/deterministic-zip.js",
-    "scripts/lib/exact-build-reproduction.js",
-    "scripts/lib/exact-git-source.js",
-    "scripts/lib/raw-text-plugin.js",
-    "scripts/verify-bundled-third-party-notices.js",
-    "src/cloud/aws-gate2-template.js",
-    "src/cloud/public-demo.js"
-  ];
   const buildControlInputs = Array.isArray(receipt.buildControlInputs)
     ? receipt.buildControlInputs
     : [];
   requireCondition(
-    JSON.stringify(buildControlInputs.map((input) => input?.path)) ===
-      JSON.stringify(expectedBuildControlPaths),
+      JSON.stringify(buildControlInputs.map((input) => input?.path)) ===
+      JSON.stringify(GATE2_BUILD_CONTROL_PATHS),
     "AWS_READINESS_BUILD_CONTROL_SET"
   );
   const acceptedBuildControlInputs = [];
@@ -823,11 +1109,27 @@ export function validateBuildReceipt(
   providerRuntime.bundledPackages.forEach((packageName) =>
     bundledPackageUnion.add(packageName)
   );
+  const liveDrillRuntime = validateLiveDrillRuntime(
+    projectRoot,
+    receipt.liveDrillRuntime,
+    {
+      packageLockDigest: receipt.packageLockDigest,
+      sourceCommit,
+      toolchain,
+      treeDigest,
+      validateRuntimeManifest,
+      validateRuntimeNodeMetadata
+    }
+  );
+  liveDrillRuntime.bundledPackages.forEach((packageName) =>
+    bundledPackageUnion.add(packageName)
+  );
   requireCondition(
     JSON.stringify([...bundledPackageUnion].sort()) ===
       JSON.stringify(thirdPartyNotices.accepted.packageNames),
     "AWS_READINESS_BUNDLED_PACKAGE_UNION"
   );
+  const outputPrivacy = validateBuildOutputPrivacy(projectRoot, receipt);
 
   return {
     schemaVersion: receipt.schemaVersion,
@@ -847,6 +1149,8 @@ export function validateBuildReceipt(
       path: providerRuntime.path,
       sha256: providerRuntime.sha256
     },
+    liveDrillRuntime: liveDrillRuntime.accepted,
+    outputPrivacy,
     bootstrapTemplate: validateTemplateReceipt(
       projectRoot,
       receipt.bootstrapTemplate,
@@ -2133,7 +2437,10 @@ export async function runAwsReadiness({
   now = () => new Date(),
   run = defaultRunner(projectRoot),
   verifyExactCheckout = assertCleanExactGitCheckout,
-  verifyRepositoryLayout = assertExactGitRepositoryLayout
+  verifyRepositoryLayout = assertExactGitRepositoryLayout,
+  validateRuntimeManifest =
+    validateIntegratedLiveDrillRuntimeManifest,
+  validateRuntimeNodeMetadata = validateOfficialNodeRuntimeMetadata
 } = {}) {
   const checkout = assertCheckout(
     run,
@@ -2175,6 +2482,20 @@ export async function runAwsReadiness({
     ["test"],
     "AWS_READINESS_TESTS"
   );
+  const providerResumeStress = validateIntegratedLiveDrillStressReceipt(
+    jsonCommand(
+      run,
+      "npm",
+      ["run", "--silent", "stress:provider-resume"],
+      "AWS_READINESS_PROVIDER_RESUME_STRESS"
+    )
+  );
+  requireCondition(
+    providerResumeStress.sourceCommit === checkout.sourceCommit &&
+      providerResumeStress.treeDigest === checkout.treeDigest &&
+      providerResumeStress.iterationCount === 20,
+    "AWS_READINESS_PROVIDER_RESUME_STRESS"
+  );
   const audit = validateAuditReport(
     jsonCommand(
       run,
@@ -2193,7 +2514,9 @@ export async function runAwsReadiness({
     {
       projectRoot,
       sourceCommit: checkout.sourceCommit,
-      treeDigest: checkout.treeDigest
+      treeDigest: checkout.treeDigest,
+      validateRuntimeManifest,
+      validateRuntimeNodeMetadata
     }
   );
   const preflight = localOnly
@@ -2244,6 +2567,7 @@ export async function runAwsReadiness({
       releasePrivacy: true,
       staticAccessibility: true,
       testsPassed: true,
+      providerResumeStress20Of20: true,
       dependencyAudit: audit,
       exactHeadBuild: true,
       artifactSet: ARTIFACT_NAMES,
@@ -2252,6 +2576,7 @@ export async function runAwsReadiness({
       awsPreflight: preflight ? "PASS" : "NOT_RUN"
     },
     releaseProvenance,
+    providerResumeStress,
     build,
     awsPreflight: preflight,
     claimBoundary: localOnly

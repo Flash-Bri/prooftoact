@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   __test,
   forbiddenTrackedPath,
+  reviewBuildOutputFindings,
   reviewFindings,
   safeFailureCode,
+  scanBuildOutputBuffer,
   scanBuffer,
   validateManifest
 } from "../scripts/verify-release-privacy.js";
@@ -172,6 +174,40 @@ test("finding review accepts only named synthetic AWS fixtures in tests", () => 
         manifest
       ),
     /RELEASE_PRIVACY_UNREVIEWED_FINDING/
+  );
+});
+
+test("build-output review permits only reviewed public attribution", () => {
+  const value = fragments("licensor", "@example.invalid");
+  const [finding] = scanBuildOutputBuffer(
+    Buffer.from(value),
+    "dist/aws/runtime.zip"
+  );
+  const publicManifest = fixtureManifest({
+    allowedFindings: [{
+      rule: finding.rule,
+      path: "THIRD_PARTY_NOTICES.txt",
+      matchSha256: finding.matchSha256,
+      classification: "PUBLIC_UPSTREAM_ATTRIBUTION"
+    }]
+  });
+  assert.equal(
+    reviewBuildOutputFindings([finding], publicManifest).findingCount,
+    1
+  );
+  assert.throws(
+    () => reviewBuildOutputFindings(
+      [finding],
+      fixtureManifest({
+        allowedFindings: [{
+          rule: finding.rule,
+          path: "test/fixture.txt",
+          matchSha256: finding.matchSha256,
+          classification: "SYNTHETIC_TEST_FIXTURE"
+        }]
+      })
+    ),
+    /RELEASE_PRIVACY_UNREVIEWED_BUILD_OUTPUT/u
   );
 });
 

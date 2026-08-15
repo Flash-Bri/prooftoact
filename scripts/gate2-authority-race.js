@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   parseAuthorityDrillBinding,
@@ -22,10 +25,44 @@ import {
   gitInvariantArguments,
   trustedGitExecutable
 } from "./lib/exact-git-source.js";
-import { runReleaseProvenance } from "./verify-release-provenance.js";
 
 const OFFICIAL_REMOTE =
   "https://github.com/Flash-Bri/prooftoact.git";
+
+function exactRegularFileSha256(rootDir, relativePath) {
+  const resolved = path.join(rootDir, relativePath);
+  const stat = fs.lstatSync(resolved);
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.nlink !== 1 ||
+    fs.realpathSync(resolved) !== resolved
+  ) {
+    throw new Error("AUTHORITY_RACE_RELEASE_FILE_REJECTED");
+  }
+  return createHash("sha256")
+    .update(fs.readFileSync(resolved))
+    .digest("hex");
+}
+
+export function snapshotAuthorityRaceRelease(rootDir, checkout) {
+  if (
+    typeof rootDir !== "string" ||
+    checkout?.sourceCommit === undefined ||
+    checkout?.treeDigest === undefined
+  ) {
+    throw new Error("AUTHORITY_RACE_RELEASE_SNAPSHOT_REJECTED");
+  }
+  return Object.freeze({
+    sourceCommit: checkout.sourceCommit,
+    treeDigest: checkout.treeDigest,
+    packageLockDigest: exactRegularFileSha256(rootDir, "package-lock.json"),
+    dependencyInventoryDigest: exactRegularFileSha256(
+      rootDir,
+      "docs/DEPENDENCY_INVENTORY.md"
+    )
+  });
+}
 
 export function createAuthorityRaceGitRunner({
   rootDir = process.cwd(),
@@ -275,13 +312,7 @@ export async function main(argv = process.argv.slice(2)) {
     rootDir,
     readGit
   });
-  const provenance = await runReleaseProvenance({ projectRoot: rootDir });
-  if (
-    provenance.source.commit !== checkout.sourceCommit ||
-    provenance.source.tree !== checkout.treeDigest
-  ) {
-    throw new Error("AUTHORITY_RACE_PROVENANCE_REJECTED");
-  }
+  const releaseSnapshot = snapshotAuthorityRaceRelease(rootDir, checkout);
   assertAwsSdkEvidenceEnvironment(process.env);
   const credentials = explicitAwsCredentials(process.env, {
     requireSessionToken: true
@@ -329,10 +360,9 @@ export async function main(argv = process.argv.slice(2)) {
         bravoProposalDigest: drill.bravoProposalDigest,
         alphaLogicalActionDigest: drill.alphaLogicalActionDigest,
         bravoLogicalActionDigest: drill.bravoLogicalActionDigest,
-        packageLockDigest:
-          provenance.dependencies.installedTree.packageLockSha256,
+        packageLockDigest: releaseSnapshot.packageLockDigest,
         dependencyInventoryDigest:
-          provenance.dependencies.inventory.inventorySha256
+          releaseSnapshot.dependencyInventoryDigest
       }
     }
   );
@@ -359,17 +389,18 @@ export async function main(argv = process.argv.slice(2)) {
     rootDir,
     readGit
   });
-  const finalProvenance = await runReleaseProvenance({
-    projectRoot: rootDir
-  });
+  const finalReleaseSnapshot = snapshotAuthorityRaceRelease(
+    rootDir,
+    finalCheckout
+  );
   if (
     finalCheckout.treeDigest !== checkout.treeDigest ||
-    finalProvenance.source.commit !== provenance.source.commit ||
-    finalProvenance.source.tree !== provenance.source.tree ||
-    finalProvenance.dependencies.installedTree.packageLockSha256 !==
-      provenance.dependencies.installedTree.packageLockSha256 ||
-    finalProvenance.dependencies.inventory.inventorySha256 !==
-      provenance.dependencies.inventory.inventorySha256
+    finalReleaseSnapshot.sourceCommit !== releaseSnapshot.sourceCommit ||
+    finalReleaseSnapshot.treeDigest !== releaseSnapshot.treeDigest ||
+    finalReleaseSnapshot.packageLockDigest !==
+      releaseSnapshot.packageLockDigest ||
+    finalReleaseSnapshot.dependencyInventoryDigest !==
+      releaseSnapshot.dependencyInventoryDigest
   ) {
     throw new Error("AUTHORITY_RACE_POST_EVIDENCE_DRIFT");
   }

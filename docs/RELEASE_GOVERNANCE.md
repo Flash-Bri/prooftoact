@@ -37,7 +37,8 @@ no-touch boundaries are machine-bound by `RENAME_MIGRATION_MANIFEST.json` and
 
 `npm run governance:verify` verifies both canonical snapshot structures, exact
 reviewed settings, the stable repository identity and current coordinate,
-exact surface hashes, the required local CI job identity, and the explicit
+exact surface hashes, the protected `verify` merge/main job, the separate
+no-secrets `verify-pr-head-no-secrets` candidate-head job, and the explicit
 non-final boundary. A pass means only `CURRENT_REPOSITORY_GOVERNANCE_PASS`.
 
 It does not query GitHub, prove that settings still match, require a human approval, establish vulnerability absence, approve the release, authorize cloud mutation, or authorize submission. Any final release must requery GitHub at the exact final commit and bind the resulting observation to the final hosted CI run.
@@ -45,5 +46,5 @@ It does not query GitHub, prove that settings still match, require a human appro
 ## Final release requirements
 
 1. Requery repository visibility, security settings, and the complete `main` branch-protection document at the exact final release commit.
-2. Verify the required `verify` check succeeds at that exact commit and still belongs to the intended GitHub Actions workflow.
+2. Before merge, verify `verify-pr-head-no-secrets` succeeds on the exact candidate head while `verify` succeeds on the distinct synthetic merge commit; after merge, verify `verify` succeeds at the exact official-main commit and still belongs to the intended GitHub Actions workflow.
 3. Complete signed-out repository, release metadata, and public-link review before publication and submission.

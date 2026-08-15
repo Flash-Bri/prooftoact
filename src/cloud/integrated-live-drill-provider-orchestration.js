@@ -6,7 +6,6 @@ import {
   integratedLiveDrillCanonicalSha256
 } from "./integrated-live-drill-authorization.js";
 import {
-  acquireIntegratedLiveDrillPrivateRootLease,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORITY_STATEMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_AUTHORIZATION_SCHEMA,
   integratedLiveDrillPrivateRootBinding,
@@ -39,7 +38,9 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_SUPERVISOR_COMPLETION_SCHEMA =
 export const INTEGRATED_LIVE_DRILL_PROVIDER_CHECKPOINT_PERSISTENCE_SCHEMA =
   "tideproof.highwater-drill-provider-checkpoint-persistence.v1";
 export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_SCHEMA =
-  "tideproof.highwater-drill-provider-orchestration-decision.v2";
+  "tideproof.highwater-drill-provider-orchestration-decision.v4";
+export const INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_SCHEMA =
+  "tideproof.highwater-drill-provider-dispatch-request.v1";
 export const
 INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT =
   "TIDEPROOF_INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR";
@@ -57,8 +58,7 @@ export const INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES = Object.freeze
   PROVIDER_WORKER_HANDOFF_DURABLE: "PROVIDER_WORKER_HANDOFF_DURABLE",
   PROVIDER_FINALIZATION_DURABLE: "PROVIDER_FINALIZATION_DURABLE",
   CANDIDATE_BUILT_NON_ACCEPTING: "CANDIDATE_BUILT_NON_ACCEPTING",
-  PROVIDER_ADMITTED: "PROVIDER_ADMITTED",
-  STOPPED_BEFORE_PROVIDER_ADMISSION: "STOPPED_BEFORE_PROVIDER_ADMISSION",
+  STOPPED_BEFORE_GLOBAL_EXECUTION: "STOPPED_BEFORE_GLOBAL_EXECUTION",
   UNKNOWN_DO_NOT_ACT: "UNKNOWN_DO_NOT_ACT",
   EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED:
     "EXPIRED_FRESH_AUDIT_AUTHORITY_REQUIRED"
@@ -1227,7 +1227,7 @@ export function integratedLiveDrillProviderOrchestrationStopDisposition(value) {
     authorizationId: normalized.authorizationId,
     checkpointPersistenceReceiptSha256: null,
     decision: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-      .STOPPED_BEFORE_PROVIDER_ADMISSION,
+      .STOPPED_BEFORE_GLOBAL_EXECUTION,
     dispatchAuthorizationSha256: null,
     decisionPathSha256: normalized.decisionPathSha256,
     decisionRootBindingReceiptSha256:
@@ -1235,6 +1235,9 @@ export function integratedLiveDrillProviderOrchestrationStopDisposition(value) {
     decisionRootPathSha256: normalized.decisionRootPathSha256,
     evidenceRootBindingReceiptSha256:
       normalized.evidenceRootBindingReceiptSha256,
+    globalGrantId: null,
+    globalGrantState: null,
+    globalGrantWorkerSpecSha256: null,
     finalReleaseReady: false,
     providerBacked: false,
     retryPermitted: false,
@@ -1266,6 +1269,9 @@ export function validateIntegratedLiveDrillProviderOrchestrationDecision(value) 
     "decisionRootPathSha256",
     "dispatchAuthorizationSha256",
     "evidenceRootBindingReceiptSha256",
+    "globalGrantId",
+    "globalGrantState",
+    "globalGrantWorkerSpecSha256",
     "finalReleaseReady",
     "preparationReceiptSha256",
     "preparationContextSha256",
@@ -1279,11 +1285,9 @@ export function validateIntegratedLiveDrillProviderOrchestrationDecision(value) 
     "status",
     "treeDigest"
   ], INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_SCHEMA, code);
-  const admitted = normalized.decision ===
-    INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED;
   const stopped = normalized.decision ===
     INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-      .STOPPED_BEFORE_PROVIDER_ADMISSION;
+      .STOPPED_BEFORE_GLOBAL_EXECUTION;
   requireCondition(
     normalized.accepted === false &&
       normalized.providerBacked === false &&
@@ -1303,15 +1307,7 @@ export function validateIntegratedLiveDrillProviderOrchestrationDecision(value) 
       HEX_40.test(normalized.sourceCommit ?? "") &&
       HEX_40.test(normalized.treeDigest ?? "") &&
       normalized.status === normalized.state &&
-      (
-        admitted &&
-        normalized.state === INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-          .PROVIDER_ADMITTED &&
-        normalized.causeCodeSha256 === null &&
-        HEX_64.test(normalized.checkpointPersistenceReceiptSha256 ?? "") &&
-        HEX_64.test(normalized.dispatchAuthorizationSha256 ?? "")
-      ) !== (
-        stopped &&
+      stopped &&
         [
           INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.UNKNOWN_DO_NOT_ACT,
           INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
@@ -1319,8 +1315,10 @@ export function validateIntegratedLiveDrillProviderOrchestrationDecision(value) 
         ].includes(normalized.state) &&
         HEX_64.test(normalized.causeCodeSha256 ?? "") &&
         normalized.checkpointPersistenceReceiptSha256 === null &&
-        normalized.dispatchAuthorizationSha256 === null
-      ),
+        normalized.dispatchAuthorizationSha256 === null &&
+        normalized.globalGrantId === null &&
+        normalized.globalGrantState === null &&
+        normalized.globalGrantWorkerSpecSha256 === null,
     code
   );
   return normalized;
@@ -1332,75 +1330,10 @@ export function validateIntegratedLiveDrillProviderOrchestrationStop(value) {
   );
   requireCondition(
     normalized.decision === INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-      .STOPPED_BEFORE_PROVIDER_ADMISSION,
+      .STOPPED_BEFORE_GLOBAL_EXECUTION,
     "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STOP_REJECTED"
   );
   return normalized;
-}
-
-export function integratedLiveDrillProviderOrchestrationAdmissionDisposition(
-  value
-) {
-  const normalized = normalizeJson(value);
-  requireCondition(
-    exactRecord(normalized, [
-      "dispatchAuthorizationSha256",
-      "persistence",
-      "preparation"
-    ]),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED"
-  );
-  const preparation = normalized.preparation;
-  const persistence = normalized.persistence;
-  requireCondition(
-    UUID.test(preparation?.authorizationId ?? "") &&
-      UUID.test(preparation?.runId ?? "") &&
-      HEX_64.test(preparation?.receiptSha256 ?? "") &&
-      HEX_64.test(preparation?.gate1Preparation?.preparationContextSha256 ?? "") &&
-      HEX_64.test(preparation?.gate1Preparation?.signingPayloadSha256 ?? "") &&
-      HEX_64.test(preparation?.decisionPathSha256 ?? "") &&
-      HEX_64.test(preparation?.decisionRootBinding?.receiptSha256 ?? "") &&
-      HEX_64.test(preparation?.decisionRootPathSha256 ?? "") &&
-      HEX_64.test(preparation?.evidenceRootBinding?.receiptSha256 ?? "") &&
-      HEX_64.test(persistence?.receiptSha256 ?? "") &&
-      HEX_64.test(normalized.dispatchAuthorizationSha256 ?? "") &&
-      HEX_40.test(preparation?.sourceCommit ?? "") &&
-      HEX_40.test(preparation?.treeDigest ?? ""),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED"
-  );
-  return withReceipt(Object.freeze({
-    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_DECISION_SCHEMA,
-    accepted: false,
-    ambiguityBlocker:
-      INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_AMBIGUITY_BLOCKER,
-    authorizationId: preparation.authorizationId,
-    checkpointPersistenceReceiptSha256: persistence.receiptSha256,
-    causeCodeSha256: null,
-    decision:
-      INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED,
-    decisionPathSha256: preparation.decisionPathSha256,
-    decisionRootBindingReceiptSha256:
-      preparation.decisionRootBinding.receiptSha256,
-    decisionRootPathSha256: preparation.decisionRootPathSha256,
-    dispatchAuthorizationSha256: normalized.dispatchAuthorizationSha256,
-    evidenceRootBindingReceiptSha256:
-      preparation.evidenceRootBinding.receiptSha256,
-    finalReleaseReady: false,
-    preparationReceiptSha256: preparation.receiptSha256,
-    preparationContextSha256:
-      preparation.gate1Preparation.preparationContextSha256,
-    providerBacked: false,
-    retryPermitted: false,
-    runId: preparation.runId,
-    signingPayloadSha256:
-      preparation.gate1Preparation.signingPayloadSha256,
-    sourceCommit: preparation.sourceCommit,
-    state: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-      .PROVIDER_ADMITTED,
-    status: INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES
-      .PROVIDER_ADMITTED,
-    treeDigest: preparation.treeDigest
-  }));
 }
 
 function claimIntegratedLiveDrillProviderOrchestrationDecision({
@@ -1443,33 +1376,57 @@ function claimIntegratedLiveDrillProviderOrchestrationDecision({
   }
 }
 
-export function claimIntegratedLiveDrillProviderOrchestrationAdmission(args) {
-  const normalized = normalizeJson(args);
+export function integratedLiveDrillProviderDispatchRequest({
+  binding,
+  packageLockDigest,
+  workerInput,
+  workerSpecSha256
+}) {
+  const code = "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_REJECTED";
+  const normalized = normalizeJson({
+    binding,
+    packageLockDigest,
+    workerInput,
+    workerSpecSha256
+  });
   requireCondition(
     exactRecord(normalized, [
-      "decisionPath",
-      "dispatchAuthorizationSha256",
-      "forbiddenRootPath",
-      "persistence",
-      "preparation",
-      "rootPath"
-    ]),
-    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED"
+      "binding",
+      "packageLockDigest",
+      "workerInput",
+      "workerSpecSha256"
+    ]) &&
+      UUID.test(normalized.binding?.authorizationId ?? "") &&
+      HEX_64.test(normalized.binding?.controlBindingSha256 ?? "") &&
+      HEX_64.test(normalized.packageLockDigest ?? "") &&
+      HEX_64.test(normalized.workerSpecSha256 ?? "") &&
+      normalized.workerSpecSha256 ===
+        integratedLiveDrillCanonicalSha256(normalized.workerInput),
+    code
   );
-  return claimIntegratedLiveDrillProviderOrchestrationDecision({
-    decision: integratedLiveDrillProviderOrchestrationAdmissionDisposition({
-      dispatchAuthorizationSha256: normalized.dispatchAuthorizationSha256,
-      persistence: normalized.persistence,
-      preparation: normalized.preparation
-    }),
-    decisionPath: normalized.decisionPath,
-    forbiddenRootPath: normalized.forbiddenRootPath,
-    rootPath: normalized.rootPath
-  });
+  return withReceipt(Object.freeze({
+    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_SCHEMA,
+    binding: normalized.binding,
+    packageLockDigest: normalized.packageLockDigest,
+    workerInput: normalized.workerInput,
+    workerSpecSha256: normalized.workerSpecSha256
+  }));
 }
 
-export function persistIntegratedLiveDrillProviderOrchestrationAdmission(args) {
-  return claimIntegratedLiveDrillProviderOrchestrationAdmission(args).decision;
+export function persistIntegratedLiveDrillProviderDispatchRequest({
+  filePath,
+  forbiddenRootPath,
+  request,
+  rootPath
+}) {
+  const accepted = integratedLiveDrillProviderDispatchRequest(request);
+  return persistIntegratedLiveDrillExactPrivateJson({
+    code: "INTEGRATED_LIVE_DRILL_PROVIDER_DISPATCH_REQUEST_REJECTED",
+    filePath,
+    forbiddenRootPath,
+    rootPath,
+    value: accepted
+  });
 }
 
 export function persistIntegratedLiveDrillProviderOrchestrationStop(args) {
@@ -1555,154 +1512,6 @@ export function readIntegratedLiveDrillProviderOrchestrationDecisionIfPresent(
     );
   }
   return readIntegratedLiveDrillProviderOrchestrationDecision(normalized);
-}
-
-export function readBoundIntegratedLiveDrillProviderOrchestrationAdmission({
-  context,
-  decisionRootDescriptor,
-  evidenceRootDescriptor,
-  expectedReceiptSha256,
-  forbiddenRootPath
-}) {
-  const code =
-    "INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED";
-  requireCondition(
-    HEX_64.test(expectedReceiptSha256 ?? "") &&
-      Number.isSafeInteger(decisionRootDescriptor) &&
-      decisionRootDescriptor >= 0 &&
-      Number.isSafeInteger(evidenceRootDescriptor) &&
-      evidenceRootDescriptor >= 0,
-    code
-  );
-  const normalizedContext = normalizeIntegratedLiveDrillProviderContext(
-    context
-  );
-  const spec = parseIntegratedLiveDrillSpec(
-    normalizedContext.trustedRunContext.spec
-  );
-  const evidenceRootPath = normalizedContext.recoveryEvidenceRootPath;
-  const checkpointPath = path.join(
-    evidenceRootPath,
-    `${spec.runId}.provider-orchestration-preparation.json`
-  );
-  const decisionRootPath = normalizedContext.ledgerRootPath;
-  const decisionPath = path.join(
-    decisionRootPath,
-    `${normalizedContext.preCallIntent.runId}.provider-orchestration-decision.json`
-  );
-  const evidenceRootLease = acquireIntegratedLiveDrillPrivateRootLease({
-    binding: normalizedContext.evidenceRootBinding,
-    code,
-    descriptor: evidenceRootDescriptor,
-    forbiddenRootPath,
-    rootPath: evidenceRootPath
-  });
-  let decisionRootLease = null;
-  try {
-    const checkpointObservation = evidenceRootLease.beginOperation();
-    const checkpoint =
-      readIntegratedLiveDrillProviderOrchestrationPreparation({
-        checkpointPath,
-        forbiddenRootPath,
-        rootPath: evidenceRootPath,
-        spec
-      });
-    evidenceRootLease.assertOperation(checkpointObservation);
-    const { persistence, preparation } = checkpoint;
-    const { providerDispatchAuthorization, ...preparationContextValue } =
-      normalizedContext;
-    const preparationContext = normalizeIntegratedLiveDrillProviderContext(
-      preparationContextValue,
-      { requireDispatchAuthorization: false }
-    );
-    const dispatchPreparation =
-      readIntegratedLiveDrillProviderRecoveryAuthorizationPreparation(
-        preparationContext
-      );
-    requireCondition(
-      preparation.authorizationId ===
-          normalizedContext.preCallIntent.authorizationId &&
-        preparation.runId === normalizedContext.preCallIntent.runId &&
-        preparation.gate1Preparation.preparationContextSha256 ===
-          integratedLiveDrillCanonicalSha256(preparationContext) &&
-        preparation.gate1Preparation.preparationReceiptSha256 ===
-          dispatchPreparation.receiptSha256 &&
-        preparation.gate1Preparation.signingPayloadSha256 ===
-          dispatchPreparation.signingPayloadSha256 &&
-        canonicalJson(preparation.gate1Preparation.signingPayload) ===
-          canonicalJson(dispatchPreparation.signingPayload) &&
-        canonicalJson(preparation.evidenceRootBinding) ===
-          canonicalJson(evidenceRootLease.binding) &&
-        preparation.decisionRootPathSha256 ===
-          integratedLiveDrillCanonicalSha256(decisionRootPath) &&
-        preparation.decisionPathSha256 ===
-          integratedLiveDrillCanonicalSha256(decisionPath) &&
-        preparation.sourceCommit === spec.sourceCommit &&
-        preparation.treeDigest === spec.treeDigest,
-      code
-    );
-    decisionRootLease = acquireIntegratedLiveDrillPrivateRootLease({
-      binding: preparation.decisionRootBinding,
-      code,
-      descriptor: decisionRootDescriptor,
-      forbiddenRootPath,
-      rootPath: decisionRootPath
-    });
-    const observation = decisionRootLease.beginOperation();
-    const decision = readIntegratedLiveDrillProviderOrchestrationDecision({
-      decisionPath,
-      forbiddenRootPath,
-      rootPath: decisionRootPath
-    });
-    decisionRootLease.assertOperation(observation);
-    requireCondition(
-      decision.decision ===
-          INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_STATES.PROVIDER_ADMITTED &&
-        decision.receiptSha256 === expectedReceiptSha256 &&
-        decision.authorizationId ===
-          normalizedContext.preCallIntent.authorizationId &&
-        decision.runId === normalizedContext.preCallIntent.runId &&
-        decision.preparationContextSha256 ===
-          integratedLiveDrillCanonicalSha256(preparationContext) &&
-        decision.signingPayloadSha256 ===
-          dispatchPreparation.signingPayloadSha256 &&
-        decision.dispatchAuthorizationSha256 ===
-          integratedLiveDrillCanonicalSha256(providerDispatchAuthorization) &&
-        decision.preparationReceiptSha256 === preparation.receiptSha256 &&
-        decision.checkpointPersistenceReceiptSha256 ===
-          persistence.receiptSha256 &&
-        decision.evidenceRootBindingReceiptSha256 ===
-          preparation.evidenceRootBinding.receiptSha256 &&
-        decision.decisionRootBindingReceiptSha256 ===
-          decisionRootLease.binding.receiptSha256 &&
-        decision.decisionRootPathSha256 ===
-          preparation.decisionRootPathSha256 &&
-        decision.decisionPathSha256 ===
-          preparation.decisionPathSha256 &&
-        decision.sourceCommit === preparation.sourceCommit &&
-        decision.treeDigest === preparation.treeDigest,
-      code
-    );
-    const reboundObservation = evidenceRootLease.beginOperation();
-    const rebound =
-      readIntegratedLiveDrillProviderOrchestrationPreparation({
-        checkpointPath,
-        forbiddenRootPath,
-        rootPath: evidenceRootPath,
-        spec
-      });
-    evidenceRootLease.assertOperation(reboundObservation);
-    requireCondition(
-      canonicalJson(rebound) === canonicalJson(checkpoint),
-      code
-    );
-    evidenceRootLease.assertCurrent();
-    decisionRootLease.assertCurrent();
-    return decision;
-  } finally {
-    decisionRootLease?.release();
-    evidenceRootLease.release();
-  }
 }
 
 export function readIntegratedLiveDrillProviderOrchestrationStop(args) {

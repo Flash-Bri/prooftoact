@@ -5,7 +5,15 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { templateReceipt } from "../src/cloud/aws-gate2-template.js";
+import { canonicalJson } from "../src/cloud/canonical-json.js";
+import { validateIntegratedLiveDrillRuntimeManifest } from
+  "../src/cloud/integrated-live-drill-runtime.js";
 import { deterministicZip } from "../scripts/lib/deterministic-zip.js";
+import {
+  GATE2_BUILD_CONTROL_PATHS,
+  GATE2_BUILD_SCHEMA,
+  GATE2_LIVE_RUNTIME_COMPONENTS
+} from "../scripts/lib/gate2-build-contract.js";
 import {
   __test,
   parseArguments,
@@ -88,24 +96,25 @@ function fixture() {
     "infra/aws/gate2-template.json",
     gate2Template
   );
-  const buildControlInputs = [
-    "infra/aws/lambda/agent.cjs",
-    "scripts/build-gate2-exact.js",
-    "scripts/build-gate2-template.js",
-    "scripts/lib/aws-provider-bundle-entry.js",
-    "scripts/lib/aws-provider-runtime.js",
-    "scripts/lib/aws-provider-runtime-loader.js",
-    "scripts/lib/bundled-third-party-notices.js",
-    "scripts/lib/dependency-snapshot.js",
-    "scripts/lib/deterministic-zip.js",
-    "scripts/lib/exact-build-reproduction.js",
-    "scripts/lib/exact-git-source.js",
-    "scripts/lib/raw-text-plugin.js",
-    "scripts/verify-bundled-third-party-notices.js",
-    "src/cloud/aws-gate2-template.js",
-    "src/cloud/public-demo.js"
-  ].map((controlPath, index) => {
-    const bytes = Buffer.from(`fixture build control ${index}\n`, "utf8");
+  const privacyManifest = Buffer.from(`${JSON.stringify({
+    schema: "tideproof.release-privacy-manifest.v1",
+    status: "CURRENT_PUBLIC_HISTORY_REVIEWED_FINAL_RELEASE_PENDING",
+    reviewedOn: "2026-08-11",
+    allowedFindings: [{
+      classification: "SYNTHETIC_TEST_FIXTURE",
+      matchSha256: "1".repeat(64),
+      path: "test/fixture.txt",
+      rule: "email-address"
+    }],
+    allowedCommitIdentityDigests: ["2".repeat(64)],
+    syntheticAwsAccountIds: ["111111111111"],
+    finalReleaseReady: false
+  }, null, 2)}\n`);
+  const buildControlInputs = GATE2_BUILD_CONTROL_PATHS.map(
+    (controlPath, index) => {
+    const bytes = controlPath === "RELEASE_PRIVACY_MANIFEST.json"
+      ? privacyManifest
+      : Buffer.from(`fixture build control ${index}\n`, "utf8");
     writeFile(projectRoot, controlPath, bytes);
     return {
       gitBlobId: __test.gitBlobId(bytes),
@@ -185,8 +194,139 @@ function fixture() {
     sha256: providerDigest
   };
 
+  const toolchain = {
+    schemaVersion: "tideproof.build-toolchain.v2",
+    architecture: "arm64",
+    gitExecutableSha256: "5".repeat(64),
+    gitVersion: "2.50.1 (Apple Git-155)",
+    nodeExecutableSha256: "7".repeat(64),
+    nodeVersion: "v22.23.1",
+    npmCliSha256: "8".repeat(64),
+    npmPackageBytes: 123456,
+    npmPackageFileCount: 321,
+    npmPackageTreeDigest: "6".repeat(64),
+    npmVersion: "11.6.2",
+    platform: "darwin"
+  };
+  const launcherBytes = Buffer.from("fixture verified launcher\n");
+  const launcherPath =
+    "dist/runtime/verified-node-bundle-launcher.pl";
+  writeFile(projectRoot, launcherPath, launcherBytes);
+  const nodeBytes = Buffer.from("fixture official node runtime\n");
+  const nodeSha256 = sha256(nodeBytes);
+  const nodePath = `dist/runtime/node-${nodeSha256}`;
+  writeFile(projectRoot, nodePath, nodeBytes);
+  const runtimeComponents = {};
+  const manifestComponents = {};
+  for (const name of GATE2_LIVE_RUNTIME_COMPONENTS) {
+    const bytes = Buffer.from(`fixture ${name} runtime\n`);
+    const digest = sha256(bytes);
+    const runtimePath = `dist/runtime/${name}-${digest}.mjs`;
+    writeFile(projectRoot, runtimePath, bytes);
+    const entryPath =
+      `scripts/runtime-entries/integrated-live-drill-${name}.js`;
+    const entryBytes = fs.readFileSync(path.join(projectRoot, entryPath));
+    runtimeComponents[name] = {
+      bundledPackages: ["@fixture/runtime"],
+      bytes: bytes.length,
+      exactGitInputs: [{
+        gitBlobId: __test.gitBlobId(entryBytes),
+        path: entryPath,
+        sha256: sha256(entryBytes)
+      }],
+      externalImports: ["node:fs"],
+      path: runtimePath,
+      sha256: digest
+    };
+    manifestComponents[name] = {
+      bundledPackages: ["@fixture/runtime"],
+      bytes: bytes.length,
+      externalImports: ["node:fs"],
+      file: path.basename(runtimePath),
+      sha256: digest
+    };
+  }
+  const runtimeManifest = {
+    schemaVersion: "tideproof.integrated-live-drill-runtime-manifest.v1",
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST,
+    packageLockDigest: sha256(packageLock),
+    toolchainSha256: sha256(canonicalJson(toolchain)),
+    launcher: {
+      file: path.basename(launcherPath),
+      sha256: sha256(launcherBytes)
+    },
+    node: {
+      architecture: "arm64",
+      distribution: "nodejs.org-release-v22.23.1",
+      file: path.basename(nodePath),
+      platform: "darwin",
+      sha256: nodeSha256,
+      version: "v22.23.1"
+    },
+    components: manifestComponents
+  };
+  const runtimeManifestBytes = Buffer.from(
+    `${JSON.stringify(runtimeManifest, null, 2)}\n`
+  );
+  const runtimeManifestSha256 = sha256(runtimeManifestBytes);
+  const runtimeManifestPath =
+    `dist/runtime/runtime-manifest-${runtimeManifestSha256}.json`;
+  writeFile(projectRoot, runtimeManifestPath, runtimeManifestBytes);
+  const liveDrillRuntime = {
+    components: runtimeComponents,
+    launcher: {
+      path: launcherPath,
+      sha256: sha256(launcherBytes)
+    },
+    manifestPath: runtimeManifestPath,
+    manifestSha256: runtimeManifestSha256,
+    node: {
+      architecture: "arm64",
+      distribution: "nodejs.org-release-v22.23.1",
+      path: nodePath,
+      platform: "darwin",
+      sha256: nodeSha256,
+      version: "v22.23.1"
+    }
+  };
+  const outputPaths = [
+    "infra/aws/bootstrap-template.json",
+    "infra/aws/gate2-template.json",
+    providerPath,
+    runtimeManifestPath,
+    launcherPath,
+    nodePath,
+    ...Object.values(runtimeComponents).map(({ path: runtimePath }) =>
+      runtimePath
+    ),
+    ...artifacts.map(({ artifactPath }) => artifactPath)
+  ].sort();
+  const outputRecords = outputPaths.map((outputPath) => {
+    const bytes = fs.readFileSync(path.join(projectRoot, outputPath));
+    return {
+      bytes: bytes.length,
+      path: outputPath,
+      sha256: sha256(bytes)
+    };
+  });
+  const outputPrivacy = {
+    schemaVersion: "tideproof.gate2-build-output-privacy.v1",
+    status: "PASS",
+    allowedUpstreamAttributionFindingCount: 0,
+    findingCount: 0,
+    inventorySha256: sha256(JSON.stringify(outputRecords)),
+    outputCount: outputRecords.length,
+    outputs: outputRecords,
+    pinnedOfficialToolchainBytes: nodeBytes.length,
+    pinnedOfficialToolchainOutputCount: 1,
+    scannedBytes: outputRecords
+      .filter(({ path: outputPath }) => outputPath !== nodePath)
+      .reduce((sum, output) => sum + output.bytes, 0)
+  };
+
   const buildReceipt = {
-    schemaVersion: "tideproof.gate2-build.v6",
+    schemaVersion: GATE2_BUILD_SCHEMA,
     mode: "CLEAN_ARTIFACT_BUILD",
     projectSourceMode: "ISOLATED_EXACT_GIT_CHECKOUT_AND_BLOBS",
     sourceCommit: SOURCE_COMMIT,
@@ -206,22 +346,11 @@ function fixture() {
       treeDigest: "9".repeat(64)
     },
     evidenceProviderRuntime,
+    liveDrillRuntime,
+    outputPrivacy,
     packageJsonDigest: sha256(packageJson),
     packageLockDigest: sha256(packageLock),
-    toolchain: {
-      schemaVersion: "tideproof.build-toolchain.v2",
-      architecture: "arm64",
-      gitExecutableSha256: "5".repeat(64),
-      gitVersion: "2.50.1 (Apple Git-155)",
-      nodeExecutableSha256: "7".repeat(64),
-      nodeVersion: "v22.23.1",
-      npmCliSha256: "8".repeat(64),
-      npmPackageBytes: 123456,
-      npmPackageFileCount: 321,
-      npmPackageTreeDigest: "6".repeat(64),
-      npmVersion: "11.6.2",
-      platform: "darwin"
-    },
+    toolchain,
     thirdPartyNotices: {
       schema: "tideproof.bundled-third-party-notices.v1",
       status: "PASS",
@@ -867,6 +996,40 @@ function successfulRunner(buildReceipt, calls) {
     ) {
       stdout = JSON.stringify(buildReceipt);
     } else if (
+      shape === "npm run --silent stress:provider-resume"
+    ) {
+      const stressBody = {
+        schemaVersion: "tideproof.integrated-live-drill-stress-receipt.v1",
+        status: "PASS",
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST,
+        testPath: "test/integrated-live-drill-dispatch-broker.test.js",
+        target:
+          "two real broker processes publish one execution grant after one global begin",
+        iterationCount: 20,
+        observedIterationCount: 20,
+        observedTargetPassCount: 20,
+        iterations: Array.from({ length: 20 }, (_, index) => ({
+          index: index + 1,
+          tapSha256: String((index % 9) + 1).repeat(64)
+        })),
+        claimBoundary:
+          "This count-bound receipt proves only repeated local execution of one named fake-transport concurrency regression against one clean exact commit. It does not prove live provider behavior, cross-host database isolation, deployment, hostile-host safety, or release acceptance."
+      };
+      stressBody.countBindingSha256 = crypto.createHash("sha256").update(
+        canonicalJson({
+          iterationCount: stressBody.iterationCount,
+          iterations: stressBody.iterations,
+          observedIterationCount: stressBody.observedIterationCount,
+          observedTargetPassCount: stressBody.observedTargetPassCount,
+          sourceCommit: stressBody.sourceCommit,
+          target: stressBody.target,
+          testPath: stressBody.testPath,
+          treeDigest: stressBody.treeDigest
+        })
+      ).digest("hex");
+      stdout = JSON.stringify(stressBody);
+    } else if (
       shape === "npm run --silent gate2:aws-preflight"
     ) {
       stdout = JSON.stringify(preflightReceipt());
@@ -902,16 +1065,25 @@ function fixtureExactCheckout(projectRoot) {
   };
 }
 
+function buildValidationOptions(current) {
+  return {
+    projectRoot: current.projectRoot,
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST,
+    validateRuntimeManifest: (value) =>
+      validateIntegratedLiveDrillRuntimeManifest(value, {
+        validateNodeMetadata: () => true
+      }),
+    validateRuntimeNodeMetadata: () => true
+  };
+}
+
 test("AWS readiness validates every exact-head artifact byte", () => {
   const current = fixture();
   try {
     const accepted = validateBuildReceipt(
       current.buildReceipt,
-      {
-        projectRoot: current.projectRoot,
-        sourceCommit: SOURCE_COMMIT,
-        treeDigest: TREE_DIGEST
-      }
+      buildValidationOptions(current)
     );
     assert.equal(accepted.mode, "CLEAN_ARTIFACT_BUILD");
     assert.deepEqual(
@@ -929,6 +1101,58 @@ test("AWS readiness validates every exact-head artifact byte", () => {
   }
 });
 
+test("AWS readiness canonicalizes toolchain key order", () => {
+  const current = fixture();
+  try {
+    current.buildReceipt.toolchain = Object.fromEntries(
+      Object.entries(current.buildReceipt.toolchain).reverse()
+    );
+    const accepted = validateBuildReceipt(
+      current.buildReceipt,
+      buildValidationOptions(current)
+    );
+    assert.equal(
+      accepted.liveDrillRuntime.manifestSha256,
+      current.buildReceipt.liveDrillRuntime.manifestSha256
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects redundant runtime receipt fields", () => {
+  const current = fixture();
+  try {
+    current.buildReceipt.liveDrillRuntime.components.worker.file =
+      path.basename(
+        current.buildReceipt.liveDrillRuntime.components.worker.path
+      );
+    assert.throws(
+      () => validateBuildReceipt(
+        current.buildReceipt,
+        buildValidationOptions(current)
+      ),
+      /AWS_READINESS_LIVE_RUNTIME/u
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects substituted runtime validators", () => {
+  const current = fixture();
+  try {
+    const options = buildValidationOptions(current);
+    options.validateRuntimeManifest = null;
+    assert.throws(
+      () => validateBuildReceipt(current.buildReceipt, options),
+      /AWS_READINESS_BUILD_VALIDATOR/u
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
 test("AWS readiness rejects substituted exact-Git input identity", () => {
   const current = fixture();
   try {
@@ -936,11 +1160,10 @@ test("AWS readiness rejects substituted exact-Git input identity", () => {
       "0".repeat(40);
     assert.throws(
       () =>
-        validateBuildReceipt(current.buildReceipt, {
-          projectRoot: current.projectRoot,
-          sourceCommit: SOURCE_COMMIT,
-          treeDigest: TREE_DIGEST
-        }),
+        validateBuildReceipt(
+          current.buildReceipt,
+          buildValidationOptions(current)
+        ),
       /AWS_READINESS_EXACT_GIT_INPUT_DIGEST/
     );
   } finally {
@@ -954,22 +1177,20 @@ test("AWS readiness rejects a fabricated dependency or toolchain snapshot", () =
     current.buildReceipt.dependencySnapshot.treeDigest = "0";
     assert.throws(
       () =>
-        validateBuildReceipt(current.buildReceipt, {
-          projectRoot: current.projectRoot,
-          sourceCommit: SOURCE_COMMIT,
-          treeDigest: TREE_DIGEST
-        }),
+        validateBuildReceipt(
+          current.buildReceipt,
+          buildValidationOptions(current)
+        ),
       /DEPENDENCY_SNAPSHOT_RECEIPT/
     );
     current.buildReceipt.dependencySnapshot.treeDigest = "9".repeat(64);
     current.buildReceipt.toolchain.npmCliSha256 = "0";
     assert.throws(
       () =>
-        validateBuildReceipt(current.buildReceipt, {
-          projectRoot: current.projectRoot,
-          sourceCommit: SOURCE_COMMIT,
-          treeDigest: TREE_DIGEST
-        }),
+        validateBuildReceipt(
+          current.buildReceipt,
+          buildValidationOptions(current)
+        ),
       /DEPENDENCY_SNAPSHOT_TOOLCHAIN/
     );
   } finally {
@@ -988,12 +1209,47 @@ test("AWS readiness rejects an artifact changed after the build", () => {
     );
     assert.throws(
       () =>
-        validateBuildReceipt(current.buildReceipt, {
-          projectRoot: current.projectRoot,
-          sourceCommit: SOURCE_COMMIT,
-          treeDigest: TREE_DIGEST
-        }),
+        validateBuildReceipt(
+          current.buildReceipt,
+          buildValidationOptions(current)
+        ),
       /AWS_READINESS_ARTIFACT_DIGEST/
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness rejects a changed staged live-drill runtime", () => {
+  const current = fixture();
+  try {
+    const component = current.buildReceipt.liveDrillRuntime.components.worker;
+    fs.appendFileSync(
+      path.join(current.projectRoot, component.path),
+      "tamper"
+    );
+    assert.throws(
+      () => validateBuildReceipt(
+        current.buildReceipt,
+        buildValidationOptions(current)
+      ),
+      /AWS_READINESS_LIVE_RUNTIME/u
+    );
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("AWS readiness recomputes the complete build-output privacy inventory", () => {
+  const current = fixture();
+  try {
+    current.buildReceipt.outputPrivacy.scannedBytes += 1;
+    assert.throws(
+      () => validateBuildReceipt(
+        current.buildReceipt,
+        buildValidationOptions(current)
+      ),
+      /AWS_READINESS_BUILD_OUTPUT_PRIVACY/u
     );
   } finally {
     current.cleanup();
@@ -1009,11 +1265,10 @@ test("AWS readiness rejects changed third-party notice bytes", () => {
     );
     assert.throws(
       () =>
-        validateBuildReceipt(current.buildReceipt, {
-          projectRoot: current.projectRoot,
-          sourceCommit: SOURCE_COMMIT,
-          treeDigest: TREE_DIGEST
-        }),
+        validateBuildReceipt(
+          current.buildReceipt,
+          buildValidationOptions(current)
+        ),
       /AWS_READINESS_THIRD_PARTY_NOTICE_DIGEST/
     );
   } finally {
@@ -1044,11 +1299,10 @@ test("AWS readiness rejects a hash-valid ZIP without bundled notices", () => {
 
     assert.throws(
       () =>
-        validateBuildReceipt(current.buildReceipt, {
-          projectRoot: current.projectRoot,
-          sourceCommit: SOURCE_COMMIT,
-          treeDigest: TREE_DIGEST
-        }),
+        validateBuildReceipt(
+          current.buildReceipt,
+          buildValidationOptions(current)
+        ),
       /AWS_READINESS_ZIP_END/
     );
   } finally {
@@ -1289,6 +1543,7 @@ test("AWS readiness full mode performs only reviewed command families", async ()
   const calls = [];
   try {
     const receipt = await runAwsReadiness({
+      ...buildValidationOptions(current),
       projectRoot: current.projectRoot,
       run: successfulRunner(current.buildReceipt, calls),
       verifyExactCheckout: fixtureExactCheckout(current.projectRoot),
@@ -1298,6 +1553,8 @@ test("AWS readiness full mode performs only reviewed command families", async ()
     assert.equal(receipt.checks.awsPreflight, "PASS");
     assert.equal(receipt.checks.releaseProvenance, true);
     assert.equal(receipt.checks.staticAccessibility, true);
+    assert.equal(receipt.checks.providerResumeStress20Of20, true);
+    assert.equal(receipt.providerResumeStress.iterationCount, 20);
     assert.equal(receipt.source.commit, SOURCE_COMMIT);
     assert.equal(
       calls.some(
@@ -1388,6 +1645,7 @@ test("AWS readiness local mode is explicit non-AWS evidence", async () => {
   const calls = [];
   try {
     const receipt = await runAwsReadiness({
+      ...buildValidationOptions(current),
       projectRoot: current.projectRoot,
       localOnly: true,
       now: () => new Date("2026-07-31T05:45:00.000Z"),
@@ -1725,7 +1983,11 @@ test("AWS readiness ignores PATH-selected Git and npm wrappers", () => {
       ...process.env,
       npm_execpath:
         process.env.npm_execpath ??
-        fs.realpathSync(path.join(path.dirname(process.execPath), "npm")),
+        (
+          fs.existsSync(path.join(path.dirname(process.execPath), "npm"))
+            ? fs.realpathSync(path.join(path.dirname(process.execPath), "npm"))
+            : "/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js"
+        ),
       npm_node_execpath: process.execPath,
       PATH: projectRoot
     });

@@ -7,8 +7,12 @@ not permission to repeat a logical act. The source-level authority, signed
 ingest, DVI preparation, recovery publication, and recovery-audit paths now
 return one nested `tideproof.database-commit-result.v1` envelope after either a
 direct `COMMIT` acknowledgement or an exact durable-state reconciliation. This
-is source evidence only. CockroachDB v26.2 compatibility, real transport-loss
-behavior, and provider-backed concurrency remain unproved.
+is primarily source evidence. Final23 installed the bound predecessor on a
+fresh-zero local QEMU-TCG x86-64 CockroachDB CCL v26.2.0 guest and exercised a
+narrow direct-ack authority/protected-effect path plus simple recovery
+resolution. It did not inject acknowledgment loss or run the reconciliation
+negative matrix. Cross-operation compatibility, real transport-loss behavior,
+and provider-backed concurrency remain unproved.
 
 ## Frozen result envelope
 
@@ -102,8 +106,8 @@ epoch after one can exist.
   preparation entrypoints, recovery publication, and recovery audit.
 - Verification: focused synthetic transport-loss tests pass without rollback
   or duplicate mutation.
-- Residual risk: live CockroachDB v26.2 and network-fault evidence remain
-  pending.
+- Residual risk: Final23 did not exercise ACK loss; exact-version ACK-loss and
+  network-fault evidence remain pending.
 - Claim impact: no live exactly-once or provider-concurrency claim is added.
 
 ### Client-time capability freshness
@@ -157,8 +161,9 @@ epoch after one can exist.
   recovery-publication, and audit fixtures now include `Date` values.
 - Verification: focused commit and operation tests accept driver `Date` values
   while continuing to reject numeric or raw client clocks.
-- Residual risk: provider execution is still required to confirm CockroachDB
-  v26.2 and deployed driver behavior.
+- Residual risk: Final23 exercised the local driver against CockroachDB v26.2.0
+  only for its narrow direct gate. Provider execution and the other operation
+  paths are still required to confirm deployed driver behavior.
 - Claim impact: this closes a source/runtime type mismatch, not live provider
   evidence.
 
@@ -202,8 +207,10 @@ epoch after one can exist.
   binding field, and release-security markers cover the resolver and tests.
 - Verification: every modeled drift returns
   `AUTHORITY_RECONCILIATION_REJECTED`.
-- Residual risk: the provider-backed schema/function must still be installed
-  and exercised on CockroachDB v26.2.
+- Residual risk: Final23 installed and exercised the exact local authority
+  outbox happy path on CockroachDB v26.2.0, but not this reconciliation drift
+  matrix. The provider-backed schema/function and negative matrix remain
+  pending.
 - Claim impact: the source no longer labels a partial or drifted outbox an
   exact committed AWS authority result.
 
@@ -413,7 +420,9 @@ epoch after one can exist.
   contract.
 - Verification: focused local, Lambda, and static reconciliation tests accept
   one exact row and reject every modeled field drift and coordinated false row.
-- Residual risk: these controls are source-level until CockroachDB v26.2 runs
-  the same negative matrix against provider-returned rows.
+- Residual risk: Final23 covered only narrow proposal-alias and request-digest
+  negatives on local CockroachDB v26.2.0. The complete coordinated-false-row
+  matrix remains source-level until provider-backed CockroachDB runs it against
+  returned rows.
 - Claim impact: a source reconciliation result is now independently bound to
   the durable proposal bytes; no live or cluster-atomic claim is added.

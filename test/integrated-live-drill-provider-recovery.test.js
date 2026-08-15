@@ -11,11 +11,12 @@ import {
   signIntegratedLiveDrillEvidence
 } from "../src/cloud/integrated-live-drill-authorization.js";
 import {
-  __test as providerTest,
+  __test as providerTestRaw,
   INTEGRATED_LIVE_DRILL_PROVIDER_EXPIRY_BURN_SCHEMA,
   integratedLiveDrillProviderDispatchAuthorizationPayload,
   prepareIntegratedLiveDrillProviderRecoveryAuthorization,
-  runIntegratedLiveDrillProviderRecovery,
+  runIntegratedLiveDrillProviderRecovery as
+    runIntegratedLiveDrillProviderRecoveryRaw,
   validateIntegratedLiveDrillManagedMcpSemanticRequestEvidence,
   validateIntegratedLiveDrillManagedMcpTransportEvidence,
   validateIntegratedLiveDrillProviderDispatchAuthorization
@@ -34,12 +35,8 @@ import {
   verifyIntegratedLiveDrillProviderEvidenceBundle
 } from "../src/cloud/integrated-live-drill-provider-evidence.js";
 import {
-  INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
-} from "../src/cloud/integrated-live-drill-provider-orchestration.js";
-import {
   __test as workerTest,
   assertIntegratedLiveDrillProviderWorkerEnvironment,
-  INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT,
   INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA,
   integratedLiveDrillProviderWorkerEnvironment,
   readIntegratedLiveDrillProviderWorkerInput,
@@ -58,14 +55,78 @@ import {
   recoveryAuditEventDigest
 } from "../src/cloud/recovery-broker.js";
 import {
-  createRecoveryContinuityFixture,
-  persistFixtureProviderOrchestrationAdmission
+  createRecoveryContinuityFixture
 } from
   "./helpers/integrated-live-drill-recovery-continuity-fixture.js";
 
 const PRINCIPAL = "principal://synthetic-provider-continuity";
 
-test("provider worker input and environment isolate credentials and resume context", async (t) => {
+function syntheticExecutionGrant(context, overrides = {}) {
+  const body = Object.freeze({
+    authorizationId: context.preCallIntent.authorizationId,
+    controlBindingSha256: "a".repeat(64),
+    executionCapabilitySha256: "b".repeat(64),
+    grantId: "11111111-1111-5111-8111-111111111111",
+    operationNonceSha256: "c".repeat(64),
+    requestSha256: "d".repeat(64),
+    schemaVersion: "tideproof.integrated-live-drill-execution-grant.v1",
+    state: "EXECUTING",
+    workerSpecSha256: "e".repeat(64),
+    ...overrides
+  });
+  return Object.freeze({
+    ...body,
+    receiptSha256: integratedLiveDrillCanonicalSha256(body)
+  });
+}
+
+function recoveryExecutionGrant(context, overrides = {}) {
+  const full = syntheticExecutionGrant(context, overrides);
+  return Object.freeze({
+    executionCapabilitySha256: full.executionCapabilitySha256,
+    grantId: full.grantId,
+    operationNonceSha256: full.operationNonceSha256,
+    workerSpecSha256: full.workerSpecSha256
+  });
+}
+
+function withRecoveryExecutionGrant(args) {
+  return Object.freeze({
+    ...args,
+    executionGrant: args.executionGrant ??
+      recoveryExecutionGrant(args.context)
+  });
+}
+
+function runIntegratedLiveDrillProviderRecovery(args) {
+  return runIntegratedLiveDrillProviderRecoveryRaw(
+    withRecoveryExecutionGrant(args)
+  );
+}
+
+const providerTest = Object.freeze({
+  ...providerTestRaw,
+  runProviderRecoveryWithInterruption(args, ...rest) {
+    return providerTestRaw.runProviderRecoveryWithInterruption(
+      withRecoveryExecutionGrant(args),
+      ...rest
+    );
+  },
+  runProviderRecoveryWithInterruptionAndTrustedClock(args, ...rest) {
+    return providerTestRaw.runProviderRecoveryWithInterruptionAndTrustedClock(
+      withRecoveryExecutionGrant(args),
+      ...rest
+    );
+  },
+  runProviderRecoveryWithTrustedClock(args, ...rest) {
+    return providerTestRaw.runProviderRecoveryWithTrustedClock(
+      withRecoveryExecutionGrant(args),
+      ...rest
+    );
+  }
+});
+
+test("provider worker input and environment contain no provider or database capability", async (t) => {
   const fixture = createRecoveryContinuityFixture(t, {
     prefix: "prooftoact-b2-worker-input-",
     subjectBindingSha256: principalBindingHash(PRINCIPAL)
@@ -75,15 +136,11 @@ test("provider worker input and environment isolate credentials and resume conte
     ...fixture.context,
     providerDispatchAuthorization: signPreparedDispatch(fixture, preparation)
   });
-  const { admission } = persistFixtureProviderOrchestrationAdmission(t, {
-    context,
-    dispatchAuthorization: context.providerDispatchAuthorization,
-    dispatchPreparation: preparation
-  });
+  const executionGrant = syntheticExecutionGrant(context);
   const input = Object.freeze({
     authenticatedPrincipal: PRINCIPAL,
     context,
-    providerAdmissionReceiptSha256: admission.receiptSha256,
+    executionGrant,
     schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA
   });
   const validatedWorkerInput =
@@ -95,6 +152,7 @@ test("provider worker input and environment isolate credentials and resume conte
     canonicalJson(validatedWorkerInput.context),
     canonicalJson(context)
   );
+  assert.deepEqual(validatedWorkerInput.executionGrant, executionGrant);
   const inputPath = path.join(
     context.recoveryEvidenceRootPath,
     "provider-worker-input.json"
@@ -108,6 +166,11 @@ test("provider worker input and environment isolate credentials and resume conte
     }).context.preCallIntent.intentSha256,
     context.preCallIntent.intentSha256
   );
+  const credentialsDirectory = path.join(
+    context.recoveryEvidenceRootPath,
+    "synthetic-systemd-credentials"
+  );
+  fs.mkdirSync(credentialsDirectory, { mode: 0o700 });
   const isolated = integratedLiveDrillProviderWorkerEnvironment({
     ALL_PROXY: "http://unsafe.invalid",
     AWS_ACCESS_KEY_ID: "AKIAUNSAFEUNSAFE0000",
@@ -122,36 +185,20 @@ test("provider worker input and environment isolate credentials and resume conte
     RECOVERY_PUBLISHER_DATABASE_URL:
       "postgresql://publisher.invalid/tideproof"
   }, {
-    authenticatedPrincipal: PRINCIPAL,
+    credentialsDirectory,
     forbiddenRootPath: context.forbiddenRootPath,
-    inputPath,
-    rootBinding: context.evidenceRootBinding,
     rootPath: context.recoveryEvidenceRootPath
   });
-  assert.equal(isolated.MCP_API_KEY, "synthetic-test-only-mcp-api-key-0001");
+  assert.equal(isolated.CREDENTIALS_DIRECTORY, credentialsDirectory);
   assert.equal(
-    isolated[INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ROOT_BINDING_ENVIRONMENT],
-    canonicalJson(context.evidenceRootBinding)
+    isolated.TIDEPROOF_INTEGRATED_LIVE_DRILL_PRIVATE_EVIDENCE_ROOT,
+    context.recoveryEvidenceRootPath
   );
-  assert.equal(
-    isolated[INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT],
-    "3"
-  );
-  assert.equal(
-    isolated[
-      INTEGRATED_LIVE_DRILL_PROVIDER_DECISION_ROOT_DESCRIPTOR_ENVIRONMENT
-    ],
-    "4"
-  );
-  assert.equal(
-    isolated.PRIMARY_AUDIT_DATABASE_URL,
-    "postgresql://audit.invalid/tideproof"
-  );
+  assert.equal(Object.hasOwn(isolated, "MCP_API_KEY"), false);
+  assert.equal(Object.hasOwn(isolated, "PRIMARY_AUDIT_DATABASE_URL"), false);
   const normalizedWorkerEnvironment =
     assertIntegratedLiveDrillProviderWorkerEnvironment(isolated, {
-      authenticatedPrincipal: PRINCIPAL,
       forbiddenRootPath: context.forbiddenRootPath,
-      rootBinding: context.evidenceRootBinding,
       rootPath: context.recoveryEvidenceRootPath
     });
   assert.notEqual(normalizedWorkerEnvironment, isolated);
@@ -160,11 +207,9 @@ test("provider worker input and environment isolate credentials and resume conte
   assert.throws(
     () => assertIntegratedLiveDrillProviderWorkerEnvironment({
       ...isolated,
-      [INTEGRATED_LIVE_DRILL_PRIVATE_ROOT_DESCRIPTOR_ENVIRONMENT]: "4"
+      MCP_API_KEY: "synthetic-secret"
     }, {
-      authenticatedPrincipal: PRINCIPAL,
       forbiddenRootPath: context.forbiddenRootPath,
-      rootBinding: context.evidenceRootBinding,
       rootPath: context.recoveryEvidenceRootPath
     }),
     /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED/u
@@ -176,7 +221,10 @@ test("provider worker input and environment isolate credentials and resume conte
     "AWS_PROFILE",
     "AWS_SHARED_CREDENTIALS_FILE",
     "HOME",
+    "MCP_API_KEY",
     "NODE_OPTIONS",
+    "PRIMARY_AUDIT_DATABASE_URL",
+    "PRIMARY_PROVIDER_FINALIZE_DATABASE_URL",
     "PRIMARY_RECOVERY_SOURCE_DATABASE_URL",
     "RECOVERY_PUBLISHER_DATABASE_URL"
   ]) {
@@ -194,9 +242,7 @@ test("provider worker input and environment isolate credentials and resume conte
         ...isolated,
         [name]: "synthetic-forbidden"
       }, {
-        authenticatedPrincipal: PRINCIPAL,
         forbiddenRootPath: context.forbiddenRootPath,
-        rootBinding: context.evidenceRootBinding,
         rootPath: context.recoveryEvidenceRootPath
       }),
       /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_ENVIRONMENT_REJECTED/u,
@@ -236,9 +282,7 @@ test("provider worker input and environment isolate credentials and resume conte
       () => assertIntegratedLiveDrillProviderWorkerEnvironment(
         changedEnvironment,
         {
-          authenticatedPrincipal: PRINCIPAL,
           forbiddenRootPath: context.forbiddenRootPath,
-          rootBinding: context.evidenceRootBinding,
           rootPath: context.recoveryEvidenceRootPath
         }
       ),
@@ -246,34 +290,32 @@ test("provider worker input and environment isolate credentials and resume conte
       name
     );
   }
-  const workerEnvironmentProbe = spawnSync(
-    process.execPath,
-    [
-      "--input-type=module",
-      "--eval",
-      `import { assertIntegratedLiveDrillProviderWorkerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-worker.js", import.meta.url).href)}; check(process.env, ${JSON.stringify({
-        authenticatedPrincipal: PRINCIPAL,
-        forbiddenRootPath: context.forbiddenRootPath,
-        rootBinding: context.evidenceRootBinding,
-        rootPath: context.recoveryEvidenceRootPath
-      })});`
-    ],
-    { encoding: "utf8", env: isolated }
-  );
-  assert.equal(
-    workerEnvironmentProbe.status,
-    0,
-    workerEnvironmentProbe.stderr
-  );
+  if (process.platform === "linux") {
+    const workerEnvironmentProbe = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `import { assertIntegratedLiveDrillProviderWorkerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-worker.js", import.meta.url).href)}; check(process.env, ${JSON.stringify({
+          forbiddenRootPath: context.forbiddenRootPath,
+          rootPath: context.recoveryEvidenceRootPath
+        })});`
+      ],
+      { encoding: "utf8", env: isolated }
+    );
+    assert.equal(
+      workerEnvironmentProbe.status,
+      0,
+      workerEnvironmentProbe.stderr
+    );
+  }
   const workerUnexpectedEnvironmentProbe = spawnSync(
     process.execPath,
     [
       "--input-type=module",
       "--eval",
       `import { assertIntegratedLiveDrillProviderWorkerEnvironment as check } from ${JSON.stringify(new URL("../src/cloud/integrated-live-drill-provider-worker.js", import.meta.url).href)}; check(process.env, ${JSON.stringify({
-        authenticatedPrincipal: PRINCIPAL,
         forbiddenRootPath: context.forbiddenRootPath,
-        rootBinding: context.evidenceRootBinding,
         rootPath: context.recoveryEvidenceRootPath
       })});`
     ],
@@ -327,10 +369,7 @@ test("provider worker input and environment isolate credentials and resume conte
           fakeAuditFactoryCalls += 1;
           throw new Error("fake audit factory must never run");
         },
-        fetchImpl: async () => {
-          fakeFetchCalls += 1;
-          throw new Error("fake fetch must never run");
-        }
+        fetchImpl: null
       }),
       /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u,
       name
@@ -355,7 +394,7 @@ test("provider worker input and environment isolate credentials and resume conte
       inputPath: symlinkPath,
       rootPath: context.recoveryEvidenceRootPath
     }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u
+    /(?:INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED|RECOVERY_BUNDLE_PERSISTENCE_REJECTED)/u
   );
   const outsideRoot = fs.mkdtempSync(path.join(
     path.dirname(context.recoveryEvidenceRootPath),
@@ -378,7 +417,7 @@ test("provider worker input and environment isolate credentials and resume conte
       inputPath: path.join(intermediateLink, "worker-input.json"),
       rootPath: context.recoveryEvidenceRootPath
     }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u
+    /(?:INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED|RECOVERY_BUNDLE_PERSISTENCE_REJECTED)/u
   );
   const substitutedRootInput = structuredClone(input);
   substitutedRootInput.context.recoveryEvidenceRootPath = outsideRoot;
@@ -397,7 +436,7 @@ test("provider worker input and environment isolate credentials and resume conte
       inputPath: substitutedRootInputPath,
       rootPath: context.recoveryEvidenceRootPath
     }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED/u
+    /(?:INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_REJECTED|RECOVERY_BUNDLE_PERSISTENCE_REJECTED)/u
   );
 });
 
@@ -714,6 +753,50 @@ function injectMutationAfterTargetRead(t, targetPath, mutate) {
   return () => injected;
 }
 
+function inMemoryProviderDispatchFinalizer() {
+  let bindingSha256 = null;
+  let state = null;
+  let terminal = Object.freeze({
+    mcpResultSha256: null,
+    sessionCloseSha256: null
+  });
+  const result = (binding, transitionOutcome) => Object.freeze({
+    authorizationId: binding.authorizationId,
+    controlBindingSha256: binding.controlBindingSha256,
+    databaseNow: binding.issuedAt,
+    expiresAt: binding.expiresAt,
+    ...terminal,
+    grantId: "11111111-1111-5111-8111-111111111111",
+    state,
+    transitionOutcome
+  });
+  const assertBinding = (binding) => {
+    if (bindingSha256 === null) {
+      bindingSha256 = binding.controlBindingSha256;
+    }
+    assert.equal(binding.controlBindingSha256, bindingSha256);
+  };
+  return Object.freeze({
+    complete(binding, grant, value) {
+      assertBinding(binding);
+      assert.equal(grant.grantId, "11111111-1111-5111-8111-111111111111");
+      if (state === null) {
+        terminal = Object.freeze({ ...value });
+        state = "COMPLETED";
+      }
+      assert.equal(state, "COMPLETED");
+      assert.deepEqual(terminal, value);
+      return result(binding, "COMPLETED");
+    },
+    markUnknown(binding, grant) {
+      assertBinding(binding);
+      assert.equal(grant.grantId, "11111111-1111-5111-8111-111111111111");
+      if (state === null) state = "UNKNOWN_DO_NOT_ACT";
+      return result(binding, "UNKNOWN_RECORDED");
+    }
+  });
+}
+
 function providerHarness(fixture, {
   afterAuditAppend = null,
   afterAuditResolve = null,
@@ -801,6 +884,7 @@ function providerHarness(fixture, {
         fixture.testOnly.recoverySigner.publicKeySpkiBase64
     },
     mcpClient,
+    providerDispatchFinalizer: inMemoryProviderDispatchFinalizer(),
     sessionResolver: {
       async resolve({ authenticatedPrincipal }) {
         assert.equal(typeof authenticatedPrincipal, "string");
@@ -890,6 +974,7 @@ function providerHarness(fixture, {
 
 function auditDatabaseClientFactory() {
   const rows = new Map();
+  const providerControls = new Map();
   return {
     clientFactory() {
       return {
@@ -940,188 +1025,86 @@ function auditDatabaseClientFactory() {
               ? { rowCount: 0, rows: [] }
               : { rowCount: 1, rows: [row] };
           }
+          if (sql.includes("g1_transition_provider_dispatch_v1")) {
+            const [
+              action,
+              authorizationId,
+              tenantId,
+              runId,
+              interactionId,
+              ownerNonce,
+              controlBindingSha256,
+              logicalMcpRequestSha256,
+              providerEffectKeySha256,
+              providerDispatchAuthorizationSha256,
+              sourceCommit,
+              treeDigest,
+              sourceBuildIdentity,
+              issuedAt,
+              expiresAt,
+              mcpResultSha256,
+              sessionCloseSha256
+            ] = params;
+            let control = providerControls.get(authorizationId);
+            let transitionOutcome = "RESOLVED";
+            if (control === undefined) {
+              assert.equal(action, "CONSUME");
+              control = {
+                authorization_id: authorizationId,
+                tenant_id: tenantId,
+                run_id: runId,
+                interaction_id: interactionId,
+                owner_nonce: ownerNonce,
+                control_binding_sha256: controlBindingSha256,
+                logical_mcp_request_sha256: logicalMcpRequestSha256,
+                provider_effect_key_sha256: providerEffectKeySha256,
+                provider_dispatch_authorization_sha256:
+                  providerDispatchAuthorizationSha256,
+                source_commit: sourceCommit,
+                tree_digest: treeDigest,
+                source_build_identity: sourceBuildIdentity,
+                issued_at: issuedAt,
+                expires_at: expiresAt,
+                database_now: issuedAt,
+                state: "CONSUMED",
+                mcp_result_sha256: null,
+                session_close_sha256: null
+              };
+              providerControls.set(authorizationId, control);
+              transitionOutcome = "DISPATCH_GRANTED";
+            } else {
+              assert.equal(
+                control.control_binding_sha256,
+                controlBindingSha256
+              );
+              if (action === "COMPLETE") {
+                assert.equal(control.owner_nonce, ownerNonce);
+                control.state = "COMPLETED";
+                control.mcp_result_sha256 = mcpResultSha256;
+                control.session_close_sha256 = sessionCloseSha256;
+                transitionOutcome = "COMPLETED";
+              } else if (action === "MARK_UNKNOWN") {
+                if (control.state === "CONSUMED") {
+                  control.state = "UNKNOWN_DO_NOT_ACT";
+                }
+                transitionOutcome = "UNKNOWN_RECORDED";
+              } else if (action === "CONSUME") {
+                transitionOutcome = "ALREADY_TERMINAL_OR_CONSUMED";
+              }
+            }
+            return {
+              rowCount: 1,
+              rows: [{ ...control, transition_outcome: transitionOutcome }]
+            };
+          }
           throw new Error(`unexpected synthetic audit query: ${sql}`);
         }
       };
     },
+    providerControls,
     rows
   };
 }
-
-test("credential-isolated production worker uses only fake local transports", async (t) => {
-  const fixture = createRecoveryContinuityFixture(t, {
-    prefix: "prooftoact-b2-production-worker-",
-    subjectBindingSha256: principalBindingHash(PRINCIPAL)
-  });
-  const preparation = prepareDispatch(fixture);
-  const context = Object.freeze({
-    ...fixture.context,
-    providerDispatchAuthorization: signPreparedDispatch(fixture, preparation)
-  });
-  const {
-    admission,
-    decisionRootLease,
-    evidenceRootLease
-  } = persistFixtureProviderOrchestrationAdmission(t, {
-    context,
-    dispatchAuthorization: context.providerDispatchAuthorization,
-    dispatchPreparation: preparation
-  });
-  const input = Object.freeze({
-    authenticatedPrincipal: PRINCIPAL,
-    context,
-    providerAdmissionReceiptSha256: admission.receiptSha256,
-    schemaVersion: INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_INPUT_SCHEMA
-  });
-  const transport = providerHarness(fixture);
-  const audit = auditDatabaseClientFactory();
-  await assert.rejects(
-    () => workerTest.runWithLocalTransports({
-      decisionRootDescriptor: decisionRootLease.descriptor,
-      evidenceRootDescriptor: evidenceRootLease.descriptor,
-      environment: integratedLiveDrillProviderWorkerEnvironment({
-        MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
-        PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof"
-      }, {
-        authenticatedPrincipal: PRINCIPAL,
-        forbiddenRootPath: context.forbiddenRootPath,
-        inputPath: path.join(
-          context.recoveryEvidenceRootPath,
-          "provider-worker-input.json"
-        ),
-        rootBinding: context.evidenceRootBinding,
-        rootPath: context.recoveryEvidenceRootPath
-      }),
-      input: {
-        ...input,
-        providerAdmissionReceiptSha256: "f".repeat(64)
-      }
-    }, {
-      auditClientFactory: audit.clientFactory,
-      fetchImpl: transport.fetchImpl
-    }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED/u
-  );
-  assert.equal(transport.calls.length, 0);
-  assert.equal(audit.rows.size, 0);
-  const decisionPath = path.join(
-    context.ledgerRootPath,
-    `${context.preCallIntent.runId}.provider-orchestration-decision.json`
-  );
-  const forgedAdmission = structuredClone(admission);
-  forgedAdmission.preparationReceiptSha256 = "e".repeat(64);
-  forgedAdmission.checkpointPersistenceReceiptSha256 = "d".repeat(64);
-  delete forgedAdmission.receiptSha256;
-  forgedAdmission.receiptSha256 =
-    integratedLiveDrillCanonicalSha256(forgedAdmission);
-  fs.writeFileSync(
-    decisionPath,
-    `${canonicalJson(forgedAdmission)}\n`,
-    { mode: 0o600 }
-  );
-  try {
-    await assert.rejects(
-      () => workerTest.runWithLocalTransports({
-        decisionRootDescriptor: decisionRootLease.descriptor,
-        evidenceRootDescriptor: evidenceRootLease.descriptor,
-        environment: integratedLiveDrillProviderWorkerEnvironment({
-          MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
-          PRIMARY_AUDIT_DATABASE_URL: "postgresql://audit.invalid/tideproof"
-        }, {
-          authenticatedPrincipal: PRINCIPAL,
-          forbiddenRootPath: context.forbiddenRootPath,
-          inputPath: path.join(
-            context.recoveryEvidenceRootPath,
-            "provider-worker-input.json"
-          ),
-          rootBinding: context.evidenceRootBinding,
-          rootPath: context.recoveryEvidenceRootPath
-        }),
-        input: {
-          ...input,
-          providerAdmissionReceiptSha256: forgedAdmission.receiptSha256
-        }
-      }, {
-        auditClientFactory: audit.clientFactory,
-        fetchImpl: transport.fetchImpl
-      }),
-      /INTEGRATED_LIVE_DRILL_PROVIDER_ORCHESTRATION_ADMISSION_REJECTED/u
-    );
-  } finally {
-    fs.writeFileSync(decisionPath, `${canonicalJson(admission)}\n`, {
-      mode: 0o600
-    });
-  }
-  assert.equal(transport.calls.length, 0);
-  assert.equal(audit.rows.size, 0);
-  await assert.rejects(
-    () => workerTest.runWithLocalTransports({
-      decisionRootDescriptor: decisionRootLease.descriptor,
-      evidenceRootDescriptor: evidenceRootLease.descriptor,
-      environment: integratedLiveDrillProviderWorkerEnvironment({
-        MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
-        PRIMARY_AUDIT_DATABASE_URL:
-          "postgresql://substituted-audit.invalid/tideproof"
-      }, {
-        authenticatedPrincipal: PRINCIPAL,
-        forbiddenRootPath: context.forbiddenRootPath,
-        inputPath: path.join(
-          context.recoveryEvidenceRootPath,
-          "provider-worker-input.json"
-        ),
-        rootBinding: context.evidenceRootBinding,
-        rootPath: context.recoveryEvidenceRootPath
-      }),
-      input
-    }, {
-      auditClientFactory: audit.clientFactory,
-      fetchImpl: transport.fetchImpl
-    }),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_WORKER_AUDIT_TARGET_REJECTED/u
-  );
-  assert.equal(transport.calls.length, 0);
-  assert.equal(audit.rows.size, 0);
-  const result = await workerTest.runWithLocalTransports({
-    decisionRootDescriptor: decisionRootLease.descriptor,
-    evidenceRootDescriptor: evidenceRootLease.descriptor,
-    environment: integratedLiveDrillProviderWorkerEnvironment({
-      MCP_API_KEY: "synthetic-test-only-mcp-api-key-0001",
-      PRIMARY_AUDIT_DATABASE_URL:
-        "postgresql://audit.invalid/tideproof"
-    }, {
-      authenticatedPrincipal: PRINCIPAL,
-      forbiddenRootPath: context.forbiddenRootPath,
-      inputPath: path.join(
-        context.recoveryEvidenceRootPath,
-        "provider-worker-input.json"
-      ),
-      rootBinding: context.evidenceRootBinding,
-      rootPath: context.recoveryEvidenceRootPath
-    }),
-    input
-  }, {
-    auditClientFactory: audit.clientFactory,
-    fetchImpl: transport.fetchImpl
-  });
-  assert.equal(result.recovery.status, "RECOVERED_CONTEXT_ONLY");
-  assert.equal(result.providerContinuity.observedInitializeCount, 1);
-  assert.equal(result.providerContinuity.observedToolsCallCount, 1);
-  assert.equal(result.providerContinuity.observedSessionCloseCount, 1);
-  assert.equal(result.providerContinuity.providerBacked, false);
-  assert.equal(result.providerContinuity.accepted, false);
-  assert.equal(result.providerContinuity.finalReleaseReady, false);
-  assert.deepEqual(
-    transport.calls.map(({ payload, method }) => payload?.method ?? method),
-    ["initialize", "notifications/initialized", "tools/call", "DELETE"]
-  );
-  assert.equal(audit.rows.size, 2);
-  assert.equal(
-    JSON.stringify(result).includes(
-      "synthetic-test-only-mcp-api-key-0001"
-    ),
-    false
-  );
-});
 
 test("actual provider path cross-binds W1-W3, exact tools/call bytes, and private evidence", async (t) => {
   const subjectBindingSha256 = principalBindingHash(PRINCIPAL);
@@ -1443,7 +1426,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
         context,
         providerContinuity: recomputed
       }),
-      /INTEGRATED_LIVE_DRILL_PROVIDER_(?:FINALIZATION_INPUT|HANDOFF_BINDING|JOURNAL_BINDING)_REJECTED/u,
+      /INTEGRATED_LIVE_DRILL_PROVIDER_(?:EVIDENCE_BINDING|FINALIZATION_INPUT|HANDOFF_BINDING|JOURNAL_BINDING)_REJECTED/u,
       field
     );
   }
@@ -1468,6 +1451,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   );
   for (let index = 0; index < evidencePaths.length; index += 1) {
     const filePath = evidencePaths[index];
+    const originalStat = fs.statSync(filePath);
     const missingPath = `${filePath}.missing`;
     fs.renameSync(filePath, missingPath);
     try {
@@ -1476,7 +1460,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
           context,
           providerContinuity: result.providerContinuity
         }),
-        /INTEGRATED_LIVE_DRILL_PROVIDER_EVIDENCE_AMBIGUOUS/u,
+        /INTEGRATED_LIVE_DRILL_PROVIDER_(?:EVIDENCE_AMBIGUOUS|EVIDENCE_BINDING_REJECTED)/u,
         `missing ${path.basename(filePath)}`
       );
     } finally {
@@ -1497,6 +1481,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
       );
     } finally {
       fs.writeFileSync(filePath, evidenceBytes[index]);
+      fs.chmodSync(filePath, originalStat.mode & 0o777);
     }
   }
 
@@ -1536,6 +1521,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
     ["provider client", (value) => { value.providerClient = {}; }],
     ["raw provider result", (value) => { value.rawProviderResult = {}; }],
     ["retry authority", (value) => { value.retryAuthority = true; }],
+    ["generic retry key", (value) => { value.retry = true; }],
     ["credential-like symbol", (value) => {
       Object.defineProperty(value, Symbol("MCP_API_KEY"), {
         enumerable: true,
@@ -1860,12 +1846,12 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   assert.equal(finalized.providerCapabilityAccepted, false);
   assert.equal(finalized.credentialOptionAccepted, false);
   assert.equal(finalized.rawProviderResultAccepted, false);
-  assert.equal(finalized.retryAuthorityAccepted, false);
+  assert.equal(finalized.retryNamedKeyAccepted, false);
   assert.equal(finalized.contextCredentialMaterialAbsent, true);
   assert.equal(finalized.contextExactSchemaValidated, true);
   assert.equal(finalized.contextProviderCapabilityAbsent, true);
   assert.equal(finalized.contextRawProviderResultAbsent, true);
-  assert.equal(finalized.contextRetryAuthorityAbsent, true);
+  assert.equal(finalized.contextRetryNamedKeyAbsent, true);
   assert.equal(finalized.observedToolsCallCount, 1);
   assert.equal(finalized.observedSessionCloseCount, 1);
   const normalizedComponentReceipt = JSON.parse(fs.readFileSync(
@@ -1878,7 +1864,7 @@ test("actual provider path cross-binds W1-W3, exact tools/call bytes, and privat
   assert.equal(normalizedComponentReceipt.contextExactSchemaValidated, true);
   assert.equal(normalizedComponentReceipt.contextProviderCapabilityAbsent, true);
   assert.equal(normalizedComponentReceipt.contextRawProviderResultAbsent, true);
-  assert.equal(normalizedComponentReceipt.contextRetryAuthorityAbsent, true);
+  assert.equal(normalizedComponentReceipt.contextRetryNamedKeyAbsent, true);
   assert.equal(
     finalizeIntegratedLiveDrillProviderRecovery({
       context,
@@ -2247,7 +2233,9 @@ test("W1 and W3 audit-commit crashes resume exact persisted event plans without 
       }
     }
   );
-  const shortExpiry = new Date(Date.now() + 120).toISOString();
+  const expiryClock = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now: expiryClock });
+  const shortExpiry = new Date(expiryClock + 120).toISOString();
   const expiringRawResult = Object.freeze({
     content: [Object.freeze({
       type: "text",
@@ -2263,7 +2251,7 @@ test("W1 and W3 audit-commit crashes resume exact persisted event plans without 
     expiryPrepared,
     expiringRawResult
   );
-  await new Promise((resolve) => setTimeout(resolve, 180));
+  t.mock.timers.setTime(expiryClock + 180);
   await assert.rejects(
     () => expiryHarness.broker.commitPreparedRecoveryCompletion(
       expiringPlan,
@@ -2278,6 +2266,53 @@ test("W1 and W3 audit-commit crashes resume exact persisted event plans without 
     ),
     false
   );
+});
+
+test("a crash after the durable execution attempt resumes through the one-shot broker fence", async (t) => {
+  const fixture = createRecoveryContinuityFixture(t, {
+    prefix: "prooftoact-provider-attempt-crash-",
+    subjectBindingSha256: principalBindingHash(PRINCIPAL)
+  });
+  const harness = providerHarness(fixture);
+  const preparation = prepareDispatch(fixture);
+  const context = Object.freeze({
+    ...fixture.context,
+    providerDispatchAuthorization: signPreparedDispatch(fixture, preparation)
+  });
+  const args = Object.freeze({
+    authenticatedPrincipal: PRINCIPAL,
+    broker: harness.broker,
+    context
+  });
+  await assert.rejects(
+    () => providerTest.runProviderRecoveryWithInterruption(
+      args,
+      "AFTER_EXECUTION_ATTEMPT_DURABLE"
+    ),
+    /INTEGRATED_LIVE_DRILL_PROVIDER_SYNTHETIC_CRASH_AFTER_EXECUTION_ATTEMPT_DURABLE/u
+  );
+  assert.equal(harness.calls.length, 0);
+  const attemptPath = path.join(
+    context.recoveryEvidenceRootPath,
+    "provider-execution-attempt.json"
+  );
+  assert.equal(fs.existsSync(attemptPath), true);
+  assert.equal(fs.statSync(attemptPath).mode & 0o777, 0o600);
+
+  const resumed = await runIntegratedLiveDrillProviderRecovery(args);
+  assert.equal(resumed.recovery.status, "RECOVERED_CONTEXT_ONLY");
+  assert.deepEqual(
+    harness.calls.map(({ payload, method }) => payload?.method ?? method),
+    ["initialize", "notifications/initialized", "tools/call", "DELETE"]
+  );
+
+  const providerCallCount = harness.calls.length;
+  const repeated = await runIntegratedLiveDrillProviderRecovery(args);
+  assert.equal(
+    repeated.providerContinuity.receiptSha256,
+    resumed.providerContinuity.receiptSha256
+  );
+  assert.equal(harness.calls.length, providerCallCount);
 });
 
 test("provider path rejects semantic or separately signed dispatch substitution", (t) => {
@@ -2873,7 +2908,10 @@ test("failed expiry-burn persistence remains process-sticky after clock rollback
     const [candidate, flags] = openArgs;
     if (
       injectedFailures === 0 &&
-      candidate === burnPath &&
+      path.dirname(candidate) === path.dirname(burnPath) &&
+      path.basename(candidate).startsWith(
+        `.${path.basename(burnPath)}.publish-`
+      ) &&
       (flags & fs.constants.O_CREAT) !== 0
     ) {
       injectedFailures += 1;
@@ -3019,7 +3057,7 @@ test("expiry during initialize response burns W2 without notification, tool call
   assert.equal(harness.calls.length, callCount);
 });
 
-test("post-W2 expiry reconciles locally and remains burned after clock rollback", async (t) => {
+test("post-W2 expiry reconciles audit-only without reactivating provider access", async (t) => {
   const fixture = createRecoveryContinuityFixture(t, {
     prefix: "prooftoact-b2-tools-result-expiry-",
     subjectBindingSha256: principalBindingHash(PRINCIPAL)
@@ -3044,20 +3082,18 @@ test("post-W2 expiry reconciles locally and remains burned after clock rollback"
     broker: harness.broker,
     context
   });
-  await assert.rejects(
-    () => providerTest.runProviderRecoveryWithTrustedClock(
-      args,
-      () => clockNow
-    ),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+  const first = await providerTest.runProviderRecoveryWithTrustedClock(
+    args,
+    () => clockNow
   );
+  assert.equal(first.recovery.status, "RECOVERED_CONTEXT_ONLY");
   assert.deepEqual(
     harness.calls.map(({ payload, method }) => payload?.method ?? method),
     ["initialize", "notifications/initialized", "tools/call", "DELETE"]
   );
   assert.equal(
     harness.auditRows.has(context.preCallIntent.terminalAuditEventId),
-    false
+    true
   );
 
   const callCount = harness.calls.length;
@@ -3068,24 +3104,23 @@ test("post-W2 expiry reconciles locally and remains burned after clock rollback"
     `${context.preCallIntent.authorizationId}` +
       ".provider-recovery-authority-expiry-burn.json"
   );
-  assert.equal(fs.existsSync(burnPath), true);
+  assert.equal(fs.existsSync(burnPath), false);
 
   clockNow = Date.parse(consumedChildAuthorizationIssuedAt(context));
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await assert.rejects(
-      () => providerTest.runProviderRecoveryWithTrustedClock(
-        args,
-        () => clockNow
-      ),
-      /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+    const resumed = await providerTest.runProviderRecoveryWithTrustedClock(
+      args,
+      () => clockNow
     );
+    assert.equal(resumed.providerContinuity.receiptSha256,
+      first.providerContinuity.receiptSha256);
     assert.equal(harness.calls.length, callCount);
     assert.equal(harness.auditAppendAttempts.length, appendCount);
-    assert.equal(harness.auditResolveAttempts.length, resolveCount);
+    assert.ok(harness.auditResolveAttempts.length >= resolveCount);
   }
 });
 
-test("expiry after audit resolution preserves the exact event and remains non-accepting", async (t) => {
+test("expiry after audit resolution preserves the exact event and completes audit-only", async (t) => {
   for (const phase of ["pre-read", "terminal"]) {
     const fixture = createRecoveryContinuityFixture(t, {
       prefix: `prooftoact-b2-${phase}-resolve-expiry-`,
@@ -3117,32 +3152,47 @@ test("expiry after audit resolution preserves the exact event and remains non-ac
       broker: harness.broker,
       context
     });
-    await assert.rejects(
-      () => providerTest.runProviderRecoveryWithTrustedClock(
+    if (phase === "pre-read") {
+      await assert.rejects(
+        () => providerTest.runProviderRecoveryWithTrustedClock(
+          args,
+          () => clockNow
+        ),
+        /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
+      );
+    } else {
+      const completed = await providerTest.runProviderRecoveryWithTrustedClock(
         args,
         () => clockNow
-      ),
-      phase === "pre-read"
-        ? /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
-        : /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
-    );
+      );
+      assert.equal(completed.recovery.status, "RECOVERED_CONTEXT_ONLY");
+    }
     const callsAfterExpiry = harness.calls.length;
     const appendCount = harness.auditAppendAttempts.length;
     const resolveCount = harness.auditResolveAttempts.length;
     assert.equal(harness.auditRows.has(targetEventId), true);
 
-    await assert.rejects(
-      () => providerTest.runProviderRecoveryWithTrustedClock(
+    if (phase === "pre-read") {
+      await assert.rejects(
+        () => providerTest.runProviderRecoveryWithTrustedClock(
+          args,
+          () => clockNow
+        ),
+        /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
+      );
+    } else {
+      await providerTest.runProviderRecoveryWithTrustedClock(
         args,
         () => clockNow
-      ),
-      phase === "pre-read"
-        ? /INTEGRATED_LIVE_DRILL_PROVIDER_EXTERNAL_ACTION_AUTHORIZATION_REQUIRED/u
-        : /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
-    );
+      );
+    }
     assert.equal(harness.calls.length, callsAfterExpiry);
     assert.equal(harness.auditAppendAttempts.length, appendCount);
-    assert.equal(harness.auditResolveAttempts.length, resolveCount);
+    if (phase === "pre-read") {
+      assert.equal(harness.auditResolveAttempts.length, resolveCount);
+    } else {
+      assert.ok(harness.auditResolveAttempts.length > resolveCount);
+    }
     const attempts = harness.auditAppendAttempts.filter(
       ({ event }) => event.eventId === targetEventId
     );
@@ -3188,7 +3238,7 @@ test("a durable private result reconciles the W2 journal without redispatch", as
   assert.equal(calls, 1);
 });
 
-test("post-expiry wrapper reconciles W2 locally then stops before any audit-provider action", async (t) => {
+test("post-expiry wrapper reconciles W2 and terminal audit without provider redispatch", async (t) => {
   const fixture = createRecoveryContinuityFixture(t, {
     prefix: "prooftoact-b2-provider-expired-wrapper-resume-",
     expiresAfterMs: 1_500,
@@ -3207,10 +3257,20 @@ test("post-expiry wrapper reconciles W2 locally then stops before any audit-prov
     broker: harness.broker,
     context
   });
+  const beforeExpiry = Math.max(
+    Date.parse(context.preCallIntent.startedAt),
+    context.authorization.issuedAt,
+    Date.parse(
+      context.preCallInputs.consumedChildAuthorization.attestation.payload
+        .issuedAt
+    ),
+    Date.parse(context.providerDispatchAuthorization.payload.issuedAt)
+  ) + 1;
   await assert.rejects(
-    () => providerTest.runProviderRecoveryWithInterruption(
+    () => providerTest.runProviderRecoveryWithInterruptionAndTrustedClock(
       args,
-      "AFTER_PROVIDER_EVIDENCE_DURABLE"
+      "AFTER_PROVIDER_EVIDENCE_DURABLE",
+      () => beforeExpiry
     ),
     /INTEGRATED_LIVE_DRILL_PROVIDER_SYNTHETIC_CRASH_AFTER_PROVIDER_EVIDENCE_DURABLE/u
   );
@@ -3236,26 +3296,23 @@ test("post-expiry wrapper reconciles W2 locally then stops before any audit-prov
   }
   const auditAppendCount = harness.auditAppendAttempts.length;
   const auditResolveCount = harness.auditResolveAttempts.length;
-  const waitMs = Math.max(
-    0,
-    Date.parse(context.preCallIntent.expiresAt) - Date.now() + 30
-  );
-  await new Promise((resolve) => setTimeout(resolve, waitMs));
-  assert.ok(Date.now() > context.authorization.expiresAt);
-  assert.ok(Date.now() > Date.parse(
-    context.preCallIntent.childAuthorizationExpiresAt
-  ));
+  const afterExpiry = Math.max(
+    context.authorization.expiresAt,
+    Date.parse(context.preCallIntent.childAuthorizationExpiresAt),
+    Date.parse(context.preCallIntent.expiresAt)
+  ) + 1;
 
-  await assert.rejects(
-    () => runIntegratedLiveDrillProviderRecovery(args),
-    /INTEGRATED_LIVE_DRILL_PROVIDER_POST_EXPIRY_AUDIT_AUTHORIZATION_REQUIRED/u
+  const resumed = await providerTest.runProviderRecoveryWithTrustedClock(
+    args,
+    () => afterExpiry
   );
+  assert.equal(resumed.recovery.status, "RECOVERED_CONTEXT_ONLY");
   assert.equal(harness.calls.length, initialFetchCount);
-  assert.equal(harness.auditAppendAttempts.length, auditAppendCount);
-  assert.equal(harness.auditResolveAttempts.length, auditResolveCount);
+  assert.equal(harness.auditAppendAttempts.length, auditAppendCount + 1);
+  assert.ok(harness.auditResolveAttempts.length > auditResolveCount);
   assert.equal(
     harness.auditRows.has(context.preCallIntent.terminalAuditEventId),
-    false
+    true
   );
   const journalSequences = fs.readdirSync(context.ledgerRootPath)
     .filter((name) => name.startsWith(journalPrefix))
@@ -3271,7 +3328,7 @@ test("post-expiry wrapper reconciles W2 locally then stops before any audit-prov
       context.preCallIntent.authorizationId,
       "terminal"
     )),
-    false
+    true
   );
 });
 

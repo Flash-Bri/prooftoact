@@ -9,7 +9,8 @@ import {
   connectionStringForUser
 } from "../src/cloud/primary-security.js";
 import {
-  authorizeDviProposalWithClient
+  authorizeDviProposalWithClient,
+  DVI_PROPOSAL_AUTHORIZATION_SQL
 } from "../src/cloud/dvi-proposal-authorization.js";
 import {
   assertRecoveryPublisherTrustRootWriteDeniedWithClient
@@ -25,8 +26,64 @@ const USERS = [
   "tp_dispatch_user",
   "tp_recovery_source_user",
   "tp_recovery_audit_user",
+  "tp_provider_claim_user",
+  "tp_provider_begin_user",
+  "tp_provider_redeem_user",
+  "tp_provider_activate_user",
+  "tp_provider_finalize_user",
+  "tp_provider_terminalize_user",
+  "tp_provider_reconcile_user",
   "tp_audit_user"
 ];
+
+const RECOVERY_SOURCE_STABLE_COLUMNS = Object.freeze([
+  "admissibility",
+  "agency",
+  "agent_id",
+  "authority_evidence_binding_sha256",
+  "authorization_binding_sha256",
+  "authorization_epoch",
+  "evidence_digest",
+  "evidence_id",
+  "has_durable_intent",
+  "incident_id",
+  "logical_action_digest",
+  "logical_authority_key_sha256",
+  "operation_id",
+  "outcome",
+  "policy_version",
+  "proposal_digest",
+  "reason",
+  "recorded_at",
+  "request_digest",
+  "resource_id",
+  "run_id",
+  "tenant_id"
+]);
+
+function sameStableDatabaseValue(left, right) {
+  const normalized = (value) => {
+    if (value instanceof Date) {
+      const milliseconds = value.getTime();
+      if (!Number.isFinite(milliseconds)) {
+        throw new TypeError("stable database timestamp invalid");
+      }
+      return ["timestamptz", new Date(milliseconds).toISOString()];
+    }
+    if (value === null) return ["null", ""];
+    if (
+      typeof value === "string" ||
+      typeof value === "boolean" ||
+      (typeof value === "number" && Number.isFinite(value))
+    ) {
+      return [typeof value, value];
+    }
+    throw new TypeError("stable database value invalid");
+  };
+  const [leftType, leftValue] = normalized(left);
+  const [rightType, rightValue] = normalized(right);
+  return leftType === rightType && leftValue === rightValue;
+}
 
 const SPEND_AUTHORITY_SQL = `
   SELECT *
@@ -56,6 +113,14 @@ const GATE2_SPEND_AUTHORITY_SQL = SPEND_AUTHORITY_SQL.replace(
   "tp_api.g1_spend_authority_v1",
   "tp_api.g2_spend_authority_race_v1"
 );
+
+const PROTECTED_EFFECT_SQL = `
+  SELECT *
+  FROM tp_api.g1_record_protected_effect_v1(
+    $1::UUID, $2::UUID, $3::UUID, $4,
+    $5::UUID, $6::UUID, $7, $8, $9::INT8, $10
+  )
+`;
 
 const OBSERVE_AUTHORITY_RACE_SQL = `
   SELECT *
@@ -88,8 +153,91 @@ function spendAuthorityValues(request) {
   ];
 }
 
+function assertSqlProbeRequestBindings(values) {
+  if (!Array.isArray(values) || values.length !== 18) {
+    throw new TypeError("SQL authority probe values must contain 18 fields");
+  }
+  const requestPayload = JSON.parse(values[3]);
+  const payload = JSON.parse(values[14]);
+  const expectedBindings = {
+    tenantId: values[0],
+    proposalDigest: values[4],
+    logicalActionDigest: values[5],
+    selectedEvidenceDigest: values[6],
+    runId: values[7],
+    incidentId: values[8],
+    resourceId: values[9],
+    agentId: values[10],
+    agency: values[11],
+    evidenceId: values[12],
+    selectedEvidenceId: values[12],
+    effectKey: values[13],
+    payloadDigest: values[15],
+    policyVersion: values[16],
+    leaseMs: values[17]
+  };
+  if (
+    Object.keys(requestPayload).length !== 18 ||
+    Object.entries(expectedBindings).some(
+      ([field, expected]) => requestPayload[field] !== expected
+    ) ||
+    requestPayload.actionKind !== payload.action
+  ) {
+    throw new Error("SQL authority probe request bindings diverged");
+  }
+}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function protectedEffectValues(request, fencingToken, payloadDigest) {
+  return [
+    request.tenantId,
+    request.effectKey,
+    request.operationId,
+    request.requestDigest,
+    request.runId,
+    request.incidentId,
+    request.resourceId,
+    request.agentId,
+    fencingToken,
+    payloadDigest ?? request.payloadDigest
+  ];
+}
+
+function alternateDigest(digest) {
+  if (!/^[a-f0-9]{64}$/u.test(digest)) {
+    throw new Error("protected effect payload digest invalid");
+  }
+  return `${digest[0] === "0" ? "1" : "0"}${digest.slice(1)}`;
+}
+
+async function authorityCurrent(client, request, authorityIdentity) {
+  const result = await client.query(
+    SPEND_AUTHORITY_SQL,
+    spendAuthorityValues(request)
+  );
+  const row = result.rows[0];
+  if (
+    result.rowCount !== 1 ||
+    row?.decision_outcome !== "resource_reserved" ||
+    row?.decision_operation_id !== request.operationId ||
+    row?.decision_request_digest !== request.requestDigest ||
+    row?.decision_replay_kind !== "operation_replay" ||
+    row?.decision_proposal_digest !== request.proposalDigest ||
+    row?.decision_logical_action_digest !== request.logicalActionDigest ||
+    row?.decision_authorization_epoch !==
+      authorityIdentity.authorizationEpoch ||
+    row?.decision_logical_authority_key_sha256 !==
+      authorityIdentity.logicalAuthorityKeySha256 ||
+    row?.decision_authorization_binding_sha256 !==
+      authorityIdentity.authorizationBindingSha256 ||
+    typeof row?.decision_authority_current !== "boolean"
+  ) {
+    throw new Error("protected effect authority replay was not exact");
+  }
+  return row.decision_authority_current;
 }
 
 function requireEnvironment(name) {
@@ -110,12 +258,25 @@ async function withClient(connectionString, work) {
   }
 }
 
-async function expectSqlState(client, query, values, sqlstate) {
+async function expectSqlState(
+  client,
+  query,
+  values,
+  sqlstate,
+  expectedMessage
+) {
   try {
     await client.query(query, values);
   } catch (error) {
-    if (error.code === sqlstate) {
-      return { denied: true, sqlstate: error.code };
+    if (
+      error.code === sqlstate &&
+      (expectedMessage === undefined || error.message === expectedMessage)
+    ) {
+      return {
+        denied: true,
+        sqlstate: error.code,
+        message: error.message
+      };
     }
     throw error;
   }
@@ -140,6 +301,213 @@ async function expectPrivilegeDeniedOrUndefined(client, query, values = []) {
     throw error;
   }
   throw new Error("expected legacy resolver denial or absence");
+}
+
+const PROVIDER_PROBE = Object.freeze({
+  authorizationId: "11111111-1111-4111-8111-111111111111",
+  bindingSha256: "a".repeat(64),
+  completionCapability: "b".repeat(64),
+  completionCapabilitySha256: "c".repeat(64),
+  executionCapability: "d".repeat(64),
+  executionCapabilitySha256: "e".repeat(64),
+  grantId: "22222222-2222-4222-8222-222222222222",
+  interactionId: "33333333-3333-4333-8333-333333333333",
+  issuedAt: "2026-08-12T00:00:00.000Z",
+  expiresAt: "2026-08-13T00:00:00.000Z",
+  runId: "44444444-4444-4444-8444-444444444444",
+  tenantId: "55555555-5555-4555-8555-555555555555",
+  workerSpecSha256: "f".repeat(64)
+});
+
+const FORBIDDEN_PROVIDER_MUTATIONS = Object.freeze([
+  Object.freeze({
+    name: "claim",
+    sql: `
+      SELECT * FROM tp_api.g1_claim_provider_dispatch_v2(
+        $1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID,
+        $6, $7, $8, $9, $10, $11, $12,
+        $13::TIMESTAMPTZ, $14::TIMESTAMPTZ, $15, $16
+      )
+    `,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.tenantId,
+      PROVIDER_PROBE.runId,
+      PROVIDER_PROBE.interactionId,
+      PROVIDER_PROBE.bindingSha256,
+      "1".repeat(64),
+      "2".repeat(64),
+      "3".repeat(64),
+      "4".repeat(40),
+      "5".repeat(40),
+      "6".repeat(64),
+      PROVIDER_PROBE.issuedAt,
+      PROVIDER_PROBE.expiresAt,
+      PROVIDER_PROBE.executionCapabilitySha256,
+      PROVIDER_PROBE.workerSpecSha256
+    ]
+  }),
+  Object.freeze({
+    name: "begin",
+    sql: `SELECT * FROM tp_api.g1_begin_provider_dispatch_v2(
+      $1::UUID, $2::UUID, $3, $4, $5
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.executionCapability,
+      PROVIDER_PROBE.workerSpecSha256
+    ]
+  }),
+  Object.freeze({
+    name: "redeem",
+    sql: `SELECT * FROM tp_api.g1_redeem_provider_dispatch_v2(
+      $1::UUID, $2::UUID, $3, $4, $5, $6
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.executionCapability,
+      PROVIDER_PROBE.completionCapabilitySha256,
+      PROVIDER_PROBE.workerSpecSha256
+    ]
+  }),
+  Object.freeze({
+    name: "complete",
+    sql: `SELECT * FROM tp_api.g1_complete_provider_dispatch_v2(
+      $1::UUID, $2::UUID, $3, $4, $5, $6
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.completionCapability,
+      "7".repeat(64),
+      "8".repeat(64)
+    ]
+  }),
+  Object.freeze({
+    name: "markUnknown",
+    sql: `SELECT * FROM tp_api.g1_mark_provider_dispatch_unknown_v2(
+      $1::UUID, $2::UUID, $3, $4
+    )`,
+    values: [
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.completionCapability
+    ]
+  })
+]);
+
+const LEGACY_PROVIDER_TRANSITION_SQL = `
+  SELECT * FROM tp_api.g1_transition_provider_dispatch_v1(
+    'CONSUME', $1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID,
+    $6, $7, $8, $9, $10, $11, $12,
+    $13::TIMESTAMPTZ, $14::TIMESTAMPTZ, NULL, NULL
+  )
+`;
+const LEGACY_PROVIDER_TRANSITION_VALUES = Object.freeze([
+  PROVIDER_PROBE.authorizationId,
+  PROVIDER_PROBE.tenantId,
+  PROVIDER_PROBE.runId,
+  PROVIDER_PROBE.interactionId,
+  PROVIDER_PROBE.grantId,
+  PROVIDER_PROBE.bindingSha256,
+  "1".repeat(64),
+  "2".repeat(64),
+  "3".repeat(64),
+  "4".repeat(40),
+  "5".repeat(40),
+  "6".repeat(64),
+  PROVIDER_PROBE.issuedAt,
+  PROVIDER_PROBE.expiresAt
+]);
+
+async function providerMutationDenials(client) {
+  const denials = {};
+  for (const probe of FORBIDDEN_PROVIDER_MUTATIONS) {
+    denials[probe.name] = await expectPrivilegeDeniedOrUndefined(
+      client,
+      probe.sql,
+      probe.values
+    );
+  }
+  denials.legacyTransition = await expectPrivilegeDeniedOrUndefined(
+    client,
+    LEGACY_PROVIDER_TRANSITION_SQL,
+    LEGACY_PROVIDER_TRANSITION_VALUES
+  );
+  return denials;
+}
+
+const PROVIDER_RUNTIME_CLOSURE_PROBES = Object.freeze({
+  activate: Object.freeze({
+    privateSql: `
+      SELECT tp_private.g1_activate_provider_dispatch_inner_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    publicSql: `
+      SELECT * FROM tp_api.g1_activate_provider_dispatch_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    values: Object.freeze([
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      "a".repeat(64)
+    ])
+  }),
+  terminalize: Object.freeze({
+    privateSql: `
+      SELECT tp_private.g1_terminalize_provider_dispatch_inner_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    publicSql: `
+      SELECT * FROM tp_api.g1_terminalize_provider_dispatch_v2(
+        $1::UUID, $2::UUID, $3, $4
+      )
+    `,
+    values: Object.freeze([
+      PROVIDER_PROBE.authorizationId,
+      PROVIDER_PROBE.grantId,
+      PROVIDER_PROBE.bindingSha256,
+      PROVIDER_PROBE.workerSpecSha256
+    ])
+  })
+});
+
+async function assertProviderRuntimeClosure(client, probe) {
+  const directLedgerRead = await expectPrivilegeDenied(
+    client,
+    "SELECT * FROM tp_ledger.g1_provider_dispatch_controls_v2 LIMIT 1"
+  );
+  const directPrivateFunction = await expectPrivilegeDenied(
+    client,
+    probe.privateSql,
+    probe.values
+  );
+  const publicControlAbsent = await expectSqlState(
+    client,
+    probe.publicSql,
+    probe.values,
+    "22023",
+    "provider dispatch control absent"
+  );
+  return {
+    directLedgerRead,
+    directPrivateFunction,
+    publicControlAbsent: {
+      reached: true,
+      sqlstate: publicControlAbsent.sqlstate
+    }
+  };
 }
 
 async function main() {
@@ -366,7 +734,14 @@ async function main() {
       destination: "synthetic-zone-capability"
     }
   };
-  const mismatchRetrievalId = randomUUID();
+  const mismatchSelectionNow = Date.now();
+  const mismatchSelectionWindow = {
+    retrievalId: randomUUID(),
+    admittedAt: new Date(mismatchSelectionNow - 1_000).toISOString(),
+    expiresAt: new Date(
+      mismatchSelectionNow + 5 * 60_000
+    ).toISOString()
+  };
   const beforeSelectionMismatch =
     await authorityStore.authorityIdentityStateForTest(authorityFixture);
   const selectionMismatch = await authorizeSyntheticProposal(
@@ -375,7 +750,7 @@ async function main() {
     {
       allowDenied: true,
       proposalAuthorizer,
-      retrievalId: mismatchRetrievalId,
+      ...mismatchSelectionWindow,
       requestedSelectedEvidenceId: randomUUID(),
       requestedSelectedEvidenceDigest: "f".repeat(64)
     }
@@ -409,9 +784,154 @@ async function main() {
     capabilityRequest,
     {
       proposalAuthorizer,
-      retrievalId: mismatchRetrievalId
+      ...mismatchSelectionWindow
     }
   );
+  const payloadVariantAuthorizations = [];
+  for (const [name, payload] of [
+    ["required-only", {
+      action: "dispatch_rescue_unit",
+      scenario: "synthetic-highwater"
+    }],
+    ["logical-dispatch-only", {
+      action: "dispatch_rescue_unit",
+      logicalDispatch: "contender-001",
+      scenario: "synthetic-highwater"
+    }],
+    ["all-fields", {
+      action: "dispatch_rescue_unit",
+      destination: "synthetic-zone-capability",
+      logicalDispatch: "contender-001",
+      scenario: "synthetic-highwater"
+    }]
+  ]) {
+    const variant = await authorizeSyntheticProposal(
+      authorityStore,
+      { ...capabilityRequest, payload },
+      { proposalAuthorizer, ...mismatchSelectionWindow }
+    );
+    payloadVariantAuthorizations.push({
+      name,
+      outcome: variant.authorization.outcome,
+      proposalDigest: variant.authorization.identity.proposalDigest
+    });
+  }
+  payloadVariantAuthorizations.unshift({
+    name: "destination-only",
+    outcome: capabilityAuthorization.authorization.outcome,
+    proposalDigest:
+      capabilityAuthorization.authorization.identity.proposalDigest
+  });
+
+  const beforePayloadCanonicalizationNegatives =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  const payloadCanonicalizationDatabase = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_authorizer_user",
+      passwords.tp_authorizer_user
+    ),
+    async (client) => {
+      const values = [
+        authorityFixture.tenantId,
+        mismatchSelectionWindow.retrievalId,
+        authorityFixture.runId,
+        authorityFixture.incidentId,
+        authorityFixture.evidenceId,
+        capabilityAuthorization.dviAuthorization.selectedEvidenceDigest,
+        authorityFixture.resourceId,
+        "rescue",
+        "dispatch_rescue_unit",
+        '{ "scenario" : "synthetic-highwater", "destination" : "synthetic-zone-capability", "action" : "dispatch_rescue_unit" }'
+      ];
+      const replay = await client.query(
+        DVI_PROPOSAL_AUTHORIZATION_SQL,
+        values
+      );
+      const invalidPayloads = [
+        {
+          action: "dispatch_rescue_unit",
+          scenario: "synthetic-highwater",
+          extra: "alternate-identity"
+        },
+        { action: "dispatch_rescue_unit" },
+        {
+          action: "dispatch_rescue_unit",
+          scenario: 123
+        },
+        {
+          action: "dispatch_rescue_unit",
+          destination: null,
+          scenario: "synthetic-highwater"
+        },
+        {
+          action: "dispatch_rescue_unit",
+          scenario: "unsafe/value"
+        },
+        {
+          action: "dispatch_rescue_unit",
+          scenario: "x".repeat(129)
+        }
+      ];
+      const invalidSqlstates = [];
+      for (const payload of invalidPayloads) {
+        const invalidValues = [...values];
+        invalidValues[9] = JSON.stringify(payload);
+        const rejected = await expectSqlState(
+          client,
+          DVI_PROPOSAL_AUTHORIZATION_SQL,
+          invalidValues,
+          "22023"
+        );
+        invalidSqlstates.push(rejected.sqlstate);
+      }
+      return {
+        outcome: replay.rows[0]?.decision_outcome,
+        proposalDigest: replay.rows[0]?.decision_proposal_digest,
+        logicalActionDigest:
+          replay.rows[0]?.decision_logical_action_digest,
+        payloadDigest: replay.rows[0]?.decision_payload_digest,
+        authorityCurrent: replay.rows[0]?.decision_authority_current,
+        invalidSqlstates
+      };
+    }
+  );
+  const afterPayloadCanonicalizationNegatives =
+    await authorityStore.authorityIdentityStateForTest(authorityFixture);
+  if (
+    payloadVariantAuthorizations.length !== 4 ||
+    payloadVariantAuthorizations.some(({ outcome }) =>
+      !["proposal_authorized", "proposal_authorization_replay"].includes(
+        outcome
+      )
+    ) ||
+    new Set(
+      payloadVariantAuthorizations.map(({ proposalDigest }) => proposalDigest)
+    ).size !== 4 ||
+    payloadCanonicalizationDatabase.outcome !==
+      "proposal_authorization_replay" ||
+    payloadCanonicalizationDatabase.proposalDigest !==
+      capabilityAuthorization.authorization.identity.proposalDigest ||
+    payloadCanonicalizationDatabase.logicalActionDigest !==
+      capabilityAuthorization.authorization.identity.logicalActionDigest ||
+    payloadCanonicalizationDatabase.payloadDigest !==
+      "5d1c79211961c5702709a3219cb1e533761d64f22cb022a8ef8c291b456d4986" ||
+    payloadCanonicalizationDatabase.authorityCurrent !== true ||
+    payloadCanonicalizationDatabase.invalidSqlstates.length !== 6 ||
+    payloadCanonicalizationDatabase.invalidSqlstates.some(
+      (sqlstate) => sqlstate !== "22023"
+    ) ||
+    JSON.stringify(afterPayloadCanonicalizationNegatives) !==
+      JSON.stringify(beforePayloadCanonicalizationNegatives)
+  ) {
+    throw new Error("DVI payload canonicalization invariant failed");
+  }
+  const payloadCanonicalization = {
+    acceptedVariants: payloadVariantAuthorizations.map(({ name }) => name),
+    replayOutcome: payloadCanonicalizationDatabase.outcome,
+    payloadDigest: payloadCanonicalizationDatabase.payloadDigest,
+    invalidPayloadsRejectedWithoutMutation: 6
+  };
   const authorizedCapabilityRequest = {
     ...capabilityRequest,
     dviAuthorization: capabilityAuthorization.dviAuthorization
@@ -462,9 +982,9 @@ async function main() {
         ...normalizedCapabilityRequest.requestPayload,
         payloadDigest: "b".repeat(64)
       });
-      payloadSubstitution[13] = randomUUID();
       payloadSubstitution[14] = JSON.stringify(substitutedPayload);
       payloadSubstitution[15] = "b".repeat(64);
+      assertSqlProbeRequestBindings(payloadSubstitution);
       const substituted = await client.query(
         SPEND_AUTHORITY_SQL,
         payloadSubstitution
@@ -480,7 +1000,7 @@ async function main() {
         proposalDigest: normalizedDeniedRequest.proposalDigest
       });
       proposalAlias[4] = normalizedDeniedRequest.proposalDigest;
-      proposalAlias[13] = randomUUID();
+      assertSqlProbeRequestBindings(proposalAlias);
       const aliased = await client.query(
         SPEND_AUTHORITY_SQL,
         proposalAlias
@@ -491,12 +1011,13 @@ async function main() {
       );
       forgedRequestDigest[1] = randomUUID();
       forgedRequestDigest[2] = "d".repeat(64);
-      forgedRequestDigest[13] = randomUUID();
+      assertSqlProbeRequestBindings(forgedRequestDigest);
       const requestDigestRejected = await expectSqlState(
         client,
         SPEND_AUTHORITY_SQL,
         forgedRequestDigest,
-        "22023"
+        "22023",
+        "database-derived authority identity mismatch"
       );
 
       const nullIntentNonce = spendAuthorityValues(
@@ -508,17 +1029,21 @@ async function main() {
         ...normalizedCapabilityRequest.requestPayload,
         intentNonce: null
       });
-      nullIntentNonce[13] = randomUUID();
+      assertSqlProbeRequestBindings(nullIntentNonce);
       const nullIntentNonceRejected = await expectSqlState(
         client,
         SPEND_AUTHORITY_SQL,
         nullIntentNonce,
-        "22023"
+        "22023",
+        "authority request identity binding mismatch"
       );
       return {
         payloadSubstitutionOutcome:
           substituted.rows[0]?.decision_outcome,
+        payloadSubstitutionReason:
+          substituted.rows[0]?.decision_reason,
         proposalAliasOutcome: aliased.rows[0]?.decision_outcome,
+        proposalAliasReason: aliased.rows[0]?.decision_reason,
         requestDigestRejected,
         nullIntentNonceRejected
       };
@@ -529,9 +1054,17 @@ async function main() {
   if (
     sqlBindingNegatives.payloadSubstitutionOutcome !==
         "authorization_denied" ||
+    sqlBindingNegatives.payloadSubstitutionReason !==
+        "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.proposalAliasOutcome !== "authorization_denied" ||
+    sqlBindingNegatives.proposalAliasReason !==
+        "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.requestDigestRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.requestDigestRejected?.message !==
+        "database-derived authority identity mismatch" ||
     sqlBindingNegatives.nullIntentNonceRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.nullIntentNonceRejected?.message !==
+        "authority request identity binding mismatch" ||
     JSON.stringify(afterSqlBindingNegatives) !==
       JSON.stringify(beforeSqlBindingNegatives)
   ) {
@@ -619,6 +1152,13 @@ async function main() {
         spendOutcome: spent.rows[0]?.decision_outcome,
         spendFence: spent.rows[0]?.decision_fencing_token,
         replayKind: replay.rows[0]?.decision_replay_kind,
+        authorityIdentity: {
+          authorizationEpoch: spent.rows[0]?.decision_authorization_epoch,
+          logicalAuthorityKeySha256:
+            spent.rows[0]?.decision_logical_authority_key_sha256,
+          authorizationBindingSha256:
+            spent.rows[0]?.decision_authorization_binding_sha256
+        },
         deniedOutcome: denied.rows[0]?.decision_outcome,
         durableProof: durableProof.rows[0],
         gateTwoDirect
@@ -655,15 +1195,21 @@ async function main() {
       return { gateOneDirect, nestedGateOneReached };
     }
   );
-  const capabilitySnapshot = await authorityStore.snapshot({
+  const capabilitySnapshotBeforeEffect = await authorityStore.snapshot({
     tenantId: authorityFixture.tenantId,
     resourceId: authorityFixture.resourceId
   });
-  await authorityStore.close();
   if (
     authorizer.spendOutcome !== "resource_reserved" ||
     authorizer.spendFence !== "1" ||
     authorizer.replayKind !== "operation_replay" ||
+    authorizer.authorityIdentity?.authorizationEpoch !== "1" ||
+    !/^[a-f0-9]{64}$/u.test(
+      authorizer.authorityIdentity?.logicalAuthorityKeySha256 ?? ""
+    ) ||
+    !/^[a-f0-9]{64}$/u.test(
+      authorizer.authorityIdentity?.authorizationBindingSha256 ?? ""
+    ) ||
     authorizer.deniedOutcome !== "resource_held_denied" ||
     authorizer.gateTwoDirect?.denied !== true ||
     gateTwoAuthorizer.gateOneDirect?.denied !== true ||
@@ -677,17 +1223,25 @@ async function main() {
     authorizer.durableProof?.protected_effect_count !== "0" ||
     sqlBindingNegatives.payloadSubstitutionOutcome !==
       "authorization_denied" ||
+    sqlBindingNegatives.payloadSubstitutionReason !==
+      "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.proposalAliasOutcome !== "authorization_denied" ||
+    sqlBindingNegatives.proposalAliasReason !==
+      "proposal_authorization_missing_or_stale" ||
     sqlBindingNegatives.requestDigestRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.requestDigestRejected?.message !==
+      "database-derived authority identity mismatch" ||
     sqlBindingNegatives.nullIntentNonceRejected?.sqlstate !== "22023" ||
+    sqlBindingNegatives.nullIntentNonceRejected?.message !==
+      "authority request identity binding mismatch" ||
     authorizer.durableProof
       ?.bravo_observed_holder_operation_id !==
       normalizedCapabilityRequest.operationId ||
     authorizer.durableProof?.bravo_observed_fence !== "1" ||
-    capabilitySnapshot.receipts.length !== 2 ||
-    capabilitySnapshot.outbox.length !== 1 ||
-    capabilitySnapshot.effects.length !== 0 ||
-    capabilitySnapshot.resource.current_fence !== "1"
+    capabilitySnapshotBeforeEffect.receipts.length !== 2 ||
+    capabilitySnapshotBeforeEffect.outbox.length !== 1 ||
+    capabilitySnapshotBeforeEffect.effects.length !== 0 ||
+    capabilitySnapshotBeforeEffect.resource.current_fence !== "1"
   ) {
     throw new Error("least-privilege authority spend invariant failed");
   }
@@ -695,10 +1249,16 @@ async function main() {
   const dispatch = await withClient(
     connectionStringForUser(
       adminConnectionString,
-      "tp_dispatch_user",
-      passwords.tp_dispatch_user
+      "tp_authorizer_user",
+      passwords.tp_authorizer_user
     ),
-    async (client) => {
+    async (authorizerClient) => withClient(
+      connectionStringForUser(
+        adminConnectionString,
+        "tp_dispatch_user",
+        passwords.tp_dispatch_user
+      ),
+      async (client) => {
       const directWrite = await expectPrivilegeDenied(
         client,
         `
@@ -767,12 +1327,159 @@ async function main() {
           "b".repeat(64)
         ]
       );
+      const wrongPayloadDigest = alternateDigest(
+        normalizedCapabilityRequest.payloadDigest
+      );
+      const wrongDigestBeforeInsert = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence,
+          wrongPayloadDigest
+        )
+      );
+      const snapshotAfterWrongDigest = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterWrongDigest = await authorityCurrent(
+        authorizerClient,
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
+      );
+
+      const inserted = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence
+        )
+      );
+      const snapshotAfterInsert = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterInsert = await authorityCurrent(
+        authorizerClient,
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
+      );
+
+      const replay = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence
+        )
+      );
+      const snapshotAfterReplay = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterReplay = await authorityCurrent(
+        authorizerClient,
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
+      );
+
+      const wrongDigestAfterReplay = await client.query(
+        PROTECTED_EFFECT_SQL,
+        protectedEffectValues(
+          normalizedCapabilityRequest,
+          authorizer.spendFence,
+          wrongPayloadDigest
+        )
+      );
+      const snapshotAfterWrongDigestReplay = await authorityStore.snapshot({
+        tenantId: authorityFixture.tenantId,
+        resourceId: authorityFixture.resourceId
+      });
+      const currentAfterWrongDigestReplay = await authorityCurrent(
+        authorizerClient,
+        normalizedCapabilityRequest,
+        authorizer.authorityIdentity
+      );
+      if (
+        wrongDigestBeforeInsert.rowCount !== 0 ||
+        snapshotAfterWrongDigest.effects.length !== 0 ||
+        inserted.rowCount !== 1 ||
+        inserted.rows[0]?.effect_key !== normalizedCapabilityRequest.effectKey ||
+        inserted.rows[0]?.operation_id !==
+          normalizedCapabilityRequest.operationId ||
+        snapshotAfterInsert.effects.length !== 1 ||
+        replay.rowCount !== 0 ||
+        snapshotAfterReplay.effects.length !== 1 ||
+        wrongDigestAfterReplay.rowCount !== 0 ||
+        snapshotAfterWrongDigestReplay.effects.length !== 1 ||
+        currentAfterWrongDigest !== true ||
+        currentAfterInsert !== true ||
+        currentAfterReplay !== true ||
+        currentAfterWrongDigestReplay !== true
+      ) {
+        throw new Error("protected effect execution regression failed");
+      }
       return {
         directWrite,
-        unauthorizedFunctionRows: bounded.rowCount
+        unauthorizedFunctionRows: bounded.rowCount,
+        positiveProtectedEffect: {
+          wrongDigestBeforeInsertRows: wrongDigestBeforeInsert.rowCount,
+          effectsAfterWrongDigest: snapshotAfterWrongDigest.effects.length,
+          insertRows: inserted.rowCount,
+          exactReplayRows: replay.rowCount,
+          wrongDigestAfterReplayRows: wrongDigestAfterReplay.rowCount,
+          currentAfterWrongDigest,
+          currentAfterInsert,
+          currentAfterReplay,
+          currentAfterWrongDigestReplay,
+          effectsAfterInsert: snapshotAfterInsert.effects.length,
+          effectsAfterReplay: snapshotAfterReplay.effects.length,
+          effectsAfterWrongDigestReplay:
+            snapshotAfterWrongDigestReplay.effects.length,
+          effectKey: inserted.rows[0].effect_key,
+          operationId: inserted.rows[0].operation_id
+        }
       };
-    }
+      }
+    )
   );
+
+  const capabilitySnapshot = await authorityStore.snapshot({
+    tenantId: authorityFixture.tenantId,
+    resourceId: authorityFixture.resourceId
+  });
+  await authorityStore.close();
+  const protectedEffect = capabilitySnapshot.effects[0];
+  if (
+    dispatch.directWrite?.denied !== true ||
+    dispatch.unauthorizedFunctionRows !== 0 ||
+    capabilitySnapshot.receipts.length !== 2 ||
+    capabilitySnapshot.outbox.length !== 1 ||
+    capabilitySnapshot.effects.length !== 1 ||
+    capabilitySnapshot.resource.current_fence !== "1" ||
+    protectedEffect?.tenant_id !== normalizedCapabilityRequest.tenantId ||
+    protectedEffect?.effect_key !== normalizedCapabilityRequest.effectKey ||
+    protectedEffect?.operation_id !== normalizedCapabilityRequest.operationId ||
+    protectedEffect?.request_digest !==
+      normalizedCapabilityRequest.requestDigest ||
+    protectedEffect?.proposal_digest !==
+      normalizedCapabilityRequest.proposalDigest ||
+    protectedEffect?.logical_action_digest !==
+      normalizedCapabilityRequest.logicalActionDigest ||
+    protectedEffect?.authorization_epoch !==
+      authorizer.authorityIdentity.authorizationEpoch ||
+    protectedEffect?.logical_authority_key_sha256 !==
+      authorizer.authorityIdentity.logicalAuthorityKeySha256 ||
+    protectedEffect?.authorization_binding_sha256 !==
+      authorizer.authorityIdentity.authorizationBindingSha256 ||
+    protectedEffect?.run_id !== normalizedCapabilityRequest.runId ||
+    protectedEffect?.incident_id !== normalizedCapabilityRequest.incidentId ||
+    protectedEffect?.resource_id !== normalizedCapabilityRequest.resourceId ||
+    protectedEffect?.agent_id !== normalizedCapabilityRequest.agentId ||
+    protectedEffect?.fencing_token !== authorizer.spendFence ||
+    protectedEffect?.payload_digest !== normalizedCapabilityRequest.payloadDigest
+  ) {
+    throw new Error("protected effect durable identity regression failed");
+  }
 
   const recoverySource = await withClient(
     connectionStringForUser(
@@ -784,6 +1491,10 @@ async function main() {
       const directRead = await expectPrivilegeDenied(
         client,
         "SELECT * FROM tp_ledger.g1_authority_receipts LIMIT 1"
+      );
+      const directPrivateRead = await expectPrivilegeDenied(
+        client,
+        "SELECT * FROM tp_private.g1_resources LIMIT 1"
       );
       const directTrustRootWrite =
         await assertRecoveryPublisherTrustRootWriteDeniedWithClient(client);
@@ -820,10 +1531,10 @@ async function main() {
             normalizedCapabilityRequest.requestDigest
           ]
         );
-      const resolved = await client.query(
+      const privateSnapshotDenied = await expectPrivilegeDenied(
+        client,
         `
-          SELECT *
-          FROM tp_api.g1_resolve_recovery_source_receipt_v2(
+          SELECT tp_private.g1_resolve_recovery_source_snapshot_v1(
             $1::UUID, $2::UUID, $3::UUID, $4::UUID,
             $5, $6::UUID, $7
           )
@@ -838,21 +1549,104 @@ async function main() {
           normalizedCapabilityRequest.requestDigest
         ]
       );
+      const recoverySourceQuery = `
+          SELECT *
+          FROM tp_api.g1_resolve_recovery_source_receipt_v2(
+            $1::UUID, $2::UUID, $3::UUID, $4::UUID,
+            $5, $6::UUID, $7
+          )
+        `;
+      const recoverySourceValues = Object.freeze([
+        authorityFixture.tenantId,
+        authorityFixture.runId,
+        authorityFixture.incidentId,
+        authorityFixture.evidenceId,
+        authorityFixture.resourceId,
+        normalizedCapabilityRequest.operationId,
+        normalizedCapabilityRequest.requestDigest
+      ]);
+      let resolved;
+      let resolvedAgain;
+      let cursorCountAfterFirst;
+      let cursorCountAfterSecond;
+      await client.query("BEGIN");
+      try {
+        resolved = await client.query(
+          recoverySourceQuery,
+          recoverySourceValues
+        );
+        const cursorsAfterFirst = await client.query(
+          "SELECT count(*)::INT8 AS cursor_count FROM pg_catalog.pg_cursors"
+        );
+        resolvedAgain = await client.query(
+          recoverySourceQuery,
+          recoverySourceValues
+        );
+        const cursorsAfterSecond = await client.query(
+          "SELECT count(*)::INT8 AS cursor_count FROM pg_catalog.pg_cursors"
+        );
+        cursorCountAfterFirst = Number(
+          cursorsAfterFirst.rows[0]?.cursor_count
+        );
+        cursorCountAfterSecond = Number(
+          cursorsAfterSecond.rows[0]?.cursor_count
+        );
+        if (
+          cursorsAfterFirst.rowCount !== 1 ||
+          cursorsAfterSecond.rowCount !== 1 ||
+          !Number.isSafeInteger(cursorCountAfterFirst) ||
+          !Number.isSafeInteger(cursorCountAfterSecond) ||
+          cursorCountAfterFirst !== 0 ||
+          cursorCountAfterSecond !== 0
+        ) {
+          throw new Error("recovery source cursor was not closed exactly");
+        }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
+      const stableColumns = Object.keys(resolved.rows[0] ?? {})
+        .filter((column) => column !== "database_now")
+        .sort();
       if (
         resolved.rowCount !== 1 ||
+        resolvedAgain.rowCount !== 1 ||
         resolved.rows[0]?.outcome !== "resource_reserved" ||
         resolved.rows[0]?.admissibility !== "admissible" ||
-        resolved.rows[0]?.has_durable_intent !== true
+        resolved.rows[0]?.has_durable_intent !== true ||
+        resolvedAgain.rows[0]?.outcome !== "resource_reserved" ||
+        resolvedAgain.rows[0]?.admissibility !== "admissible" ||
+        resolvedAgain.rows[0]?.has_durable_intent !== true ||
+        JSON.stringify(stableColumns) !==
+          JSON.stringify(RECOVERY_SOURCE_STABLE_COLUMNS) ||
+        JSON.stringify(
+          Object.keys(resolvedAgain.rows[0] ?? {})
+            .filter((column) => column !== "database_now")
+            .sort()
+        ) !== JSON.stringify(RECOVERY_SOURCE_STABLE_COLUMNS) ||
+        stableColumns.some(
+          (column) =>
+            !sameStableDatabaseValue(
+              resolved.rows[0]?.[column],
+              resolvedAgain.rows[0]?.[column]
+            )
+        )
       ) {
         throw new Error("recovery source receipt was not resolved exactly");
       }
       return {
         directRead,
+        directPrivateRead,
         directTrustRootWrite,
         auditResolverDenied,
         legacySourceResolverDeniedOrAbsent,
+        privateSnapshotDenied,
         operationId: resolved.rows[0].operation_id,
-        databaseNow: resolved.rows[0].database_now
+        databaseNow: resolved.rows[0].database_now,
+        cursorCountAfterFirst,
+        cursorCountAfterSecond,
+        resolverRepeatStable: true
       };
     }
   );
@@ -889,6 +1683,8 @@ async function main() {
           normalizedCapabilityRequest.requestDigest
         ]
       );
+      const providerControlMutationDenials =
+        await providerMutationDenials(client);
       const resolvedTrustRoot = await client.query(
         `
           SELECT *
@@ -1224,6 +2020,7 @@ async function main() {
         directRead,
         directTrustRootWrite,
         sourceResolverDenied,
+        providerControlMutationDenials,
         publisherTrustRootCommittedAt:
           resolvedTrustRoot.rows[0].committed_at,
         directWrite,
@@ -1238,6 +2035,66 @@ async function main() {
         orphanTerminalV3
       };
     }
+  );
+
+  const providerReconcile = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_provider_reconcile_user",
+      passwords.tp_provider_reconcile_user
+    ),
+    async (client) => {
+      const directRead = await expectPrivilegeDenied(
+        client,
+        "SELECT * FROM tp_ledger.g1_provider_dispatch_controls_v2 LIMIT 1"
+      );
+      const providerControlMutationDenials =
+        await providerMutationDenials(client);
+      const resolved = await client.query(
+        `SELECT * FROM tp_api.g1_resolve_provider_dispatch_v2($1::UUID, $2)`,
+        [PROVIDER_PROBE.authorizationId, PROVIDER_PROBE.bindingSha256]
+      );
+      const row = resolved.rows[0];
+      if (
+        resolved.rowCount !== 1 || row?.state !== "ABSENT" ||
+        row?.transition_outcome !== "RESOLVED_ABSENT" ||
+        Object.keys(row).some((name) =>
+          /nonce|capability/u.test(name)
+        )
+      ) {
+        throw new Error("provider reconcile capability invariant failed");
+      }
+      return {
+        directRead,
+        providerControlMutationDenials,
+        resolveColumns: Object.keys(row).sort(),
+        resolveState: row.state
+      };
+    }
+  );
+
+  const providerActivate = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_provider_activate_user",
+      passwords.tp_provider_activate_user
+    ),
+    async (client) => assertProviderRuntimeClosure(
+      client,
+      PROVIDER_RUNTIME_CLOSURE_PROBES.activate
+    )
+  );
+
+  const providerTerminalize = await withClient(
+    connectionStringForUser(
+      adminConnectionString,
+      "tp_provider_terminalize_user",
+      passwords.tp_provider_terminalize_user
+    ),
+    async (client) => assertProviderRuntimeClosure(
+      client,
+      PROVIDER_RUNTIME_CLOSURE_PROBES.terminalize
+    )
   );
 
   const audit = await withClient(
@@ -1269,11 +2126,15 @@ async function main() {
         roles: bootstrap.roles,
         ingest,
         authorizer,
+        payloadCanonicalization,
         sqlBindingNegatives,
         gateTwoAuthorizer,
         dispatch,
         recoverySource,
         recoveryAudit,
+        providerReconcile,
+        providerActivate,
+        providerTerminalize,
         audit,
         capabilityAuthority: {
           receiptCount: capabilitySnapshot.receipts.length,

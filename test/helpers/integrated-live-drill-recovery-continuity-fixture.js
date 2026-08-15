@@ -40,16 +40,9 @@ import {
   integratedLiveDrillRecoveryContinuityPreCallIntent
 } from "../../src/cloud/integrated-live-drill-recovery-continuity.js";
 import {
-  acquireIntegratedLiveDrillPrivateRootLease,
   integratedLiveDrillPrivateRootBinding,
   secureIntegratedLiveDrillPrivateRoot
 } from "../../src/cloud/integrated-live-drill-provider-evidence.js";
-import {
-  buildIntegratedLiveDrillProviderOrchestrationPreparation,
-  persistIntegratedLiveDrillProviderOrchestrationAdmission,
-  persistIntegratedLiveDrillProviderOrchestrationPreparation,
-  readIntegratedLiveDrillProviderOrchestrationPreparation
-} from "../../src/cloud/integrated-live-drill-provider-orchestration.js";
 import {
   INTEGRATED_LIVE_DRILL_SPEC_SCHEMA,
   integratedSourceBuildIdentity,
@@ -70,9 +63,6 @@ import {
   generateSyntheticTestOnlyEd25519Key,
   syntheticTestDeploymentExpectation
 } from "./synthetic-test-signing-keys.js";
-import {
-  persistIntegratedLiveDrillProviderSupervisorPreparation
-} from "../../scripts/gate1-integrated-live-drill-provider-supervisor.js";
 
 export const RECOVERY_CONTINUITY_FORBIDDEN_ROOT =
   fs.realpathSync(process.cwd());
@@ -88,249 +78,6 @@ function privateDirectory(prefix) {
   return Object.freeze({
     guardPath: fs.realpathSync(guardPath),
     rootPath: fs.realpathSync(rootPath)
-  });
-}
-
-function syntheticProviderOrchestrationComponents(spec) {
-  const authorityEvidenceId =
-    "44444444-4444-4444-8444-444444444444";
-  const authoritySelectedEvidenceDigest = "d".repeat(64);
-  const authorityBinding = "e".repeat(64);
-  const operationId = "55555555-5555-4555-8555-555555555555";
-  const requestDigest = "f".repeat(64);
-  const selectedBinding = selectedEvidenceBindingSha256(
-    authorityEvidenceId,
-    authoritySelectedEvidenceDigest
-  );
-  const dvi = Object.freeze({
-    schemaVersion: "tideproof.gate1.admissible-vector-proof.v2",
-    status: "PASS",
-    sourceCommit: spec.sourceCommit,
-    treeDigest: spec.treeDigest,
-    drill: Object.freeze({
-      runId: spec.runId,
-      authorityEvidenceBindingSha256: authorityBinding,
-      selectedEvidenceBindingSha256: selectedBinding,
-      durableSelectionCommitted: true
-    }),
-    fixture: Object.freeze({
-      requiredExclusionsBoundToSnapshot: true,
-      nearestExcludedCloserThanRanked: true
-    }),
-    ranking: Object.freeze({
-      vectorSearchUsed: true,
-      exactPrefixSpansUsed: true
-    }),
-    cleanup: Object.freeze({
-      snapshotRetired: true,
-      remainingCandidateCount: 0,
-      remainingExclusionCount: 0
-    })
-  });
-  const race = Object.freeze({
-    schemaVersion: "tideproof.aws-authority-race-receipt.v7",
-    status: "PASS",
-    sourceCommit: spec.sourceCommit,
-    treeDigest: spec.treeDigest,
-    packageLockDigest: spec.packageLockDigest,
-    authoritySourceDigest: spec.authoritySourceDigest,
-    authorityArtifactDigest: spec.authorityArtifactDigest,
-    configDigest: spec.configDigest,
-    raceId: spec.raceId,
-    runId: spec.runId,
-    dvi: Object.freeze({
-      authorityEvidenceBindingSha256: authorityBinding,
-      selectedEvidenceBindingSha256: selectedBinding
-    }),
-    functionArnDigest: integratedLiveDrillSha256(spec.functionArn),
-    functionVersion: spec.functionArn.split(":").at(-1),
-    callerBinding: Object.freeze({
-      bindingDigest: "4".repeat(64),
-      callerIdentityDigest: "5".repeat(64),
-      contextDigest: "6".repeat(64),
-      expectedIdentityDigest: "5".repeat(64),
-      expectedPrincipalDigest: "7".repeat(64),
-      principalIdDigest: "8".repeat(64),
-      principalType: "assumed-role"
-    }),
-    contenders: 2,
-    serializableTransactions: true,
-    overlappingDatabaseIntervals: true,
-    distinctDatabaseSessions: true,
-    distinctLogicalActions: true,
-    distinctProposals: true,
-    databaseInterval: Object.freeze({
-      startedAt: "2026-08-06T12:00:00.000Z",
-      completedAt: "2026-08-06T12:00:02.000Z"
-    }),
-    invocationRequestDigests: Object.freeze({
-      alpha: "4".repeat(64),
-      bravo: "5".repeat(64),
-      changedInput: "6".repeat(64),
-      proof: "7".repeat(64),
-      replay: "8".repeat(64)
-    }),
-    awsInvokeRequestDigests: Object.freeze({
-      alpha: "9".repeat(64),
-      bravo: "a".repeat(64),
-      changedInput: "b".repeat(64),
-      proof: "c".repeat(64),
-      replay: "d".repeat(64)
-    }),
-    providerOperations: Object.freeze({
-      cloudFormationDescribeStackResourceRequests: 1,
-      lambdaInvokeRequests: 5,
-      stsGetCallerIdentityRequests: 1
-    }),
-    durableStateVerified: true,
-    durableState: Object.freeze({
-      receiptCount: 2,
-      resourceReceiptCount: 2,
-      outboxCount: 1,
-      protectedEffectCount: 0,
-      holderOperationId: operationId,
-      outboxOperationId: operationId,
-      denialObservedHolderOperationId: operationId,
-      denialObservedFence: "1"
-    }),
-    protectedEffectExecuted: false,
-    authorityTransferredByModel: false,
-    winner: Object.freeze({
-      contender: "alpha",
-      operationId,
-      requestDigest,
-      fencingToken: "1"
-    }),
-    denial: Object.freeze({
-      contender: "bravo",
-      operationId: "66666666-6666-4666-8666-666666666666",
-      requestDigest: "e".repeat(64),
-      reason: "active_holder"
-    }),
-    replay: Object.freeze({
-      contender: "alpha",
-      operationId,
-      requestDigest,
-      outcome: "resource_reserved",
-      fencingToken: "1",
-      replayKind: "operation_replay",
-      exactDecisionReturned: true
-    }),
-    changedInputDenial: Object.freeze({
-      contender: "alpha",
-      operationId,
-      changedRequestDigest: "0".repeat(64),
-      code: "OPERATION_DIGEST_MISMATCH",
-      denied: true
-    })
-  });
-  return Object.freeze({
-    authorityEvidenceId,
-    authoritySelectedEvidenceDigest,
-    dvi,
-    race
-  });
-}
-
-export function persistFixtureProviderOrchestrationAdmission(t, {
-  context,
-  dispatchAuthorization,
-  dispatchPreparation,
-  gate1Preparation = null
-}) {
-  const {
-    providerDispatchAuthorization: _providerDispatchAuthorization,
-    ...preparationContext
-  } = context;
-  const spec = preparationContext.trustedRunContext.spec;
-  const acceptedGate1Preparation = gate1Preparation ??
-    persistIntegratedLiveDrillProviderSupervisorPreparation({
-      context: preparationContext,
-      contextPath: path.join(
-        preparationContext.recoveryEvidenceRootPath,
-        `${spec.runId}.provider-supervisor-context.json`
-      ),
-      expiresAt: dispatchPreparation.signingPayload.expiresAt,
-      forbiddenRootPath: preparationContext.forbiddenRootPath,
-      issuedAt: dispatchPreparation.signingPayload.issuedAt,
-      rootPath: preparationContext.recoveryEvidenceRootPath
-    });
-  if (
-    canonicalJson(acceptedGate1Preparation.signingPayload) !==
-      canonicalJson(dispatchPreparation.signingPayload)
-  ) {
-    throw new Error(
-      "INTEGRATED_LIVE_DRILL_TEST_ORCHESTRATION_PREPARATION_REJECTED"
-    );
-  }
-  const evidenceRootLease = acquireIntegratedLiveDrillPrivateRootLease({
-    binding: preparationContext.evidenceRootBinding,
-    forbiddenRootPath: preparationContext.forbiddenRootPath,
-    rootPath: preparationContext.recoveryEvidenceRootPath
-  });
-  const decisionRootLease = acquireIntegratedLiveDrillPrivateRootLease({
-    forbiddenRootPath: preparationContext.forbiddenRootPath,
-    rootPath: preparationContext.ledgerRootPath
-  });
-  t.after(() => {
-    decisionRootLease.release();
-    evidenceRootLease.release();
-  });
-  const decisionPath = path.join(
-    preparationContext.ledgerRootPath,
-    `${preparationContext.preCallIntent.runId}.provider-orchestration-decision.json`
-  );
-  const checkpointPath = path.join(
-    preparationContext.recoveryEvidenceRootPath,
-    `${spec.runId}.provider-orchestration-preparation.json`
-  );
-  const components = syntheticProviderOrchestrationComponents(spec);
-  const builtPreparation =
-    buildIntegratedLiveDrillProviderOrchestrationPreparation({
-      ...components,
-      decisionPathSha256: integratedLiveDrillCanonicalSha256(decisionPath),
-      decisionRootBinding: decisionRootLease.binding,
-      decisionRootPathSha256: integratedLiveDrillCanonicalSha256(
-        preparationContext.ledgerRootPath
-      ),
-      evidenceRootBinding: evidenceRootLease.binding,
-      gate1Preparation: acceptedGate1Preparation,
-      journalIntentBindingSha256: integratedLiveDrillCanonicalSha256(
-        "synthetic-provider-orchestration-journal-intent"
-      ),
-      journalPathSha256: integratedLiveDrillCanonicalSha256(
-        "synthetic-provider-orchestration-journal-path"
-      ),
-      spec
-    });
-  persistIntegratedLiveDrillProviderOrchestrationPreparation({
-    checkpointPath,
-    forbiddenRootPath: preparationContext.forbiddenRootPath,
-    preparation: builtPreparation,
-    rootPath: preparationContext.recoveryEvidenceRootPath,
-    spec
-  });
-  const checkpoint = readIntegratedLiveDrillProviderOrchestrationPreparation({
-    checkpointPath,
-    forbiddenRootPath: preparationContext.forbiddenRootPath,
-    rootPath: preparationContext.recoveryEvidenceRootPath,
-    spec
-  });
-  const admission = persistIntegratedLiveDrillProviderOrchestrationAdmission({
-    decisionPath,
-    dispatchAuthorizationSha256:
-      integratedLiveDrillCanonicalSha256(dispatchAuthorization),
-    forbiddenRootPath: preparationContext.forbiddenRootPath,
-    persistence: checkpoint.persistence,
-    preparation: checkpoint.preparation,
-    rootPath: preparationContext.ledgerRootPath
-  });
-  return Object.freeze({
-    admission,
-    checkpoint,
-    decisionRootLease,
-    evidenceRootLease,
-    gate1Preparation: acceptedGate1Preparation
   });
 }
 
@@ -402,6 +149,7 @@ export function createRecoveryContinuityFixture(
     packageLockDigest: "d".repeat(64),
     authoritySourceDigest: "e".repeat(64),
     authorityArtifactDigest: "f".repeat(64),
+    runtimeBundleManifestSha256: "6".repeat(64),
     functionArn: expectationTemplate.functions.authority.numericVersionArn,
     raceId: "11111111-1111-4111-8111-111111111111",
     runId: "22222222-2222-4222-8222-222222222222",
