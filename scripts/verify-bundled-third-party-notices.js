@@ -44,6 +44,10 @@ const BUNDLED_COMPONENTS = Object.freeze({
   runtimeWorker: "scripts/runtime-entries/integrated-live-drill-worker.js"
 });
 
+export const BUNDLED_COMPONENT_NAMES = Object.freeze(
+  Object.keys(BUNDLED_COMPONENTS)
+);
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);

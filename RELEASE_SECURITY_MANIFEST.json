@@ -240,13 +240,13 @@
       "id": "aws-readiness",
       "path": "scripts/gate2-aws-readiness.js",
       "role": "EXACT_CHECKOUT_READINESS",
-      "sha256": "f4eff0d6bc40431e1054bdbf41de2a3c699cfce63d7c205c1875d195e1473ec3"
+      "sha256": "8fc5633ffa025161945a2f65e4086c927d0867a222dcc8ffa9b9bedb658d3ed3"
     },
     {
       "id": "aws-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
       "role": "EXACT_CHECKOUT_READINESS_VERIFICATION",
-      "sha256": "005bd4c9b3aa0f0a109264649633c040b5d5aca4555546f45221fd71eebf46fb"
+      "sha256": "9ba122781f46b4fc762281f1b0c17ed48f940f28f66031c632499d4643c2d97d"
     },
     {
       "id": "aws-security-tests",

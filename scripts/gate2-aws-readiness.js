@@ -34,6 +34,8 @@ import {
 } from "./lib/gate2-build-contract.js";
 import { validateIntegratedLiveDrillStressReceipt } from
   "./run-integrated-live-drill-stress.js";
+import { BUNDLED_COMPONENT_NAMES } from
+  "./verify-bundled-third-party-notices.js";
 import { validateReleaseClaimsReceipt } from "./verify-release-claims.js";
 import { validateReleaseCostReceipt } from "./verify-release-cost.js";
 import { validateReleaseSecurityReceipt } from "./verify-release-security.js";
@@ -91,10 +93,6 @@ const ARTIFACT_NAMES = Object.freeze([
   "demo",
   "probe",
   "signer"
-]);
-const BUNDLED_COMPONENT_NAMES = Object.freeze([
-  ...ARTIFACT_NAMES,
-  "evidenceProvider"
 ]);
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
