@@ -23,6 +23,8 @@ import {
   validatePreflightReceipt,
   validateReleaseProvenance
 } from "../scripts/gate2-aws-readiness.js";
+import { BUNDLED_COMPONENT_NAMES } from
+  "../scripts/verify-bundled-third-party-notices.js";
 import {
   RELEASE_CLAIMS_STOP_TOKEN_COUNT,
   RELEASE_CLAIMS_SURFACE_COUNT,
@@ -822,7 +824,7 @@ function releaseProvenanceReceipt() {
         fallbackCount: 5,
         licenses: { MIT: 42 },
         artifactPackages: Object.fromEntries(
-          [...__test.ARTIFACT_NAMES, "evidenceProvider"].map((name) => [
+          BUNDLED_COMPONENT_NAMES.map((name) => [
             name,
             []
           ])
@@ -1367,6 +1369,23 @@ test("AWS readiness binds the preflight to the exact checkout", () => {
 });
 
 test("AWS readiness binds release provenance to the exact checkout", () => {
+  assert.deepEqual(
+    BUNDLED_COMPONENT_NAMES.filter((name) => name.startsWith("runtime")),
+    [
+      "runtimeAuthorityRace",
+      "runtimeDispatchBroker",
+      "runtimeProviderActivation",
+      "runtimeProviderExchange",
+      "runtimeDvi",
+      "runtimeFinalizer",
+      "runtimeProviderOperation",
+      "runtimeProviderTerminalizer",
+      "runtimeOrchestrator",
+      "runtimeReconciler",
+      "runtimeSupervisor",
+      "runtimeWorker"
+    ]
+  );
   const receipt = releaseProvenanceReceipt();
   assert.equal(
     validateReleaseProvenance(receipt, {
@@ -1374,6 +1393,17 @@ test("AWS readiness binds release provenance to the exact checkout", () => {
       treeDigest: TREE_DIGEST
     }),
     receipt
+  );
+  const missingRuntimeComponent = releaseProvenanceReceipt();
+  delete missingRuntimeComponent.dependencies.bundledThirdPartyNotices
+    .artifactPackages.runtimeWorker;
+  assert.throws(
+    () =>
+      validateReleaseProvenance(missingRuntimeComponent, {
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      }),
+    /AWS_READINESS_RELEASE_PROVENANCE/
   );
   assert.throws(
     () =>
