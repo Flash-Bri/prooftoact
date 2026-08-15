@@ -816,7 +816,7 @@
       "id": "integrated-live-drill-root-stage-tests",
       "path": "test/root/integrated-live-drill-stage-root.test.js",
       "role": "LINUX_ROOT_STAGE_ADVERSARIAL_VERIFICATION",
-      "sha256": "e56ae2a2137507a2d868c53cba59c65dd9a972dc25d4fab6bccc4ac4cda3da4b"
+      "sha256": "c77565f1cc502bd006693ed65f6a04538b30e82bedd4363e3c9bd5076e353702"
     },
     {
       "id": "integrated-live-drill-systemd-boundary-verifier",

@@ -44,6 +44,7 @@ const PACKAGE_LOCK_DIGEST = "3".repeat(64);
 const STAGE_INSTANCE = "11111111-1111-4111-8111-111111111111";
 const OFFICIAL_LINUX_X64_NODE_SHA256 =
   "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068";
+const ROOT_STAGE_TEST_PARENT = "/var/lib/prooftoact-root-stage-tests";
 
 function sha256(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
@@ -54,6 +55,26 @@ function writeExact(filePath, bytes, mode = 0o444) {
   fs.writeFileSync(filePath, bytes, { flag: "wx", mode });
   fs.chownSync(filePath, 0, 0);
   fs.chmodSync(filePath, mode);
+}
+
+function createRootFixture(name) {
+  fs.mkdirSync(ROOT_STAGE_TEST_PARENT, { mode: 0o755, recursive: true });
+  fs.chownSync(ROOT_STAGE_TEST_PARENT, 0, 0);
+  fs.chmodSync(ROOT_STAGE_TEST_PARENT, 0o755);
+  const fixtureRoot = path.join(
+    ROOT_STAGE_TEST_PARENT,
+    `${name}-${process.pid}`
+  );
+  assert.equal(fs.existsSync(fixtureRoot), false);
+  fs.mkdirSync(fixtureRoot, { mode: 0o755 });
+  fs.chownSync(fixtureRoot, 0, 0);
+  fs.chmodSync(fixtureRoot, 0o755);
+  return fixtureRoot;
+}
+
+function removeRootFixture(fixtureRoot) {
+  fs.chmodSync(fixtureRoot, 0o700);
+  fs.rmSync(fixtureRoot, { force: true, recursive: true });
 }
 
 function injectedFileSystem(method, {
@@ -342,11 +363,8 @@ function launchComponentAsUnprivileged(stageRoot, manifestSha256, component, {
 test("fresh persistent state creates private roots before guard validation", {
   skip: process.geteuid?.() !== 0
 }, () => {
-  const fixtureRoot = `/opt/prooftoact-state-regression-${process.pid}`;
+  const fixtureRoot = createRootFixture("prooftoact-state-regression");
   const stateRoot = path.join(fixtureRoot, "state");
-  fs.mkdirSync(fixtureRoot, { mode: 0o755 });
-  fs.chownSync(fixtureRoot, 0, 0);
-  fs.chmodSync(fixtureRoot, 0o755);
   try {
     const accounts = [
       "prooftoact",
@@ -372,17 +390,40 @@ test("fresh persistent state creates private roots before guard validation", {
       );
     }
   } finally {
-    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+    removeRootFixture(fixtureRoot);
+  }
+});
+
+test("root installer rejects a world-writable fixture ancestor", {
+  skip: process.geteuid?.() !== 0
+}, () => {
+  const fixtureRoot = createRootFixture(
+    "prooftoact-mutable-ancestor-regression"
+  );
+  const mutableParent = path.join(fixtureRoot, "mutable");
+  fs.mkdirSync(mutableParent, { mode: 0o755 });
+  fs.chownSync(mutableParent, 0, 0);
+  fs.chmodSync(mutableParent, 0o777);
+  try {
+    assert.throws(
+      () => installerTest.preparePersistentState({
+        accounts: [],
+        code: "INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED",
+        instance: STAGE_INSTANCE,
+        stateRoot: path.join(mutableParent, "state")
+      }),
+      /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u
+    );
+  } finally {
+    fs.chmodSync(mutableParent, 0o700);
+    removeRootFixture(fixtureRoot);
   }
 });
 
 test("root exact-file publication is failure-convergent across publication boundaries", {
   skip: process.geteuid?.() !== 0
 }, () => {
-  const fixtureRoot = `/opt/prooftoact-publication-regression-${process.pid}`;
-  fs.mkdirSync(fixtureRoot, { mode: 0o755 });
-  fs.chownSync(fixtureRoot, 0, 0);
-  fs.chmodSync(fixtureRoot, 0o755);
+  const fixtureRoot = createRootFixture("prooftoact-publication-regression");
   const bytes = Buffer.from('{"schemaVersion":"publication-regression.v1"}\n');
   const code = "INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED";
   const publish = (filePath, fileSystem = fs) =>
@@ -644,8 +685,7 @@ test("root exact-file publication is failure-convergent across publication bound
       /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u
     );
   } finally {
-    fs.chmodSync(fixtureRoot, 0o700);
-    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+    removeRootFixture(fixtureRoot);
   }
 });
 
@@ -653,11 +693,7 @@ test("root installer publishes one exact stage and independent non-root verifica
   skip: process.geteuid?.() !== 0 || process.arch !== "x64" ||
     !fs.existsSync("/usr/bin/setpriv")
 }, () => {
-  const fixtureRoot = `/opt/prooftoact-stage-regression-${process.pid}`;
-  assert.equal(fs.existsSync(fixtureRoot), false);
-  fs.mkdirSync(fixtureRoot, { mode: 0o755 });
-  fs.chownSync(fixtureRoot, 0, 0);
-  fs.chmodSync(fixtureRoot, 0o755);
+  const fixtureRoot = createRootFixture("prooftoact-stage-regression");
   try {
     const current = fixture(fixtureRoot);
     const stageReceiptPath = path.join(current.receiptRoot, "stage-1.json");
@@ -870,7 +906,6 @@ test("root installer publishes one exact stage and independent non-root verifica
       /INTEGRATED_LIVE_DRILL_STAGE_INSTALL_REJECTED/u
     );
   } finally {
-    fs.chmodSync(fixtureRoot, 0o700);
-    fs.rmSync(fixtureRoot, { force: true, recursive: true });
+    removeRootFixture(fixtureRoot);
   }
 });
