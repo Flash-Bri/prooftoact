@@ -815,8 +815,6 @@ function buildSimulationVectors(accountId, artifactBucketName) {
     "prooftoact-gate2-negative";
   const stack = `arn:aws:cloudformation:${REGION}:${accountId}:stack/` +
     "prooftoact-gate2/00000000-0000-4000-8000-000000000000";
-  const changeSet = `arn:aws:cloudformation:${REGION}:${accountId}:changeSet/` +
-    "prooftoact-release-negative/00000000-0000-4000-8000-000000000000";
   const entries = {
     CloudFormationServiceRole: {
       positive: ["s3:GetObjectVersion",
@@ -827,7 +825,7 @@ function buildSimulationVectors(accountId, artifactBucketName) {
     },
     LiveDrillOperatorRole: {
       positive: ["dynamodb:DescribeTable", table],
-      negative: ["cloudformation:ExecuteChangeSet", changeSet]
+      negative: ["lambda:InvokeFunction", lambda]
     },
     ReleaseCoordinatorRole: {
       positive: ["dynamodb:DescribeTable", table],
@@ -835,7 +833,7 @@ function buildSimulationVectors(accountId, artifactBucketName) {
     },
     ReleaseDeploymentRole: {
       positive: ["dynamodb:DescribeTable", table],
-      negative: ["cloudformation:ExecuteChangeSet", changeSet]
+      negative: ["lambda:InvokeFunction", lambda]
     },
     ReleaseEvidenceRole: {
       positive: ["dynamodb:DescribeTable", table],
