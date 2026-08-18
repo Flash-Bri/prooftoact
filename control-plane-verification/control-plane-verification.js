@@ -96,7 +96,11 @@ const GOVERNANCE_LANES = Object.freeze([
 
 const REQUIRED_EXACT_PATHS = Object.freeze([
   ...WORKFLOWS.map(({ file }) => `.github/workflows/${file}`),
+  ".github/workflows/prooftoact-hosted-dual-root-verification.yml",
   "config/prooftoact-release-operator-public.pub",
+  "control-plane-verification/generate-hosted-dual-root-verification.js",
+  "control-plane-verification/hosted-dual-root-verification.js",
+  "control-plane-verification/verify-hosted-dual-root-verification.js",
   "infra/aws/release-deployment-roles-template.json",
   "release-control/build-release-control-runtime.js",
   "release-control/DEPENDENCY_INVENTORY.json",
@@ -120,6 +124,7 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "scripts/run-release-prepare-preflight.js",
   "scripts/sign-release-provider-approval.js",
   "test/release-control-bootstrap-plan.test.js",
+  "test/hosted-dual-root-verification.test.js",
   "test/release-provider-runtime-loader.test.js",
   "test/release-provider-runtime.test.js",
   "test/release-prepare-runner.test.js"
@@ -155,7 +160,7 @@ const DISCOVERY_RULES = Object.freeze([
   Object.freeze({
     directory: "test",
     pattern:
-      /^(?:control-plane-verification|fresh-primary-bootstrap|release-control-.*|release-deployment-plan|release-prepare-.*|release-provider-.*)\.test\.js$/u,
+      /^(?:control-plane-verification|fresh-primary-bootstrap|hosted-dual-root-verification|release-control-.*|release-deployment-plan|release-prepare-.*|release-provider-.*)\.test\.js$/u,
     recursive: false
   }),
   Object.freeze({
@@ -1073,6 +1078,38 @@ function collectSecurity(root, inventory) {
         ? item.phaseWiredDefaultHold
         : item.diagnosticFailClosed && item.idTokenAbsent)),
   "The release-candidate workflow is phase-wired but defaults to a diagnostic HOLD; the other five workflows remain diagnostic-only. Provider authority is not inferred.");
+  let hostedDualRootConstrained = false;
+  try {
+    const hosted = readText(root,
+      ".github/workflows/prooftoact-hosted-dual-root-verification.yml");
+    const generator = readText(root,
+      "control-plane-verification/hosted-dual-root-verification.js");
+    const uses = [...hosted.matchAll(/^\s*uses:\s*[^@\s]+@([^\s#]+)/gmu)]
+      .map((match) => match[1]);
+    hostedDualRootConstrained =
+      hosted.startsWith("name: ProofToAct Hosted Dual Root Verification\n") &&
+      /^permissions:\s*\n\s+contents:\s+read\s*$/mu.test(hosted) &&
+      (hosted.match(/uses:\s*actions\/checkout@/gu) ?? []).length === 2 &&
+      (hosted.match(/persist-credentials:\s*false/gu) ?? []).length === 2 &&
+      uses.length === 4 && uses.every((value) => HEX_40.test(value)) &&
+      !/^\s*id-token:/mu.test(hosted) &&
+      !/^\s*environment:/mu.test(hosted) &&
+      !/\$\{\{\s*secrets\./u.test(hosted) &&
+      !/configure-aws-credentials|cockroach|execute-change-set/iu.test(hosted) &&
+      hosted.includes("ref: 963937a9873f0199b91897fe88da1b91bc84b5e3") &&
+      hosted.includes("retention-days: 90") &&
+      hosted.includes("if-no-files-found: error") &&
+      hosted.includes("verify-hosted-dual-root-verification.js") &&
+      generator.includes("ACTIONS_ID_TOKEN_REQUEST_TOKEN") &&
+      generator.includes("providerExecutionAuthorized: false") &&
+      generator.includes("liveParameterValuesObserved: false") &&
+      generator.includes("HOSTED_DUAL_ROOT_REQUIRED_TEST_SKIPPED");
+  } catch {
+    hostedDualRootConstrained = false;
+  }
+  check("HOSTED_DUAL_ROOT_NO_OIDC_COMPLETE_EVIDENCE",
+    hostedDualRootConstrained,
+    "The retained hosted lane must bind separate exact roots, reject OIDC/provider credentials, require zero skipped tests, and publish only a non-authorizing evidence artifact.");
   let credentialChainDisabled = false;
   try {
     const builder = readText(root, "release-control/build-release-control-runtime.js");

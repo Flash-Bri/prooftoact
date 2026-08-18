@@ -1,0 +1,122 @@
+name: ProofToAct Hosted Dual Root Verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prooftoact-hosted-dual-root-verification-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify-dual-root:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out exact control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: control-plane
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          repository: Flash-Bri/prooftoact
+          show-progress: false
+          submodules: false
+
+      - name: Check out exact frozen application separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: frozen-application
+          persist-credentials: false
+          ref: 963937a9873f0199b91897fe88da1b91bc84b5e3
+          repository: Flash-Bri/prooftoact
+          show-progress: false
+          submodules: false
+
+      - name: Use exact official Node.js runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          check-latest: false
+          node-version: 22.23.1
+
+      - name: Normalize and verify exact separate source roots
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: node scripts/normalize-release-control-checkouts.js
+
+      - name: Generate complete no-provider dual-root evidence
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: |
+          verification_output="$RUNNER_TEMP/prooftoact-dual-root-verification"
+          install -d -m 0700 "$verification_output"
+          npm_cli="$(node -e 'const path = require("node:path"); process.stdout.write(path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npm-cli.js"));')"
+          node control-plane-verification/generate-hosted-dual-root-verification.js \
+            --control-root "$GITHUB_WORKSPACE/control-plane" \
+            --application-root "$GITHUB_WORKSPACE/frozen-application" \
+            --npm-cli "$npm_cli" \
+            --output-root "$verification_output"
+
+      - name: Independently reopen the complete artifact set
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: >-
+          node control-plane-verification/verify-hosted-dual-root-verification.js
+          --control-root "$GITHUB_WORKSPACE/control-plane"
+          --application-root "$GITHUB_WORKSPACE/frozen-application"
+          --output-root "$RUNNER_TEMP/prooftoact-dual-root-verification"
+
+      - name: Retain canonical manifest and nonsecret logs
+        if: ${{ always() }}
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          name: prooftoact-dual-root-${{ github.sha }}-${{ github.run_id }}
+          overwrite: false
+          path: ${{ runner.temp }}/prooftoact-dual-root-verification
+          retention-days: 90
+
+      - name: Require retained artifact registration
+        if: ${{ always() && steps.upload.outcome == 'success' }}
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: >-
+          node -e 'if (!/^[1-9][0-9]*$/.test(process.env.ARTIFACT_ID ?? "") ||
+          !/^https:\/\/github\.com\/Flash-Bri\/prooftoact\/actions\/runs\/[1-9][0-9]*\/artifacts\/[1-9][0-9]*$/u.test(process.env.ARTIFACT_URL ?? ""))
+          process.exit(1)'

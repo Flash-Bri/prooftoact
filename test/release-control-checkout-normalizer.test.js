@@ -120,7 +120,7 @@ function exactFakeNormalizer(calls) {
   };
 }
 
-test("all six exact diagnostic workflow tuples normalize distinct checkouts", () => {
+test("all seven exact workflow tuples normalize distinct checkouts", () => {
   const current = fixture();
   try {
     for (const workflow of Object.keys(__test.WORKFLOWS)) {

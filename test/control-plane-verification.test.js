@@ -273,7 +273,11 @@ test("candidate deterministically binds the complete control-plane surface", () 
     assert.equal(inventoryPaths.includes(`.github/workflows/${workflow.file}`), true);
   }
   for (const exactPath of [
+    ".github/workflows/prooftoact-hosted-dual-root-verification.yml",
     "config/prooftoact-release-operator-public.pub",
+    "control-plane-verification/generate-hosted-dual-root-verification.js",
+    "control-plane-verification/hosted-dual-root-verification.js",
+    "control-plane-verification/verify-hosted-dual-root-verification.js",
     "infra/aws/release-deployment-roles-template.json",
     "release-control/package.json",
     "release-control/package-lock.json",
@@ -298,6 +302,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     "scripts/run-release-prepare-preflight.js",
     "scripts/sign-release-provider-approval.js",
     "test/control-plane-verification.test.js",
+    "test/hosted-dual-root-verification.test.js",
     "test/release-control-bootstrap-plan.test.js",
     "test/release-provider-runtime-loader.test.js",
     "test/release-provider-runtime.test.js",
@@ -327,6 +332,8 @@ test("candidate deterministically binds the complete control-plane surface", () 
   assert.equal(candidate.body.providerMetadataArtifacts.ready, true);
   assert.equal(candidate.body.providerMetadataArtifacts.artifacts.every((item) =>
     item.status === "VERIFIED"), true);
+  assert.equal(candidate.body.security.checks.find(({ id }) =>
+    id === "HOSTED_DUAL_ROOT_NO_OIDC_COMPLETE_EVIDENCE")?.passed, true);
   assert.equal(candidate.body.inventory.files.every((item) =>
     typeof item.gitTracked === "boolean" &&
     typeof item.gitMatchesHead === "boolean"), true);
