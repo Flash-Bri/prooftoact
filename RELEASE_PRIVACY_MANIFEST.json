@@ -130,6 +130,12 @@
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
+      "rule": "basic-auth-url",
+      "path": "test/recovery-security.test.js",
+      "matchSha256": "ddba706fcc211999e18673eff54c44d5b333e47a15fec1517de55880eba444be",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
       "rule": "email-address",
       "path": "THIRD_PARTY_NOTICES.txt",
       "matchSha256": "2dd1e217e885ac11b2ea782579eb499ac771fd1dcef83b15ee147f0e0f4543c3",
