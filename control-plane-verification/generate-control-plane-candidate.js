@@ -8,9 +8,11 @@ function parse(args) {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     const value = args[index + 1];
-    if (!["--governance-evidence", "--output", "--provenance-evidence", "--root"]
-      .includes(name) || typeof value !== "string") {
-      throw new Error("usage: generate-control-plane-candidate.js --root /absolute/root --output /absolute/candidate.json [--governance-evidence /absolute/file] [--provenance-evidence /absolute/file]");
+    if (!["--frozen-application-root", "--governance-evidence", "--npm-cli",
+      "--output", "--provenance-evidence", "--root"]
+      .includes(name) || typeof value !== "string" || !path.isAbsolute(value) ||
+      values.has(name)) {
+      throw new Error("usage: generate-control-plane-candidate.js --root /absolute/root --output /absolute/candidate.json [--governance-evidence /absolute/file] [--provenance-evidence /absolute/file --frozen-application-root /absolute/frozen-app --npm-cli /absolute/npm-cli.js]");
     }
     values.set(name, value);
   }
@@ -28,8 +30,16 @@ function optionalJson(filePath) {
 }
 
 const args = parse(process.argv.slice(2));
+const provenanceArgumentCount = ["--provenance-evidence",
+  "--frozen-application-root", "--npm-cli"].filter((name) =>
+  args.has(name)).length;
+if (![0, 3].includes(provenanceArgumentCount)) {
+  throw new Error("CONTROL_PLANE_PROVENANCE_REPRODUCTION_ARGUMENT_REJECTED");
+}
 const candidate = buildCandidate({
+  frozenApplicationRoot: args.get("--frozen-application-root") ?? null,
   governanceEvidence: optionalJson(args.get("--governance-evidence")),
+  npmCli: args.get("--npm-cli") ?? null,
   provenanceEvidence: optionalJson(args.get("--provenance-evidence")),
   rootDir: args.get("--root")
 });

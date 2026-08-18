@@ -1,129 +1,198 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prooftoact.example/schemas/control-plane-provenance-evidence.v1.json",
-  "title": "ProofToAct clean standalone control-plane provenance evidence",
-  "description": "Evidence from a clean standalone checkout and hermetic nested install/build.",
+  "$id": "https://prooftoact.example/schemas/control-plane-provenance-evidence.v2.json",
+  "title": "ProofToAct independently reproducible clean provenance evidence",
+  "description": "Non-authorizing evidence generated and independently reproduced from exact standalone control-plane and frozen-application roots.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
-    "status",
-    "origin",
-    "controlPlane",
-    "frozenApplication",
-    "git",
-    "clean",
-    "install",
-    "node",
-    "npm",
-    "build",
-    "tests",
-    "auditFindingCount"
+    "bodySha256",
+    "body"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "prooftoact.control-plane-provenance-evidence.v1"
+      "const": "prooftoact.control-plane-provenance-evidence.v2"
     },
-    "status": {
-      "const": "ACCEPTED"
+    "bodySha256": {
+      "$ref": "#/$defs/sha256"
     },
-    "origin": {
-      "const": "https://github.com/Flash-Bri/prooftoact.git"
-    },
-    "controlPlane": {
-      "$ref": "#/$defs/gitIdentity"
-    },
-    "frozenApplication": {
-      "$ref": "#/$defs/gitIdentity"
-    },
-    "git": {
-      "type": "object"
-    },
-    "clean": {
-      "const": true
-    },
-    "install": {
+    "body": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "releaseControl",
-        "releaseProvider"
+        "schemaVersion",
+        "claimBoundary",
+        "decision",
+        "git",
+        "packages",
+        "executions"
       ],
       "properties": {
-        "releaseControl": {
-          "$ref": "#/$defs/install"
+        "schemaVersion": {
+          "const": "prooftoact.control-plane-provenance-evidence.v2"
         },
-        "releaseProvider": {
-          "$ref": "#/$defs/install"
+        "claimBoundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "applicationDeploymentObserved",
+            "hostedCiParityObserved",
+            "privilegedRootStageObserved",
+            "providerActionsPerformed",
+            "providerExecutionAuthorized",
+            "providerFactsAsserted",
+            "sourceAndLocalExecutionEvidenceOnly"
+          ],
+          "properties": {
+            "applicationDeploymentObserved": { "const": false },
+            "hostedCiParityObserved": { "const": false },
+            "privilegedRootStageObserved": { "const": false },
+            "providerActionsPerformed": { "const": false },
+            "providerExecutionAuthorized": { "const": false },
+            "providerFactsAsserted": { "const": false },
+            "sourceAndLocalExecutionEvidenceOnly": { "const": true }
+          }
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cleanStandaloneProvenanceObserved",
+            "nextGate",
+            "providerExecutionAuthorized",
+            "status"
+          ],
+          "properties": {
+            "cleanStandaloneProvenanceObserved": { "const": true },
+            "nextGate": { "const": "SEPARATE_GOVERNED_PROVIDER_AUTHORIZATION" },
+            "providerExecutionAuthorized": { "const": false },
+            "status": { "const": "LOCAL_PROVENANCE_VERIFIED" }
+          }
+        },
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["controlPlane", "frozenApplication"],
+          "properties": {
+            "controlPlane": { "$ref": "#/$defs/gitRoot" },
+            "frozenApplication": { "$ref": "#/$defs/gitRoot" }
+          }
+        },
+        "packages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["application", "controlPlane"],
+          "properties": {
+            "application": {
+              "type": "array",
+              "minItems": 2,
+              "items": { "$ref": "#/$defs/fileRecord" }
+            },
+            "controlPlane": {
+              "type": "array",
+              "minItems": 6,
+              "items": { "$ref": "#/$defs/fileRecord" }
+            }
+          }
+        },
+        "executions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["audits", "build", "installations", "tests", "toolchain"],
+          "properties": {
+            "audits": { "type": "array", "minItems": 4, "maxItems": 4 },
+            "build": { "type": "object" },
+            "installations": { "type": "array", "minItems": 4, "maxItems": 4 },
+            "tests": { "type": "array", "minItems": 4, "maxItems": 4 },
+            "toolchain": { "$ref": "#/$defs/toolchain" }
+          }
         }
       }
-    },
-    "node": {
-      "type": "object"
-    },
-    "npm": {
-      "type": "object"
-    },
-    "build": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "releaseControl",
-        "releaseProvider"
-      ],
-      "properties": {
-        "releaseControl": {
-          "type": "object"
-        },
-        "releaseProvider": {
-          "type": "object"
-        }
-      }
-    },
-    "tests": {
-      "type": "object"
-    },
-    "auditFindingCount": {
-      "const": 0
     }
   },
   "$defs": {
-    "install": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "arguments",
-        "packageLockSha256"
-      ],
-      "properties": {
-        "arguments": {
-          "const": [
-            "ci",
-            "--ignore-scripts"
-          ]
-        },
-        "packageLockSha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        }
-      }
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
-    "gitIdentity": {
+    "gitRoot": {
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "clean",
         "commit",
+        "grafts",
+        "origin",
+        "replacements",
+        "role",
+        "rootDevice",
+        "rootInode",
+        "rootMode",
+        "rootOwnerUid",
+        "shallow",
+        "standalone",
         "tree"
       ],
       "properties": {
-        "commit": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
+        "clean": { "const": true },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "grafts": { "const": false },
+        "origin": { "const": "https://github.com/Flash-Bri/prooftoact.git" },
+        "replacements": { "const": false },
+        "role": { "enum": ["CONTROL_PLANE", "FROZEN_APPLICATION"] },
+        "rootDevice": { "type": "integer", "minimum": 0 },
+        "rootInode": { "type": "integer", "minimum": 0 },
+        "rootMode": { "type": "integer", "minimum": 0, "maximum": 511 },
+        "rootOwnerUid": { "type": "integer", "minimum": 0 },
+        "shallow": { "const": false },
+        "standalone": { "const": true },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "fileRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes", "gitBlobId", "path", "sha256"],
+      "properties": {
+        "bytes": { "type": "integer", "minimum": 1 },
+        "gitBlobId": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodeArch",
+        "nodeDistribution",
+        "nodeExecutableSha256",
+        "nodePlatform",
+        "nodeVersion",
+        "npmCliSha256",
+        "npmPackageFileCount",
+        "npmPackageJsonSha256",
+        "npmPackageTreeSha256",
+        "npmVersion"
+      ],
+      "properties": {
+        "nodeArch": { "enum": ["arm64", "x64"] },
+        "nodeDistribution": { "const": "nodejs.org-release-v22.23.1" },
+        "nodeExecutableSha256": { "$ref": "#/$defs/sha256" },
+        "nodePlatform": { "enum": ["darwin", "linux"] },
+        "nodeVersion": { "const": "v22.23.1" },
+        "npmCliSha256": {
+          "const": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7"
         },
-        "tree": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
-        }
+        "npmPackageFileCount": { "const": 1964 },
+        "npmPackageJsonSha256": {
+          "const": "3f6dff62de33c82d89e986a05ddd5644e6b613344a54ecf2820a612bfbaee7d7"
+        },
+        "npmPackageTreeSha256": {
+          "const": "d81bc4bf8e3252c48b5c0c08488c128d1b47dd21b52e25e2d202f8ffb54931bc"
+        },
+        "npmVersion": { "const": "10.9.8" }
       }
     }
   }

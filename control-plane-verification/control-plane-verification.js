@@ -3,6 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
+import {
+  CONTROL_PLANE_PROVENANCE_CONSTANTS,
+  validateControlPlaneProvenanceEvidence,
+  verifyControlPlaneProvenanceEvidence
+} from "./control-plane-provenance.js";
+
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const EXACT_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/u;
@@ -11,7 +17,7 @@ const BODY_SCHEMA = "prooftoact.control-plane-verification-body.v1";
 const GOVERNANCE_EVIDENCE_SCHEMA =
   "prooftoact.control-plane-governance-evidence.v1";
 const PROVENANCE_EVIDENCE_SCHEMA =
-  "prooftoact.control-plane-provenance-evidence.v1";
+  CONTROL_PLANE_PROVENANCE_CONSTANTS.SCHEMA;
 const FROZEN_APPLICATION = Object.freeze({
   commit: "963937a9873f0199b91897fe88da1b91bc84b5e3",
   tree: "a330e0d57328e63a568be73c523b2cae6338f26c"
@@ -1359,9 +1365,11 @@ function gitOutput(root, args) {
     return execFileSync("/usr/bin/git", ["-C", root, ...args], {
       encoding: "utf8",
       env: {
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_CONFIG_NOSYSTEM: "1",
+        GIT_NO_REPLACE_OBJECTS: "1",
         GIT_OPTIONAL_LOCKS: "0",
-        HOME: "/nonexistent",
         LANG: "C",
         LC_ALL: "C",
         PATH: "/usr/bin:/bin"
@@ -1378,9 +1386,11 @@ function gitBlob(root, relativePath) {
   try {
     return execFileSync("/usr/bin/git", ["-C", root, "show", `HEAD:${relativePath}`], {
       env: {
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_CONFIG_NOSYSTEM: "1",
+        GIT_NO_REPLACE_OBJECTS: "1",
         GIT_OPTIONAL_LOCKS: "0",
-        HOME: "/nonexistent",
         LANG: "C",
         LC_ALL: "C",
         PATH: "/usr/bin:/bin"
@@ -1394,7 +1404,7 @@ function gitBlob(root, relativePath) {
 }
 
 function collectProvenance(root, dependencies, providerDependencies,
-  provenanceEvidence) {
+  provenanceEvidence, provenanceVerification) {
   const gitMarker = path.join(root, ".git");
   let gitDirKind = "missing";
   if (fs.existsSync(gitMarker)) {
@@ -1420,7 +1430,7 @@ function collectProvenance(root, dependencies, providerDependencies,
   };
   if (provenanceEvidence !== null) {
     validateProvenanceEvidence(provenanceEvidence, dependencies,
-      providerDependencies);
+      providerDependencies, provenanceVerification);
     providerEvidence = {
       evidenceSha256: canonicalDigest(provenanceEvidence),
       schemaVersion: PROVENANCE_EVIDENCE_SCHEMA,
@@ -1459,78 +1469,30 @@ function collectProvenance(root, dependencies, providerDependencies,
 }
 
 export function validateProvenanceEvidence(value, dependencies,
-  providerDependencies) {
-  invariant(exactKeys(value, [
-    "auditFindingCount", "build", "clean", "controlPlane", "frozenApplication",
-    "git", "install", "node", "npm", "origin", "schemaVersion", "status",
-    "tests"
-  ]) && value.schemaVersion === PROVENANCE_EVIDENCE_SCHEMA &&
-    value.status === "ACCEPTED" && value.clean === true &&
-    value.auditFindingCount === 0 && value.origin ===
-      "https://github.com/Flash-Bri/prooftoact.git" &&
-    exactKeys(value.frozenApplication, ["commit", "tree"]) &&
-    value.frozenApplication.commit === FROZEN_APPLICATION.commit &&
-    value.frozenApplication.tree === FROZEN_APPLICATION.tree &&
-    exactKeys(value.controlPlane, ["commit", "tree"]) &&
-    HEX_40.test(value.controlPlane.commit ?? "") &&
-    HEX_40.test(value.controlPlane.tree ?? "") &&
-    value.controlPlane.commit !== FROZEN_APPLICATION.commit &&
-    exactKeys(value.git, ["grafts", "replacements", "shallow", "standalone"]) &&
-    value.git.grafts === false && value.git.replacements === false &&
-    value.git.shallow === false && value.git.standalone === true &&
-    exactKeys(value.install, ["releaseControl", "releaseProvider"]) &&
-    exactKeys(value.install.releaseControl, ["arguments", "packageLockSha256"]) &&
-    exactKeys(value.install.releaseProvider, ["arguments", "packageLockSha256"]) &&
-    canonicalJson(value.install.releaseControl.arguments) ===
-      canonicalJson(["ci", "--ignore-scripts"]) &&
-    canonicalJson(value.install.releaseProvider.arguments) ===
-      canonicalJson(["ci", "--ignore-scripts"]) &&
-    value.install.releaseControl.packageLockSha256 ===
+  providerDependencies, verificationOptions = null) {
+  validateControlPlaneProvenanceEvidence(value);
+  const build = value.body.executions.build;
+  invariant(build.releaseControl.packageJsonSha256 ===
+    dependencies.packageSha256 &&
+    build.releaseControl.packageLockSha256 ===
       dependencies.packageLockSha256 &&
-    value.install.releaseProvider.packageLockSha256 ===
-      providerDependencies.packageLockSha256 &&
-    exactKeys(value.node, ["executableSha256", "version"]) &&
-    value.node.version === "v22.23.1" && HEX_64.test(value.node.executableSha256 ?? "") &&
-    exactKeys(value.npm, ["version"]) && value.npm.version === "10.9.8" &&
-    exactKeys(value.tests, ["failed", "passed", "skipped"]) &&
-    value.tests.failed === 0 && Number.isSafeInteger(value.tests.passed) &&
-    value.tests.passed > 0 && Number.isSafeInteger(value.tests.skipped) &&
-    exactKeys(value.build, ["releaseControl", "releaseProvider"]) &&
-    exactKeys(value.build.releaseControl, [
-      "packageJsonSha256", "packageLockSha256", "receiptSha256",
-      "reproducible", "runtimeSha256"
-    ]) && value.build.releaseControl.packageJsonSha256 ===
-      dependencies.packageSha256 &&
-    value.build.releaseControl.packageLockSha256 ===
-      dependencies.packageLockSha256 &&
-    value.build.releaseControl.reproducible === true &&
-    [value.build.releaseControl.receiptSha256,
-      value.build.releaseControl.runtimeSha256]
-      .every((digest) => HEX_64.test(digest ?? "")) &&
-    exactKeys(value.build.releaseProvider, [
-      "externalImports", "packageJsonSha256", "packageLockSha256",
-      "receiptSha256", "reproducible", "runtimeCount", "runtimeSetSha256",
-      "sourceInventorySha256"
-    ]) && value.build.releaseProvider.packageJsonSha256 ===
+    build.releaseProvider.packageJsonSha256 ===
       providerDependencies.packageSha256 &&
-    value.build.releaseProvider.packageLockSha256 ===
+    build.releaseProvider.packageLockSha256 ===
       providerDependencies.packageLockSha256 &&
-    value.build.releaseProvider.runtimeSetSha256 ===
-      providerDependencies.runtimeSetSha256 &&
-    value.build.releaseProvider.reproducible === true &&
-    value.build.releaseProvider.runtimeCount === 3 &&
-    Array.isArray(value.build.releaseProvider.externalImports) &&
-    value.build.releaseProvider.externalImports.length > 0 &&
-    canonicalJson(value.build.releaseProvider.externalImports) ===
-      canonicalJson(sorted(new Set(
-        value.build.releaseProvider.externalImports))) &&
-    value.build.releaseProvider.externalImports.every((name) =>
-      /^node:[a-z0-9_./-]+$/u.test(name)) &&
-    [value.build.releaseProvider.receiptSha256,
-      value.build.releaseProvider.runtimeSetSha256,
-      value.build.releaseProvider.sourceInventorySha256]
-      .every((digest) => HEX_64.test(digest ?? "")),
-  "CONTROL_PLANE_PROVENANCE_EVIDENCE_REJECTED");
+    build.releaseProvider.runtimeSetSha256 ===
+      providerDependencies.runtimeSetSha256,
+  "CONTROL_PLANE_PROVENANCE_DEPENDENCY_BINDING_REJECTED");
+  invariant(plainObject(verificationOptions) &&
+    typeof verificationOptions.controlPlaneRoot === "string" &&
+    typeof verificationOptions.frozenApplicationRoot === "string" &&
+    typeof verificationOptions.npmCli === "string",
+  "CONTROL_PLANE_PROVENANCE_INDEPENDENT_REPRODUCTION_REQUIRED");
+  const verified = verifyControlPlaneProvenanceEvidence(value,
+    verificationOptions);
+  invariant(verified.providerExecutionAuthorized === false &&
+    verified.status === "LOCAL_PROVENANCE_REPRODUCED",
+  "CONTROL_PLANE_PROVENANCE_INDEPENDENT_REPRODUCTION_REJECTED");
   return value;
 }
 
@@ -1565,7 +1527,9 @@ function localFindings({ inventory, dependencies, notices, providerDependencies,
 }
 
 export function buildCandidate({
+  frozenApplicationRoot = null,
   governanceEvidence = null,
+  npmCli = null,
   provenanceEvidence = null,
   rootDir
 }) {
@@ -1588,7 +1552,12 @@ export function buildCandidate({
   const cost = collectCost(root);
   const governance = collectGovernance(root, governanceEvidence);
   const provenance = collectProvenance(root, dependencies,
-    providerDependencies, provenanceEvidence);
+    providerDependencies, provenanceEvidence, provenanceEvidence === null
+      ? null : {
+        controlPlaneRoot: root,
+        frozenApplicationRoot,
+        npmCli
+      });
   const findings = localFindings({ inventory, dependencies, notices,
     providerDependencies, providerMetadataArtifacts, providerNotices, security,
     cost, governance, metadataArtifacts, provenance });

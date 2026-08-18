@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -20,6 +22,16 @@ import {
   verifyReleaseProviderMetadata,
   verifyCandidate
 } from "../control-plane-verification/control-plane-verification.js";
+import {
+  CONTROL_PLANE_PROVENANCE_CONSTANTS,
+  __test as provenanceTest,
+  canonicalProvenanceJson,
+  provenanceSha256,
+  validateControlPlaneProvenanceEvidence
+} from "../control-plane-verification/control-plane-provenance.js";
+import {
+  expectedOfficialNodeRuntime
+} from "../src/cloud/official-node-runtime-contract.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const HEX = "a".repeat(64);
@@ -57,68 +69,180 @@ function governanceEvidence() {
 }
 
 function provenanceEvidence(dependencies, providerDependencies) {
-  return {
-    schemaVersion:
-      CONTROL_PLANE_VERIFICATION_CONSTANTS.PROVENANCE_EVIDENCE_SCHEMA,
-    status: "ACCEPTED",
-    origin: "https://github.com/Flash-Bri/prooftoact.git",
-    controlPlane: {
-      commit: "1".repeat(40),
-      tree: "2".repeat(40)
+  const officialNode = expectedOfficialNodeRuntime(process.platform,
+    process.arch);
+  const file = (pathName, marker) => ({
+    bytes: 100,
+    gitBlobId: marker.repeat(40),
+    path: pathName,
+    sha256: marker.repeat(64)
+  });
+  const execution = (command, semantic, kind) => {
+    const stdout = kind === "test"
+      ? Buffer.from("TAP version 13\n# tests 10\n# suites 1\n# pass 10\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n", "utf8")
+      : kind === "audit"
+        ? Buffer.from(`${JSON.stringify({ metadata: { vulnerabilities:
+          semantic.vulnerabilities } })}\n`, "utf8")
+        : Buffer.from("installed\n", "utf8");
+    const stderr = Buffer.alloc(0);
+    return {
+      argumentsSha256: "a".repeat(64),
+      command,
+      outputBytes: stdout.length,
+      outputSha256: provenanceSha256(Buffer.concat([stdout,
+        Buffer.from("\n---STDERR---\n", "utf8"), stderr])),
+      semantic,
+      stderrBase64: stderr.toString("base64"),
+      stdoutBase64: stdout.toString("base64")
+    };
+  };
+  const receipt = (marker) => {
+    const body = { zeta: marker, alpha: "multi-key-order-binding" };
+    return {
+      ...body,
+      provenanceSha256: provenanceSha256(Buffer.from(
+        `${JSON.stringify(body)}\n`, "utf8"))
+    };
+  };
+  const controlReceipt = receipt("control");
+  const providerReceipt = receipt("provider");
+  const body = {
+    schemaVersion: CONTROL_PLANE_PROVENANCE_CONSTANTS.SCHEMA,
+    claimBoundary: {
+      applicationDeploymentObserved: false,
+      hostedCiParityObserved: false,
+      privilegedRootStageObserved: false,
+      providerActionsPerformed: false,
+      providerExecutionAuthorized: false,
+      providerFactsAsserted: false,
+      sourceAndLocalExecutionEvidenceOnly: true
     },
-    frozenApplication: {
-      commit: "963937a9873f0199b91897fe88da1b91bc84b5e3",
-      tree: "a330e0d57328e63a568be73c523b2cae6338f26c"
+    decision: {
+      cleanStandaloneProvenanceObserved: true,
+      nextGate: "SEPARATE_GOVERNED_PROVIDER_AUTHORIZATION",
+      providerExecutionAuthorized: false,
+      status: "LOCAL_PROVENANCE_VERIFIED"
     },
     git: {
-      grafts: false,
-      replacements: false,
-      shallow: false,
-      standalone: true
-    },
-    clean: true,
-    install: {
-      releaseControl: {
-        arguments: ["ci", "--ignore-scripts"],
-        packageLockSha256: dependencies.packageLockSha256
+      controlPlane: {
+        clean: true,
+        commit: "1".repeat(40),
+        grafts: false,
+        origin: "https://github.com/Flash-Bri/prooftoact.git",
+        replacements: false,
+        role: "CONTROL_PLANE",
+        rootDevice: 1,
+        rootInode: 10,
+        rootMode: 0o755,
+        rootOwnerUid: process.getuid(),
+        shallow: false,
+        standalone: true,
+        tree: "2".repeat(40)
       },
-      releaseProvider: {
-        arguments: ["ci", "--ignore-scripts"],
-        packageLockSha256: providerDependencies.packageLockSha256
+      frozenApplication: {
+        clean: true,
+        commit: CONTROL_PLANE_PROVENANCE_CONSTANTS.FROZEN_APPLICATION.commit,
+        grafts: false,
+        origin: "https://github.com/Flash-Bri/prooftoact.git",
+        replacements: false,
+        role: "FROZEN_APPLICATION",
+        rootDevice: 1,
+        rootInode: 11,
+        rootMode: 0o755,
+        rootOwnerUid: process.getuid(),
+        shallow: false,
+        standalone: true,
+        tree: CONTROL_PLANE_PROVENANCE_CONSTANTS.FROZEN_APPLICATION.tree
       }
     },
-    node: {
-      executableSha256: "3".repeat(64),
-      version: "v22.23.1"
+    packages: {
+      application: [file("package.json", "3"),
+        file("package-lock.json", "4")],
+      controlPlane: [file("package.json", "3"),
+        file("package-lock.json", "4"),
+        file("release-control/package.json", "5"),
+        file("release-control/package-lock.json", "6"),
+        file("release-provider/package.json", "7"),
+        file("release-provider/package-lock.json", "8")]
     },
-    npm: {
-      version: "10.9.8"
-    },
-    build: {
-      releaseControl: {
-        packageJsonSha256: dependencies.packageSha256,
-        packageLockSha256: dependencies.packageLockSha256,
-        receiptSha256: "4".repeat(64),
+    executions: {
+      installations: ["control-plane-root", "release-control",
+        "release-provider", "frozen-application"].map((name) =>
+        execution(name, {
+          arguments: ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+          status: "PASS"
+        }, "install")),
+      tests: ["control-plane-root", "release-control", "release-provider",
+        "frozen-application"].map((name) =>
+        execution(name, {
+          cancelled: 0,
+          failed: 0,
+          packageScriptSha256: "9".repeat(64),
+          passed: 10,
+          script: "test",
+          skipped: 0,
+          tests: 10,
+          todo: 0
+        }, "test")),
+      audits: ["control-plane-root", "release-control", "release-provider",
+        "frozen-application"].map((name) =>
+        execution(name, {
+          auditFindingCount: 0,
+          vulnerabilities: {
+            critical: 0, high: 0, info: 0, low: 0, moderate: 0, total: 0
+          }
+        }, "audit")),
+      build: {
         reproducible: true,
-        runtimeSha256: "5".repeat(64)
+        releaseControl: {
+          externalImports: ["node:crypto"],
+          packageJsonSha256: dependencies.packageSha256,
+          packageLockSha256: dependencies.packageLockSha256,
+          provenanceSha256: controlReceipt.provenanceSha256,
+          rawOutputSha256: provenanceSha256(Buffer.from(
+            `${JSON.stringify(controlReceipt)}\n`, "utf8")),
+          receiptBase64: Buffer.from(`${JSON.stringify(controlReceipt)}\n`,
+            "utf8").toString("base64"),
+          runtimeSha256: "c".repeat(64),
+          sourceInventorySha256: "d".repeat(64)
+        },
+        releaseProvider: {
+          externalImports: ["node:crypto"],
+          packageJsonSha256: providerDependencies.packageSha256,
+          packageLockSha256: providerDependencies.packageLockSha256,
+          provenanceSha256: providerReceipt.provenanceSha256,
+          rawOutputSha256: provenanceSha256(Buffer.from(
+            `${JSON.stringify(providerReceipt)}\n`, "utf8")),
+          receiptBase64: Buffer.from(`${JSON.stringify(providerReceipt)}\n`,
+            "utf8").toString("base64"),
+          runtimeCount: 3,
+          runtimeSetSha256: providerDependencies.runtimeSetSha256,
+          sourceInventorySha256: "a".repeat(64)
+        }
       },
-      releaseProvider: {
-        externalImports: ["node:buffer", "node:crypto"],
-        packageJsonSha256: providerDependencies.packageSha256,
-        packageLockSha256: providerDependencies.packageLockSha256,
-        receiptSha256: "6".repeat(64),
-        reproducible: true,
-        runtimeCount: 3,
-        runtimeSetSha256: providerDependencies.runtimeSetSha256,
-        sourceInventorySha256: "7".repeat(64)
+      toolchain: {
+        nodeArch: officialNode.architecture,
+        nodeDistribution: officialNode.distribution,
+        nodeExecutableSha256: officialNode.sha256,
+        nodePlatform: officialNode.platform,
+        nodeVersion: officialNode.version,
+        npmCliSha256:
+          CONTROL_PLANE_PROVENANCE_CONSTANTS.NPM_PACKAGE_IDENTITY.cliSha256,
+        npmPackageFileCount:
+          CONTROL_PLANE_PROVENANCE_CONSTANTS.NPM_PACKAGE_IDENTITY.fileCount,
+        npmPackageJsonSha256:
+          CONTROL_PLANE_PROVENANCE_CONSTANTS.NPM_PACKAGE_IDENTITY
+            .packageJsonSha256,
+        npmPackageTreeSha256:
+          CONTROL_PLANE_PROVENANCE_CONSTANTS.NPM_PACKAGE_IDENTITY.treeSha256,
+        npmVersion: "10.9.8"
       }
-    },
-    tests: {
-      failed: 0,
-      passed: 100,
-      skipped: 0
-    },
-    auditFindingCount: 0
+    }
+  };
+  return {
+    body,
+    bodySha256: provenanceSha256(Buffer.from(canonicalProvenanceJson(body))),
+    schemaVersion: CONTROL_PLANE_PROVENANCE_CONSTANTS.SCHEMA
   };
 }
 
@@ -259,57 +383,101 @@ test("provenance evidence binds standalone Git, nested lock, build, test, and au
   const candidate = buildCandidate({ rootDir: ROOT });
   const evidence = provenanceEvidence(candidate.body.dependencies,
     candidate.body.providerDependencies);
-  assert.equal(validateProvenanceEvidence(evidence,
-    candidate.body.dependencies, candidate.body.providerDependencies), evidence);
+  assert.equal(validateControlPlaneProvenanceEvidence(evidence), evidence);
+  const canonicalRoundTrip = JSON.parse(canonicalProvenanceJson(evidence));
+  assert.equal(validateControlPlaneProvenanceEvidence(canonicalRoundTrip),
+    canonicalRoundTrip);
+  assert.throws(() => validateProvenanceEvidence(evidence,
+    candidate.body.dependencies, candidate.body.providerDependencies),
+  /CONTROL_PLANE_PROVENANCE_INDEPENDENT_REPRODUCTION_REQUIRED/u);
   const wrongLock = structuredClone(evidence);
-  wrongLock.install.releaseControl.packageLockSha256 = "f".repeat(64);
+  wrongLock.body.executions.build.releaseControl.packageLockSha256 =
+    "f".repeat(64);
+  wrongLock.bodySha256 = provenanceSha256(Buffer.from(
+    canonicalProvenanceJson(wrongLock.body)));
   assert.throws(() => validateProvenanceEvidence(wrongLock,
     candidate.body.dependencies, candidate.body.providerDependencies),
-  /CONTROL_PLANE_PROVENANCE_EVIDENCE_REJECTED/u);
+  /CONTROL_PLANE_PROVENANCE_DEPENDENCY_BINDING_REJECTED/u);
   const sameAsFrozen = structuredClone(evidence);
-  sameAsFrozen.controlPlane.commit =
-    sameAsFrozen.frozenApplication.commit;
-  assert.throws(() => validateProvenanceEvidence(sameAsFrozen,
-    candidate.body.dependencies, candidate.body.providerDependencies),
-  /CONTROL_PLANE_PROVENANCE_EVIDENCE_REJECTED/u);
-  const external = structuredClone(evidence);
-  external.build.releaseProvider.externalImports.push("@aws-sdk/client-s3");
-  assert.throws(() => validateProvenanceEvidence(external,
-    candidate.body.dependencies, candidate.body.providerDependencies),
-  /CONTROL_PLANE_PROVENANCE_EVIDENCE_REJECTED/u);
-  const wrongProviderLock = structuredClone(evidence);
-  wrongProviderLock.install.releaseProvider.packageLockSha256 = "e".repeat(64);
-  assert.throws(() => validateProvenanceEvidence(wrongProviderLock,
-    candidate.body.dependencies, candidate.body.providerDependencies),
-  /CONTROL_PLANE_PROVENANCE_EVIDENCE_REJECTED/u);
+  sameAsFrozen.body.git.controlPlane.commit =
+    sameAsFrozen.body.git.frozenApplication.commit;
+  sameAsFrozen.bodySha256 = provenanceSha256(Buffer.from(
+    canonicalProvenanceJson(sameAsFrozen.body)));
+  assert.throws(() => validateControlPlaneProvenanceEvidence(sameAsFrozen),
+    /CONTROL_PLANE_PROVENANCE_PACKAGE_EVIDENCE_REJECTED/u);
+  const outputSubstitution = structuredClone(evidence);
+  outputSubstitution.body.executions.tests[0].stdoutBase64 =
+    Buffer.from("forged\n", "utf8").toString("base64");
+  outputSubstitution.bodySha256 = provenanceSha256(Buffer.from(
+    canonicalProvenanceJson(outputSubstitution.body)));
+  assert.throws(() => validateControlPlaneProvenanceEvidence(outputSubstitution),
+    /CONTROL_PLANE_PROVENANCE_TEST_OUTPUT_REJECTED/u);
+  const receiptSubstitution = structuredClone(evidence);
+  receiptSubstitution.body.executions.build.releaseControl.receiptBase64 =
+    Buffer.from('{"forged":true}\n', "utf8").toString("base64");
+  receiptSubstitution.bodySha256 = provenanceSha256(Buffer.from(
+    canonicalProvenanceJson(receiptSubstitution.body)));
+  assert.throws(() => validateControlPlaneProvenanceEvidence(receiptSubstitution),
+    /CONTROL_PLANE_PROVENANCE_BUILD_RECEIPT_REJECTED/u);
 });
 
-test("accepted evidence is digest-bound but never authorizes provider execution", () => {
+test("provenance JSON cannot self-assert readiness or provider authority", () => {
   const source = buildCandidate({ rootDir: ROOT });
   const governance = governanceEvidence();
   const provenance = provenanceEvidence(source.body.dependencies,
     source.body.providerDependencies);
-  const candidate = buildCandidate({
+  assert.equal(provenance.body.decision.providerExecutionAuthorized, false);
+  assert.equal(provenance.body.claimBoundary.providerFactsAsserted, false);
+  assert.throws(() => buildCandidate({
     governanceEvidence: governance,
     provenanceEvidence: provenance,
     rootDir: ROOT
-  });
-  const result = verifyCandidate(candidate, {
-    governanceEvidence: governance,
-    provenanceEvidence: provenance,
-    rootDir: ROOT
-  });
-  assert.equal(result.providerEvidenceReady, true);
-  assert.equal(result.providerExecutionAuthorized, false);
-  assert.equal(candidate.body.governance.providerEvidence.status, "ACCEPTED");
-  assert.equal(candidate.body.provenance.providerEvidence.status, "ACCEPTED");
-  const substituted = structuredClone(governance);
-  substituted.observedAt = "2026-08-17T22:01:00.000Z";
-  assert.throws(() => verifyCandidate(candidate, {
-    governanceEvidence: substituted,
-    provenanceEvidence: provenance,
-    rootDir: ROOT
-  }), /CONTROL_PLANE_CANDIDATE_SOURCE_MISMATCH/u);
+  }), /CONTROL_PLANE_PROVENANCE_INDEPENDENT_REPRODUCTION_REQUIRED/u);
+});
+
+test("provenance boundary rejects nested roots, failing outputs, duplicate flags, and broad evidence modes", (t) => {
+  assert.equal(provenanceTest.rootsAreSeparate("/tmp/control", "/tmp/app"),
+    true);
+  assert.equal(provenanceTest.rootsAreSeparate("/tmp/control", "/tmp/control"),
+    false);
+  assert.equal(provenanceTest.rootsAreSeparate("/tmp/control", "/tmp/control/app"),
+    false);
+  assert.throws(() => provenanceTest.parseTap(Buffer.from(
+    "# tests 1\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n", "utf8"), "TEST_TAP_REJECTED"), /TEST_TAP_REJECTED/u);
+  assert.throws(() => provenanceTest.parseAudit(Buffer.from(JSON.stringify({
+    metadata: { vulnerabilities: {
+      critical: 0, high: 1, info: 0, low: 0, moderate: 0, total: 1
+    } }
+  }), "utf8"), "TEST_AUDIT_REJECTED"), /TEST_AUDIT_REJECTED/u);
+
+  const duplicate = spawnSync(process.execPath, [
+    path.join(ROOT,
+      "control-plane-verification/generate-control-plane-provenance-evidence.js"),
+    "--control-root", "/tmp/one", "--control-root", "/tmp/two"
+  ], { encoding: "utf8" });
+  assert.notEqual(duplicate.status, 0);
+  assert.match(duplicate.stderr,
+    /CONTROL_PLANE_PROVENANCE_ARGUMENT_REJECTED/u);
+
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(),
+    "prooftoact-provenance-mode-test-"));
+  t.after(() => fs.rmSync(temporaryRoot, { force: true, recursive: true }));
+  const controlRoot = path.join(temporaryRoot, "control");
+  const applicationRoot = path.join(temporaryRoot, "application");
+  fs.mkdirSync(controlRoot, { mode: 0o700 });
+  fs.mkdirSync(applicationRoot, { mode: 0o700 });
+  const evidencePath = path.join(temporaryRoot, "evidence.json");
+  fs.writeFileSync(evidencePath, "{}\n", { mode: 0o644 });
+  fs.chmodSync(evidencePath, 0o644);
+  const broadMode = spawnSync(process.execPath, [
+    path.join(ROOT,
+      "control-plane-verification/verify-control-plane-provenance-evidence.js"),
+    "--control-root", controlRoot, "--application-root", applicationRoot,
+    "--npm-cli", process.execPath, "--evidence", evidencePath
+  ], { encoding: "utf8" });
+  assert.notEqual(broadMode.status, 0);
+  assert.match(broadMode.stderr,
+    /CONTROL_PLANE_PROVENANCE_EVIDENCE_FILE_REJECTED/u);
 });
 
 test("dependency inventory and notice rendering are deterministic", () => {

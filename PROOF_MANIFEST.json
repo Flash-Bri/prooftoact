@@ -943,7 +943,7 @@
     {
       "id": "release-ci-workflow",
       "path": ".github/workflows/ci.yml",
-      "sha256": "3cd4b9a7b1ec4354c41ad1f7fc9d2344ab1ae71f9bc88559e529cb264b8cb740",
+      "sha256": "c7832f7654b9943bf6e1e92a8fd9b02c6b51cce098fad4758d2e8e2729ae3389",
       "kind": "verification-code"
     },
     {
@@ -1003,7 +1003,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "1783c2da808f8a2d3ebcc7b205985c3d11986b491e179cd135868d9124b666a4",
+      "sha256": "0ce11197b9bd1c515ae7ab853447867db7ac68fd6e847b0aa27a5b391b4ee473",
       "kind": "boundary-ledger"
     },
     {
@@ -1039,7 +1039,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "a185dbe754610a5740a22b54e51309c77284005ef84f39603ed90b44649ed214",
+      "sha256": "b3a690bdc26487b60a69129346e19244f09bfaa857f91d44d636bbb948b6c975",
       "kind": "boundary-ledger"
     },
     {
@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "95a697344078c8d6c028bd0573abdb403361bcf3ea469280be48a87699fcdd43",
+      "sha256": "12e7299d260fd16e7ea3219d9c1e70a15cb8dfc84c9dff4d568eddaedb779452",
       "kind": "boundary-ledger"
     },
     {

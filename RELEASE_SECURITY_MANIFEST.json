@@ -24,7 +24,7 @@
       "id": "actions-ci-workflow",
       "path": ".github/workflows/ci.yml",
       "role": "GITHUB_ACTIONS_RELEASE_VERIFICATION_WORKFLOW",
-      "sha256": "3cd4b9a7b1ec4354c41ad1f7fc9d2344ab1ae71f9bc88559e529cb264b8cb740"
+      "sha256": "c7832f7654b9943bf6e1e92a8fd9b02c6b51cce098fad4758d2e8e2729ae3389"
     },
     {
       "id": "admissible-vector-retrieval",

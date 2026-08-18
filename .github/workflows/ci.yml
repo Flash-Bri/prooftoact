@@ -52,89 +52,12 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
 
-      - name: Verify proof manifest
-        run: npm run proof:verify
+      - name: Install locked release-control dependencies
+        working-directory: release-control
+        run: npm ci --ignore-scripts
 
-      - name: Verify ProofToAct brand migration
-        run: npm run brand:verify
-
-      - name: Verify current claim surfaces
-        run: npm run claims:verify
-
-      - name: Verify current-source cost guards
-        run: npm run cost:verify
-
-      - name: Verify repository release governance snapshot
-        run: npm run governance:verify
-
-      - name: Verify current-surface rights inventory
-        run: npm run rights:verify
-
-      - name: Verify bounded release privacy controls
-        run: npm run privacy:verify
-
-      - name: Verify current source security boundaries
-        run: npm run security:verify
-
-      - name: Verify fail-closed submission draft
-        run: npm run submission:verify
-
-      - name: Verify bounded static accessibility controls
-        run: npm run accessibility:verify
-
-      - name: Verify rendered browser accessibility controls
-        run: npm run accessibility:browser
-
-      - name: Verify locked dependency inventory
-        run: npm run dependencies:verify
-
-      - name: Verify bundled third-party notices
-        run: npm run licenses:verify
-
-      - name: Run deterministic tests
-        run: npm test
-
-      - name: Verify installed-process boundaries
-        run: npm run process-boundaries:verify
-
-      - name: Run privileged installed-stage tests
-        run: sudo "$(command -v node)" "$(command -v npm)" run test:root-stage
-
-      - name: Audit locked dependencies
-        run: npm audit --audit-level=low
-
-      - name: Rebuild Gate Two artifacts
-        run: npm run build:gate2
-
-  verify:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    steps:
-      - name: Check out synthetic merge or official main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Use Node.js 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22.23.1
-          cache: npm
-
-      - name: Normalize exact GitHub Actions checkout
-        env:
-          GIT_OPTIONAL_LOCKS: "0"
-          NODE_COMPILE_CACHE: ""
-          NODE_EXTRA_CA_CERTS: ""
-          NODE_OPTIONS: ""
-          NODE_PATH: ""
-          NODE_REPL_EXTERNAL_MODULE: ""
-          NODE_V8_COVERAGE: ""
-        run: node scripts/normalize-actions-checkout.js
-
-      - name: Install locked dependencies
+      - name: Install locked release-provider dependencies
+        working-directory: release-provider
         run: npm ci --ignore-scripts
 
       - name: Verify proof manifest
@@ -176,11 +99,15 @@ jobs:
       - name: Verify bundled third-party notices
         run: npm run licenses:verify
 
-      - name: Verify exact release provenance
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: npm run release:provenance
-
       - name: Run deterministic tests
+        run: npm test
+
+      - name: Run deterministic release-control tests
+        working-directory: release-control
+        run: npm test
+
+      - name: Run deterministic release-provider tests
+        working-directory: release-provider
         run: npm test
 
       - name: Verify installed-process boundaries
@@ -192,9 +119,136 @@ jobs:
       - name: Audit locked dependencies
         run: npm audit --audit-level=low
 
+      - name: Audit locked release-control dependencies
+        working-directory: release-control
+        run: npm audit --omit=dev --audit-level=low
+
+      - name: Audit locked release-provider dependencies
+        working-directory: release-provider
+        run: npm audit --omit=dev --audit-level=low
+
       - name: Rebuild Gate Two artifacts
         run: npm run build:gate2
 
-      - name: Verify official-main release readiness wrapper
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out synthetic merge or official main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+
+      - name: Normalize exact GitHub Actions checkout
+        env:
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: node scripts/normalize-actions-checkout.js
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install locked release-control dependencies
+        working-directory: release-control
+        run: npm ci --ignore-scripts
+
+      - name: Install locked release-provider dependencies
+        working-directory: release-provider
+        run: npm ci --ignore-scripts
+
+      - name: Verify proof manifest
+        run: npm run proof:verify
+
+      - name: Verify ProofToAct brand migration
+        run: npm run brand:verify
+
+      - name: Verify current claim surfaces
+        run: npm run claims:verify
+
+      - name: Verify current-source cost guards
+        run: npm run cost:verify
+
+      - name: Verify repository release governance snapshot
+        run: npm run governance:verify
+
+      - name: Verify current-surface rights inventory
+        run: npm run rights:verify
+
+      - name: Verify bounded release privacy controls
+        run: npm run privacy:verify
+
+      - name: Verify current source security boundaries
+        run: npm run security:verify
+
+      - name: Verify fail-closed submission draft
+        run: npm run submission:verify
+
+      - name: Verify bounded static accessibility controls
+        run: npm run accessibility:verify
+
+      - name: Verify rendered browser accessibility controls
+        run: npm run accessibility:browser
+
+      - name: Verify locked dependency inventory
+        run: npm run dependencies:verify
+
+      - name: Verify bundled third-party notices
+        run: npm run licenses:verify
+
+      - name: Verify exact frozen-application release provenance
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.sha == '963937a9873f0199b91897fe88da1b91bc84b5e3'
+        run: npm run release:provenance
+
+      - name: Run deterministic tests
+        run: npm test
+
+      - name: Run deterministic release-control tests
+        working-directory: release-control
+        run: npm test
+
+      - name: Run deterministic release-provider tests
+        working-directory: release-provider
+        run: npm test
+
+      - name: Verify installed-process boundaries
+        run: npm run process-boundaries:verify
+
+      - name: Run privileged installed-stage tests
+        run: sudo "$(command -v node)" "$(command -v npm)" run test:root-stage
+
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=low
+
+      - name: Audit locked release-control dependencies
+        working-directory: release-control
+        run: npm audit --omit=dev --audit-level=low
+
+      - name: Audit locked release-provider dependencies
+        working-directory: release-provider
+        run: npm audit --omit=dev --audit-level=low
+
+      - name: Rebuild Gate Two artifacts
+        run: npm run build:gate2
+
+      - name: Verify frozen-application release readiness wrapper
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.sha == '963937a9873f0199b91897fe88da1b91bc84b5e3'
         run: npm run gate2:aws-readiness:local

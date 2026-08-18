@@ -60,9 +60,10 @@ node control-plane-verification/verify-control-plane-candidate.js \
   --candidate /absolute/private/output/control-plane-candidate.json
 ```
 
-When sanitized governance and provenance evidence files are supplied during
-generation, supply those exact same files during verification. The candidate
-binds their canonical digests and rejects substitution.
+When sanitized governance evidence is supplied during generation, supply the
+same file during verification. Provenance is stricter: a caller-authored JSON
+summary is never accepted. It must first be generated from two separate exact
+standalone roots and then independently reproduced from those roots.
 
 Add `--require-ready` only at the final local gate. Even a ready candidate still
 requires the separate signed approval and provider authority path.
@@ -94,8 +95,71 @@ node control-plane-verification/verify-release-provider-metadata.js \
   --root /absolute/control-plane
 ```
 
-Clean-checkout provenance evidence must separately bind `npm ci
---ignore-scripts`, the lock and package bytes, and reproducible build receipts
-for both hermetic packages. Provider provenance additionally binds exactly
-three runtimes, their runtime-set digest, source inventory, and the union of
-external imports; every external import must be a `node:` builtin.
+## Two-root clean provenance gate
+
+The control-plane root must be a clean standalone checkout at its exact current
+commit and tree. The application root must be a different, non-nested clean
+standalone checkout at frozen application commit
+`963937a9873f0199b91897fe88da1b91bc84b5e3` and tree
+`a330e0d57328e63a568be73c523b2cae6338f26c`. Both roots must use the official
+origin and have a local, complete, non-shallow object store with no grafts,
+replacement refs, alternates, hidden index flags, or dirty bytes.
+
+Run both commands with an official Node.js v22.23.1 distribution whose
+executable digest is pinned by `official-node-runtime-contract.js`. The
+`--npm-cli` path must be the adjacent npm 10.9.8 package shipped inside that
+same official distribution; the verifier hashes all 1,964 npm package files
+and rejects an ambient, Homebrew, copied, or caller-supplied substitute.
+
+Generate the evidence into an existing owner-only output directory that is
+outside both checkout roots:
+
+```text
+/absolute/official-node/bin/node \
+  control-plane-verification/generate-control-plane-provenance-evidence.js \
+  --control-root /absolute/standalone/control-plane \
+  --application-root /absolute/standalone/frozen-application \
+  --npm-cli /absolute/official-node/lib/node_modules/npm/bin/npm-cli.js \
+  --output /absolute/owner-only/provenance-evidence.json
+```
+
+The generator itself runs `npm ci --ignore-scripts` and the exact package
+`test` script for the control-plane root, both hermetic packages, and the
+frozen application root. It runs production dependency audits, rebuilds each
+control/provider runtime twice, reopens every tracked package/lock byte and
+build input/output, and embeds the exact stdout/stderr and full build receipts
+under canonical digests.
+
+Reproduce the evidence independently before it can enter a candidate:
+
+```text
+/absolute/official-node/bin/node \
+  control-plane-verification/verify-control-plane-provenance-evidence.js \
+  --control-root /absolute/standalone/control-plane \
+  --application-root /absolute/standalone/frozen-application \
+  --npm-cli /absolute/official-node/lib/node_modules/npm/bin/npm-cli.js \
+  --evidence /absolute/owner-only/provenance-evidence.json
+```
+
+The verifier first reopens and reparses the owner-only, non-symlink evidence
+file, embedded command outputs, and raw build receipts. It then reruns the
+installs, exact package test scripts, audits, and two-build reproducibility
+checks against the same two roots. Both roots are re-inspected after the long
+gate, including filesystem identity. A structurally valid JSON file without
+that reproduction fails closed.
+
+This local receipt intentionally does not claim hosted-CI parity or execution
+of the separately privileged root-stage tests. Those remain independent,
+required hosted-workflow evidence at the exact control-plane commit; a local
+provenance receipt cannot substitute for them.
+
+Only after reproduction may the same evidence be supplied to candidate
+generation/verification, together with `--frozen-application-root` and
+`--npm-cli`. Even then the result states only
+`LOCAL_PROVENANCE_REPRODUCED`; it always returns
+`providerExecutionAuthorized: false`. It does not authorize OIDC, credentials,
+AWS or CockroachDB access, deployment, spending, publication, or submission.
+
+Provider build provenance binds exactly three runtimes, their runtime-set
+digest, complete source inventory, full receipts, and the union of external
+imports; every external import must be a `node:` builtin.
