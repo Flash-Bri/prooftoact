@@ -872,10 +872,8 @@ function buildSimulationVectors(accountId, artifactBucketName) {
 
 function validateSimulationResult(response, request, decision, boundaryExpected) {
   const code = "BOOTSTRAP_READBACK_IAM_SIMULATION_REJECTED";
-  requireCondition(allowedKeys(response, ["EvaluationResults", "IsTruncated"],
-    ["EvaluationResults", "IsTruncated"]) &&
-    response.IsTruncated === false &&
-    Array.isArray(response.EvaluationResults) &&
+  untruncatedEnvelope(response, ["EvaluationResults"], code);
+  requireCondition(Array.isArray(response.EvaluationResults) &&
     response.EvaluationResults.length === 1, code);
   const result = response.EvaluationResults[0];
   requireCondition(allowedKeys(result, [
