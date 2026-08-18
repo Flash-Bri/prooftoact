@@ -28,12 +28,14 @@ const CONTROL_PLANE_ROLES_TEMPLATE_PATH =
   "infra/aws/release-deployment-roles-template.json";
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
+const SEALED_WORKFLOW_COMMIT =
+  "50d0cd261b8597fe74c80b84c49be0adde5bdf6f";
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const REVIEWED_GATE2_TEMPLATE_SHA256 =
   "a10066b23925cf2921b15eaa0d52e7ac8ef7a5f46e0ab260431a340e897cc3a1";
 const REVIEWED_DEPLOYMENT_ROLES_TEMPLATE_SHA256 =
-  "6e8fd5c0ad6de5c5b0a52dc125b019857c3dd3f86298b91e05a6279edd220989";
+  "5f72ab835c93e6c8739405ed953d5c340dd13497a83eb1efff40fd70ba144da9";
 const ARTIFACT_NAMES = Object.freeze([
   "agent",
   "authority",
@@ -74,18 +76,21 @@ const DEPLOYMENT_ROLE_LOGICAL_IDS = Object.freeze([
 ]);
 const OIDC_ROLE_CONTRACTS = Object.freeze({
   LiveDrillOperatorRole: Object.freeze({
+    credentialWorkflowFile: "prooftoact-sealed-live-drill.yml",
     environment: "aws-live-drill",
     roleName: "ProofToActLiveDrillOperator",
     workflow: "ProofToAct Bounded Live Drill",
     workflowFile: "prooftoact-bounded-live-drill.yml"
   }),
   ReleaseDeploymentRole: Object.freeze({
+    credentialWorkflowFile: "prooftoact-sealed-prepare.yml",
     environment: "aws-release-deployment",
     roleName: "ProofToActReleaseDeployment",
     workflow: "ProofToAct Release Candidate",
     workflowFile: "prooftoact-release-candidate.yml"
   }),
   ReleaseCoordinatorRole: Object.freeze({
+    credentialWorkflowFile: "prooftoact-sealed-coordinator.yml",
     environment: "aws-release-coordination",
     roleName: "ProofToActReleaseCoordinator",
     workflows: Object.freeze([
@@ -104,24 +109,28 @@ const OIDC_ROLE_CONTRACTS = Object.freeze({
     ])
   }),
   ReleaseEvidenceRole: Object.freeze({
+    credentialWorkflowFile: "prooftoact-sealed-evidence.yml",
     environment: "aws-release-evidence",
     roleName: "ProofToActReleaseEvidence",
     workflow: "ProofToAct Read Only Release Evidence",
     workflowFile: "prooftoact-read-only-release-evidence.yml"
   }),
   ReleaseExecutionRole: Object.freeze({
+    credentialWorkflowFile: "prooftoact-sealed-execute.yml",
     environment: "aws-release-execution",
     roleName: "ProofToActReleaseExecution",
     workflow: "ProofToAct Execute Approved Release",
     workflowFile: "prooftoact-execute-approved-release.yml"
   }),
   ReleaseTeardownRole: Object.freeze({
+    credentialWorkflowFile: "prooftoact-sealed-teardown.yml",
     environment: "aws-release-teardown",
     roleName: "ProofToActReleaseTeardown",
     workflow: "ProofToAct Approved Teardown",
     workflowFile: "prooftoact-approved-teardown.yml"
   }),
   ReleaseTerminalizerRole: Object.freeze({
+    credentialWorkflowFile: "prooftoact-sealed-terminalizer.yml",
     environment: "aws-release-terminalization",
     roleName: "ProofToActReleaseTerminalizer",
     workflow: "ProofToAct Terminalize Expired Release",
@@ -231,6 +240,7 @@ function validateOidcRoleTrust(role, contract) {
       exactKeys(equals, [
         "token.actions.githubusercontent.com:aud",
         "token.actions.githubusercontent.com:environment",
+        "token.actions.githubusercontent.com:job_workflow_ref",
         "token.actions.githubusercontent.com:ref",
         "token.actions.githubusercontent.com:repository",
         "token.actions.githubusercontent.com:repository_id",
@@ -243,6 +253,8 @@ function validateOidcRoleTrust(role, contract) {
         "sts.amazonaws.com" &&
       equals["token.actions.githubusercontent.com:environment"] ===
         contract.environment &&
+      equals["token.actions.githubusercontent.com:job_workflow_ref"] ===
+        `Flash-Bri/prooftoact/.github/workflows/${contract.credentialWorkflowFile}@${SEALED_WORKFLOW_COMMIT}` &&
       equals["token.actions.githubusercontent.com:ref"] ===
         "refs/heads/main" &&
       equals["token.actions.githubusercontent.com:repository"] ===
@@ -1158,15 +1170,11 @@ export function validateReleaseDeploymentRoleTemplate(
       "COORDINATOR_HAS_ATOMIC_STORE_AND_READBACK_ONLY;LANE_DISPATCHERS_HAVE_EFFECT_ONLY_STRONG_READ",
     teardownPhysicalStackBindingRequired: true,
     oidcTrustBoundary:
-      "IAM_BINDS_SUPPORTED_GITHUB_CLAIMS;RUNTIME_MUST_VERIFY_EXACT_WORKFLOW_REF",
+      "IAM_BINDS_IMMUTABLE_REUSABLE_JOB_WORKFLOW_REF_AND_EXISTING_REPOSITORY_REF_ENVIRONMENT_CLAIMS",
     requiredRuntimeWorkflowRefs: Object.freeze(Object.fromEntries(
       Object.entries(OIDC_ROLE_CONTRACTS).map(([logicalId, contract]) => [
         logicalId,
-        contract.workflowFiles
-          ? Object.freeze(contract.workflowFiles.map((workflowFile) =>
-            `Flash-Bri/prooftoact/.github/workflows/${workflowFile}@refs/heads/main`
-          ))
-          : `Flash-Bri/prooftoact/.github/workflows/${contract.workflowFile}@refs/heads/main`
+        `Flash-Bri/prooftoact/.github/workflows/${contract.credentialWorkflowFile}@${SEALED_WORKFLOW_COMMIT}`
       ])
     )),
     kms

@@ -9,7 +9,7 @@ const OFFICIAL_ORIGIN = "https://github.com/Flash-Bri/prooftoact.git";
 const TEMPLATE_PATH = "infra/aws/release-deployment-roles-template.json";
 const PLANNER_PATH = "scripts/prepare-release-control-bootstrap.js";
 const REVIEWED_TEMPLATE_SHA256 =
-  "6e8fd5c0ad6de5c5b0a52dc125b019857c3dd3f86298b91e05a6279edd220989";
+  "5f72ab835c93e6c8739405ed953d5c340dd13497a83eb1efff40fd70ba144da9";
 const REVIEWED_BOUNDARY_POLICY_SHA256 =
   "beb78b947292ec8afd946ba9656c424b1bfa35ffa8ea59e095b38cc49523dd84";
 const REGION = "us-east-1";

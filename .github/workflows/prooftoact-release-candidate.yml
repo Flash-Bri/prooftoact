@@ -107,12 +107,17 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' && !inputs.diagnostic_only }}
     permissions:
       contents: read
-      id-token: write
     environment: aws-release-coordination
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
-      lookup_b64: ${{ steps.reserve.outputs.lookup_b64 }}
+      artifact_name: ${{ steps.seal.outputs.artifact_name }}
+      authority_commit: ${{ steps.seal.outputs.authority_commit }}
+      authority_tree: ${{ steps.seal.outputs.authority_tree }}
+      command_base64: ${{ steps.seal.outputs.command_base64 }}
+      command_sha256: ${{ steps.seal.outputs.command_sha256 }}
+      manifest_base64: ${{ steps.seal.outputs.manifest_base64 }}
+      manifest_sha256: ${{ steps.seal.outputs.manifest_sha256 }}
 
     steps:
       - name: Check out exact control plane
@@ -168,68 +173,56 @@ jobs:
           npm ci --ignore-scripts --prefix release-control
           npm ci --ignore-scripts --prefix release-provider
 
-      - name: Require protected bootstrap evidence and rebuild signed executable manifest before OIDC
+      - name: Generate hash-bound non-executable coordinator reserve seal
+        id: seal
         working-directory: control-plane
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
-          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
-          NODE_COMPILE_CACHE: ""
-          NODE_EXTRA_CA_CERTS: ""
-          NODE_OPTIONS: ""
-          NODE_PATH: ""
-          NODE_REPL_EXTERNAL_MODULE: ""
-          NODE_V8_COVERAGE: ""
-          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
-          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
-          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-coordination
-          PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64 }}
-          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
-        run: node scripts/run-release-prepare-preflight.js reserve
+          ARTIFACT_NAME: prooftoact-sealed-coordinator-${{ github.run_id }}-${{ github.run_attempt }}-reserve
+          SEAL_ROOT: ${{ runner.temp }}/prooftoact-sealed-coordinator-reserve
+        run: |
+          authority_commit="$(git rev-parse HEAD)"
+          authority_tree="$(git rev-parse HEAD^{tree})"
+          receipt="$(node scripts/build-release-credential-seal.js "$SEAL_ROOT" coordinator aws-release-coordination reserve "$authority_commit" "$authority_tree")"
+          command_base64="$(jq -er '.commandBase64' <<<"$receipt")"
+          command_sha256="$(jq -er '.commandSha256' <<<"$receipt")"
+          manifest_base64="$(jq -er '.manifestBase64' <<<"$receipt")"
+          manifest_sha256="$(jq -er '.manifestSha256' <<<"$receipt")"
+          printf '%s\n' \
+            "artifact_name=$ARTIFACT_NAME" \
+            "authority_commit=$authority_commit" \
+            "authority_tree=$authority_tree" \
+            "command_base64=$command_base64" \
+            "command_sha256=$command_sha256" \
+            "manifest_base64=$manifest_base64" \
+            "manifest_sha256=$manifest_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Assume only the release coordinator role
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - name: Upload only the non-executable reserve seal
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          aws-region: us-east-1
-          disable-retry: true
-          mask-aws-account-id: true
-          output-env-credentials: true
-          role-duration-seconds: 900
-          role-session-name: pta-${{ github.run_id }}-${{ github.run_attempt }}-coordinator-reserve
-          role-to-assume: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
-          unset-current-credentials: true
-
-      - name: Atomically reserve budget and append one durable intent
-        id: reserve
-        working-directory: control-plane
-        env:
-          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
-          NODE_COMPILE_CACHE: ""
-          NODE_EXTRA_CA_CERTS: ""
-          NODE_OPTIONS: ""
-          NODE_PATH: ""
-          NODE_REPL_EXTERNAL_MODULE: ""
-          NODE_V8_COVERAGE: ""
-          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-coordination
-          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
-          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
-          PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64 }}
-          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
-        run: node scripts/run-release-prepare-phase.js reserve
+          name: ${{ steps.seal.outputs.artifact_name }}
+          path: ${{ runner.temp }}/prooftoact-sealed-coordinator-reserve/*
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1
 
   provider-dispatch:
     needs: coordinator-reserve
     if: ${{ github.ref == 'refs/heads/main' && !inputs.diagnostic_only && needs.coordinator-reserve.result == 'success' }}
     permissions:
       contents: read
-      id-token: write
     environment: aws-release-deployment
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    outputs:
+      artifact_name: ${{ steps.seal.outputs.artifact_name }}
+      authority_commit: ${{ steps.seal.outputs.authority_commit }}
+      authority_tree: ${{ steps.seal.outputs.authority_tree }}
+      command_base64: ${{ steps.seal.outputs.command_base64 }}
+      command_sha256: ${{ steps.seal.outputs.command_sha256 }}
+      manifest_base64: ${{ steps.seal.outputs.manifest_base64 }}
+      manifest_sha256: ${{ steps.seal.outputs.manifest_sha256 }}
 
     steps:
       - name: Check out exact control plane
@@ -297,61 +290,39 @@ jobs:
           npm ci --ignore-scripts --prefix release-control
           npm ci --ignore-scripts --prefix release-provider
 
-      - name: Require protected bootstrap evidence and rebuild signed executable manifest before OIDC
+      - name: Generate hash-bound non-executable PREPARE dispatch seal
+        id: seal
         working-directory: control-plane
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
-          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
-          NODE_COMPILE_CACHE: ""
-          NODE_EXTRA_CA_CERTS: ""
-          NODE_OPTIONS: ""
-          NODE_PATH: ""
-          NODE_REPL_EXTERNAL_MODULE: ""
-          NODE_V8_COVERAGE: ""
-          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
-          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
-          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-deployment
-          PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64 }}
-          PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64 }}
-          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_DEPLOYMENT_ROLE_ARN }}
-        run: node scripts/run-release-prepare-preflight.js dispatch
+          ARTIFACT_NAME: prooftoact-sealed-prepare-${{ github.run_id }}-${{ github.run_attempt }}
+          SEAL_ROOT: ${{ runner.temp }}/prooftoact-sealed-prepare-dispatch
+        run: |
+          authority_commit="$(git rev-parse HEAD)"
+          authority_tree="$(git rev-parse HEAD^{tree})"
+          receipt="$(node scripts/build-release-credential-seal.js "$SEAL_ROOT" prepare aws-release-deployment dispatch "$authority_commit" "$authority_tree")"
+          command_base64="$(jq -er '.commandBase64' <<<"$receipt")"
+          command_sha256="$(jq -er '.commandSha256' <<<"$receipt")"
+          manifest_base64="$(jq -er '.manifestBase64' <<<"$receipt")"
+          manifest_sha256="$(jq -er '.manifestSha256' <<<"$receipt")"
+          printf '%s\n' \
+            "artifact_name=$ARTIFACT_NAME" \
+            "authority_commit=$authority_commit" \
+            "authority_tree=$authority_tree" \
+            "command_base64=$command_base64" \
+            "command_sha256=$command_sha256" \
+            "manifest_base64=$manifest_base64" \
+            "manifest_sha256=$manifest_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Assume only the PREPARE deployment role
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - name: Upload only the non-executable PREPARE seal
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          aws-region: us-east-1
-          disable-retry: true
-          mask-aws-account-id: true
-          output-env-credentials: true
-          role-duration-seconds: 900
-          role-session-name: pta-${{ github.run_id }}-${{ github.run_attempt }}-provider-dispatch
-          role-to-assume: ${{ secrets.PROOFTOACT_RELEASE_DEPLOYMENT_ROLE_ARN }}
-          unset-current-credentials: true
-
-      - name: Strongly reread intent and perform one bounded PREPARE dispatch
-        working-directory: control-plane
-        env:
-          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
-          NODE_COMPILE_CACHE: ""
-          NODE_EXTRA_CA_CERTS: ""
-          NODE_OPTIONS: ""
-          NODE_PATH: ""
-          NODE_REPL_EXTERNAL_MODULE: ""
-          NODE_V8_COVERAGE: ""
-          PROOFTOACT_RELEASE_BUILD_RECEIPT_PATH: ${{ runner.temp }}/prooftoact-gate2-build-receipt.json
-          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-deployment
-          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
-          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
-          PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64 }}
-          PROOFTOACT_RELEASE_PREPARE_LOOKUP_B64: ${{ needs.coordinator-reserve.outputs.lookup_b64 }}
-          PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64 }}
-          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_DEPLOYMENT_ROLE_ARN }}
-        run: node scripts/run-release-prepare-phase.js dispatch
+          name: ${{ steps.seal.outputs.artifact_name }}
+          path: ${{ runner.temp }}/prooftoact-sealed-prepare-dispatch/*
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1
 
   coordinator-finalize:
     needs:
@@ -360,10 +331,17 @@ jobs:
     if: ${{ always() && github.ref == 'refs/heads/main' && !inputs.diagnostic_only && needs.coordinator-reserve.result == 'success' }}
     permissions:
       contents: read
-      id-token: write
     environment: aws-release-coordination
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    outputs:
+      artifact_name: ${{ steps.seal.outputs.artifact_name }}
+      authority_commit: ${{ steps.seal.outputs.authority_commit }}
+      authority_tree: ${{ steps.seal.outputs.authority_tree }}
+      command_base64: ${{ steps.seal.outputs.command_base64 }}
+      command_sha256: ${{ steps.seal.outputs.command_sha256 }}
+      manifest_base64: ${{ steps.seal.outputs.manifest_base64 }}
+      manifest_sha256: ${{ steps.seal.outputs.manifest_sha256 }}
 
     steps:
       - name: Check out exact control plane
@@ -431,58 +409,78 @@ jobs:
           npm ci --ignore-scripts --prefix release-control
           npm ci --ignore-scripts --prefix release-provider
 
-      - name: Require protected bootstrap evidence and rebuild signed executable manifest before OIDC
+      - name: Generate hash-bound non-executable coordinator finalize seal
+        id: seal
         working-directory: control-plane
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
-          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
-          NODE_COMPILE_CACHE: ""
-          NODE_EXTRA_CA_CERTS: ""
-          NODE_OPTIONS: ""
-          NODE_PATH: ""
-          NODE_REPL_EXTERNAL_MODULE: ""
-          NODE_V8_COVERAGE: ""
-          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
-          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
-          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-coordination
-          PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64 }}
-          PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64 }}
-          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
-        run: node scripts/run-release-prepare-preflight.js finalize
+          ARTIFACT_NAME: prooftoact-sealed-coordinator-${{ github.run_id }}-${{ github.run_attempt }}-finalize
+          SEAL_ROOT: ${{ runner.temp }}/prooftoact-sealed-coordinator-finalize
+        run: |
+          authority_commit="$(git rev-parse HEAD)"
+          authority_tree="$(git rev-parse HEAD^{tree})"
+          receipt="$(node scripts/build-release-credential-seal.js "$SEAL_ROOT" coordinator aws-release-coordination finalize "$authority_commit" "$authority_tree")"
+          command_base64="$(jq -er '.commandBase64' <<<"$receipt")"
+          command_sha256="$(jq -er '.commandSha256' <<<"$receipt")"
+          manifest_base64="$(jq -er '.manifestBase64' <<<"$receipt")"
+          manifest_sha256="$(jq -er '.manifestSha256' <<<"$receipt")"
+          printf '%s\n' \
+            "artifact_name=$ARTIFACT_NAME" \
+            "authority_commit=$authority_commit" \
+            "authority_tree=$authority_tree" \
+            "command_base64=$command_base64" \
+            "command_sha256=$command_sha256" \
+            "manifest_base64=$manifest_base64" \
+            "manifest_sha256=$manifest_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Assume only the release coordinator role
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      - name: Upload only the non-executable finalize seal
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          aws-region: us-east-1
-          disable-retry: true
-          mask-aws-account-id: true
-          output-env-credentials: true
-          role-duration-seconds: 900
-          role-session-name: pta-${{ github.run_id }}-${{ github.run_attempt }}-coordinator-finalize
-          role-to-assume: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
-          unset-current-credentials: true
+          name: ${{ steps.seal.outputs.artifact_name }}
+          path: ${{ runner.temp }}/prooftoact-sealed-coordinator-finalize/*
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1
 
-      - name: Ignore dispatcher claims and finalize only from fresh readback
-        working-directory: control-plane
-        env:
-          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
-          NODE_COMPILE_CACHE: ""
-          NODE_EXTRA_CA_CERTS: ""
-          NODE_OPTIONS: ""
-          NODE_PATH: ""
-          NODE_REPL_EXTERNAL_MODULE: ""
-          NODE_V8_COVERAGE: ""
-          PROOFTOACT_RELEASE_BUILD_RECEIPT_PATH: ${{ runner.temp }}/prooftoact-gate2-build-receipt.json
-          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-coordination
-          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
-          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
-          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
-          PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64 }}
-          PROOFTOACT_RELEASE_PREPARE_LOOKUP_B64: ${{ needs.coordinator-reserve.outputs.lookup_b64 }}
-          PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64: ${{ secrets.PROOFTOACT_RELEASE_PREPARE_PRIVATE_CONFIG_B64 }}
-          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
-        run: node scripts/run-release-prepare-phase.js finalize
+  sealed-coordinator-reserve:
+    needs: coordinator-reserve
+    if: ${{ github.ref == 'refs/heads/main' && !inputs.diagnostic_only && needs.coordinator-reserve.result == 'success' }}
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-coordinator.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f
+    with:
+      authority_commit: ${{ needs.coordinator-reserve.outputs.authority_commit }}
+      authority_tree: ${{ needs.coordinator-reserve.outputs.authority_tree }}
+      command_base64: ${{ needs.coordinator-reserve.outputs.command_base64 }}
+      command_sha256: ${{ needs.coordinator-reserve.outputs.command_sha256 }}
+      manifest_base64: ${{ needs.coordinator-reserve.outputs.manifest_base64 }}
+      manifest_sha256: ${{ needs.coordinator-reserve.outputs.manifest_sha256 }}
+      phase: reserve
+
+  sealed-provider-dispatch:
+    needs:
+      - provider-dispatch
+      - sealed-coordinator-reserve
+    if: ${{ github.ref == 'refs/heads/main' && !inputs.diagnostic_only && needs.provider-dispatch.result == 'success' && needs.sealed-coordinator-reserve.result == 'success' }}
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-prepare.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f
+    with:
+      authority_commit: ${{ needs.provider-dispatch.outputs.authority_commit }}
+      authority_tree: ${{ needs.provider-dispatch.outputs.authority_tree }}
+      command_base64: ${{ needs.provider-dispatch.outputs.command_base64 }}
+      command_sha256: ${{ needs.provider-dispatch.outputs.command_sha256 }}
+      manifest_base64: ${{ needs.provider-dispatch.outputs.manifest_base64 }}
+      manifest_sha256: ${{ needs.provider-dispatch.outputs.manifest_sha256 }}
+
+  sealed-coordinator-finalize:
+    needs:
+      - coordinator-finalize
+      - sealed-provider-dispatch
+    if: ${{ always() && github.ref == 'refs/heads/main' && !inputs.diagnostic_only && needs.coordinator-finalize.result == 'success' && needs.sealed-provider-dispatch.result == 'success' }}
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-coordinator.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f
+    with:
+      authority_commit: ${{ needs.coordinator-finalize.outputs.authority_commit }}
+      authority_tree: ${{ needs.coordinator-finalize.outputs.authority_tree }}
+      command_base64: ${{ needs.coordinator-finalize.outputs.command_base64 }}
+      command_sha256: ${{ needs.coordinator-finalize.outputs.command_sha256 }}
+      manifest_base64: ${{ needs.coordinator-finalize.outputs.manifest_base64 }}
+      manifest_sha256: ${{ needs.coordinator-finalize.outputs.manifest_sha256 }}
+      phase: finalize

@@ -19,7 +19,7 @@ const STACK_NAME = "prooftoact-release-control-bootstrap";
 const TABLE_NAME = "prooftoact-release-controller";
 const BOUNDARY_NAME = "ProofToActGate2CloudFormationBoundary";
 const TEMPLATE_SHA256 =
-  "6e8fd5c0ad6de5c5b0a52dc125b019857c3dd3f86298b91e05a6279edd220989";
+  "5f72ab835c93e6c8739405ed953d5c340dd13497a83eb1efff40fd70ba144da9";
 const SOURCE_BOUNDARY_SHA256 =
   "beb78b947292ec8afd946ba9656c424b1bfa35ffa8ea59e095b38cc49523dd84";
 const DYNAMODB_KMS_SOURCE_ALIAS = "alias/aws/dynamodb";

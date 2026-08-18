@@ -272,6 +272,15 @@ test("candidate deterministically binds the complete control-plane surface", () 
   for (const workflow of CONTROL_PLANE_VERIFICATION_CONSTANTS.WORKFLOWS) {
     assert.equal(inventoryPaths.includes(`.github/workflows/${workflow.file}`), true);
   }
+  for (const file of
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SEALED_WORKFLOW_FILES) {
+    assert.equal(inventoryPaths.includes(`.github/workflows/${file}`), true,
+      file);
+  }
+  assert.equal(
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SEALED_WORKFLOW_FILES.length, 7);
+  assert.equal(
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SOURCE_ONLY_WORKFLOWS.length, 1);
   for (const exactPath of [
     ".github/workflows/prooftoact-hosted-dual-root-verification.yml",
     "config/prooftoact-release-operator-public.pub",
@@ -292,6 +301,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     "release-provider/build-release-provider-runtimes.js",
     "release-provider/generate-release-provider-metadata.js",
     "scripts/bootstrap-fresh-primary.js",
+    "scripts/build-release-credential-seal.js",
     "scripts/normalize-release-control-checkouts.js",
     "scripts/prepare-release-control-bootstrap.js",
     "scripts/prepare-release-deployment.js",
@@ -338,8 +348,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     item.status === "VERIFIED"), true);
   assert.equal(candidate.body.security.checks.find(({ id }) =>
     id === "HOSTED_DUAL_ROOT_NO_OIDC_COMPLETE_EVIDENCE")?.passed, true);
-  assert.equal(candidate.body.policy.requiredWorkflowCount, 7);
-  assert.deepEqual(candidate.body.inventory.unexpectedWorkflowPaths, []);
+  assert.equal(candidate.body.policy.requiredWorkflowCount, 14);
   assert.equal(candidate.body.inventory.files.every((item) =>
     typeof item.gitTracked === "boolean" &&
     typeof item.gitMatchesHead === "boolean"), true);
@@ -353,8 +362,9 @@ test("candidate deterministically binds the complete control-plane surface", () 
   }
   assert.equal(candidate.body.governance.sourceMappings.every((item) =>
     item.workflowSourceBound), true);
-  assert.equal(candidate.body.readiness.localSourceReady, true);
+  assert.deepEqual(candidate.body.inventory.unexpectedWorkflowPaths, []);
   assert.deepEqual(candidate.body.findings, []);
+  assert.equal(candidate.body.readiness.localSourceReady, true);
 });
 
 test("candidate envelope and current source mismatch fail closed", () => {

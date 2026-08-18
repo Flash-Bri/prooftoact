@@ -50,10 +50,18 @@ const OFFICIAL_ORIGIN = new Set([
 ]);
 const TRACKED_EXECUTABLE_PATHS = Object.freeze([
   ".github/workflows/prooftoact-release-candidate.yml",
+  ".github/workflows/prooftoact-sealed-coordinator.yml",
+  ".github/workflows/prooftoact-sealed-evidence.yml",
+  ".github/workflows/prooftoact-sealed-execute.yml",
+  ".github/workflows/prooftoact-sealed-live-drill.yml",
+  ".github/workflows/prooftoact-sealed-prepare.yml",
+  ".github/workflows/prooftoact-sealed-teardown.yml",
+  ".github/workflows/prooftoact-sealed-terminalizer.yml",
   "config/prooftoact-release-operator-public.pub",
   "infra/aws/release-deployment-roles-template.json",
   "release-control/build-release-control-runtime.js",
   "release-provider/build-release-provider-runtimes.js",
+  "scripts/build-release-credential-seal.js",
   "scripts/normalize-release-control-checkouts.js",
   "scripts/release-provider-one-shot-broker.js",
   "scripts/run-release-prepare-common.js",
