@@ -31,7 +31,13 @@ const WORKFLOWS = Object.freeze({
     path: ".github/workflows/prooftoact-release-candidate.yml"
   }),
   "ProofToAct Execute Approved Release": Object.freeze({
-    jobs: Object.freeze(["controller-diagnostic"]),
+    jobs: Object.freeze([
+      "controller-diagnostic",
+      "execute-diagnostic",
+      "coordinator-reserve",
+      "provider-dispatch",
+      "coordinator-finalize"
+    ]),
     path: ".github/workflows/prooftoact-execute-approved-release.yml"
   }),
   "ProofToAct Bounded Live Drill": Object.freeze({
@@ -197,6 +203,27 @@ function validateReleaseControlContext({
     "RELEASE_CONTROL_CHECKOUT_ARGUMENT"
   );
   const workflow = WORKFLOWS[environment.GITHUB_WORKFLOW];
+  const sealedCallerJob = environment.PROOFTOACT_RELEASE_CALLER_JOB;
+  const expectedSealedWorkflow = sealedCallerJob === "provider-dispatch"
+    ? "prooftoact-sealed-execute.yml"
+    : "prooftoact-sealed-coordinator.yml";
+  const sealedContext = environment.GITHUB_JOB ===
+      "sealed-credential-boundary" &&
+    environment.GITHUB_WORKFLOW === "ProofToAct Execute Approved Release" &&
+    workflow?.jobs.includes(sealedCallerJob) &&
+    environment.PROOFTOACT_RELEASE_SEALED_WORKFLOW ===
+      expectedSealedWorkflow &&
+    environment.PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT ===
+      environment.GITHUB_SHA;
+  const executeDirectJob = environment.GITHUB_WORKFLOW !==
+      "ProofToAct Execute Approved Release" ||
+    ["controller-diagnostic", "execute-diagnostic"]
+      .includes(environment.GITHUB_JOB);
+  const directContext = workflow?.jobs.includes(environment.GITHUB_JOB) &&
+    executeDirectJob &&
+    environment.PROOFTOACT_RELEASE_CALLER_JOB === undefined &&
+    environment.PROOFTOACT_RELEASE_SEALED_WORKFLOW === undefined &&
+    environment.PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT === undefined;
   assertSafeEnvironment(environment);
   assert(
     platform === "linux" &&
@@ -218,7 +245,7 @@ function validateReleaseControlContext({
       /^[1-9][0-9]{0,19}$/u.test(environment.GITHUB_RUN_ID ?? "") &&
       environment.GITHUB_RUN_ATTEMPT === "1" &&
       workflow &&
-      workflow.jobs.includes(environment.GITHUB_JOB) &&
+      (directContext || sealedContext) &&
       environment.GITHUB_WORKFLOW_REF ===
         `${OFFICIAL_REPOSITORY}/${workflow.path}@refs/heads/main` &&
       HEX_40.test(environment.GITHUB_SHA ?? "") &&

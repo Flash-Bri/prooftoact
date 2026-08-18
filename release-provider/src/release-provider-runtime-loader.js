@@ -8,6 +8,15 @@ const CAPABILITIES = Object.freeze({
   PERMIT_READER: Object.freeze([
     "createAwsPreparePermitTransport", "createPreparePermitReader"
   ]),
+  EXECUTE_PERMIT_READER: Object.freeze([
+    "createAwsExecutePermitTransport", "createExecutePermitReader"
+  ]),
+  EXECUTE_DISPATCHER: Object.freeze([
+    "createAwsExecuteDispatcherTransport", "createExecuteDispatcher"
+  ]),
+  EXECUTE_READBACK: Object.freeze([
+    "createAwsExecuteReadbackTransport", "createExecuteReadback"
+  ]),
   PREPARE_DISPATCHER: Object.freeze([
     "createAwsPrepareDispatcherTransport", "createPrepareDispatcher"
   ]),
@@ -139,8 +148,9 @@ export async function loadReleaseProviderRuntime({
       sha256(fs.readFileSync(fs.realpathSync(process.execPath))),
   "RELEASE_PROVIDER_BUILD_PROVENANCE_REJECTED");
   requireCondition(Array.isArray(receipt.runtimes) &&
-    receipt.runtimes.length === 3 && receipt.runtimes.map(({ capability: name }) =>
-      name).join("\n") === Object.keys(CAPABILITIES).join("\n"),
+    receipt.runtimes.length === Object.keys(CAPABILITIES).length &&
+    receipt.runtimes.map(({ capability: name }) => name).join("\n") ===
+      Object.keys(CAPABILITIES).join("\n"),
   "RELEASE_PROVIDER_RUNTIME_SET_REJECTED");
   for (const runtime of receipt.runtimes) validateRuntime(runtime);
   requireCondition(receipt.runtimeSetSha256 === jsonDigest(receipt.runtimes.map(

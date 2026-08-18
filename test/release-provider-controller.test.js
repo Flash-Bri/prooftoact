@@ -1295,7 +1295,7 @@ test("controller stays stdlib-only and never calls a provider", () => {
   assert.match(source, /never calls a\s+\* provider/u);
 });
 
-test("PREPARE is phase-separated while every later workflow remains diagnostic-only", () => {
+test("PREPARE is phase-separated while EXECUTE awaits its exact reusable-workflow trust pin", () => {
   const workflows = {
     "prooftoact-release-candidate.yml": [
       "ProofToAct Release Candidate",
@@ -1356,7 +1356,7 @@ test("PREPARE is phase-separated while every later workflow remains diagnostic-o
         /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/gu
       ) ?? []).length, 3);
       assert.equal((source.match(
-        /\.github\/workflows\/prooftoact-sealed-(?:coordinator|prepare)\.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f/gu
+        /\.github\/workflows\/prooftoact-sealed-(?:coordinator|prepare|execute)\.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f/gu
       ) ?? []).length, 3);
       assert.doesNotMatch(source, /\$\{\{ (?:secrets|vars)\./u);
       assert.doesNotMatch(source, /PROOFTOACT_RELEASE_PREPARE_LOOKUP_B64/u);

@@ -58,6 +58,45 @@ test("seal generator publishes exact create-only non-executable bytes", () => {
   }
 });
 
+test("EXECUTE seals bind executable coordinates without embedding credentials", () => {
+  const cases = [
+    ["execute-coordinator", "aws-release-coordination", "reserve",
+      "EXECUTE_COORDINATOR"],
+    ["execute-coordinator", "aws-release-coordination", "finalize",
+      "EXECUTE_COORDINATOR"],
+    ["execute", "aws-release-execution", "dispatch", "EXECUTE"]
+  ];
+  for (const [lane, environment, phase, expectedLane] of cases) {
+    const temporary = temporaryPath("seal");
+    try {
+      const receipt = buildReleaseCredentialSeal({
+        authorityCommit: BOOTSTRAP_COMMIT,
+        authorityTree: BOOTSTRAP_TREE,
+        environment,
+        lane,
+        outputRoot: temporary.root,
+        phase
+      });
+      const command = JSON.parse(Buffer.from(
+        receipt.commandBase64, "base64").toString("utf8"));
+      const manifest = JSON.parse(Buffer.from(
+        receipt.manifestBase64, "base64").toString("utf8"));
+      assert.equal(receipt.status,
+        "SEALED_EXECUTABLE_COORDINATES_GENERATED");
+      assert.equal(command.action, "ACTIVATE_SIGNED_EXECUTE_PHASE");
+      assert.equal(command.lane, expectedLane);
+      assert.equal(command.phase, phase);
+      assert.equal(manifest.status, "HASH_BOUND_EXECUTABLE_COORDINATES");
+      assert.equal(manifest.lane, expectedLane);
+      assert.equal(Object.hasOwn(command, "roleArn"), false);
+      assert.equal(Object.hasOwn(command, "approval"), false);
+      assert.equal(Object.hasOwn(manifest, "credential"), false);
+    } finally {
+      fs.rmSync(temporary.parent, { recursive: true, force: true });
+    }
+  }
+});
+
 test("wrong lane, environment, phase, identity, and occupied roots reject", () => {
   for (const drift of [
     { lane: "execute" },
@@ -100,12 +139,8 @@ test("wrong lane, environment, phase, identity, and occupied roots reject", () =
   }
 });
 
-test("all token-capable reusable workflows are immutable, minimal, and held", () => {
+test("legacy PREPARE reusable workflow remains immutable, minimal, and held", () => {
   const workflows = {
-    "prooftoact-sealed-coordinator.yml": {
-      environment: "aws-release-coordination",
-      phases: ["reserve", "finalize"]
-    },
     "prooftoact-sealed-prepare.yml": {
       environment: "aws-release-deployment",
       phases: ["dispatch"]
@@ -131,8 +166,29 @@ test("all token-capable reusable workflows are immutable, minimal, and held", ()
       new RegExp(phase, "u"));
   }
 
+  const activeExecuteWorkflows = {
+    "prooftoact-sealed-coordinator.yml": "aws-release-coordination",
+    "prooftoact-sealed-execute.yml": "aws-release-execution"
+  };
+  for (const [file, environment] of
+    Object.entries(activeExecuteWorkflows)) {
+    const source = fs.readFileSync(path.join(ROOT, ".github/workflows", file),
+      "utf8");
+    assert.match(source, /^  workflow_call:$/mu);
+    assert.match(source, new RegExp(`^    environment: ${environment}$`, "mu"));
+    assert.equal((source.match(/id-token: write/gu) ?? []).length, 1);
+    assert.equal((source.match(/persist-credentials: false/gu) ?? []).length, 2);
+    assert.equal((source.match(/actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/gu) ?? []).length, 2);
+    assert.match(source,
+      /aws-actions\/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c/u);
+    assert.match(source, /ACTIVATE_SIGNED_EXECUTE_PHASE/u);
+    assert.match(source, /HASH_BOUND_EXECUTABLE_COORDINATES/u);
+    assert.match(source, /run-release-execute-preflight\.js/u);
+    assert.match(source, /run-release-execute-phase\.js/u);
+    assert.doesNotMatch(source, /HOLD:SEALED_(?:COORDINATOR|EXECUTE)/u);
+  }
+
   for (const file of [
-    "prooftoact-sealed-execute.yml",
     "prooftoact-sealed-live-drill.yml",
     "prooftoact-sealed-evidence.yml",
     "prooftoact-sealed-teardown.yml",
