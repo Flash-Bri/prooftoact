@@ -101,6 +101,12 @@
     },
     {
       "rule": "basic-auth-url",
+      "path": "test/hosted-dual-root-verification.test.js",
+      "matchSha256": "195bfa9c25358ded6083da238898a74bd5fda2fe99cc0b04f0876106c22604bc",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
       "path": "test/integrated-live-drill-recovery-continuity.test.js",
       "matchSha256": "2ec269b250f23960d8565d245d4bdcec1174af2dd2f0caf97de4fb7c4c36a148",
       "classification": "SYNTHETIC_TEST_FIXTURE"
@@ -216,6 +222,12 @@
     {
       "rule": "pem-private-key",
       "path": "test/fixtures/integrated-live-drill-pre-attestation.json",
+      "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "pem-private-key",
+      "path": "test/hosted-dual-root-verification.test.js",
       "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },

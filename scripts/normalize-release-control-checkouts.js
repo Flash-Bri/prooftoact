@@ -49,6 +49,10 @@ const WORKFLOWS = Object.freeze({
   "ProofToAct Terminalize Expired Release": Object.freeze({
     jobs: Object.freeze(["terminalizer-diagnostic"]),
     path: ".github/workflows/prooftoact-terminalize-expired-release.yml"
+  }),
+  "ProofToAct Hosted Dual Root Verification": Object.freeze({
+    jobs: Object.freeze(["verify-dual-root"]),
+    path: ".github/workflows/prooftoact-hosted-dual-root-verification.yml"
   })
 });
 const PUBLIC_CODES = Object.freeze([
