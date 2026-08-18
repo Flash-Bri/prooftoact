@@ -112,6 +112,8 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "scripts/normalize-release-control-checkouts.js",
   "scripts/prepare-release-control-bootstrap.js",
   "scripts/prepare-release-deployment.js",
+  "scripts/release-provider-bootstrap-readback.js",
+  "scripts/release-provider-bootstrap-readback-collector.sh",
   "scripts/release-provider-controller.js",
   "scripts/release-provider-one-shot-broker.js",
   "scripts/run-release-prepare-common.js",
@@ -120,6 +122,7 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "scripts/run-release-prepare-preflight.js",
   "scripts/sign-release-provider-approval.js",
   "test/release-control-bootstrap-plan.test.js",
+  "test/release-control-bootstrap-readback.test.js",
   "test/release-provider-runtime-loader.test.js",
   "test/release-provider-runtime.test.js",
   "test/release-prepare-runner.test.js"
