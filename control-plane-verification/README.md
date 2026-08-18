@@ -1,0 +1,165 @@
+# ProofToAct control-plane verification
+
+This additive verifier is deliberately separate from the frozen application
+package, lock, notices, manifests, and historical proof. It inventories and
+hash-binds the later release-control surface without rewriting earlier facts.
+
+It produces one deterministic candidate with independent sections for:
+
+- exact/glob source inventory and proof;
+- both nested `release-control` and `release-provider` dependency locks and
+  generated inventories;
+- installed license-text coverage and generated third-party notices for both
+  hermetic packages;
+- the three sealed provider bundle capability surfaces, with credential-chain
+  packages excluded and external imports limited to Node builtins;
+- source security invariants;
+- the cumulative $20 cost boundary and retained controller state;
+- six workflow files mapped to seven protected environments (including both
+  credential-isolated coordinator jobs), plus separately supplied live proof;
+- clean standalone dual-package install/build provenance and separately
+  supplied evidence.
+
+The inventory also discovers every file under `release-provider/` except
+generated `dist/` and installed `node_modules/`, plus every matching root
+provider test and the release-control bootstrap planner/test. A discovered file
+that is not tracked by Git is an explicit local finding. Missing package
+metadata, lock drift, notice drift, omitted workflow/environment/job mappings,
+or absent clean-checkout evidence keeps the candidate on `HOLD`.
+
+The PREPARE workflow is source-checked as four exact jobs: a no-OIDC diagnostic
+default, coordinator reserve, provider dispatch, and coordinator finalization.
+Both coordinator jobs must bind `aws-release-coordination`; provider dispatch
+must bind `aws-release-deployment`. The three live jobs may carry job-level OIDC
+permission, but the workflow input defaults to diagnostic-only and the source
+candidate never turns that dormant path into provider authority. The remaining
+five workflows must still be diagnostic-only.
+
+Missing source or provider evidence is represented as `HOLD`. A verified
+candidate never authorizes deployment, provider access, spending, publication,
+or submission. Provider truth is accepted only through the dedicated sanitized
+governance and provenance evidence schemas; it is never inferred from source.
+
+The operator-authorized $20 cumulative ProofToAct control-plane envelope is a
+separate later control. It does not rewrite the frozen application's historical
+$13.14-era manifest, calculations, or receipts.
+
+Generate a create-only candidate:
+
+```text
+node control-plane-verification/generate-control-plane-candidate.js \
+  --root /absolute/clean/control-plane \
+  --output /absolute/private/output/control-plane-candidate.json
+```
+
+Verify the exact current bytes:
+
+```text
+node control-plane-verification/verify-control-plane-candidate.js \
+  --root /absolute/clean/control-plane \
+  --candidate /absolute/private/output/control-plane-candidate.json
+```
+
+When sanitized governance evidence is supplied during generation, supply the
+same file during verification. Provenance is stricter: a caller-authored JSON
+summary is never accepted. It must first be generated from two separate exact
+standalone roots and then independently reproduced from those roots.
+
+Add `--require-ready` only at the final local gate. Even a ready candidate still
+requires the separate signed approval and provider authority path.
+
+The two build-bound metadata files are generated separately from the frozen
+application and verified byte-for-byte:
+
+```text
+node control-plane-verification/generate-release-control-metadata.js \
+  --root /absolute/control-plane \
+  --inventory-output /absolute/output/DEPENDENCY_INVENTORY.json \
+  --notices-output /absolute/output/THIRD_PARTY_NOTICES.txt
+
+node control-plane-verification/verify-release-control-metadata.js \
+  --root /absolute/control-plane
+```
+
+The provider package owns its build-derived metadata generator because bundle
+membership comes from esbuild metafiles. The additive verifier independently
+reopens and validates those bytes against the exact package, lock, installed
+license texts, permitted capability set, and runtime-set digest:
+
+```text
+node release-provider/generate-release-provider-metadata.js \
+  --inventory-output /absolute/output/DEPENDENCY_INVENTORY.json \
+  --notices-output /absolute/output/THIRD_PARTY_NOTICES.txt
+
+node control-plane-verification/verify-release-provider-metadata.js \
+  --root /absolute/control-plane
+```
+
+## Two-root clean provenance gate
+
+The control-plane root must be a clean standalone checkout at its exact current
+commit and tree. The application root must be a different, non-nested clean
+standalone checkout at frozen application commit
+`963937a9873f0199b91897fe88da1b91bc84b5e3` and tree
+`a330e0d57328e63a568be73c523b2cae6338f26c`. Both roots must use the official
+origin and have a local, complete, non-shallow object store with no grafts,
+replacement refs, alternates, hidden index flags, or dirty bytes.
+
+Run both commands with an official Node.js v22.23.1 distribution whose
+executable digest is pinned by `official-node-runtime-contract.js`. The
+`--npm-cli` path must be the adjacent npm 10.9.8 package shipped inside that
+same official distribution; the verifier hashes all 1,964 npm package files
+and rejects an ambient, Homebrew, copied, or caller-supplied substitute.
+
+Generate the evidence into an existing owner-only output directory that is
+outside both checkout roots:
+
+```text
+/absolute/official-node/bin/node \
+  control-plane-verification/generate-control-plane-provenance-evidence.js \
+  --control-root /absolute/standalone/control-plane \
+  --application-root /absolute/standalone/frozen-application \
+  --npm-cli /absolute/official-node/lib/node_modules/npm/bin/npm-cli.js \
+  --output /absolute/owner-only/provenance-evidence.json
+```
+
+The generator itself runs `npm ci --ignore-scripts` and the exact package
+`test` script for the control-plane root, both hermetic packages, and the
+frozen application root. It runs production dependency audits, rebuilds each
+control/provider runtime twice, reopens every tracked package/lock byte and
+build input/output, and embeds the exact stdout/stderr and full build receipts
+under canonical digests.
+
+Reproduce the evidence independently before it can enter a candidate:
+
+```text
+/absolute/official-node/bin/node \
+  control-plane-verification/verify-control-plane-provenance-evidence.js \
+  --control-root /absolute/standalone/control-plane \
+  --application-root /absolute/standalone/frozen-application \
+  --npm-cli /absolute/official-node/lib/node_modules/npm/bin/npm-cli.js \
+  --evidence /absolute/owner-only/provenance-evidence.json
+```
+
+The verifier first reopens and reparses the owner-only, non-symlink evidence
+file, embedded command outputs, and raw build receipts. It then reruns the
+installs, exact package test scripts, audits, and two-build reproducibility
+checks against the same two roots. Both roots are re-inspected after the long
+gate, including filesystem identity. A structurally valid JSON file without
+that reproduction fails closed.
+
+This local receipt intentionally does not claim hosted-CI parity or execution
+of the separately privileged root-stage tests. Those remain independent,
+required hosted-workflow evidence at the exact control-plane commit; a local
+provenance receipt cannot substitute for them.
+
+Only after reproduction may the same evidence be supplied to candidate
+generation/verification, together with `--frozen-application-root` and
+`--npm-cli`. Even then the result states only
+`LOCAL_PROVENANCE_REPRODUCED`; it always returns
+`providerExecutionAuthorized: false`. It does not authorize OIDC, credentials,
+AWS or CockroachDB access, deployment, spending, publication, or submission.
+
+Provider build provenance binds exactly three runtimes, their runtime-set
+digest, complete source inventory, full receipts, and the union of external
+imports; every external import must be a `node:` builtin.

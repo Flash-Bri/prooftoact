@@ -1,12 +1,30 @@
 {
   "schema": "tideproof.release-privacy-manifest.v1",
   "status": "CURRENT_PUBLIC_HISTORY_REVIEWED_FINAL_RELEASE_PENDING",
-  "reviewedOn": "2026-08-11",
+  "reviewedOn": "2026-08-17",
   "allowedFindings": [
     {
       "rule": "aws-access-key",
       "path": "test/integrated-live-drill-provider-recovery.test.js",
       "matchSha256": "c33c81391bfa7d2188ef11575efc07d925bf27aaec5f7a26b8fc78a016ea6f3f",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "aws-access-key",
+      "path": "test/release-control-aws-runtime.test.js",
+      "matchSha256": "93a4d39e7777a0ecb288f53f8a3195c5a5d75ebb6a8cb44d7b9f6468936b4b92",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "aws-access-key",
+      "path": "test/release-control-aws-runtime.test.js",
+      "matchSha256": "b4398adc6a8fef67c32e6e133142a0e6c7e90abe7b532f534abb418eaf63c4b4",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "aws-access-key",
+      "path": "test/release-control-runtime-loader.test.js",
+      "matchSha256": "93a4d39e7777a0ecb288f53f8a3195c5a5d75ebb6a8cb44d7b9f6468936b4b92",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
@@ -73,6 +91,12 @@
       "rule": "basic-auth-url",
       "path": "test/database-runtime.test.js",
       "matchSha256": "e44f16fe36c38a3893ac76b277ad7931b6acdec5e9dc6d41ddeffb38362f4b39",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/fresh-primary-bootstrap.test.js",
+      "matchSha256": "6b3dd81efc2a7b4f14e2bb34a1f3bba4fcf7119ae83180c654d6f44b6a9b434b",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
@@ -148,6 +172,30 @@
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
+      "rule": "email-address",
+      "path": "test/release-control-bootstrap-plan.test.js",
+      "matchSha256": "3de132cd98be7bf26b6f08e81c31c799a891bc32046b61f0b6fe3671ca2e44b5",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/release-control-bootstrap-plan.test.js",
+      "matchSha256": "e7ab0556abf7315609ff6015f8a3769910b42155ba4a3cad2d7ab37babe1f1cb",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/release-deployment-plan.test.js",
+      "matchSha256": "e7ab0556abf7315609ff6015f8a3769910b42155ba4a3cad2d7ab37babe1f1cb",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/release-provider-controller.test.js",
+      "matchSha256": "e7ab0556abf7315609ff6015f8a3769910b42155ba4a3cad2d7ab37babe1f1cb",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
       "rule": "pem-private-key",
       "path": "test/fixtures/integrated-live-drill-pre-attestation.json",
       "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
@@ -157,6 +205,12 @@
       "rule": "pem-private-key",
       "path": "test/integrated-live-drill-provider-recovery.test.js",
       "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "private-ipv4",
+      "path": "test/release-deployment-plan.test.js",
+      "matchSha256": "c5eb5a4cc76a5cdb16e79864b9ccd26c3553f0c396d0a21bafb7be71c1efcd8c",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     }
   ],

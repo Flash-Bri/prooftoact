@@ -1,0 +1,90 @@
+name: ProofToAct Bounded Live Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      diagnostic_only:
+        description: Validate the local broker/control-plane contract; live drill remains blocked
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prooftoact-bounded-live-drill-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  controller-diagnostic:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    environment: aws-live-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out exact control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: control-plane
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          show-progress: false
+          submodules: false
+
+      - name: Check out frozen application source separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: frozen-application
+          persist-credentials: false
+          ref: 963937a9873f0199b91897fe88da1b91bc84b5e3
+          show-progress: false
+          submodules: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          check-latest: false
+          node-version: 22.23.1
+
+      - name: Normalize exact control-plane checkout
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+        run: node scripts/normalize-release-control-checkouts.js
+
+      - name: Verify frozen application identity and directory separation
+        working-directory: frozen-application
+        env:
+          EXPECTED_APP_COMMIT: 963937a9873f0199b91897fe88da1b91bc84b5e3
+          EXPECTED_APP_TREE: a330e0d57328e63a568be73c523b2cae6338f26c
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_APP_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_APP_TREE"
+          test "$GITHUB_WORKSPACE/frozen-application" != "$GITHUB_WORKSPACE/control-plane"
+
+      - name: Fail closed before live-drill execution
+        if: ${{ !inputs.diagnostic_only }}
+        run: |
+          printf '%s\n' '::error::PROVIDER_EXECUTION_DISABLED_RUNTIME_AUTHORITY_RECEIPTS_REQUIRED' >&2
+          exit 1
+
+      - name: Verify local broker and controller contracts
+        if: ${{ inputs.diagnostic_only }}
+        working-directory: control-plane
+        env:
+          NODE_COMPILE_CACHE: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+        run: node --test test/release-provider-one-shot-broker.test.js test/release-provider-controller.test.js

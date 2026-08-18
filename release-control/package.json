@@ -1,0 +1,21 @@
+{
+  "name": "@prooftoact/release-control-runtime",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "node build-release-control-runtime.js",
+    "test": "node --test ../test/release-control-aws-runtime.test.js ../test/release-control-dynamodb-store.test.js ../test/release-control-runtime-loader.test.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1098.0",
+    "@aws-sdk/client-sts": "3.1098.0",
+    "@smithy/node-http-handler": "4.9.13"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}
