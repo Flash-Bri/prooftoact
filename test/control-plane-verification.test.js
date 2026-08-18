@@ -469,6 +469,10 @@ test("provenance boundary rejects nested roots, failing outputs, duplicate flags
   fs.mkdirSync(applicationRoot, { mode: 0o700 });
   fs.mkdirSync(environmentRoot, { mode: 0o700 });
   const commandEnvironment = provenanceTest.commandEnvironment(environmentRoot);
+  assert.equal(commandEnvironment.HOME, environmentRoot);
+  assert.equal(commandEnvironment.TMPDIR, environmentRoot);
+  assert.equal(commandEnvironment.TMP, environmentRoot);
+  assert.equal(commandEnvironment.TEMP, environmentRoot);
   assert.notEqual(commandEnvironment.npm_config_globalconfig,
     commandEnvironment.npm_config_userconfig);
   for (const filePath of [commandEnvironment.npm_config_globalconfig,

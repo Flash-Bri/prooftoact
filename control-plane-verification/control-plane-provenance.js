@@ -124,10 +124,14 @@ function commandEnvironment(temporaryRoot) {
     GIT_NO_LAZY_FETCH: "1",
     GIT_NO_REPLACE_OBJECTS: "1",
     GIT_TERMINAL_PROMPT: "0",
+    HOME: temporaryRoot,
     LANG: "C",
     LC_ALL: "C",
     NO_COLOR: "1",
     PATH: `${path.dirname(fs.realpathSync(process.execPath))}:/usr/bin:/bin`,
+    TEMP: temporaryRoot,
+    TMP: temporaryRoot,
+    TMPDIR: temporaryRoot,
     npm_config_always_auth: "false",
     npm_config_audit: "false",
     npm_config_cache: path.join(temporaryRoot, "npm-cache"),
@@ -701,6 +705,7 @@ function observe({ controlPlaneRoot, frozenApplicationRoot, npmCli,
     controlIdentity.commit);
   const temporaryRoot = fs.mkdtempSync(path.join(trustedTemporaryRoot(),
     "prooftoact-control-provenance-"));
+  fs.chownSync(temporaryRoot, process.getuid(), process.getgid());
   fs.chmodSync(temporaryRoot, 0o700);
   try {
     const executions = executeGate({ applicationRoot, controlRoot,
