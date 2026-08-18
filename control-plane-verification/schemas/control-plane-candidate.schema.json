@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prooftoact.example/schemas/control-plane-verification-candidate.v1.json",
+  "title": "ProofToAct control-plane verification candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "body",
+    "bodySha256"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "prooftoact.control-plane-verification-candidate.v1"
+    },
+    "bodySha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "claimBoundary",
+        "cost",
+        "dependencies",
+        "findings",
+        "frozenApplication",
+        "governance",
+        "inventory",
+        "metadataArtifacts",
+        "notices",
+        "providerDependencies",
+        "providerMetadataArtifacts",
+        "providerNotices",
+        "policy",
+        "proof",
+        "provenance",
+        "readiness",
+        "security"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "prooftoact.control-plane-verification-body.v1"
+        },
+        "claimBoundary": {
+          "type": "object"
+        },
+        "cost": {
+          "type": "object"
+        },
+        "dependencies": {
+          "type": "object"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "frozenApplication": {
+          "type": "object"
+        },
+        "governance": {
+          "type": "object"
+        },
+        "inventory": {
+          "type": "object"
+        },
+        "metadataArtifacts": {
+          "type": "object"
+        },
+        "notices": {
+          "type": "object"
+        },
+        "providerDependencies": {
+          "type": "object"
+        },
+        "providerMetadataArtifacts": {
+          "type": "object"
+        },
+        "providerNotices": {
+          "type": "object"
+        },
+        "policy": {
+          "type": "object"
+        },
+        "proof": {
+          "type": "object"
+        },
+        "provenance": {
+          "type": "object"
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "finalDisposition",
+            "localSourceReady",
+            "providerEvidenceReady",
+            "providerExecutionAuthorized"
+          ],
+          "properties": {
+            "finalDisposition": {
+              "enum": [
+                "HOLD",
+                "CANDIDATE_VERIFIED_PROVIDER_ACTION_STILL_SEPARATELY_AUTHORIZED"
+              ]
+            },
+            "localSourceReady": {
+              "type": "boolean"
+            },
+            "providerEvidenceReady": {
+              "type": "boolean"
+            },
+            "providerExecutionAuthorized": {
+              "const": false
+            }
+          }
+        },
+        "security": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

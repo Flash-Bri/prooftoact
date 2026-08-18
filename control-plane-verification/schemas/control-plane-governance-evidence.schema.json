@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prooftoact.example/schemas/control-plane-governance-evidence.v1.json",
+  "title": "ProofToAct sanitized live governance evidence",
+  "description": "Provider-observed evidence. Source configuration cannot satisfy this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "repository",
+    "repositoryId",
+    "accountIdSha256",
+    "observedAt",
+    "branchProtection",
+    "environments"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "prooftoact.control-plane-governance-evidence.v1"
+    },
+    "status": {
+      "const": "ACCEPTED"
+    },
+    "repository": {
+      "const": "Flash-Bri/prooftoact"
+    },
+    "repositoryId": {
+      "const": "1317716765"
+    },
+    "accountIdSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "observedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "branchProtection": {
+      "type": "object"
+    },
+    "environments": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "environment",
+          "jobNames",
+          "workflowRef",
+          "roleArnSha256",
+          "trustPolicySha256",
+          "requiredReviewerCount",
+          "preventSelfReview",
+          "adminsCanBypass",
+          "deploymentBranch"
+        ],
+        "properties": {
+          "environment": {
+            "type": "string"
+          },
+          "jobNames": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "workflowRef": {
+            "type": "string"
+          },
+          "roleArnSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "trustPolicySha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "requiredReviewerCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "preventSelfReview": {
+            "const": true
+          },
+          "adminsCanBypass": {
+            "const": false
+          },
+          "deploymentBranch": {
+            "const": "main"
+          }
+        }
+      }
+    }
+  }
+}

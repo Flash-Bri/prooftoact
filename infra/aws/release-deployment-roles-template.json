@@ -1,0 +1,2287 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "One-time bootstrap for the protected ProofToAct release control plane. Applying this template is an administrator action outside every release workflow; the retained controller table is not part of application teardown.",
+  "Parameters": {
+    "GitHubOidcProviderArn": {
+      "Type": "String",
+      "Description": "Existing GitHub Actions OIDC provider in the approved AWS account.",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$"
+    },
+    "ArtifactBucketName": {
+      "Type": "String",
+      "Description": "Existing private versioned artifact bucket accepted by the read-only preflight.",
+      "MinLength": 3,
+      "MaxLength": 63,
+      "AllowedPattern": "^(?!xn--)(?!.*\\.\\.)[a-z0-9](?:[a-z0-9.-]*[a-z0-9])$"
+    }
+  },
+  "Resources": {
+    "ReleaseControlTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "TableName": "prooftoact-release-controller",
+        "BillingMode": "PAY_PER_REQUEST",
+        "DeletionProtectionEnabled": true,
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "pk",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "pk",
+            "KeyType": "HASH"
+          }
+        ],
+        "SSESpecification": {
+          "SSEEnabled": true,
+          "SSEType": "KMS",
+          "KMSMasterKeyId": "alias/aws/dynamodb"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "RetainedReleaseControl"
+          },
+          {
+            "Key": "Retention",
+            "Value": "IntentionalOutsideApplicationTeardown"
+          }
+        ]
+      }
+    },
+    "CloudFormationPermissionsBoundary": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": "ProofToActGate2CloudFormationBoundary",
+        "Description": "Source-owned maximum-permissions boundary for the exact ProofToAct Gate Two CloudFormation service role and rollback envelope.",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadExactVersionedArtifacts",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/gate2/*"
+              }
+            },
+            {
+              "Sid": "ManageExactStackRoles",
+              "Effect": "Allow",
+              "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:DeleteRolePolicy",
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListRoleTags",
+                "iam:PutRolePolicy",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:UpdateRoleDescription"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-*"
+              }
+            },
+            {
+              "Sid": "PassExactLambdaExecutionRoles",
+              "Effect": "Allow",
+              "Action": "iam:PassRole",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-*Role-*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": "lambda.amazonaws.com"
+                }
+              }
+            },
+            {
+              "Sid": "ManageExactLambdaFamily",
+              "Effect": "Allow",
+              "Action": [
+                "lambda:AddPermission",
+                "lambda:CreateAlias",
+                "lambda:CreateFunction",
+                "lambda:DeleteAlias",
+                "lambda:DeleteFunction",
+                "lambda:DeleteFunctionConcurrency",
+                "lambda:GetAlias",
+                "lambda:GetFunction",
+                "lambda:GetFunctionConfiguration",
+                "lambda:GetFunctionConcurrency",
+                "lambda:GetPolicy",
+                "lambda:ListTags",
+                "lambda:PublishVersion",
+                "lambda:PutFunctionConcurrency",
+                "lambda:RemovePermission",
+                "lambda:TagResource",
+                "lambda:UntagResource",
+                "lambda:UpdateAlias",
+                "lambda:UpdateFunctionCode",
+                "lambda:UpdateFunctionConfiguration"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-gate2-*"
+              }
+            },
+            {
+              "Sid": "ManageExactLogGroups",
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:DeleteLogGroup",
+                "logs:DescribeLogGroups",
+                "logs:ListTagsForResource",
+                "logs:PutRetentionPolicy",
+                "logs:TagResource",
+                "logs:UntagResource"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:*prooftoact-gate2-*"
+              }
+            },
+            {
+              "Sid": "ManageExactAlarms",
+              "Effect": "Allow",
+              "Action": [
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:PutMetricAlarm"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:us-east-1:${AWS::AccountId}:alarm:prooftoact-gate2-*"
+              }
+            },
+            {
+              "Sid": "CreateOneTaggedHttpApi",
+              "Effect": "Allow",
+              "Action": "apigateway:POST",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/apis"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Project": "ProofToAct",
+                  "aws:RequestTag/Gate": "Two"
+                }
+              }
+            },
+            {
+              "Sid": "ManageOnlyTaggedHttpApiFamily",
+              "Effect": "Allow",
+              "Action": [
+                "apigateway:DELETE",
+                "apigateway:GET",
+                "apigateway:PATCH",
+                "apigateway:POST"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/apis/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/tags/*"
+                }
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "aws:ResourceTag/Project": "ProofToAct",
+                  "aws:ResourceTag/Gate": "Two"
+                }
+              }
+            },
+            {
+              "Sid": "CreateTaggedReceiptKey",
+              "Effect": "Allow",
+              "Action": "kms:CreateKey",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Project": "ProofToAct",
+                  "aws:RequestTag/Purpose": "SyntheticGateTwoEvidence",
+                  "kms:KeySpec": "ECC_NIST_P256",
+                  "kms:KeyUsage": "SIGN_VERIFY",
+                  "kms:MultiRegion": "false"
+                }
+              }
+            },
+            {
+              "Sid": "ManageTaggedReceiptKey",
+              "Effect": "Allow",
+              "Action": [
+                "kms:DescribeKey",
+                "kms:GetKeyPolicy",
+                "kms:GetKeyRotationStatus",
+                "kms:ListResourceTags",
+                "kms:PutKeyPolicy",
+                "kms:ScheduleKeyDeletion",
+                "kms:TagResource",
+                "kms:UntagResource"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:ResourceTag/Project": "ProofToAct",
+                  "aws:ResourceTag/Purpose": "SyntheticGateTwoEvidence"
+                }
+              }
+            },
+            {
+              "Sid": "ManageExactReceiptKeyAlias",
+              "Effect": "Allow",
+              "Action": [
+                "kms:CreateAlias",
+                "kms:DeleteAlias"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:kms:us-east-1:${AWS::AccountId}:alias/prooftoact-gate2-*"
+              }
+            },
+            {
+              "Sid": "BindReceiptKeyAliasToTaggedTargetKey",
+              "Effect": "Allow",
+              "Action": [
+                "kms:CreateAlias",
+                "kms:DeleteAlias"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:kms:us-east-1:${AWS::AccountId}:key/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:ResourceTag/Project": "ProofToAct",
+                  "aws:ResourceTag/Purpose": "SyntheticGateTwoEvidence"
+                }
+              }
+            },
+            {
+              "Sid": "DenyProviderRuntimeUse",
+              "Effect": "Deny",
+              "Action": [
+                "bedrock:*",
+                "kms:Decrypt",
+                "kms:GenerateDataKey*",
+                "kms:GenerateMac",
+                "kms:Sign",
+                "lambda:Invoke*",
+                "secretsmanager:*",
+                "sts:AssumeRole"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "DenyUnrelatedIdentityAndAccountAuthority",
+              "Effect": "Deny",
+              "Action": [
+                "account:*",
+                "organizations:*",
+                "sts:*",
+                "iam:Add*",
+                "iam:Attach*",
+                "iam:CreateAccessKey",
+                "iam:CreateAccountAlias",
+                "iam:CreateGroup",
+                "iam:CreateInstanceProfile",
+                "iam:CreateLoginProfile",
+                "iam:CreateOpenIDConnectProvider",
+                "iam:CreatePolicy",
+                "iam:CreatePolicyVersion",
+                "iam:CreateSAMLProvider",
+                "iam:CreateServiceLinkedRole",
+                "iam:CreateUser",
+                "iam:CreateVirtualMFADevice",
+                "iam:DeleteAccessKey",
+                "iam:DeleteAccountAlias",
+                "iam:DeleteGroup*",
+                "iam:DeleteInstanceProfile",
+                "iam:DeleteLoginProfile",
+                "iam:DeleteOpenIDConnectProvider",
+                "iam:DeletePolicy*",
+                "iam:DeleteSAMLProvider",
+                "iam:DeleteServiceLinkedRole",
+                "iam:DeleteUser*",
+                "iam:DeleteVirtualMFADevice",
+                "iam:Detach*",
+                "iam:PutGroupPolicy",
+                "iam:PutRolePermissionsBoundary",
+                "iam:PutUser*",
+                "iam:Remove*",
+                "iam:Set*",
+                "iam:UpdateAccountPasswordPolicy",
+                "iam:UpdateLoginProfile",
+                "iam:UpdateOpenIDConnectProviderThumbprint",
+                "iam:UpdateRole",
+                "iam:UpdateSAMLProvider"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
+    "CloudFormationServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActGate2CloudFormation",
+        "Description": "CloudFormation-only execution role for one prooftoact-gate2 CREATE change set and automatic rollback.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudformation.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-gate2/*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "PermissionsBoundary": {
+          "Ref": "CloudFormationPermissionsBoundary"
+        },
+        "Policies": [
+          {
+            "PolicyName": "ProofToActGate2CreateAndRollback",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadExactVersionedArtifacts",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/gate2/*"
+                  }
+                },
+                {
+                  "Sid": "ManageExactStackRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:CreateRole",
+                    "iam:DeleteRole",
+                    "iam:DeleteRolePolicy",
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags",
+                    "iam:PutRolePolicy",
+                    "iam:TagRole",
+                    "iam:UntagRole",
+                    "iam:UpdateAssumeRolePolicy",
+                    "iam:UpdateRoleDescription"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "PassExactLambdaExecutionRoles",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-*Role-*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "lambda.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageExactLambdaFamily",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:AddPermission",
+                    "lambda:CreateAlias",
+                    "lambda:CreateFunction",
+                    "lambda:DeleteAlias",
+                    "lambda:DeleteFunction",
+                    "lambda:DeleteFunctionConcurrency",
+                    "lambda:GetAlias",
+                    "lambda:GetFunction",
+                    "lambda:GetFunctionConfiguration",
+                    "lambda:GetFunctionConcurrency",
+                    "lambda:GetPolicy",
+                    "lambda:ListTags",
+                    "lambda:PublishVersion",
+                    "lambda:PutFunctionConcurrency",
+                    "lambda:RemovePermission",
+                    "lambda:TagResource",
+                    "lambda:UntagResource",
+                    "lambda:UpdateAlias",
+                    "lambda:UpdateFunctionCode",
+                    "lambda:UpdateFunctionConfiguration"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "ManageExactLogGroups",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:DeleteLogGroup",
+                    "logs:DescribeLogGroups",
+                    "logs:ListTagsForResource",
+                    "logs:PutRetentionPolicy",
+                    "logs:TagResource",
+                    "logs:UntagResource"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:*prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "ManageExactAlarms",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudwatch:DeleteAlarms",
+                    "cloudwatch:DescribeAlarms",
+                    "cloudwatch:PutMetricAlarm"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudwatch:us-east-1:${AWS::AccountId}:alarm:prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "CreateOneTaggedHttpApi",
+                  "Effect": "Allow",
+                  "Action": "apigateway:POST",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/apis"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestTag/Project": "ProofToAct",
+                      "aws:RequestTag/Gate": "Two"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageOnlyTaggedHttpApiFamily",
+                  "Effect": "Allow",
+                  "Action": [
+                    "apigateway:DELETE",
+                    "apigateway:GET",
+                    "apigateway:PATCH",
+                    "apigateway:POST"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/apis/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/tags/*"
+                    }
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:ResourceTag/Project": "ProofToAct",
+                      "aws:ResourceTag/Gate": "Two"
+                    }
+                  }
+                },
+                {
+                  "Sid": "CreateTaggedReceiptKey",
+                  "Effect": "Allow",
+                  "Action": "kms:CreateKey",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestTag/Project": "ProofToAct",
+                      "aws:RequestTag/Purpose": "SyntheticGateTwoEvidence",
+                      "kms:KeySpec": "ECC_NIST_P256",
+                      "kms:KeyUsage": "SIGN_VERIFY",
+                      "kms:MultiRegion": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageTaggedReceiptKey",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:DescribeKey",
+                    "kms:GetKeyPolicy",
+                    "kms:GetKeyRotationStatus",
+                    "kms:ListResourceTags",
+                    "kms:PutKeyPolicy",
+                    "kms:ScheduleKeyDeletion",
+                    "kms:TagResource",
+                    "kms:UntagResource"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:ResourceTag/Project": "ProofToAct",
+                      "aws:ResourceTag/Purpose": "SyntheticGateTwoEvidence"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageExactReceiptKeyAlias",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:CreateAlias",
+                    "kms:DeleteAlias"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:kms:us-east-1:${AWS::AccountId}:alias/prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "BindReceiptKeyAliasToTaggedTargetKey",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:CreateAlias",
+                    "kms:DeleteAlias"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:kms:us-east-1:${AWS::AccountId}:key/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:ResourceTag/Project": "ProofToAct",
+                      "aws:ResourceTag/Purpose": "SyntheticGateTwoEvidence"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyProviderRuntimeUse",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:*",
+                    "kms:Decrypt",
+                    "kms:GenerateDataKey*",
+                    "kms:GenerateMac",
+                    "kms:Sign",
+                    "lambda:Invoke*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GateTwoCloudFormationCreateOnly"
+          }
+        ]
+      }
+    },
+    "ReleaseDeploymentRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActReleaseDeployment",
+        "Description": "Protected GitHub OIDC role that can upload exact artifacts and prepare one reviewed CREATE change set; it cannot execute it, invoke the application, or assume drill or evidence roles.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-release-deployment",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner": "Flash-Bri",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-release-deployment",
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Release Candidate"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActReleaseChangeSetOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "WriteExactArtifactPrefix",
+                  "Effect": "Allow",
+                  "Action": "s3:PutObject",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/gate2/*"
+                  }
+                },
+                {
+                  "Sid": "ReadExactArtifactVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/gate2/*"
+                  }
+                },
+                {
+                  "Sid": "ListExactArtifactPrefix",
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": "gate2/*"
+                    }
+                  }
+                },
+                {
+                  "Sid": "CreateDescribeAndExecuteExactChangeSet",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:CreateChangeSet",
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:GetTemplate",
+                    "cloudformation:GetTemplateSummary",
+                    "cloudformation:ListChangeSets",
+                    "cloudformation:ValidateTemplate"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-gate2/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:changeSet/prooftoact-release-*/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "PassExactCloudFormationRole",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "CloudFormationServiceRole",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "cloudformation.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadAndSimulateExactBootstrapRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags",
+                    "iam:SimulatePrincipalPolicy"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "CloudFormationServiceRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseDeploymentRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseCoordinatorRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseExecutionRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "LiveDrillOperatorRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseEvidenceRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseTeardownRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseTerminalizerRole",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactPermissionsBoundary",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetPolicy",
+                    "iam:GetPolicyVersion"
+                  ],
+                  "Resource": {
+                    "Ref": "CloudFormationPermissionsBoundary"
+                  }
+                },
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadExactReleaseControlItems",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": "EFFECT#*"
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyDirectStackMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "cloudformation:CreateStack",
+                    "cloudformation:DeleteStack",
+                    "cloudformation:ExecuteChangeSet",
+                    "cloudformation:UpdateStack"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyIamMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:Add*",
+                    "iam:Attach*",
+                    "iam:Create*",
+                    "iam:Delete*",
+                    "iam:Detach*",
+                    "iam:Put*",
+                    "iam:Remove*",
+                    "iam:Set*",
+                    "iam:Tag*",
+                    "iam:Untag*",
+                    "iam:Update*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyRuntimeAndSecretUse",
+                  "Effect": "Deny",
+                  "Action": [
+                    "bedrock:*",
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:UpdateTable",
+                    "execute-api:Invoke",
+                    "kms:*",
+                    "lambda:Invoke*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyOtherArtifactWrites",
+                  "Effect": "Deny",
+                  "Action": [
+                    "s3:AbortMultipartUpload",
+                    "s3:DeleteObject",
+                    "s3:PutObject",
+                    "s3:PutObjectAcl",
+                    "s3:PutObjectTagging"
+                  ],
+                  "NotResource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/gate2/*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GateTwoReleaseChangeSetOnly"
+          }
+        ]
+      }
+    },
+    "ReleaseCoordinatorRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActReleaseCoordinator",
+        "Description": "Credential-isolated GitHub OIDC coordinator for one-shot store transitions and read-only provider finalization across the five release lanes. It has no provider mutation, invocation, secret, KMS, role-assumption, or application-database credential capability.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-release-coordination",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner": "Flash-Bri",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-release-coordination",
+                  "token.actions.githubusercontent.com:workflow": [
+                    "ProofToAct Release Candidate",
+                    "ProofToAct Execute Approved Release",
+                    "ProofToAct Bounded Live Drill",
+                    "ProofToAct Read Only Release Evidence",
+                    "ProofToAct Approved Teardown"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActExactReleaseControlAndReadback",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "CoordinateExactReleaseControlItems",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "BUDGET#*",
+                        "EFFECT#*"
+                      ]
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadExactArtifactVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/gate2/*"
+                  }
+                },
+                {
+                  "Sid": "ListExactArtifactPrefix",
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": "gate2/*"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadExactReleaseStack",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:DescribeStackResourceDrifts",
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:DetectStackDrift",
+                    "cloudformation:GetTemplate"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-gate2/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:changeSet/prooftoact-release-*/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadOwnDriftDetectionStatus",
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DescribeStackDriftDetectionStatus",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadGateTwoHttpApiDeployment",
+                  "Effect": "Allow",
+                  "Action": "apigateway:GET",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/apis/*"
+                  }
+                },
+                {
+                  "Sid": "ReadExactLambdaDeployment",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:GetAlias",
+                    "lambda:GetFunctionCodeSigningConfig",
+                    "lambda:GetFunctionConfiguration",
+                    "lambda:GetFunctionConcurrency",
+                    "lambda:GetFunctionRecursionConfig",
+                    "lambda:GetPolicy",
+                    "lambda:GetRuntimeManagementConfig",
+                    "lambda:ListAliases",
+                    "lambda:ListFunctionUrlConfigs",
+                    "lambda:ListProvisionedConcurrencyConfigs",
+                    "lambda:ListTags"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "ReadLambdaEventSourceCensus",
+                  "Effect": "Allow",
+                  "Action": "lambda:ListEventSourceMappings",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadExactReleaseLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:DescribeLogStreams",
+                    "logs:FilterLogEvents",
+                    "logs:GetLogEvents"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:*prooftoact-gate2-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:*prooftoact-gate2-*:*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactReleaseRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "ReadAndSimulateExactBootstrapRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags",
+                    "iam:SimulatePrincipalPolicy"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "CloudFormationServiceRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseDeploymentRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseCoordinatorRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseExecutionRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "LiveDrillOperatorRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseEvidenceRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseTeardownRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseTerminalizerRole",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactPermissionsBoundary",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetPolicy",
+                    "iam:GetPolicyVersion"
+                  ],
+                  "Resource": {
+                    "Ref": "CloudFormationPermissionsBoundary"
+                  }
+                },
+                {
+                  "Sid": "DenyUnsafeReleaseControlOperations",
+                  "Effect": "Deny",
+                  "Action": [
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:UpdateTable"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyProviderMutationAndAuthorityCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:DELETE",
+                    "apigateway:PATCH",
+                    "apigateway:POST",
+                    "bedrock:*",
+                    "cloudformation:Create*",
+                    "cloudformation:Delete*",
+                    "cloudformation:Execute*",
+                    "cloudformation:Update*",
+                    "execute-api:Invoke",
+                    "iam:Add*",
+                    "iam:Attach*",
+                    "iam:Create*",
+                    "iam:Delete*",
+                    "iam:Detach*",
+                    "iam:PassRole",
+                    "iam:Put*",
+                    "iam:Remove*",
+                    "iam:Set*",
+                    "iam:Tag*",
+                    "iam:Untag*",
+                    "iam:Update*",
+                    "kms:*",
+                    "lambda:Invoke*",
+                    "s3:AbortMultipartUpload",
+                    "s3:Delete*",
+                    "s3:Put*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "ReleaseControlAndReadOnlyFinalization"
+          }
+        ]
+      }
+    },
+    "ReleaseExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActReleaseExecution",
+        "Description": "Separate protected GitHub OIDC role that can execute one separately approved CREATE change set and enable termination protection; it cannot prepare artifacts, create change sets, deploy directly, invoke the application, or assume drill roles.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-release-execution",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner": "Flash-Bri",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-release-execution",
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Execute Approved Release"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActExecuteApprovedCreateChangeSetOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ExecuteNamedReviewedChangeSet",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:ExecuteChangeSet"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:changeSet/prooftoact-release-*/*"
+                  }
+                },
+                {
+                  "Sid": "ReadExactStackAndEnableProtection",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:UpdateTerminationProtection"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-gate2/*"
+                  }
+                },
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadExactReleaseControlItems",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": "EFFECT#*"
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyReleaseControlMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:UpdateTable"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPreparationDirectMutationAndRuntime",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:*",
+                    "bedrock:*",
+                    "cloudformation:Create*",
+                    "cloudformation:Delete*",
+                    "cloudformation:UpdateStack",
+                    "execute-api:Invoke",
+                    "iam:*",
+                    "kms:*",
+                    "lambda:Invoke*",
+                    "s3:Put*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GateTwoApprovedExecutionOnly"
+          }
+        ]
+      }
+    },
+    "LiveDrillOperatorRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActLiveDrillOperator",
+        "Description": "Separate protected GitHub OIDC role for one bounded live drill. The frozen application has one EvidenceOperatorPrincipalArn for its drill and inner evidence roles, so this role retains only those exact assumptions; an independent outer evidence role cannot dispatch or assume them.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-live-drill",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner": "Flash-Bri",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-live-drill",
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Bounded Live Drill"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActAssumeExactDrillAndInnerEvidenceRoles",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AssumeOnlyInStackDrillAndInnerEvidenceRoles",
+                  "Effect": "Allow",
+                  "Action": "sts:AssumeRole",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-AdvisoryCallerRole-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-AuthorityRaceCallerRole-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-evidence"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-evidence-alternate"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadExactReleaseControlItems",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": "EFFECT#*"
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyReleaseControlMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:UpdateTable"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyDirectProviderAndDeploymentCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:*",
+                    "bedrock:*",
+                    "cloudformation:Create*",
+                    "cloudformation:Delete*",
+                    "cloudformation:Execute*",
+                    "cloudformation:Update*",
+                    "execute-api:Invoke",
+                    "iam:*",
+                    "kms:*",
+                    "lambda:Invoke*",
+                    "s3:Put*",
+                    "secretsmanager:*"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyOtherRoleAssumption",
+                  "Effect": "Deny",
+                  "Action": "sts:AssumeRole",
+                  "NotResource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-AdvisoryCallerRole-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-AuthorityRaceCallerRole-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-evidence"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-evidence-alternate"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GateTwoBoundedLiveDrillOnly"
+          }
+        ]
+      }
+    },
+    "ReleaseEvidenceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActReleaseEvidence",
+        "Description": "Independent protected GitHub OIDC role for read-only release-control and the exact frozen deployment-attestation inventory. It cannot dispatch, deploy, invoke, mutate the controller table, or assume another role.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-release-evidence",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner": "Flash-Bri",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-release-evidence",
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Read Only Release Evidence"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActReadOnlyReleaseEvidence",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadExactReleaseControlItems",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": "EFFECT#*"
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadExactReleaseStack",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:DescribeStackResourceDrifts",
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:DetectStackDrift",
+                    "cloudformation:GetTemplate"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-gate2/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:changeSet/prooftoact-release-*/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadOwnDriftDetectionStatus",
+                  "Effect": "Allow",
+                  "Action": "cloudformation:DescribeStackDriftDetectionStatus",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadGateTwoHttpApiDeployment",
+                  "Effect": "Allow",
+                  "Action": "apigateway:GET",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:apigateway:us-east-1::/apis/*"
+                  }
+                },
+                {
+                  "Sid": "ReadExactLambdaDeployment",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:GetAlias",
+                    "lambda:GetFunctionCodeSigningConfig",
+                    "lambda:GetFunctionConfiguration",
+                    "lambda:GetFunctionConcurrency",
+                    "lambda:GetFunctionRecursionConfig",
+                    "lambda:GetPolicy",
+                    "lambda:GetRuntimeManagementConfig",
+                    "lambda:ListAliases",
+                    "lambda:ListFunctionUrlConfigs",
+                    "lambda:ListProvisionedConcurrencyConfigs",
+                    "lambda:ListTags"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "ReadLambdaEventSourceCensus",
+                  "Effect": "Allow",
+                  "Action": "lambda:ListEventSourceMappings",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadExactReleaseLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:DescribeLogStreams",
+                    "logs:FilterLogEvents",
+                    "logs:GetLogEvents"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:*prooftoact-gate2-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:*prooftoact-gate2-*:*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactReleaseRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/prooftoact-gate2-*"
+                  }
+                },
+                {
+                  "Sid": "ReadAndSimulateExactBootstrapRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags",
+                    "iam:SimulatePrincipalPolicy"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "CloudFormationServiceRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseDeploymentRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseCoordinatorRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseExecutionRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "LiveDrillOperatorRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseEvidenceRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseTeardownRole",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ReleaseTerminalizerRole",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactPermissionsBoundary",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetPolicy",
+                    "iam:GetPolicyVersion"
+                  ],
+                  "Resource": {
+                    "Ref": "CloudFormationPermissionsBoundary"
+                  }
+                },
+                {
+                  "Sid": "DenyEvidenceMutationAndSecrets",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:DELETE",
+                    "apigateway:PATCH",
+                    "apigateway:POST",
+                    "bedrock:*",
+                    "cloudformation:Create*",
+                    "cloudformation:Delete*",
+                    "cloudformation:Execute*",
+                    "cloudformation:Update*",
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:UpdateTable",
+                    "execute-api:Invoke",
+                    "iam:Add*",
+                    "iam:Attach*",
+                    "iam:Create*",
+                    "iam:Delete*",
+                    "iam:Detach*",
+                    "iam:PassRole",
+                    "iam:Put*",
+                    "iam:Remove*",
+                    "iam:Set*",
+                    "iam:Tag*",
+                    "iam:Untag*",
+                    "iam:Update*",
+                    "kms:*",
+                    "lambda:Invoke*",
+                    "s3:Delete*",
+                    "s3:Put*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GateTwoReadOnlyEvidence"
+          }
+        ]
+      }
+    },
+    "ReleaseTeardownRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActReleaseTeardown",
+        "Description": "Independent protected GitHub OIDC provider dispatcher that can delete only the named gate2 stack through its exact service role after external physical-stack identity verification. It has no release-control table access.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-release-teardown",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner": "Flash-Bri",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-release-teardown",
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Approved Teardown"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActExactReleaseTeardown",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "DeleteOnlyExactReleaseStack",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DeleteStack",
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:GetTemplate",
+                    "cloudformation:UpdateTerminationProtection"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-gate2/*"
+                  }
+                },
+                {
+                  "Sid": "PassExactCloudFormationRole",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "CloudFormationServiceRole",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "cloudformation.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadExactReleaseControlItems",
+                  "Effect": "Allow",
+                  "Action": "dynamodb:GetItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": "EFFECT#*"
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyReleaseControlMutation",
+                  "Effect": "Deny",
+                  "Action": [
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:UpdateTable"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyNonTeardownCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:*",
+                    "bedrock:*",
+                    "cloudformation:Create*",
+                    "cloudformation:Execute*",
+                    "cloudformation:UpdateStack",
+                    "execute-api:Invoke",
+                    "iam:Add*",
+                    "iam:Attach*",
+                    "iam:Create*",
+                    "iam:Delete*",
+                    "iam:Detach*",
+                    "iam:Put*",
+                    "iam:Remove*",
+                    "iam:Set*",
+                    "iam:Tag*",
+                    "iam:Untag*",
+                    "iam:Update*",
+                    "kms:*",
+                    "lambda:Invoke*",
+                    "s3:Delete*",
+                    "s3:Put*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyOtherStackTeardown",
+                  "Effect": "Deny",
+                  "Action": [
+                    "cloudformation:DeleteStack",
+                    "cloudformation:UpdateTerminationProtection"
+                  ],
+                  "NotResource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-gate2/*"
+                  }
+                },
+                {
+                  "Sid": "DenyOtherRolePass",
+                  "Effect": "Deny",
+                  "Action": "iam:PassRole",
+                  "NotResource": {
+                    "Fn::GetAtt": [
+                      "CloudFormationServiceRole",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GateTwoExactTeardownOnly"
+          }
+        ]
+      }
+    },
+    "ReleaseTerminalizerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActReleaseTerminalizer",
+        "Description": "Independent protected GitHub OIDC role for safety-reducing expiry terminalization of exact effect records. It cannot dispatch, reserve budget, deploy, invoke, assume roles, or delete state.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-release-terminalization",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner": "Flash-Bri",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-release-terminalization",
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Terminalize Expired Release"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActSafetyReducingTerminalizationOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadAndTerminalizeExactEffectItems",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": "EFFECT#*"
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyBudgetMutation",
+                  "Effect": "Deny",
+                  "Action": "dynamodb:UpdateItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ReleaseControlTable",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "ForAnyValue:StringLike": {
+                      "dynamodb:LeadingKeys": "BUDGET#*"
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "DenyUnsafeReleaseControlOperations",
+                  "Effect": "Deny",
+                  "Action": [
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateTable"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyAllProviderAndAuthorityCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:*",
+                    "bedrock:*",
+                    "cloudformation:*",
+                    "execute-api:Invoke",
+                    "iam:*",
+                    "kms:*",
+                    "lambda:Invoke*",
+                    "s3:*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "SafetyReducingReleaseTerminalizationOnly"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "CloudFormationPermissionsBoundaryArn": {
+      "Value": {
+        "Ref": "CloudFormationPermissionsBoundary"
+      }
+    },
+    "CloudFormationServiceRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "CloudFormationServiceRole",
+          "Arn"
+        ]
+      }
+    },
+    "ReleaseDeploymentRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReleaseDeploymentRole",
+          "Arn"
+        ]
+      }
+    },
+    "ReleaseCoordinatorRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReleaseCoordinatorRole",
+          "Arn"
+        ]
+      }
+    },
+    "LiveDrillOperatorRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "LiveDrillOperatorRole",
+          "Arn"
+        ]
+      }
+    },
+    "ReleaseExecutionRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReleaseExecutionRole",
+          "Arn"
+        ]
+      }
+    },
+    "ReleaseControlTableArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReleaseControlTable",
+          "Arn"
+        ]
+      }
+    },
+    "ReleaseControlTableName": {
+      "Value": {
+        "Ref": "ReleaseControlTable"
+      }
+    },
+    "ReleaseEvidenceRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReleaseEvidenceRole",
+          "Arn"
+        ]
+      }
+    },
+    "ReleaseTeardownRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReleaseTeardownRole",
+          "Arn"
+        ]
+      }
+    },
+    "ReleaseTerminalizerRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ReleaseTerminalizerRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

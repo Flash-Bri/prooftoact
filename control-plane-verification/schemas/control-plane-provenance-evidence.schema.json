@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prooftoact.example/schemas/control-plane-provenance-evidence.v1.json",
+  "title": "ProofToAct clean standalone control-plane provenance evidence",
+  "description": "Evidence from a clean standalone checkout and hermetic nested install/build.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "origin",
+    "controlPlane",
+    "frozenApplication",
+    "git",
+    "clean",
+    "install",
+    "node",
+    "npm",
+    "build",
+    "tests",
+    "auditFindingCount"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "prooftoact.control-plane-provenance-evidence.v1"
+    },
+    "status": {
+      "const": "ACCEPTED"
+    },
+    "origin": {
+      "const": "https://github.com/Flash-Bri/prooftoact.git"
+    },
+    "controlPlane": {
+      "$ref": "#/$defs/gitIdentity"
+    },
+    "frozenApplication": {
+      "$ref": "#/$defs/gitIdentity"
+    },
+    "git": {
+      "type": "object"
+    },
+    "clean": {
+      "const": true
+    },
+    "install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "releaseControl",
+        "releaseProvider"
+      ],
+      "properties": {
+        "releaseControl": {
+          "$ref": "#/$defs/install"
+        },
+        "releaseProvider": {
+          "$ref": "#/$defs/install"
+        }
+      }
+    },
+    "node": {
+      "type": "object"
+    },
+    "npm": {
+      "type": "object"
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "releaseControl",
+        "releaseProvider"
+      ],
+      "properties": {
+        "releaseControl": {
+          "type": "object"
+        },
+        "releaseProvider": {
+          "type": "object"
+        }
+      }
+    },
+    "tests": {
+      "type": "object"
+    },
+    "auditFindingCount": {
+      "const": 0
+    }
+  },
+  "$defs": {
+    "install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arguments",
+        "packageLockSha256"
+      ],
+      "properties": {
+        "arguments": {
+          "const": [
+            "ci",
+            "--ignore-scripts"
+          ]
+        },
+        "packageLockSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "gitIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "tree"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "tree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    }
+  }
+}
