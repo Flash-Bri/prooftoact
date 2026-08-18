@@ -681,15 +681,14 @@ async function expectDirectRecoveryTablePrivilegeDenied(client, operation, sql) 
 
 export async function collectRecoveryPublisherCapabilityPosture(
   client,
-  { expectedRecoverySqlClusterId } = {}
+  options = undefined
 ) {
   if (typeof client?.query !== "function") {
     throw new TypeError("RECOVERY_PUBLISHER_PROBE_CLIENT_REQUIRED");
   }
-  const observedRecoverySqlClusterId = requireObservedRecoveryClusterId(
-    await collectObservedRecoveryClusterId(client),
-    expectedRecoverySqlClusterId
-  );
+  if (options !== undefined) {
+    throw new TypeError("RECOVERY_PUBLISHER_PROBE_OPTIONS_REJECTED");
+  }
   const sessionResult = await client.query(`
     SELECT
       current_database() AS database_name,
@@ -776,8 +775,7 @@ export async function collectRecoveryPublisherCapabilityPosture(
       await expectDirectRecoveryTablePrivilegeDenied(client, operation, sql);
   }
   return {
-    schemaVersion: "tideproof.recovery-publisher-capability-posture.v2",
-    sqlClusterId: observedRecoverySqlClusterId,
+    schemaVersion: "tideproof.recovery-publisher-capability-posture.v3",
     databaseName: session.database_name,
     principal: session.session_user_name,
     databaseVersionSha256: sha256(session.database_version),
@@ -794,7 +792,7 @@ export async function collectRecoveryPublisherCapabilityPosture(
 
 export function recoveryPublisherPrivateSchemaRepairPlan() {
   return Object.freeze({
-    schemaVersion: "tideproof.recovery-publisher-private-schema-repair.v3",
+    schemaVersion: "tideproof.recovery-publisher-private-schema-repair.v4",
     databaseName: "tideproof_recovery",
     providerClusterId:
       RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID,
@@ -985,8 +983,7 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
   try {
     await publisher.connect();
     capabilityPosture = await collectRecoveryPublisherCapabilityPosture(
-      publisher,
-      { expectedRecoverySqlClusterId: binding.sqlClusterId }
+      publisher
     );
   } catch (error) {
     throw stablePublisherError(
@@ -1002,7 +999,7 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
     applied: true,
     capabilityPosture,
     claimBoundary:
-      "Read-only verification confirms the exact schema-USAGE posture, stored-function definition hashes, rollback-safe function probes, and direct-table denials. It proves no deployment or release authority."
+      "Read-only verification confirms SQL cluster identity through the admin connection, the exact schema-USAGE posture, stored-function definition hashes, rollback-safe publisher function probes, and direct-table denials. The least-privilege publisher is not required or granted access to internal cluster metadata. It proves no deployment or release authority."
   });
 }
 
