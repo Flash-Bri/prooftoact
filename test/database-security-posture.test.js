@@ -382,6 +382,98 @@ test("managed grant census rejects unexpected and missing capabilities", () => {
   );
 });
 
+test("recovery publisher requires private-schema usage but rejects table DML", () => {
+  const options = {
+    databaseName: "tideproof_recovery",
+    managedSchemas: ["mcp_private", "mcp_public", "mcp_api"],
+    managedPrefixes: ["tp_"],
+    apiSchema: "mcp_api",
+    ownerRoles: ["tp_recovery_owner"],
+    roleGrantPolicies: {
+      tp_recovery_publisher_role: {
+        schemas: ["mcp_api", "mcp_private"],
+        functions: ["append_probe_v1(UUID)", "resolve_probe_v1(UUID)"]
+      }
+    },
+    runtimeUsers: ["tp_recovery_publisher_user"],
+    trustedPrincipals: ["cluster_admin"]
+  };
+  const expected = [
+    {
+      database_name: "tideproof_recovery",
+      schema_name: null,
+      object_name: null,
+      object_type: "database",
+      grantee: "tp_recovery_publisher_role",
+      privilege_type: "CONNECT",
+      is_grantable: false
+    },
+    ...["mcp_api", "mcp_private"].map((schemaName) => ({
+      database_name: "tideproof_recovery",
+      schema_name: schemaName,
+      object_name: null,
+      object_type: "schema",
+      grantee: "tp_recovery_publisher_role",
+      privilege_type: "USAGE",
+      is_grantable: false
+    })),
+    ...["append_probe_v1(uuid)", "resolve_probe_v1(uuid)"].map(
+      (objectName) => ({
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_api",
+        object_name: objectName,
+        object_type: "function",
+        grantee: "tp_recovery_publisher_role",
+        privilege_type: "EXECUTE",
+        is_grantable: false
+      })
+    )
+  ];
+  assert.deepEqual(validateManagedObjectGrants(expected, options), {
+    objectGrantCount: 5,
+    censusObjectGrantCount: 5
+  });
+  assert.throws(
+    () => validateManagedObjectGrants(
+      expected.filter((row) => row.schema_name !== "mcp_private"),
+      options
+    ),
+    /DATABASE_POSTURE_MANAGED_GRANT_MISSING/u
+  );
+  for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+    assert.throws(
+      () => validateManagedObjectGrants([
+        ...expected,
+        {
+          database_name: "tideproof_recovery",
+          schema_name: "mcp_private",
+          object_name: "recovery_bundles_v2",
+          object_type: "table",
+          grantee: "tp_recovery_publisher_role",
+          privilege_type: privilege,
+          is_grantable: false
+        }
+      ], options),
+      /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
+    );
+  }
+  assert.throws(
+    () => validateManagedObjectGrants([
+      ...expected,
+      {
+        database_name: "tideproof",
+        schema_name: "tp_api",
+        object_name: null,
+        object_type: "schema",
+        grantee: "tp_recovery_publisher_role",
+        privilege_type: "USAGE",
+        is_grantable: false
+      }
+    ], options),
+    /DATABASE_POSTURE_OUT_OF_SCOPE_GRANT/u
+  );
+});
+
 test("routine census canonicalizes CockroachDB v26.2 identity aliases", () => {
   assert.deepEqual(
     validateManagedObjectGrants([{

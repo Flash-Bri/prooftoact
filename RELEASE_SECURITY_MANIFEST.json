@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-security-manifest.v1",
   "status": "CURRENT_SOURCE_SECURITY_REVIEWED_FINAL_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-14",
+  "reviewedOn": "2026-08-18",
   "claimBoundary": "This manifest binds the current reviewed security source and generated-template surfaces. It does not prove vulnerability absence, live AWS or CockroachDB enforcement, production suitability, or final release approval.",
   "finalReleaseRequirements": [
     "Exact-release live receipts for IAM allow and deny behavior, API routes and headers, throttles, concurrency, KMS, the bounded model call, the authority race, durable-state reconciliation, logs, cost controls, and teardown.",
@@ -294,7 +294,7 @@
       "id": "commit-reconciliation-ledger",
       "path": "docs/COMMIT_RECONCILIATION.md",
       "role": "DATABASE_COMMIT_RECONCILIATION_BOUNDARY",
-      "sha256": "489645af00fac5bbbf5920a812e6beac4067f5574e44021836a69cf4a689c8ec"
+      "sha256": "dba5e021cb0e2a0f0548653339a7199212c9772db3d9944170c575b9be6bba65"
     },
     {
       "id": "commit-reconciliation-tests",
@@ -312,7 +312,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "0aad7ffa066c7ac976fadaaff15f01a486dae50cd5fe0fc11cf49a60ebffe4ad"
+      "sha256": "1b6aa009da23bcc0695619fde917030cc3f5761cdf2573923459cc5aca7b9815"
     },
     {
       "id": "database-security-posture",
@@ -324,7 +324,7 @@
       "id": "database-security-posture-tests",
       "path": "test/database-security-posture.test.js",
       "role": "DATABASE_POSTURE_VERIFICATION",
-      "sha256": "06fdda2fd752fef585697e5723da047662496dbd4ad09ab809c0a6002301816f"
+      "sha256": "fb88a73a4ec7521c907faeef753a1991c02454a1745da08aceed7c8320f36f50"
     },
     {
       "id": "dependency-snapshot",
@@ -1158,7 +1158,7 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "2b63d892863e3622747ec2613e5653ea4746817da06bd8bb86226825b6b7ebac"
+      "sha256": "d627d51b87053063140a3c7ec497b9263b04513b5fddfb2dadb6a598441ad013"
     },
     {
       "id": "recovery-audit-reconciliation-tests",
@@ -1227,10 +1227,16 @@
       "sha256": "84103f0e7f8ff499ca00fdeb6778427c279096dc968857ffbed723c9984f046e"
     },
     {
+      "id": "recovery-publisher-schema-repair",
+      "path": "scripts/repair-recovery-publisher-private-schema-usage.js",
+      "role": "RECOVERY_PUBLISHER_EXISTING_CLUSTER_REPAIR",
+      "sha256": "8a315cff922b571b22b3d9161b998b6ad4b207551cfe5418112794f974917869"
+    },
+    {
       "id": "recovery-publication-reconciliation-tests",
       "path": "test/recovery-security.test.js",
       "role": "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION",
-      "sha256": "82e0087fa7b581d6183020b0a017664a0965064bf0b6640ae543ef7bcd1cbbc9"
+      "sha256": "5b9a607f8a3905a6459debe8f59d2f3287b3007da7707d2ad4f47ebfddad04f5"
     },
     {
       "id": "recovery-store",

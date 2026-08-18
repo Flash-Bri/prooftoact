@@ -843,6 +843,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/recovery-publisher-key.test.js",
     role: "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION"
   }),
+  "recovery-publisher-schema-repair": Object.freeze({
+    path: "scripts/repair-recovery-publisher-private-schema-usage.js",
+    role: "RECOVERY_PUBLISHER_EXISTING_CLUSTER_REPAIR"
+  }),
   "recovery-publication-reconciliation-tests": Object.freeze({
     path: "test/recovery-security.test.js",
     role: "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION"
@@ -1609,7 +1613,10 @@ const SOURCE_MARKERS = Object.freeze({
     "Classifier-dependent rollback after COMMIT dispatch",
     "Direct replay currentness omitted the outbox",
     "Digest label without durable payload verification",
-    "Invocation identity projected as committed replay identity"
+    "Invocation identity projected as committed replay identity",
+    "Recovery publisher schema repair runbook",
+    "`CONFIRMED_ABSENT` is a terminal HOLD",
+    "no other administrator may alter users, roles, memberships, grants"
   ]),
   "commit-reconciliation-tests": Object.freeze([
     "direct ACK and read reconciliation share one exact commit schema",
@@ -1991,6 +1998,7 @@ const SOURCE_MARKERS = Object.freeze({
     "collector rolls back a failed census snapshot",
     "cluster census enforces database isolation with matching barriers",
     "cluster census rejects database-set drift",
+    "recovery publisher requires private-schema usage but rejects table DML",
     "DATABASE_POSTURE_EXTERNAL_PRINCIPAL_CAPABILITY",
     "DATABASE_POSTURE_EXTERNAL_OBJECT_GRANT",
     "DATABASE_POSTURE_DEFAULT_GRANT_UNSAFE"
@@ -3488,7 +3496,16 @@ const SOURCE_MARKERS = Object.freeze({
     "lockRecoveryPublicRoutineDefaults(",
     "allowMissingExpectedCapabilities: false",
     "collectValidatedRecoveryPosture(",
-    "GRANT USAGE ON SCHEMA mcp_api TO ${RECOVERY_PUBLISHER_ROLE}",
+    "GRANT USAGE ON SCHEMA mcp_api, mcp_private TO ${RECOVERY_PUBLISHER_ROLE}",
+    "RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL",
+    "collectRecoveryPublisherCapabilityPosture",
+    "assertCleanExactGitCheckout",
+    "RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID",
+    "crdb_internal.cluster_id()::STRING AS cluster_id",
+    "RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_MISMATCH",
+    "validateRecoveryPublisherFunctionDefinitionBinding",
+    "RECOVERY_SCHEMA_REPAIR_FUNCTION_DEFINITION_MISMATCH",
+    "RECOVERY_PUBLISHER_DIRECT_${operation}_NOT_DENIED",
     "mcp_api.resolve_recovery_bundle_v1",
     "read_reconciled",
     "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED",
@@ -3621,12 +3638,39 @@ const SOURCE_MARKERS = Object.freeze({
     "policy_version: \"g1-admissibility-v2\"",
     "RECOVERY_SOURCE_RECEIPT_INVALID"
   ]),
+  "recovery-publisher-schema-repair": Object.freeze([
+    "mode === \"--plan\"",
+    "--verify-applied",
+    "RECOVERY_ADMIN_DATABASE_URL",
+    "RECOVERY_PUBLISHER_DATABASE_URL",
+    "EXPECTED_RECOVERY_HOSTNAME",
+    "EXPECTED_RECOVERY_CLUSTER_ID",
+    "EXPECTED_RECOVERY_PRE_REPAIR_POSTURE_SHA256",
+    "EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256",
+    "EXPECTED_RECOVERY_APPEND_FUNCTION_DEFINITION_SHA256",
+    "EXPECTED_RECOVERY_RESOLVE_FUNCTION_DEFINITION_SHA256",
+    "RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT",
+    "RECOVERY_SCHEMA_REPAIR_SOURCE_TREE",
+    "RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION"
+  ]),
   "recovery-publication-reconciliation-tests": Object.freeze([
     "recovery publisher resolves an exact receipt after COMMIT ACK loss",
     "output.commit.observation, \"read_reconciled\"",
     "sqlState(\"ECONNRESET\")",
     "recovery publisher never rolls back an unclassified post-COMMIT error",
-    "ambiguous_closed"
+    "ambiguous_closed",
+    "publisher capability collector executes functions only in a rolled-back probe",
+    "publisher capability collector rejects any direct private-table operation",
+    "publisher capability collector byte-compares its observed cluster UUID",
+    "read-only repair verification distinguishes exact absent and present state",
+    "repair reconciles COMMIT ACK loss as present without retry",
+    "repair reconciles COMMIT ACK loss as absent and never retries",
+    "repair marks contradictory ACK-loss readback unresolved",
+    "post-COMMIT verification failure is recoverable only by read-only verification",
+    "post-COMMIT function or cluster drift remains unresolved without retry",
+    "repair stops on rollback failure before dispatching COMMIT",
+    "repair requires the executing standalone exact-Git checkout identity",
+    "repair CLI gates apply and exposes only a read-only verify mode"
   ]),
   "recovery-store": Object.freeze([
     "runtimeDatabaseConfig({",

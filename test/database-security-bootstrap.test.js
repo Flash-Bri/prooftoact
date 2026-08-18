@@ -132,7 +132,7 @@ test("snapshot exclusions are exact, bounded, and removed with the snapshot", as
   );
 });
 
-test("recovery bootstrap audits first and grants no private-schema access", async () => {
+test("recovery bootstrap grants private schema visibility but no table capability", async () => {
   const source = await readFile(recoveryUrl, "utf8");
   const bootstrap = source.slice(source.indexOf("export async function bootstrapRecoverySecurity"));
   const preflight = bootstrap.indexOf("collectValidatedRecoveryPosture(");
@@ -157,11 +157,15 @@ test("recovery bootstrap audits first and grants no private-schema access", asyn
   assert.ok(bootstrap.indexOf("GRANT ALL ON DATABASE tideproof_recovery") > preflight);
   assert.match(
     source,
-    /GRANT USAGE ON SCHEMA mcp_api TO \$\{RECOVERY_PUBLISHER_ROLE\}/u
+    /GRANT USAGE ON SCHEMA mcp_api, mcp_private TO \$\{RECOVERY_PUBLISHER_ROLE\}/u
   );
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /GRANT USAGE ON SCHEMA mcp_api, mcp_private/u
+    /schemas: Object\.freeze\(\[\.\.\.publisherSchemas\]\)/u
+  );
+  assert.match(
+    source,
+    /REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public FROM \$\{RECOVERY_PUBLISHER_ROLE\}/u
   );
   assert.match(
     source,
