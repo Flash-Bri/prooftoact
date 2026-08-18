@@ -148,6 +148,26 @@ test("exact workflow context admits only the four phase tuples", () => {
   }
 });
 
+test("exact workflow context admits Node's real process environment carrier",
+  { concurrency: false }, () => {
+    const fixture = contextFixture("diagnostic");
+    const previous = new Map(Object.keys(fixture.environment).map((name) =>
+      [name, process.env[name]]));
+    try {
+      Object.assign(process.env, fixture.environment);
+      const result = validatePrepareWorkflowContext(
+        process.env, "diagnostic", "linux");
+      assert.equal(result.controlRoot,
+        path.join(fixture.workspace, "control-plane"));
+    } finally {
+      for (const [name, value] of previous) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      fixture.cleanup();
+    }
+  });
+
 test("wrong job, ref, environment, SHA, and run attempt reject", () => {
   const fixture = contextFixture("dispatch");
   try {

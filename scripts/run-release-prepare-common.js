@@ -312,7 +312,9 @@ export function validatePrepareWorkflowContext(
 ) {
   const code = "RELEASE_PREPARE_WORKFLOW_CONTEXT_REJECTED";
   const contract = PHASES[phaseName];
-  requireCondition(contract && plainObject(environment) && platform === "linux" &&
+  const exactEnvironmentCarrier = environment === process.env ||
+    plainObject(environment);
+  requireCondition(contract && exactEnvironmentCarrier && platform === "linux" &&
     environment.CI === "true" && environment.GITHUB_ACTIONS === "true" &&
     environment.RUNNER_OS === "Linux" &&
     environment.RUNNER_ENVIRONMENT === "github-hosted" &&
