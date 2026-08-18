@@ -1039,7 +1039,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "b3a690bdc26487b60a69129346e19244f09bfaa857f91d44d636bbb948b6c975",
+      "sha256": "66c56ea71d20429a06371828aaa4039f88fe08d6da2fa7b9df806c31867986c6",
       "kind": "boundary-ledger"
     },
     {
