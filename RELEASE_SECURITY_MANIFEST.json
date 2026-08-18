@@ -294,7 +294,7 @@
       "id": "commit-reconciliation-ledger",
       "path": "docs/COMMIT_RECONCILIATION.md",
       "role": "DATABASE_COMMIT_RECONCILIATION_BOUNDARY",
-      "sha256": "d920d8397e18aec93dcc33fe4d9bcad3e9b100da49f821a71b691e6008269dff"
+      "sha256": "dba5e021cb0e2a0f0548653339a7199212c9772db3d9944170c575b9be6bba65"
     },
     {
       "id": "commit-reconciliation-tests",
@@ -1158,7 +1158,7 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "7430c8c58d69a34b9f7fc2b464bee1b8eba59f1c87d6414c8b1ca6269ad85c8e"
+      "sha256": "d627d51b87053063140a3c7ec497b9263b04513b5fddfb2dadb6a598441ad013"
     },
     {
       "id": "recovery-audit-reconciliation-tests",
@@ -1230,13 +1230,13 @@
       "id": "recovery-publisher-schema-repair",
       "path": "scripts/repair-recovery-publisher-private-schema-usage.js",
       "role": "RECOVERY_PUBLISHER_EXISTING_CLUSTER_REPAIR",
-      "sha256": "2334b6ab26b4b657e769090c20aa3855d6f48fcf0ae61d785d6c562099c50a7e"
+      "sha256": "8a315cff922b571b22b3d9161b998b6ad4b207551cfe5418112794f974917869"
     },
     {
       "id": "recovery-publication-reconciliation-tests",
       "path": "test/recovery-security.test.js",
       "role": "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION",
-      "sha256": "ff8d4a7ba40fe6028f5d6e45239af82c97e392fa762bdff592c36a5a26e01e3d"
+      "sha256": "5b9a607f8a3905a6459debe8f59d2f3287b3007da7707d2ad4f47ebfddad04f5"
     },
     {
       "id": "recovery-store",

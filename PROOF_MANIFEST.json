@@ -1039,7 +1039,7 @@
     {
       "id": "release-privacy-manifest",
       "path": "RELEASE_PRIVACY_MANIFEST.json",
-      "sha256": "b3a690bdc26487b60a69129346e19244f09bfaa857f91d44d636bbb948b6c975",
+      "sha256": "beaddc62f3fc24907d7ea39582b6703af4f48dff7eaee2f5c19a46ef49032b32",
       "kind": "boundary-ledger"
     },
     {
@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "d76b386549c1159625a22cd1707ddb3aeab0d81b33b4fa8e300622bfde3babf6",
+      "sha256": "1a1a1060d16fe8de52bc557d2f3d8e00d092af627c10d2775a9ae4664a63c852",
       "kind": "boundary-ledger"
     },
     {
@@ -1105,7 +1105,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "95120fdba9a1639f3fda0d129b4e4c0ddcf606739d77b81e4eddd45cc0fb50a9",
+      "sha256": "4896f7748180f160134f3c93ad1bc6eb65b1fe4b9a1992493c8e1c8c6f6dbee2",
       "kind": "verification-code"
     },
     {
