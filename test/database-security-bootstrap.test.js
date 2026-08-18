@@ -6,6 +6,8 @@ import { runInNewContext } from "node:vm";
 import { __test as primarySecurityContract } from "../src/cloud/primary-security.js";
 import { validateManagedObjectGrants } from "../src/cloud/database-security-posture.js";
 import { dviSelectionBindingSha256For } from "../src/cloud/dvi-selection.js";
+import { MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL } from
+  "../src/cloud/recovery-security.js";
 import { authorizeSyntheticProposal } from
   "../scripts/lib/synthetic-authority-proposal.js";
 
@@ -132,7 +134,7 @@ test("snapshot exclusions are exact, bounded, and removed with the snapshot", as
   );
 });
 
-test("recovery bootstrap grants private schema visibility but no table capability", async () => {
+test("recovery bootstrap grants exact publisher and optional Managed MCP schema visibility without private relation capability", async () => {
   const source = await readFile(recoveryUrl, "utf8");
   const bootstrap = source.slice(source.indexOf("export async function bootstrapRecoverySecurity"));
   const preflight = bootstrap.indexOf("collectValidatedRecoveryPosture(");
@@ -166,6 +168,18 @@ test("recovery bootstrap grants private schema visibility but no table capabilit
   assert.match(
     source,
     /REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public FROM \$\{RECOVERY_PUBLISHER_ROLE\}/u
+  );
+  assert.match(
+    source,
+    /MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL = Object\.freeze\(\[[\s\S]*GRANT SELECT ON TABLE mcp_public\.recovery_bundle_v2[\s\S]*GRANT USAGE ON SCHEMA mcp_private[\s\S]*GRANT USAGE ON SCHEMA mcp_public/u
+  );
+  assert.match(
+    bootstrap,
+    /if \(managedMcpPrincipalPresent\) \{[\s\S]*for \(const statement of MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL\)/u
+  );
+  assert.doesNotMatch(
+    MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL.join("\n"),
+    /mcp_private\.[^\s]+|FUNCTION|EXECUTE|GRANT OPTION/u
   );
   assert.match(
     source,

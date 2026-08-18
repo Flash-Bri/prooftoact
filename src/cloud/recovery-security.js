@@ -42,9 +42,9 @@ export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL =
   `GRANT USAGE ON SCHEMA mcp_private TO ${RECOVERY_PUBLISHER_ROLE}`;
 export const MANAGED_MCP_RECOVERY_PRINCIPAL = "managed-mcp";
 export const MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION =
-  "GRANT_MANAGED_MCP_RECOVERY_PUBLIC_VIEW_V1";
+  "GRANT_MANAGED_MCP_RECOVERY_PRIVATE_SCHEMA_USAGE_V2";
 export const MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION =
-  "DISABLE_MANAGED_MCP_RECOVERY_PUBLIC_VIEW_V1";
+  "DISABLE_MANAGED_MCP_RECOVERY_PRIVATE_SCHEMA_USAGE_V2";
 export const MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID =
   RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID;
 export const MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID =
@@ -52,12 +52,19 @@ export const MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID =
 export const MANAGED_MCP_RECOVERY_VIEW_DEFINITION_SHA256 =
   "f71728df77547de0160a1bbc6766309b4d1ce02e140876cffe14bfa6c00b148c";
 export const MANAGED_MCP_RECOVERY_GRANT_SQL = Object.freeze([
-  'GRANT SELECT ON TABLE mcp_public.recovery_bundle_v2 TO "managed-mcp"',
+  'REVOKE USAGE ON SCHEMA mcp_public FROM "managed-mcp"',
+  'GRANT USAGE ON SCHEMA mcp_private TO "managed-mcp"',
   'GRANT USAGE ON SCHEMA mcp_public TO "managed-mcp"'
 ]);
 export const MANAGED_MCP_RECOVERY_ROLLBACK_SQL = Object.freeze([
   'REVOKE USAGE ON SCHEMA mcp_public FROM "managed-mcp"',
-  'REVOKE SELECT ON TABLE mcp_public.recovery_bundle_v2 FROM "managed-mcp"'
+  'REVOKE USAGE ON SCHEMA mcp_private FROM "managed-mcp"',
+  'GRANT USAGE ON SCHEMA mcp_public TO "managed-mcp"'
+]);
+export const MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL = Object.freeze([
+  'GRANT SELECT ON TABLE mcp_public.recovery_bundle_v2 TO "managed-mcp"',
+  'GRANT USAGE ON SCHEMA mcp_private TO "managed-mcp"',
+  'GRANT USAGE ON SCHEMA mcp_public TO "managed-mcp"'
 ]);
 const RECOVERY_SECURITY_SOURCE_ROOT = path.resolve(
   fileURLToPath(new URL("../../", import.meta.url))
@@ -123,7 +130,7 @@ function recoveryPostureSpec(publisherSchemas) {
       [MANAGED_MCP_RECOVERY_PRINCIPAL]: Object.freeze({
         allowAbsent: true,
         databaseConnect: false,
-        schemas: Object.freeze(["mcp_public"]),
+        schemas: Object.freeze(["mcp_private", "mcp_public"]),
         relationGrants: Object.freeze([Object.freeze({
           schema: "mcp_public",
           name: "recovery_bundle_v2"
@@ -263,19 +270,29 @@ async function collectValidatedRecoveryPosture(
   throw lastError;
 }
 
-async function scrubRecoveryPrivileges(client) {
-  for (const principal of [RECOVERY_PUBLISHER_ROLE, RECOVERY_PUBLISHER_USER]) {
+async function scrubRecoveryPrivileges(
+  client,
+  { managedMcpPrincipalPresent = false } = {}
+) {
+  for (const principal of [
+    RECOVERY_PUBLISHER_ROLE,
+    RECOVERY_PUBLISHER_USER,
+    ...(managedMcpPrincipalPresent ? [MANAGED_MCP_RECOVERY_PRINCIPAL] : [])
+  ]) {
+    const quotedPrincipal = principal === MANAGED_MCP_RECOVERY_PRINCIPAL
+      ? quoteIdentifier(principal)
+      : principal;
     await client.query(
-      `REVOKE ALL ON DATABASE tideproof_recovery FROM ${principal}`
+      `REVOKE ALL ON DATABASE tideproof_recovery FROM ${quotedPrincipal}`
     );
     await client.query(
-      `REVOKE ALL ON SCHEMA mcp_private, mcp_public, mcp_api FROM ${principal}`
+      `REVOKE ALL ON SCHEMA mcp_private, mcp_public, mcp_api FROM ${quotedPrincipal}`
     );
     await client.query(
-      `REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public, mcp_api FROM ${principal}`
+      `REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public, mcp_api FROM ${quotedPrincipal}`
     );
     await client.query(
-      `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mcp_private, mcp_public, mcp_api FROM ${principal}`
+      `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mcp_private, mcp_public, mcp_api FROM ${quotedPrincipal}`
     );
   }
 }
@@ -1256,6 +1273,15 @@ function normalizeManagedMcpRecoveryGrant(row) {
 const MANAGED_MCP_RECOVERY_EXPECTED_GRANTS = Object.freeze([
   Object.freeze({
     databaseName: "tideproof_recovery",
+    schemaName: "mcp_private",
+    objectName: "",
+    objectType: "schema",
+    grantee: MANAGED_MCP_RECOVERY_PRINCIPAL,
+    privilegeType: "USAGE",
+    isGrantable: false
+  }),
+  Object.freeze({
+    databaseName: "tideproof_recovery",
     schemaName: "mcp_public",
     objectName: "",
     objectType: "schema",
@@ -1307,23 +1333,39 @@ function classifyManagedMcpRecoveryGrants(rows) {
       grants: Object.freeze(observed)
     });
   }
-  for (const [state, expectedGrant] of [
-    ["SELECT_ONLY", expected.find((grant) =>
-      grant.privilegeType === "SELECT")],
-    ["USAGE_ONLY", expected.find((grant) =>
-      grant.privilegeType === "USAGE")]
-  ]) {
-    if (
-      observed.length === 1 &&
-      JSON.stringify(observed[0]) === JSON.stringify(expectedGrant)
-    ) {
-      return Object.freeze({
-        state,
-        grants: Object.freeze(observed)
-      });
-    }
+  const expectedKeys = new Map(expected.map((grant) => [
+    JSON.stringify(grant),
+    grant.schemaName === "mcp_private"
+      ? "PRIVATE_USAGE"
+      : grant.privilegeType === "SELECT"
+        ? "VIEW_SELECT"
+        : "PUBLIC_USAGE"
+  ]));
+  const observedCapabilities = observed.map((grant) =>
+    expectedKeys.get(JSON.stringify(grant))
+  );
+  if (observedCapabilities.some((capability) => !capability)) {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_GRANT_POSTURE_UNRESOLVED"
+    );
   }
-  throw stablePublisherError("MANAGED_MCP_RECOVERY_GRANT_POSTURE_UNRESOLVED");
+  const stateByCapabilities = new Map([
+    ["VIEW_SELECT", "SELECT_ONLY"],
+    ["PUBLIC_USAGE", "PUBLIC_SCHEMA_ONLY"],
+    ["PRIVATE_USAGE", "PRIVATE_SCHEMA_ONLY"],
+    ["PUBLIC_USAGE,VIEW_SELECT", "PUBLIC_VIEW_READY"],
+    ["PRIVATE_USAGE,VIEW_SELECT", "PRIVATE_USAGE_AND_SELECT"],
+    ["PRIVATE_USAGE,PUBLIC_USAGE", "PRIVATE_AND_PUBLIC_SCHEMA_USAGE"]
+  ]);
+  const state = stateByCapabilities.get(
+    observedCapabilities.sort().join(",")
+  );
+  if (!state) {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_GRANT_POSTURE_UNRESOLVED"
+    );
+  }
+  return Object.freeze({ state, grants: Object.freeze(observed) });
 }
 
 function validateManagedMcpRecoveryTargetBinding({
@@ -1652,7 +1694,7 @@ export async function collectManagedMcpRecoveryGrantPosture(
       grants: classified.grants
     });
     return Object.freeze({
-      schemaVersion: "tideproof.managed-mcp-recovery-grant-posture.v1",
+      schemaVersion: "tideproof.managed-mcp-recovery-grant-posture.v2",
       ...summary,
       postureDigest: sha256(JSON.stringify(summary))
     });
@@ -1666,7 +1708,7 @@ export async function collectManagedMcpRecoveryGrantPosture(
 
 export function managedMcpRecoveryGrantPlan() {
   return Object.freeze({
-    schemaVersion: "tideproof.managed-mcp-recovery-grant-repair.v1",
+    schemaVersion: "tideproof.managed-mcp-recovery-grant-repair.v2",
     databaseName: "tideproof_recovery",
     providerClusterId: MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID,
     sqlClusterId: MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID,
@@ -1679,26 +1721,38 @@ export function managedMcpRecoveryGrantPlan() {
     rollbackStatementDigests: Object.freeze(
       MANAGED_MCP_RECOVERY_ROLLBACK_SQL.map(sha256)
     ),
-    expectedAddedCapabilities: Object.freeze([
+    freshBootstrapStatements: MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL,
+    freshBootstrapStatementDigests: Object.freeze(
+      MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL.map(sha256)
+    ),
+    requiredPreexistingCapabilities: Object.freeze([
       "SCHEMA:mcp_public:USAGE",
       "VIEW:mcp_public.recovery_bundle_v2:SELECT"
     ]),
+    expectedAddedCapabilities: Object.freeze([
+      "SCHEMA:mcp_private:USAGE"
+    ]),
     forbiddenCapabilities: Object.freeze([
       "DATABASE_WIDE_SELECT",
-      "SCHEMA:mcp_private:*",
+      "SCHEMA:mcp_private:CREATE",
       "SCHEMA:mcp_api:*",
-      "TABLE:mcp_private.recovery_bundles_v2:*",
+      "RELATION:mcp_private:*",
+      "FUNCTION:mcp_private:*",
+      "GRANT_OPTION",
       "ROLE_MEMBERSHIP",
       "SYSTEM_GRANT"
     ]),
     confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
     disableConfirmation: MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION,
-    mutationStatementCount: 2,
-    mutationTransactionCount: 2,
+    mutationStatementCount: 3,
+    mutationTransactionCount: 3,
     dispatchOrder: Object.freeze([
-      "VIEW_SELECT_WHILE_SCHEMA_USAGE_ABSENT",
-      "SCHEMA_USAGE_ACTIVATES_CAPABILITY"
+      "REVOKE_PUBLIC_SCHEMA_USAGE_DEACTIVATES_VIEW",
+      "GRANT_PRIVATE_SCHEMA_USAGE_WHILE_VIEW_INACTIVE",
+      "REGRANT_PUBLIC_SCHEMA_USAGE_ACTIVATES_VIEW"
     ]),
+    requiredPreflightState: "PUBLIC_VIEW_READY",
+    rollbackRestoresExactPreflight: true,
     reconciliationRequiredAfterEachDispatch: true,
     explicitMultiStatementTransactionForbidden: true,
     exclusiveTargetReservationRequired: true,
@@ -1797,8 +1851,8 @@ export async function preflightManagedMcpRecoveryGrants({
     applied: posture.state === "PRESENT",
     status: posture.state === "PRESENT"
       ? "CONFIRMED_PRESENT"
-      : posture.state === "ABSENT"
-        ? "CONFIRMED_ABSENT"
+      : posture.state === "PUBLIC_VIEW_READY"
+        ? "READY_FOR_PRIVATE_SCHEMA_USAGE"
         : `HOLD_${posture.state}`,
     mutationStatementCount: 0,
     mutationTransactionCount: 0,
@@ -1818,7 +1872,7 @@ export async function preflightManagedMcpRecoveryGrants({
     preflightPostureDigest: posture.postureDigest,
     posture,
     claimBoundary:
-      "This read-only preflight source-binds the exact target, view, principal, and full recovery posture before a separately confirmed mutation. It grants no capability or execution authority."
+      "This read-only preflight source-binds the exact target, view, principal, full recovery posture, and the already-present public-schema USAGE plus public-view SELECT baseline before a separately confirmed private-schema traversal grant. It grants no capability or execution authority."
   });
 }
 
@@ -1877,8 +1931,8 @@ export async function verifyManagedMcpRecoveryGrants({
     applied: posture.state === "PRESENT",
     status: posture.state === "PRESENT"
       ? "CONFIRMED_PRESENT"
-      : posture.state === "ABSENT"
-        ? "CONFIRMED_ABSENT"
+      : posture.state === "PUBLIC_VIEW_READY"
+        ? "CONFIRMED_PRE_REPAIR_BASELINE"
         : `HOLD_${posture.state}`,
     mutationStatementCount: 0,
     mutationTransactionCount: 0,
@@ -1899,7 +1953,7 @@ export async function verifyManagedMcpRecoveryGrants({
       binding.expectedPreflightPostureDigest,
     posture,
     claimBoundary:
-      "This read-only receipt classifies only the managed-mcp user's exact access to the public recovery view. It grants no private-table, API-schema, role, system, execution, deployment, or release authority."
+      "This read-only receipt classifies only the managed-mcp user's exact public-view access and non-grantable schema traversal. It proves no private-relation, function, API-schema, role, system, execution, deployment, or release authority."
   });
 }
 
@@ -1963,8 +2017,13 @@ export async function repairManagedMcpRecoveryGrants({
   const preflight = await verifyManagedMcpRecoveryGrants(
     verificationOptions("read_only_verification", createReconciliationAdminClient)
   );
-  if (preflight.posture.state !== "ABSENT") {
+  if (preflight.posture.state === "PRESENT") {
     throw stablePublisherError("MANAGED_MCP_RECOVERY_ALREADY_APPLIED");
+  }
+  if (preflight.posture.state !== "PUBLIC_VIEW_READY") {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_PUBLIC_VIEW_BASELINE_REQUIRED"
+    );
   }
   if (
     preflight.posture.postureDigest !== binding.expectedPreflightPostureDigest
@@ -1985,15 +2044,21 @@ export async function repairManagedMcpRecoveryGrants({
   const dispatches = [];
   const steps = [
     Object.freeze({
-      id: "GRANT_VIEW_SELECT_INACTIVE",
+      id: "REVOKE_PUBLIC_SCHEMA_USAGE_DEACTIVATE",
       statement: MANAGED_MCP_RECOVERY_GRANT_SQL[0],
-      beforeState: "ABSENT",
+      beforeState: "PUBLIC_VIEW_READY",
       afterState: "SELECT_ONLY"
     }),
     Object.freeze({
-      id: "GRANT_SCHEMA_USAGE_ACTIVATE",
+      id: "GRANT_PRIVATE_SCHEMA_USAGE_INACTIVE",
       statement: MANAGED_MCP_RECOVERY_GRANT_SQL[1],
       beforeState: "SELECT_ONLY",
+      afterState: "PRIVATE_USAGE_AND_SELECT"
+    }),
+    Object.freeze({
+      id: "GRANT_PUBLIC_SCHEMA_USAGE_REACTIVATE",
+      statement: MANAGED_MCP_RECOVERY_GRANT_SQL[2],
+      beforeState: "PRIVATE_USAGE_AND_SELECT",
       afterState: "PRESENT"
     })
   ];
@@ -2031,7 +2096,7 @@ export async function repairManagedMcpRecoveryGrants({
       throw stablePublisherError("MANAGED_MCP_RECOVERY_STEP_STATE_INVALID");
     }
     const intent = Object.freeze({
-      schemaVersion: "tideproof.managed-mcp-recovery-grant-intent.v1",
+      schemaVersion: "tideproof.managed-mcp-recovery-grant-intent.v2",
       step: index + 1,
       stepId: step.id,
       operationId,
@@ -2125,10 +2190,7 @@ export async function repairManagedMcpRecoveryGrants({
     }
     if (currentState !== step.afterState) {
       let emergencyDisableReceipt = null;
-      if (
-        index === 1 ||
-        ["PRESENT", "USAGE_ONLY"].includes(currentState)
-      ) {
+      if (currentState !== "PUBLIC_VIEW_READY") {
         emergencyDisableReceipt = await emergencyDisable(dispatchError);
       }
       const error = stablePublisherError(
@@ -2148,15 +2210,15 @@ export async function repairManagedMcpRecoveryGrants({
   return Object.freeze({
     ...finalVerification,
     mode: "APPLY_JOURNALED_RECONCILED",
-    mutationStatementCount: 2,
+    mutationStatementCount: 3,
     mutationDispatchCount: dispatches.length,
-    mutationTransactionCount: 2,
+    mutationTransactionCount: 3,
     explicitMultiStatementTransactionUsed: false,
     preflightPostureDigest: preflight.posture.postureDigest,
     targetReservation,
     dispatches: Object.freeze(dispatches),
     claimBoundary:
-      "This records two journaled implicit grant transactions, each followed by fresh-connection readback. View SELECT is staged while schema traversal is absent; schema USAGE activates only after the safe partial state is confirmed. It grants no private-table, API-schema, database-wide, role, system, deployment, or release authority."
+      "This records three journaled implicit grant transactions with fresh-connection readback after each. It first revokes public-schema USAGE to deactivate the view, adds only non-grantable mcp_private schema USAGE while the view remains inactive, and regrants public-schema USAGE last to activate the exact preexisting public-view SELECT. It grants no private-relation, function, API-schema, database-wide, role, system, deployment, or release authority."
   });
 }
 
@@ -2229,12 +2291,14 @@ export async function disableManagedMcpRecoveryGrants({
   for (const [index, statement] of
     MANAGED_MCP_RECOVERY_ROLLBACK_SQL.entries()) {
     const intent = Object.freeze({
-      schemaVersion: "tideproof.managed-mcp-recovery-disable-intent.v1",
+      schemaVersion: "tideproof.managed-mcp-recovery-disable-intent.v2",
       step: index + 1,
       operationId,
-      stepId: index === 0
-        ? "REVOKE_SCHEMA_USAGE_DISABLE"
-        : "REVOKE_VIEW_SELECT_CLEANUP",
+      stepId: [
+        "REVOKE_PUBLIC_SCHEMA_USAGE_DEACTIVATE",
+        "REVOKE_PRIVATE_SCHEMA_USAGE_CLEANUP",
+        "GRANT_PUBLIC_SCHEMA_USAGE_RESTORE_BASELINE"
+      ][index],
       statementSha256: sha256(statement),
       sourceCommit: binding.sourceCommit,
       sourceTree: binding.sourceTree,
@@ -2290,11 +2354,19 @@ export async function disableManagedMcpRecoveryGrants({
       hold.disableDispatches = Object.freeze(dispatches);
       throw hold;
     }
-    const acceptableState = index === 0
-      ? ["ABSENT", "SELECT_ONLY"].includes(
-          finalVerification.posture.state
-        )
-      : finalVerification.posture.state === "ABSENT";
+    const acceptableStates = [
+      new Set([
+        "ABSENT",
+        "SELECT_ONLY",
+        "PRIVATE_SCHEMA_ONLY",
+        "PRIVATE_USAGE_AND_SELECT"
+      ]),
+      new Set(["ABSENT", "SELECT_ONLY"]),
+      new Set(["PUBLIC_SCHEMA_ONLY", "PUBLIC_VIEW_READY"])
+    ][index];
+    const acceptableState = acceptableStates.has(
+      finalVerification.posture.state
+    );
     dispatches.push(Object.freeze({
       step: index + 1,
       statementSha256: sha256(statement),
@@ -2329,14 +2401,14 @@ export async function disableManagedMcpRecoveryGrants({
   return Object.freeze({
     ...finalVerification,
     mode: "DISABLE_JOURNALED_RECONCILED",
-    mutationStatementCount: 2,
+    mutationStatementCount: 3,
     mutationDispatchCount: dispatches.length,
-    mutationTransactionCount: 2,
+    mutationTransactionCount: 3,
     explicitMultiStatementTransactionUsed: false,
     targetReservation,
     dispatches: Object.freeze(dispatches),
     claimBoundary:
-      "This records capability-first disablement: schema USAGE is revoked and freshly reconciled before view SELECT is removed. It proves exact absence of the two direct grants, not provider, deployment, or release cleanup."
+      "This records three-step capability-first restoration: public-schema USAGE is revoked first to deactivate the view, private-schema USAGE is removed while inactive, and public-schema USAGE is restored last. Fresh readback follows every step and the exact pre-repair public-view posture digest must be reproduced; no private-relation or function grant is introduced."
   });
 }
 
@@ -2367,6 +2439,9 @@ export async function bootstrapRecoverySecurity({
       adminConnectionString,
       principalDatabases: CLUSTER_PRINCIPAL_DATABASES
     });
+    const managedMcpPrincipalPresent = preflight.posture.principals.some(
+      (row) => row?.username === MANAGED_MCP_RECOVERY_PRINCIPAL
+    );
     const bootstrapOwner =
       preflight.posture.session[0].session_user_name;
     await lockInitialRecoveryPublicCapability(client, bootstrapOwner);
@@ -2412,7 +2487,7 @@ export async function bootstrapRecoverySecurity({
     await client.query(
       `REVOKE ${RECOVERY_PUBLISHER_ROLE} FROM ${RECOVERY_PUBLISHER_USER}`
     );
-    await scrubRecoveryPrivileges(client);
+    await scrubRecoveryPrivileges(client, { managedMcpPrincipalPresent });
     for (const role of RECOVERY_ROLES) {
       await client.query(`ALTER ROLE ${role} WITH NOLOGIN`);
       await client.query(`ALTER ROLE ${role} WITH PASSWORD NULL`);
@@ -2631,7 +2706,7 @@ export async function bootstrapRecoverySecurity({
       [bootstrapOwner, ...RECOVERY_ROLES, ...RECOVERY_USERS],
       ["mcp_private", "mcp_public", "mcp_api"]
     );
-    await scrubRecoveryPrivileges(client);
+    await scrubRecoveryPrivileges(client, { managedMcpPrincipalPresent });
     await client.query(
       `GRANT CONNECT ON DATABASE tideproof_recovery TO ${RECOVERY_PUBLISHER_ROLE}`
     );
@@ -2644,6 +2719,11 @@ export async function bootstrapRecoverySecurity({
     await client.query(
       `GRANT EXECUTE ON FUNCTION ${RESOLVE_SIGNATURE} TO ${RECOVERY_PUBLISHER_ROLE}`
     );
+    if (managedMcpPrincipalPresent) {
+      for (const statement of MANAGED_MCP_RECOVERY_FRESH_BOOTSTRAP_SQL) {
+        await client.query(statement);
+      }
+    }
     await client.query(
       `REVOKE ALL ON ALL TABLES IN SCHEMA mcp_private, mcp_public FROM ${RECOVERY_PUBLISHER_ROLE}`
     );
