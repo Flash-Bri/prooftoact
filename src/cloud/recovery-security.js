@@ -40,6 +40,25 @@ export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID =
   "9fad7a1e-e440-4989-383b-6a191b947e6e";
 export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL =
   `GRANT USAGE ON SCHEMA mcp_private TO ${RECOVERY_PUBLISHER_ROLE}`;
+export const MANAGED_MCP_RECOVERY_PRINCIPAL = "managed-mcp";
+export const MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION =
+  "GRANT_MANAGED_MCP_RECOVERY_PUBLIC_VIEW_V1";
+export const MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION =
+  "DISABLE_MANAGED_MCP_RECOVERY_PUBLIC_VIEW_V1";
+export const MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID =
+  RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID;
+export const MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID =
+  RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID;
+export const MANAGED_MCP_RECOVERY_VIEW_DEFINITION_SHA256 =
+  "f71728df77547de0160a1bbc6766309b4d1ce02e140876cffe14bfa6c00b148c";
+export const MANAGED_MCP_RECOVERY_GRANT_SQL = Object.freeze([
+  'GRANT SELECT ON TABLE mcp_public.recovery_bundle_v2 TO "managed-mcp"',
+  'GRANT USAGE ON SCHEMA mcp_public TO "managed-mcp"'
+]);
+export const MANAGED_MCP_RECOVERY_ROLLBACK_SQL = Object.freeze([
+  'REVOKE USAGE ON SCHEMA mcp_public FROM "managed-mcp"',
+  'REVOKE SELECT ON TABLE mcp_public.recovery_bundle_v2 FROM "managed-mcp"'
+]);
 const RECOVERY_SECURITY_SOURCE_ROOT = path.resolve(
   fileURLToPath(new URL("../../", import.meta.url))
 );
@@ -100,10 +119,24 @@ function recoveryPostureSpec(publisherSchemas) {
         functions: RECOVERY_PUBLISHER_FUNCTIONS
       })
     }),
+    directPrincipalGrantPolicies: Object.freeze({
+      [MANAGED_MCP_RECOVERY_PRINCIPAL]: Object.freeze({
+        allowAbsent: true,
+        databaseConnect: false,
+        schemas: Object.freeze(["mcp_public"]),
+        relationGrants: Object.freeze([Object.freeze({
+          schema: "mcp_public",
+          name: "recovery_bundle_v2"
+        })])
+      })
+    }),
     roles: RECOVERY_ROLES,
     users: RECOVERY_USERS,
     bindings: RECOVERY_ROLE_BINDINGS,
-    optionalRoles: PRIMARY_SIBLING_ROLES,
+    optionalRoles: Object.freeze([
+      ...PRIMARY_SIBLING_ROLES,
+      MANAGED_MCP_RECOVERY_PRINCIPAL
+    ]),
     optionalUsers: PRIMARY_SIBLING_USERS,
     optionalBindings: PRIMARY_SIBLING_BINDINGS
   });
@@ -1206,6 +1239,1105 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
     );
   }
   return receipt;
+}
+
+function normalizeManagedMcpRecoveryGrant(row) {
+  return Object.freeze({
+    databaseName: row?.database_name ?? "",
+    schemaName: row?.schema_name ?? "",
+    objectName: row?.object_name ?? "",
+    objectType: String(row?.object_type ?? "").toLowerCase(),
+    grantee: row?.grantee ?? "",
+    privilegeType: String(row?.privilege_type ?? "").toUpperCase(),
+    isGrantable: row?.is_grantable === true
+  });
+}
+
+const MANAGED_MCP_RECOVERY_EXPECTED_GRANTS = Object.freeze([
+  Object.freeze({
+    databaseName: "tideproof_recovery",
+    schemaName: "mcp_public",
+    objectName: "",
+    objectType: "schema",
+    grantee: MANAGED_MCP_RECOVERY_PRINCIPAL,
+    privilegeType: "USAGE",
+    isGrantable: false
+  }),
+  Object.freeze({
+    databaseName: "tideproof_recovery",
+    schemaName: "mcp_public",
+    objectName: "recovery_bundle_v2",
+    objectType: "table",
+    grantee: MANAGED_MCP_RECOVERY_PRINCIPAL,
+    privilegeType: "SELECT",
+    isGrantable: false
+  })
+]);
+
+function sortedManagedMcpRecoveryGrants(rows) {
+  if (!Array.isArray(rows)) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_GRANT_CENSUS_INVALID");
+  }
+  return rows
+    .map(normalizeManagedMcpRecoveryGrant)
+    .sort((left, right) => JSON.stringify(left).localeCompare(
+      JSON.stringify(right)
+    ));
+}
+
+function classifyManagedMcpRecoveryGrants(rows) {
+  const observed = sortedManagedMcpRecoveryGrants(rows);
+  if (observed.length === 0) {
+    return Object.freeze({ state: "ABSENT", grants: Object.freeze([]) });
+  }
+  const expected = sortedManagedMcpRecoveryGrants(
+    MANAGED_MCP_RECOVERY_EXPECTED_GRANTS.map((grant) => ({
+      database_name: grant.databaseName,
+      schema_name: grant.schemaName || null,
+      object_name: grant.objectName || null,
+      object_type: grant.objectType,
+      grantee: grant.grantee,
+      privilege_type: grant.privilegeType,
+      is_grantable: grant.isGrantable
+    }))
+  );
+  if (JSON.stringify(observed) === JSON.stringify(expected)) {
+    return Object.freeze({
+      state: "PRESENT",
+      grants: Object.freeze(observed)
+    });
+  }
+  for (const [state, expectedGrant] of [
+    ["SELECT_ONLY", expected.find((grant) =>
+      grant.privilegeType === "SELECT")],
+    ["USAGE_ONLY", expected.find((grant) =>
+      grant.privilegeType === "USAGE")]
+  ]) {
+    if (
+      observed.length === 1 &&
+      JSON.stringify(observed[0]) === JSON.stringify(expectedGrant)
+    ) {
+      return Object.freeze({
+        state,
+        grants: Object.freeze(observed)
+      });
+    }
+  }
+  throw stablePublisherError("MANAGED_MCP_RECOVERY_GRANT_POSTURE_UNRESOLVED");
+}
+
+function validateManagedMcpRecoveryTargetBinding({
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
+  expectedViewDefinitionSha256,
+  sourceCommit,
+  sourceTree,
+  verifySourceCheckout = assertCleanExactGitCheckout
+}) {
+  if (
+    expectedRecoveryProviderClusterId !==
+      MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID
+  ) {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_PROVIDER_CLUSTER_ID_INVALID"
+    );
+  }
+  if (
+    expectedRecoverySqlClusterId !==
+      MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID
+  ) {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_SQL_CLUSTER_ID_INVALID"
+    );
+  }
+  if (
+    expectedViewDefinitionSha256 !==
+      MANAGED_MCP_RECOVERY_VIEW_DEFINITION_SHA256
+  ) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_VIEW_DIGEST_INVALID");
+  }
+  const checkedSourceCommit = requiredGitObjectId(
+    sourceCommit,
+    "MANAGED_MCP_RECOVERY_SOURCE_COMMIT_INVALID"
+  );
+  const checkedSourceTree = requiredGitObjectId(
+    sourceTree,
+    "MANAGED_MCP_RECOVERY_SOURCE_TREE_INVALID"
+  );
+  if (typeof verifySourceCheckout !== "function") {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_SOURCE_CHECKOUT_INVALID");
+  }
+  let verifiedSource;
+  try {
+    verifiedSource = verifySourceCheckout({
+      rootDir: RECOVERY_SECURITY_SOURCE_ROOT,
+      sourceCommit: checkedSourceCommit,
+      treeDigest: checkedSourceTree
+    });
+  } catch (error) {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_SOURCE_CHECKOUT_INVALID",
+      error
+    );
+  }
+  if (
+    verifiedSource?.sourceCommit !== checkedSourceCommit ||
+    verifiedSource?.treeDigest !== checkedSourceTree
+  ) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_SOURCE_CHECKOUT_INVALID");
+  }
+  return Object.freeze({
+    providerClusterId: expectedRecoveryProviderClusterId,
+    sqlClusterId: expectedRecoverySqlClusterId,
+    expectedViewDefinitionSha256,
+    sourceCommit: checkedSourceCommit,
+    sourceTree: checkedSourceTree
+  });
+}
+
+function validateManagedMcpRecoveryGrantBinding({
+  expectedPreflightPostureDigest,
+  ...options
+}) {
+  const binding = validateManagedMcpRecoveryTargetBinding(options);
+  return Object.freeze({
+    ...binding,
+    expectedPreflightPostureDigest: requiredSha256(
+      expectedPreflightPostureDigest,
+      "MANAGED_MCP_RECOVERY_PREFLIGHT_DIGEST_INVALID"
+    )
+  });
+}
+
+function validatedManagedMcpRecoveryViewDefinition(result, expectedSha256) {
+  if (!Array.isArray(result?.rows) || result.rows.length !== 1) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_VIEW_DEFINITION_INVALID");
+  }
+  const statement = normalizedFunctionDefinition(
+    result.rows[0]?.create_statement ?? result.rows[0]?.createStatement
+  );
+  const searchable = statement
+    .toLowerCase()
+    .replaceAll('"', "")
+    .replaceAll(/\s+/gu, " ");
+  if (
+    !searchable.includes("view mcp_public.recovery_bundle_v2") ||
+    !searchable.includes(
+      "from tideproof_recovery.mcp_private.recovery_bundles_v2"
+    ) ||
+    !searchable.includes("authority_transferred") ||
+    !searchable.includes("requires_fresh_authorization") ||
+    searchable.includes("security_invoker") ||
+    sha256(statement) !== expectedSha256
+  ) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_VIEW_DEFINITION_INVALID");
+  }
+  return Object.freeze({
+    createStatementSha256: sha256(statement),
+    byteLength: Buffer.byteLength(statement, "utf8"),
+    securityInvoker: false
+  });
+}
+
+export async function collectManagedMcpRecoveryGrantPosture(
+  client,
+  {
+    expectedRecoverySqlClusterId,
+    expectedViewDefinitionSha256
+  }
+) {
+  if (typeof client?.query !== "function") {
+    throw new TypeError("MANAGED_MCP_RECOVERY_ADMIN_CLIENT_REQUIRED");
+  }
+  if (
+    expectedRecoverySqlClusterId !== MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID
+  ) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_SQL_CLUSTER_ID_INVALID");
+  }
+  if (
+    expectedViewDefinitionSha256 !==
+      MANAGED_MCP_RECOVERY_VIEW_DEFINITION_SHA256
+  ) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_VIEW_DIGEST_INVALID");
+  }
+  let transactionStarted = false;
+  try {
+    await client.query(
+      "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY"
+    );
+    transactionStarted = true;
+    const sessionResult = await client.query(`
+      SELECT
+        current_database() AS database_name,
+        current_user AS current_user_name,
+        session_user AS session_user_name,
+        version() AS database_version,
+        crdb_internal.cluster_id()::STRING AS cluster_id
+    `);
+    const userResult = await client.query(`
+      SELECT username, options
+      FROM [SHOW USERS]
+      ORDER BY username
+    `);
+    const principalResult = await client.query(`
+      SELECT username, "isRole" AS is_role
+      FROM system.users
+      WHERE username = 'managed-mcp'
+    `);
+    const membershipResult = await client.query(`
+      SELECT role_name, member, is_admin
+      FROM [SHOW GRANTS ON ROLE]
+      ORDER BY role_name, member
+    `);
+    const systemGrantResult = await client.query(`
+      SELECT grantee, privilege_type, is_grantable
+      FROM [SHOW SYSTEM GRANTS]
+      ORDER BY grantee, privilege_type, is_grantable
+    `);
+    const objectGrantResult = await client.query(`
+      SELECT
+        database_name,
+        schema_name,
+        object_name,
+        object_type,
+        grantee,
+        privilege_type,
+        is_grantable
+      FROM [SHOW GRANTS]
+      WHERE database_name = current_database()
+        AND (
+          schema_name IS NULL
+          OR schema_name NOT IN (
+            'crdb_internal',
+            'information_schema',
+            'pg_catalog',
+            'pg_extension'
+          )
+        )
+      ORDER BY
+        database_name,
+        schema_name,
+        object_name,
+        object_type,
+        privilege_type,
+        is_grantable
+    `);
+    const defaultGrantResult = await client.query(`
+      SELECT
+        current_database() AS database_name,
+        NULL::STRING AS schema_name,
+        role,
+        for_all_roles,
+        object_type,
+        grantee,
+        privilege_type,
+        is_grantable
+      FROM [SHOW DEFAULT PRIVILEGES]
+      ORDER BY role, object_type, grantee, privilege_type, is_grantable
+    `);
+    const viewOwnerResult = await client.query(`
+      SELECT table_name, owner
+      FROM [SHOW TABLES FROM mcp_public]
+      WHERE table_name = 'recovery_bundle_v2'
+    `);
+    const viewDefinitionResult = await client.query(
+      "SHOW CREATE VIEW mcp_public.recovery_bundle_v2"
+    );
+    await client.query("COMMIT");
+    transactionStarted = false;
+
+    const session = sessionResult.rows?.[0];
+    const managedMcpUserRows = userResult.rows?.filter((row) =>
+      row?.username === MANAGED_MCP_RECOVERY_PRINCIPAL
+    );
+    if (
+      sessionResult.rowCount !== 1 ||
+      session?.database_name !== "tideproof_recovery" ||
+      typeof session?.current_user_name !== "string" ||
+      session.current_user_name === "" ||
+      session.current_user_name !== session?.session_user_name ||
+      !/\bCockroachDB(?: CCL)? v26\.2(?:\.\d+)?\b/u.test(
+        session?.database_version ?? ""
+      ) ||
+      session?.cluster_id !== expectedRecoverySqlClusterId
+    ) {
+      throw stablePublisherError("MANAGED_MCP_RECOVERY_SESSION_INVALID");
+    }
+    if (
+      principalResult.rowCount !== 1 ||
+      principalResult.rows?.[0]?.username !== MANAGED_MCP_RECOVERY_PRINCIPAL ||
+      principalResult.rows?.[0]?.is_role !== false ||
+      managedMcpUserRows?.length !== 1 ||
+      !Array.isArray(managedMcpUserRows[0]?.options) ||
+      managedMcpUserRows[0].options.length !== 1 ||
+      managedMcpUserRows[0].options[0] !== "NOLOGIN" ||
+      membershipResult.rows?.some((row) =>
+        row?.role_name === MANAGED_MCP_RECOVERY_PRINCIPAL ||
+        row?.member === MANAGED_MCP_RECOVERY_PRINCIPAL
+      ) ||
+      systemGrantResult.rows?.some((row) =>
+        row?.grantee === MANAGED_MCP_RECOVERY_PRINCIPAL
+      ) ||
+      defaultGrantResult.rows?.some((row) =>
+        row?.role === MANAGED_MCP_RECOVERY_PRINCIPAL ||
+        row?.grantee === MANAGED_MCP_RECOVERY_PRINCIPAL
+      )
+    ) {
+      throw stablePublisherError("MANAGED_MCP_RECOVERY_PRINCIPAL_UNSAFE");
+    }
+    if (
+      viewOwnerResult.rowCount !== 1 ||
+      viewOwnerResult.rows?.[0]?.table_name !== "recovery_bundle_v2" ||
+      viewOwnerResult.rows?.[0]?.owner !== "tp_recovery_owner"
+    ) {
+      throw stablePublisherError("MANAGED_MCP_RECOVERY_VIEW_OWNER_INVALID");
+    }
+    const viewDefinition = validatedManagedMcpRecoveryViewDefinition(
+      viewDefinitionResult,
+      expectedViewDefinitionSha256
+    );
+    const managedMcpObjectGrants = objectGrantResult.rows.filter((row) =>
+      row?.grantee === MANAGED_MCP_RECOVERY_PRINCIPAL
+    );
+    const baselinePosture = {
+      session: [{
+        database_name: session.database_name,
+        current_user_name: session.current_user_name,
+        session_user_name: session.session_user_name,
+        database_version: session.database_version
+      }],
+      principals: userResult.rows,
+      memberships: membershipResult.rows,
+      systemGrants: systemGrantResult.rows,
+      objectGrants: objectGrantResult.rows.filter((row) =>
+        row?.grantee !== MANAGED_MCP_RECOVERY_PRINCIPAL
+      ),
+      defaultGrants: defaultGrantResult.rows
+    };
+    const baselineRecoveryPosture = validateRecoverySecurityPosture(
+      baselinePosture
+    );
+    const ownerPrivateTableGrant = objectGrantResult.rows.filter((row) =>
+      row?.database_name === "tideproof_recovery" &&
+      row?.schema_name === "mcp_private" &&
+      row?.object_name === "recovery_bundles_v2" &&
+      ["table", "TABLE"].includes(row?.object_type) &&
+      row?.grantee === "tp_recovery_owner" &&
+      row?.privilege_type === "ALL" &&
+      row?.is_grantable === true
+    );
+    if (ownerPrivateTableGrant.length !== 1) {
+      throw stablePublisherError(
+        "MANAGED_MCP_RECOVERY_VIEW_OWNER_CAPABILITY_INVALID"
+      );
+    }
+    const classified = classifyManagedMcpRecoveryGrants(
+      managedMcpObjectGrants
+    );
+    const summary = Object.freeze({
+      databaseName: session.database_name,
+      databaseVersionSha256: sha256(session.database_version),
+      sqlClusterId: session.cluster_id,
+      principal: MANAGED_MCP_RECOVERY_PRINCIPAL,
+      principalType: "USER",
+      membershipCount: 0,
+      systemGrantCount: 0,
+      defaultGrantCount: 0,
+      viewOwner: "tp_recovery_owner",
+      viewOwnerPrivateTableCapability: "ALL_WITH_GRANT_OPTION",
+      viewDefinition,
+      baselineRecoveryPostureDigest:
+        baselineRecoveryPosture.postureDigest,
+      state: classified.state,
+      grants: classified.grants
+    });
+    return Object.freeze({
+      schemaVersion: "tideproof.managed-mcp-recovery-grant-posture.v1",
+      ...summary,
+      postureDigest: sha256(JSON.stringify(summary))
+    });
+  } catch (error) {
+    if (transactionStarted) {
+      await client.query("ROLLBACK").catch(() => {});
+    }
+    throw error;
+  }
+}
+
+export function managedMcpRecoveryGrantPlan() {
+  return Object.freeze({
+    schemaVersion: "tideproof.managed-mcp-recovery-grant-repair.v1",
+    databaseName: "tideproof_recovery",
+    providerClusterId: MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID,
+    sqlClusterId: MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID,
+    principal: MANAGED_MCP_RECOVERY_PRINCIPAL,
+    statements: MANAGED_MCP_RECOVERY_GRANT_SQL,
+    statementDigests: Object.freeze(
+      MANAGED_MCP_RECOVERY_GRANT_SQL.map(sha256)
+    ),
+    rollbackStatements: MANAGED_MCP_RECOVERY_ROLLBACK_SQL,
+    rollbackStatementDigests: Object.freeze(
+      MANAGED_MCP_RECOVERY_ROLLBACK_SQL.map(sha256)
+    ),
+    expectedAddedCapabilities: Object.freeze([
+      "SCHEMA:mcp_public:USAGE",
+      "VIEW:mcp_public.recovery_bundle_v2:SELECT"
+    ]),
+    forbiddenCapabilities: Object.freeze([
+      "DATABASE_WIDE_SELECT",
+      "SCHEMA:mcp_private:*",
+      "SCHEMA:mcp_api:*",
+      "TABLE:mcp_private.recovery_bundles_v2:*",
+      "ROLE_MEMBERSHIP",
+      "SYSTEM_GRANT"
+    ]),
+    confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+    disableConfirmation: MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION,
+    mutationStatementCount: 2,
+    mutationTransactionCount: 2,
+    dispatchOrder: Object.freeze([
+      "VIEW_SELECT_WHILE_SCHEMA_USAGE_ABSENT",
+      "SCHEMA_USAGE_ACTIVATES_CAPABILITY"
+    ]),
+    reconciliationRequiredAfterEachDispatch: true,
+    explicitMultiStatementTransactionForbidden: true,
+    exclusiveTargetReservationRequired: true,
+    externalMutatorExclusionRequired: true
+  });
+}
+
+async function reserveManagedMcpRecoveryTarget({
+  binding,
+  target,
+  operationId,
+  journalIntent
+}) {
+  if (typeof journalIntent?.reserveTarget !== "function") {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_TARGET_RESERVATION_REQUIRED"
+    );
+  }
+  const targetBinding = Object.freeze({
+    schemaVersion: "tideproof.managed-mcp-recovery-target-binding.v1",
+    providerClusterIdSha256: sha256(binding.providerClusterId),
+    sqlClusterIdSha256: sha256(binding.sqlClusterId),
+    databaseName: target.databaseName,
+    hostnameSha256: sha256(target.hostname),
+    adminPrincipalSha256: sha256(target.username),
+    managedPrincipal: MANAGED_MCP_RECOVERY_PRINCIPAL
+  });
+  const targetBindingSha256 = sha256(JSON.stringify(targetBinding));
+  const reservation = await journalIntent.reserveTarget(Object.freeze({
+    schemaVersion: "tideproof.managed-mcp-recovery-target-reservation.v1",
+    operationId,
+    targetBinding,
+    targetBindingSha256
+  }));
+  if (
+    reservation?.operationId !== operationId ||
+    reservation?.reservation !== "TARGET_UNIQUE_RESERVED" ||
+    reservation?.targetBindingSha256 !== targetBindingSha256
+  ) {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_TARGET_RESERVATION_INVALID"
+    );
+  }
+  return Object.freeze({
+    operationId,
+    reservation: "TARGET_UNIQUE_RESERVED",
+    targetBindingSha256,
+    reservationDigest: requiredSha256(
+      reservation?.reservationDigest,
+      "MANAGED_MCP_RECOVERY_TARGET_RESERVATION_INVALID"
+    )
+  });
+}
+
+export async function preflightManagedMcpRecoveryGrants({
+  adminConnectionString,
+  expectedRecoveryHostname,
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
+  expectedViewDefinitionSha256,
+  sourceCommit,
+  sourceTree,
+  createAdminClient = () => new Client(bootstrapDatabaseConfig({
+    connectionString: adminConnectionString,
+    max: 1,
+    applicationName: "tideproof-managed-mcp-recovery-grant-preflight"
+  })),
+  verifySourceCheckout = assertCleanExactGitCheckout
+}) {
+  const binding = validateManagedMcpRecoveryTargetBinding({
+    expectedRecoveryProviderClusterId,
+    expectedRecoverySqlClusterId,
+    expectedViewDefinitionSha256,
+    sourceCommit,
+    sourceTree,
+    verifySourceCheckout
+  });
+  const target = recoveryConnectionTarget(
+    adminConnectionString,
+    expectedRecoveryHostname
+  );
+  const admin = createAdminClient();
+  let posture;
+  try {
+    await admin.connect();
+    posture = await collectManagedMcpRecoveryGrantPosture(admin, {
+      expectedRecoverySqlClusterId: binding.sqlClusterId,
+      expectedViewDefinitionSha256: binding.expectedViewDefinitionSha256
+    });
+  } finally {
+    await admin.end().catch(() => {});
+  }
+  return Object.freeze({
+    ...managedMcpRecoveryGrantPlan(),
+    mode: "PREFLIGHT_READ_ONLY",
+    applied: posture.state === "PRESENT",
+    status: posture.state === "PRESENT"
+      ? "CONFIRMED_PRESENT"
+      : posture.state === "ABSENT"
+        ? "CONFIRMED_ABSENT"
+        : `HOLD_${posture.state}`,
+    mutationStatementCount: 0,
+    mutationTransactionCount: 0,
+    source: Object.freeze({
+      commit: binding.sourceCommit,
+      tree: binding.sourceTree
+    }),
+    target: Object.freeze({
+      providerClusterId: binding.providerClusterId,
+      providerClusterIdSha256: sha256(binding.providerClusterId),
+      sqlClusterId: binding.sqlClusterId,
+      sqlClusterIdSha256: sha256(binding.sqlClusterId),
+      databaseName: target.databaseName,
+      hostnameSha256: sha256(target.hostname),
+      adminPrincipalSha256: sha256(target.username)
+    }),
+    preflightPostureDigest: posture.postureDigest,
+    posture,
+    claimBoundary:
+      "This read-only preflight source-binds the exact target, view, principal, and full recovery posture before a separately confirmed mutation. It grants no capability or execution authority."
+  });
+}
+
+export async function verifyManagedMcpRecoveryGrants({
+  adminConnectionString,
+  expectedRecoveryHostname,
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
+  expectedPreflightPostureDigest,
+  expectedViewDefinitionSha256,
+  sourceCommit,
+  sourceTree,
+  observation = "read_only_verification",
+  createAdminClient = () => new Client(bootstrapDatabaseConfig({
+    connectionString: adminConnectionString,
+    max: 1,
+    applicationName: "tideproof-managed-mcp-recovery-grant-verifier"
+  })),
+  verifySourceCheckout = assertCleanExactGitCheckout
+}) {
+  if (![
+    "read_only_verification",
+    "direct_ack",
+    "read_reconciled"
+  ].includes(observation)) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_OBSERVATION_INVALID");
+  }
+  const binding = validateManagedMcpRecoveryGrantBinding({
+    expectedRecoveryProviderClusterId,
+    expectedRecoverySqlClusterId,
+    expectedPreflightPostureDigest,
+    expectedViewDefinitionSha256,
+    sourceCommit,
+    sourceTree,
+    verifySourceCheckout
+  });
+  const target = recoveryConnectionTarget(
+    adminConnectionString,
+    expectedRecoveryHostname
+  );
+  const admin = createAdminClient();
+  let posture;
+  try {
+    await admin.connect();
+    posture = await collectManagedMcpRecoveryGrantPosture(admin, {
+      expectedRecoverySqlClusterId: binding.sqlClusterId,
+      expectedViewDefinitionSha256: binding.expectedViewDefinitionSha256
+    });
+  } finally {
+    await admin.end().catch(() => {});
+  }
+  return Object.freeze({
+    ...managedMcpRecoveryGrantPlan(),
+    mode: "VERIFY_READ_ONLY",
+    observation,
+    applied: posture.state === "PRESENT",
+    status: posture.state === "PRESENT"
+      ? "CONFIRMED_PRESENT"
+      : posture.state === "ABSENT"
+        ? "CONFIRMED_ABSENT"
+        : `HOLD_${posture.state}`,
+    mutationStatementCount: 0,
+    mutationTransactionCount: 0,
+    source: Object.freeze({
+      commit: binding.sourceCommit,
+      tree: binding.sourceTree
+    }),
+    target: Object.freeze({
+      providerClusterId: binding.providerClusterId,
+      providerClusterIdSha256: sha256(binding.providerClusterId),
+      sqlClusterId: binding.sqlClusterId,
+      sqlClusterIdSha256: sha256(binding.sqlClusterId),
+      databaseName: target.databaseName,
+      hostnameSha256: sha256(target.hostname),
+      adminPrincipalSha256: sha256(target.username)
+    }),
+    expectedPreflightPostureDigest:
+      binding.expectedPreflightPostureDigest,
+    posture,
+    claimBoundary:
+      "This read-only receipt classifies only the managed-mcp user's exact access to the public recovery view. It grants no private-table, API-schema, role, system, execution, deployment, or release authority."
+  });
+}
+
+export async function repairManagedMcpRecoveryGrants({
+  adminConnectionString,
+  expectedRecoveryHostname,
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
+  expectedPreflightPostureDigest,
+  expectedViewDefinitionSha256,
+  sourceCommit,
+  sourceTree,
+  confirmation,
+  operationId,
+  journalIntent,
+  createAdminClient = () => new Client(bootstrapDatabaseConfig({
+    connectionString: adminConnectionString,
+    max: 1,
+    applicationName: "tideproof-managed-mcp-recovery-grant-repair"
+  })),
+  createReconciliationAdminClient = createAdminClient,
+  verifySourceCheckout = assertCleanExactGitCheckout
+}) {
+  if (confirmation !== MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_CONFIRMATION_REQUIRED");
+  }
+  if (typeof journalIntent !== "function") {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_JOURNAL_REQUIRED");
+  }
+  if (typeof operationId !== "string" || !LOWERCASE_UUID.test(operationId)) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_OPERATION_ID_INVALID");
+  }
+  const binding = validateManagedMcpRecoveryGrantBinding({
+    expectedRecoveryProviderClusterId,
+    expectedRecoverySqlClusterId,
+    expectedPreflightPostureDigest,
+    expectedViewDefinitionSha256,
+    sourceCommit,
+    sourceTree,
+    verifySourceCheckout
+  });
+  const target = recoveryConnectionTarget(
+    adminConnectionString,
+    expectedRecoveryHostname
+  );
+
+  const verificationOptions = (observation, createClient) => ({
+      adminConnectionString,
+      expectedRecoveryHostname,
+      expectedRecoveryProviderClusterId: binding.providerClusterId,
+      expectedRecoverySqlClusterId: binding.sqlClusterId,
+      expectedPreflightPostureDigest:
+        binding.expectedPreflightPostureDigest,
+      expectedViewDefinitionSha256: binding.expectedViewDefinitionSha256,
+      sourceCommit: binding.sourceCommit,
+      sourceTree: binding.sourceTree,
+      observation,
+      createAdminClient: createClient,
+      verifySourceCheckout
+  });
+  const preflight = await verifyManagedMcpRecoveryGrants(
+    verificationOptions("read_only_verification", createReconciliationAdminClient)
+  );
+  if (preflight.posture.state !== "ABSENT") {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_ALREADY_APPLIED");
+  }
+  if (
+    preflight.posture.postureDigest !== binding.expectedPreflightPostureDigest
+  ) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_PREFLIGHT_MISMATCH");
+  }
+  const expectedBaselineRecoveryPostureDigest = requiredSha256(
+    preflight.posture.baselineRecoveryPostureDigest,
+    "MANAGED_MCP_RECOVERY_BASELINE_DIGEST_INVALID"
+  );
+  const targetReservation = await reserveManagedMcpRecoveryTarget({
+    binding,
+    target,
+    operationId,
+    journalIntent
+  });
+
+  const dispatches = [];
+  const steps = [
+    Object.freeze({
+      id: "GRANT_VIEW_SELECT_INACTIVE",
+      statement: MANAGED_MCP_RECOVERY_GRANT_SQL[0],
+      beforeState: "ABSENT",
+      afterState: "SELECT_ONLY"
+    }),
+    Object.freeze({
+      id: "GRANT_SCHEMA_USAGE_ACTIVATE",
+      statement: MANAGED_MCP_RECOVERY_GRANT_SQL[1],
+      beforeState: "SELECT_ONLY",
+      afterState: "PRESENT"
+    })
+  ];
+  const emergencyDisable = async (cause) => {
+    try {
+      return await disableManagedMcpRecoveryGrants({
+        adminConnectionString,
+        expectedRecoveryHostname,
+        expectedRecoveryProviderClusterId: binding.providerClusterId,
+        expectedRecoverySqlClusterId: binding.sqlClusterId,
+        expectedPreflightPostureDigest:
+          binding.expectedPreflightPostureDigest,
+        expectedViewDefinitionSha256:
+          binding.expectedViewDefinitionSha256,
+        sourceCommit: binding.sourceCommit,
+        sourceTree: binding.sourceTree,
+        confirmation: MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION,
+        operationId,
+        journalIntent,
+        createAdminClient,
+        createReconciliationAdminClient,
+        verifySourceCheckout
+      });
+    } catch (disableError) {
+      throw stablePublisherError(
+        "MANAGED_MCP_RECOVERY_EMERGENCY_HOLD",
+        new AggregateError([cause, disableError].filter(Boolean))
+      );
+    }
+  };
+  let currentState = preflight.posture.state;
+  let finalVerification = preflight;
+  for (const [index, step] of steps.entries()) {
+    if (currentState !== step.beforeState) {
+      throw stablePublisherError("MANAGED_MCP_RECOVERY_STEP_STATE_INVALID");
+    }
+    const intent = Object.freeze({
+      schemaVersion: "tideproof.managed-mcp-recovery-grant-intent.v1",
+      step: index + 1,
+      stepId: step.id,
+      operationId,
+      statementSha256: sha256(step.statement),
+      expectedBeforeState: step.beforeState,
+      expectedAfterState: step.afterState,
+      sourceCommit: binding.sourceCommit,
+      sourceTree: binding.sourceTree,
+      expectedPreflightPostureDigest:
+        binding.expectedPreflightPostureDigest,
+      expectedViewDefinitionSha256:
+        binding.expectedViewDefinitionSha256,
+      providerClusterIdSha256: sha256(binding.providerClusterId),
+      sqlClusterIdSha256: sha256(binding.sqlClusterId),
+      databaseName: target.databaseName,
+      hostnameSha256: sha256(target.hostname),
+      adminPrincipalSha256: sha256(target.username),
+      targetReservationDigest: targetReservation.reservationDigest
+    });
+    const journal = await journalIntent(intent);
+    const intentSha256 = sha256(JSON.stringify(intent));
+    if (
+      journal?.operationId !== operationId ||
+      journal?.intentSha256 !== intentSha256 ||
+      journal?.reservation !== "UNIQUE_RESERVED" ||
+      journal?.targetReservationDigest !== targetReservation.reservationDigest
+    ) {
+      throw stablePublisherError("MANAGED_MCP_RECOVERY_JOURNAL_INVALID");
+    }
+    const journalDigest = requiredSha256(
+      journal?.journalDigest,
+      "MANAGED_MCP_RECOVERY_JOURNAL_INVALID"
+    );
+
+    const admin = createAdminClient(index);
+    let acknowledged = false;
+    let dispatchError = null;
+    try {
+      await admin.connect();
+      await admin.query(step.statement);
+      acknowledged = true;
+    } catch (error) {
+      dispatchError = error;
+    } finally {
+      await admin.end().catch(() => {});
+    }
+
+    try {
+      finalVerification = await verifyManagedMcpRecoveryGrants(
+        verificationOptions(
+          acknowledged ? "direct_ack" : "read_reconciled",
+          () => createReconciliationAdminClient(index)
+        )
+      );
+    } catch (error) {
+      const emergencyDisableReceipt = await emergencyDisable(
+        new AggregateError([dispatchError, error].filter(Boolean))
+      );
+      const reconciliationError = stablePublisherError(
+        "MANAGED_MCP_RECOVERY_RECONCILIATION_UNRESOLVED",
+        new AggregateError([dispatchError, error].filter(Boolean))
+      );
+      reconciliationError.emergencyDisable = emergencyDisableReceipt;
+      throw reconciliationError;
+    }
+    currentState = finalVerification.posture.state;
+    dispatches.push(Object.freeze({
+      step: index + 1,
+      stepId: step.id,
+      statementSha256: sha256(step.statement),
+      intentSha256,
+      journalDigest,
+      acknowledged,
+      observation: acknowledged ? "direct_ack" : "read_reconciled",
+      observedState: currentState,
+      observedPostureDigest: finalVerification.posture.postureDigest
+    }));
+    if (
+      finalVerification.posture.baselineRecoveryPostureDigest !==
+        expectedBaselineRecoveryPostureDigest
+    ) {
+      const emergencyDisableReceipt = await emergencyDisable(
+        stablePublisherError("MANAGED_MCP_RECOVERY_BASELINE_DRIFT")
+      );
+      const error = stablePublisherError(
+        "MANAGED_MCP_RECOVERY_BASELINE_DRIFT"
+      );
+      error.reconciliation = finalVerification;
+      error.emergencyDisable = emergencyDisableReceipt;
+      throw error;
+    }
+    if (currentState !== step.afterState) {
+      let emergencyDisableReceipt = null;
+      if (
+        index === 1 ||
+        ["PRESENT", "USAGE_ONLY"].includes(currentState)
+      ) {
+        emergencyDisableReceipt = await emergencyDisable(dispatchError);
+      }
+      const error = stablePublisherError(
+        currentState === step.beforeState
+          ? "MANAGED_MCP_RECOVERY_DISPATCH_CONFIRMED_ABSENT"
+          : "MANAGED_MCP_RECOVERY_DISPATCH_STATE_UNRESOLVED",
+        dispatchError
+      );
+      error.reconciliation = finalVerification;
+      if (emergencyDisableReceipt) {
+        error.emergencyDisable = emergencyDisableReceipt;
+      }
+      throw error;
+    }
+  }
+
+  return Object.freeze({
+    ...finalVerification,
+    mode: "APPLY_JOURNALED_RECONCILED",
+    mutationStatementCount: 2,
+    mutationDispatchCount: dispatches.length,
+    mutationTransactionCount: 2,
+    explicitMultiStatementTransactionUsed: false,
+    preflightPostureDigest: preflight.posture.postureDigest,
+    targetReservation,
+    dispatches: Object.freeze(dispatches),
+    claimBoundary:
+      "This records two journaled implicit grant transactions, each followed by fresh-connection readback. View SELECT is staged while schema traversal is absent; schema USAGE activates only after the safe partial state is confirmed. It grants no private-table, API-schema, database-wide, role, system, deployment, or release authority."
+  });
+}
+
+export async function disableManagedMcpRecoveryGrants({
+  adminConnectionString,
+  expectedRecoveryHostname,
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
+  expectedPreflightPostureDigest,
+  expectedViewDefinitionSha256,
+  sourceCommit,
+  sourceTree,
+  confirmation,
+  operationId,
+  journalIntent,
+  createAdminClient = () => new Client(bootstrapDatabaseConfig({
+    connectionString: adminConnectionString,
+    max: 1,
+    applicationName: "tideproof-managed-mcp-recovery-grant-disable"
+  })),
+  createReconciliationAdminClient = createAdminClient,
+  verifySourceCheckout = assertCleanExactGitCheckout
+}) {
+  if (confirmation !== MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION) {
+    throw stablePublisherError(
+      "MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION_REQUIRED"
+    );
+  }
+  if (typeof journalIntent !== "function") {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_JOURNAL_REQUIRED");
+  }
+  if (typeof operationId !== "string" || !LOWERCASE_UUID.test(operationId)) {
+    throw stablePublisherError("MANAGED_MCP_RECOVERY_OPERATION_ID_INVALID");
+  }
+  const binding = validateManagedMcpRecoveryGrantBinding({
+    expectedRecoveryProviderClusterId,
+    expectedRecoverySqlClusterId,
+    expectedPreflightPostureDigest,
+    expectedViewDefinitionSha256,
+    sourceCommit,
+    sourceTree,
+    verifySourceCheckout
+  });
+  const target = recoveryConnectionTarget(
+    adminConnectionString,
+    expectedRecoveryHostname
+  );
+  const targetReservation = await reserveManagedMcpRecoveryTarget({
+    binding,
+    target,
+    operationId,
+    journalIntent
+  });
+  const verificationOptions = (observation, createClient) => ({
+    adminConnectionString,
+    expectedRecoveryHostname,
+    expectedRecoveryProviderClusterId: binding.providerClusterId,
+    expectedRecoverySqlClusterId: binding.sqlClusterId,
+    expectedPreflightPostureDigest:
+      binding.expectedPreflightPostureDigest,
+    expectedViewDefinitionSha256: binding.expectedViewDefinitionSha256,
+    sourceCommit: binding.sourceCommit,
+    sourceTree: binding.sourceTree,
+    observation,
+    createAdminClient: createClient,
+    verifySourceCheckout
+  });
+  const dispatches = [];
+  let finalVerification = null;
+  for (const [index, statement] of
+    MANAGED_MCP_RECOVERY_ROLLBACK_SQL.entries()) {
+    const intent = Object.freeze({
+      schemaVersion: "tideproof.managed-mcp-recovery-disable-intent.v1",
+      step: index + 1,
+      operationId,
+      stepId: index === 0
+        ? "REVOKE_SCHEMA_USAGE_DISABLE"
+        : "REVOKE_VIEW_SELECT_CLEANUP",
+      statementSha256: sha256(statement),
+      sourceCommit: binding.sourceCommit,
+      sourceTree: binding.sourceTree,
+      expectedPreflightPostureDigest:
+        binding.expectedPreflightPostureDigest,
+      expectedViewDefinitionSha256:
+        binding.expectedViewDefinitionSha256,
+      providerClusterIdSha256: sha256(binding.providerClusterId),
+      sqlClusterIdSha256: sha256(binding.sqlClusterId),
+      databaseName: target.databaseName,
+      hostnameSha256: sha256(target.hostname),
+      adminPrincipalSha256: sha256(target.username),
+      targetReservationDigest: targetReservation.reservationDigest
+    });
+    const journal = await journalIntent(intent);
+    const intentSha256 = sha256(JSON.stringify(intent));
+    if (
+      journal?.operationId !== operationId ||
+      journal?.intentSha256 !== intentSha256 ||
+      journal?.reservation !== "UNIQUE_RESERVED" ||
+      journal?.targetReservationDigest !== targetReservation.reservationDigest
+    ) {
+      throw stablePublisherError("MANAGED_MCP_RECOVERY_JOURNAL_INVALID");
+    }
+    const journalDigest = requiredSha256(
+      journal?.journalDigest,
+      "MANAGED_MCP_RECOVERY_JOURNAL_INVALID"
+    );
+    const admin = createAdminClient(index);
+    let acknowledged = false;
+    let dispatchError = null;
+    try {
+      await admin.connect();
+      await admin.query(statement);
+      acknowledged = true;
+    } catch (error) {
+      dispatchError = error;
+    } finally {
+      await admin.end().catch(() => {});
+    }
+    try {
+      finalVerification = await verifyManagedMcpRecoveryGrants(
+        verificationOptions(
+          acknowledged ? "direct_ack" : "read_reconciled",
+          () => createReconciliationAdminClient(index)
+        )
+      );
+    } catch (error) {
+      const hold = stablePublisherError(
+        "MANAGED_MCP_RECOVERY_EMERGENCY_HOLD",
+        new AggregateError([dispatchError, error].filter(Boolean))
+      );
+      hold.disableDispatches = Object.freeze(dispatches);
+      throw hold;
+    }
+    const acceptableState = index === 0
+      ? ["ABSENT", "SELECT_ONLY"].includes(
+          finalVerification.posture.state
+        )
+      : finalVerification.posture.state === "ABSENT";
+    dispatches.push(Object.freeze({
+      step: index + 1,
+      statementSha256: sha256(statement),
+      intentSha256,
+      journalDigest,
+      acknowledged,
+      observation: acknowledged ? "direct_ack" : "read_reconciled",
+      observedState: finalVerification.posture.state,
+      observedPostureDigest: finalVerification.posture.postureDigest
+    }));
+    if (!acceptableState) {
+      const hold = stablePublisherError(
+        "MANAGED_MCP_RECOVERY_EMERGENCY_HOLD",
+        dispatchError
+      );
+      hold.reconciliation = finalVerification;
+      hold.disableDispatches = Object.freeze(dispatches);
+      throw hold;
+    }
+  }
+  if (
+    finalVerification.posture.postureDigest !==
+      binding.expectedPreflightPostureDigest
+  ) {
+    const hold = stablePublisherError(
+      "MANAGED_MCP_RECOVERY_EMERGENCY_HOLD"
+    );
+    hold.reconciliation = finalVerification;
+    hold.disableDispatches = Object.freeze(dispatches);
+    throw hold;
+  }
+  return Object.freeze({
+    ...finalVerification,
+    mode: "DISABLE_JOURNALED_RECONCILED",
+    mutationStatementCount: 2,
+    mutationDispatchCount: dispatches.length,
+    mutationTransactionCount: 2,
+    explicitMultiStatementTransactionUsed: false,
+    targetReservation,
+    dispatches: Object.freeze(dispatches),
+    claimBoundary:
+      "This records capability-first disablement: schema USAGE is revoked and freshly reconciled before view SELECT is removed. It proves exact absence of the two direct grants, not provider, deployment, or release cleanup."
+  });
 }
 
 export async function bootstrapRecoverySecurity({

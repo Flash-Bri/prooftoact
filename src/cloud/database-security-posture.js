@@ -147,17 +147,17 @@ function roleGrantKey(grant, databaseName, apiSchema, managedSchemas) {
   if (
     grant.databaseName === databaseName &&
     ["TABLE", "VIEW"].includes(grant.objectType) &&
-    grant.schemaName === apiSchema &&
+    managedSchemas.has(grant.schemaName) &&
     grant.privilegeType === "SELECT"
   ) {
-    return `RELATION:${apiSchema}.${grant.objectName}:SELECT`;
+    return `RELATION:${grant.schemaName}.${grant.objectName}:SELECT`;
   }
   return "";
 }
 
 function expectedRoleGrantKeys(policy, apiSchema) {
   return new Set([
-    "DATABASE:CONNECT",
+    ...(policy?.databaseConnect === false ? [] : ["DATABASE:CONNECT"]),
     ...(policy?.schemas ?? [apiSchema]).map(
       (schemaName) => `SCHEMA:${schemaName}:USAGE`
     ),
@@ -167,6 +167,9 @@ function expectedRoleGrantKeys(policy, apiSchema) {
     ),
     ...(policy?.relations ?? []).map(
       (name) => `RELATION:${apiSchema}.${name}:SELECT`
+    ),
+    ...(policy?.relationGrants ?? []).map(
+      ({ schema, name }) => `RELATION:${schema}.${name}:SELECT`
     )
   ]);
 }
@@ -365,6 +368,7 @@ export function validateManagedObjectGrants(
     runtimeUsers,
     knownManagedPrincipals = [],
     roleGrantPolicies = {},
+    directPrincipalGrantPolicies = {},
     ownerRoles = [],
     managedPrefixes = ["tp_"],
     trustedPrincipals = [],
@@ -377,18 +381,32 @@ export function validateManagedObjectGrants(
   const schemas = new Set(managedSchemas);
   const users = new Set(runtimeUsers);
   const runtimeRoles = new Set(Object.keys(roleGrantPolicies));
+  const directPrincipals = new Set(
+    Object.keys(directPrincipalGrantPolicies)
+  );
+  const capabilityPrincipals = new Set([
+    ...runtimeRoles,
+    ...directPrincipals
+  ]);
   const owners = new Set(ownerRoles);
-  const managed = new Set([...runtimeRoles, ...owners, ...users]);
+  const managed = new Set([
+    ...capabilityPrincipals,
+    ...owners,
+    ...users
+  ]);
   const knownManaged = new Set([...managed, ...knownManagedPrincipals]);
   const trusted = new Set(trustedPrincipals);
   const expected = new Map(
-    Object.entries(roleGrantPolicies).map(([role, policy]) => [
-      role,
+    [
+      ...Object.entries(roleGrantPolicies),
+      ...Object.entries(directPrincipalGrantPolicies)
+    ].map(([principal, policy]) => [
+      principal,
       expectedRoleGrantKeys(policy, apiSchema)
     ])
   );
   const observed = new Map(
-    [...runtimeRoles].map((role) => [role, new Set()])
+    [...capabilityPrincipals].map((principal) => [principal, new Set()])
   );
   const census = new Set();
   for (const row of rows) {
@@ -410,7 +428,7 @@ export function validateManagedObjectGrants(
     ) {
       throw stablePostureError("DATABASE_POSTURE_STALE_PRINCIPAL");
     }
-    if (users.has(grant.grantee)) {
+    if (users.has(grant.grantee) && !directPrincipals.has(grant.grantee)) {
       throw stablePostureError("DATABASE_POSTURE_DIRECT_USER_GRANT");
     }
     if (managed.has(grant.grantee) && grant.databaseName !== databaseName) {
@@ -425,7 +443,7 @@ export function validateManagedObjectGrants(
       }
       continue;
     }
-    if (runtimeRoles.has(grant.grantee)) {
+    if (capabilityPrincipals.has(grant.grantee)) {
       if (grant.isGrantable) {
         throw stablePostureError("DATABASE_POSTURE_GRANT_OPTION_UNSAFE");
       }
@@ -474,8 +492,16 @@ export function validateManagedObjectGrants(
     }
   }
   if (!allowMissingExpected) {
-    for (const role of runtimeRoles) {
-      if (!exactSet(observed.get(role), expected.get(role))) {
+    for (const principal of capabilityPrincipals) {
+      const policy = directPrincipalGrantPolicies[principal] ??
+        roleGrantPolicies[principal];
+      if (
+        policy?.allowAbsent === true &&
+        observed.get(principal).size === 0
+      ) {
+        continue;
+      }
+      if (!exactSet(observed.get(principal), expected.get(principal))) {
         throw stablePostureError("DATABASE_POSTURE_MANAGED_GRANT_MISSING");
       }
     }
@@ -963,6 +989,8 @@ export function validateDatabaseSecurityPosture(
     managedPrefixes: spec.managedPrefixes ?? ["tp_"],
     ownerRoles: spec.ownerRoles ?? [],
     roleGrantPolicies: spec.roleGrantPolicies ?? {},
+    directPrincipalGrantPolicies:
+      spec.directPrincipalGrantPolicies ?? {},
     optionalRoles: spec.optionalRoles ?? [],
     optionalUsers: spec.optionalUsers ?? [],
     optionalBindings: spec.optionalBindings ?? [],
@@ -1034,6 +1062,8 @@ export function validateDatabaseSecurityPosture(
       runtimeUsers: acceptedSpec.users,
       knownManagedPrincipals: managedPrincipals,
       roleGrantPolicies: acceptedSpec.roleGrantPolicies,
+      directPrincipalGrantPolicies:
+        acceptedSpec.directPrincipalGrantPolicies,
       ownerRoles: acceptedSpec.ownerRoles,
       managedPrefixes: acceptedSpec.managedPrefixes,
       trustedPrincipals,
