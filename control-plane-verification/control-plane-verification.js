@@ -77,6 +77,16 @@ const WORKFLOWS = Object.freeze([
   })
 ]);
 
+const SEALED_WORKFLOW_FILES = Object.freeze([
+  "prooftoact-sealed-coordinator.yml",
+  "prooftoact-sealed-evidence.yml",
+  "prooftoact-sealed-execute.yml",
+  "prooftoact-sealed-live-drill.yml",
+  "prooftoact-sealed-prepare.yml",
+  "prooftoact-sealed-teardown.yml",
+  "prooftoact-sealed-terminalizer.yml"
+]);
+
 const GOVERNANCE_LANES = Object.freeze([
   ...WORKFLOWS.map((item) => Object.freeze({
     ...item,
@@ -96,6 +106,7 @@ const GOVERNANCE_LANES = Object.freeze([
 
 const REQUIRED_EXACT_PATHS = Object.freeze([
   ...WORKFLOWS.map(({ file }) => `.github/workflows/${file}`),
+  ...SEALED_WORKFLOW_FILES.map((file) => `.github/workflows/${file}`),
   "config/prooftoact-release-operator-public.pub",
   "infra/aws/release-deployment-roles-template.json",
   "release-control/build-release-control-runtime.js",
@@ -305,8 +316,10 @@ function collectInventory(root) {
     !fs.existsSync(safePath(root, entry)));
   required.filter((entry) => !missingPaths.includes(entry))
     .forEach((entry) => discovered.add(entry));
-  const expectedWorkflows = sorted(WORKFLOWS.map(({ file }) =>
-    `.github/workflows/${file}`));
+  const expectedWorkflows = sorted([
+    ...WORKFLOWS.map(({ file }) => `.github/workflows/${file}`),
+    ...SEALED_WORKFLOW_FILES.map((file) => `.github/workflows/${file}`)
+  ]);
   const discoveredWorkflows = sorted([...discovered].filter((entry) =>
     entry.startsWith(".github/workflows/prooftoact-")));
   const unexpectedWorkflowPaths = discoveredWorkflows.filter((entry) =>
@@ -1612,6 +1625,7 @@ export function buildCandidate({
           EXPECTED_PROVIDER_DIRECT_DEPENDENCIES,
         governanceLanes: GOVERNANCE_LANES,
         requiredExactPaths: REQUIRED_EXACT_PATHS,
+        sealedWorkflowFiles: SEALED_WORKFLOW_FILES,
         workflows: WORKFLOWS
       })
     }),
@@ -1686,5 +1700,6 @@ export const CONTROL_PLANE_VERIFICATION_CONSTANTS = Object.freeze({
   GOVERNANCE_EVIDENCE_SCHEMA,
   GOVERNANCE_LANES,
   PROVENANCE_EVIDENCE_SCHEMA,
+  SEALED_WORKFLOW_FILES,
   WORKFLOWS
 });

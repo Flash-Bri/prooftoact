@@ -46,3 +46,10 @@ environment, secret, role, workflow run, AWS resource, database, deployment,
 publication, or submission state was changed. Until the exact IAM update is
 deployed and a separately reviewed executable design replaces the HOLD, the
 only truthful result is `NO PROVIDER MUTATION`.
+
+The reviewed IAM template SHA-256 after this source change is
+`5f72ab835c93e6c8739405ed953d5c340dd13497a83eb1efff40fd70ba144da9`.
+Any bootstrap readback captured against an earlier template is historical
+evidence only after this change merges. Applying the IAM update requires a
+fresh complete read-only bootstrap readback against these exact template bytes
+before any later release phase can rely on the updated roles.

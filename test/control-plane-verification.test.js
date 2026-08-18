@@ -272,6 +272,11 @@ test("candidate deterministically binds the complete control-plane surface", () 
   for (const workflow of CONTROL_PLANE_VERIFICATION_CONSTANTS.WORKFLOWS) {
     assert.equal(inventoryPaths.includes(`.github/workflows/${workflow.file}`), true);
   }
+  for (const file of
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SEALED_WORKFLOW_FILES) {
+    assert.equal(inventoryPaths.includes(`.github/workflows/${file}`), true,
+      file);
+  }
   for (const exactPath of [
     "config/prooftoact-release-operator-public.pub",
     "infra/aws/release-deployment-roles-template.json",
@@ -344,8 +349,9 @@ test("candidate deterministically binds the complete control-plane surface", () 
   }
   assert.equal(candidate.body.governance.sourceMappings.every((item) =>
     item.workflowSourceBound), true);
-  assert.equal(candidate.body.readiness.localSourceReady,
-    candidate.body.findings.length === 0);
+  assert.deepEqual(candidate.body.inventory.unexpectedWorkflowPaths, []);
+  assert.deepEqual(candidate.body.findings, []);
+  assert.equal(candidate.body.readiness.localSourceReady, true);
 });
 
 test("candidate envelope and current source mismatch fail closed", () => {
