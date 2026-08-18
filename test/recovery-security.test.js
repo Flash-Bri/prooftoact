@@ -8,7 +8,8 @@ import {
   collectRecoveryPublisherFunctionDefinitions,
   collectRecoveryPublisherCapabilityPosture,
   RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
-  RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+  RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID,
+  RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID,
   repairRecoveryPublisherPrivateSchemaUsage,
   verifyRecoveryPublisherPrivateSchemaUsage
 } from "../src/cloud/recovery-security.js";
@@ -58,7 +59,7 @@ function sqlState(code, message = code) {
 function publisherProbeClient({
   directOperationAllowed = null,
   functionProbeError = null,
-  clusterId = RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+  clusterId = RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
 } = {}) {
   let appendedBundleDigest = null;
   let appendTransactionActive = false;
@@ -226,7 +227,7 @@ function recoveryAdminState(options = {}) {
     rollbackError: options.rollbackError ?? null,
     definitionDrift: options.definitionDrift ?? false,
     clusterId: options.clusterId ??
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID,
     afterCommitDefinitionDrift:
       options.afterCommitDefinitionDrift ?? false,
     afterCommitClusterId: options.afterCommitClusterId ?? null,
@@ -342,8 +343,10 @@ function repairArguments(overrides = {}) {
     publisherConnectionString:
       "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
     expectedRecoveryHostname: "recovery.example",
-    expectedRecoveryClusterId:
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+    expectedRecoveryProviderClusterId:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID,
+    expectedRecoverySqlClusterId:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID,
     expectedPreflightPostureDigest: legacySummary.postureDigest,
     expectedClusterPreflightPostureDigest:
       SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST,
@@ -361,8 +364,8 @@ function repairArguments(overrides = {}) {
 test("publisher capability collector executes functions only in a rolled-back probe", async () => {
   const client = publisherProbeClient();
   const result = await collectRecoveryPublisherCapabilityPosture(client, {
-    expectedRecoveryClusterId:
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+    expectedRecoverySqlClusterId:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
   });
   assert.equal(result.functionProbe.appendOutcome, "bundle_appended");
   assert.equal(result.functionProbe.resolveOutcome, "bundle_present");
@@ -383,8 +386,8 @@ test("publisher capability collector executes functions only in a rolled-back pr
   );
   assert.equal(client.calls.includes("COMMIT"), false);
   assert.equal(
-    result.clusterId,
-    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+    result.sqlClusterId,
+    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
   );
 });
 
@@ -394,8 +397,8 @@ test("publisher capability collector rejects any direct private-table operation"
       collectRecoveryPublisherCapabilityPosture(
         publisherProbeClient({ directOperationAllowed: operation }),
         {
-          expectedRecoveryClusterId:
-            RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+          expectedRecoverySqlClusterId:
+            RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
         }
       ),
       new RegExp(`RECOVERY_PUBLISHER_DIRECT_${operation}_NOT_DENIED`, "u")
@@ -409,8 +412,8 @@ test("publisher capability collector byte-compares its observed cluster UUID", a
   });
   await assert.rejects(
     collectRecoveryPublisherCapabilityPosture(client, {
-      expectedRecoveryClusterId:
-        RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+      expectedRecoverySqlClusterId:
+        RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
     }),
     /RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_MISMATCH/u
   );
@@ -451,13 +454,15 @@ test("read-only repair verification distinguishes exact absent and present state
     assert.equal(result.status, expectedStatus);
     assert.equal(result.mode, "VERIFY_APPLIED_READ_ONLY");
     assert.equal(result.mutationCount, 0);
-    assert.equal(result.target.clusterId,
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID);
+    assert.equal(result.target.providerClusterId,
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID);
+    assert.equal(result.target.sqlClusterId,
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID);
     assert.equal(result.source.commit, SCHEMA_REPAIR_SOURCE_COMMIT);
     assert.equal(result.source.tree, SCHEMA_REPAIR_SOURCE_TREE);
     assert.equal(
-      result.observedRecoveryClusterId,
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+      result.observedRecoverySqlClusterId,
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
     );
     assert.deepEqual(result.expectedFunctionDefinitionDigests, {
       appendRecoveryBundleV2: SCHEMA_REPAIR_APPEND_FUNCTION_DIGEST,
@@ -506,12 +511,12 @@ test("existing-cluster repair binds exact preflight and verifies through a fresh
     SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST);
   assert.equal(result.capabilityPosture.functionProbe.rollbackVerified, true);
   assert.equal(
-    result.preflightObservedRecoveryClusterId,
-    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+    result.preflightObservedRecoverySqlClusterId,
+    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
   );
   assert.equal(
-    result.capabilityPosture.clusterId,
-    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+    result.capabilityPosture.sqlClusterId,
+    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
   );
   assert.equal(clients.length, 2);
   assert.equal(
@@ -762,10 +767,20 @@ test("existing-cluster repair fails closed on identity, digest, and posture drif
   await assert.rejects(
     repairRecoveryPublisherPrivateSchemaUsage({
       ...common,
-      expectedRecoveryClusterId: "00000000-0000-0000-0000-000000000000",
+      expectedRecoveryProviderClusterId:
+        "00000000-0000-0000-0000-000000000000",
       createAdminClient: () => recoveryAdminClient()
     }),
-    /RECOVERY_SCHEMA_REPAIR_CLUSTER_ID_INVALID/u
+    /RECOVERY_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID_INVALID/u
+  );
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      expectedRecoverySqlClusterId:
+        "00000000-0000-0000-0000-000000000000",
+      createAdminClient: () => recoveryAdminClient()
+    }),
+    /RECOVERY_SCHEMA_REPAIR_SQL_CLUSTER_ID_INVALID/u
   );
   await assert.rejects(
     repairRecoveryPublisherPrivateSchemaUsage({
@@ -868,7 +883,9 @@ test("repair CLI gates apply and exposes only a read-only verify mode", async ()
       repairArguments().publisherConnectionString,
     EXPECTED_RECOVERY_HOSTNAME: "recovery.example",
     EXPECTED_RECOVERY_CLUSTER_ID:
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID,
+    EXPECTED_RECOVERY_SQL_CLUSTER_ID:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID,
     EXPECTED_RECOVERY_PRE_REPAIR_POSTURE_SHA256:
       repairArguments().expectedPreflightPostureDigest,
     EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256:
