@@ -843,6 +843,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/recovery-publisher-key.test.js",
     role: "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION"
   }),
+  "recovery-publisher-schema-repair": Object.freeze({
+    path: "scripts/repair-recovery-publisher-private-schema-usage.js",
+    role: "RECOVERY_PUBLISHER_EXISTING_CLUSTER_REPAIR"
+  }),
   "recovery-publication-reconciliation-tests": Object.freeze({
     path: "test/recovery-security.test.js",
     role: "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION"
@@ -1991,6 +1995,7 @@ const SOURCE_MARKERS = Object.freeze({
     "collector rolls back a failed census snapshot",
     "cluster census enforces database isolation with matching barriers",
     "cluster census rejects database-set drift",
+    "recovery publisher requires private-schema usage but rejects table DML",
     "DATABASE_POSTURE_EXTERNAL_PRINCIPAL_CAPABILITY",
     "DATABASE_POSTURE_EXTERNAL_OBJECT_GRANT",
     "DATABASE_POSTURE_DEFAULT_GRANT_UNSAFE"
@@ -3488,7 +3493,10 @@ const SOURCE_MARKERS = Object.freeze({
     "lockRecoveryPublicRoutineDefaults(",
     "allowMissingExpectedCapabilities: false",
     "collectValidatedRecoveryPosture(",
-    "GRANT USAGE ON SCHEMA mcp_api TO ${RECOVERY_PUBLISHER_ROLE}",
+    "GRANT USAGE ON SCHEMA mcp_api, mcp_private TO ${RECOVERY_PUBLISHER_ROLE}",
+    "RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL",
+    "collectRecoveryPublisherCapabilityPosture",
+    "RECOVERY_PUBLISHER_DIRECT_${operation}_NOT_DENIED",
     "mcp_api.resolve_recovery_bundle_v1",
     "read_reconciled",
     "RECOVERY_PUBLISH_RETRY_DEADLINE_EXCEEDED",
@@ -3621,12 +3629,25 @@ const SOURCE_MARKERS = Object.freeze({
     "policy_version: \"g1-admissibility-v2\"",
     "RECOVERY_SOURCE_RECEIPT_INVALID"
   ]),
+  "recovery-publisher-schema-repair": Object.freeze([
+    "mode === \"--plan\"",
+    "mode !== \"--apply\"",
+    "RECOVERY_ADMIN_DATABASE_URL",
+    "RECOVERY_PUBLISHER_DATABASE_URL",
+    "EXPECTED_RECOVERY_HOSTNAME",
+    "EXPECTED_RECOVERY_PRE_REPAIR_POSTURE_SHA256",
+    "RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION"
+  ]),
   "recovery-publication-reconciliation-tests": Object.freeze([
     "recovery publisher resolves an exact receipt after COMMIT ACK loss",
     "output.commit.observation, \"read_reconciled\"",
     "sqlState(\"ECONNRESET\")",
     "recovery publisher never rolls back an unclassified post-COMMIT error",
-    "ambiguous_closed"
+    "ambiguous_closed",
+    "publisher capability collector executes functions only in a rolled-back probe",
+    "publisher capability collector rejects any direct private-table operation",
+    "existing-cluster repair accepts only exact legacy posture and verifies the result",
+    "existing-cluster repair fails closed on already-repaired or drifted posture"
   ]),
   "recovery-store": Object.freeze([
     "runtimeDatabaseConfig({",

@@ -1,6 +1,7 @@
-import { Client } from "pg";
+import { createHash, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { setTimeout as sleepTimer } from "node:timers/promises";
+import { Client } from "pg";
 import { connectionStringForDatabase } from "./authority-store.js";
 import {
   bootstrapDatabaseConfig,
@@ -27,6 +28,10 @@ import {
 
 export const RECOVERY_PUBLISHER_ROLE = "tp_recovery_publisher_role";
 export const RECOVERY_PUBLISHER_USER = "tp_recovery_publisher_user";
+export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION =
+  "REPAIR_TP_RECOVERY_PUBLISHER_PRIVATE_SCHEMA_USAGE_V1";
+export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL =
+  `GRANT USAGE ON SCHEMA mcp_private TO ${RECOVERY_PUBLISHER_ROLE}`;
 const RECOVERY_ROLE_BINDINGS = [
   [RECOVERY_PUBLISHER_ROLE, RECOVERY_PUBLISHER_USER]
 ];
@@ -64,27 +69,38 @@ const CLUSTER_PRINCIPAL_DATABASES = Object.freeze(Object.fromEntries([
     "tideproof_recovery"
   ])
 ]));
-const RECOVERY_POSTURE_SPEC = Object.freeze({
-  databaseName: "tideproof_recovery",
-  managedSchemas: ["mcp_private", "mcp_public", "mcp_api"],
-  managedPrefixes: ["tp_"],
-  apiSchema: "mcp_api",
-  ownerRoles: ["tp_recovery_owner"],
-  roleGrantPolicies: Object.freeze({
-    [RECOVERY_PUBLISHER_ROLE]: Object.freeze({
-      functions: Object.freeze([
-        "append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)",
-        "resolve_recovery_bundle_v1(UUID, UUID, INT8, STRING)"
-      ])
-    })
-  }),
-  roles: RECOVERY_ROLES,
-  users: RECOVERY_USERS,
-  bindings: RECOVERY_ROLE_BINDINGS,
-  optionalRoles: PRIMARY_SIBLING_ROLES,
-  optionalUsers: PRIMARY_SIBLING_USERS,
-  optionalBindings: PRIMARY_SIBLING_BINDINGS
-});
+const RECOVERY_PUBLISHER_FUNCTIONS = Object.freeze([
+  "append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)",
+  "resolve_recovery_bundle_v1(UUID, UUID, INT8, STRING)"
+]);
+
+function recoveryPostureSpec(publisherSchemas) {
+  return Object.freeze({
+    databaseName: "tideproof_recovery",
+    managedSchemas: ["mcp_private", "mcp_public", "mcp_api"],
+    managedPrefixes: ["tp_"],
+    apiSchema: "mcp_api",
+    ownerRoles: ["tp_recovery_owner"],
+    roleGrantPolicies: Object.freeze({
+      [RECOVERY_PUBLISHER_ROLE]: Object.freeze({
+        schemas: Object.freeze([...publisherSchemas]),
+        functions: RECOVERY_PUBLISHER_FUNCTIONS
+      })
+    }),
+    roles: RECOVERY_ROLES,
+    users: RECOVERY_USERS,
+    bindings: RECOVERY_ROLE_BINDINGS,
+    optionalRoles: PRIMARY_SIBLING_ROLES,
+    optionalUsers: PRIMARY_SIBLING_USERS,
+    optionalBindings: PRIMARY_SIBLING_BINDINGS
+  });
+}
+
+const LEGACY_RECOVERY_POSTURE_SPEC = recoveryPostureSpec(["mcp_api"]);
+export const RECOVERY_POSTURE_SPEC = recoveryPostureSpec([
+  "mcp_api",
+  "mcp_private"
+]);
 
 const APPEND_SIGNATURE =
   "mcp_api.append_recovery_bundle_v2(UUID, UUID, STRING, INT8, INT8, UUID, TIMESTAMPTZ, STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING, JSONB, JSONB, JSONB, JSONB, TIMESTAMPTZ)";
@@ -166,11 +182,7 @@ async function collectValidatedRecoveryPosture(
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const posture = await collectDatabaseSecurityPosture(client);
-      const summary = validateDatabaseSecurityPosture(
-        posture,
-        RECOVERY_POSTURE_SPEC,
-        options
-      );
+      const summary = validateRecoverySecurityPosture(posture, options);
       return { posture, summary };
     } catch (error) {
       lastError = error;
@@ -268,6 +280,399 @@ export function recoveryBundleValues(bundle) {
     JSON.stringify(bundle.receiptSummary),
     bundle.expiresAt
   ];
+}
+
+export function validateRecoverySecurityPosture(posture, options = {}) {
+  return validateDatabaseSecurityPosture(
+    posture,
+    RECOVERY_POSTURE_SPEC,
+    options
+  );
+}
+
+function validateLegacyRecoverySecurityPosture(posture, options = {}) {
+  return validateDatabaseSecurityPosture(
+    posture,
+    LEGACY_RECOVERY_POSTURE_SPEC,
+    options
+  );
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function requiredSha256(value, code) {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value)) {
+    throw stablePublisherError(code);
+  }
+  return value;
+}
+
+function recoveryConnectionTarget(
+  connectionString,
+  expectedHostname,
+  { publisher = false } = {}
+) {
+  if (
+    typeof connectionString !== "string" ||
+    typeof expectedHostname !== "string" ||
+    expectedHostname.trim() === ""
+  ) {
+    throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_TARGET_INVALID");
+  }
+  let url;
+  try {
+    url = new URL(connectionString);
+  } catch (error) {
+    throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_TARGET_INVALID", error);
+  }
+  let databaseName;
+  let username;
+  try {
+    databaseName = decodeURIComponent(url.pathname.replace(/^\//u, ""));
+    username = decodeURIComponent(url.username);
+  } catch (error) {
+    throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_TARGET_INVALID", error);
+  }
+  const query = [...url.searchParams.entries()];
+  if (
+    !["postgres:", "postgresql:"].includes(url.protocol) ||
+    url.hostname.toLowerCase() !== expectedHostname.trim().toLowerCase() ||
+    url.port !== "26257" ||
+    databaseName !== "tideproof_recovery" ||
+    url.hash !== "" ||
+    query.length !== 1 ||
+    query[0][0] !== "sslmode" ||
+    query[0][1] !== "verify-full" ||
+    username === "" ||
+    (publisher && username !== RECOVERY_PUBLISHER_USER) ||
+    (!publisher && [RECOVERY_PUBLISHER_ROLE, RECOVERY_PUBLISHER_USER]
+      .includes(username))
+  ) {
+    throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_TARGET_INVALID");
+  }
+  return {
+    databaseName,
+    hostname: url.hostname.toLowerCase(),
+    port: url.port,
+    username
+  };
+}
+
+function publisherProbeBundle(databaseNow) {
+  const sourceCommitTime = new Date(databaseNow);
+  if (!Number.isFinite(sourceCommitTime.getTime())) {
+    throw stablePublisherError("RECOVERY_PUBLISHER_PROBE_TIME_INVALID");
+  }
+  const probeId = randomUUID();
+  const probeDigest = (label) => sha256(`${label}\0${probeId}`);
+  return {
+    tenantId: randomUUID(),
+    recoverySessionId: randomUUID(),
+    subjectBindingHash: probeDigest("subject"),
+    schemaVersion: 2,
+    snapshotVersion: sourceCommitTime.getTime(),
+    sourceClusterId: randomUUID(),
+    sourceCommitTs: sourceCommitTime.toISOString(),
+    sourceDigest: probeDigest("source"),
+    bundleDigest: probeDigest("bundle"),
+    policyVersion: "recovery-private-schema-repair-probe-v1",
+    publisherKeyId: "rollback-only-probe",
+    publisherVersion: RECOVERY_PUBLISHER_VERSION,
+    signatureAlgorithm: RECOVERY_SIGNATURE_ALGORITHM,
+    sourceSignatureBase64: Buffer.alloc(64, 1).toString("base64"),
+    signatureDigest: probeDigest("signature"),
+    checkpointSummary: { probe: true },
+    evidenceSummary: { probe: true },
+    conflictSummary: { probe: true },
+    receiptSummary: { probe: true },
+    expiresAt: new Date(sourceCommitTime.getTime() + 5 * 60_000).toISOString()
+  };
+}
+
+async function expectDirectRecoveryTablePrivilegeDenied(client, operation, sql) {
+  await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+  let queryError = null;
+  try {
+    await client.query(sql);
+  } catch (error) {
+    queryError = error;
+  }
+  try {
+    await client.query("ROLLBACK");
+  } catch (rollbackError) {
+    throw stablePublisherError(
+      "RECOVERY_PUBLISHER_PROBE_ROLLBACK_FAILED",
+      queryError
+        ? new AggregateError([queryError, rollbackError])
+        : rollbackError
+    );
+  }
+  if (queryError?.code !== "42501") {
+    throw stablePublisherError(
+      `RECOVERY_PUBLISHER_DIRECT_${operation}_NOT_DENIED`,
+      queryError
+    );
+  }
+  return { denied: true, sqlstate: queryError.code };
+}
+
+export async function collectRecoveryPublisherCapabilityPosture(client) {
+  if (typeof client?.query !== "function") {
+    throw new TypeError("RECOVERY_PUBLISHER_PROBE_CLIENT_REQUIRED");
+  }
+  const sessionResult = await client.query(`
+    SELECT
+      current_database() AS database_name,
+      current_user AS current_user_name,
+      session_user AS session_user_name,
+      version() AS database_version,
+      statement_timestamp() AS database_now
+  `);
+  const session = sessionResult.rows?.[0];
+  if (
+    sessionResult.rowCount !== 1 ||
+    session?.database_name !== "tideproof_recovery" ||
+    session?.current_user_name !== RECOVERY_PUBLISHER_USER ||
+    session?.session_user_name !== RECOVERY_PUBLISHER_USER ||
+    !/\bCockroachDB(?: CCL)? v26\.2(?:\.\d+)?\b/u.test(
+      session?.database_version ?? ""
+    )
+  ) {
+    throw stablePublisherError("RECOVERY_PUBLISHER_PROBE_SESSION_INVALID");
+  }
+  const databaseNow = databaseTimestampFromDriver(session.database_now);
+  const bundle = publisherProbeBundle(databaseNow);
+  let transactionStarted = false;
+  let appendResult;
+  let resolveResult;
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+    transactionStarted = true;
+    appendResult = await client.query(
+      APPEND_SQL,
+      recoveryBundleValues(bundle)
+    );
+    resolveResult = await client.query(RESOLVE_SQL, [
+      bundle.tenantId,
+      bundle.recoverySessionId,
+      bundle.snapshotVersion,
+      bundle.bundleDigest
+    ]);
+    await client.query("ROLLBACK");
+    transactionStarted = false;
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        throw stablePublisherError(
+          "RECOVERY_PUBLISHER_PROBE_ROLLBACK_FAILED",
+          new AggregateError([error, rollbackError])
+        );
+      }
+    }
+    throw stablePublisherError(
+      "RECOVERY_PUBLISHER_FUNCTION_PROBE_FAILED",
+      error
+    );
+  }
+  if (
+    appendResult?.rowCount !== 1 ||
+    appendResult.rows?.[0]?.bundle_digest !== bundle.bundleDigest ||
+    appendResult.rows?.[0]?.outcome !== "bundle_appended" ||
+    resolveResult?.rowCount !== 1 ||
+    resolveResult.rows?.[0]?.bundle_digest !== bundle.bundleDigest ||
+    resolveResult.rows?.[0]?.outcome !== "bundle_present"
+  ) {
+    throw stablePublisherError("RECOVERY_PUBLISHER_FUNCTION_PROBE_INVALID");
+  }
+  const rollbackReadback = await client.query(RESOLVE_SQL, [
+    bundle.tenantId,
+    bundle.recoverySessionId,
+    bundle.snapshotVersion,
+    bundle.bundleDigest
+  ]);
+  if (rollbackReadback?.rowCount !== 0) {
+    throw stablePublisherError("RECOVERY_PUBLISHER_PROBE_ROLLBACK_UNPROVEN");
+  }
+  const directTableDenials = {};
+  for (const [operation, sql] of [
+    ["SELECT", "SELECT 1 FROM mcp_private.recovery_bundles_v2 LIMIT 0"],
+    ["INSERT", "INSERT INTO mcp_private.recovery_bundles_v2 DEFAULT VALUES"],
+    ["UPDATE", "UPDATE mcp_private.recovery_bundles_v2 SET policy_version = policy_version WHERE false"],
+    ["DELETE", "DELETE FROM mcp_private.recovery_bundles_v2 WHERE false"]
+  ]) {
+    directTableDenials[operation.toLowerCase()] =
+      await expectDirectRecoveryTablePrivilegeDenied(client, operation, sql);
+  }
+  return {
+    schemaVersion: "tideproof.recovery-publisher-capability-posture.v1",
+    databaseName: session.database_name,
+    principal: session.session_user_name,
+    databaseVersionSha256: sha256(session.database_version),
+    databaseObservedAt: databaseNow,
+    functionProbe: {
+      appendOutcome: appendResult.rows[0].outcome,
+      resolveOutcome: resolveResult.rows[0].outcome,
+      rollbackVerified: true,
+      probeBundleDigest: bundle.bundleDigest
+    },
+    directTableDenials
+  };
+}
+
+export function recoveryPublisherPrivateSchemaRepairPlan() {
+  return Object.freeze({
+    schemaVersion: "tideproof.recovery-publisher-private-schema-repair.v1",
+    databaseName: "tideproof_recovery",
+    principal: RECOVERY_PUBLISHER_ROLE,
+    statement: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL,
+    statementSha256: sha256(RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL),
+    expectedAddedCapability: "SCHEMA:mcp_private:USAGE",
+    forbiddenDirectTablePrivileges: Object.freeze([
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ]),
+    confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+    mutationCount: 1
+  });
+}
+
+export async function repairRecoveryPublisherPrivateSchemaUsage({
+  adminConnectionString,
+  publisherConnectionString,
+  expectedRecoveryHostname,
+  expectedPreflightPostureDigest,
+  confirmation,
+  createAdminClient = () => new Client(bootstrapDatabaseConfig({
+    connectionString: adminConnectionString,
+    max: 1,
+    applicationName: "tideproof-recovery-schema-repair"
+  })),
+  createPublisherClient = () => new Client(runtimeDatabaseConfig({
+    connectionString: publisherConnectionString,
+    max: 1,
+    applicationName: "tideproof-recovery-schema-repair-probe"
+  })),
+  collectClusterPosture = (options) =>
+    collectClusterManagedGrantPosture(options)
+}) {
+  if (confirmation !== RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION) {
+    throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_CONFIRMATION_REQUIRED");
+  }
+  requiredSha256(
+    expectedPreflightPostureDigest,
+    "RECOVERY_SCHEMA_REPAIR_PREFLIGHT_DIGEST_INVALID"
+  );
+  const adminTarget = recoveryConnectionTarget(
+    adminConnectionString,
+    expectedRecoveryHostname
+  );
+  const publisherTarget = recoveryConnectionTarget(
+    publisherConnectionString,
+    expectedRecoveryHostname,
+    { publisher: true }
+  );
+  if (adminTarget.hostname !== publisherTarget.hostname) {
+    throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_TARGET_INVALID");
+  }
+
+  const admin = createAdminClient();
+  let preflight;
+  let finalPosture;
+  let clusterPreflight;
+  let clusterFinal;
+  try {
+    await admin.connect();
+    const posture = await collectDatabaseSecurityPosture(admin);
+    try {
+      validateRecoverySecurityPosture(posture);
+      throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_ALREADY_APPLIED");
+    } catch (error) {
+      if (error?.code === "RECOVERY_SCHEMA_REPAIR_ALREADY_APPLIED") {
+        throw error;
+      }
+    }
+    preflight = validateLegacyRecoverySecurityPosture(posture);
+    if (preflight.postureDigest !== expectedPreflightPostureDigest) {
+      throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_PREFLIGHT_MISMATCH");
+    }
+    clusterPreflight = await collectClusterPosture({
+      adminConnectionString,
+      principalDatabases: CLUSTER_PRINCIPAL_DATABASES
+    });
+    requiredSha256(
+      clusterPreflight?.postureDigest,
+      "RECOVERY_SCHEMA_REPAIR_CLUSTER_PREFLIGHT_INVALID"
+    );
+
+    let transactionStarted = false;
+    let commitDispatched = false;
+    try {
+      await admin.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+      transactionStarted = true;
+      await admin.query(RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL);
+      commitDispatched = true;
+      await admin.query("COMMIT");
+      transactionStarted = false;
+    } catch (error) {
+      if (transactionStarted && !commitDispatched) {
+        await admin.query("ROLLBACK").catch(() => {});
+      }
+      throw stablePublisherError(
+        commitDispatched
+          ? "RECOVERY_SCHEMA_REPAIR_COMMIT_UNKNOWN"
+          : "RECOVERY_SCHEMA_REPAIR_NOT_APPLIED",
+        error
+      );
+    }
+
+    finalPosture = validateRecoverySecurityPosture(
+      await collectDatabaseSecurityPosture(admin)
+    );
+    clusterFinal = await collectClusterPosture({
+      adminConnectionString,
+      principalDatabases: CLUSTER_PRINCIPAL_DATABASES
+    });
+    requiredSha256(
+      clusterFinal?.postureDigest,
+      "RECOVERY_SCHEMA_REPAIR_CLUSTER_FINAL_INVALID"
+    );
+  } finally {
+    await admin.end().catch(() => {});
+  }
+
+  const publisher = createPublisherClient();
+  let capabilityPosture;
+  try {
+    await publisher.connect();
+    capabilityPosture = await collectRecoveryPublisherCapabilityPosture(
+      publisher
+    );
+  } finally {
+    await publisher.end().catch(() => {});
+  }
+  return {
+    ...recoveryPublisherPrivateSchemaRepairPlan(),
+    status: "CONFIRMED_APPLIED",
+    target: {
+      databaseName: adminTarget.databaseName,
+      hostnameSha256: sha256(adminTarget.hostname),
+      adminPrincipalSha256: sha256(adminTarget.username),
+      publisherPrincipal: publisherTarget.username
+    },
+    preflightPostureDigest: preflight.postureDigest,
+    finalPostureDigest: finalPosture.postureDigest,
+    clusterPreflightPostureDigest: clusterPreflight.postureDigest,
+    clusterFinalPostureDigest: clusterFinal.postureDigest,
+    capabilityPosture,
+    claimBoundary:
+      "This confirms one schema-USAGE repair and rollback-safe publisher probes. It grants no direct table privilege, cross-database capability, deployment authority, or release authority."
+  };
 }
 
 export async function bootstrapRecoverySecurity({
@@ -566,7 +971,7 @@ export async function bootstrapRecoverySecurity({
       `GRANT CONNECT ON DATABASE tideproof_recovery TO ${RECOVERY_PUBLISHER_ROLE}`
     );
     await client.query(
-      `GRANT USAGE ON SCHEMA mcp_api TO ${RECOVERY_PUBLISHER_ROLE}`
+      `GRANT USAGE ON SCHEMA mcp_api, mcp_private TO ${RECOVERY_PUBLISHER_ROLE}`
     );
     await client.query(
       `GRANT EXECUTE ON FUNCTION ${APPEND_SIGNATURE} TO ${RECOVERY_PUBLISHER_ROLE}`
@@ -792,6 +1197,8 @@ export async function appendRecoveryBundleWithClient(
 
 export const __test = Object.freeze({
   APPEND_SQL,
+  CLUSTER_PRINCIPAL_DATABASES,
+  LEGACY_RECOVERY_POSTURE_SPEC,
   RESOLVE_SQL,
   RECOVERY_PUBLISH_MAX_ATTEMPTS,
   RECOVERY_PUBLISH_RETRY_DEADLINE_MS,

@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  appendRecoveryBundleWithClient
+  __test as recoverySecurityContract,
+  appendRecoveryBundleWithClient,
+  collectRecoveryPublisherCapabilityPosture,
+  RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+  repairRecoveryPublisherPrivateSchemaUsage
 } from "../src/cloud/recovery-security.js";
+import {
+  validateDatabaseSecurityPosture
+} from "../src/cloud/database-security-posture.js";
 
 const BUNDLE = Object.freeze({
   tenantId: "11111111-1111-4111-8111-111111111111",
@@ -41,6 +48,329 @@ function result() {
 function sqlState(code, message = code) {
   return Object.assign(new Error(message), { code });
 }
+
+function publisherProbeClient({ directOperationAllowed = null } = {}) {
+  let appendedBundleDigest = null;
+  let appendTransactionActive = false;
+  const calls = [];
+  return {
+    calls,
+    async connect() {},
+    async end() {},
+    async query(text, values = []) {
+      const sql = text.trim();
+      calls.push(sql);
+      if (sql.includes("statement_timestamp() AS database_now")) {
+        return {
+          rowCount: 1,
+          rows: [{
+            database_name: "tideproof_recovery",
+            current_user_name: "tp_recovery_publisher_user",
+            session_user_name: "tp_recovery_publisher_user",
+            database_version: "CockroachDB CCL v26.2.5",
+            database_now: new Date("2026-08-18T13:00:00.000Z")
+          }]
+        };
+      }
+      if (sql.startsWith("BEGIN TRANSACTION")) {
+        appendTransactionActive = true;
+        return {};
+      }
+      if (sql === "ROLLBACK") {
+        appendTransactionActive = false;
+        return {};
+      }
+      if (sql.includes("mcp_api.append_recovery_bundle_v2")) {
+        appendedBundleDigest = values[8];
+        return {
+          rowCount: 1,
+          rows: [{
+            bundle_digest: appendedBundleDigest,
+            outcome: "bundle_appended",
+            database_now: new Date("2026-08-18T13:00:01.000Z")
+          }]
+        };
+      }
+      if (sql.includes("mcp_api.resolve_recovery_bundle_v1")) {
+        return appendTransactionActive && appendedBundleDigest === values[3]
+          ? {
+              rowCount: 1,
+              rows: [{
+                bundle_digest: appendedBundleDigest,
+                outcome: "bundle_present",
+                database_now: new Date("2026-08-18T13:00:01.000Z")
+              }]
+            }
+          : { rowCount: 0, rows: [] };
+      }
+      const operation = sql.split(/\s+/u)[0];
+      if (
+        sql.includes("mcp_private.recovery_bundles_v2") &&
+        ["SELECT", "INSERT", "UPDATE", "DELETE"].includes(operation)
+      ) {
+        if (directOperationAllowed === operation) return { rowCount: 0, rows: [] };
+        throw sqlState("42501", `${operation} denied`);
+      }
+      return {};
+    }
+  };
+}
+
+function recoveryAdminPosture({ privateUsage = false, extraGrants = [] } = {}) {
+  const functionNames = [
+    "append_recovery_bundle_v2(uuid,uuid,text,int8,int8,uuid,timestamptz,text,text,text,text,text,text,text,text,jsonb,jsonb,jsonb,jsonb,timestamptz)",
+    "resolve_recovery_bundle_v1(uuid,uuid,int8,text)"
+  ];
+  return {
+    session: [{
+      database_name: "tideproof_recovery",
+      current_user_name: "cluster_admin",
+      session_user_name: "cluster_admin",
+      database_version: "CockroachDB CCL v26.2.5"
+    }],
+    principals: [
+      { username: "cluster_admin", options: [] },
+      { username: "tp_recovery_owner", options: ["NOLOGIN"] },
+      { username: "tp_recovery_publisher_role", options: ["NOLOGIN"] },
+      { username: "tp_recovery_publisher_user", options: [] }
+    ],
+    memberships: [
+      { role_name: "admin", member: "cluster_admin", is_admin: false },
+      {
+        role_name: "tp_recovery_publisher_role",
+        member: "tp_recovery_publisher_user",
+        is_admin: false
+      }
+    ],
+    systemGrants: [],
+    objectGrants: [
+      {
+        database_name: "tideproof_recovery",
+        schema_name: null,
+        object_name: null,
+        object_type: "database",
+        grantee: "tp_recovery_publisher_role",
+        privilege_type: "CONNECT",
+        is_grantable: false
+      },
+      {
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_api",
+        object_name: null,
+        object_type: "schema",
+        grantee: "tp_recovery_publisher_role",
+        privilege_type: "USAGE",
+        is_grantable: false
+      },
+      ...(privateUsage ? [{
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_private",
+        object_name: null,
+        object_type: "schema",
+        grantee: "tp_recovery_publisher_role",
+        privilege_type: "USAGE",
+        is_grantable: false
+      }] : []),
+      ...functionNames.map((objectName) => ({
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_api",
+        object_name: objectName,
+        object_type: "function",
+        grantee: "tp_recovery_publisher_role",
+        privilege_type: "EXECUTE",
+        is_grantable: false
+      })),
+      ...extraGrants
+    ],
+    defaultGrants: []
+  };
+}
+
+function recoveryAdminClient(options = {}) {
+  let repaired = options.privateUsage ?? false;
+  const calls = [];
+  return {
+    calls,
+    async connect() {},
+    async end() {},
+    async query(sql) {
+      calls.push(sql.trim());
+      if (sql.includes("FROM [SHOW USERS]")) {
+        return { rows: recoveryAdminPosture({
+          privateUsage: repaired,
+          extraGrants: options.extraGrants
+        }).principals };
+      }
+      if (sql.includes("FROM [SHOW GRANTS ON ROLE]")) {
+        return { rows: recoveryAdminPosture({
+          privateUsage: repaired,
+          extraGrants: options.extraGrants
+        }).memberships };
+      }
+      if (sql.includes("FROM [SHOW SYSTEM GRANTS]")) return { rows: [] };
+      if (sql.includes("FROM [SHOW GRANTS]")) {
+        return { rows: recoveryAdminPosture({
+          privateUsage: repaired,
+          extraGrants: options.extraGrants
+        }).objectGrants };
+      }
+      if (sql.includes("FROM [SHOW DEFAULT PRIVILEGES]")) return { rows: [] };
+      if (sql.includes("current_database() AS database_name")) {
+        return { rows: recoveryAdminPosture({
+          privateUsage: repaired,
+          extraGrants: options.extraGrants
+        }).session };
+      }
+      if (sql === "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role") {
+        repaired = true;
+      }
+      return { rows: [] };
+    }
+  };
+}
+
+test("publisher capability collector executes functions only in a rolled-back probe", async () => {
+  const client = publisherProbeClient();
+  const result = await collectRecoveryPublisherCapabilityPosture(client);
+  assert.equal(result.functionProbe.appendOutcome, "bundle_appended");
+  assert.equal(result.functionProbe.resolveOutcome, "bundle_present");
+  assert.equal(result.functionProbe.rollbackVerified, true);
+  assert.deepEqual(
+    Object.keys(result.directTableDenials),
+    ["select", "insert", "update", "delete"]
+  );
+  assert.equal(
+    Object.values(result.directTableDenials).every(
+      (entry) => entry.denied && entry.sqlstate === "42501"
+    ),
+    true
+  );
+  assert.equal(
+    client.calls.filter((sql) => sql === "ROLLBACK").length,
+    5
+  );
+  assert.equal(client.calls.includes("COMMIT"), false);
+});
+
+test("publisher capability collector rejects any direct private-table operation", async () => {
+  for (const operation of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+    await assert.rejects(
+      collectRecoveryPublisherCapabilityPosture(
+        publisherProbeClient({ directOperationAllowed: operation })
+      ),
+      new RegExp(`RECOVERY_PUBLISHER_DIRECT_${operation}_NOT_DENIED`, "u")
+    );
+  }
+});
+
+test("existing-cluster repair accepts only exact legacy posture and verifies the result", async () => {
+  const admin = recoveryAdminClient();
+  const legacySummary = validateDatabaseSecurityPosture(
+    recoveryAdminPosture(),
+    recoverySecurityContract.LEGACY_RECOVERY_POSTURE_SPEC
+  );
+  let clusterReads = 0;
+  const result = await repairRecoveryPublisherPrivateSchemaUsage({
+    adminConnectionString:
+      "postgresql://cluster_admin:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    publisherConnectionString:
+      "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    expectedRecoveryHostname: "recovery.example",
+    expectedPreflightPostureDigest: legacySummary.postureDigest,
+    confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+    createAdminClient: () => admin,
+    createPublisherClient: () => publisherProbeClient(),
+    collectClusterPosture: async () => ({
+      postureDigest: `${++clusterReads}`.repeat(64)
+    })
+  });
+  assert.equal(result.status, "CONFIRMED_APPLIED");
+  assert.equal(result.preflightPostureDigest, legacySummary.postureDigest);
+  assert.notEqual(result.finalPostureDigest, result.preflightPostureDigest);
+  assert.equal(result.capabilityPosture.functionProbe.rollbackVerified, true);
+  assert.equal(clusterReads, 2);
+  assert.equal(
+    admin.calls.filter((sql) =>
+      sql === "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
+    ).length,
+    1
+  );
+});
+
+test("existing-cluster repair fails closed on already-repaired or drifted posture", async () => {
+  const common = {
+    adminConnectionString:
+      "postgresql://cluster_admin:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    publisherConnectionString:
+      "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    expectedRecoveryHostname: "recovery.example",
+    expectedPreflightPostureDigest: "a".repeat(64),
+    confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+    createPublisherClient: () => publisherProbeClient(),
+    collectClusterPosture: async () => ({ postureDigest: "b".repeat(64) })
+  };
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      createAdminClient: () => recoveryAdminClient({ privateUsage: true })
+    }),
+    /RECOVERY_SCHEMA_REPAIR_ALREADY_APPLIED/u
+  );
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      createAdminClient: () => recoveryAdminClient({
+        extraGrants: [{
+          database_name: "tideproof_recovery",
+          schema_name: "mcp_private",
+          object_name: "recovery_bundles_v2",
+          object_type: "table",
+          grantee: "tp_recovery_publisher_role",
+          privilege_type: "SELECT",
+          is_grantable: false
+        }]
+      })
+    }),
+    /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
+  );
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      publisherConnectionString:
+        "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=require",
+      createAdminClient: () => recoveryAdminClient()
+    }),
+    /RECOVERY_SCHEMA_REPAIR_TARGET_INVALID/u
+  );
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      confirmation: "not-authorized",
+      createAdminClient: () => recoveryAdminClient()
+    }),
+    /RECOVERY_SCHEMA_REPAIR_CONFIRMATION_REQUIRED/u
+  );
+  const clusterInvalidAdmin = recoveryAdminClient();
+  const legacySummary = validateDatabaseSecurityPosture(
+    recoveryAdminPosture(),
+    recoverySecurityContract.LEGACY_RECOVERY_POSTURE_SPEC
+  );
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      expectedPreflightPostureDigest: legacySummary.postureDigest,
+      createAdminClient: () => clusterInvalidAdmin,
+      collectClusterPosture: async () => ({})
+    }),
+    /RECOVERY_SCHEMA_REPAIR_CLUSTER_PREFLIGHT_INVALID/u
+  );
+  assert.equal(
+    clusterInvalidAdmin.calls.includes(
+      "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
+    ),
+    false
+  );
+});
 
 test("recovery publisher succeeds without retry", async () => {
   const calls = [];

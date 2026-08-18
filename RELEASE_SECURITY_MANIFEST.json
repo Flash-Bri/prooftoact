@@ -312,7 +312,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "0aad7ffa066c7ac976fadaaff15f01a486dae50cd5fe0fc11cf49a60ebffe4ad"
+      "sha256": "1b6aa009da23bcc0695619fde917030cc3f5761cdf2573923459cc5aca7b9815"
     },
     {
       "id": "database-security-posture",
@@ -324,7 +324,7 @@
       "id": "database-security-posture-tests",
       "path": "test/database-security-posture.test.js",
       "role": "DATABASE_POSTURE_VERIFICATION",
-      "sha256": "06fdda2fd752fef585697e5723da047662496dbd4ad09ab809c0a6002301816f"
+      "sha256": "fb88a73a4ec7521c907faeef753a1991c02454a1745da08aceed7c8320f36f50"
     },
     {
       "id": "dependency-snapshot",
@@ -1158,7 +1158,7 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "2b63d892863e3622747ec2613e5653ea4746817da06bd8bb86226825b6b7ebac"
+      "sha256": "8dd2df67a2a26a1addc83d572193c5bba02f93c120e99754b524f3da92de966a"
     },
     {
       "id": "recovery-audit-reconciliation-tests",
@@ -1227,10 +1227,16 @@
       "sha256": "84103f0e7f8ff499ca00fdeb6778427c279096dc968857ffbed723c9984f046e"
     },
     {
+      "id": "recovery-publisher-schema-repair",
+      "path": "scripts/repair-recovery-publisher-private-schema-usage.js",
+      "role": "RECOVERY_PUBLISHER_EXISTING_CLUSTER_REPAIR",
+      "sha256": "cef1351d7aec1f717a5e3c05de46d8af42742c40f050cbf22672c2ac8487f063"
+    },
+    {
       "id": "recovery-publication-reconciliation-tests",
       "path": "test/recovery-security.test.js",
       "role": "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION",
-      "sha256": "82e0087fa7b581d6183020b0a017664a0965064bf0b6640ae543ef7bcd1cbbc9"
+      "sha256": "2e67d3f5f87ea7bfd7aefde10d8cae547b4b8ed96e612713fed610eb38e74684"
     },
     {
       "id": "recovery-store",
