@@ -35,6 +35,71 @@ permission, but the workflow input defaults to diagnostic-only and the source
 candidate never turns that dormant path into provider authority. The remaining
 five workflows must still be diagnostic-only.
 
+The bootstrap readback verifier is provider-I/O-free. It validates caller-
+supplied AWS read-only responses against the exact reviewed bootstrap template,
+ten-resource inventory, retained DynamoDB identity, permissions boundary, eight
+role trust/policy documents, and sixteen source-owned IAM simulation vectors.
+Only after every check passes does it derive the five nonsecret PREPARE
+environment values. That receipt proves the release-control bootstrap only; it
+grants no provider, deployment, publication, or submission authority.
+It validates response semantics and exact source equality, but does not
+independently prove collector execution, read-only behavior, or principal
+independence.
+The sole accepted drift is DynamoDB's AWS-managed KMS normalization: source
+`ExpectedProperties` must still contain `alias/aws/dynamodb`, and the summary
+field must byte-match either that alias or the one source-owned CloudFormation
+KMS-ARN-pattern sentinel observed in the retained provider response.
+
+Generate the exact read-only IAM simulation plan or shell commands without
+calling AWS:
+
+```text
+node scripts/release-provider-bootstrap-readback.js \
+  --simulation-plan 123456789012 private-versioned-artifact-bucket
+
+node scripts/release-provider-bootstrap-readback.js \
+  --simulation-commands 123456789012 private-versioned-artifact-bucket
+```
+
+The accepted input schema is
+`prooftoact.release-control-bootstrap-readback-input.v1`. Its exact top-level
+keys are `schemaVersion`, `accountId`, `artifactBucketName`, `observedAt`,
+`providerMutationAbsenceCallerAsserted`, `readOnlyCollectionCallerAsserted`,
+`region`, and `responses`. Those two collection statements remain caller
+assertions, not independent proof. The exact response set is `boundary`,
+`callerIdentity`, `deployedTemplate`,
+`describeKmsKey`, `describeTable`, `listStackResourceDrifts`,
+`listStackResources`, `listTableTags`, `roles`, `simulations`, and `stack`;
+nested response shapes are fail-closed in the
+verifier and exercised by synthetic fixtures.
+
+Verify one assembled, absolute-path JSON input. Output is written only after
+full acceptance:
+
+```text
+node scripts/release-provider-bootstrap-readback.js \
+  --verify-input /absolute/private/bootstrap-readback-input.json
+```
+
+On an already authenticated AWS CloudShell, the source-owned collector creates
+one new local evidence directory, performs only read-only provider calls, then
+assembles and verifies the exact schema without hand-editing JSON:
+
+```text
+bash scripts/release-provider-bootstrap-readback-collector.sh \
+  123456789012 private-versioned-artifact-bucket \
+  /absolute/new/private/bootstrap-readback
+```
+
+It calls only STS `get-caller-identity`; CloudFormation `describe`, `get`, and
+`list`; DynamoDB `describe-table` and `list-tags-of-resource`; KMS
+`describe-key`; and IAM `get`, `list`, and `simulate-principal-policy`. It does
+not detect drift, mutate a stack, write a table, modify IAM, or authorize a
+later phase. The receipt binds the local collector and verifier source digests,
+labels collector execution as unproven, and requires the raw collector bundle
+to accompany any publication. The accepted receipt and five-value output are
+written beside the raw directory only after the verifier succeeds.
+
 Missing source or provider evidence is represented as `HOLD`. A verified
 candidate never authorizes deployment, provider access, spending, publication,
 or submission. Provider truth is accepted only through the dedicated sanitized
