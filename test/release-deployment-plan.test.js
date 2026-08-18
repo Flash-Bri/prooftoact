@@ -730,16 +730,19 @@ test("every GitHub role binds supported claims and requires runtime workflow-ref
   const rolesTemplate = deploymentRolesTemplate();
   const expected = {
     LiveDrillOperatorRole: {
+      credentialWorkflowFile: "prooftoact-sealed-live-drill.yml",
       environment: "aws-live-drill",
       workflows: ["ProofToAct Bounded Live Drill"],
       workflowFiles: ["prooftoact-bounded-live-drill.yml"]
     },
     ReleaseDeploymentRole: {
+      credentialWorkflowFile: "prooftoact-sealed-prepare.yml",
       environment: "aws-release-deployment",
       workflows: ["ProofToAct Release Candidate"],
       workflowFiles: ["prooftoact-release-candidate.yml"]
     },
     ReleaseCoordinatorRole: {
+      credentialWorkflowFile: "prooftoact-sealed-coordinator.yml",
       environment: "aws-release-coordination",
       workflows: [
         "ProofToAct Release Candidate",
@@ -757,27 +760,32 @@ test("every GitHub role binds supported claims and requires runtime workflow-ref
       ]
     },
     ReleaseEvidenceRole: {
+      credentialWorkflowFile: "prooftoact-sealed-evidence.yml",
       environment: "aws-release-evidence",
       workflows: ["ProofToAct Read Only Release Evidence"],
       workflowFiles: ["prooftoact-read-only-release-evidence.yml"]
     },
     ReleaseExecutionRole: {
+      credentialWorkflowFile: "prooftoact-sealed-execute.yml",
       environment: "aws-release-execution",
       workflows: ["ProofToAct Execute Approved Release"],
       workflowFiles: ["prooftoact-execute-approved-release.yml"]
     },
     ReleaseTeardownRole: {
+      credentialWorkflowFile: "prooftoact-sealed-teardown.yml",
       environment: "aws-release-teardown",
       workflows: ["ProofToAct Approved Teardown"],
       workflowFiles: ["prooftoact-approved-teardown.yml"]
     },
     ReleaseTerminalizerRole: {
+      credentialWorkflowFile: "prooftoact-sealed-terminalizer.yml",
       environment: "aws-release-terminalization",
       workflows: ["ProofToAct Terminalize Expired Release"],
       workflowFiles: ["prooftoact-terminalize-expired-release.yml"]
     }
   };
-  for (const [logicalId, { environment, workflowFiles, workflows }] of
+  for (const [logicalId, { credentialWorkflowFile, environment,
+    workflowFiles, workflows }] of
     Object.entries(expected)) {
     const equals = rolesTemplate.Resources[logicalId].Properties
       .AssumeRolePolicyDocument.Statement[0].Condition.StringEquals;
@@ -795,17 +803,17 @@ test("every GitHub role binds supported claims and requires runtime workflow-ref
       equals["token.actions.githubusercontent.com:workflow"],
       logicalId === "ReleaseCoordinatorRole" ? workflows : workflows[0]
     );
+    const credentialWorkflowRef =
+      `Flash-Bri/prooftoact/.github/workflows/${credentialWorkflowFile}` +
+      "@50d0cd261b8597fe74c80b84c49be0adde5bdf6f";
     assert.equal(
-      Object.hasOwn(equals, "token.actions.githubusercontent.com:workflow_ref"),
-      false
-    );
-    const requiredRefs = workflowFiles.map((workflowFile) =>
-      `Flash-Bri/prooftoact/.github/workflows/${workflowFile}@refs/heads/main`
+      equals["token.actions.githubusercontent.com:job_workflow_ref"],
+      credentialWorkflowRef
     );
     assert.deepEqual(
       buildReleaseUploadPlan(input()).authoritySeparation
         .requiredRuntimeWorkflowRefs[logicalId],
-      logicalId === "ReleaseCoordinatorRole" ? requiredRefs : requiredRefs[0]
+      credentialWorkflowRef
     );
 
     const drift = deploymentRolesTemplate();
@@ -823,13 +831,14 @@ test("every GitHub role binds supported claims and requires runtime workflow-ref
       /RELEASE_PLAN_OIDC_TRUST_REJECTED/u
     );
 
-    const unsupported = deploymentRolesTemplate();
-    unsupported.Resources[logicalId].Properties.AssumeRolePolicyDocument
+    const mutableReusableRef = deploymentRolesTemplate();
+    mutableReusableRef.Resources[logicalId].Properties.AssumeRolePolicyDocument
       .Statement[0].Condition.StringEquals[
-        "token.actions.githubusercontent.com:workflow_ref"
-      ] = `Flash-Bri/prooftoact/.github/workflows/${workflowFiles[0]}@refs/heads/main`;
+        "token.actions.githubusercontent.com:job_workflow_ref"
+      ] = `Flash-Bri/prooftoact/.github/workflows/${credentialWorkflowFile}@refs/heads/main`;
     assert.throws(
-      () => validateReleaseDeploymentRoleTemplate(unsupported, gate2Template()),
+      () => validateReleaseDeploymentRoleTemplate(mutableReusableRef,
+        gate2Template()),
       /RELEASE_PLAN_OIDC_TRUST_REJECTED/u
     );
   }
