@@ -34,15 +34,17 @@ export const RECOVERY_PUBLISHER_ROLE = "tp_recovery_publisher_role";
 export const RECOVERY_PUBLISHER_USER = "tp_recovery_publisher_user";
 export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION =
   "REPAIR_TP_RECOVERY_PUBLISHER_PRIVATE_SCHEMA_USAGE_V1";
-export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID =
+export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID =
   "24f93c44-fa61-467c-bd3f-a1153618c309";
+export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID =
+  "9fad7a1e-e440-4989-383b-6a191b947e6e";
 export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL =
   `GRANT USAGE ON SCHEMA mcp_private TO ${RECOVERY_PUBLISHER_ROLE}`;
 const RECOVERY_SECURITY_SOURCE_ROOT = path.resolve(
   fileURLToPath(new URL("../../", import.meta.url))
 );
 const LOWERCASE_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const RECOVERY_ROLE_BINDINGS = [
   [RECOVERY_PUBLISHER_ROLE, RECOVERY_PUBLISHER_USER]
 ];
@@ -351,7 +353,8 @@ function requiredGitObjectId(value, code) {
 }
 
 function validateSchemaRepairBinding({
-  expectedRecoveryClusterId,
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
   expectedPreflightPostureDigest,
   expectedClusterPreflightPostureDigest,
   expectedAppendFunctionDefinitionSha256,
@@ -361,10 +364,20 @@ function validateSchemaRepairBinding({
   verifySourceCheckout = assertCleanExactGitCheckout
 }) {
   if (
-    expectedRecoveryClusterId !==
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+    expectedRecoveryProviderClusterId !==
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID
   ) {
-    throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_CLUSTER_ID_INVALID");
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID_INVALID"
+    );
+  }
+  if (
+    expectedRecoverySqlClusterId !==
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
+  ) {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_SQL_CLUSTER_ID_INVALID"
+    );
   }
   const checkedSourceCommit = requiredGitObjectId(
     sourceCommit,
@@ -401,7 +414,8 @@ function validateSchemaRepairBinding({
     );
   }
   return Object.freeze({
-    clusterId: expectedRecoveryClusterId,
+    providerClusterId: expectedRecoveryProviderClusterId,
+    sqlClusterId: expectedRecoverySqlClusterId,
     expectedPreflightPostureDigest: requiredSha256(
       expectedPreflightPostureDigest,
       "RECOVERY_SCHEMA_REPAIR_PREFLIGHT_DIGEST_INVALID"
@@ -667,14 +681,14 @@ async function expectDirectRecoveryTablePrivilegeDenied(client, operation, sql) 
 
 export async function collectRecoveryPublisherCapabilityPosture(
   client,
-  { expectedRecoveryClusterId } = {}
+  { expectedRecoverySqlClusterId } = {}
 ) {
   if (typeof client?.query !== "function") {
     throw new TypeError("RECOVERY_PUBLISHER_PROBE_CLIENT_REQUIRED");
   }
-  const observedRecoveryClusterId = requireObservedRecoveryClusterId(
+  const observedRecoverySqlClusterId = requireObservedRecoveryClusterId(
     await collectObservedRecoveryClusterId(client),
-    expectedRecoveryClusterId
+    expectedRecoverySqlClusterId
   );
   const sessionResult = await client.query(`
     SELECT
@@ -762,8 +776,8 @@ export async function collectRecoveryPublisherCapabilityPosture(
       await expectDirectRecoveryTablePrivilegeDenied(client, operation, sql);
   }
   return {
-    schemaVersion: "tideproof.recovery-publisher-capability-posture.v1",
-    clusterId: observedRecoveryClusterId,
+    schemaVersion: "tideproof.recovery-publisher-capability-posture.v2",
+    sqlClusterId: observedRecoverySqlClusterId,
     databaseName: session.database_name,
     principal: session.session_user_name,
     databaseVersionSha256: sha256(session.database_version),
@@ -780,9 +794,12 @@ export async function collectRecoveryPublisherCapabilityPosture(
 
 export function recoveryPublisherPrivateSchemaRepairPlan() {
   return Object.freeze({
-    schemaVersion: "tideproof.recovery-publisher-private-schema-repair.v2",
+    schemaVersion: "tideproof.recovery-publisher-private-schema-repair.v3",
     databaseName: "tideproof_recovery",
-    clusterId: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+    providerClusterId:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID,
+    sqlClusterId:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID,
     principal: RECOVERY_PUBLISHER_ROLE,
     statement: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL,
     statementSha256: sha256(RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL),
@@ -804,8 +821,10 @@ function schemaRepairTargetReceipt(
   binding
 ) {
   return Object.freeze({
-    clusterId: binding.clusterId,
-    clusterIdSha256: sha256(binding.clusterId),
+    providerClusterId: binding.providerClusterId,
+    providerClusterIdSha256: sha256(binding.providerClusterId),
+    sqlClusterId: binding.sqlClusterId,
+    sqlClusterIdSha256: sha256(binding.sqlClusterId),
     databaseName: adminTarget.databaseName,
     hostnameSha256: sha256(adminTarget.hostname),
     adminPrincipalSha256: sha256(adminTarget.username),
@@ -830,7 +849,8 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
   adminConnectionString,
   publisherConnectionString,
   expectedRecoveryHostname,
-  expectedRecoveryClusterId,
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
   expectedPreflightPostureDigest,
   expectedClusterPreflightPostureDigest,
   expectedAppendFunctionDefinitionSha256,
@@ -862,7 +882,8 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
     );
   }
   const binding = validateSchemaRepairBinding({
-    expectedRecoveryClusterId,
+    expectedRecoveryProviderClusterId,
+    expectedRecoverySqlClusterId,
     expectedPreflightPostureDigest,
     expectedClusterPreflightPostureDigest,
     expectedAppendFunctionDefinitionSha256,
@@ -887,13 +908,13 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
   let classified;
   let clusterObserved;
   let functionDefinitions;
-  let adminObservedRecoveryClusterId;
+  let adminObservedRecoverySqlClusterId;
   const admin = createAdminClient();
   try {
     await admin.connect();
-    adminObservedRecoveryClusterId = requireObservedRecoveryClusterId(
+    adminObservedRecoverySqlClusterId = requireObservedRecoveryClusterId(
       await collectObservedRecoveryClusterId(admin),
-      binding.clusterId
+      binding.sqlClusterId
     );
     classified = classifyRecoverySchemaRepairPosture(
       await collectDatabaseSecurityPosture(admin)
@@ -942,7 +963,7 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
       "CALLER_SUPPLIED_BINDING_NOT_REOBSERVED",
     observedPostureDigest: classified.summary.postureDigest,
     observedClusterPostureDigest: clusterObserved.postureDigest,
-    observedRecoveryClusterId: adminObservedRecoveryClusterId,
+    observedRecoverySqlClusterId: adminObservedRecoverySqlClusterId,
     expectedFunctionDefinitionDigests:
       binding.expectedFunctionDefinitionDigests,
     functionDefinitions,
@@ -965,7 +986,7 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
     await publisher.connect();
     capabilityPosture = await collectRecoveryPublisherCapabilityPosture(
       publisher,
-      { expectedRecoveryClusterId: binding.clusterId }
+      { expectedRecoverySqlClusterId: binding.sqlClusterId }
     );
   } catch (error) {
     throw stablePublisherError(
@@ -989,7 +1010,8 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
   adminConnectionString,
   publisherConnectionString,
   expectedRecoveryHostname,
-  expectedRecoveryClusterId,
+  expectedRecoveryProviderClusterId,
+  expectedRecoverySqlClusterId,
   expectedPreflightPostureDigest,
   expectedClusterPreflightPostureDigest,
   expectedAppendFunctionDefinitionSha256,
@@ -1018,7 +1040,8 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
     throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_CONFIRMATION_REQUIRED");
   }
   const binding = validateSchemaRepairBinding({
-    expectedRecoveryClusterId,
+    expectedRecoveryProviderClusterId,
+    expectedRecoverySqlClusterId,
     expectedPreflightPostureDigest,
     expectedClusterPreflightPostureDigest,
     expectedAppendFunctionDefinitionSha256,
@@ -1044,14 +1067,14 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
   let preflight;
   let clusterPreflight;
   let preflightFunctionDefinitions;
-  let preflightObservedRecoveryClusterId;
+  let preflightObservedRecoverySqlClusterId;
   let commitAcknowledged = false;
   let commitError = null;
   try {
     await admin.connect();
-    preflightObservedRecoveryClusterId = requireObservedRecoveryClusterId(
+    preflightObservedRecoverySqlClusterId = requireObservedRecoveryClusterId(
       await collectObservedRecoveryClusterId(admin),
-      binding.clusterId
+      binding.sqlClusterId
     );
     const classified = classifyRecoverySchemaRepairPosture(
       await collectDatabaseSecurityPosture(admin)
@@ -1124,7 +1147,8 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
       adminConnectionString,
       publisherConnectionString,
       expectedRecoveryHostname,
-      expectedRecoveryClusterId: binding.clusterId,
+      expectedRecoveryProviderClusterId: binding.providerClusterId,
+      expectedRecoverySqlClusterId: binding.sqlClusterId,
       expectedPreflightPostureDigest:
         binding.expectedPreflightPostureDigest,
       expectedClusterPreflightPostureDigest:
@@ -1159,7 +1183,7 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
     mutationDispatchCount: 1,
     preflightPostureDigest: preflight.postureDigest,
     clusterPreflightPostureDigest: clusterPreflight.postureDigest,
-    preflightObservedRecoveryClusterId,
+    preflightObservedRecoverySqlClusterId,
     preflightFunctionDefinitions,
     commitAcknowledged,
     claimBoundary:

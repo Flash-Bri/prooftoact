@@ -30,9 +30,13 @@ function boundOptions(environment) {
       environment,
       "EXPECTED_RECOVERY_HOSTNAME"
     ),
-    expectedRecoveryClusterId: requiredEnvironment(
+    expectedRecoveryProviderClusterId: requiredEnvironment(
       environment,
       "EXPECTED_RECOVERY_CLUSTER_ID"
+    ),
+    expectedRecoverySqlClusterId: requiredEnvironment(
+      environment,
+      "EXPECTED_RECOVERY_SQL_CLUSTER_ID"
     ),
     expectedPreflightPostureDigest: requiredEnvironment(
       environment,
@@ -66,6 +70,7 @@ const REQUIRED_BOUND_ENVIRONMENT = Object.freeze([
   "RECOVERY_PUBLISHER_DATABASE_URL",
   "EXPECTED_RECOVERY_HOSTNAME",
   "EXPECTED_RECOVERY_CLUSTER_ID",
+  "EXPECTED_RECOVERY_SQL_CLUSTER_ID",
   "EXPECTED_RECOVERY_PRE_REPAIR_POSTURE_SHA256",
   "EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256",
   "EXPECTED_RECOVERY_APPEND_FUNCTION_DEFINITION_SHA256",
