@@ -66,6 +66,23 @@ jobs:
           NODE_V8_COVERAGE: ""
         run: node scripts/normalize-release-control-checkouts.js
 
+      - name: Bootstrap exact control-plane module graph for verifier loading
+        working-directory: control-plane
+        env:
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+          npm_config_audit: "false"
+          npm_config_fund: "false"
+          npm_config_ignore_scripts: "true"
+          npm_config_update_notifier: "false"
+        run: |
+          npm_cli="$(node -e 'const path = require("node:path"); process.stdout.write(path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npm-cli.js"));')"
+          node "$npm_cli" ci --ignore-scripts --no-audit --no-fund
+
       - name: Generate complete no-provider dual-root evidence
         working-directory: control-plane
         env:
