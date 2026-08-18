@@ -703,6 +703,10 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/managed-mcp-client.test.js",
     role: "RECOVERY_MCP_STRICT_TRANSPORT_VERIFICATION"
   }),
+  "managed-mcp-recovery-grant-repair": Object.freeze({
+    path: "scripts/repair-managed-mcp-recovery-grants.js",
+    role: "MANAGED_MCP_RECOVERY_EXISTING_CLUSTER_REPAIR"
+  }),
   "primary-security-bootstrap": Object.freeze({
     path: "src/cloud/primary-security.js",
     role: "PRIMARY_DATABASE_SECURITY"
@@ -1971,6 +1975,9 @@ const SOURCE_MARKERS = Object.freeze({
     "DATABASE_POSTURE_EXTERNAL_OBJECT_GRANT",
     "DATABASE_POSTURE_DEFAULT_GRANT_UNSAFE",
     "DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED",
+    "directPrincipalGrantPolicies",
+    "policy?.allowAbsent === true",
+    "policy?.databaseConnect === false",
     "DATABASE_POSTURE_OUT_OF_SCOPE_GRANT",
     "DATABASE_POSTURE_DIRECT_USER_GRANT",
     "DATABASE_POSTURE_CROSS_BOUNDARY_GRANT",
@@ -3201,6 +3208,21 @@ const SOURCE_MARKERS = Object.freeze({
     "Managed MCP SSE rejects malformed, duplicate, or uncorrelated response data",
     "RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS"
   ]),
+  "managed-mcp-recovery-grant-repair": Object.freeze([
+    "--preflight",
+    "--verify",
+    "--apply",
+    "--disable",
+    "createExclusiveManagedMcpJournal",
+    "EXPECTED_MANAGED_MCP_PRE_REPAIR_POSTURE_SHA256",
+    "MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION",
+    "MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION",
+    "MANAGED_MCP_RECOVERY_TARGET_ALREADY_RESERVED",
+    "TARGET_UNIQUE_RESERVED",
+    "fs.openSync(target, \"wx\", 0o600)",
+    "fs.fsyncSync",
+    "uuidgen | tr '[:upper:]' '[:lower:]'"
+  ]),
   "primary-security-bootstrap": Object.freeze([
     "REVOKE ALL ON DATABASE tideproof FROM public",
     "REVOKE CREATE ON SCHEMA public FROM public",
@@ -3498,6 +3520,12 @@ const SOURCE_MARKERS = Object.freeze({
     "collectValidatedRecoveryPosture(",
     "GRANT USAGE ON SCHEMA mcp_api, mcp_private TO ${RECOVERY_PUBLISHER_ROLE}",
     "RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL",
+    "MANAGED_MCP_RECOVERY_GRANT_SQL",
+    "preflightManagedMcpRecoveryGrants",
+    "reserveManagedMcpRecoveryTarget",
+    "baselineRecoveryPostureDigest",
+    "MANAGED_MCP_RECOVERY_EMERGENCY_HOLD",
+    "MANAGED_MCP_RECOVERY_BASELINE_DRIFT",
     "collectRecoveryPublisherCapabilityPosture",
     "assertCleanExactGitCheckout",
     "RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID",
@@ -3671,7 +3699,14 @@ const SOURCE_MARKERS = Object.freeze({
     "post-COMMIT function or cluster drift remains unresolved without retry",
     "repair stops on rollback failure before dispatching COMMIT",
     "repair requires the executing standalone exact-Git checkout identity",
-    "repair CLI gates apply and exposes only a read-only verify mode"
+    "repair CLI gates apply and exposes only a read-only verify mode",
+    "Managed MCP preflight discovers the exact posture digest after source binding and needs no prior digest",
+    "Managed MCP repair disables an activated capability when post-activation verification fails",
+    "Managed MCP repair disables schema usage observed concurrently after the inert first step",
+    "Managed MCP disable proves exact restoration rather than grant absence alone",
+    "Managed MCP CLI exposes exact modes and gates apply and disable confirmations",
+    "Managed MCP local journal reserves one target durably and excludes other operations",
+    "Managed MCP journal durability failure stops before any grant dispatch"
   ]),
   "recovery-store": Object.freeze([
     "runtimeDatabaseConfig({",

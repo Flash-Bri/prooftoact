@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -7,12 +10,30 @@ import {
   appendRecoveryBundleWithClient,
   collectRecoveryPublisherFunctionDefinitions,
   collectRecoveryPublisherCapabilityPosture,
+  collectManagedMcpRecoveryGrantPosture,
+  disableManagedMcpRecoveryGrants,
+  managedMcpRecoveryGrantPlan,
+  MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION,
+  MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+  MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID,
+  MANAGED_MCP_RECOVERY_GRANT_SQL,
+  MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID,
+  MANAGED_MCP_RECOVERY_ROLLBACK_SQL,
+  MANAGED_MCP_RECOVERY_VIEW_DEFINITION_SHA256,
+  preflightManagedMcpRecoveryGrants,
   RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
   RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_PROVIDER_CLUSTER_ID,
   RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID,
+  repairManagedMcpRecoveryGrants,
   repairRecoveryPublisherPrivateSchemaUsage,
+  validateRecoverySecurityPosture,
+  verifyManagedMcpRecoveryGrants,
   verifyRecoveryPublisherPrivateSchemaUsage
 } from "../src/cloud/recovery-security.js";
+import {
+  createExclusiveManagedMcpJournal,
+  main as managedMcpRepairCliMain
+} from "../scripts/repair-managed-mcp-recovery-grants.js";
 import { main as repairCliMain } from
   "../scripts/repair-recovery-publisher-private-schema-usage.js";
 import {
@@ -130,7 +151,11 @@ function publisherProbeClient({
   };
 }
 
-function recoveryAdminPosture({ privateUsage = false, extraGrants = [] } = {}) {
+function recoveryAdminPosture({
+  privateUsage = false,
+  managedMcpState = "ABSENT",
+  extraGrants = []
+} = {}) {
   const functionNames = [
     "append_recovery_bundle_v2(uuid,uuid,text,int8,int8,uuid,timestamptz,text,text,text,text,text,text,text,text,jsonb,jsonb,jsonb,jsonb,timestamptz)",
     "resolve_recovery_bundle_v1(uuid,uuid,int8,text)"
@@ -146,7 +171,8 @@ function recoveryAdminPosture({ privateUsage = false, extraGrants = [] } = {}) {
       { username: "cluster_admin", options: [] },
       { username: "tp_recovery_owner", options: ["NOLOGIN"] },
       { username: "tp_recovery_publisher_role", options: ["NOLOGIN"] },
-      { username: "tp_recovery_publisher_user", options: [] }
+      { username: "tp_recovery_publisher_user", options: [] },
+      { username: "managed-mcp", options: ["NOLOGIN"] }
     ],
     memberships: [
       { role_name: "admin", member: "cluster_admin", is_admin: false },
@@ -194,6 +220,24 @@ function recoveryAdminPosture({ privateUsage = false, extraGrants = [] } = {}) {
         privilege_type: "EXECUTE",
         is_grantable: false
       })),
+      ...(["SELECT_ONLY", "PRESENT"].includes(managedMcpState) ? [{
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_public",
+        object_name: "recovery_bundle_v2",
+        object_type: "table",
+        grantee: "managed-mcp",
+        privilege_type: "SELECT",
+        is_grantable: false
+      }] : []),
+      ...(["USAGE_ONLY", "PRESENT"].includes(managedMcpState) ? [{
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_public",
+        object_name: null,
+        object_type: "schema",
+        grantee: "managed-mcp",
+        privilege_type: "USAGE",
+        is_grantable: false
+      }] : []),
       ...extraGrants
     ],
     defaultGrants: []
@@ -359,6 +403,917 @@ function repairArguments(overrides = {}) {
     ...overrides
   };
 }
+
+const MANAGED_MCP_VIEW_DEFINITION = `CREATE VIEW mcp_public.recovery_bundle_v2 (
+\ttenant_id,
+\trecovery_session_id,
+\tsubject_binding_hash,
+\tschema_version,
+\tsnapshot_version,
+\tsource_cluster_id,
+\tsource_commit_ts,
+\tsource_digest,
+\tbundle_digest,
+\tpolicy_version,
+\tpublisher_key_id,
+\tpublisher_version,
+\tsignature_algorithm,
+\tsource_signature_base64,
+\tsignature_digest,
+\tcheckpoint_summary,
+\tevidence_summary,
+\tconflict_summary,
+\treceipt_summary,
+\tauthority_transferred,
+\trequires_fresh_authorization,
+\texpires_at
+) AS SELECT
+\t\ttenant_id,
+\t\trecovery_session_id,
+\t\tsubject_binding_hash,
+\t\tschema_version,
+\t\tsnapshot_version,
+\t\tsource_cluster_id,
+\t\tsource_commit_ts,
+\t\tsource_digest,
+\t\tbundle_digest,
+\t\tpolicy_version,
+\t\tpublisher_key_id,
+\t\tpublisher_version,
+\t\tsignature_algorithm,
+\t\tsource_signature_base64,
+\t\tsignature_digest,
+\t\tcheckpoint_summary,
+\t\tevidence_summary,
+\t\tconflict_summary,
+\t\treceipt_summary,
+\t\tauthority_transferred,
+\t\trequires_fresh_authorization,
+\t\texpires_at
+\tFROM
+\t\ttideproof_recovery.mcp_private.recovery_bundles_v2;`;
+const MANAGED_MCP_VIEW_DEFINITION_DIGEST =
+  functionDefinitionDigest(MANAGED_MCP_VIEW_DEFINITION);
+const MANAGED_MCP_OPERATION_ID =
+  "44444444-4444-4444-8444-444444444444";
+assert.equal(
+  MANAGED_MCP_VIEW_DEFINITION_DIGEST,
+  MANAGED_MCP_RECOVERY_VIEW_DEFINITION_SHA256
+);
+
+function managedMcpAdminState({
+  grantState = "ABSENT",
+  dispatchErrors = new Map(),
+  dispatchApplies = new Map(),
+  viewDefinition = MANAGED_MCP_VIEW_DEFINITION,
+  viewOwner = "tp_recovery_owner",
+  clusterId = MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID,
+  databaseVersion = "CockroachDB CCL v26.2.5",
+  memberships = [{
+    role_name: "admin",
+    member: "cluster_admin",
+    is_admin: false
+  }, {
+    role_name: "tp_recovery_publisher_role",
+    member: "tp_recovery_publisher_user",
+    is_admin: false
+  }],
+  systemGrants = [],
+  defaultGrants = [],
+  principal = { username: "managed-mcp", is_role: false },
+  userOptions = ["NOLOGIN"],
+  extraGrants = []
+} = {}) {
+  return {
+    grantState,
+    dispatchErrors,
+    dispatchApplies,
+    viewDefinition,
+    viewOwner,
+    clusterId,
+    databaseVersion,
+    memberships,
+    systemGrants,
+    defaultGrants,
+    principal,
+    userOptions,
+    extraGrants
+  };
+}
+
+function managedMcpAdminClient(state = managedMcpAdminState()) {
+  const calls = [];
+  return {
+    calls,
+    async connect() {},
+    async end() {},
+    async query(text) {
+      const sql = text.trim();
+      calls.push(sql);
+      if (sql.includes("crdb_internal.cluster_id()")) {
+        return {
+          rowCount: 1,
+          rows: [{
+            database_name: "tideproof_recovery",
+            current_user_name: "cluster_admin",
+            session_user_name: "cluster_admin",
+            database_version: state.databaseVersion,
+            cluster_id: state.clusterId
+          }]
+        };
+      }
+      if (sql.includes("FROM system.users")) {
+        return { rowCount: 1, rows: [state.principal] };
+      }
+      if (sql.includes("FROM [SHOW USERS]")) {
+        return {
+          rows: [
+            ...recoveryAdminPosture({ privateUsage: true }).principals.filter(
+              (row) => row.username !== "managed-mcp"
+            ),
+            { username: "managed-mcp", options: state.userOptions }
+          ]
+        };
+      }
+      if (sql.includes("FROM [SHOW GRANTS ON ROLE]")) {
+        return { rows: state.memberships };
+      }
+      if (sql.includes("FROM [SHOW SYSTEM GRANTS]")) {
+        return { rows: state.systemGrants };
+      }
+      if (sql.includes("FROM [SHOW GRANTS]")) {
+        const all = recoveryAdminPosture({
+          privateUsage: true,
+          managedMcpState: state.grantState,
+          extraGrants: state.extraGrants
+        }).objectGrants;
+        return { rows: [
+          ...all,
+          {
+            database_name: "tideproof_recovery",
+            schema_name: "mcp_private",
+            object_name: "recovery_bundles_v2",
+            object_type: "table",
+            grantee: "tp_recovery_owner",
+            privilege_type: "ALL",
+            is_grantable: true
+          }
+        ] };
+      }
+      if (sql.includes("FROM [SHOW DEFAULT PRIVILEGES]")) {
+        return { rows: state.defaultGrants };
+      }
+      if (sql.includes("FROM [SHOW TABLES FROM mcp_public]")) {
+        return {
+          rowCount: 1,
+          rows: [{
+            table_name: "recovery_bundle_v2",
+            owner: state.viewOwner
+          }]
+        };
+      }
+      if (sql === "SHOW CREATE VIEW mcp_public.recovery_bundle_v2") {
+        return {
+          rowCount: 1,
+          rows: [{ create_statement: state.viewDefinition }]
+        };
+      }
+      if (sql === MANAGED_MCP_RECOVERY_GRANT_SQL[0]) {
+        if (state.dispatchApplies.get(0) !== false) {
+          state.grantState = state.grantState === "USAGE_ONLY"
+            ? "PRESENT"
+            : "SELECT_ONLY";
+        }
+        const error = state.dispatchErrors.get(0);
+        if (error) throw error;
+        return {};
+      }
+      if (sql === MANAGED_MCP_RECOVERY_GRANT_SQL[1]) {
+        if (state.dispatchApplies.get(1) !== false) {
+          state.grantState = state.grantState === "SELECT_ONLY"
+            ? "PRESENT"
+            : "USAGE_ONLY";
+        }
+        const error = state.dispatchErrors.get(1);
+        if (error) throw error;
+        return {};
+      }
+      if (sql === MANAGED_MCP_RECOVERY_ROLLBACK_SQL[0]) {
+        state.grantState = state.grantState === "PRESENT"
+          ? "SELECT_ONLY"
+          : state.grantState === "USAGE_ONLY"
+            ? "ABSENT"
+            : state.grantState;
+        const error = state.dispatchErrors.get(2);
+        if (error) throw error;
+        return {};
+      }
+      if (sql === MANAGED_MCP_RECOVERY_ROLLBACK_SQL[1]) {
+        state.grantState = state.grantState === "PRESENT"
+          ? "USAGE_ONLY"
+          : state.grantState === "SELECT_ONLY"
+            ? "ABSENT"
+            : state.grantState;
+        const error = state.dispatchErrors.get(3);
+        if (error) throw error;
+        return {};
+      }
+      return {};
+    }
+  };
+}
+
+function managedMcpArguments(expectedPreflightPostureDigest, overrides = {}) {
+  return {
+    adminConnectionString:
+      "postgresql://cluster_admin:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    expectedRecoveryHostname: "recovery.example",
+    expectedRecoveryProviderClusterId:
+      MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID,
+    expectedRecoverySqlClusterId:
+      MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID,
+    expectedPreflightPostureDigest,
+    expectedViewDefinitionSha256: MANAGED_MCP_VIEW_DEFINITION_DIGEST,
+    sourceCommit: SCHEMA_REPAIR_SOURCE_COMMIT,
+    sourceTree: SCHEMA_REPAIR_SOURCE_TREE,
+    operationId: MANAGED_MCP_OPERATION_ID,
+    verifySourceCheckout: verifiedSourceCheckout,
+    ...overrides
+  };
+}
+
+async function managedMcpJournalReceipt(intent) {
+  const intentSha256 = functionDefinitionDigest(JSON.stringify(intent));
+  return {
+    operationId: intent.operationId,
+    intentSha256,
+    reservation: "UNIQUE_RESERVED",
+    targetReservationDigest: intent.targetReservationDigest,
+    journalDigest: functionDefinitionDigest(`journal\0${intentSha256}`)
+  };
+}
+
+managedMcpJournalReceipt.reserveTarget = async (intent) => {
+  assert.equal(
+    intent.targetBindingSha256,
+    functionDefinitionDigest(JSON.stringify(intent.targetBinding))
+  );
+  return {
+    operationId: intent.operationId,
+    reservation: "TARGET_UNIQUE_RESERVED",
+    targetBindingSha256: intent.targetBindingSha256,
+    reservationDigest: functionDefinitionDigest(
+      `target-reservation\0${intent.targetBindingSha256}`
+    )
+  };
+};
+
+function managedMcpCliEnvironment(overrides = {}) {
+  return {
+    RECOVERY_ADMIN_DATABASE_URL:
+      "postgresql://cluster_admin:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    EXPECTED_RECOVERY_HOSTNAME: "recovery.example",
+    EXPECTED_RECOVERY_CLUSTER_ID:
+      MANAGED_MCP_RECOVERY_GRANT_PROVIDER_CLUSTER_ID,
+    EXPECTED_RECOVERY_SQL_CLUSTER_ID:
+      MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID,
+    EXPECTED_MANAGED_MCP_PRE_REPAIR_POSTURE_SHA256: "a".repeat(64),
+    MANAGED_MCP_RECOVERY_REPAIR_SOURCE_COMMIT: SCHEMA_REPAIR_SOURCE_COMMIT,
+    MANAGED_MCP_RECOVERY_REPAIR_SOURCE_TREE: SCHEMA_REPAIR_SOURCE_TREE,
+    MANAGED_MCP_RECOVERY_OPERATION_ID: MANAGED_MCP_OPERATION_ID,
+    MANAGED_MCP_RECOVERY_JOURNAL_DIRECTORY: "/private/journal",
+    ...overrides
+  };
+}
+
+function managedMcpTargetReservationIntent(
+  operationId = MANAGED_MCP_OPERATION_ID
+) {
+  const targetBinding = {
+    schemaVersion: "tideproof.managed-mcp-recovery-target-binding.v1",
+    providerClusterIdSha256: "1".repeat(64),
+    sqlClusterIdSha256: "2".repeat(64),
+    databaseName: "tideproof_recovery",
+    hostnameSha256: "3".repeat(64),
+    adminPrincipalSha256: "4".repeat(64),
+    managedPrincipal: "managed-mcp"
+  };
+  return {
+    schemaVersion: "tideproof.managed-mcp-recovery-target-reservation.v1",
+    operationId,
+    targetBinding,
+    targetBindingSha256: functionDefinitionDigest(
+      JSON.stringify(targetBinding)
+    )
+  };
+}
+
+async function managedMcpPosture(state) {
+  return collectManagedMcpRecoveryGrantPosture(
+    managedMcpAdminClient(state),
+    {
+      expectedRecoverySqlClusterId:
+        MANAGED_MCP_RECOVERY_GRANT_SQL_CLUSTER_ID,
+      expectedViewDefinitionSha256: MANAGED_MCP_VIEW_DEFINITION_DIGEST
+    }
+  );
+}
+
+test("Managed MCP recovery plan stages inert SELECT before schema activation and disables schema first", () => {
+  const plan = managedMcpRecoveryGrantPlan();
+  assert.deepEqual(plan.statements, [
+    'GRANT SELECT ON TABLE mcp_public.recovery_bundle_v2 TO "managed-mcp"',
+    'GRANT USAGE ON SCHEMA mcp_public TO "managed-mcp"'
+  ]);
+  assert.deepEqual(plan.rollbackStatements, [
+    'REVOKE USAGE ON SCHEMA mcp_public FROM "managed-mcp"',
+    'REVOKE SELECT ON TABLE mcp_public.recovery_bundle_v2 FROM "managed-mcp"'
+  ]);
+  assert.equal(plan.explicitMultiStatementTransactionForbidden, true);
+  assert.equal(plan.reconciliationRequiredAfterEachDispatch, true);
+});
+
+test("recovery posture accepts exact absent or present Managed MCP capability and rejects partial or private access", () => {
+  for (const managedMcpState of ["ABSENT", "PRESENT"]) {
+    const result = validateRecoverySecurityPosture(recoveryAdminPosture({
+      privateUsage: true,
+      managedMcpState
+    }));
+    assert.match(result.postureDigest, /^[0-9a-f]{64}$/u);
+  }
+  for (const managedMcpState of ["SELECT_ONLY", "USAGE_ONLY"]) {
+    assert.throws(
+      () => validateRecoverySecurityPosture(recoveryAdminPosture({
+        privateUsage: true,
+        managedMcpState
+      })),
+      /DATABASE_POSTURE_MANAGED_GRANT_MISSING/u
+    );
+  }
+  assert.throws(
+    () => validateRecoverySecurityPosture(recoveryAdminPosture({
+      privateUsage: true,
+      managedMcpState: "PRESENT",
+      extraGrants: [{
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_private",
+        object_name: "recovery_bundles_v2",
+        object_type: "table",
+        grantee: "managed-mcp",
+        privilege_type: "SELECT",
+        is_grantable: false
+      }]
+    })),
+    /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
+  );
+});
+
+test("Managed MCP recovery collector classifies exact absent, safe partial, and present states", async () => {
+  for (const expectedState of [
+    "ABSENT",
+    "SELECT_ONLY",
+    "USAGE_ONLY",
+    "PRESENT"
+  ]) {
+    const result = await managedMcpPosture(managedMcpAdminState({
+      grantState: expectedState
+    }));
+    assert.equal(result.state, expectedState);
+    assert.equal(result.principal, "managed-mcp");
+    assert.equal(result.viewOwner, "tp_recovery_owner");
+    assert.equal(result.viewDefinition.securityInvoker, false);
+    assert.match(result.postureDigest, /^[0-9a-f]{64}$/u);
+  }
+});
+
+test("Managed MCP recovery collector rejects identity, owner, view, membership, system, default, and extra-grant drift", async () => {
+  for (const state of [
+    managedMcpAdminState({
+      clusterId: "00000000-0000-0000-0000-000000000000"
+    }),
+    managedMcpAdminState({ viewOwner: "root" }),
+    managedMcpAdminState({ userOptions: ["NOLOGIN", "CREATEROLE"] }),
+    managedMcpAdminState({
+      viewDefinition: `${MANAGED_MCP_VIEW_DEFINITION} WITH (security_invoker=true)`
+    }),
+    managedMcpAdminState({
+      memberships: [{ role_name: "admin", member: "managed-mcp" }]
+    }),
+    managedMcpAdminState({
+      systemGrants: [{ grantee: "managed-mcp", privilege_type: "VIEWACTIVITY" }]
+    }),
+    managedMcpAdminState({
+      defaultGrants: [{ role: "managed-mcp", grantee: "managed-mcp" }]
+    }),
+    managedMcpAdminState({
+      extraGrants: [{
+        database_name: "tideproof_recovery",
+        schema_name: "mcp_private",
+        object_name: "recovery_bundles_v2",
+        object_type: "table",
+        grantee: "managed-mcp",
+        privilege_type: "SELECT",
+        is_grantable: false
+      }]
+    })
+  ]) {
+    await assert.rejects(managedMcpPosture(state));
+  }
+});
+
+test("Managed MCP preflight discovers the exact posture digest after source binding and needs no prior digest", async () => {
+  const state = managedMcpAdminState();
+  const {
+    expectedPreflightPostureDigest: ignoredDigest,
+    operationId: ignoredOperationId,
+    ...targetOptions
+  } = managedMcpArguments("a".repeat(64));
+  assert.equal(ignoredDigest, "a".repeat(64));
+  assert.equal(ignoredOperationId, MANAGED_MCP_OPERATION_ID);
+  let sourceChecked = false;
+  const receipt = await preflightManagedMcpRecoveryGrants({
+    ...targetOptions,
+    verifySourceCheckout(options) {
+      sourceChecked = true;
+      return verifiedSourceCheckout(options);
+    },
+    createAdminClient() {
+      assert.equal(sourceChecked, true);
+      return managedMcpAdminClient(state);
+    }
+  });
+  assert.equal(receipt.mode, "PREFLIGHT_READ_ONLY");
+  assert.equal(receipt.status, "CONFIRMED_ABSENT");
+  assert.equal(receipt.preflightPostureDigest, receipt.posture.postureDigest);
+  await assert.rejects(
+    preflightManagedMcpRecoveryGrants({
+      ...targetOptions,
+      verifySourceCheckout() {
+        throw new Error("EXACT_GIT_SOURCE_DIRTY");
+      },
+      createAdminClient: () => assert.fail("source must stop provider access")
+    }),
+    /MANAGED_MCP_RECOVERY_SOURCE_CHECKOUT_INVALID/u
+  );
+});
+
+test("Managed MCP repair journals and reconciles each implicit grant without a multi-statement transaction", async () => {
+  const state = managedMcpAdminState();
+  const preflight = await managedMcpPosture(state);
+  const mutationClients = [];
+  const reconciliationClients = [];
+  const journals = [];
+  const journalIntent = async (intent) => {
+    journals.push(intent);
+    return managedMcpJournalReceipt(intent);
+  };
+  journalIntent.reserveTarget = managedMcpJournalReceipt.reserveTarget;
+  const receipt = await repairManagedMcpRecoveryGrants({
+    ...managedMcpArguments(preflight.postureDigest),
+    confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+    journalIntent,
+    createAdminClient: () => {
+      const client = managedMcpAdminClient(state);
+      mutationClients.push(client);
+      return client;
+    },
+    createReconciliationAdminClient: () => {
+      const client = managedMcpAdminClient(state);
+      reconciliationClients.push(client);
+      return client;
+    }
+  });
+  assert.equal(receipt.status, "CONFIRMED_PRESENT");
+  assert.equal(receipt.posture.state, "PRESENT");
+  assert.equal(receipt.mutationDispatchCount, 2);
+  assert.equal(receipt.mutationTransactionCount, 2);
+  assert.equal(receipt.explicitMultiStatementTransactionUsed, false);
+  assert.deepEqual(
+    receipt.dispatches.map((entry) => entry.observedState),
+    ["SELECT_ONLY", "PRESENT"]
+  );
+  assert.equal(journals.length, 2);
+  assert.equal(reconciliationClients.length, 3);
+  assert.equal(
+    mutationClients.flatMap((client) => client.calls).some((sql) =>
+      sql.startsWith("BEGIN TRANSACTION") || sql === "COMMIT"
+    ),
+    false
+  );
+});
+
+test("Managed MCP repair reconciles acknowledgement loss without retry and stops on confirmed absence", async () => {
+  const ackLossState = managedMcpAdminState({
+    dispatchErrors: new Map([[0, sqlState("ECONNRESET")]])
+  });
+  const ackLossPreflight = await managedMcpPosture(ackLossState);
+  const receipt = await repairManagedMcpRecoveryGrants({
+    ...managedMcpArguments(ackLossPreflight.postureDigest),
+    confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+    journalIntent: managedMcpJournalReceipt,
+    createAdminClient: () => managedMcpAdminClient(ackLossState),
+    createReconciliationAdminClient: () =>
+      managedMcpAdminClient(ackLossState)
+  });
+  assert.equal(receipt.dispatches[0].acknowledged, false);
+  assert.equal(receipt.dispatches[0].observation, "read_reconciled");
+  assert.equal(receipt.status, "CONFIRMED_PRESENT");
+
+  const absentState = managedMcpAdminState();
+  const absentPreflight = await managedMcpPosture(absentState);
+  let mutationCalls = 0;
+  await assert.rejects(
+    repairManagedMcpRecoveryGrants({
+      ...managedMcpArguments(absentPreflight.postureDigest),
+      confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+      journalIntent: managedMcpJournalReceipt,
+      createAdminClient: () => ({
+        async connect() {},
+        async end() {},
+        async query() {
+          mutationCalls += 1;
+          throw sqlState("42501");
+        }
+      }),
+      createReconciliationAdminClient: () =>
+        managedMcpAdminClient(absentState)
+    }),
+    /MANAGED_MCP_RECOVERY_DISPATCH_CONFIRMED_ABSENT/u
+  );
+  assert.equal(mutationCalls, 1);
+});
+
+test("Managed MCP disable revokes schema traversal first and proves exact absence", async () => {
+  const state = managedMcpAdminState({ grantState: "PRESENT" });
+  const originalAbsent = await managedMcpPosture(managedMcpAdminState());
+  const mutationClients = [];
+  const receipt = await disableManagedMcpRecoveryGrants({
+    ...managedMcpArguments(originalAbsent.postureDigest),
+    confirmation: MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION,
+    journalIntent: managedMcpJournalReceipt,
+    createAdminClient: () => {
+      const client = managedMcpAdminClient(state);
+      mutationClients.push(client);
+      return client;
+    },
+    createReconciliationAdminClient: () => managedMcpAdminClient(state)
+  });
+  assert.equal(receipt.status, "CONFIRMED_ABSENT");
+  assert.equal(receipt.posture.state, "ABSENT");
+  assert.deepEqual(
+    receipt.dispatches.map((entry) => entry.observedState),
+    ["SELECT_ONLY", "ABSENT"]
+  );
+  assert.deepEqual(
+    mutationClients.flatMap((client) => client.calls).filter((sql) =>
+      sql.startsWith("REVOKE ")
+    ),
+    MANAGED_MCP_RECOVERY_ROLLBACK_SQL
+  );
+});
+
+test("Managed MCP repair cleans a denied activation back to exact absence", async () => {
+  const state = managedMcpAdminState({
+    dispatchErrors: new Map([[1, sqlState("42501")]]),
+    dispatchApplies: new Map([[1, false]])
+  });
+  const preflight = await managedMcpPosture(state);
+  await assert.rejects(
+    repairManagedMcpRecoveryGrants({
+      ...managedMcpArguments(preflight.postureDigest),
+      confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+      journalIntent: managedMcpJournalReceipt,
+      createAdminClient: () => managedMcpAdminClient(state),
+      createReconciliationAdminClient: () => managedMcpAdminClient(state)
+    }),
+    (error) => {
+      assert.equal(
+        error.code,
+        "MANAGED_MCP_RECOVERY_DISPATCH_CONFIRMED_ABSENT"
+      );
+      assert.equal(error.emergencyDisable.status, "CONFIRMED_ABSENT");
+      return true;
+    }
+  );
+  assert.equal(state.grantState, "ABSENT");
+});
+
+test("Managed MCP repair disables an activated capability when post-activation verification fails", async () => {
+  const state = managedMcpAdminState();
+  const preflight = await managedMcpPosture(state);
+  let reconciliationCount = 0;
+  await assert.rejects(
+    repairManagedMcpRecoveryGrants({
+      ...managedMcpArguments(preflight.postureDigest),
+      confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+      journalIntent: managedMcpJournalReceipt,
+      createAdminClient: () => managedMcpAdminClient(state),
+      createReconciliationAdminClient: () => {
+        reconciliationCount += 1;
+        if (reconciliationCount === 3) {
+          return {
+            async connect() {},
+            async end() {},
+            async query() {
+              throw sqlState("ECONNRESET");
+            }
+          };
+        }
+        return managedMcpAdminClient(state);
+      }
+    }),
+    (error) => {
+      assert.equal(
+        error.code,
+        "MANAGED_MCP_RECOVERY_RECONCILIATION_UNRESOLVED"
+      );
+      assert.equal(error.emergencyDisable.status, "CONFIRMED_ABSENT");
+      return true;
+    }
+  );
+  assert.equal(state.grantState, "ABSENT");
+});
+
+test("Managed MCP repair disables schema usage observed concurrently after the inert first step", async () => {
+  const state = managedMcpAdminState();
+  const preflight = await managedMcpPosture(state);
+  let reconciliationCount = 0;
+  await assert.rejects(
+    repairManagedMcpRecoveryGrants({
+      ...managedMcpArguments(preflight.postureDigest),
+      confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+      journalIntent: managedMcpJournalReceipt,
+      createAdminClient: () => managedMcpAdminClient(state),
+      createReconciliationAdminClient: () => {
+        reconciliationCount += 1;
+        if (reconciliationCount === 2) state.grantState = "PRESENT";
+        return managedMcpAdminClient(state);
+      }
+    }),
+    (error) => {
+      assert.equal(
+        error.code,
+        "MANAGED_MCP_RECOVERY_DISPATCH_STATE_UNRESOLVED"
+      );
+      assert.equal(error.emergencyDisable.status, "CONFIRMED_ABSENT");
+      return true;
+    }
+  );
+  assert.equal(state.grantState, "ABSENT");
+});
+
+test("Managed MCP disable proves exact restoration rather than grant absence alone", async () => {
+  const state = managedMcpAdminState({ grantState: "PRESENT" });
+  const originalAbsent = await managedMcpPosture(managedMcpAdminState());
+  let reconciliationCount = 0;
+  await assert.rejects(
+    disableManagedMcpRecoveryGrants({
+      ...managedMcpArguments(originalAbsent.postureDigest),
+      confirmation: MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION,
+      journalIntent: managedMcpJournalReceipt,
+      createAdminClient: () => managedMcpAdminClient(state),
+      createReconciliationAdminClient: () => {
+        reconciliationCount += 1;
+        if (reconciliationCount === 2) {
+          state.databaseVersion = "CockroachDB CCL v26.2.6";
+        }
+        return managedMcpAdminClient(state);
+      }
+    }),
+    (error) => {
+      assert.equal(error.code, "MANAGED_MCP_RECOVERY_EMERGENCY_HOLD");
+      assert.equal(error.reconciliation.posture.state, "ABSENT");
+      return true;
+    }
+  );
+  assert.equal(state.grantState, "ABSENT");
+});
+
+test("Managed MCP CLI exposes exact modes and gates apply and disable confirmations", async () => {
+  const writes = [];
+  const plan = await managedMcpRepairCliMain(["--plan"], {}, {
+    write: (value) => writes.push(value)
+  });
+  assert.equal(plan.mode, "PLAN_ONLY");
+  assert.ok(plan.requiredPreflightEnvironment.includes(
+    "MANAGED_MCP_RECOVERY_REPAIR_SOURCE_COMMIT"
+  ));
+  assert.ok(!plan.requiredPreflightEnvironment.includes(
+    "EXPECTED_MANAGED_MCP_PRE_REPAIR_POSTURE_SHA256"
+  ));
+  assert.ok(plan.requiredVerifyEnvironment.includes(
+    "EXPECTED_MANAGED_MCP_PRE_REPAIR_POSTURE_SHA256"
+  ));
+  assert.equal(
+    plan.operationIdGenerationCommand,
+    "uuidgen | tr '[:upper:]' '[:lower:]'"
+  );
+
+  const environment = managedMcpCliEnvironment();
+  let preflightOptions;
+  const preflightReceipt = await managedMcpRepairCliMain(
+    ["--preflight"],
+    environment,
+    {
+      write: (value) => writes.push(value),
+      preflightRepair: async (options) => {
+        preflightOptions = options;
+        return { mode: "PREFLIGHT_READ_ONLY" };
+      }
+    }
+  );
+  assert.equal(preflightReceipt.mode, "PREFLIGHT_READ_ONLY");
+  assert.equal(
+    "expectedPreflightPostureDigest" in preflightOptions,
+    false
+  );
+
+  let verifyOptions;
+  await managedMcpRepairCliMain(["--verify"], environment, {
+    write: (value) => writes.push(value),
+    verifyRepair: async (options) => {
+      verifyOptions = options;
+      return { mode: "VERIFY_READ_ONLY" };
+    }
+  });
+  assert.equal(
+    verifyOptions.expectedPreflightPostureDigest,
+    environment.EXPECTED_MANAGED_MCP_PRE_REPAIR_POSTURE_SHA256
+  );
+
+  let mutationCalls = 0;
+  await assert.rejects(
+    managedMcpRepairCliMain(["--apply"], environment, {
+      write: () => {},
+      createJournal: () => managedMcpJournalReceipt,
+      applyRepair: async () => {
+        mutationCalls += 1;
+      }
+    }),
+    /MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION_REQUIRED/u
+  );
+  assert.equal(mutationCalls, 0);
+
+  let applyOptions;
+  await managedMcpRepairCliMain(["--apply"], {
+    ...environment,
+    MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION:
+      MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION
+  }, {
+    write: (value) => writes.push(value),
+    createJournal: () => managedMcpJournalReceipt,
+    applyRepair: async (options) => {
+      applyOptions = options;
+      return { mode: "APPLY_JOURNALED_RECONCILED" };
+    }
+  });
+  assert.equal(applyOptions.operationId, MANAGED_MCP_OPERATION_ID);
+  assert.equal(applyOptions.journalIntent, managedMcpJournalReceipt);
+
+  let disableOptions;
+  await managedMcpRepairCliMain(["--disable"], {
+    ...environment,
+    MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION:
+      MANAGED_MCP_RECOVERY_DISABLE_CONFIRMATION
+  }, {
+    write: (value) => writes.push(value),
+    createJournal: () => managedMcpJournalReceipt,
+    disableRepair: async (options) => {
+      disableOptions = options;
+      return { mode: "DISABLE_JOURNALED_RECONCILED" };
+    }
+  });
+  assert.equal(disableOptions.operationId, MANAGED_MCP_OPERATION_ID);
+  assert.equal(
+    JSON.stringify(writes).includes(environment.RECOVERY_ADMIN_DATABASE_URL),
+    false
+  );
+});
+
+test("Managed MCP local journal reserves one target durably and excludes other operations", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pta-mcp-journal-"));
+  fs.chmodSync(root, 0o700);
+  try {
+    const reservationIntent = managedMcpTargetReservationIntent();
+    const journal = createExclusiveManagedMcpJournal(root);
+    const reservation = await journal.reserveTarget(reservationIntent);
+    assert.equal(reservation.reservation, "TARGET_UNIQUE_RESERVED");
+    assert.deepEqual(
+      await journal.reserveTarget(reservationIntent),
+      reservation
+    );
+    const intent = {
+      schemaVersion: "tideproof.managed-mcp-recovery-grant-intent.v1",
+      operationId: MANAGED_MCP_OPERATION_ID,
+      step: 1,
+      targetReservationDigest: reservation.reservationDigest,
+      statementSha256: "5".repeat(64)
+    };
+    const stepReceipt = await journal(intent);
+    assert.equal(
+      stepReceipt.targetReservationDigest,
+      reservation.reservationDigest
+    );
+    const files = fs.readdirSync(root);
+    assert.equal(files.length, 2);
+    for (const file of files) {
+      assert.equal(fs.lstatSync(path.join(root, file)).mode & 0o777, 0o600);
+      const body = fs.readFileSync(path.join(root, file), "utf8");
+      assert.equal(body.includes("postgresql://"), false);
+      assert.equal(body.includes("secret"), false);
+    }
+
+    const resumed = createExclusiveManagedMcpJournal(root);
+    assert.deepEqual(
+      await resumed.reserveTarget(reservationIntent),
+      reservation
+    );
+    await assert.rejects(
+      resumed(intent),
+      /MANAGED_MCP_RECOVERY_JOURNAL_ALREADY_RESERVED/u
+    );
+    const differentOperation = createExclusiveManagedMcpJournal(root);
+    await assert.rejects(
+      differentOperation.reserveTarget(managedMcpTargetReservationIntent(
+        "55555555-5555-4555-8555-555555555555"
+      )),
+      /MANAGED_MCP_RECOVERY_TARGET_ALREADY_RESERVED/u
+    );
+
+    const badMode = path.join(root, "bad-mode");
+    fs.mkdirSync(badMode, { mode: 0o755 });
+    fs.chmodSync(badMode, 0o755);
+    assert.throws(
+      () => createExclusiveManagedMcpJournal(badMode),
+      /MANAGED_MCP_RECOVERY_JOURNAL_DIRECTORY_INVALID/u
+    );
+    const real = path.join(root, "real");
+    const link = path.join(root, "link");
+    fs.mkdirSync(real, { mode: 0o700 });
+    fs.symlinkSync(real, link);
+    assert.throws(
+      () => createExclusiveManagedMcpJournal(link),
+      /MANAGED_MCP_RECOVERY_JOURNAL_DIRECTORY_INVALID/u
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Managed MCP journal durability failure stops before any grant dispatch", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pta-mcp-fsync-"));
+  fs.chmodSync(root, 0o700);
+  const state = managedMcpAdminState();
+  const preflight = await managedMcpPosture(state);
+  const journalIntent = createExclusiveManagedMcpJournal(root);
+  const originalFsync = fs.fsyncSync;
+  let mutationClients = 0;
+  fs.fsyncSync = () => {
+    throw sqlState("EIO");
+  };
+  try {
+    await assert.rejects(
+      repairManagedMcpRecoveryGrants({
+        ...managedMcpArguments(preflight.postureDigest),
+        confirmation: MANAGED_MCP_RECOVERY_GRANT_CONFIRMATION,
+        journalIntent,
+        createAdminClient: () => {
+          mutationClients += 1;
+          return managedMcpAdminClient(state);
+        },
+        createReconciliationAdminClient: () => managedMcpAdminClient(state)
+      }),
+      /MANAGED_MCP_RECOVERY_JOURNAL_WRITE_FAILED/u
+    );
+  } finally {
+    fs.fsyncSync = originalFsync;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  assert.equal(mutationClients, 0);
+  assert.equal(state.grantState, "ABSENT");
+});
+
+test("Managed MCP verification binds exact source and exposes partial state only as HOLD", async () => {
+  const absent = await managedMcpPosture(managedMcpAdminState());
+  const partialState = managedMcpAdminState({ grantState: "SELECT_ONLY" });
+  const receipt = await verifyManagedMcpRecoveryGrants({
+    ...managedMcpArguments(absent.postureDigest),
+    createAdminClient: () => managedMcpAdminClient(partialState)
+  });
+  assert.equal(receipt.status, "HOLD_SELECT_ONLY");
+  assert.equal(receipt.applied, false);
+  await assert.rejects(
+    verifyManagedMcpRecoveryGrants({
+      ...managedMcpArguments(absent.postureDigest, {
+        verifySourceCheckout() {
+          throw new Error("EXACT_GIT_SOURCE_DIRTY");
+        }
+      }),
+      createAdminClient: () => assert.fail("source must stop first")
+    }),
+    /MANAGED_MCP_RECOVERY_SOURCE_CHECKOUT_INVALID/u
+  );
+});
 
 test("publisher capability collector executes functions only in a rolled-back probe without internal cluster metadata", async () => {
   const client = publisherProbeClient();
