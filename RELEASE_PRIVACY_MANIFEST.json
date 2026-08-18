@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-privacy-manifest.v1",
   "status": "CURRENT_PUBLIC_HISTORY_REVIEWED_FINAL_RELEASE_PENDING",
-  "reviewedOn": "2026-08-17",
+  "reviewedOn": "2026-08-18",
   "allowedFindings": [
     {
       "rule": "aws-access-key",
@@ -97,6 +97,12 @@
       "rule": "basic-auth-url",
       "path": "test/fresh-primary-bootstrap.test.js",
       "matchSha256": "6b3dd81efc2a7b4f14e2bb34a1f3bba4fcf7119ae83180c654d6f44b6a9b434b",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "basic-auth-url",
+      "path": "test/hosted-dual-root-verification.test.js",
+      "matchSha256": "195bfa9c25358ded6083da238898a74bd5fda2fe99cc0b04f0876106c22604bc",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
     {
@@ -198,6 +204,12 @@
     {
       "rule": "pem-private-key",
       "path": "test/fixtures/integrated-live-drill-pre-attestation.json",
+      "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "pem-private-key",
+      "path": "test/hosted-dual-root-verification.test.js",
       "matchSha256": "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
       "classification": "SYNTHETIC_TEST_FIXTURE"
     },
