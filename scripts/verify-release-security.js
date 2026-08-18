@@ -3662,7 +3662,7 @@ const SOURCE_MARKERS = Object.freeze({
     "ambiguous_closed",
     "publisher capability collector executes functions only in a rolled-back probe",
     "publisher capability collector rejects any direct private-table operation",
-    "publisher capability collector byte-compares its observed cluster UUID",
+    "publisher capability collector executes functions only in a rolled-back probe without internal cluster metadata",
     "read-only repair verification distinguishes exact absent and present state",
     "repair reconciles COMMIT ACK loss as present without retry",
     "repair reconciles COMMIT ACK loss as absent and never retries",

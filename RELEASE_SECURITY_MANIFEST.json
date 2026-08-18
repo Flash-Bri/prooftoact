@@ -1158,7 +1158,7 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "0760826d0c889e83ee1a47c69f18c2c50ebd81d21af7256920f2a675dfe03502"
+      "sha256": "adf59b7d5dd68461b0cb4ec58d25225679b1ab0d0aec52ccade7f40b5b4bf998"
     },
     {
       "id": "recovery-audit-reconciliation-tests",
@@ -1236,7 +1236,7 @@
       "id": "recovery-publication-reconciliation-tests",
       "path": "test/recovery-security.test.js",
       "role": "RECOVERY_PUBLICATION_RECONCILIATION_VERIFICATION",
-      "sha256": "89b2f07f439f5fef0486488f076b5876805b62349d866923f6e97a28746390fe"
+      "sha256": "a3c3dda4a7485dd528fc590cd0b814abce9f67b29ebfc6aa7dc92036798cc2b3"
     },
     {
       "id": "recovery-store",

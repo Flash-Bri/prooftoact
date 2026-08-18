@@ -58,8 +58,7 @@ function sqlState(code, message = code) {
 
 function publisherProbeClient({
   directOperationAllowed = null,
-  functionProbeError = null,
-  clusterId = RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
+  functionProbeError = null
 } = {}) {
   let appendedBundleDigest = null;
   let appendTransactionActive = false;
@@ -72,7 +71,7 @@ function publisherProbeClient({
       const sql = text.trim();
       calls.push(sql);
       if (sql.includes("crdb_internal.cluster_id()")) {
-        return { rowCount: 1, rows: [{ cluster_id: clusterId }] };
+        throw sqlState("42501", "cluster metadata denied");
       }
       if (sql.includes("statement_timestamp() AS database_now")) {
         return {
@@ -361,12 +360,14 @@ function repairArguments(overrides = {}) {
   };
 }
 
-test("publisher capability collector executes functions only in a rolled-back probe", async () => {
+test("publisher capability collector executes functions only in a rolled-back probe without internal cluster metadata", async () => {
   const client = publisherProbeClient();
-  const result = await collectRecoveryPublisherCapabilityPosture(client, {
-    expectedRecoverySqlClusterId:
-      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
-  });
+  await assert.rejects(
+    collectRecoveryPublisherCapabilityPosture(client, {}),
+    /RECOVERY_PUBLISHER_PROBE_OPTIONS_REJECTED/u
+  );
+  assert.equal(client.calls.length, 0);
+  const result = await collectRecoveryPublisherCapabilityPosture(client);
   assert.equal(result.functionProbe.appendOutcome, "bundle_appended");
   assert.equal(result.functionProbe.resolveOutcome, "bundle_present");
   assert.equal(result.functionProbe.rollbackVerified, true);
@@ -386,8 +387,8 @@ test("publisher capability collector executes functions only in a rolled-back pr
   );
   assert.equal(client.calls.includes("COMMIT"), false);
   assert.equal(
-    result.sqlClusterId,
-    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
+    client.calls.some((sql) => sql.includes("crdb_internal.cluster_id()")),
+    false
   );
 });
 
@@ -395,32 +396,11 @@ test("publisher capability collector rejects any direct private-table operation"
   for (const operation of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
     await assert.rejects(
       collectRecoveryPublisherCapabilityPosture(
-        publisherProbeClient({ directOperationAllowed: operation }),
-        {
-          expectedRecoverySqlClusterId:
-            RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
-        }
+        publisherProbeClient({ directOperationAllowed: operation })
       ),
       new RegExp(`RECOVERY_PUBLISHER_DIRECT_${operation}_NOT_DENIED`, "u")
     );
   }
-});
-
-test("publisher capability collector byte-compares its observed cluster UUID", async () => {
-  const client = publisherProbeClient({
-    clusterId: "11111111-1111-4111-8111-111111111111"
-  });
-  await assert.rejects(
-    collectRecoveryPublisherCapabilityPosture(client, {
-      expectedRecoverySqlClusterId:
-        RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
-    }),
-    /RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_MISMATCH/u
-  );
-  assert.equal(
-    client.calls.some((sql) => sql.startsWith("BEGIN TRANSACTION")),
-    false
-  );
 });
 
 test("stored recovery function definitions are read and digest-bound", async () => {
@@ -512,10 +492,6 @@ test("existing-cluster repair binds exact preflight and verifies through a fresh
   assert.equal(result.capabilityPosture.functionProbe.rollbackVerified, true);
   assert.equal(
     result.preflightObservedRecoverySqlClusterId,
-    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
-  );
-  assert.equal(
-    result.capabilityPosture.sqlClusterId,
     RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL_CLUSTER_ID
   );
   assert.equal(clients.length, 2);
