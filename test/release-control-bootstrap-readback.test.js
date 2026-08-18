@@ -453,6 +453,23 @@ test("simulation command renderer emits exactly sixteen read-only IAM calls", ()
     line.includes("ReleaseTerminalizerRole-negative.json")).length, 1);
 });
 
+test("live-simulator negative vectors use explicit-deny-compatible actions", () => {
+  const plan = buildBootstrapIamSimulationPlan({
+    accountId: ACCOUNT_ID,
+    artifactBucketName: ARTIFACT_BUCKET
+  });
+  const lambdaArn = `arn:aws:lambda:us-east-1:${ACCOUNT_ID}:function:` +
+    "prooftoact-gate2-negative";
+  for (const logicalId of [
+    "LiveDrillOperatorRole",
+    "ReleaseDeploymentRole"
+  ]) {
+    assert.deepEqual(plan[logicalId].negative.ActionNames,
+      ["lambda:InvokeFunction"]);
+    assert.deepEqual(plan[logicalId].negative.ResourceArns, [lambdaArn]);
+  }
+});
+
 test("source-owned directory assembly reproduces the exact input without hand edits", (t) => {
   const accepted = fixture();
   const root = materializeDirectory(t, accepted.input);
