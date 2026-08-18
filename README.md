@@ -1,6 +1,6 @@
 # ProofToAct
 
-**Public clean-room source. Not yet a contest submission or live AWS claim.**
+**Public clean-room source.**
 
 ProofToAct is an admissibility-memory demonstration for high-stakes agents.
 Its “Highwater Drill” is a synthetic multi-agency response exercise: shared
