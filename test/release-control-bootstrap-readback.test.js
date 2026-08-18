@@ -604,6 +604,37 @@ test("canonical hashes are deterministic across provider object key order", () =
   }), /BOOTSTRAP_READBACK_RECEIPT_REJECTED/u);
 });
 
+test("IAM simulations accept the AWS CLI false omission and reject every truncated or malformed envelope", () => {
+  const omitted = fixture();
+  for (const role of Object.values(omitted.input.responses.simulations)) {
+    delete role.negative.response.IsTruncated;
+    delete role.positive.response.IsTruncated;
+  }
+  assert.doesNotThrow(() =>
+    buildReleaseControlBootstrapReadbackReceipt(omitted));
+
+  const explicitFalse = fixture();
+  assert.doesNotThrow(() =>
+    buildReleaseControlBootstrapReadbackReceipt(explicitFalse));
+
+  const mutations = [
+    (response) => response.IsTruncated = true,
+    (response) => response.IsTruncated = null,
+    (response) => response.IsTruncated = "false",
+    (response) => response.IsTruncated = 0,
+    (response) => response.NextToken = "unexpected",
+    (response) => delete response.EvaluationResults
+  ];
+  for (const mutate of mutations) {
+    const candidate = fixture();
+    const response = candidate.input.responses.simulations
+      .ReleaseExecutionRole.positive.response;
+    mutate(response);
+    assert.throws(() => buildReleaseControlBootstrapReadbackReceipt(candidate),
+      /BOOTSTRAP_READBACK_IAM_SIMULATION_REJECTED/u);
+  }
+});
+
 test("unknown resource, table, role, boundary, and simulation drift fail closed", () => {
   const mutations = [
     (value) => value.input.responses.listStackResources
