@@ -6,7 +6,7 @@ import { verifyHostedDualRootArtifact } from
 
 function parse(arguments_) {
   const allowed = new Set([
-    "--application-root", "--control-root", "--output-root"
+    "--application-root", "--control-root", "--npm-cli", "--output-root"
   ]);
   const values = new Map();
   for (let index = 0; index < arguments_.length; index += 2) {
@@ -29,6 +29,7 @@ try {
   const result = verifyHostedDualRootArtifact({
     applicationRoot: values.get("--application-root"),
     controlRoot: values.get("--control-root"),
+    npmCli: values.get("--npm-cli"),
     outputRoot: values.get("--output-root")
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);

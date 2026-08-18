@@ -77,6 +77,19 @@ const WORKFLOWS = Object.freeze([
   })
 ]);
 
+const SOURCE_ONLY_WORKFLOWS = Object.freeze([
+  Object.freeze({
+    file: "prooftoact-hosted-dual-root-verification.yml",
+    jobNames: Object.freeze(["verify-dual-root"]),
+    name: "ProofToAct Hosted Dual Root Verification"
+  })
+]);
+
+const REQUIRED_WORKFLOW_PATHS = Object.freeze([
+  ...WORKFLOWS.map(({ file }) => `.github/workflows/${file}`),
+  ...SOURCE_ONLY_WORKFLOWS.map(({ file }) => `.github/workflows/${file}`)
+].sort());
+
 const GOVERNANCE_LANES = Object.freeze([
   ...WORKFLOWS.map((item) => Object.freeze({
     ...item,
@@ -95,11 +108,11 @@ const GOVERNANCE_LANES = Object.freeze([
 ]);
 
 const REQUIRED_EXACT_PATHS = Object.freeze([
-  ...WORKFLOWS.map(({ file }) => `.github/workflows/${file}`),
-  ".github/workflows/prooftoact-hosted-dual-root-verification.yml",
+  ...REQUIRED_WORKFLOW_PATHS,
   "config/prooftoact-release-operator-public.pub",
   "control-plane-verification/generate-hosted-dual-root-verification.js",
   "control-plane-verification/hosted-dual-root-verification.js",
+  "control-plane-verification/test-hosted-dual-root-verification-tamper.js",
   "control-plane-verification/verify-hosted-dual-root-verification.js",
   "infra/aws/release-deployment-roles-template.json",
   "release-control/build-release-control-runtime.js",
@@ -309,8 +322,7 @@ function collectInventory(root) {
     !fs.existsSync(safePath(root, entry)));
   required.filter((entry) => !missingPaths.includes(entry))
     .forEach((entry) => discovered.add(entry));
-  const expectedWorkflows = sorted(WORKFLOWS.map(({ file }) =>
-    `.github/workflows/${file}`));
+  const expectedWorkflows = REQUIRED_WORKFLOW_PATHS;
   const discoveredWorkflows = sorted([...discovered].filter((entry) =>
     entry.startsWith(".github/workflows/prooftoact-")));
   const unexpectedWorkflowPaths = discoveredWorkflows.filter((entry) =>
@@ -1099,20 +1111,34 @@ function collectSecurity(root, inventory) {
       !/^\s*environment:/mu.test(hosted) &&
       !/\$\{\{\s*secrets\./u.test(hosted) &&
       !/configure-aws-credentials|cockroach|execute-change-set/iu.test(hosted) &&
+      !/^\s+if:\s*\$\{\{\s*github\.ref\s*==/mu.test(hosted) &&
+      hosted.includes(
+        'run: test "$EXACT_DISPATCH_REF" = "refs/heads/main"') &&
       hosted.includes("ref: 963937a9873f0199b91897fe88da1b91bc84b5e3") &&
       hosted.includes("retention-days: 90") &&
       hosted.includes("if-no-files-found: error") &&
+      hosted.includes("if: ${{ success() }}") &&
+      !hosted.includes("if: ${{ always() }}") &&
       hosted.includes("verify-hosted-dual-root-verification.js") &&
+      hosted.includes(
+        "test-hosted-dual-root-verification-tamper.js") &&
       generator.includes("ACTIONS_ID_TOKEN_REQUEST_TOKEN") &&
       generator.includes("providerExecutionAuthorized: false") &&
       generator.includes("liveParameterValuesObserved: false") &&
-      generator.includes("HOSTED_DUAL_ROOT_REQUIRED_TEST_SKIPPED");
+      generator.includes("HOSTED_DUAL_ROOT_REQUIRED_TEST_SKIPPED") &&
+      generator.includes("NOT_OBSERVED_NO_PROVIDER_CONFIGURATION") &&
+      generator.includes("parameterDispositions") &&
+      generator.includes("verifyCommandBinding") &&
+      generator.includes("reopenRequiredSuiteEvidence") &&
+      generator.includes("reopenProvenanceLogEvidence") &&
+      generator.includes("parseSecurityReceipt(securityOutput)") &&
+      generator.includes("parseProcessBoundaryReceipts(processOutput)");
   } catch {
     hostedDualRootConstrained = false;
   }
   check("HOSTED_DUAL_ROOT_NO_OIDC_COMPLETE_EVIDENCE",
     hostedDualRootConstrained,
-    "The retained hosted lane must bind separate exact roots, reject OIDC/provider credentials, require zero skipped tests, and publish only a non-authorizing evidence artifact.");
+    "The retained hosted lane must bind separate exact roots, reject non-main dispatch and OIDC/provider credentials, require zero skipped tests, disposition all 45 parameters without invented provider values, bind retained commands and source bytes, and publish only a non-authorizing evidence artifact.");
   let credentialChainDisabled = false;
   try {
     const builder = readText(root, "release-control/build-release-control-runtime.js");
@@ -1629,7 +1655,7 @@ export function buildCandidate({
       governanceEvidenceSchema: GOVERNANCE_EVIDENCE_SCHEMA,
       provenanceEvidenceSchema: PROVENANCE_EVIDENCE_SCHEMA,
       requiredProtectedEnvironmentCount: GOVERNANCE_LANES.length,
-      requiredWorkflowCount: WORKFLOWS.length,
+      requiredWorkflowCount: REQUIRED_WORKFLOW_PATHS.length,
       sourcePolicySha256: canonicalDigest({
         discoveryRules: DISCOVERY_RULES.map((rule) => ({
           directory: rule.directory,
@@ -1644,6 +1670,7 @@ export function buildCandidate({
           EXPECTED_PROVIDER_DIRECT_DEPENDENCIES,
         governanceLanes: GOVERNANCE_LANES,
         requiredExactPaths: REQUIRED_EXACT_PATHS,
+        sourceOnlyWorkflows: SOURCE_ONLY_WORKFLOWS,
         workflows: WORKFLOWS
       })
     }),
@@ -1718,5 +1745,6 @@ export const CONTROL_PLANE_VERIFICATION_CONSTANTS = Object.freeze({
   GOVERNANCE_EVIDENCE_SCHEMA,
   GOVERNANCE_LANES,
   PROVENANCE_EVIDENCE_SCHEMA,
+  SOURCE_ONLY_WORKFLOWS,
   WORKFLOWS
 });

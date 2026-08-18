@@ -12,11 +12,15 @@ concurrency:
 
 jobs:
   verify-dual-root:
-    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
     steps:
+      - name: Reject every non-main manual dispatch
+        env:
+          EXACT_DISPATCH_REF: ${{ github.ref }}
+        run: test "$EXACT_DISPATCH_REF" = "refs/heads/main"
+
       - name: Check out exact control plane
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -92,14 +96,55 @@ jobs:
           NODE_PATH: ""
           NODE_REPL_EXTERNAL_MODULE: ""
           NODE_V8_COVERAGE: ""
-        run: >-
-          node control-plane-verification/verify-hosted-dual-root-verification.js
-          --control-root "$GITHUB_WORKSPACE/control-plane"
-          --application-root "$GITHUB_WORKSPACE/frozen-application"
-          --output-root "$RUNNER_TEMP/prooftoact-dual-root-verification"
+        run: |
+          npm_cli="$(node -e 'const path = require("node:path"); process.stdout.write(path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npm-cli.js"));')"
+          node control-plane-verification/verify-hosted-dual-root-verification.js \
+            --control-root "$GITHUB_WORKSPACE/control-plane" \
+            --application-root "$GITHUB_WORKSPACE/frozen-application" \
+            --npm-cli "$npm_cli" \
+            --output-root "$RUNNER_TEMP/prooftoact-dual-root-verification"
+
+      - name: Prove the verifier rejects retained evidence tampering
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: |
+          tamper_root="$RUNNER_TEMP/prooftoact-dual-root-tamper"
+          install -d -m 0700 "$tamper_root"
+          npm_cli="$(node -e 'const path = require("node:path"); process.stdout.write(path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npm-cli.js"));')"
+          node control-plane-verification/test-hosted-dual-root-verification-tamper.js \
+            --control-root "$GITHUB_WORKSPACE/control-plane" \
+            --application-root "$GITHUB_WORKSPACE/frozen-application" \
+            --npm-cli "$npm_cli" \
+            --output-root "$RUNNER_TEMP/prooftoact-dual-root-verification" \
+            --tamper-root "$tamper_root"
+
+      - name: Reopen the restored canonical set after tamper testing
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ github.sha }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+        run: |
+          npm_cli="$(node -e 'const path = require("node:path"); process.stdout.write(path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npm-cli.js"));')"
+          node control-plane-verification/verify-hosted-dual-root-verification.js \
+            --control-root "$GITHUB_WORKSPACE/control-plane" \
+            --application-root "$GITHUB_WORKSPACE/frozen-application" \
+            --npm-cli "$npm_cli" \
+            --output-root "$RUNNER_TEMP/prooftoact-dual-root-verification"
 
       - name: Retain canonical manifest and nonsecret logs
-        if: ${{ always() }}
+        if: ${{ success() }}
         id: upload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -112,7 +157,7 @@ jobs:
           retention-days: 90
 
       - name: Require retained artifact registration
-        if: ${{ always() && steps.upload.outcome == 'success' }}
+        if: ${{ success() && steps.upload.outcome == 'success' }}
         env:
           ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}

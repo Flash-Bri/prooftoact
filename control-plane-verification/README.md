@@ -15,8 +15,10 @@ It produces one deterministic candidate with independent sections for:
   packages excluded and external imports limited to Node builtins;
 - source security invariants;
 - the cumulative $20 cost boundary and retained controller state;
-- six workflow files mapped to seven protected environments (including both
-  credential-isolated coordinator jobs), plus separately supplied live proof;
+- six provider workflow files mapped to seven protected environments
+  (including both credential-isolated coordinator jobs), one separately
+  inventoried no-provider hosted-verification workflow, plus separately
+  supplied live proof;
 - clean standalone dual-package install/build provenance and separately
   supplied evidence.
 
@@ -234,10 +236,12 @@ imports; every external import must be a `node:` builtin.
 `ProofToAct Hosted Dual Root Verification` is a manually dispatched,
 main-only GitHub-hosted lane with repository contents read permission only. It
 has no environment binding, OIDC permission, provider credential input, or
-provider client action. It checks out the exact current control-plane SHA and
-the frozen application commit into separate roots, normalizes both, and uses
-the official Node.js 22.23.1 and npm 10.9.8 distributions already required by
-the provenance verifier.
+provider client action. A non-main manual dispatch executes an explicit
+failing first step; it cannot report success by skipping the only job. The lane
+checks out the exact current control-plane SHA and the frozen application
+commit into separate roots, normalizes both, and uses the official Node.js
+22.23.1 and npm 10.9.8 distributions already required by the provenance
+verifier.
 
 The lane requires all four package test scripts to finish with zero failures,
 zero cancellations, zero skips, and zero todos. It additionally runs the
@@ -245,17 +249,26 @@ explicit crash/replay/concurrency/spend/teardown test inventory, the complete
 source-security inventory and verifier, both installed-process boundary
 verifiers, and the privileged installed-stage suite. The frozen application is
 built twice through the isolated exact-Git builder and every output digest,
-template digest, build receipt, 45-key template parameter schema, and
-build-derived parameter input digest must match. Release-control and
-release-provider runtimes are also built twice and their complete executable
-manifests must match.
+template digest, build receipt, and build-derived parameter input digest must
+match. Its parameter evidence contains exactly one disposition for each of the
+45 template keys: 28 nonsecret build-derived values are represented only by
+their exact SHA-256 digests, while all 17 live/private or provider-resolved
+values carry `NOT_OBSERVED_NO_PROVIDER_CONFIGURATION`, `valueObserved:false`,
+and no invented value. Release-control and release-provider runtimes are also
+built twice and their complete executable manifests must match.
 
 The result is one canonical `manifest.json` plus hash-inventoried nonsecret
 logs and receipts. The workflow independently reopens the set, rejects any
-missing or extra file, and uploads it with 90-day retention. The manifest is
-deliberately non-authorizing: it records no AWS or CockroachDB access, no OIDC,
-no deployment, and no provider facts. Private/provider-resolved values in the
-45-value deployment parameter manifest are explicitly
-`SOURCE_CONTRACT_ONLY_NO_PROVIDER_CONFIGURATION`; this lane proves the complete
-source-owned parameter contract and build-derived inputs, not live parameter
-values or an executable change set.
+missing or extra file, reparses every retained TAP/security/process receipt,
+and recomputes each literal command, argument list, executable digest, and
+source-file digest. A post-verification matrix then proves that missing files,
+unbound bytes, resealed command argument/executable/source drift, skipped TAP,
+and resealed security or process receipt drift all reject. Only the canonical
+set is uploaded with
+90-day retention, and only after a final independent verifier pass over the
+restored set; a failed, cancelled, or interrupted generation, verification, or
+tamper step cannot upload a partial set. The manifest is deliberately
+non-authorizing: it records no AWS or CockroachDB access, no OIDC, no
+deployment, and no provider facts. This lane proves the complete source-owned
+parameter schema, per-key dispositions, and build-derived inputs—not live
+parameter values or an executable change set.

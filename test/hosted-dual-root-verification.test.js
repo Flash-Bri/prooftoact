@@ -13,6 +13,12 @@ import {
 } from "../control-plane-verification/hosted-dual-root-verification.js";
 import { PARAMETER_KEYS } from
   "../release-provider/src/release-provider-common.js";
+import { verifyReleaseSecurity } from
+  "../scripts/verify-release-security.js";
+import { verifyIntegratedLiveDrillProcessBoundaries } from
+  "../scripts/verify-integrated-live-drill-process-boundaries.js";
+import { verifyIntegratedLiveDrillSystemdBoundary } from
+  "../scripts/verify-integrated-live-drill-systemd-boundary.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const COMMIT = "1".repeat(40);
@@ -161,6 +167,30 @@ test("safety inventory explicitly spans replay, concurrency, spend, and teardown
 
 test("parameter evidence hashes all 45 schemas and labels live values absent",
   () => {
+    const exactPrivateKeys = [
+      "AgentArtifactVersion",
+      "ArtifactBucket",
+      "AuthorityArtifactVersion",
+      "AuthorityDatabaseHost",
+      "AuthorityDatabasePort",
+      "AuthorityDatabaseSecretArn",
+      "AuthorityDatabaseSecretVersionId",
+      "AuthorityIncidentId",
+      "AuthorityResourceId",
+      "AuthorityTenantId",
+      "BedrockModelId",
+      "BoundaryArtifactVersion",
+      "ConfigDigest",
+      "DemoArtifactVersion",
+      "EvidenceOperatorPrincipalArn",
+      "ProbeArtifactVersion",
+      "SignerArtifactVersion"
+    ];
+    assert.equal(PARAMETER_KEYS.length, 45);
+    assert.deepEqual(HOSTED_DUAL_ROOT_CONSTANTS.PRIVATE_PARAMETER_KEYS,
+      exactPrivateKeys);
+    assert.equal(exactPrivateKeys.length, 17);
+    assert.equal(PARAMETER_KEYS.length - exactPrivateKeys.length, 28);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(),
       "prooftoact-hosted-parameters-"));
     try {
@@ -187,6 +217,28 @@ test("parameter evidence hashes all 45 schemas and labels live values absent",
       const first = __test.templateParameterContract(temporary, receipt);
       assert.equal(first.keyCount, PARAMETER_KEYS.length);
       assert.equal(first.liveParameterValuesObserved, false);
+      assert.deepEqual(Object.keys(first.parameterDispositions).sort(),
+        [...PARAMETER_KEYS].sort());
+      assert.equal(first.observedValueCount + first.notObservedValueCount,
+        PARAMETER_KEYS.length);
+      assert.equal(first.notObservedValueCount,
+        HOSTED_DUAL_ROOT_CONSTANTS.PRIVATE_PARAMETER_KEYS.length);
+      for (const name of PARAMETER_KEYS) {
+        const disposition = first.parameterDispositions[name];
+        assert.deepEqual(Object.keys(disposition).sort(), [
+          "evidence", "status", "valueObserved", "valueSha256"
+        ]);
+        if (HOSTED_DUAL_ROOT_CONSTANTS.PRIVATE_PARAMETER_KEYS.includes(name)) {
+          assert.equal(disposition.status,
+            "NOT_OBSERVED_NO_PROVIDER_CONFIGURATION");
+          assert.equal(disposition.valueObserved, false);
+          assert.equal(disposition.valueSha256, null);
+        } else {
+          assert.equal(disposition.status, "OBSERVED_BUILD_DERIVED_VALUE");
+          assert.equal(disposition.valueObserved, true);
+          assert.match(disposition.valueSha256, /^[0-9a-f]{64}$/u);
+        }
+      }
       assert.equal(first.status,
         "SOURCE_CONTRACT_ONLY_NO_PROVIDER_CONFIGURATION");
       const changed = structuredClone(receipt);
@@ -194,6 +246,8 @@ test("parameter evidence hashes all 45 schemas and labels live values absent",
       const second = __test.templateParameterContract(temporary, changed);
       assert.notEqual(first.buildDerivedParameterInputsSha256,
         second.buildDerivedParameterInputsSha256);
+      assert.notEqual(first.parameterDispositionSha256,
+        second.parameterDispositionSha256);
       assert.equal(first.parameterSchemaSha256,
         second.parameterSchemaSha256);
     } finally {
@@ -214,27 +268,80 @@ test("publication scanner rejects reusable credentials and private keys", () => 
     "TEST_CODE"), /TEST_CODE/u);
 });
 
+test("retained command bindings reject argument, executable, and source drift",
+  () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(),
+      "prooftoact-hosted-command-binding-"));
+    try {
+      fs.writeFileSync(path.join(temporary, "source.js"), "export {};\n",
+        { mode: 0o600 });
+      const expected = {
+        args: ["--test", "source.js"],
+        executable: process.execPath,
+        sourcePaths: ["source.js"],
+        sourceRole: "test-root",
+        sourceRoot: temporary
+      };
+      const binding = __test.createCommandBinding(expected);
+      assert.deepEqual(__test.verifyCommandBinding(binding, expected), binding);
+      const argumentTamper = structuredClone(binding);
+      argumentTamper.arguments[0] = "--tampered";
+      assert.throws(() => __test.verifyCommandBinding(argumentTamper, expected),
+        /HOSTED_DUAL_ROOT_COMMAND_BINDING_REJECTED/u);
+      const sourceTamper = structuredClone(binding);
+      sourceTamper.sourceFiles[0].sha256 = "0".repeat(64);
+      assert.throws(() => __test.verifyCommandBinding(sourceTamper, expected),
+        /HOSTED_DUAL_ROOT_COMMAND_BINDING_REJECTED/u);
+      const executableTamper = structuredClone(binding);
+      executableTamper.executableSha256 = "0".repeat(64);
+      assert.throws(() => __test.verifyCommandBinding(executableTamper,
+        expected), /HOSTED_DUAL_ROOT_COMMAND_BINDING_REJECTED/u);
+    } finally {
+      fs.rmSync(temporary, { force: true, recursive: true });
+    }
+  });
+
 test("process and source-security receipts require exact pass dispositions",
   () => {
     const processBytes = Buffer.from([
-      JSON.stringify({ schemaVersion: "one", status: "PASS" }),
-      JSON.stringify({ schemaVersion: "two", status: "PASS" }),
+      JSON.stringify({ schemaVersion:
+        "tideproof.highwater-drill-process-boundary-verification.v5",
+      status: "PASS" }),
+      JSON.stringify({ schemaVersion:
+        "tideproof.integrated-live-drill-systemd-boundary.v1",
+      status: "PASS" }),
       ""
     ].join("\n"));
     assert.equal(__test.parseProcessBoundaryReceipts(processBytes).length, 2);
     assert.throws(() => __test.parseProcessBoundaryReceipts(Buffer.from(
       `${JSON.stringify({ status: "PASS" })}\n`)),
     /HOSTED_DUAL_ROOT_PROCESS_BOUNDARY_REJECTED/u);
-    assert.equal(__test.parseSecurityReceipt(Buffer.from(JSON.stringify({
-      finalReleaseReady: false,
-      manifestSha256: "a".repeat(64),
-      status: "CURRENT_SOURCE_SECURITY_PASS"
-    }))).status, "CURRENT_SOURCE_SECURITY_PASS");
-    assert.throws(() => __test.parseSecurityReceipt(Buffer.from(JSON.stringify({
-      finalReleaseReady: true,
-      manifestSha256: "a".repeat(64),
-      status: "CURRENT_SOURCE_SECURITY_PASS"
-    }))), /HOSTED_DUAL_ROOT_SECURITY_RECEIPT_REJECTED/u);
+    const securityReceipt = verifyReleaseSecurity({ rootDir: ROOT });
+    const securityBytes = Buffer.from(
+      `${JSON.stringify(securityReceipt, null, 2)}\n`, "utf8");
+    assert.equal(__test.parseSecurityReceipt(securityBytes).status,
+      "CURRENT_SOURCE_SECURITY_PASS");
+    const changed = structuredClone(securityReceipt);
+    changed.checks.canonicalManifest = false;
+    assert.throws(() => __test.parseSecurityReceipt(Buffer.from(
+      `${JSON.stringify(changed, null, 2)}\n`, "utf8")),
+    /HOSTED_DUAL_ROOT_SECURITY_RECEIPT_REJECTED/u);
+    const securitySources = __test.securityVerifierSourceFiles(ROOT);
+    assert.equal(securitySources.includes("RELEASE_SECURITY_MANIFEST.json"),
+      true);
+    assert.equal(securitySources.length > 200 && securitySources.every(
+      (relativePath) => fs.statSync(path.join(ROOT, relativePath)).isFile()),
+    true);
+    const processSources = __test.processBoundarySourceFiles([
+      verifyIntegratedLiveDrillProcessBoundaries(),
+      verifyIntegratedLiveDrillSystemdBoundary()
+    ]);
+    assert.equal(processSources.includes(
+      "src/cloud/integrated-live-drill-provider-worker.js"), true);
+    assert.equal(processSources.includes(
+      "infra/systemd/prooftoact-integrated-live-drill@.service"), true);
+    assert.equal(processSources.every((relativePath) =>
+      fs.statSync(path.join(ROOT, relativePath)).isFile()), true);
   });
 
 test("hosted workflow is no-OIDC, exact-root, retained, and action-pinned",
@@ -244,6 +351,10 @@ test("hosted workflow is no-OIDC, exact-root, retained, and action-pinned",
     assert.equal(/^\s*id-token:/mu.test(source), false);
     assert.equal(/^\s*environment:/mu.test(source), false);
     assert.equal(/\$\{\{\s*secrets\./u.test(source), false);
+    assert.equal(/^\s+if:\s*\$\{\{\s*github\.ref\s*==/mu.test(source),
+      false);
+    assert.equal(source.includes(
+      "run: test \"$EXACT_DISPATCH_REF\" = \"refs/heads/main\""), true);
     assert.equal(source.includes(
       HOSTED_DUAL_ROOT_CONSTANTS.FROZEN_APPLICATION.commit), true);
     assert.equal(source.includes("retention-days: 90"), true);
@@ -252,6 +363,16 @@ test("hosted workflow is no-OIDC, exact-root, retained, and action-pinned",
       '--control-root "$GITHUB_WORKSPACE/control-plane"'), true);
     assert.equal(source.includes(
       '--application-root "$GITHUB_WORKSPACE/frozen-application"'), true);
+    assert.equal((source.match(/--npm-cli "\$npm_cli"/gu) ?? []).length, 4);
+    assert.equal(source.includes("if: ${{ success() }}"), true);
+    assert.equal(source.includes("if: ${{ always() }}"), false);
+    const generate = source.indexOf(
+      "generate-hosted-dual-root-verification.js");
+    const verify = source.indexOf(
+      "verify-hosted-dual-root-verification.js");
+    const tamper = source.indexOf(
+      "test-hosted-dual-root-verification-tamper.js");
+    assert.equal(generate >= 0 && verify > generate && tamper > verify, true);
     const pins = [...source.matchAll(/^\s*uses:\s*[^@\s]+@([^\s#]+)/gmu)]
       .map((match) => match[1]);
     assert.equal(pins.length, 4);

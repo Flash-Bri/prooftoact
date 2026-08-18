@@ -277,6 +277,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     "config/prooftoact-release-operator-public.pub",
     "control-plane-verification/generate-hosted-dual-root-verification.js",
     "control-plane-verification/hosted-dual-root-verification.js",
+    "control-plane-verification/test-hosted-dual-root-verification-tamper.js",
     "control-plane-verification/verify-hosted-dual-root-verification.js",
     "infra/aws/release-deployment-roles-template.json",
     "release-control/package.json",
@@ -337,6 +338,8 @@ test("candidate deterministically binds the complete control-plane surface", () 
     item.status === "VERIFIED"), true);
   assert.equal(candidate.body.security.checks.find(({ id }) =>
     id === "HOSTED_DUAL_ROOT_NO_OIDC_COMPLETE_EVIDENCE")?.passed, true);
+  assert.equal(candidate.body.policy.requiredWorkflowCount, 7);
+  assert.deepEqual(candidate.body.inventory.unexpectedWorkflowPaths, []);
   assert.equal(candidate.body.inventory.files.every((item) =>
     typeof item.gitTracked === "boolean" &&
     typeof item.gitMatchesHead === "boolean"), true);
@@ -350,8 +353,8 @@ test("candidate deterministically binds the complete control-plane surface", () 
   }
   assert.equal(candidate.body.governance.sourceMappings.every((item) =>
     item.workflowSourceBound), true);
-  assert.equal(candidate.body.readiness.localSourceReady,
-    candidate.body.findings.length === 0);
+  assert.equal(candidate.body.readiness.localSourceReady, true);
+  assert.deepEqual(candidate.body.findings, []);
 });
 
 test("candidate envelope and current source mismatch fail closed", () => {
