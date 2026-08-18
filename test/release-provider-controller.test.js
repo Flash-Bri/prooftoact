@@ -815,8 +815,12 @@ test("exact resource contract and strict JSON bind the reviewed bytes", () => {
     "ProofToAct Read Only Release Evidence",
     "ProofToAct Approved Teardown"
   ]);
-  assert.equal(CONTRACT.releaseCoordinatorRole.requiredRuntimeWorkflowRefs
-    .length, 5);
+  assert.equal(
+    CONTRACT.releaseCoordinatorRole.requiredRuntimeWorkflowRefs,
+    "Flash-Bri/prooftoact/.github/workflows/" +
+      "prooftoact-sealed-coordinator.yml@" +
+      "50d0cd261b8597fe74c80b84c49be0adde5bdf6f"
+  );
   assert.equal(
     controllerConstants.LANE_ROLE_NAMES.evidence,
     "ProofToActReleaseEvidence"
@@ -1341,17 +1345,21 @@ test("PREPARE is phase-separated while every later workflow remains diagnostic-o
       assert.match(source, /^  coordinator-reserve:$/mu);
       assert.match(source, /^  provider-dispatch:$/mu);
       assert.match(source, /^  coordinator-finalize:$/mu);
+      assert.match(source, /^  sealed-coordinator-reserve:$/mu);
+      assert.match(source, /^  sealed-provider-dispatch:$/mu);
+      assert.match(source, /^  sealed-coordinator-finalize:$/mu);
       assert.match(source, /^    environment: aws-release-coordination$/mu);
-      assert.equal((source.match(/^      id-token: write$/gmu) ?? []).length, 3);
-      assert.match(
-        source,
-        /aws-actions\/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c/u
-      );
-      assert.match(source, /run-release-prepare-preflight\.js reserve/u);
-      assert.match(source, /run-release-prepare-preflight\.js dispatch/u);
-      assert.match(source, /run-release-prepare-preflight\.js finalize/u);
-      assert.match(source, /PROOFTOACT_RELEASE_BOOTSTRAP_STATUS/u);
-      assert.match(source, /PROOFTOACT_RELEASE_PREPARE_LOOKUP_B64/u);
+      assert.equal((source.match(/^      id-token: write$/gmu) ?? []).length, 0);
+      assert.doesNotMatch(source, /configure-aws-credentials/u);
+      assert.doesNotMatch(source, /run-release-prepare-preflight\.js/u);
+      assert.equal((source.match(
+        /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/gu
+      ) ?? []).length, 3);
+      assert.equal((source.match(
+        /\.github\/workflows\/prooftoact-sealed-(?:coordinator|prepare)\.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f/gu
+      ) ?? []).length, 3);
+      assert.doesNotMatch(source, /\$\{\{ (?:secrets|vars)\./u);
+      assert.doesNotMatch(source, /PROOFTOACT_RELEASE_PREPARE_LOOKUP_B64/u);
       assert.doesNotMatch(source, /PROVIDER_EXECUTION_DISABLED_RUNTIME_AUTHORITY_RECEIPTS_REQUIRED/u);
       const normalizers = [...source.matchAll(
         /run: node scripts\/(normalize-[a-z0-9-]+\.js)/gu

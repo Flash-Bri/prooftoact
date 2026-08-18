@@ -287,6 +287,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     "release-provider/build-release-provider-runtimes.js",
     "release-provider/generate-release-provider-metadata.js",
     "scripts/bootstrap-fresh-primary.js",
+    "scripts/build-release-credential-seal.js",
     "scripts/normalize-release-control-checkouts.js",
     "scripts/prepare-release-control-bootstrap.js",
     "scripts/prepare-release-deployment.js",

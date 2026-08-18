@@ -109,6 +109,7 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "release-provider/package.json",
   "release-provider/THIRD_PARTY_NOTICES.txt",
   "scripts/bootstrap-fresh-primary.js",
+  "scripts/build-release-credential-seal.js",
   "scripts/normalize-release-control-checkouts.js",
   "scripts/prepare-release-control-bootstrap.js",
   "scripts/prepare-release-deployment.js",
@@ -1047,10 +1048,14 @@ function collectSecurity(root, inventory) {
       sourceJobsBound &&
       /^\s*default:\s*true\s*$/mu.test(text) &&
       text.includes("PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: DIAGNOSTIC_NO_PROVIDER") &&
-      (text.match(/^\s*id-token:\s*write\s*$/gmu) ?? []).length === 3 &&
+      (text.match(/^\s*id-token:\s*write\s*$/gmu) ?? []).length === 0 &&
       (text.match(/!inputs\.diagnostic_only/gu) ?? []).length >= 3 &&
-      (text.match(/node scripts\/run-release-prepare-preflight\.js /gu) ?? [])
-        .length === 3;
+      !text.includes("${{ secrets.") && !text.includes("${{ vars.") &&
+      (text.match(/actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/gu) ?? [])
+        .length === 3 &&
+      (text.match(/\.github\/workflows\/prooftoact-sealed-(?:coordinator|prepare)\.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f/gu) ?? [])
+        .length === 3 &&
+      !text.includes("configure-aws-credentials");
     workflowChecks.push({
       actionPinsExact: uses.length >= 2 && uses.every((value) => HEX_40.test(value)),
       contentsReadOnly: /^permissions:\s*\n\s+contents:\s+read\s*$/mu.test(text),

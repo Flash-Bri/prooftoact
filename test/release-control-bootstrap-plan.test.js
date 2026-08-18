@@ -190,7 +190,7 @@ test("bootstrap plan is canonical, immutable, exact, and remains HOLD", (t) => {
   assert.equal(plan.controlPlane.tree, checkout.identity.tree);
   assert.equal(plan.controlPlane.templateSha256,
     __test.REVIEWED_TEMPLATE_SHA256);
-  assert.equal(plan.controlPlane.templateBytes, 83_658);
+  assert.equal(plan.controlPlane.templateBytes, 84_981);
   assert.equal(
     plan.controlPlane.permissionsBoundaryPolicySha256,
     __test.REVIEWED_BOUNDARY_POLICY_SHA256
