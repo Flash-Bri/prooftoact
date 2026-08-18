@@ -20,6 +20,7 @@ const PREIMPORT_BOUND_FILES = Object.freeze([
   "package-lock.json",
   "package.json",
   "scripts/bootstrap-fresh-primary.js",
+  "scripts/fresh-primary-provider-controller.js",
   "scripts/gate2-aws-readiness.js",
   "scripts/lib/dependency-snapshot.js",
   "scripts/lib/exact-git-source.js",
@@ -747,6 +748,116 @@ async function runFreshPrimaryBootstrap({
   });
 }
 
+function createProviderTransitionJournal(recordTransition) {
+  requireCondition(
+    typeof recordTransition === "function",
+    "FRESH_PRIMARY_PROVIDER_TRANSITION_REJECTED"
+  );
+  return Object.freeze({
+    [STATEFUL_TRANSITION_JOURNAL]: true,
+    record: recordTransition
+  });
+}
+
+async function runFreshPrimaryProviderControlledBootstrapWithRuntime({
+  adminConnectionString,
+  approval,
+  approvalNow = Date.now(),
+  clock = Date.now,
+  command,
+  credentialBundle,
+  credentialBundleRawSha256,
+  credentialBundleSha256,
+  credentialSeal,
+  databaseEnvironment = process.env,
+  discardAdminCredential,
+  localCredentialDiscarded,
+  operationId,
+  provider,
+  runtime,
+  sourceCommit,
+  treeDigest
+}) {
+  requireCondition(
+    command?.sourceCommit === sourceCommit &&
+      command?.treeDigest === treeDigest &&
+      command?.operationId === operationId &&
+      command?.approvalId === approval?.approvalId &&
+      command?.sqlClusterId === approval?.expectedClusterId &&
+      command?.approvalSha256 === sha256(canonicalBytes(approval)) &&
+      command?.adminSecretValueSha256 === sha256(adminConnectionString) &&
+      command?.credentialBundleRawSha256 === credentialBundleRawSha256 &&
+      command?.credentialBundleSha256 === credentialBundleSha256 &&
+      command?.credentialBundleSha256 ===
+        sha256(canonicalBytes(credentialBundle)) &&
+      command?.credentialSealReceiptSha256 ===
+        sha256(canonicalBytes(credentialSeal)) &&
+      command?.credentialSecretArnSha256 === credentialSeal?.secretArnSha256 &&
+      command?.credentialSecretVersionIdSha256 ===
+        credentialSeal?.secretVersionIdSha256 &&
+      command?.credentialBundleRawSha256 ===
+        credentialSeal?.credentialBundleRawSha256 &&
+      command?.credentialBundleSha256 ===
+        credentialSeal?.credentialBundleSha256 &&
+      runtime && [
+        "bootstrap",
+        "bootstrapDatabaseConfig",
+        "clientFactory",
+        "connectionStringForUser",
+        "runtimeDatabaseConfig"
+      ].every((name) => typeof runtime[name] === "function"),
+    "FRESH_PRIMARY_PROVIDER_BINDING_REJECTED"
+  );
+  // This controller is imported only after the public entry point has bound
+  // its exact bytes with the rest of the pre-import helper closure. Tests use
+  // the same path with injected non-provider dependencies.
+  const { runFreshPrimaryProviderController } = await import(
+    "./fresh-primary-provider-controller.js"
+  );
+  return runFreshPrimaryProviderController({
+    clock,
+    command,
+    provider,
+    dispatch: ({ recordTransition }) => runFreshPrimaryBootstrap({
+      adminConnectionString,
+      approval,
+      approvalNow,
+      bootstrap: runtime.bootstrap,
+      bootstrapDatabaseConfig: runtime.bootstrapDatabaseConfig,
+      clientFactory: runtime.clientFactory,
+      connectionStringForUser: runtime.connectionStringForUser,
+      credentialBundle,
+      credentialBundleRawSha256,
+      credentialBundleSha256,
+      credentialSeal,
+      databaseEnvironment,
+      discardAdminCredential,
+      localCredentialDiscarded,
+      operationId,
+      runtimeDatabaseConfig: runtime.runtimeDatabaseConfig,
+      sourceCommit,
+      transitionJournal: createProviderTransitionJournal(recordTransition),
+      treeDigest
+    })
+  });
+}
+
+export async function runFreshPrimaryProviderControlledBootstrap({
+  buildReceipt,
+  expectedCommit,
+  expectedTree,
+  ...input
+}) {
+  const source = preliminaryExactSourceBinding(expectedCommit, expectedTree);
+  const runtime = await loadBoundRuntime({ buildReceipt, source });
+  return runFreshPrimaryProviderControlledBootstrapWithRuntime({
+    ...input,
+    runtime,
+    sourceCommit: source.sourceCommit,
+    treeDigest: source.treeDigest
+  });
+}
+
 function parseArguments(args) {
   const accepted = new Set([
     "--admin-url-file",
@@ -1358,6 +1469,7 @@ export const __test = Object.freeze({
     process.env.NODE_TEST_CONTEXT !== "" ? {
       createStatefulTestTransitionJournal,
       openFreshOperationJournal,
+      runFreshPrimaryProviderControlledBootstrapWithRuntime,
       runFreshPrimaryBootstrap
     } : {})
 });

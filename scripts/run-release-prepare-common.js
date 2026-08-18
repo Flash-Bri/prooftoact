@@ -49,6 +49,7 @@ const OFFICIAL_ORIGIN = new Set([
   "https://github.com/Flash-Bri/prooftoact.git"
 ]);
 const TRACKED_EXECUTABLE_PATHS = Object.freeze([
+  ".github/workflows/prooftoact-execute-approved-release.yml",
   ".github/workflows/prooftoact-release-candidate.yml",
   ".github/workflows/prooftoact-sealed-coordinator.yml",
   ".github/workflows/prooftoact-sealed-evidence.yml",
@@ -66,7 +67,11 @@ const TRACKED_EXECUTABLE_PATHS = Object.freeze([
   "scripts/release-provider-one-shot-broker.js",
   "scripts/run-release-prepare-common.js",
   "scripts/run-release-prepare-phase.js",
-  "scripts/run-release-prepare-preflight.js"
+  "scripts/run-release-prepare-preflight.js",
+  "scripts/run-release-execute-common.js",
+  "scripts/run-release-execute-diagnostic.js",
+  "scripts/run-release-execute-phase.js",
+  "scripts/run-release-execute-preflight.js"
 ]);
 const PHASES = Object.freeze({
   diagnostic: Object.freeze({
@@ -238,6 +243,16 @@ export function createControlPlaneExecutableManifest({
     commit: controlPlane.commit,
     controlRuntimeProvenanceSha256: controlReceipt.provenanceSha256,
     controlRuntimeSha256: controlReceipt.sha256,
+    executeCommonSha256: exactFileSha256(controlRoot,
+      "scripts/run-release-execute-common.js", code),
+    executeDiagnosticSha256: exactFileSha256(controlRoot,
+      "scripts/run-release-execute-diagnostic.js", code),
+    executePhaseSha256: exactFileSha256(controlRoot,
+      "scripts/run-release-execute-phase.js", code),
+    executePreflightSha256: exactFileSha256(controlRoot,
+      "scripts/run-release-execute-preflight.js", code),
+    executeWorkflowSha256: exactFileSha256(controlRoot,
+      ".github/workflows/prooftoact-execute-approved-release.yml", code),
     iamBootstrapTemplateSha256: exactFileSha256(controlRoot,
       "infra/aws/release-deployment-roles-template.json", code),
     normalizerSha256: exactFileSha256(controlRoot,
@@ -415,9 +430,12 @@ export function sanitizedBrokerEnvironment(environment) {
 }
 
 export function consumeSignedApproval(environment, trustedOperatorPublicKey,
-  now = Date.now()) {
-  const encoded = environment.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64;
-  delete environment.PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64;
+  now = Date.now(), {
+    lane = "PREPARE",
+    secretName = "PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64"
+  } = {}) {
+  const encoded = environment[secretName];
+  delete environment[secretName];
   const envelope = decodeBase64Json(encoded, 512 * 1024,
     "RELEASE_PREPARE_APPROVAL_SECRET_REJECTED");
   const approval = validateProviderBrokerApproval(
@@ -425,7 +443,7 @@ export function consumeSignedApproval(environment, trustedOperatorPublicKey,
     trustedOperatorPublicKey,
     now
   );
-  requireCondition(approval.claims.lane === "PREPARE",
+  requireCondition(approval.claims.lane === lane,
     "RELEASE_PREPARE_APPROVAL_LANE_REJECTED");
   return Object.freeze({ approval, envelope });
 }
@@ -433,7 +451,9 @@ export function consumeSignedApproval(environment, trustedOperatorPublicKey,
 export function consumeBoundedSignedApproval({
   clock = Date.now,
   environment,
+  lane = "PREPARE",
   phaseName,
+  secretName = "PROOFTOACT_RELEASE_PREPARE_APPROVAL_B64",
   trustedOperatorPublicKey
 }) {
   const code = "RELEASE_PREPARE_APPROVAL_WINDOW_REJECTED";
@@ -444,7 +464,7 @@ export function consumeBoundedSignedApproval({
   validateApprovalWindow({ expiresAt: Number.MAX_SAFE_INTEGER,
     now: initialNow, phaseName, priorNow: 0 });
   const accepted = consumeSignedApproval(environment, trustedOperatorPublicKey,
-    initialNow);
+    initialNow, { lane, secretName });
   validateApprovalWindow({ expiresAt: accepted.approval.expiresAt,
     now: initialNow, phaseName, priorNow: initialNow });
   let priorNow = initialNow;

@@ -21,31 +21,34 @@ This uses a deliberate two-commit sequence:
 The direct release-candidate workflow has no `id-token: write` permission and
 no AWS credential configuration. Checkout, dependency installation, frozen
 application build, tests, and seal generation stay in those tokenless jobs.
-They receive no protected environment secret or variable. The only
-token-capable reusable workflows are the
-coordinator and PREPARE boundaries. They perform no checkout, setup, package
-installation, build, test, repository script, AWS CLI, or caller-controlled
-command or third-party action. They receive only two small canonical Base64
-values from the tokenless jobs, decode them into an owner-only temporary
-directory, require exactly two bounded regular single-link files, verify the
-canonical Base64 and both SHA-256 values, parse exact JSON schemas and fixed
-values, and then stop with a hard HOLD before AWS credential configuration.
-The tokenless jobs separately retain those two files through an exact pinned
-artifact-upload action; the token jobs never download or execute that artifact.
+They receive no protected environment secret or variable. Its bootstrap-pinned
+coordinator and PREPARE reusable workflows still decode only two small
+canonical Base64 values, verify their hashes and exact schemas, and stop at the
+reviewed HOLD boundary.
 
-The execution, drill, evidence, teardown, and terminalizer reusable workflows
-have no OIDC permission at all and hard-fail. Their role trusts are pinned now
-so a later mutable caller cannot silently gain authority. Enabling any of them
-requires a new reviewed reusable-workflow commit and a separately reviewed IAM
-trust update to that new exact SHA.
+The source now also contains activation-ready successor coordinator and EXECUTE
+reusable-workflow bytes. Those successors check out the exact authority commit
+and frozen application separately, bind the signed approval and protected
+bootstrap readback before OIDC, install only the two isolated runtime dependency
+trees, assume one phase-specific role, and perform reserve, dispatch, or
+finalize through capability-separated runtimes. They are not reachable from the
+current diagnostic-only top-level EXECUTE workflow, and the live IAM trusts are
+not authorized to their as-yet-unbound commit SHA. Activating them requires the
+same two-commit sequence: first merge and verify these reusable bytes; then pin
+the caller and IAM `job_workflow_ref` conditions to that immutable commit in a
+separate reviewed child, apply the exact IAM update, and capture a fresh
+provider readback. The drill, evidence, teardown, and terminalizer reusable
+workflows remain hard HOLDs.
 
-The current coordinator and PREPARE seals deliberately contain only the fixed
-action `HOLD_NO_PROVIDER_EXECUTION`. They are not executable provider payloads.
-The source-bound IAM template has not been applied by this change, and no
-environment, secret, role, workflow run, AWS resource, database, deployment,
-publication, or submission state was changed. Until the exact IAM update is
-deployed and a separately reviewed executable design replaces the HOLD, the
-only truthful result is `NO PROVIDER MUTATION`.
+The legacy coordinator and PREPARE seals deliberately contain only the fixed
+action `HOLD_NO_PROVIDER_EXECUTION`. The successor EXECUTE seals contain only
+hash-bound executable coordinates; they contain no credential, approval, role,
+provider receipt, or authority by themselves. The source-bound IAM template
+has not been advanced to the successor workflow bytes, and no environment,
+secret, role, workflow run, AWS resource, database, deployment, publication, or
+submission state is implied by this source. Until the child pin, applied IAM
+update, fresh bootstrap readback, fresh signed approval, and exact provider
+receipts all exist, the only truthful result is `NO PROVIDER MUTATION`.
 
 The reviewed IAM template SHA-256 after this source change is
 `5f72ab835c93e6c8739405ed953d5c340dd13497a83eb1efff40fd70ba144da9`.

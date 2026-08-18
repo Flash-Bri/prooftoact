@@ -19,6 +19,8 @@ import {
   sha256,
   tableArnFor
 } from "./release-provider-common.js";
+import { validateExecuteCommand } from
+  "./release-provider-execute-common.js";
 
 const MAX_CANONICAL_BYTES = 128 * 1024;
 const COMMAND_SCHEMA = "prooftoact.provider-broker-command.v2";
@@ -28,7 +30,7 @@ const INTENT_SCHEMA = "prooftoact.provider-global-dispatch-intent.v1";
 const OUTCOME_SCHEMA = "prooftoact.provider-dispatch-outcome.v1";
 const RECORD_SCHEMA = "prooftoact.provider-global-record.v1";
 const TERMINAL_SCHEMA = "prooftoact.provider-global-terminal-record.v1";
-const COMMAND_KEYS = Object.freeze([
+const PREPARE_COMMAND_KEYS = Object.freeze([
   "action", "approvalId", "approvalSha256", "appSource",
   "artifactManifestSha256", "authorityContractSha256",
   "budgetKeySha256", "budgetReservationUsd", "buildReceiptSha256",
@@ -85,7 +87,7 @@ export function validatePrepareCommand(command, tableArn) {
   const account = /^arn:aws:dynamodb:us-east-1:([0-9]{12}):table\/prooftoact-release-controller$/u
     .exec(tableArn ?? "")?.[1];
   requireCondition(ACCOUNT_ID.test(account ?? "") &&
-    exactKeys(command, COMMAND_KEYS) &&
+    exactKeys(command, PREPARE_COMMAND_KEYS) &&
     command.schemaVersion === COMMAND_SCHEMA &&
     command.action === "PREPARE_EXACT_CREATE_CHANGE_SET" &&
     command.lane === "PREPARE" && command.providerMutationExpected === true &&
@@ -142,6 +144,16 @@ export function validatePrepareCommand(command, tableArn) {
   return deepFreeze(structuredClone(command));
 }
 
+function validateLaneCommand(command, tableArn, lane) {
+  if (lane === "PREPARE") return validatePrepareCommand(command, tableArn);
+  requireCondition(lane === "EXECUTE",
+    "RELEASE_PROVIDER_COMMAND_LANE_REJECTED");
+  validateExecuteCommand(command);
+  requireCondition(command.namespaceArn === tableArn,
+    "RELEASE_PROVIDER_EXECUTE_COMMAND_REJECTED");
+  return deepFreeze(structuredClone(command));
+}
+
 function validateConsumption(value, command) {
   const code = "RELEASE_PROVIDER_CONSUMPTION_REJECTED";
   requireCondition(exactKeys(value, [
@@ -186,7 +198,7 @@ function validateIntent(value, command, consumption) {
     value.action === command.action && value.approvalId === command.approvalId &&
     value.commandSha256 === command.commandSha256 &&
     value.globalKeySha256 === command.globalKeySha256 &&
-    value.lane === "PREPARE" && value.previousReceiptSha256 ===
+    value.lane === command.lane && value.previousReceiptSha256 ===
       canonicalDigest(consumption) && UUID.test(value.intentId ?? "") &&
     value.version === 2 && value.durable === true &&
     value.globallyAuthoritative === true, code);
@@ -245,10 +257,11 @@ function validateTerminal(value, command, predecessor) {
   return value;
 }
 
-export function decodeImmutablePrepareRecordItem({
+function decodeImmutableLaneRecordItem({
   commandSha256,
   globalKeySha256,
   item,
+  lane,
   tableArn
 }) {
   const code = "RELEASE_PROVIDER_GLOBAL_RECORD_ITEM_REJECTED";
@@ -275,8 +288,8 @@ export function decodeImmutablePrepareRecordItem({
     ...(hasIntent ? ["intent", "intentSha256"] : []),
     ...(hasTerminal ? ["terminal", "terminalSha256"] : [])
   ]), code);
-  const command = validatePrepareCommand(decodeCanonical(item.command, code),
-    tableArn);
+  const command = validateLaneCommand(decodeCanonical(item.command, code),
+    tableArn, lane);
   const consumption = validateConsumption(
     decodeCanonical(item.consumption, code), command);
   requireCondition(command.commandSha256 === commandSha256 &&
@@ -322,6 +335,14 @@ export function decodeImmutablePrepareRecordItem({
   });
 }
 
+export function decodeImmutablePrepareRecordItem(options) {
+  return decodeImmutableLaneRecordItem({ ...options, lane: "PREPARE" });
+}
+
+export function decodeImmutableExecuteRecordItem(options) {
+  return decodeImmutableLaneRecordItem({ ...options, lane: "EXECUTE" });
+}
+
 export function decodeImmutablePrepareIntentItem({
   commandSha256,
   globalKeySha256,
@@ -340,6 +361,24 @@ export function decodeImmutablePrepareIntentItem({
     intent: record.intent });
 }
 
+export function decodeImmutableExecuteIntentItem({
+  commandSha256,
+  globalKeySha256,
+  intentId,
+  item,
+  tableArn
+}) {
+  const code = "RELEASE_PROVIDER_EXECUTE_INTENT_ITEM_REJECTED";
+  requireCondition(UUID.test(intentId ?? ""), code);
+  const record = decodeImmutableExecuteRecordItem({
+    commandSha256, globalKeySha256, item, tableArn
+  });
+  requireCondition(record.status === "INTENT" && record.intent !== null &&
+    record.intent.intentId === intentId && record.terminal === null, code);
+  return deepFreeze({ command: record.command, consumption: record.consumption,
+    intent: record.intent });
+}
+
 function exactTransport(transport) {
   requireCondition(exactKeys(transport, [
     "describeTable", "getCallerIdentity", "getIntentItem", "listTags"
@@ -348,9 +387,12 @@ function exactTransport(transport) {
   return transport;
 }
 
-export function createPreparePermitReader({
+function createPermitReader({
   accountId,
   expectedTableIdentity,
+  lane,
+  permitSchema,
+  roleName,
   transport
 }) {
   const provider = exactTransport(transport);
@@ -362,7 +404,7 @@ export function createPreparePermitReader({
 
   async function readRecord({ commandSha256, globalKeySha256 }) {
     const caller = normalizeCallerIdentity(
-      await provider.getCallerIdentity(), "ProofToActReleaseDeployment");
+      await provider.getCallerIdentity(), roleName);
     requireCondition(caller.accountId === accountId,
       "RELEASE_PROVIDER_CALLER_ACCOUNT_REJECTED");
     const [describeResponse, listTagsResponse] = await Promise.all([
@@ -390,9 +432,13 @@ export function createPreparePermitReader({
       response.$metadata?.requestId,
       "RELEASE_PROVIDER_INTENT_READ_REJECTED"
     );
-    const record = decodeImmutablePrepareRecordItem({
-      commandSha256, globalKeySha256, item: response.Item, tableArn
-    });
+    const record = lane === "PREPARE"
+      ? decodeImmutablePrepareRecordItem({
+          commandSha256, globalKeySha256, item: response.Item, tableArn
+        })
+      : decodeImmutableExecuteRecordItem({
+          commandSha256, globalKeySha256, item: response.Item, tableArn
+        });
     return deepFreeze({ caller, record, storeReadRequestId, tableIdentity });
   }
 
@@ -410,7 +456,7 @@ export function createPreparePermitReader({
         record.intent.intentId === request.intentId && record.terminal === null,
       code);
       const permit = {
-        schemaVersion: "prooftoact.prepare-provider-permit.v1",
+        schemaVersion: permitSchema,
         status: "EXACT_DURABLE_INTENT_CONFIRMED",
         caller,
         command: record.command,
@@ -441,8 +487,26 @@ export function createPreparePermitReader({
   });
 }
 
+export function createPreparePermitReader(options) {
+  return createPermitReader({
+    ...options,
+    lane: "PREPARE",
+    permitSchema: "prooftoact.prepare-provider-permit.v1",
+    roleName: "ProofToActReleaseDeployment"
+  });
+}
+
+export function createExecutePermitReader(options) {
+  return createPermitReader({
+    ...options,
+    lane: "EXECUTE",
+    permitSchema: "prooftoact.execute-provider-permit.v1",
+    roleName: "ProofToActReleaseExecution"
+  });
+}
+
 export const __test = Object.freeze({
-  COMMAND_KEYS,
+  COMMAND_KEYS: PREPARE_COMMAND_KEYS,
   decodeCanonical,
   exactMoney,
   validateConsumption,

@@ -16,6 +16,8 @@ import {
   validateFreshPrimaryCredentialBundle,
   validateFreshPrimaryCredentialSeal
 } from "../scripts/bootstrap-fresh-primary.js";
+import { buildFreshPrimaryProviderCommand } from
+  "../scripts/fresh-primary-provider-controller.js";
 
 const runFreshPrimaryBootstrap = __test.runFreshPrimaryBootstrap;
 
@@ -219,6 +221,149 @@ function runInput(state = clients(), overrides = {}) {
     transitionJournal: __test.createStatefulTestTransitionJournal(),
     treeDigest: TREE_DIGEST,
     ...overrides
+  };
+}
+
+function providerControlledInput(state = clients()) {
+  const input = runInput(state);
+  const command = buildFreshPrimaryProviderCommand({
+    adminSecretArnSha256: "c".repeat(64),
+    adminSecretVersionIdSha256: "d".repeat(64),
+    adminSecretValueSha256: __test.sha256(input.adminConnectionString),
+    approvalId: input.approval.approvalId,
+    approvalSha256: __test.sha256(__test.canonicalBytes(input.approval)),
+    cloudApiSecretArnSha256: "e".repeat(64),
+    cloudApiSecretVersionIdSha256: "f".repeat(64),
+    cloudApiSecretValueSha256: "a".repeat(64),
+    controllerTableArn:
+      "arn:aws:dynamodb:us-east-1:111111111111:table/" +
+      "prooftoact-release-controller",
+    credentialSecretArnSha256: input.credentialSeal.secretArnSha256,
+    credentialSecretVersionIdSha256:
+      input.credentialSeal.secretVersionIdSha256,
+    credentialBundleRawSha256: input.credentialBundleRawSha256,
+    credentialBundleSha256: input.credentialBundleSha256,
+    credentialSealReceiptSha256:
+      __test.sha256(__test.canonicalBytes(input.credentialSeal)),
+    operationId: input.operationId,
+    providerClusterId: "523e4567-e89b-42d3-a456-426614174004",
+    sourceCommit: input.sourceCommit,
+    sqlClusterId: input.approval.expectedClusterId,
+    treeDigest: input.treeDigest
+  });
+  let version = 0;
+  const provider = {
+    async authenticate() {
+      return {
+        schemaVersion:
+          "prooftoact.fresh-primary-provider-authentication.v2",
+        status: "AUTHENTICATED_PROVIDER_READBACK",
+        callerIdentitySha256: "0".repeat(64),
+        cloud: command.cloud,
+        clusterInventorySha256: "1".repeat(64),
+        namespaceArn: command.controllerTableArn,
+        observedAt: new Date(NOW).toISOString(),
+        providerBacked: true,
+        providerClusterId: command.providerClusterId,
+        readOnly: true,
+        region: command.region,
+        secretReadbacks: {
+          admin: {
+            immutableVersion: true,
+            secretArnSha256: command.adminSecretArnSha256,
+            secretValueSha256: command.adminSecretValueSha256,
+            secretVersionIdSha256: command.adminSecretVersionIdSha256,
+            versionStage: "AWSCURRENT"
+          },
+          cloudApi: {
+            immutableVersion: true,
+            secretArnSha256: command.cloudApiSecretArnSha256,
+            secretValueSha256: command.cloudApiSecretValueSha256,
+            secretVersionIdSha256: command.cloudApiSecretVersionIdSha256,
+            versionStage: "AWSCURRENT"
+          },
+          credential: {
+            immutableVersion: true,
+            secretArnSha256: command.credentialSecretArnSha256,
+            secretValueSha256: command.credentialBundleRawSha256,
+            secretVersionIdSha256: command.credentialSecretVersionIdSha256,
+            versionStage: "AWSCURRENT"
+          }
+        },
+        stronglyConsistent: true
+      };
+    },
+    async readStrong() { return null; },
+    async consumeOnce() {
+      version = 1;
+      return {
+        schemaVersion: "prooftoact.fresh-primary-provider-consumption.v1",
+        status: "CONSUMED",
+        approvalId: command.approvalId,
+        commandSha256: command.commandSha256,
+        consumedAt: new Date(NOW).toISOString(),
+        durable: true,
+        globallyAuthoritative: true,
+        globalKeySha256: command.globalKeySha256,
+        namespaceArn: command.controllerTableArn,
+        oneShot: true,
+        operationId: command.operationId,
+        version
+      };
+    },
+    async appendIntent({ authentication, consumption }) {
+      version = 2;
+      return {
+        schemaVersion: "prooftoact.fresh-primary-provider-intent.v2",
+        status: "DURABLE",
+        commandSha256: command.commandSha256,
+        durable: true,
+        event: "BEFORE_DATABASE_PROVIDER_DISPATCH",
+        globallyAuthoritative: true,
+        globalKeySha256: command.globalKeySha256,
+        namespaceArn: command.controllerTableArn,
+        operationId: command.operationId,
+        previousReceiptSha256:
+          __test.sha256(__test.canonicalBytes(consumption)),
+        providerAuthenticationReceiptSha256:
+          __test.sha256(__test.canonicalBytes(authentication)),
+        version
+      };
+    },
+    async appendTransition({ transition }) {
+      version = transition.version;
+      return transition;
+    },
+    async finalize({ outcome, previousReceiptSha256, transitionCount }) {
+      version += 1;
+      return {
+        schemaVersion: "prooftoact.fresh-primary-provider-terminal.v1",
+        status: "TERMINAL",
+        commandSha256: command.commandSha256,
+        operationId: command.operationId,
+        namespaceArn: command.controllerTableArn,
+        outcomeSha256: __test.sha256(__test.canonicalBytes(outcome)),
+        previousReceiptSha256,
+        durable: true,
+        globallyAuthoritative: true,
+        globalKeySha256: command.globalKeySha256,
+        transitionCount,
+        version
+      };
+    }
+  };
+  return {
+    ...input,
+    clock: () => NOW,
+    command,
+    provider,
+    runtime: {
+      bootstrap: input.bootstrap,
+      bootstrapDatabaseConfig: input.bootstrapDatabaseConfig,
+      clientFactory: input.clientFactory,
+      connectionStringForUser: input.connectionStringForUser,
+      runtimeDatabaseConfig: input.runtimeDatabaseConfig
+    }
   };
 }
 
@@ -501,6 +646,47 @@ test("fresh-primary bootstrap creates one database and validates exact roles", a
   ]);
 });
 
+test("provider controller wraps the real bootstrap core in durable global transitions", async () => {
+  const state = clients();
+  const receipt = await __test
+    .runFreshPrimaryProviderControlledBootstrapWithRuntime(
+      providerControlledInput(state)
+    );
+  assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.globallyAuthoritativeOneShot, true);
+  assert.equal(receipt.providerClusterId,
+    "523e4567-e89b-42d3-a456-426614174004");
+  assert.equal(receipt.sqlClusterId, CLUSTER_ID);
+  assert.equal(receipt.transitionCount, 10);
+  assert.equal(
+    state.calls.filter((call) => call === "admin:CREATE DATABASE tideproof")
+      .length,
+    1
+  );
+});
+
+test("provider controller binds authenticated secret values to bootstrap inputs", async () => {
+  for (const drift of [
+    { adminConnectionString: ADMIN_URL.replace("private-password", "drifted") },
+    {
+      credentialBundle: {
+        ...credentialBundle(),
+        recoveryPublisherKeySetDigest: "0".repeat(64)
+      }
+    }
+  ]) {
+    const state = clients();
+    await assert.rejects(
+      __test.runFreshPrimaryProviderControlledBootstrapWithRuntime({
+        ...providerControlledInput(state),
+        ...drift
+      }),
+      /FRESH_PRIMARY_PROVIDER_BINDING_REJECTED/u
+    );
+    assert.equal(state.calls.length, 0);
+  }
+});
+
 test("fresh-primary recomputes canonical credential digest before connect", async () => {
   const state = clients();
   await assert.rejects(
@@ -627,6 +813,7 @@ test("database-capable imports occur only after exact runtime/dependency binding
     "package-lock.json",
     "package.json",
     "scripts/bootstrap-fresh-primary.js",
+    "scripts/fresh-primary-provider-controller.js",
     "scripts/gate2-aws-readiness.js",
     "scripts/lib/dependency-snapshot.js",
     "scripts/lib/exact-git-source.js",

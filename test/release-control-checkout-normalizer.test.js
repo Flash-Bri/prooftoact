@@ -105,6 +105,23 @@ function actionsEnvironment(
   };
 }
 
+function sealedExecuteEnvironment(current, callerJob) {
+  assert([
+    "coordinator-reserve",
+    "provider-dispatch",
+    "coordinator-finalize"
+  ].includes(callerJob));
+  return {
+    ...actionsEnvironment(current, "ProofToAct Execute Approved Release"),
+    GITHUB_JOB: "sealed-credential-boundary",
+    PROOFTOACT_RELEASE_CALLER_JOB: callerJob,
+    PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: current.controlCommit,
+    PROOFTOACT_RELEASE_SEALED_WORKFLOW: callerJob === "provider-dispatch"
+      ? "prooftoact-sealed-execute.yml"
+      : "prooftoact-sealed-coordinator.yml"
+  };
+}
+
 function exactFakeNormalizer(calls) {
   return ({ rootDir, environment }) => {
     assert.equal(environment.GITHUB_WORKSPACE, rootDir);
@@ -171,6 +188,68 @@ test("release candidate admits only the exact phase-separated jobs", () => {
       });
       assert.equal(receipt.status, "EXACT_SEPARATE_CHECKOUTS_NORMALIZED");
       assert.equal(calls.length, 2);
+    }
+  } finally {
+    current.cleanup();
+  }
+});
+
+test("sealed execute admits only the exact caller and reusable-workflow tuple", () => {
+  const current = fixture();
+  try {
+    for (const callerJob of [
+      "coordinator-reserve",
+      "provider-dispatch",
+      "coordinator-finalize"
+    ]) {
+      const calls = [];
+      const receipt = __test.normalizeWithDependencies({
+        applicationCommit: current.applicationCommit,
+        controlRoot: current.controlRoot,
+        environment: sealedExecuteEnvironment(current, callerJob),
+        normalizer: exactFakeNormalizer(calls)
+      });
+      assert.equal(receipt.status, "EXACT_SEPARATE_CHECKOUTS_NORMALIZED");
+      assert.equal(receipt.workflow, "ProofToAct Execute Approved Release");
+      assert.equal(calls.length, 2);
+    }
+
+    const base = sealedExecuteEnvironment(current, "provider-dispatch");
+    for (const mutation of [
+      { PROOFTOACT_RELEASE_CALLER_JOB: "execute-diagnostic" },
+      { PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: "f".repeat(40) },
+      { PROOFTOACT_RELEASE_SEALED_WORKFLOW:
+        "prooftoact-sealed-coordinator.yml" },
+      { GITHUB_JOB: "provider-dispatch" }
+    ]) {
+      assert.throws(
+        () => __test.validate({
+          applicationCommit: current.applicationCommit,
+          controlRoot: current.controlRoot,
+          environment: { ...base, ...mutation }
+        }),
+        /RELEASE_CONTROL_CHECKOUT_CONTEXT/u
+      );
+    }
+    for (const job of [
+      "coordinator-reserve",
+      "provider-dispatch",
+      "coordinator-finalize"
+    ]) {
+      assert.throws(
+        () => __test.validate({
+          applicationCommit: current.applicationCommit,
+          controlRoot: current.controlRoot,
+          environment: {
+            ...actionsEnvironment(
+              current,
+              "ProofToAct Execute Approved Release"
+            ),
+            GITHUB_JOB: job
+          }
+        }),
+        /RELEASE_CONTROL_CHECKOUT_CONTEXT/u
+      );
     }
   } finally {
     current.cleanup();

@@ -53,7 +53,7 @@ function loaderInput(outputRoot, receipt, capability) {
   };
 }
 
-test("builds three deterministic capability-specific content-addressed runtimes", async () => {
+test("builds six deterministic capability-specific content-addressed runtimes", async () => {
   const first = await built();
   const second = await built();
   assert.equal(first.receipt.runtimeSetSha256,
@@ -61,7 +61,8 @@ test("builds three deterministic capability-specific content-addressed runtimes"
   assert.equal(first.receipt.provenanceSha256,
     second.receipt.provenanceSha256);
   assert.deepEqual(first.receipt.runtimes.map(({ capability }) => capability), [
-    "PERMIT_READER", "PREPARE_DISPATCHER", "PREPARE_READBACK"
+    "PERMIT_READER", "EXECUTE_PERMIT_READER", "EXECUTE_DISPATCHER",
+    "EXECUTE_READBACK", "PREPARE_DISPATCHER", "PREPARE_READBACK"
   ]);
   for (const runtime of first.receipt.runtimes) {
     assert.equal(runtime.path.endsWith(`${runtime.sha256}.mjs`), true);
@@ -81,12 +82,27 @@ test("loader verifies provenance, exact bytes, modes, and capability exports", a
   const { outputRoot, receipt } = await built();
   const permit = await loadReleaseProviderRuntime(loaderInput(
     outputRoot, receipt, "PERMIT_READER"));
+  const executePermit = await loadReleaseProviderRuntime(loaderInput(
+    outputRoot, receipt, "EXECUTE_PERMIT_READER"));
+  const executeDispatch = await loadReleaseProviderRuntime(loaderInput(
+    outputRoot, receipt, "EXECUTE_DISPATCHER"));
+  const executeReadback = await loadReleaseProviderRuntime(loaderInput(
+    outputRoot, receipt, "EXECUTE_READBACK"));
   const dispatch = await loadReleaseProviderRuntime(loaderInput(
     outputRoot, receipt, "PREPARE_DISPATCHER"));
   const readback = await loadReleaseProviderRuntime(loaderInput(
     outputRoot, receipt, "PREPARE_READBACK"));
   assert.deepEqual(Object.keys(permit.exports), [
     "createAwsPreparePermitTransport", "createPreparePermitReader"
+  ]);
+  assert.deepEqual(Object.keys(executePermit.exports), [
+    "createAwsExecutePermitTransport", "createExecutePermitReader"
+  ]);
+  assert.deepEqual(Object.keys(executeDispatch.exports), [
+    "createAwsExecuteDispatcherTransport", "createExecuteDispatcher"
+  ]);
+  assert.deepEqual(Object.keys(executeReadback.exports), [
+    "createAwsExecuteReadbackTransport", "createExecuteReadback"
   ]);
   assert.deepEqual(Object.keys(dispatch.exports), [
     "createAwsPrepareDispatcherTransport", "createPrepareDispatcher"
@@ -95,6 +111,9 @@ test("loader verifies provenance, exact bytes, modes, and capability exports", a
     "createAwsPrepareReadbackTransport", "createPrepareReadback"
   ]);
   assert.equal(permit.runtimeSetSha256, dispatch.runtimeSetSha256);
+  assert.equal(executePermit.runtimeSetSha256, dispatch.runtimeSetSha256);
+  assert.equal(executeDispatch.runtimeSetSha256, dispatch.runtimeSetSha256);
+  assert.equal(executeReadback.runtimeSetSha256, dispatch.runtimeSetSha256);
   assert.equal(dispatch.runtimeSetSha256, readback.runtimeSetSha256);
 
   const permitTransport = await permit.exports.createAwsPreparePermitTransport({
@@ -103,8 +122,23 @@ test("loader verifies provenance, exact bytes, modes, and capability exports", a
       "arn:aws:dynamodb:us-east-1:111111111111:table/" +
       "prooftoact-release-controller"
   });
+  const executePermitTransport = await executePermit.exports
+    .createAwsExecutePermitTransport({
+      credentials: CREDENTIALS,
+      tableArn:
+        "arn:aws:dynamodb:us-east-1:111111111111:table/" +
+        "prooftoact-release-controller"
+    });
   const dispatchTransport =
     await dispatch.exports.createAwsPrepareDispatcherTransport({
+      credentials: CREDENTIALS
+    });
+  const executeDispatchTransport =
+    await executeDispatch.exports.createAwsExecuteDispatcherTransport({
+      credentials: CREDENTIALS
+    });
+  const executeReadbackTransport =
+    await executeReadback.exports.createAwsExecuteReadbackTransport({
       credentials: CREDENTIALS
     });
   const readbackTransport =
@@ -114,8 +148,18 @@ test("loader verifies provenance, exact bytes, modes, and capability exports", a
   assert.deepEqual(Object.keys(permitTransport), [
     "describeTable", "getCallerIdentity", "getIntentItem", "listTags"
   ]);
+  assert.deepEqual(Object.keys(executePermitTransport), [
+    "describeTable", "getCallerIdentity", "getIntentItem", "listTags"
+  ]);
   assert.deepEqual(Object.keys(dispatchTransport), [
     "createChangeSet", "getObject", "headObject", "putObject"
+  ]);
+  assert.deepEqual(Object.keys(executeDispatchTransport), [
+    "describeChangeSet", "describeStacks", "executeChangeSet",
+    "updateTerminationProtection"
+  ]);
+  assert.deepEqual(Object.keys(executeReadbackTransport), [
+    "describeChangeSet", "describeStackEvents", "describeStacks"
   ]);
   assert.deepEqual(Object.keys(readbackTransport), [
     "describeChangeSet", "describeStackEvents", "describeStackResources",
@@ -131,6 +175,23 @@ test("built runtimes contain no forbidden cross-capability SDK command", async (
       "InvokeFunctionCommand", "PutObjectCommand", "TransactWriteItemsCommand",
       "UpdateItemCommand"
     ],
+    EXECUTE_PERMIT_READER: [
+      "CreateChangeSetCommand", "DeleteStackCommand", "ExecuteChangeSetCommand",
+      "InvokeFunctionCommand", "PutObjectCommand", "TransactWriteItemsCommand",
+      "UpdateItemCommand", "UpdateTerminationProtectionCommand"
+    ],
+    EXECUTE_DISPATCHER: [
+      "AssumeRoleCommand", "CreateChangeSetCommand", "DeleteStackCommand",
+      "DescribeStackEventsCommand", "GetObjectCommand", "InvokeFunctionCommand",
+      "PutItemCommand", "PutObjectCommand", "TransactWriteItemsCommand",
+      "UpdateItemCommand"
+    ],
+    EXECUTE_READBACK: [
+      "AssumeRoleCommand", "CreateChangeSetCommand", "DeleteStackCommand",
+      "ExecuteChangeSetCommand", "GetObjectCommand", "InvokeFunctionCommand",
+      "PutItemCommand", "PutObjectCommand", "TransactWriteItemsCommand",
+      "UpdateItemCommand", "UpdateTerminationProtectionCommand"
+    ],
     PREPARE_DISPATCHER: [
       "AssumeRoleCommand", "DeleteStackCommand", "ExecuteChangeSetCommand",
       "InvokeFunctionCommand", "PutItemCommand", "TransactWriteItemsCommand",
@@ -145,7 +206,8 @@ test("built runtimes contain no forbidden cross-capability SDK command", async (
   };
   for (const runtime of receipt.runtimes) {
     const text = fs.readFileSync(path.join(outputRoot, runtime.path), "utf8");
-    if (runtime.capability === "PERMIT_READER") {
+    if (["PERMIT_READER", "EXECUTE_PERMIT_READER"]
+      .includes(runtime.capability)) {
       assert.match(text, /readStrong/u,
         "sealed permit reader must expose broker-compatible readStrong");
     }
@@ -161,6 +223,19 @@ test("built runtimes contain no forbidden cross-capability SDK command", async (
       assert.match(text, /Date\.now/u);
       assert.equal(text.includes("createPrepareReadbackForTest"), false,
         "sealed readback must not expose the test clock seam");
+    }
+    if (runtime.capability === "EXECUTE_DISPATCHER") {
+      assert.match(text, /ExecuteChangeSetCommand/u);
+      assert.match(text, /UpdateTerminationProtectionCommand/u);
+      assert.match(text, /Date\.now/u);
+      assert.equal(text.includes("createExecuteDispatcherForTest"), false,
+        "sealed execute dispatcher must not expose the test clock seam");
+    }
+    if (runtime.capability === "EXECUTE_READBACK") {
+      assert.match(text, /DescribeStackEventsCommand/u);
+      assert.match(text, /Date\.now/u);
+      assert.equal(text.includes("createExecuteReadbackForTest"), false,
+        "sealed execute readback must not expose the test clock seam");
     }
     for (const name of forbidden[runtime.capability]) {
       assert.equal(text.includes(name), false,

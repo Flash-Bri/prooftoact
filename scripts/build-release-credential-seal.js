@@ -6,11 +6,31 @@ import { pathToFileURL } from "node:url";
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const CONTRACTS = Object.freeze({
   coordinator: Object.freeze({
+    action: "HOLD_NO_PROVIDER_EXECUTION",
     environment: "aws-release-coordination",
+    manifestLane: "COORDINATOR",
+    status: "HASH_BOUND_NOT_EXECUTABLE",
     phases: Object.freeze(new Set(["reserve", "finalize"]))
   }),
   prepare: Object.freeze({
+    action: "HOLD_NO_PROVIDER_EXECUTION",
     environment: "aws-release-deployment",
+    manifestLane: "PREPARE",
+    status: "HASH_BOUND_NOT_EXECUTABLE",
+    phases: Object.freeze(new Set(["dispatch"]))
+  }),
+  "execute-coordinator": Object.freeze({
+    action: "ACTIVATE_SIGNED_EXECUTE_PHASE",
+    environment: "aws-release-coordination",
+    manifestLane: "EXECUTE_COORDINATOR",
+    status: "HASH_BOUND_EXECUTABLE_COORDINATES",
+    phases: Object.freeze(new Set(["reserve", "finalize"]))
+  }),
+  execute: Object.freeze({
+    action: "ACTIVATE_SIGNED_EXECUTE_PHASE",
+    environment: "aws-release-execution",
+    manifestLane: "EXECUTE",
+    status: "HASH_BOUND_EXECUTABLE_COORDINATES",
     phases: Object.freeze(new Set(["dispatch"]))
   })
 });
@@ -91,9 +111,9 @@ export function buildReleaseCredentialSeal({
     HEX_40.test(authorityTree ?? "") && authorityCommit !== authorityTree &&
     environment === contract.environment && contract.phases.has(phase), code);
   const root = exactOutputRoot(outputRoot);
-  const laneName = normalizedLane.toUpperCase();
+  const laneName = contract.manifestLane;
   const command = Object.freeze({
-    action: "HOLD_NO_PROVIDER_EXECUTION",
+    action: contract.action,
     authorityCommit,
     authorityTree,
     lane: laneName,
@@ -110,7 +130,7 @@ export function buildReleaseCredentialSeal({
     lane: laneName,
     phase,
     schemaVersion: "prooftoact.sealed-credential-manifest.v1",
-    status: "HASH_BOUND_NOT_EXECUTABLE"
+    status: contract.status
   });
   const manifestRecord = publishExact(root, "manifest.json",
     Buffer.from(`${JSON.stringify(manifest)}\n`, "utf8"));
@@ -125,7 +145,9 @@ export function buildReleaseCredentialSeal({
     commandSha256: commandRecord.sha256,
     manifestBase64: fs.readFileSync(manifestRecord.path).toString("base64"),
     manifestSha256: manifestRecord.sha256,
-    status: "SEALED_NON_EXECUTABLE_COMMAND_GENERATED"
+    status: contract.status === "HASH_BOUND_EXECUTABLE_COORDINATES"
+      ? "SEALED_EXECUTABLE_COORDINATES_GENERATED"
+      : "SEALED_NON_EXECUTABLE_COMMAND_GENERATED"
   });
 }
 
