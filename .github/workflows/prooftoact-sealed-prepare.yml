@@ -1,0 +1,74 @@
+name: ProofToAct Sealed Prepare Credential Boundary
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name: { required: true, type: string }
+      authority_commit: { required: true, type: string }
+      authority_tree: { required: true, type: string }
+      command_sha256: { required: true, type: string }
+      manifest_sha256: { required: true, type: string }
+
+permissions: {}
+
+jobs:
+  sealed-credential-boundary:
+    permissions:
+      actions: read
+      id-token: write
+    environment: aws-release-deployment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Validate immutable artifact coordinates
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          COMMAND_SHA256: ${{ inputs.command_sha256 }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        run: |
+          [[ "$ARTIFACT_NAME" =~ ^prooftoact-sealed-prepare-[0-9]+-[0-9]+$ ]]
+          [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$COMMAND_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+      - name: Download only the named prebuilt seal
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/prooftoact-sealed-input
+      - name: Verify exact non-executable command and manifest bytes
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          COMMAND_SHA256: ${{ inputs.command_sha256 }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          SEALED_ROOT: ${{ runner.temp }}/prooftoact-sealed-input
+        run: |
+          [[ -d "$SEALED_ROOT" && ! -L "$SEALED_ROOT" ]]
+          mapfile -d '' sealed_files < <(find "$SEALED_ROOT" -mindepth 1 -maxdepth 1 -print0)
+          [[ "${#sealed_files[@]}" -eq 2 ]]
+          for file in "$SEALED_ROOT/command.json" "$SEALED_ROOT/manifest.json"; do
+            [[ -f "$file" && ! -L "$file" && "$(stat -c '%h' "$file")" == "1" ]]
+          done
+          [[ "$(sha256sum "$SEALED_ROOT/command.json" | cut -d' ' -f1)" == "$COMMAND_SHA256" ]]
+          [[ "$(sha256sum "$SEALED_ROOT/manifest.json" | cut -d' ' -f1)" == "$MANIFEST_SHA256" ]]
+          jq -e --arg commit "$AUTHORITY_COMMIT" --arg tree "$AUTHORITY_TREE" --arg command "$COMMAND_SHA256" '
+            (keys | sort) == ["authorityCommit","authorityTree","commandSha256","environment","lane","phase","schemaVersion","status"] and
+            .schemaVersion == "prooftoact.sealed-credential-manifest.v1" and .status == "HASH_BOUND_NOT_EXECUTABLE" and
+            .lane == "PREPARE" and .environment == "aws-release-deployment" and .phase == "dispatch" and
+            .authorityCommit == $commit and .authorityTree == $tree and .commandSha256 == $command
+          ' "$SEALED_ROOT/manifest.json" >/dev/null
+          jq -e --arg commit "$AUTHORITY_COMMIT" --arg tree "$AUTHORITY_TREE" '
+            (keys | sort) == ["action","authorityCommit","authorityTree","lane","phase","schemaVersion"] and
+            .schemaVersion == "prooftoact.sealed-credential-command.v1" and .action == "HOLD_NO_PROVIDER_EXECUTION" and
+            .lane == "PREPARE" and .phase == "dispatch" and .authorityCommit == $commit and .authorityTree == $tree
+          ' "$SEALED_ROOT/command.json" >/dev/null
+      - name: Hold before AWS credential configuration
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          echo 'HOLD:SEALED_PREPARE_RUNTIME_NOT_ACTIVATED' >&2
+          exit 1
