@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="2200"
+  height="720"
+  viewBox="0 0 1100 360"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">ProofToAct evidence, proposal, authority, and recovery boundaries</title>
+  <desc id="description">
+    Untrusted evidence passes through CockroachDB provenance, validity, scope,
+    and conflict checks before vector ranking. An agent can propose but cannot
+    authorize. A separate serializable transaction issues one fenced receipt.
+    Managed MCP returns context only and never authority.
+  </desc>
+  <metadata>
+    ProofToAct clean-room architecture diagram. Synthetic scope. See
+    docs/ARCHITECTURE.md and docs/media/RIGHTS.md.
+  </metadata>
+  <defs>
+    <marker
+      id="arrow"
+      markerWidth="8"
+      markerHeight="8"
+      refX="7"
+      refY="4"
+      orient="auto"
+    >
+      <path d="M0,0 L8,4 L0,8 Z" fill="#9eb0a5"/>
+    </marker>
+  </defs>
+
+  <rect width="1100" height="360" rx="20" fill="#08100c"/>
+  <rect
+    x="205"
+    y="32"
+    width="470"
+    height="305"
+    rx="18"
+    fill="#0c1711"
+    stroke="#33493d"
+    stroke-width="2"
+    stroke-dasharray="7 6"
+  />
+  <text
+    x="229"
+    y="62"
+    fill="#aebbb3"
+    font-family="Menlo, Monaco, monospace"
+    font-size="12"
+    font-weight="800"
+    letter-spacing="1.2"
+  >COCKROACHDB MEMORY</text>
+  <rect
+    x="690"
+    y="12"
+    width="220"
+    height="132"
+    rx="18"
+    fill="#0c1711"
+    stroke="#33493d"
+    stroke-width="2"
+    stroke-dasharray="7 6"
+  />
+  <text
+    x="714"
+    y="40"
+    fill="#aebbb3"
+    font-family="Menlo, Monaco, monospace"
+    font-size="12"
+    font-weight="800"
+    letter-spacing="1.2"
+  >AGENT RUNTIME</text>
+  <rect
+    x="690"
+    y="178"
+    width="392"
+    height="159"
+    rx="18"
+    fill="#111a16"
+    stroke="#779381"
+    stroke-width="2"
+    stroke-dasharray="7 6"
+  />
+  <text
+    x="714"
+    y="207"
+    fill="#aebbb3"
+    font-family="Menlo, Monaco, monospace"
+    font-size="12"
+    font-weight="800"
+    letter-spacing="1.2"
+  >DETERMINISTIC AUTHORITY</text>
+
+  <g
+    fill="none"
+    stroke="#9eb0a5"
+    stroke-width="2.5"
+    marker-end="url(#arrow)"
+  >
+    <path d="M180 155 H230"/>
+    <path d="M450 155 H500"/>
+    <path d="M660 155 C690 155 690 92 720 92"/>
+    <path d="M450 178 C560 230 610 258 720 258"/>
+    <path d="M900 258 H945"/>
+  </g>
+  <path
+    d="M810 132 V228"
+    fill="none"
+    stroke="#d9a441"
+    stroke-width="2.5"
+    stroke-dasharray="7 5"
+    marker-end="url(#arrow)"
+  />
+  <path
+    d="M580 282 C640 282 660 112 720 112"
+    fill="none"
+    stroke="#69a9cf"
+    stroke-width="2.5"
+    stroke-dasharray="5 5"
+    marker-end="url(#arrow)"
+  />
+
+  <g
+    fill="#edf3ef"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+  >
+    <rect
+      x="30"
+      y="112"
+      width="150"
+      height="86"
+      rx="14"
+      fill="#241d15"
+      stroke="#d9a441"
+      stroke-width="2"
+    />
+    <text x="54" y="144">Untrusted</text>
+    <text x="54" y="167">evidence</text>
+    <text
+      x="54"
+      y="186"
+      fill="#aebbb3"
+      font-size="10"
+      font-weight="600"
+    >attributable · expiring</text>
+  </g>
+  <g
+    fill="#edf3ef"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+  >
+    <rect
+      x="230"
+      y="92"
+      width="220"
+      height="126"
+      rx="14"
+      fill="#173127"
+      stroke="#65b98c"
+      stroke-width="2"
+    />
+    <text x="254" y="127">Admit or refuse</text>
+    <text x="254" y="153" fill="#aebbb3" font-size="11" font-weight="600">provenance · validity</text>
+    <text x="254" y="174" fill="#aebbb3" font-size="11" font-weight="600">scope · conflict</text>
+    <text x="254" y="198" fill="#aebbb3" font-size="11" font-weight="600">before similarity</text>
+  </g>
+  <g
+    fill="#edf3ef"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+  >
+    <rect
+      x="500"
+      y="112"
+      width="160"
+      height="86"
+      rx="14"
+      fill="#152b39"
+      stroke="#69a9cf"
+      stroke-width="2"
+    />
+    <text x="524" y="145">Vector rank</text>
+    <text x="524" y="171" fill="#aebbb3" font-size="11" font-weight="600">eligible IDs only</text>
+  </g>
+  <g
+    fill="#edf3ef"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+  >
+    <rect
+      x="720"
+      y="54"
+      width="170"
+      height="78"
+      rx="14"
+      fill="#302718"
+      stroke="#d9a441"
+      stroke-width="2"
+    />
+    <text x="744" y="85">Agent proposal</text>
+    <text x="744" y="108" fill="#aebbb3" font-size="10" font-weight="600">no fence · no effect key</text>
+  </g>
+  <g
+    fill="#edf3ef"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+  >
+    <rect
+      x="500"
+      y="246"
+      width="160"
+      height="72"
+      rx="14"
+      fill="#152b39"
+      stroke="#69a9cf"
+      stroke-width="2"
+    />
+    <text x="524" y="275">Managed MCP</text>
+    <text x="524" y="298" fill="#aebbb3" font-size="11" font-weight="600">context only</text>
+  </g>
+  <g
+    fill="#edf3ef"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+  >
+    <rect
+      x="720"
+      y="220"
+      width="180"
+      height="82"
+      rx="14"
+      fill="#173127"
+      stroke="#65b98c"
+      stroke-width="2"
+    />
+    <text x="744" y="251">Commit one</text>
+    <text x="744" y="275" fill="#aebbb3" font-size="11" font-weight="600">serializable · fenced</text>
+  </g>
+  <g
+    fill="#edf3ef"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="15"
+    font-weight="700"
+  >
+    <rect
+      x="945"
+      y="220"
+      width="116"
+      height="82"
+      rx="14"
+      fill="#173127"
+      stroke="#65b98c"
+      stroke-width="2"
+    />
+    <text x="969" y="250">Durable</text>
+    <text x="969" y="272">receipt</text>
+    <text x="969" y="291" fill="#aebbb3" font-size="11" font-weight="600">DB sink</text>
+  </g>
+
+  <g
+    fill="#aebbb3"
+    font-family="Menlo, Monaco, monospace"
+    font-size="11"
+    font-weight="700"
+  >
+    <text x="723" y="170">proposal only</text>
+    <text x="578" y="230">fresh authorization</text>
+    <text x="626" y="330">no inherited authority</text>
+  </g>
+</svg>

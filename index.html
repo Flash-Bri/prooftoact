@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A static, precomputed local ProofToAct replay. No live AWS, CockroachDB, DVI, or Managed MCP execution occurs on this page."
+    >
+    <meta name="referrer" content="no-referrer">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <title>ProofToAct — Admissibility Memory</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#judge-path">Skip to the judge path</a>
+
+    <aside
+      class="proof-ribbon"
+      aria-label="Proof environment status"
+      tabindex="0"
+    >
+      <span class="safety-state">
+        STATIC FALLBACK · PRECOMPUTED LOCAL REPLAY · NO LIVE AWS OR DATABASE EXECUTION
+      </span>
+      <span class="proof-state local">STATIC PRECOMPUTED SNAPSHOT</span>
+      <span id="gate-two-proof-state" class="proof-state pending">PROVIDER PROOF NOT PRESENT</span>
+    </aside>
+
+    <header class="hero">
+      <p class="eyebrow">ProofToAct · Admissibility Memory</p>
+      <h1>Memory should preserve evidence—not inherit authority.</h1>
+      <p class="lede">
+        Explore a deterministic, precomputed three-act scenario showing the
+        intended boundary between relevant memory and authority. This static
+        fallback makes no network call to AWS or a database.
+      </p>
+      <div class="hero-facts" role="group" aria-label="Current proof summary">
+        <p><strong>11</strong><span>precomputed local checks</span></p>
+        <p><strong>1</strong><span>modeled local winner</span></p>
+        <p><strong>0</strong><span>provider calls from this page</span></p>
+      </div>
+    </header>
+
+    <main>
+      <section class="architecture" aria-labelledby="architecture-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Trust boundary</p>
+            <h2 id="architecture-title">
+              Relevance can suggest. Only admissibility can authorize.
+            </h2>
+          </div>
+          <p class="section-note">
+            Source-reviewed architecture design · execution not shown
+          </p>
+        </div>
+
+        <div
+          class="architecture-shell"
+          role="region"
+          aria-label="Scrollable ProofToAct trust-boundary diagram"
+          tabindex="0"
+        >
+          <img
+            src="./architecture.svg"
+            width="2200"
+            height="720"
+            alt="ProofToAct trust boundaries: evidence is admitted before vector ranking; agents propose without authority; CockroachDB commits one fenced receipt; Managed MCP returns context only."
+          >
+          <p class="diagram-caption">
+            This diagram explains the reviewed source design. It is not a live
+            topology view, deployment receipt, or proof that any depicted AWS,
+            CockroachDB, Distributed Vector Indexing, or Managed MCP component
+            executed.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="judge-path"
+        class="judge-path"
+        aria-labelledby="judge-title"
+        tabindex="-1"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Three-act judge path</p>
+            <h2 id="judge-title">Watch the authority boundary hold.</h2>
+          </div>
+          <p class="section-note">
+            Focus this static replay, then use arrow keys or the presenter controls
+          </p>
+        </div>
+
+        <nav class="act-nav" aria-label="Choose a demonstration act">
+          <button
+            type="button"
+            data-act="0"
+            aria-controls="step-stage"
+            aria-pressed="true"
+            disabled
+          >
+            <span>Act I</span> Admit / Refuse
+          </button>
+          <button
+            type="button"
+            data-act="1"
+            aria-controls="step-stage"
+            aria-pressed="false"
+            disabled
+          >
+            <span>Act II</span> Commit One
+          </button>
+          <button
+            type="button"
+            data-act="2"
+            aria-controls="step-stage"
+            aria-pressed="false"
+            disabled
+          >
+            <span>Act III</span> Recover Safely
+          </button>
+        </nav>
+
+        <article
+          id="step-stage"
+          class="step-stage"
+          aria-label="Current demonstration step"
+          aria-keyshortcuts="ArrowLeft ArrowRight Space Home"
+          tabindex="-1"
+        >
+          <div class="loading-state">
+            <p class="step-kicker">Loading local deterministic replay</p>
+            <h3>Loading the precomputed scenario snapshot…</h3>
+          </div>
+        </article>
+
+        <div
+          class="presenter-controls"
+          role="group"
+          aria-label="Presenter controls"
+        >
+          <button
+            id="previous-step"
+            type="button"
+            aria-controls="step-stage"
+            disabled
+          >← Previous</button>
+          <button
+            id="play-pause"
+            type="button"
+            aria-controls="step-stage"
+            aria-pressed="false"
+            disabled
+          >
+            Play
+          </button>
+          <button
+            id="next-step"
+            type="button"
+            aria-controls="step-stage"
+            disabled
+          >Next →</button>
+          <button
+            id="restart-demo"
+            type="button"
+            aria-controls="step-stage"
+            disabled
+          >Restart</button>
+          <p id="step-progress" aria-live="off">Loading proof…</p>
+        </div>
+        <p
+          id="load-status"
+          class="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          Loading the local proof.
+        </p>
+      </section>
+
+      <section class="verification" aria-labelledby="verification-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Snapshot checks</p>
+            <h2 id="verification-title">Precomputed checks are not provider proof.</h2>
+          </div>
+          <p class="section-note">
+            Green means the exact static JSON records the local invariant as true
+          </p>
+        </div>
+        <details class="verification-details">
+          <summary>
+            <span id="verification-count">Loading checks…</span>
+            <span>View every invariant</span>
+          </summary>
+          <ul id="invariants" class="invariant-list"></ul>
+        </details>
+      </section>
+
+      <section class="evidence-ledger" aria-labelledby="evidence-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Source and evidence boundaries</p>
+            <h2 id="evidence-title">Every claim carries its boundary.</h2>
+          </div>
+          <a
+            class="text-link"
+            href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/CLAIMS.md"
+            rel="noreferrer"
+          >Open the source claims ledger</a>
+        </div>
+        <div class="evidence-grid">
+          <article>
+            <span class="proof-state local">SOURCE MATERIAL</span>
+            <h3>Provider-oriented evidence documents</h3>
+            <p>
+              The public repository contains historical and source-oriented
+              evidence documents. This fallback does not re-perform or
+              independently verify their provider activity.
+            </p>
+            <dl>
+              <div><dt>Source</dt><dd><code>40e9a3a86c232cedcad81d89b8ca4d84081632ec</code></dd></div>
+              <div><dt>Mode</dt><dd>External source links only</dd></div>
+              <div><dt>Limit</dt><dd>No provider receipt is generated here</dd></div>
+            </dl>
+            <p class="evidence-links">
+              <a href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-authority-2026-07-30.md" rel="noreferrer">Authority document</a>
+              <a href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-recovery-broker-2026-07-30.md" rel="noreferrer">Recovery document</a>
+              <a href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-ambiguity-2026-07-30.md" rel="noreferrer">Ambiguity document</a>
+            </p>
+          </article>
+          <article>
+            <span id="gate-two-evidence-state" class="proof-state pending">
+              PROVIDER EXECUTION · ABSENT
+            </span>
+            <h3 id="gate-two-heading">
+              Source design only
+            </h3>
+            <p id="gate-two-summary">
+              This static branch serves HTML, CSS, JavaScript, an architecture
+              asset, and an exact precomputed scenario. It has no provider
+              credentials and performs no provider execution.
+            </p>
+            <dl>
+              <div>
+                <dt>Source</dt>
+                <dd><code id="gate-two-source">40e9a3a</code></dd>
+              </div>
+              <div>
+                <dt>Cloud state</dt>
+                <dd id="gate-two-cloud-state">Not demonstrated by this fallback</dd>
+              </div>
+              <div>
+                <dt>Limit</dt>
+                <dd id="gate-two-limit">
+                  No live AWS, CockroachDB, DVI, or Managed MCP evidence.
+                </dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="boundary" aria-labelledby="boundary-title">
+        <p class="step-label">Current boundary</p>
+        <h2 id="boundary-title">Runnable static replay. No provider proof.</h2>
+        <p id="current-boundary-copy">
+          This page is a precomputed local replay published through GitHub
+          Pages. It does not execute AWS Lambda, CockroachDB, Distributed
+          Vector Indexing, or Cloud Managed MCP. It is not a deployment receipt,
+          functional provider demo, production claim, disaster-readiness claim,
+          truth-detection claim, or exactly-once real-world-effect claim.
+        </p>
+      </section>
+
+      <section class="about" aria-labelledby="about-title">
+        <p class="step-label">About this fallback</p>
+        <h2 id="about-title">Static by design, explicit by default.</h2>
+        <p>
+          <strong>STATIC FALLBACK · PRECOMPUTED LOCAL REPLAY · NO LIVE AWS OR DATABASE EXECUTION.</strong>
+          The exact scenario JSON was deterministically generated from the
+          reviewed public source commit below and then published as inert
+          static data. Browser controls only navigate that snapshot.
+        </p>
+        <p class="evidence-links">
+          <a href="./scenario.json">View exact scenario JSON</a>
+          <a href="./source-identity.json">View source identity receipt</a>
+          <a href="./SHA256SUMS.txt">View static file hashes</a>
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        A TrustAgentic.ai project · Public clean-room proof · Synthetic data ·
+        <a
+          href="https://github.com/Flash-Bri/prooftoact/tree/40e9a3a86c232cedcad81d89b8ca4d84081632ec"
+          rel="noreferrer"
+        >Exact public MIT source</a>
+      </p>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

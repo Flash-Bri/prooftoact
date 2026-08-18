@@ -1,0 +1,302 @@
+{
+  "title": "ProofToAct — Admissibility Memory for High-Stakes Agents",
+  "disclosure": "Synthetic scenario; not operational emergency software.",
+  "fixedTime": "2026-08-01T12:00:00.000Z",
+  "incidentId": "incident-highwater-001",
+  "invariants": {
+    "expiredEvidenceExcluded": true,
+    "invalidProvenanceExcluded": true,
+    "outOfScopeEvidenceExcluded": true,
+    "unresolvedConflictExcludedFromRanking": true,
+    "unresolvedConflictDenied": true,
+    "exactlyOneLocalWinner": true,
+    "authorityNotTransferred": true,
+    "recoveredCapabilitiesAbsent": true,
+    "exactOperationReplay": true,
+    "changedOperationRejected": true,
+    "outageFailsClosed": true
+  },
+  "timeline": [
+    {
+      "step": "fresh-evidence",
+      "label": "Fresh, attributable evidence admitted",
+      "detail": {
+        "id": "ev-shelter-capacity",
+        "incidentId": "incident-highwater-001",
+        "claimKey": "shelter-river-capacity",
+        "claimValue": "18",
+        "assertion": "River Shelter has capacity for 18 synthetic evacuees.",
+        "issuer": "synthetic-county-sensor",
+        "scopes": [
+          "rescue"
+        ],
+        "observedAt": "2026-08-01T11:55:00.000Z",
+        "validFrom": "2026-08-01T11:55:00.000Z",
+        "validUntil": "2026-08-01T12:25:00.000Z",
+        "signatureValid": true,
+        "confidence": 0.9,
+        "status": "admitted",
+        "actionEligible": true
+      }
+    },
+    {
+      "step": "expired-evidence",
+      "label": "Highly similar but expired evidence excluded",
+      "detail": {
+        "id": "ev-expired-bridge",
+        "incidentId": "incident-highwater-001",
+        "claimKey": "bridge-delta-status",
+        "claimValue": "open",
+        "assertion": "Delta Bridge is open.",
+        "issuer": "synthetic-county-sensor",
+        "scopes": [
+          "rescue"
+        ],
+        "observedAt": "2026-08-01T09:00:00.000Z",
+        "validFrom": "2026-08-01T09:00:00.000Z",
+        "validUntil": "2026-08-01T10:00:00.000Z",
+        "signatureValid": true,
+        "confidence": 0.99,
+        "status": "expired",
+        "actionEligible": false
+      }
+    },
+    {
+      "step": "invalid-provenance",
+      "label": "Invalid provenance quarantined before ranking",
+      "detail": {
+        "id": "ev-invalid-shelter",
+        "incidentId": "incident-highwater-001",
+        "claimKey": "shelter-river-status",
+        "claimValue": "closed",
+        "assertion": "River Shelter is closed.",
+        "issuer": "unverified-radio",
+        "scopes": [
+          "rescue"
+        ],
+        "observedAt": "2026-08-01T11:55:00.000Z",
+        "validFrom": "2026-08-01T11:55:00.000Z",
+        "validUntil": "2026-08-01T12:25:00.000Z",
+        "signatureValid": false,
+        "confidence": 0.99,
+        "status": "invalid_provenance",
+        "actionEligible": false
+      }
+    },
+    {
+      "step": "out-of-scope",
+      "label": "Current but out-of-scope evidence excluded before ranking",
+      "detail": {
+        "id": "ev-medical-private",
+        "incidentId": "incident-highwater-001",
+        "claimKey": "medical-private-status",
+        "claimValue": "restricted",
+        "assertion": "A synthetic medical status exists outside the rescue scope.",
+        "issuer": "synthetic-medical-agency",
+        "scopes": [
+          "medical"
+        ],
+        "observedAt": "2026-08-01T11:55:00.000Z",
+        "validFrom": "2026-08-01T11:55:00.000Z",
+        "validUntil": "2026-08-01T12:25:00.000Z",
+        "signatureValid": true,
+        "confidence": 0.99,
+        "status": "admitted",
+        "actionEligible": true
+      }
+    },
+    {
+      "step": "conflict-preserved",
+      "label": "Contradictory current reports remain visible but not actionable",
+      "detail": [
+        "ev-road-open",
+        "ev-road-closed"
+      ]
+    },
+    {
+      "step": "policy-before-vector",
+      "label": "Admissibility filters run before vector ranking",
+      "detail": {
+        "returnedIds": [
+          "ev-shelter-capacity"
+        ],
+        "excludedIds": [
+          "ev-expired-bridge",
+          "ev-invalid-shelter",
+          "ev-medical-private",
+          "ev-road-open",
+          "ev-road-closed"
+        ]
+      }
+    },
+    {
+      "step": "conflict-fails-closed",
+      "label": "Unresolved conflict blocks action",
+      "detail": {
+        "allowed": false,
+        "reason": "evidence_conflict",
+        "evidenceId": "ev-road-open"
+      }
+    },
+    {
+      "step": "one-winner-race",
+      "label": "One local contender receives the scarce resource",
+      "detail": [
+        {
+          "operationId": "op-reserve-alpha",
+          "incidentId": "incident-highwater-001",
+          "resourceId": "synthetic-rescue-unit-7",
+          "agentId": "agent-alpha",
+          "outcome": "resource_reserved",
+          "fencingToken": 1,
+          "evidenceIds": [
+            "ev-shelter-capacity"
+          ],
+          "recordedAt": "2026-08-01T12:00:00.000Z"
+        },
+        {
+          "operationId": "op-reserve-bravo",
+          "incidentId": "incident-highwater-001",
+          "resourceId": "synthetic-rescue-unit-7",
+          "agentId": "agent-bravo",
+          "outcome": "resource_held_denied",
+          "heldBy": "agent-alpha",
+          "fencingToken": 1,
+          "evidenceIds": [
+            "ev-shelter-capacity"
+          ],
+          "recordedAt": "2026-08-01T12:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "step": "checkpoint-termination",
+      "label": "Winning agent checkpoints, then terminates",
+      "detail": {
+        "checkpoint": {
+          "checkpointId": "checkpoint-before-handoff",
+          "incidentId": "incident-highwater-001",
+          "agentId": "agent-alpha",
+          "lastEvidenceIds": [
+            "ev-shelter-capacity"
+          ],
+          "receiptReference": {
+            "receiptDigest": "de4731c0c3206a2388a7ad09628ec2992ddf68d14064db151765acfbb5d94deb",
+            "receiptSummary": {
+              "durableIntentPresent": false,
+              "outcome": "resource_reserved",
+              "reason": null,
+              "resourceLabel": "synthetic-rescue-unit-7"
+            }
+          },
+          "state": {
+            "phase": "resource-reserved"
+          },
+          "recordedAt": "2026-08-01T12:00:00.000Z"
+        },
+        "termination": {
+          "agentId": "agent-alpha",
+          "status": "PROCESS_TERMINATED_AFTER_CHECKPOINT"
+        }
+      }
+    },
+    {
+      "step": "successor-recovery",
+      "label": "Successor recovers context but not spent authority",
+      "detail": {
+        "incidentId": "incident-highwater-001",
+        "failedAgentId": "agent-alpha",
+        "successorAgentId": "agent-successor",
+        "checkpointSummary": {
+          "checkpointVersion": 1,
+          "failedAgent": "agent-alpha",
+          "phase": "successor-context-recovery",
+          "scenario": "synthetic-highwater"
+        },
+        "evidenceSummary": {
+          "admittedCount": 1,
+          "classification": "synthetic",
+          "evidenceDigest": "9dc55ce471ff769b724b6b69062c1675419ebce8dbf316ccea9e47f4eaaa5f4e"
+        },
+        "conflictSummary": {
+          "status": "none",
+          "unresolvedCount": 0
+        },
+        "receiptReference": {
+          "receiptDigest": "de4731c0c3206a2388a7ad09628ec2992ddf68d14064db151765acfbb5d94deb",
+          "receiptSummary": {
+            "durableIntentPresent": false,
+            "outcome": "resource_reserved",
+            "reason": null,
+            "resourceLabel": "synthetic-rescue-unit-7"
+          }
+        },
+        "authorityTransferred": false,
+        "requiresFreshAuthorization": true,
+        "operationalCapabilitiesReturned": false
+      }
+    },
+    {
+      "step": "exact-operation-replay",
+      "label": "Exact duplicate returns the original durable decision",
+      "detail": {
+        "outcome": "operation_replay",
+        "operationId": "op-reserve-alpha",
+        "originalReceipt": {
+          "operationId": "op-reserve-alpha",
+          "incidentId": "incident-highwater-001",
+          "resourceId": "synthetic-rescue-unit-7",
+          "agentId": "agent-alpha",
+          "outcome": "resource_reserved",
+          "fencingToken": 1,
+          "evidenceIds": [
+            "ev-shelter-capacity"
+          ],
+          "recordedAt": "2026-08-01T12:00:00.000Z"
+        }
+      }
+    },
+    {
+      "step": "changed-operation-rejected",
+      "label": "Successor cannot reuse the operation with changed authority inputs",
+      "detail": {
+        "outcome": "operation_digest_mismatch_denied",
+        "operationId": "op-reserve-alpha",
+        "reason": "operation_parameters_changed"
+      }
+    },
+    {
+      "step": "memory-outage",
+      "label": "Memory outage fails closed",
+      "detail": {
+        "code": "MEMORY_UNAVAILABLE_FAIL_CLOSED",
+        "message": "Evidence memory unavailable; authorization failed closed."
+      }
+    }
+  ],
+  "proofStates": {
+    "local": {
+      "label": "LOCAL DETERMINISTIC REPLAY",
+      "scope": "Synthetic in-memory specification",
+      "limitation": "No live cloud claim"
+    },
+    "gateOne": {
+      "label": "RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30",
+      "sourceCommit": "55892bf25a5286af30e30908ab5711e24f106629",
+      "authorityEvidence": "/evidence/gate1-authority",
+      "recoveryEvidence": "/evidence/gate1-recovery",
+      "ambiguityEvidence": "/evidence/gate1-ambiguity"
+    },
+    "gateTwo": {
+      "badge": "GATE TWO · LOCAL",
+      "label": "GATE TWO — local AWS candidate; live AWS evidence pending",
+      "heading": "AWS proposal boundary · live evidence pending",
+      "summary": "The candidate binds receipts to one exact KMS public key, separates proposal from authority, logs the API path, and fails closed. It is not a live AWS claim.",
+      "sourceCommit": "UNBOUND LOCAL",
+      "cloudState": "Main stack not deployed",
+      "limitation": "Bedrock, KMS, IAM, API Gateway, and CloudFormation are unverified live.",
+      "boundarySummary": "CockroachDB transactions, Distributed Vector Indexing, and Managed MCP are recorded Gate One evidence in synthetic scope. The AWS path is a locally verified candidate awaiting live Gate Two receipts. ProofToAct makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim.",
+      "hostReceipt": null
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "prooftoact.static-fallback-source.v1",
+  "assembledAt": "2026-08-18T18:58:03Z",
+  "publicationMode": "STATIC_FALLBACK_PRECOMPUTED_LOCAL_REPLAY",
+  "source": {
+    "repository": "https://github.com/Flash-Bri/prooftoact",
+    "commit": "40e9a3a86c232cedcad81d89b8ca4d84081632ec",
+    "tree": "b47b8c23e1ad4435bf038cbdbdc2a16d0872e9db",
+    "refAtAssembly": "refs/heads/main",
+    "commitTimestamp": "2026-08-18T11:34:46-04:00"
+  },
+  "sourceInputs": {
+    "src/scenario.js": "3321258d3e9f119f19b2444ab2968351008135452af277557d6ab5f00ccfaea3",
+    "src/protocol.js": "642d88839df5692b8d0b2427ae2240490d6c4f7f7dd28295458798ea6219bb7e",
+    "web/index.html": "cd64c1c28d8ba0df44d49827102d91335c653056c6dbb2b8585d10130c389b21",
+    "web/app.js": "825b5466035432c30598aa4b43c4a9e428d4ec88df8599cfacc25ee208a02a10",
+    "web/styles.css": "c33554b39142780f662d9ec5fa8b8c8fd5832eb9c0e4ec5c305ee3a53fd86e9e",
+    "docs/media/architecture.svg": "0a35e196d896e932bbadf2afbf5e915c21073c423d9d8ac8a23023ad0887c871",
+    "package-lock.json": "923be53e7c071361591b13ef4ed22abe6e2d5464184c8a51d7561c6440913e85"
+  },
+  "precomputedScenario": {
+    "path": "scenario.json",
+    "sha256": "59700942b8bd4c681dab95f43e61b223be61375b4b210d46f5578f815f655152",
+    "generator": "node src/demo.js",
+    "runtime": "Node.js v22.23.1",
+    "byteExactToFreshSourceRunAtAssembly": true
+  },
+  "claimsBoundary": {
+    "staticFallback": true,
+    "precomputedLocalReplay": true,
+    "providerExecutionPerformedByPage": false,
+    "awsDeploymentProven": false,
+    "cockroachDbExecutionProven": false,
+    "distributedVectorIndexingExecutionProven": false,
+    "managedMcpExecutionProven": false,
+    "functionalProviderDemoClaimed": false,
+    "productionReadinessClaimed": false
+  }
+}
