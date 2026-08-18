@@ -464,8 +464,18 @@ test("provenance boundary rejects nested roots, failing outputs, duplicate flags
   t.after(() => fs.rmSync(temporaryRoot, { force: true, recursive: true }));
   const controlRoot = path.join(temporaryRoot, "control");
   const applicationRoot = path.join(temporaryRoot, "application");
+  const environmentRoot = path.join(temporaryRoot, "environment");
   fs.mkdirSync(controlRoot, { mode: 0o700 });
   fs.mkdirSync(applicationRoot, { mode: 0o700 });
+  fs.mkdirSync(environmentRoot, { mode: 0o700 });
+  const commandEnvironment = provenanceTest.commandEnvironment(environmentRoot);
+  assert.notEqual(commandEnvironment.npm_config_globalconfig,
+    commandEnvironment.npm_config_userconfig);
+  for (const filePath of [commandEnvironment.npm_config_globalconfig,
+    commandEnvironment.npm_config_userconfig]) {
+    assert.equal(fs.readFileSync(filePath).length, 0);
+    assert.equal(fs.lstatSync(filePath).mode & 0o777, 0o600);
+  }
   const evidencePath = path.join(temporaryRoot, "evidence.json");
   fs.writeFileSync(evidencePath, "{}\n", { mode: 0o644 });
   fs.chmodSync(evidencePath, 0o644);

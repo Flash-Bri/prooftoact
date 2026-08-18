@@ -104,6 +104,16 @@ function rootsAreSeparate(left, right) {
 }
 
 function commandEnvironment(temporaryRoot) {
+  const npmGlobalConfig = path.join(temporaryRoot, "npm-global-config");
+  const npmUserConfig = path.join(temporaryRoot, "npm-user-config");
+  fs.writeFileSync(npmGlobalConfig, Buffer.alloc(0), {
+    flag: "wx",
+    mode: 0o600
+  });
+  fs.writeFileSync(npmUserConfig, Buffer.alloc(0), {
+    flag: "wx",
+    mode: 0o600
+  });
   return {
     AWS_CONFIG_FILE: "/dev/null",
     AWS_EC2_METADATA_DISABLED: "true",
@@ -122,10 +132,10 @@ function commandEnvironment(temporaryRoot) {
     npm_config_audit: "false",
     npm_config_cache: path.join(temporaryRoot, "npm-cache"),
     npm_config_fund: "false",
-    npm_config_globalconfig: "/dev/null",
+    npm_config_globalconfig: npmGlobalConfig,
     npm_config_registry: "https://registry.npmjs.org/",
     npm_config_update_notifier: "false",
-    npm_config_userconfig: "/dev/null",
+    npm_config_userconfig: npmUserConfig,
     npm_node_execpath: process.execPath
   };
 }
@@ -994,6 +1004,7 @@ export const CONTROL_PLANE_PROVENANCE_CONSTANTS = Object.freeze({
 });
 
 export const __test = Object.freeze({
+  commandEnvironment,
   evidenceBody,
   inspectRoot,
   parseAudit,
