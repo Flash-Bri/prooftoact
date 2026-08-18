@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -56,7 +57,8 @@ function sqlState(code, message = code) {
 
 function publisherProbeClient({
   directOperationAllowed = null,
-  functionProbeError = null
+  functionProbeError = null,
+  clusterId = RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
 } = {}) {
   let appendedBundleDigest = null;
   let appendTransactionActive = false;
@@ -68,6 +70,9 @@ function publisherProbeClient({
     async query(text, values = []) {
       const sql = text.trim();
       calls.push(sql);
+      if (sql.includes("crdb_internal.cluster_id()")) {
+        return { rowCount: 1, rows: [{ cluster_id: clusterId }] };
+      }
       if (sql.includes("statement_timestamp() AS database_now")) {
         return {
           rowCount: 1,
@@ -220,6 +225,11 @@ function recoveryAdminState(options = {}) {
     grantError: options.grantError ?? null,
     rollbackError: options.rollbackError ?? null,
     definitionDrift: options.definitionDrift ?? false,
+    clusterId: options.clusterId ??
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+    afterCommitDefinitionDrift:
+      options.afterCommitDefinitionDrift ?? false,
+    afterCommitClusterId: options.afterCommitClusterId ?? null,
     afterCommitExtraGrants: options.afterCommitExtraGrants ?? null
   };
 }
@@ -235,6 +245,12 @@ function recoveryAdminClient(options = {}) {
     async end() {},
     async query(sql) {
       calls.push(sql.trim());
+      if (sql.includes("crdb_internal.cluster_id()")) {
+        return {
+          rowCount: 1,
+          rows: [{ cluster_id: state.clusterId }]
+        };
+      }
       if (sql.startsWith("SHOW CREATE FUNCTION")) {
         const append = sql.includes("append_recovery_bundle_v2");
         return {
@@ -283,6 +299,12 @@ function recoveryAdminClient(options = {}) {
         if (state.afterCommitExtraGrants) {
           state.extraGrants = state.afterCommitExtraGrants;
         }
+        if (state.afterCommitDefinitionDrift) {
+          state.definitionDrift = true;
+        }
+        if (state.afterCommitClusterId) {
+          state.clusterId = state.afterCommitClusterId;
+        }
         grantPending = false;
         if (state.commitError) throw state.commitError;
       }
@@ -298,6 +320,16 @@ function recoveryAdminClient(options = {}) {
 const SCHEMA_REPAIR_SOURCE_COMMIT = "1".repeat(40);
 const SCHEMA_REPAIR_SOURCE_TREE = "2".repeat(40);
 const SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST = "b".repeat(64);
+const functionDefinitionDigest = (value) =>
+  createHash("sha256").update(value).digest("hex");
+const SCHEMA_REPAIR_APPEND_FUNCTION_DIGEST =
+  functionDefinitionDigest(RECOVERY_FUNCTION_DEFINITIONS.append);
+const SCHEMA_REPAIR_RESOLVE_FUNCTION_DIGEST =
+  functionDefinitionDigest(RECOVERY_FUNCTION_DEFINITIONS.resolve);
+const verifiedSourceCheckout = ({ sourceCommit, treeDigest }) => ({
+  sourceCommit,
+  treeDigest
+});
 
 function repairArguments(overrides = {}) {
   const legacySummary = validateDatabaseSecurityPosture(
@@ -315,15 +347,23 @@ function repairArguments(overrides = {}) {
     expectedPreflightPostureDigest: legacySummary.postureDigest,
     expectedClusterPreflightPostureDigest:
       SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST,
+    expectedAppendFunctionDefinitionSha256:
+      SCHEMA_REPAIR_APPEND_FUNCTION_DIGEST,
+    expectedResolveFunctionDefinitionSha256:
+      SCHEMA_REPAIR_RESOLVE_FUNCTION_DIGEST,
     sourceCommit: SCHEMA_REPAIR_SOURCE_COMMIT,
     sourceTree: SCHEMA_REPAIR_SOURCE_TREE,
+    verifySourceCheckout: verifiedSourceCheckout,
     ...overrides
   };
 }
 
 test("publisher capability collector executes functions only in a rolled-back probe", async () => {
   const client = publisherProbeClient();
-  const result = await collectRecoveryPublisherCapabilityPosture(client);
+  const result = await collectRecoveryPublisherCapabilityPosture(client, {
+    expectedRecoveryClusterId:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+  });
   assert.equal(result.functionProbe.appendOutcome, "bundle_appended");
   assert.equal(result.functionProbe.resolveOutcome, "bundle_present");
   assert.equal(result.functionProbe.rollbackVerified, true);
@@ -342,17 +382,42 @@ test("publisher capability collector executes functions only in a rolled-back pr
     5
   );
   assert.equal(client.calls.includes("COMMIT"), false);
+  assert.equal(
+    result.clusterId,
+    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+  );
 });
 
 test("publisher capability collector rejects any direct private-table operation", async () => {
   for (const operation of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
     await assert.rejects(
       collectRecoveryPublisherCapabilityPosture(
-        publisherProbeClient({ directOperationAllowed: operation })
+        publisherProbeClient({ directOperationAllowed: operation }),
+        {
+          expectedRecoveryClusterId:
+            RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+        }
       ),
       new RegExp(`RECOVERY_PUBLISHER_DIRECT_${operation}_NOT_DENIED`, "u")
     );
   }
+});
+
+test("publisher capability collector byte-compares its observed cluster UUID", async () => {
+  const client = publisherProbeClient({
+    clusterId: "11111111-1111-4111-8111-111111111111"
+  });
+  await assert.rejects(
+    collectRecoveryPublisherCapabilityPosture(client, {
+      expectedRecoveryClusterId:
+        RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+    }),
+    /RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_MISMATCH/u
+  );
+  assert.equal(
+    client.calls.some((sql) => sql.startsWith("BEGIN TRANSACTION")),
+    false
+  );
 });
 
 test("stored recovery function definitions are read and digest-bound", async () => {
@@ -390,6 +455,14 @@ test("read-only repair verification distinguishes exact absent and present state
       RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID);
     assert.equal(result.source.commit, SCHEMA_REPAIR_SOURCE_COMMIT);
     assert.equal(result.source.tree, SCHEMA_REPAIR_SOURCE_TREE);
+    assert.equal(
+      result.observedRecoveryClusterId,
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+    );
+    assert.deepEqual(result.expectedFunctionDefinitionDigests, {
+      appendRecoveryBundleV2: SCHEMA_REPAIR_APPEND_FUNCTION_DIGEST,
+      resolveRecoveryBundleV1: SCHEMA_REPAIR_RESOLVE_FUNCTION_DIGEST
+    });
     assert.equal(
       result.concurrentAdministratorRequirement,
       "NO_CONCURRENT_ADMINISTRATOR_MUTATION_REQUIRED_NOT_VERIFIED"
@@ -432,6 +505,14 @@ test("existing-cluster repair binds exact preflight and verifies through a fresh
   assert.equal(result.clusterPreflightPostureDigest,
     SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST);
   assert.equal(result.capabilityPosture.functionProbe.rollbackVerified, true);
+  assert.equal(
+    result.preflightObservedRecoveryClusterId,
+    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+  );
+  assert.equal(
+    result.capabilityPosture.clusterId,
+    RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
+  );
   assert.equal(clients.length, 2);
   assert.equal(
     clients.flatMap((client) => client.calls).filter((sql) =>
@@ -584,6 +665,48 @@ test("post-COMMIT verification failure is recoverable only by read-only verifica
   assert.equal(reconciled.observation, "read_only_verification");
 });
 
+test("post-COMMIT function or cluster drift remains unresolved without retry", async () => {
+  for (const stateOptions of [
+    { afterCommitDefinitionDrift: true },
+    { afterCommitClusterId: "11111111-1111-4111-8111-111111111111" }
+  ]) {
+    const state = recoveryAdminState(stateOptions);
+    const clients = [];
+    let clusterReads = 0;
+    await assert.rejects(
+      repairRecoveryPublisherPrivateSchemaUsage({
+        ...repairArguments(),
+        confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+        createAdminClient: () => {
+          const client = recoveryAdminClient({ state });
+          clients.push(client);
+          return client;
+        },
+        createReconciliationAdminClient: () => {
+          const client = recoveryAdminClient({ state });
+          clients.push(client);
+          return client;
+        },
+        createReconciliationPublisherClient: () => publisherProbeClient(),
+        collectClusterPosture: async () => ({
+          postureDigest: ++clusterReads === 1
+            ? SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+            : "c".repeat(64)
+        })
+      }),
+      ({ code }) =>
+        code === "RECOVERY_SCHEMA_REPAIR_POSTCOMMIT_VERIFICATION_UNRESOLVED"
+    );
+    assert.equal(
+      clients.flatMap((client) => client.calls).filter((sql) =>
+        sql ===
+          "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
+      ).length,
+      1
+    );
+  }
+});
+
 test("repair stops on rollback failure before dispatching COMMIT", async () => {
   const state = recoveryAdminState({
     grantError: sqlState("40001"),
@@ -619,6 +742,23 @@ test("existing-cluster repair fails closed on identity, digest, and posture drif
       postureDigest: SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
     })
   };
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      createAdminClient: () => recoveryAdminClient({
+        clusterId: "11111111-1111-4111-8111-111111111111"
+      })
+    }),
+    /RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_MISMATCH/u
+  );
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      expectedAppendFunctionDefinitionSha256: "f".repeat(64),
+      createAdminClient: () => recoveryAdminClient()
+    }),
+    /RECOVERY_SCHEMA_REPAIR_FUNCTION_DEFINITION_MISMATCH/u
+  );
   await assert.rejects(
     repairRecoveryPublisherPrivateSchemaUsage({
       ...common,
@@ -669,6 +809,58 @@ test("existing-cluster repair fails closed on identity, digest, and posture drif
   );
 });
 
+test("repair requires the executing standalone exact-Git checkout identity", async () => {
+  for (const exactGitCode of [
+    "EXACT_GIT_SOURCE_WORKTREE_CONFIG",
+    "EXACT_GIT_SOURCE_DIRTY",
+    "EXACT_GIT_SOURCE_ROOT",
+    "EXACT_GIT_SOURCE_OBJECT_PATH"
+  ]) {
+    let adminCreated = false;
+    await assert.rejects(
+      repairRecoveryPublisherPrivateSchemaUsage({
+        ...repairArguments({
+          verifySourceCheckout() {
+            throw new Error(exactGitCode);
+          }
+        }),
+        confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+        createAdminClient: () => {
+          adminCreated = true;
+          return recoveryAdminClient();
+        }
+      }),
+      ({ code, cause }) =>
+        code === "RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID" &&
+        cause?.message === exactGitCode
+    );
+    assert.equal(adminCreated, false);
+  }
+
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...repairArguments({
+        verifySourceCheckout: () => ({
+          sourceCommit: "a".repeat(40),
+          treeDigest: SCHEMA_REPAIR_SOURCE_TREE
+        })
+      }),
+      confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+      createAdminClient: () => assert.fail("identity mismatch must stop first")
+    }),
+    /RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID/u
+  );
+
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...repairArguments({ verifySourceCheckout: undefined }),
+      confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+      createAdminClient: () => assert.fail("unverified source must stop first")
+    }),
+    /RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID/u
+  );
+});
+
 test("repair CLI gates apply and exposes only a read-only verify mode", async () => {
   const environment = {
     RECOVERY_ADMIN_DATABASE_URL: repairArguments().adminConnectionString,
@@ -681,6 +873,10 @@ test("repair CLI gates apply and exposes only a read-only verify mode", async ()
       repairArguments().expectedPreflightPostureDigest,
     EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256:
       SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST,
+    EXPECTED_RECOVERY_APPEND_FUNCTION_DEFINITION_SHA256:
+      SCHEMA_REPAIR_APPEND_FUNCTION_DIGEST,
+    EXPECTED_RECOVERY_RESOLVE_FUNCTION_DEFINITION_SHA256:
+      SCHEMA_REPAIR_RESOLVE_FUNCTION_DIGEST,
     RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT: SCHEMA_REPAIR_SOURCE_COMMIT,
     RECOVERY_SCHEMA_REPAIR_SOURCE_TREE: SCHEMA_REPAIR_SOURCE_TREE
   };

@@ -432,8 +432,14 @@ epoch after one can exist.
 The existing-cluster publisher repair is a one-statement exception, not a
 general migration lane. Before either `--apply` or `--verify-applied`, the
 operator must bind the exact recovery cluster ID, hostname, database, source
-commit/tree, database-posture digest, and cluster-wide pre-repair posture
-digest. The administrator must also establish an exclusive maintenance window:
+commit/tree, database-posture digest, cluster-wide pre-repair posture digest,
+and the individually reviewed SHA-256 digest of each stored recovery function
+definition. The executable rejects linked, dirty, replaced, grafted,
+alternate-object, shallow, aliased-root, or otherwise non-exact Git checkouts;
+the supplied commit and tree must be the executing standalone checkout. Both
+the administrator and publisher sessions must observe the same byte-exact
+cluster UUID through `crdb_internal.cluster_id()` before a present-state
+receipt is accepted. The administrator must also establish an exclusive maintenance window:
 no other administrator may alter users, roles, memberships, grants, default
 privileges, or either recovery function until the final receipt is retained.
 
@@ -441,15 +447,17 @@ privileges, or either recovery function until the final receipt is retained.
 the COMMIT call, whether its acknowledgement succeeds or is lost, the mutation
 connection is closed. A fresh administrator connection then classifies the
 exact posture as `CONFIRMED_PRESENT`, `CONFIRMED_ABSENT`, or unresolved. It
-also re-reads and hashes both stored function definitions and the cluster-wide
-grant posture. `CONFIRMED_ABSENT` is a terminal HOLD for that invocation, not
+also re-reads both stored function definitions, compares each one with its
+caller-approved digest, re-observes the cluster UUID, and reads the
+cluster-wide grant posture. `CONFIRMED_ABSENT` is a terminal HOLD for that invocation, not
 permission to retry. Any drift, connection failure, probe failure, or
 contradictory state is unresolved and must not trigger another mutation.
 
 `--verify-applied` is the recovery path after an applied-but-unconfirmed or
 post-COMMIT verification failure. It dispatches no DDL and authorizes no
-repair. It reopens the target, reclassifies grants, re-hashes stored function
-definitions, and uses rollback-only publisher capability probes. A present
+repair. It reopens the target, reclassifies grants, re-observes the cluster
+UUID from both principals, compares stored functions with their approved exact
+digests, and uses rollback-only publisher capability probes. A present
 result is labeled by its observation (`read_only_verification` or
 `read_reconciled`); an absent result remains HOLD. Preserve the nonsecret JSON
 receipt and source identity, but never persist database URLs or passwords.

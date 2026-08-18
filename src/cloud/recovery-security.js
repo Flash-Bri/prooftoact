@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as sleepTimer } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { assertCleanExactGitCheckout } from
+  "../../scripts/lib/exact-git-source.js";
 import { connectionStringForDatabase } from "./authority-store.js";
 import {
   bootstrapDatabaseConfig,
@@ -34,6 +38,11 @@ export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID =
   "24f93c44-fa61-467c-bd3f-a1153618c309";
 export const RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_SQL =
   `GRANT USAGE ON SCHEMA mcp_private TO ${RECOVERY_PUBLISHER_ROLE}`;
+const RECOVERY_SECURITY_SOURCE_ROOT = path.resolve(
+  fileURLToPath(new URL("../../", import.meta.url))
+);
+const LOWERCASE_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const RECOVERY_ROLE_BINDINGS = [
   [RECOVERY_PUBLISHER_ROLE, RECOVERY_PUBLISHER_USER]
 ];
@@ -345,14 +354,51 @@ function validateSchemaRepairBinding({
   expectedRecoveryClusterId,
   expectedPreflightPostureDigest,
   expectedClusterPreflightPostureDigest,
+  expectedAppendFunctionDefinitionSha256,
+  expectedResolveFunctionDefinitionSha256,
   sourceCommit,
-  sourceTree
+  sourceTree,
+  verifySourceCheckout = assertCleanExactGitCheckout
 }) {
   if (
     expectedRecoveryClusterId !==
       RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID
   ) {
     throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_CLUSTER_ID_INVALID");
+  }
+  const checkedSourceCommit = requiredGitObjectId(
+    sourceCommit,
+    "RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT_INVALID"
+  );
+  const checkedSourceTree = requiredGitObjectId(
+    sourceTree,
+    "RECOVERY_SCHEMA_REPAIR_SOURCE_TREE_INVALID"
+  );
+  if (typeof verifySourceCheckout !== "function") {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID"
+    );
+  }
+  let verifiedSource;
+  try {
+    verifiedSource = verifySourceCheckout({
+      rootDir: RECOVERY_SECURITY_SOURCE_ROOT,
+      sourceCommit: checkedSourceCommit,
+      treeDigest: checkedSourceTree
+    });
+  } catch (error) {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID",
+      error
+    );
+  }
+  if (
+    verifiedSource?.sourceCommit !== checkedSourceCommit ||
+    verifiedSource?.treeDigest !== checkedSourceTree
+  ) {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_SOURCE_CHECKOUT_INVALID"
+    );
   }
   return Object.freeze({
     clusterId: expectedRecoveryClusterId,
@@ -364,14 +410,18 @@ function validateSchemaRepairBinding({
       expectedClusterPreflightPostureDigest,
       "RECOVERY_SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST_INVALID"
     ),
-    sourceCommit: requiredGitObjectId(
-      sourceCommit,
-      "RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT_INVALID"
-    ),
-    sourceTree: requiredGitObjectId(
-      sourceTree,
-      "RECOVERY_SCHEMA_REPAIR_SOURCE_TREE_INVALID"
-    )
+    expectedFunctionDefinitionDigests: Object.freeze({
+      appendRecoveryBundleV2: requiredSha256(
+        expectedAppendFunctionDefinitionSha256,
+        "RECOVERY_SCHEMA_REPAIR_APPEND_FUNCTION_DIGEST_INVALID"
+      ),
+      resolveRecoveryBundleV1: requiredSha256(
+        expectedResolveFunctionDefinitionSha256,
+        "RECOVERY_SCHEMA_REPAIR_RESOLVE_FUNCTION_DIGEST_INVALID"
+      )
+    }),
+    sourceCommit: checkedSourceCommit,
+    sourceTree: checkedSourceTree
   });
 }
 
@@ -451,6 +501,59 @@ export async function collectRecoveryPublisherFunctionDefinitions(client) {
     definitions: Object.freeze(definitions),
     bindingSha256: sha256(JSON.stringify(definitions))
   });
+}
+
+function validateRecoveryPublisherFunctionDefinitionBinding(
+  observed,
+  expected
+) {
+  if (
+    observed?.definitions?.length !== 2 ||
+    observed.definitions[0]?.id !== "append_recovery_bundle_v2" ||
+    observed.definitions[1]?.id !== "resolve_recovery_bundle_v1" ||
+    observed.definitions[0].createStatementSha256 !==
+      expected.appendRecoveryBundleV2 ||
+    observed.definitions[1].createStatementSha256 !==
+      expected.resolveRecoveryBundleV1
+  ) {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_FUNCTION_DEFINITION_MISMATCH"
+    );
+  }
+  return observed;
+}
+
+async function collectObservedRecoveryClusterId(client) {
+  if (typeof client?.query !== "function") {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_INVALID"
+    );
+  }
+  const result = await client.query(`
+    SELECT crdb_internal.cluster_id()::STRING AS cluster_id
+  `);
+  const clusterId = result?.rows?.[0]?.cluster_id;
+  if (
+    result?.rowCount !== 1 ||
+    !Array.isArray(result.rows) ||
+    result.rows.length !== 1 ||
+    typeof clusterId !== "string" ||
+    !LOWERCASE_UUID.test(clusterId)
+  ) {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_INVALID"
+    );
+  }
+  return clusterId;
+}
+
+function requireObservedRecoveryClusterId(clusterId, expectedClusterId) {
+  if (clusterId !== expectedClusterId) {
+    throw stablePublisherError(
+      "RECOVERY_SCHEMA_REPAIR_CLUSTER_OBSERVATION_MISMATCH"
+    );
+  }
+  return clusterId;
 }
 
 function recoveryConnectionTarget(
@@ -562,10 +665,17 @@ async function expectDirectRecoveryTablePrivilegeDenied(client, operation, sql) 
   return { denied: true, sqlstate: queryError.code };
 }
 
-export async function collectRecoveryPublisherCapabilityPosture(client) {
+export async function collectRecoveryPublisherCapabilityPosture(
+  client,
+  { expectedRecoveryClusterId } = {}
+) {
   if (typeof client?.query !== "function") {
     throw new TypeError("RECOVERY_PUBLISHER_PROBE_CLIENT_REQUIRED");
   }
+  const observedRecoveryClusterId = requireObservedRecoveryClusterId(
+    await collectObservedRecoveryClusterId(client),
+    expectedRecoveryClusterId
+  );
   const sessionResult = await client.query(`
     SELECT
       current_database() AS database_name,
@@ -653,6 +763,7 @@ export async function collectRecoveryPublisherCapabilityPosture(client) {
   }
   return {
     schemaVersion: "tideproof.recovery-publisher-capability-posture.v1",
+    clusterId: observedRecoveryClusterId,
     databaseName: session.database_name,
     principal: session.session_user_name,
     databaseVersionSha256: sha256(session.database_version),
@@ -722,6 +833,8 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
   expectedRecoveryClusterId,
   expectedPreflightPostureDigest,
   expectedClusterPreflightPostureDigest,
+  expectedAppendFunctionDefinitionSha256,
+  expectedResolveFunctionDefinitionSha256,
   sourceCommit,
   sourceTree,
   observation = "read_only_verification",
@@ -736,7 +849,8 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
     applicationName: "tideproof-recovery-schema-repair-verifier"
   })),
   collectClusterPosture = (options) =>
-    collectClusterManagedGrantPosture(options)
+    collectClusterManagedGrantPosture(options),
+  verifySourceCheckout = assertCleanExactGitCheckout
 }) {
   if (![
     "read_only_verification",
@@ -751,8 +865,11 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
     expectedRecoveryClusterId,
     expectedPreflightPostureDigest,
     expectedClusterPreflightPostureDigest,
+    expectedAppendFunctionDefinitionSha256,
+    expectedResolveFunctionDefinitionSha256,
     sourceCommit,
-    sourceTree
+    sourceTree,
+    verifySourceCheckout
   });
   const adminTarget = recoveryConnectionTarget(
     adminConnectionString,
@@ -770,14 +887,21 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
   let classified;
   let clusterObserved;
   let functionDefinitions;
+  let adminObservedRecoveryClusterId;
   const admin = createAdminClient();
   try {
     await admin.connect();
+    adminObservedRecoveryClusterId = requireObservedRecoveryClusterId(
+      await collectObservedRecoveryClusterId(admin),
+      binding.clusterId
+    );
     classified = classifyRecoverySchemaRepairPosture(
       await collectDatabaseSecurityPosture(admin)
     );
-    functionDefinitions =
-      await collectRecoveryPublisherFunctionDefinitions(admin);
+    functionDefinitions = validateRecoveryPublisherFunctionDefinitionBinding(
+      await collectRecoveryPublisherFunctionDefinitions(admin),
+      binding.expectedFunctionDefinitionDigests
+    );
     clusterObserved = await collectClusterPosture({
       adminConnectionString,
       principalDatabases: CLUSTER_PRINCIPAL_DATABASES
@@ -818,6 +942,9 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
       "CALLER_SUPPLIED_BINDING_NOT_REOBSERVED",
     observedPostureDigest: classified.summary.postureDigest,
     observedClusterPostureDigest: clusterObserved.postureDigest,
+    observedRecoveryClusterId: adminObservedRecoveryClusterId,
+    expectedFunctionDefinitionDigests:
+      binding.expectedFunctionDefinitionDigests,
     functionDefinitions,
     concurrentAdministratorRequirement:
       "NO_CONCURRENT_ADMINISTRATOR_MUTATION_REQUIRED_NOT_VERIFIED"
@@ -837,7 +964,8 @@ export async function verifyRecoveryPublisherPrivateSchemaUsage({
   try {
     await publisher.connect();
     capabilityPosture = await collectRecoveryPublisherCapabilityPosture(
-      publisher
+      publisher,
+      { expectedRecoveryClusterId: binding.clusterId }
     );
   } catch (error) {
     throw stablePublisherError(
@@ -864,6 +992,8 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
   expectedRecoveryClusterId,
   expectedPreflightPostureDigest,
   expectedClusterPreflightPostureDigest,
+  expectedAppendFunctionDefinitionSha256,
+  expectedResolveFunctionDefinitionSha256,
   sourceCommit,
   sourceTree,
   confirmation,
@@ -881,7 +1011,8 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
     })
   ),
   collectClusterPosture = (options) =>
-    collectClusterManagedGrantPosture(options)
+    collectClusterManagedGrantPosture(options),
+  verifySourceCheckout = assertCleanExactGitCheckout
 }) {
   if (confirmation !== RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION) {
     throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_CONFIRMATION_REQUIRED");
@@ -890,8 +1021,11 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
     expectedRecoveryClusterId,
     expectedPreflightPostureDigest,
     expectedClusterPreflightPostureDigest,
+    expectedAppendFunctionDefinitionSha256,
+    expectedResolveFunctionDefinitionSha256,
     sourceCommit,
-    sourceTree
+    sourceTree,
+    verifySourceCheckout
   });
   const adminTarget = recoveryConnectionTarget(
     adminConnectionString,
@@ -910,10 +1044,15 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
   let preflight;
   let clusterPreflight;
   let preflightFunctionDefinitions;
+  let preflightObservedRecoveryClusterId;
   let commitAcknowledged = false;
   let commitError = null;
   try {
     await admin.connect();
+    preflightObservedRecoveryClusterId = requireObservedRecoveryClusterId(
+      await collectObservedRecoveryClusterId(admin),
+      binding.clusterId
+    );
     const classified = classifyRecoverySchemaRepairPosture(
       await collectDatabaseSecurityPosture(admin)
     );
@@ -925,7 +1064,10 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
       throw stablePublisherError("RECOVERY_SCHEMA_REPAIR_PREFLIGHT_MISMATCH");
     }
     preflightFunctionDefinitions =
-      await collectRecoveryPublisherFunctionDefinitions(admin);
+      validateRecoveryPublisherFunctionDefinitionBinding(
+        await collectRecoveryPublisherFunctionDefinitions(admin),
+        binding.expectedFunctionDefinitionDigests
+      );
     clusterPreflight = await collectClusterPosture({
       adminConnectionString,
       principalDatabases: CLUSTER_PRINCIPAL_DATABASES
@@ -987,12 +1129,17 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
         binding.expectedPreflightPostureDigest,
       expectedClusterPreflightPostureDigest:
         binding.expectedClusterPreflightPostureDigest,
+      expectedAppendFunctionDefinitionSha256:
+        binding.expectedFunctionDefinitionDigests.appendRecoveryBundleV2,
+      expectedResolveFunctionDefinitionSha256:
+        binding.expectedFunctionDefinitionDigests.resolveRecoveryBundleV1,
       sourceCommit: binding.sourceCommit,
       sourceTree: binding.sourceTree,
       observation: commitAcknowledged ? "direct_ack" : "read_reconciled",
       createAdminClient: createReconciliationAdminClient,
       createPublisherClient: createReconciliationPublisherClient,
-      collectClusterPosture
+      collectClusterPosture,
+      verifySourceCheckout
     });
   } catch (error) {
     throw schemaRepairReconciliationError(
@@ -1012,6 +1159,7 @@ export async function repairRecoveryPublisherPrivateSchemaUsage({
     mutationDispatchCount: 1,
     preflightPostureDigest: preflight.postureDigest,
     clusterPreflightPostureDigest: clusterPreflight.postureDigest,
+    preflightObservedRecoveryClusterId,
     preflightFunctionDefinitions,
     commitAcknowledged,
     claimBoundary:

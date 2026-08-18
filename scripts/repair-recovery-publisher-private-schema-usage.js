@@ -42,6 +42,14 @@ function boundOptions(environment) {
       environment,
       "EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256"
     ),
+    expectedAppendFunctionDefinitionSha256: requiredEnvironment(
+      environment,
+      "EXPECTED_RECOVERY_APPEND_FUNCTION_DEFINITION_SHA256"
+    ),
+    expectedResolveFunctionDefinitionSha256: requiredEnvironment(
+      environment,
+      "EXPECTED_RECOVERY_RESOLVE_FUNCTION_DEFINITION_SHA256"
+    ),
     sourceCommit: requiredEnvironment(
       environment,
       "RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT"
@@ -60,6 +68,8 @@ const REQUIRED_BOUND_ENVIRONMENT = Object.freeze([
   "EXPECTED_RECOVERY_CLUSTER_ID",
   "EXPECTED_RECOVERY_PRE_REPAIR_POSTURE_SHA256",
   "EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256",
+  "EXPECTED_RECOVERY_APPEND_FUNCTION_DEFINITION_SHA256",
+  "EXPECTED_RECOVERY_RESOLVE_FUNCTION_DEFINITION_SHA256",
   "RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT",
   "RECOVERY_SCHEMA_REPAIR_SOURCE_TREE"
 ]);
