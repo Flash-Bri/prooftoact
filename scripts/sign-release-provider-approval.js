@@ -39,6 +39,12 @@ function plainObject(value) {
   return prototype === Object.prototype || prototype === null;
 }
 
+function exactKeys(value, keys) {
+  return plainObject(value) &&
+    JSON.stringify(Object.keys(value).sort()) ===
+      JSON.stringify([...keys].sort());
+}
+
 function publicDer(key) {
   const publicKey = key?.type === "public" ? key : crypto.createPublicKey(key);
   return publicKey.export({ format: "der", type: "spki" });
@@ -62,21 +68,32 @@ function validatePrivateKey(privateKeyPem, trustedPublicKeyPem) {
   return privateKey;
 }
 
-export function signProviderBrokerApproval({
-  claims,
-  expiresAt,
-  issuedAt,
-  privateKeyPem,
-  trustedPublicKeyPem
-}) {
+export function deriveProviderApprovalWindow(expiresAt) {
   const code = "PROVIDER_APPROVAL_SIGNER_INPUT_REJECTED";
-  const issued = Date.parse(issuedAt);
+  const issued = Date.now();
+  const issuedAt = new Date(issued).toISOString();
   const expires = Date.parse(expiresAt);
-  requireCondition(plainObject(claims) && UUID.test(claims.approvalId ?? "") &&
-    Number.isFinite(issued) && Number.isFinite(expires) && issued < expires &&
-    expires - issued <= 30 * 60 * 1000 &&
-    new Date(issued).toISOString() === issuedAt &&
+  requireCondition(typeof expiresAt === "string" && Number.isFinite(expires) &&
+    issued < expires && expires - issued <= 30 * 60 * 1000 &&
     new Date(expires).toISOString() === expiresAt, code);
+  return Object.freeze({ expires, issued, issuedAt });
+}
+
+export function signProviderBrokerApproval(options) {
+  const code = "PROVIDER_APPROVAL_SIGNER_INPUT_REJECTED";
+  requireCondition(exactKeys(options, [
+    "claims", "expiresAt", "privateKeyPem", "trustedPublicKeyPem"
+  ]), code);
+  const {
+    claims,
+    expiresAt,
+    privateKeyPem,
+    trustedPublicKeyPem
+  } = options;
+  const { expires, issued, issuedAt } =
+    deriveProviderApprovalWindow(expiresAt);
+  requireCondition(plainObject(claims) && UUID.test(claims.approvalId ?? "") &&
+    Number.isFinite(issued) && Number.isFinite(expires), code);
   const fingerprint = brokerPublicKeyFingerprint(trustedPublicKeyPem);
   const privateKey = validatePrivateKey(privateKeyPem, trustedPublicKeyPem);
   const unsigned = {
@@ -152,7 +169,7 @@ function readPrivateKeyFd(fd) {
 function parseArguments(args) {
   const code = "PROVIDER_APPROVAL_SIGNER_ARGUMENTS_REJECTED";
   const allowed = new Set([
-    "--claims", "--expires-at", "--issued-at", "--key-fd", "--output-root"
+    "--claims", "--expires-at", "--key-fd", "--output-root"
   ]);
   requireCondition(args.length === allowed.size * 2, code);
   const parsed = {};
@@ -198,7 +215,6 @@ export async function main(args = process.argv.slice(2), environment = process.e
   const envelope = signProviderBrokerApproval({
     claims,
     expiresAt: parsed["--expires-at"],
-    issuedAt: parsed["--issued-at"],
     privateKeyPem: readPrivateKeyFd(Number(parsed["--key-fd"])),
     trustedPublicKeyPem: publicKeyBytes
   });

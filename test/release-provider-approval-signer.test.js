@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   approvalSignerConstants,
+  deriveProviderApprovalWindow,
   signProviderBrokerApproval
 } from "../scripts/sign-release-provider-approval.js";
 import {
@@ -34,11 +35,39 @@ test("signer accepts only the private key matching its trusted public key", () =
   };
   assert.throws(() => signProviderBrokerApproval({
     claims,
-    expiresAt: "2026-08-17T20:28:00.000Z",
-    issuedAt: "2026-08-17T19:58:00.000Z",
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     privateKeyPem: second.privateKey.export({ format: "pem", type: "pkcs8" }),
     trustedPublicKeyPem: publicKey
   }), /PROVIDER_APPROVAL_SIGNER_KEY_REJECTED/u);
+});
+
+test("signer derives issuedAt from its current clock and rejects overrides", () => {
+  const pair = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const publicKey = pair.publicKey.export({ format: "pem", type: "spki" });
+  const privateKey = pair.privateKey.export({ format: "pem", type: "pkcs8" });
+  const claims = {
+    approvalId: "123e4567-e89b-42d3-a456-426614174000"
+  };
+  const before = Date.now();
+  const expiresAt = new Date(before + 15 * 60 * 1000).toISOString();
+  const window = deriveProviderApprovalWindow(expiresAt);
+  const after = Date.now();
+  assert.ok(Date.parse(window.issuedAt) >= before);
+  assert.ok(Date.parse(window.issuedAt) <= after);
+  assert.equal(window.expires, Date.parse(expiresAt));
+  assert.throws(() => deriveProviderApprovalWindow(
+    new Date(before - 1).toISOString()
+  ), /PROVIDER_APPROVAL_SIGNER_INPUT_REJECTED/u);
+  assert.throws(() => deriveProviderApprovalWindow(
+    new Date(before + 30 * 60 * 1000 + 1_000).toISOString()
+  ), /PROVIDER_APPROVAL_SIGNER_INPUT_REJECTED/u);
+  assert.throws(() => signProviderBrokerApproval({
+    claims,
+    expiresAt,
+    issuedAt: "2036-08-17T19:58:00.000Z",
+    privateKeyPem: privateKey,
+    trustedPublicKeyPem: publicKey
+  }), /PROVIDER_APPROVAL_SIGNER_INPUT_REJECTED/u);
 });
 
 test("signer source hard-pins the public key and has no key-path override", () => {
@@ -48,7 +77,9 @@ test("signer source hard-pins the public key and has no key-path override", () =
   );
   assert.match(source, /9c4e4c9bdade64461547c8e511d525d8fc2e53ae0fc44642e52cf01978a08889/u);
   assert.match(source, /fd >= 3/u);
-  assert.doesNotMatch(source, /--private-key|--public-key|--key-path/u);
+  assert.doesNotMatch(source,
+    /--private-key|--public-key|--key-path|--issued-at/u);
+  assert.match(source, /const issued = Date\.now\(\)/u);
   assert.match(source, /validateProviderBrokerApproval/u);
   assert.equal(providerBrokerConstants.OPERATOR_ISSUER,
     "NUNAN_PROOFTOACT_RELEASE_OPERATOR");
