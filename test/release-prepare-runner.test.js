@@ -443,7 +443,7 @@ test("dispatcher outcome is always ambiguous and never converts dispatch into co
   assert.equal(outcome.observedAt, "2026-08-17T12:00:00.000Z");
 });
 
-test("workflow defaults diagnostic, separates OIDC jobs, and passes only hash lookup", () => {
+test("workflow defaults diagnostic and isolates OIDC behind immutable reusable bytes", () => {
   const workflow = fs.readFileSync(new URL(
     "../.github/workflows/prooftoact-release-candidate.yml",
     import.meta.url), "utf8");
@@ -452,16 +452,20 @@ test("workflow defaults diagnostic, separates OIDC jobs, and passes only hash lo
   assert.match(workflow,
     /diagnostic_only:[\s\S]*?default: true[\s\S]*?type: boolean/u);
   assert.doesNotMatch(diagnostic, /id-token:\s*write/u);
-  assert.equal((workflow.match(/id-token:\s*write/gu) ?? []).length, 3);
-  assert.equal((workflow.match(/aws-actions\/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c/gu) ?? []).length, 3);
-  assert.equal((workflow.match(/run-release-prepare-preflight\.js (?:reserve|dispatch|finalize)/gu) ?? []).length, 3);
+  assert.equal((workflow.match(/id-token:\s*write/gu) ?? []).length, 0);
+  assert.doesNotMatch(workflow, /configure-aws-credentials/u);
+  assert.equal((workflow.match(/run-release-prepare-preflight\.js/gu) ?? []).length, 0);
+  assert.equal((workflow.match(
+    /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/gu
+  ) ?? []).length, 3);
+  assert.equal((workflow.match(
+    /\.github\/workflows\/prooftoact-sealed-(?:coordinator|prepare)\.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f/gu
+  ) ?? []).length, 3);
   assert.match(workflow, /environment: aws-release-coordination/u);
   assert.match(workflow, /environment: aws-release-deployment/u);
-  assert.match(workflow, /outputs:\n\s+lookup_b64:/u);
-  assert.doesNotMatch(workflow, /needs\.provider-dispatch\.outputs/u);
-  assert.doesNotMatch(workflow, /actions\/(?:upload-artifact|cache)@/u);
-  assert.match(workflow,
-    /PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256:\s*\$\{\{ vars\./u);
+  assert.doesNotMatch(workflow, /lookup_b64/u);
+  assert.doesNotMatch(workflow, /actions\/cache@/u);
+  assert.doesNotMatch(workflow, /\$\{\{ (?:secrets|vars)\./u);
   assert.match(workflow,
     /coordinator-finalize:[\s\S]*?if: \$\{\{ always\(\)[\s\S]*?!inputs\.diagnostic_only/u);
 });
