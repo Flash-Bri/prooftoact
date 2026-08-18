@@ -33,7 +33,7 @@ const UUID =
 const REVIEWED_GATE2_TEMPLATE_SHA256 =
   "a10066b23925cf2921b15eaa0d52e7ac8ef7a5f46e0ab260431a340e897cc3a1";
 const REVIEWED_DEPLOYMENT_ROLES_TEMPLATE_SHA256 =
-  "68128dfa0d72246bebd1c35fe8549f86e2827efc2769314d628e551d9c6f1cad";
+  "6e8fd5c0ad6de5c5b0a52dc125b019857c3dd3f86298b91e05a6279edd220989";
 const ARTIFACT_NAMES = Object.freeze([
   "agent",
   "authority",
@@ -427,15 +427,27 @@ function requireExactCoordinatorReadback(
 
 function exactBootstrapRoleResources() {
   return [
-    "CloudFormationServiceRole",
-    "ReleaseDeploymentRole",
-    "ReleaseCoordinatorRole",
-    "ReleaseExecutionRole",
-    "LiveDrillOperatorRole",
-    "ReleaseEvidenceRole",
-    "ReleaseTeardownRole",
-    "ReleaseTerminalizerRole"
-  ].map((logicalId) => ({ "Fn::GetAtt": [logicalId, "Arn"] }));
+    { "Fn::GetAtt": ["CloudFormationServiceRole", "Arn"] },
+    {
+      "Fn::Sub":
+        "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/" +
+        "ProofToActReleaseDeployment"
+    },
+    {
+      "Fn::Sub":
+        "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/" +
+        "ProofToActReleaseCoordinator"
+    },
+    { "Fn::GetAtt": ["ReleaseExecutionRole", "Arn"] },
+    { "Fn::GetAtt": ["LiveDrillOperatorRole", "Arn"] },
+    {
+      "Fn::Sub":
+        "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/" +
+        "ProofToActReleaseEvidence"
+    },
+    { "Fn::GetAtt": ["ReleaseTeardownRole", "Arn"] },
+    { "Fn::GetAtt": ["ReleaseTerminalizerRole", "Arn"] }
+  ];
 }
 
 function requireExactBootstrapReadback(statements) {

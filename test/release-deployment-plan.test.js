@@ -41,6 +41,62 @@ function deploymentRolesTemplate() {
   return jsonFile("infra/aws/release-deployment-roles-template.json");
 }
 
+function resourceDependencies(template) {
+  const logicalIds = new Set(Object.keys(template.Resources));
+  const dependencies = new Map(
+    [...logicalIds].map((logicalId) => [logicalId, new Set()])
+  );
+  function visit(value, owner) {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, owner);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    if (typeof value.Ref === "string" && logicalIds.has(value.Ref)) {
+      dependencies.get(owner).add(value.Ref);
+    }
+    const getAtt = value["Fn::GetAtt"];
+    if (Array.isArray(getAtt) && logicalIds.has(getAtt[0])) {
+      dependencies.get(owner).add(getAtt[0]);
+    }
+    const substitution = value["Fn::Sub"];
+    if (typeof substitution === "string") {
+      for (const match of substitution.matchAll(/\$\{([A-Za-z0-9]+)(?:\.[^}]*)?\}/gu)) {
+        if (logicalIds.has(match[1])) dependencies.get(owner).add(match[1]);
+      }
+    }
+    for (const nested of Object.values(value)) visit(nested, owner);
+  }
+  for (const [logicalId, resource] of Object.entries(template.Resources)) {
+    for (const explicit of [resource.DependsOn].flat().filter(Boolean)) {
+      if (logicalIds.has(explicit)) dependencies.get(logicalId).add(explicit);
+    }
+    visit(resource.Properties, logicalId);
+  }
+  return dependencies;
+}
+
+function assertAcyclicResourceGraph(template) {
+  const dependencies = resourceDependencies(template);
+  const active = new Set();
+  const complete = new Set();
+  function visit(logicalId, path = []) {
+    if (complete.has(logicalId)) return;
+    assert.equal(
+      active.has(logicalId),
+      false,
+      `circular CloudFormation dependency: ${[...path, logicalId].join(" -> ")}`
+    );
+    active.add(logicalId);
+    for (const dependency of dependencies.get(logicalId)) {
+      visit(dependency, [...path, logicalId]);
+    }
+    active.delete(logicalId);
+    complete.add(logicalId);
+  }
+  for (const logicalId of dependencies.keys()) visit(logicalId);
+}
+
 function prettyDigest(value) {
   return sha256(Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8"));
 }
@@ -1093,15 +1149,24 @@ test("evidence role has the exact frozen attestation read inventory only", () =>
 
 test("preparer and evidence independently read back every bootstrap role and boundary", () => {
   const rolesTemplate = deploymentRolesTemplate();
-  const expectedLogicalIds = [
-    "CloudFormationServiceRole",
-    "ReleaseDeploymentRole",
-    "ReleaseCoordinatorRole",
-    "ReleaseExecutionRole",
-    "LiveDrillOperatorRole",
-    "ReleaseEvidenceRole",
-    "ReleaseTeardownRole",
-    "ReleaseTerminalizerRole"
+  const expectedRoleResources = [
+    { "Fn::GetAtt": ["CloudFormationServiceRole", "Arn"] },
+    {
+      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/" +
+        "ProofToActReleaseDeployment"
+    },
+    {
+      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/" +
+        "ProofToActReleaseCoordinator"
+    },
+    { "Fn::GetAtt": ["ReleaseExecutionRole", "Arn"] },
+    { "Fn::GetAtt": ["LiveDrillOperatorRole", "Arn"] },
+    {
+      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/" +
+        "ProofToActReleaseEvidence"
+    },
+    { "Fn::GetAtt": ["ReleaseTeardownRole", "Arn"] },
+    { "Fn::GetAtt": ["ReleaseTerminalizerRole", "Arn"] }
   ];
   for (const logicalId of [
     "ReleaseDeploymentRole",
@@ -1109,6 +1174,9 @@ test("preparer and evidence independently read back every bootstrap role and bou
     "ReleaseEvidenceRole"
   ]) {
     const role = rolesTemplate.Resources[logicalId];
+    assert.equal(role.Properties.RoleName,
+      `ProofToAct${logicalId.replace(/Role$/u, "")}`);
+    assert.equal(Object.hasOwn(role.Properties, "Path"), false);
     const readback = statement(role, "ReadAndSimulateExactBootstrapRoles");
     assert.deepEqual(actionList(readback).sort(), [
       "iam:GetRole",
@@ -1118,8 +1186,7 @@ test("preparer and evidence independently read back every bootstrap role and bou
       "iam:ListRoleTags",
       "iam:SimulatePrincipalPolicy"
     ].sort());
-    assert.deepEqual(readback.Resource.map((resource) =>
-      resource["Fn::GetAtt"][0]), expectedLogicalIds);
+    assert.deepEqual(readback.Resource, expectedRoleResources);
     assert.deepEqual(
       statement(role, "ReadExactPermissionsBoundary").Resource,
       { Ref: "CloudFormationPermissionsBoundary" }
@@ -1132,6 +1199,20 @@ test("preparer and evidence independently read back every bootstrap role and bou
   assert.throws(
     () => validateReleaseDeploymentRoleTemplate(missingRole, gate2Template()),
     /RELEASE_PLAN_IAM_READBACK_REJECTED/u
+  );
+});
+
+test("bootstrap CloudFormation resource dependency graph is acyclic", () => {
+  assertAcyclicResourceGraph(deploymentRolesTemplate());
+
+  const cyclic = deploymentRolesTemplate();
+  statement(cyclic.Resources.ReleaseDeploymentRole,
+    "ReadAndSimulateExactBootstrapRoles").Resource[1] = {
+    "Fn::GetAtt": ["ReleaseDeploymentRole", "Arn"]
+  };
+  assert.throws(
+    () => assertAcyclicResourceGraph(cyclic),
+    /circular CloudFormation dependency/u
   );
 });
 

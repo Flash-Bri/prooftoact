@@ -739,16 +739,10 @@
                       ]
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseDeploymentRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseDeployment"
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseCoordinatorRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseCoordinator"
                     },
                     {
                       "Fn::GetAtt": [
@@ -763,10 +757,7 @@
                       ]
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseEvidenceRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseEvidence"
                     },
                     {
                       "Fn::GetAtt": [
@@ -1130,16 +1121,10 @@
                       ]
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseDeploymentRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseDeployment"
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseCoordinatorRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseCoordinator"
                     },
                     {
                       "Fn::GetAtt": [
@@ -1154,10 +1139,7 @@
                       ]
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseEvidenceRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseEvidence"
                     },
                     {
                       "Fn::GetAtt": [
@@ -1749,16 +1731,10 @@
                       ]
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseDeploymentRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseDeployment"
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseCoordinatorRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseCoordinator"
                     },
                     {
                       "Fn::GetAtt": [
@@ -1773,10 +1749,7 @@
                       ]
                     },
                     {
-                      "Fn::GetAtt": [
-                        "ReleaseEvidenceRole",
-                        "Arn"
-                      ]
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActReleaseEvidence"
                     },
                     {
                       "Fn::GetAtt": [
