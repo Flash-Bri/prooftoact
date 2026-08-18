@@ -364,6 +364,15 @@ test("hosted workflow is no-OIDC, exact-root, retained, and action-pinned",
     assert.equal(source.includes(
       '--application-root "$GITHUB_WORKSPACE/frozen-application"'), true);
     assert.equal((source.match(/--npm-cli "\$npm_cli"/gu) ?? []).length, 4);
+    const bootstrap = source.indexOf(
+      "Bootstrap exact control-plane module graph for verifier loading");
+    const exactBootstrapCommand =
+      'node "$npm_cli" ci --ignore-scripts --no-audit --no-fund';
+    assert.equal(bootstrap >= 0, true);
+    assert.equal((source.match(new RegExp(exactBootstrapCommand
+      .replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "gu")) ?? []).length, 1);
+    assert.equal(source.includes("npm_config_ignore_scripts: \"true\""), true);
+    assert.equal(/\bnpm\s+(?:install|i)\b/u.test(source), false);
     assert.equal(source.includes("if: ${{ success() }}"), true);
     assert.equal(source.includes("if: ${{ always() }}"), false);
     const generate = source.indexOf(
@@ -372,7 +381,8 @@ test("hosted workflow is no-OIDC, exact-root, retained, and action-pinned",
       "verify-hosted-dual-root-verification.js");
     const tamper = source.indexOf(
       "test-hosted-dual-root-verification-tamper.js");
-    assert.equal(generate >= 0 && verify > generate && tamper > verify, true);
+    assert.equal(generate > bootstrap && verify > generate && tamper > verify,
+      true);
     const pins = [...source.matchAll(/^\s*uses:\s*[^@\s]+@([^\s#]+)/gmu)]
       .map((match) => match[1]);
     assert.equal(pins.length, 4);
