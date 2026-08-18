@@ -426,3 +426,34 @@ epoch after one can exist.
   returned rows.
 - Claim impact: a source reconciliation result is now independently bound to
   the durable proposal bytes; no live or cluster-atomic claim is added.
+
+### Recovery publisher schema repair runbook
+
+The existing-cluster publisher repair is a one-statement exception, not a
+general migration lane. Before either `--apply` or `--verify-applied`, the
+operator must bind the exact recovery cluster ID, hostname, database, source
+commit/tree, database-posture digest, and cluster-wide pre-repair posture
+digest. The administrator must also establish an exclusive maintenance window:
+no other administrator may alter users, roles, memberships, grants, default
+privileges, or either recovery function until the final receipt is retained.
+
+`--apply` dispatches the reviewed `GRANT USAGE` statement at most once. After
+the COMMIT call, whether its acknowledgement succeeds or is lost, the mutation
+connection is closed. A fresh administrator connection then classifies the
+exact posture as `CONFIRMED_PRESENT`, `CONFIRMED_ABSENT`, or unresolved. It
+also re-reads and hashes both stored function definitions and the cluster-wide
+grant posture. `CONFIRMED_ABSENT` is a terminal HOLD for that invocation, not
+permission to retry. Any drift, connection failure, probe failure, or
+contradictory state is unresolved and must not trigger another mutation.
+
+`--verify-applied` is the recovery path after an applied-but-unconfirmed or
+post-COMMIT verification failure. It dispatches no DDL and authorizes no
+repair. It reopens the target, reclassifies grants, re-hashes stored function
+definitions, and uses rollback-only publisher capability probes. A present
+result is labeled by its observation (`read_only_verification` or
+`read_reconciled`); an absent result remains HOLD. Preserve the nonsecret JSON
+receipt and source identity, but never persist database URLs or passwords.
+
+This source runbook does not establish a live CockroachDB v26.2 canary,
+exclusive-maintenance-window evidence, or provider enforcement. Those remain
+separate live gates.

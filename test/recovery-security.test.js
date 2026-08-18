@@ -4,10 +4,15 @@ import test from "node:test";
 import {
   __test as recoverySecurityContract,
   appendRecoveryBundleWithClient,
+  collectRecoveryPublisherFunctionDefinitions,
   collectRecoveryPublisherCapabilityPosture,
   RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
-  repairRecoveryPublisherPrivateSchemaUsage
+  RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+  repairRecoveryPublisherPrivateSchemaUsage,
+  verifyRecoveryPublisherPrivateSchemaUsage
 } from "../src/cloud/recovery-security.js";
+import { main as repairCliMain } from
+  "../scripts/repair-recovery-publisher-private-schema-usage.js";
 import {
   validateDatabaseSecurityPosture
 } from "../src/cloud/database-security-posture.js";
@@ -49,7 +54,10 @@ function sqlState(code, message = code) {
   return Object.assign(new Error(message), { code });
 }
 
-function publisherProbeClient({ directOperationAllowed = null } = {}) {
+function publisherProbeClient({
+  directOperationAllowed = null,
+  functionProbeError = null
+} = {}) {
   let appendedBundleDigest = null;
   let appendTransactionActive = false;
   const calls = [];
@@ -81,6 +89,7 @@ function publisherProbeClient({ directOperationAllowed = null } = {}) {
         return {};
       }
       if (sql.includes("mcp_api.append_recovery_bundle_v2")) {
+        if (functionProbeError) throw functionProbeError;
         appendedBundleDigest = values[8];
         return {
           rowCount: 1,
@@ -186,46 +195,129 @@ function recoveryAdminPosture({ privateUsage = false, extraGrants = [] } = {}) {
   };
 }
 
+const RECOVERY_FUNCTION_DEFINITIONS = Object.freeze({
+  append: `CREATE OR REPLACE FUNCTION mcp_api.append_recovery_bundle_v2()
+    RETURNS TABLE(bundle_digest STRING)
+    LANGUAGE PLpgSQL SECURITY DEFINER AS $$
+    BEGIN
+      IF session_user <> 'tp_recovery_publisher_user' THEN RAISE EXCEPTION 'denied'; END IF;
+      SELECT count(*) FROM mcp_private.recovery_bundles_v2;
+      INSERT INTO mcp_private.recovery_bundles_v2 DEFAULT VALUES;
+    END $$`,
+  resolve: `CREATE OR REPLACE FUNCTION mcp_api.resolve_recovery_bundle_v1()
+    RETURNS TABLE(bundle_digest STRING)
+    LANGUAGE SQL SECURITY DEFINER AS $$
+    SELECT bundle_digest FROM mcp_private.recovery_bundles_v2
+    WHERE session_user = 'tp_recovery_publisher_user' $$`
+});
+
+function recoveryAdminState(options = {}) {
+  return {
+    repaired: options.privateUsage ?? false,
+    extraGrants: options.extraGrants ?? [],
+    commitApplies: options.commitApplies ?? true,
+    commitError: options.commitError ?? null,
+    grantError: options.grantError ?? null,
+    rollbackError: options.rollbackError ?? null,
+    definitionDrift: options.definitionDrift ?? false,
+    afterCommitExtraGrants: options.afterCommitExtraGrants ?? null
+  };
+}
+
 function recoveryAdminClient(options = {}) {
-  let repaired = options.privateUsage ?? false;
+  const state = options.state ?? recoveryAdminState(options);
   const calls = [];
+  let grantPending = false;
   return {
     calls,
+    state,
     async connect() {},
     async end() {},
     async query(sql) {
       calls.push(sql.trim());
+      if (sql.startsWith("SHOW CREATE FUNCTION")) {
+        const append = sql.includes("append_recovery_bundle_v2");
+        return {
+          rowCount: 1,
+          rows: [{
+            create_statement: append
+              ? `${RECOVERY_FUNCTION_DEFINITIONS.append}${
+                state.definitionDrift ? "\n-- drift" : ""
+              }`
+              : RECOVERY_FUNCTION_DEFINITIONS.resolve
+          }]
+        };
+      }
       if (sql.includes("FROM [SHOW USERS]")) {
         return { rows: recoveryAdminPosture({
-          privateUsage: repaired,
-          extraGrants: options.extraGrants
+          privateUsage: state.repaired,
+          extraGrants: state.extraGrants
         }).principals };
       }
       if (sql.includes("FROM [SHOW GRANTS ON ROLE]")) {
         return { rows: recoveryAdminPosture({
-          privateUsage: repaired,
-          extraGrants: options.extraGrants
+          privateUsage: state.repaired,
+          extraGrants: state.extraGrants
         }).memberships };
       }
       if (sql.includes("FROM [SHOW SYSTEM GRANTS]")) return { rows: [] };
       if (sql.includes("FROM [SHOW GRANTS]")) {
         return { rows: recoveryAdminPosture({
-          privateUsage: repaired,
-          extraGrants: options.extraGrants
+          privateUsage: state.repaired,
+          extraGrants: state.extraGrants
         }).objectGrants };
       }
       if (sql.includes("FROM [SHOW DEFAULT PRIVILEGES]")) return { rows: [] };
       if (sql.includes("current_database() AS database_name")) {
         return { rows: recoveryAdminPosture({
-          privateUsage: repaired,
-          extraGrants: options.extraGrants
+          privateUsage: state.repaired,
+          extraGrants: state.extraGrants
         }).session };
       }
       if (sql === "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role") {
-        repaired = true;
+        if (state.grantError) throw state.grantError;
+        grantPending = true;
+      }
+      if (sql.trim() === "COMMIT" && grantPending) {
+        if (state.commitApplies) state.repaired = true;
+        if (state.afterCommitExtraGrants) {
+          state.extraGrants = state.afterCommitExtraGrants;
+        }
+        grantPending = false;
+        if (state.commitError) throw state.commitError;
+      }
+      if (sql.trim() === "ROLLBACK") {
+        grantPending = false;
+        if (state.rollbackError) throw state.rollbackError;
       }
       return { rows: [] };
     }
+  };
+}
+
+const SCHEMA_REPAIR_SOURCE_COMMIT = "1".repeat(40);
+const SCHEMA_REPAIR_SOURCE_TREE = "2".repeat(40);
+const SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST = "b".repeat(64);
+
+function repairArguments(overrides = {}) {
+  const legacySummary = validateDatabaseSecurityPosture(
+    recoveryAdminPosture(),
+    recoverySecurityContract.LEGACY_RECOVERY_POSTURE_SPEC
+  );
+  return {
+    adminConnectionString:
+      "postgresql://cluster_admin:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    publisherConnectionString:
+      "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
+    expectedRecoveryHostname: "recovery.example",
+    expectedRecoveryClusterId:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+    expectedPreflightPostureDigest: legacySummary.postureDigest,
+    expectedClusterPreflightPostureDigest:
+      SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST,
+    sourceCommit: SCHEMA_REPAIR_SOURCE_COMMIT,
+    sourceTree: SCHEMA_REPAIR_SOURCE_TREE,
+    ...overrides
   };
 }
 
@@ -263,52 +355,286 @@ test("publisher capability collector rejects any direct private-table operation"
   }
 });
 
-test("existing-cluster repair accepts only exact legacy posture and verifies the result", async () => {
-  const admin = recoveryAdminClient();
-  const legacySummary = validateDatabaseSecurityPosture(
-    recoveryAdminPosture(),
-    recoverySecurityContract.LEGACY_RECOVERY_POSTURE_SPEC
+test("stored recovery function definitions are read and digest-bound", async () => {
+  const result = await collectRecoveryPublisherFunctionDefinitions(
+    recoveryAdminClient()
   );
+  assert.equal(result.definitions.length, 2);
+  assert.match(result.bindingSha256, /^[0-9a-f]{64}$/u);
+  await assert.rejects(
+    collectRecoveryPublisherFunctionDefinitions({
+      async query() {
+        return { rows: [{ create_statement: "CREATE FUNCTION unsafe()" }] };
+      }
+    }),
+    /RECOVERY_SCHEMA_REPAIR_FUNCTION_DEFINITION_INVALID/u
+  );
+});
+
+test("read-only repair verification distinguishes exact absent and present state", async () => {
+  for (const [privateUsage, expectedStatus] of [
+    [false, "CONFIRMED_ABSENT"],
+    [true, "CONFIRMED_PRESENT"]
+  ]) {
+    const admin = recoveryAdminClient({ privateUsage });
+    const result = await verifyRecoveryPublisherPrivateSchemaUsage({
+      ...repairArguments(),
+      createAdminClient: () => admin,
+      createPublisherClient: () => publisherProbeClient(),
+      collectClusterPosture: async () => ({ postureDigest: "c".repeat(64) })
+    });
+    assert.equal(result.status, expectedStatus);
+    assert.equal(result.mode, "VERIFY_APPLIED_READ_ONLY");
+    assert.equal(result.mutationCount, 0);
+    assert.equal(result.target.clusterId,
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID);
+    assert.equal(result.source.commit, SCHEMA_REPAIR_SOURCE_COMMIT);
+    assert.equal(result.source.tree, SCHEMA_REPAIR_SOURCE_TREE);
+    assert.equal(
+      result.concurrentAdministratorRequirement,
+      "NO_CONCURRENT_ADMINISTRATOR_MUTATION_REQUIRED_NOT_VERIFIED"
+    );
+    assert.equal(
+      admin.calls.some((sql) => sql.startsWith("GRANT ")),
+      false
+    );
+  }
+});
+
+test("existing-cluster repair binds exact preflight and verifies through a fresh client", async () => {
+  const state = recoveryAdminState();
+  const clients = [];
   let clusterReads = 0;
   const result = await repairRecoveryPublisherPrivateSchemaUsage({
-    adminConnectionString:
-      "postgresql://cluster_admin:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
-    publisherConnectionString:
-      "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
-    expectedRecoveryHostname: "recovery.example",
-    expectedPreflightPostureDigest: legacySummary.postureDigest,
+    ...repairArguments(),
     confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
-    createAdminClient: () => admin,
-    createPublisherClient: () => publisherProbeClient(),
+    createAdminClient: () => {
+      const client = recoveryAdminClient({ state });
+      clients.push(client);
+      return client;
+    },
+    createReconciliationAdminClient: () => {
+      const client = recoveryAdminClient({ state });
+      clients.push(client);
+      return client;
+    },
+    createReconciliationPublisherClient: () => publisherProbeClient(),
     collectClusterPosture: async () => ({
-      postureDigest: `${++clusterReads}`.repeat(64)
+      postureDigest: ++clusterReads === 1
+        ? SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+        : "c".repeat(64)
     })
   });
-  assert.equal(result.status, "CONFIRMED_APPLIED");
-  assert.equal(result.preflightPostureDigest, legacySummary.postureDigest);
-  assert.notEqual(result.finalPostureDigest, result.preflightPostureDigest);
+  assert.equal(result.status, "CONFIRMED_PRESENT");
+  assert.equal(result.observation, "direct_ack");
+  assert.equal(result.preflightPostureDigest,
+    repairArguments().expectedPreflightPostureDigest);
+  assert.equal(result.clusterPreflightPostureDigest,
+    SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST);
   assert.equal(result.capabilityPosture.functionProbe.rollbackVerified, true);
-  assert.equal(clusterReads, 2);
+  assert.equal(clients.length, 2);
   assert.equal(
-    admin.calls.filter((sql) =>
+    clients.flatMap((client) => client.calls).filter((sql) =>
       sql === "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
     ).length,
     1
   );
 });
 
-test("existing-cluster repair fails closed on already-repaired or drifted posture", async () => {
-  const common = {
-    adminConnectionString:
-      "postgresql://cluster_admin:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
-    publisherConnectionString:
-      "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=verify-full",
-    expectedRecoveryHostname: "recovery.example",
-    expectedPreflightPostureDigest: "a".repeat(64),
+test("repair reconciles COMMIT ACK loss as present without retry", async () => {
+  const state = recoveryAdminState({
+    commitError: sqlState("ECONNRESET")
+  });
+  const clients = [];
+  let clusterReads = 0;
+  const result = await repairRecoveryPublisherPrivateSchemaUsage({
+    ...repairArguments(),
     confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+    createAdminClient: () => {
+      const client = recoveryAdminClient({ state });
+      clients.push(client);
+      return client;
+    },
+    createReconciliationAdminClient: () => {
+      const client = recoveryAdminClient({ state });
+      clients.push(client);
+      return client;
+    },
+    createReconciliationPublisherClient: () => publisherProbeClient(),
+    collectClusterPosture: async () => ({
+      postureDigest: ++clusterReads === 1
+        ? SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+        : "c".repeat(64)
+    })
+  });
+  assert.equal(result.status, "CONFIRMED_PRESENT");
+  assert.equal(result.observation, "read_reconciled");
+  assert.equal(result.commitAcknowledged, false);
+  assert.equal(
+    clients.flatMap((client) => client.calls).filter((sql) =>
+      sql === "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
+    ).length,
+    1
+  );
+});
+
+test("repair reconciles COMMIT ACK loss as absent and never retries", async () => {
+  const state = recoveryAdminState({
+    commitApplies: false,
+    commitError: sqlState("ECONNRESET")
+  });
+  const clients = [];
+  let clusterReads = 0;
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...repairArguments(),
+      confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+      createAdminClient: () => {
+        const client = recoveryAdminClient({ state });
+        clients.push(client);
+        return client;
+      },
+      createReconciliationAdminClient: () => {
+        const client = recoveryAdminClient({ state });
+        clients.push(client);
+        return client;
+      },
+      createReconciliationPublisherClient: () => publisherProbeClient(),
+      collectClusterPosture: async () => ({
+        postureDigest: ++clusterReads === 1
+          ? SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+          : "c".repeat(64)
+      })
+    }),
+    (error) => {
+      assert.equal(error.code, "RECOVERY_SCHEMA_REPAIR_CONFIRMED_ABSENT");
+      assert.equal(error.reconciliation.status, "CONFIRMED_ABSENT");
+      assert.equal(error.reconciliation.observation, "read_reconciled");
+      return true;
+    }
+  );
+  assert.equal(
+    clients.flatMap((client) => client.calls).filter((sql) =>
+      sql === "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
+    ).length,
+    1
+  );
+});
+
+test("repair marks contradictory ACK-loss readback unresolved", async () => {
+  const state = recoveryAdminState({
+    commitError: sqlState("ECONNRESET"),
+    afterCommitExtraGrants: [{
+      database_name: "tideproof_recovery",
+      schema_name: "mcp_private",
+      object_name: "recovery_bundles_v2",
+      object_type: "table",
+      grantee: "tp_recovery_publisher_role",
+      privilege_type: "SELECT",
+      is_grantable: false
+    }]
+  });
+  let clusterReads = 0;
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...repairArguments(),
+      confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+      createAdminClient: () => recoveryAdminClient({ state }),
+      createReconciliationAdminClient: () => recoveryAdminClient({ state }),
+      createReconciliationPublisherClient: () => publisherProbeClient(),
+      collectClusterPosture: async () => ({
+        postureDigest: ++clusterReads === 1
+          ? SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+          : "c".repeat(64)
+      })
+    }),
+    ({ code }) =>
+      code === "RECOVERY_SCHEMA_REPAIR_RECONCILIATION_UNRESOLVED"
+  );
+});
+
+test("post-COMMIT verification failure is recoverable only by read-only verification", async () => {
+  const state = recoveryAdminState();
+  let clusterReads = 0;
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...repairArguments(),
+      confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+      createAdminClient: () => recoveryAdminClient({ state }),
+      createReconciliationAdminClient: () => recoveryAdminClient({ state }),
+      createReconciliationPublisherClient: () => publisherProbeClient({
+        functionProbeError: sqlState("42501")
+      }),
+      collectClusterPosture: async () => ({
+        postureDigest: ++clusterReads === 1
+          ? SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+          : "c".repeat(64)
+      })
+    }),
+    ({ code }) =>
+      code === "RECOVERY_SCHEMA_REPAIR_POSTCOMMIT_VERIFICATION_UNRESOLVED"
+  );
+  const reconciled = await verifyRecoveryPublisherPrivateSchemaUsage({
+    ...repairArguments(),
+    createAdminClient: () => recoveryAdminClient({ state }),
     createPublisherClient: () => publisherProbeClient(),
-    collectClusterPosture: async () => ({ postureDigest: "b".repeat(64) })
+    collectClusterPosture: async () => ({ postureDigest: "c".repeat(64) })
+  });
+  assert.equal(reconciled.status, "CONFIRMED_PRESENT");
+  assert.equal(reconciled.observation, "read_only_verification");
+});
+
+test("repair stops on rollback failure before dispatching COMMIT", async () => {
+  const state = recoveryAdminState({
+    grantError: sqlState("40001"),
+    rollbackError: new Error("synthetic rollback failure")
+  });
+  const admin = recoveryAdminClient({ state });
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...repairArguments(),
+      confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+      createAdminClient: () => admin,
+      collectClusterPosture: async () => ({
+        postureDigest: SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+      })
+    }),
+    ({ code }) => code === "RECOVERY_SCHEMA_REPAIR_ROLLBACK_FAILED"
+  );
+  const grantIndex = admin.calls.indexOf(
+    "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
+  );
+  assert.equal(
+    admin.calls.slice(grantIndex + 1).includes("COMMIT"),
+    false
+  );
+});
+
+test("existing-cluster repair fails closed on identity, digest, and posture drift", async () => {
+  const common = {
+    ...repairArguments(),
+    confirmation: RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION,
+    createReconciliationPublisherClient: () => publisherProbeClient(),
+    collectClusterPosture: async () => ({
+      postureDigest: SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST
+    })
   };
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      expectedRecoveryClusterId: "00000000-0000-0000-0000-000000000000",
+      createAdminClient: () => recoveryAdminClient()
+    }),
+    /RECOVERY_SCHEMA_REPAIR_CLUSTER_ID_INVALID/u
+  );
+  await assert.rejects(
+    repairRecoveryPublisherPrivateSchemaUsage({
+      ...common,
+      expectedClusterPreflightPostureDigest: "d".repeat(64),
+      createAdminClient: () => recoveryAdminClient()
+    }),
+    /RECOVERY_SCHEMA_REPAIR_CLUSTER_PREFLIGHT_MISMATCH/u
+  );
   await assert.rejects(
     repairRecoveryPublisherPrivateSchemaUsage({
       ...common,
@@ -331,16 +657,7 @@ test("existing-cluster repair fails closed on already-repaired or drifted postur
         }]
       })
     }),
-    /DATABASE_POSTURE_MANAGED_GRANT_UNEXPECTED/u
-  );
-  await assert.rejects(
-    repairRecoveryPublisherPrivateSchemaUsage({
-      ...common,
-      publisherConnectionString:
-        "postgresql://tp_recovery_publisher_user:secret@recovery.example:26257/tideproof_recovery?sslmode=require",
-      createAdminClient: () => recoveryAdminClient()
-    }),
-    /RECOVERY_SCHEMA_REPAIR_TARGET_INVALID/u
+    /RECOVERY_SCHEMA_REPAIR_POSTURE_UNRESOLVED/u
   );
   await assert.rejects(
     repairRecoveryPublisherPrivateSchemaUsage({
@@ -350,25 +667,50 @@ test("existing-cluster repair fails closed on already-repaired or drifted postur
     }),
     /RECOVERY_SCHEMA_REPAIR_CONFIRMATION_REQUIRED/u
   );
-  const clusterInvalidAdmin = recoveryAdminClient();
-  const legacySummary = validateDatabaseSecurityPosture(
-    recoveryAdminPosture(),
-    recoverySecurityContract.LEGACY_RECOVERY_POSTURE_SPEC
+});
+
+test("repair CLI gates apply and exposes only a read-only verify mode", async () => {
+  const environment = {
+    RECOVERY_ADMIN_DATABASE_URL: repairArguments().adminConnectionString,
+    RECOVERY_PUBLISHER_DATABASE_URL:
+      repairArguments().publisherConnectionString,
+    EXPECTED_RECOVERY_HOSTNAME: "recovery.example",
+    EXPECTED_RECOVERY_CLUSTER_ID:
+      RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CLUSTER_ID,
+    EXPECTED_RECOVERY_PRE_REPAIR_POSTURE_SHA256:
+      repairArguments().expectedPreflightPostureDigest,
+    EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256:
+      SCHEMA_REPAIR_CLUSTER_PREFLIGHT_DIGEST,
+    RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT: SCHEMA_REPAIR_SOURCE_COMMIT,
+    RECOVERY_SCHEMA_REPAIR_SOURCE_TREE: SCHEMA_REPAIR_SOURCE_TREE
+  };
+  const written = [];
+  await repairCliMain(["--verify-applied"], environment, {
+    write: (value) => written.push(value),
+    verifyRepair: async (options) => ({
+      status: "CONFIRMED_PRESENT",
+      applied: true,
+      options
+    })
+  });
+  assert.equal(written[0].options.confirmation, undefined);
+  await assert.rejects(
+    repairCliMain(["--apply"], environment, {
+      write() {},
+      applyRepair: async () => assert.fail("apply must remain gated")
+    }),
+    /RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION_REQUIRED/u
   );
   await assert.rejects(
-    repairRecoveryPublisherPrivateSchemaUsage({
-      ...common,
-      expectedPreflightPostureDigest: legacySummary.postureDigest,
-      createAdminClient: () => clusterInvalidAdmin,
-      collectClusterPosture: async () => ({})
-    }),
-    /RECOVERY_SCHEMA_REPAIR_CLUSTER_PREFLIGHT_INVALID/u
+    repairCliMain(["--verify-applied", "extra"], environment),
+    /RECOVERY_SCHEMA_REPAIR_MODE_REQUIRED/u
   );
-  assert.equal(
-    clusterInvalidAdmin.calls.includes(
-      "GRANT USAGE ON SCHEMA mcp_private TO tp_recovery_publisher_role"
-    ),
-    false
+  await assert.rejects(
+    repairCliMain(["--verify-applied"], {}, {
+      write() {},
+      verifyRepair: async () => assert.fail("missing binding must stop first")
+    }),
+    /RECOVERY_ADMIN_DATABASE_URL_REQUIRED/u
   );
 });
 

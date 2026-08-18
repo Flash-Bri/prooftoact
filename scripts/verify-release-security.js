@@ -1613,7 +1613,10 @@ const SOURCE_MARKERS = Object.freeze({
     "Classifier-dependent rollback after COMMIT dispatch",
     "Direct replay currentness omitted the outbox",
     "Digest label without durable payload verification",
-    "Invocation identity projected as committed replay identity"
+    "Invocation identity projected as committed replay identity",
+    "Recovery publisher schema repair runbook",
+    "`CONFIRMED_ABSENT` is a terminal HOLD",
+    "no other administrator may alter users, roles, memberships, grants"
   ]),
   "commit-reconciliation-tests": Object.freeze([
     "direct ACK and read reconciliation share one exact commit schema",
@@ -3631,11 +3634,15 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "recovery-publisher-schema-repair": Object.freeze([
     "mode === \"--plan\"",
-    "mode !== \"--apply\"",
+    "--verify-applied",
     "RECOVERY_ADMIN_DATABASE_URL",
     "RECOVERY_PUBLISHER_DATABASE_URL",
     "EXPECTED_RECOVERY_HOSTNAME",
+    "EXPECTED_RECOVERY_CLUSTER_ID",
     "EXPECTED_RECOVERY_PRE_REPAIR_POSTURE_SHA256",
+    "EXPECTED_RECOVERY_CLUSTER_PRE_REPAIR_POSTURE_SHA256",
+    "RECOVERY_SCHEMA_REPAIR_SOURCE_COMMIT",
+    "RECOVERY_SCHEMA_REPAIR_SOURCE_TREE",
     "RECOVERY_PUBLISHER_PRIVATE_SCHEMA_REPAIR_CONFIRMATION"
   ]),
   "recovery-publication-reconciliation-tests": Object.freeze([
@@ -3646,8 +3653,13 @@ const SOURCE_MARKERS = Object.freeze({
     "ambiguous_closed",
     "publisher capability collector executes functions only in a rolled-back probe",
     "publisher capability collector rejects any direct private-table operation",
-    "existing-cluster repair accepts only exact legacy posture and verifies the result",
-    "existing-cluster repair fails closed on already-repaired or drifted posture"
+    "read-only repair verification distinguishes exact absent and present state",
+    "repair reconciles COMMIT ACK loss as present without retry",
+    "repair reconciles COMMIT ACK loss as absent and never retries",
+    "repair marks contradictory ACK-loss readback unresolved",
+    "post-COMMIT verification failure is recoverable only by read-only verification",
+    "repair stops on rollback failure before dispatching COMMIT",
+    "repair CLI gates apply and exposes only a read-only verify mode"
   ]),
   "recovery-store": Object.freeze([
     "runtimeDatabaseConfig({",

@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.proof-manifest.v1",
   "status": "INCOMPLETE_LIVE_GATES_PENDING",
-  "reviewedOn": "2026-08-14",
+  "reviewedOn": "2026-08-18",
   "claimBoundary": "Exact hashes bind the current public evidence and control files; this manifest does not prove live AWS deployment, a public demo, a finished video, submission, production safety, or exactly-once external effects.",
   "artifacts": [
     {
@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "a41b4b9f42ad7f51fe0bc1502f5338e5de233b6b20e6c552b92ed6aca17d0ec7",
+      "sha256": "d76b386549c1159625a22cd1707ddb3aeab0d81b33b4fa8e300622bfde3babf6",
       "kind": "boundary-ledger"
     },
     {
@@ -1105,7 +1105,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "47429b992a281e84931dc26813ba0cd5399d43e5827aca9e2c5cb67651657c42",
+      "sha256": "95120fdba9a1639f3fda0d129b4e4c0ddcf606739d77b81e4eddd45cc0fb50a9",
       "kind": "verification-code"
     },
     {
