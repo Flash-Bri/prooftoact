@@ -1,0 +1,533 @@
+name: ProofToAct Sealed Private Recovery Query
+
+on:
+  workflow_call:
+    inputs:
+      authority_commit:
+        required: true
+        type: string
+      authority_tree:
+        required: true
+        type: string
+      mode:
+        required: true
+        type: string
+      operation_id:
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: prooftoact-private-recovery-query-${{ inputs.operation_id }}
+  cancel-in-progress: false
+
+env:
+  AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+  AUTHORITY_TREE: ${{ inputs.authority_tree }}
+
+jobs:
+  private-recovery-query:
+    environment: aws-private-recovery-query
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+
+    steps:
+      - name: Bind immutable reusable source before protected material
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          SOURCE_LOCK_LANE: query
+        run: |
+          set +x
+          fail_closed() {
+            unset oidc_response oidc_url source_lock_program source_lock_result
+            printf '%s\n' 'PRIVATE_RECOVERY_SOURCE_LOCK_REJECTED' >&2
+            exit 1
+          }
+          [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          test "$AUTHORITY_COMMIT" != "0000000000000000000000000000000000000000" || fail_closed
+          test "$AUTHORITY_TREE" != "0000000000000000000000000000000000000000" || fail_closed
+          [[ "$SOURCE_LOCK_LANE" =~ ^(deploy|evidence|query|secret-seal|teardown)$ ]] || fail_closed
+          for unsafe_name in ALL_PROXY CURL_CA_BUNDLE HTTPS_PROXY HTTP_PROXY NO_PROXY REQUESTS_CA_BUNDLE SSL_CERT_DIR SSL_CERT_FILE; do
+            [[ -z "${!unsafe_name:-}" ]] || fail_closed
+          done
+          unset unsafe_name
+          [[ "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" =~ ^[A-Za-z0-9._~-]{20,32768}$ ]] || fail_closed
+          source_lock_audience='prooftoact-private-recovery-source-lock-v1'
+          if ! source_lock_program="$(/usr/bin/cat <<'PRIVATE_RECOVERY_SOURCE_LOCK_PY'
+          #!/usr/bin/env python3
+          import base64
+          import json
+          import re
+          import sys
+          import time
+          import urllib.parse
+          
+          
+          AUDIENCE = "prooftoact-private-recovery-source-lock-v1"
+          REPOSITORY = "Flash-Bri/prooftoact"
+          REPOSITORY_ID = "1317716765"
+          REPOSITORY_OWNER = "Flash-Bri"
+          REPOSITORY_OWNER_ID = "252500266"
+          SUBJECT_PREFIX = "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:"
+          LANES = {
+              "deploy": (
+                  "aws-private-recovery-deploy",
+                  "ProofToAct Private Recovery Deploy",
+                  "prooftoact-private-recovery-deploy.yml",
+                  "prooftoact-sealed-private-recovery-deploy.yml",
+              ),
+              "evidence": (
+                  "aws-private-recovery-evidence",
+                  "ProofToAct Private Recovery Evidence",
+                  "prooftoact-private-recovery-evidence.yml",
+                  "prooftoact-sealed-private-recovery-evidence.yml",
+              ),
+              "query": (
+                  "aws-private-recovery-query",
+                  "ProofToAct Private Recovery Query",
+                  "prooftoact-private-recovery-query.yml",
+                  "prooftoact-sealed-private-recovery-query.yml",
+              ),
+              "secret-seal": (
+                  "aws-private-recovery-deploy",
+                  "ProofToAct Private Recovery Secret Seal",
+                  "prooftoact-private-recovery-secret-seal.yml",
+                  "prooftoact-sealed-private-recovery-secret-seal.yml",
+              ),
+              "teardown": (
+                  "aws-private-recovery-teardown",
+                  "ProofToAct Private Recovery Teardown",
+                  "prooftoact-private-recovery-teardown.yml",
+                  "prooftoact-sealed-private-recovery-teardown.yml",
+              ),
+          }
+          HEX_40 = re.compile(r"^[0-9a-f]{40}$")
+          BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
+          GITHUB_TOKEN_HOST = re.compile(
+              r"^(?:pipelines|run-actions-[0-9]+-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)"
+              r"\.actions\.githubusercontent\.com$"
+          )
+          SAFE_PATH = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$")
+          SAFE_JTI = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+          
+          
+          class Rejected(Exception):
+              pass
+          
+          
+          def reject():
+              raise Rejected()
+          
+          
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if not isinstance(key, str) or key in result:
+                      reject()
+                  result[key] = value
+              return result
+          
+          
+          def strict_json(raw, maximum):
+              if not isinstance(raw, bytes) or not raw or len(raw) > maximum:
+                  reject()
+              try:
+                  text = raw.decode("utf-8", errors="strict")
+                  return json.loads(text, object_pairs_hook=unique_object)
+              except (UnicodeDecodeError, json.JSONDecodeError, Rejected):
+                  reject()
+          
+          
+          def decode_base64url(segment, maximum):
+              if (
+                  not isinstance(segment, str)
+                  or not segment
+                  or len(segment) > maximum
+                  or BASE64URL.fullmatch(segment) is None
+                  or len(segment) % 4 == 1
+              ):
+                  reject()
+              padded = segment + ("=" * ((4 - (len(segment) % 4)) % 4))
+              try:
+                  decoded = base64.b64decode(
+                      padded.encode("ascii"), altchars=b"-_", validate=True
+                  )
+              except (ValueError, UnicodeEncodeError):
+                  reject()
+              canonical = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
+              if canonical != segment:
+                  reject()
+              return decoded
+          
+          
+          def validate_audience(value):
+              if value != AUDIENCE:
+                  reject()
+          
+          
+          def validate_endpoint(audience, value):
+              validate_audience(audience)
+              if not isinstance(value, str) or not 1 <= len(value) <= 2048:
+                  reject()
+              try:
+                  parsed = urllib.parse.urlsplit(value)
+                  port = parsed.port
+              except ValueError:
+                  reject()
+              host = parsed.hostname
+              if (
+                  parsed.scheme != "https"
+                  or host is None
+                  or GITHUB_TOKEN_HOST.fullmatch(host) is None
+                  or parsed.username is not None
+                  or parsed.password is not None
+                  or port is not None
+                  or parsed.fragment
+                  or not parsed.path
+                  or len(parsed.path) > 1536
+                  or SAFE_PATH.fullmatch(parsed.path) is None
+                  or "//" in parsed.path
+              ):
+                  reject()
+              if any(part in ("", ".", "..") for part in parsed.path.split("/")[1:]):
+                  reject()
+              for index, character in enumerate(parsed.path):
+                  if character == "%" and (
+                      index + 2 >= len(parsed.path)
+                      or re.fullmatch(r"[0-9A-Fa-f]{2}", parsed.path[index + 1:index + 3])
+                      is None
+                  ):
+                      reject()
+              try:
+                  query = urllib.parse.parse_qsl(
+                      parsed.query, keep_blank_values=True, strict_parsing=True
+                  )
+              except ValueError:
+                  reject()
+              if query != [("api-version", "2.0")]:
+                  reject()
+              return value + "&audience=" + urllib.parse.quote(audience, safe="")
+          
+          
+          def validate_token_response(audience, lane, expected_commit, expected_tree, raw):
+              validate_audience(audience)
+              if lane not in LANES:
+                  reject()
+              if HEX_40.fullmatch(expected_commit or "") is None:
+                  reject()
+              if HEX_40.fullmatch(expected_tree or "") is None:
+                  reject()
+              environment, workflow, caller_file, sealed_file = LANES[lane]
+              response = strict_json(raw, 32768)
+              if not isinstance(response, dict) or set(response) != {"value"}:
+                  reject()
+              token = response["value"]
+              if not isinstance(token, str) or not 1 <= len(token) <= 24576:
+                  reject()
+              parts = token.split(".")
+              if len(parts) != 3:
+                  reject()
+              header = strict_json(decode_base64url(parts[0], 4096), 3072)
+              payload = strict_json(decode_base64url(parts[1], 24576), 16384)
+              decode_base64url(parts[2], 16384)
+              if (
+                  not isinstance(header, dict)
+                  or set(header) != {"alg", "kid", "typ"}
+                  or header.get("alg") != "RS256"
+                  or header.get("typ") != "JWT"
+                  or not isinstance(header.get("kid"), str)
+                  or not 1 <= len(header["kid"]) <= 256
+                  or not isinstance(payload, dict)
+              ):
+                  reject()
+              workflow_prefix = "Flash-Bri/prooftoact/.github/workflows/"
+              required_strings = {
+                  "iss": "https://token.actions.githubusercontent.com",
+                  "aud": AUDIENCE,
+                  "repository": REPOSITORY,
+                  "repository_id": REPOSITORY_ID,
+                  "repository_owner": REPOSITORY_OWNER,
+                  "repository_owner_id": REPOSITORY_OWNER_ID,
+                  "repository_visibility": "public",
+                  "ref": "refs/heads/main",
+                  "ref_type": "branch",
+                  "environment": environment,
+                  "sub": SUBJECT_PREFIX + environment,
+                  "workflow": workflow,
+                  "workflow_ref": workflow_prefix + caller_file + "@refs/heads/main",
+                  "event_name": "workflow_dispatch",
+                  "runner_environment": "github-hosted",
+                  "job_workflow_ref": workflow_prefix + sealed_file + "@" + expected_commit,
+                  "job_workflow_sha": expected_commit,
+              }
+              for name, expected in required_strings.items():
+                  if payload.get(name) != expected or not isinstance(payload.get(name), str):
+                      reject()
+              if "ref_protected" in payload and payload.get("ref_protected") != "true":
+                  reject()
+              caller_sha = payload.get("sha")
+              if (
+                  not isinstance(caller_sha, str)
+                  or HEX_40.fullmatch(caller_sha) is None
+                  or payload.get("workflow_sha") != caller_sha
+              ):
+                  reject()
+              now = int(time.time())
+              iat = payload.get("iat")
+              nbf = payload.get("nbf")
+              exp = payload.get("exp")
+              if (
+                  isinstance(iat, bool)
+                  or not isinstance(iat, int)
+                  or isinstance(nbf, bool)
+                  or not isinstance(nbf, int)
+                  or isinstance(exp, bool)
+                  or not isinstance(exp, int)
+                  or iat < now - 600
+                  or iat > now + 60
+                  or nbf > now + 60
+                  or exp <= now
+                  or exp > now + 600
+                  or exp <= iat
+              ):
+                  reject()
+              jti = payload.get("jti")
+              if not isinstance(jti, str) or SAFE_JTI.fullmatch(jti) is None:
+                  reject()
+              for name, value in payload.items():
+                  if not isinstance(name, str) or isinstance(value, (dict, list)):
+                      reject()
+              return "SOURCE_LOCKED:" + lane + ":" + expected_commit + ":" + expected_tree
+          
+          
+          def main():
+              if len(sys.argv) == 4 and sys.argv[1] == "--validate-endpoint":
+                  output = validate_endpoint(sys.argv[2], sys.argv[3])
+              elif len(sys.argv) == 6 and sys.argv[1] == "--validate-token":
+                  raw = sys.stdin.buffer.read(32769)
+                  output = validate_token_response(
+                      sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], raw
+                  )
+              else:
+                  reject()
+              sys.stdout.write(output + "\n")
+          
+          
+          try:
+              main()
+          except (Rejected, BrokenPipeError):
+              sys.stderr.write("PRIVATE_RECOVERY_SOURCE_LOCK_REJECTED\n")
+              raise SystemExit(1)
+          PRIVATE_RECOVERY_SOURCE_LOCK_PY
+          )"; then
+            fail_closed
+          fi
+          if ! oidc_url="$(/usr/bin/env -i LC_ALL=C PATH=/usr/bin:/bin \
+            /usr/bin/python3 -I -S -B -c "$source_lock_program" \
+            --validate-endpoint "$source_lock_audience" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" 2>/dev/null)"; then
+            fail_closed
+          fi
+          if ! oidc_response="$(
+            {
+              printf '%s\n' \
+                "header = \"Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}\""
+            } | /usr/bin/env -i LC_ALL=C PATH=/usr/bin:/bin \
+              /usr/bin/timeout --signal=KILL 30s \
+              /usr/bin/curl \
+                --disable \
+                --proto '=https' \
+                --tlsv1.2 \
+                --connect-timeout 10 \
+                --max-time 20 \
+                --fail \
+                --silent \
+                --config - \
+                "$oidc_url" 2>/dev/null
+          )"; then
+            fail_closed
+          fi
+          if ! source_lock_result="$(
+            printf '%s' "$oidc_response" |
+              /usr/bin/env -i LC_ALL=C PATH=/usr/bin:/bin \
+              /usr/bin/python3 -I -S -B -c "$source_lock_program" \
+                --validate-token "$source_lock_audience" \
+                "$SOURCE_LOCK_LANE" "$AUTHORITY_COMMIT" \
+                "$AUTHORITY_TREE" 2>/dev/null
+          )"; then
+            fail_closed
+          fi
+          test "$source_lock_result" = \
+            "SOURCE_LOCKED:${SOURCE_LOCK_LANE}:${AUTHORITY_COMMIT}:${AUTHORITY_TREE}" || fail_closed
+          unset \
+            ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            ACTIONS_ID_TOKEN_REQUEST_URL \
+            oidc_response \
+            oidc_url \
+            source_lock_audience \
+            source_lock_program \
+            source_lock_result
+
+      - name: Validate immutable protected coordinates before OIDC
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          APPROVAL_B64: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_APPROVAL_B64 }}
+          CODE_ZIP_SHA256: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_CODE_ZIP_SHA256 }}
+          CONFIG_SHA256: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_CONFIG_SHA256 }}
+          FUNCTION_ARN: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_FUNCTION_ARN }}
+          FUNCTION_VERSION: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_FUNCTION_VERSION }}
+          MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_MCP_SECRET_ARN }}
+          MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_MCP_SECRET_VERSION_ID }}
+          OPERATOR_ROLE_ARN: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_OPERATOR_ROLE_ARN }}
+          OPERATION_ID: ${{ inputs.operation_id }}
+          RELEASE_CONTROL_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
+          test "$AUTHORITY_COMMIT" != "0000000000000000000000000000000000000000"
+          test "$AUTHORITY_TREE" != "0000000000000000000000000000000000000000"
+          [[ "$OPERATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+          [[ "$REQUESTED_MODE" =~ ^(execute|reconcile-only)$ ]]
+          [[ "$APPROVAL_B64" =~ ^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$ ]]
+          [[ -n "$APPROVAL_B64" && "${#APPROVAL_B64}" -le 87384 ]]
+          [[ "$CODE_ZIP_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$CONFIG_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$FUNCTION_ARN" =~ ^arn:aws:lambda:us-east-1:[0-9]{12}:function:prooftoact-private-recovery-query$ ]]
+          [[ "$FUNCTION_VERSION" =~ ^[1-9][0-9]{0,8}$ ]]
+          [[ "$MCP_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/private-recovery-query/managed-mcp-[A-Za-z0-9]{6}$ ]]
+          [[ "$MCP_SECRET_VERSION_ID" =~ ^[A-Za-z0-9_-]{32,64}$ ]]
+          [[ "$OPERATOR_ROLE_ARN" =~ ^arn:aws:iam::[0-9]{12}:role/ProofToActPrivateRecoveryQueryOperator$ ]]
+          [[ "$RELEASE_CONTROL_TABLE_ARN" =~ ^arn:aws:dynamodb:us-east-1:[0-9]{12}:table/prooftoact-release-controller$ ]]
+
+      - name: Check out immutable reviewed runtime
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          persist-credentials: false
+          ref: ${{ inputs.authority_commit }}
+          show-progress: false
+          submodules: false
+
+      - name: Use exact Node.js runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          check-latest: false
+          node-version: 22.23.1
+
+      - name: Reproduce and verify reviewed bytes before OIDC
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          APPROVAL_B64: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_APPROVAL_B64 }}
+          CODE_ZIP_SHA256: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_CODE_ZIP_SHA256 }}
+          OPERATION_ID: ${{ inputs.operation_id }}
+          PRIVATE_ROOT: ${{ runner.temp }}/prooftoact-private-recovery-query
+        run: |
+          test "$(git rev-parse HEAD)" = "$AUTHORITY_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$AUTHORITY_TREE"
+          test "$(git remote get-url origin)" = "https://github.com/Flash-Bri/prooftoact"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund --prefix release-control
+          node --test test/private-recovery-query*.test.js
+          npm run security:verify
+          npm run privacy:verify
+          npm run proof:verify
+          umask 077
+          test ! -e "$PRIVATE_ROOT"
+          install -d -m 700 "$PRIVATE_ROOT"
+          printf '%s' "$APPROVAL_B64" | base64 --decode > "$PRIVATE_ROOT/approval.json"
+          test "$(base64 < "$PRIVATE_ROOT/approval.json" | tr -d '\n')" = "$APPROVAL_B64"
+          test "$(stat -c '%a' "$PRIVATE_ROOT/approval.json")" = "600"
+          jq -e --arg operation_id "$OPERATION_ID" \
+            '.schemaVersion == "prooftoact.private-recovery-query-approval.v1" and .operationId == $operation_id' \
+            "$PRIVATE_ROOT/approval.json" >/dev/null
+          node scripts/build-private-recovery-query-lambda.js "$PRIVATE_ROOT/build" \
+            > "$PRIVATE_ROOT/build-stdout.json"
+          jq -e --arg sha "$CODE_ZIP_SHA256" \
+            '.status == "PASS" and .artifactSha256 == $sha' \
+            "$PRIVATE_ROOT/build-stdout.json" >/dev/null
+
+      - name: Assume only the private recovery query operator role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          disable-retry: true
+          mask-aws-account-id: true
+          output-env-credentials: true
+          role-duration-seconds: 900
+          role-session-name: pta-${{ github.run_id }}-${{ github.run_attempt }}-recovery
+          role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_OPERATOR_ROLE_ARN }}
+          unset-current-credentials: true
+
+      - name: Execute or reconcile the exact one-shot private query
+        id: execute
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          CODE_ZIP_SHA256: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_CODE_ZIP_SHA256 }}
+          CONFIG_SHA256: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_CONFIG_SHA256 }}
+          FUNCTION_ARN: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_FUNCTION_ARN }}
+          FUNCTION_VERSION: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_FUNCTION_VERSION }}
+          MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_MCP_SECRET_ARN }}
+          MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_PRIVATE_RECOVERY_MCP_SECRET_VERSION_ID }}
+          PRIVATE_ROOT: ${{ runner.temp }}/prooftoact-private-recovery-query
+          RELEASE_CONTROL_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          node scripts/run-private-recovery-query.js \
+            --approval-file "$PRIVATE_ROOT/approval.json" \
+            --code-zip-sha256 "$CODE_ZIP_SHA256" \
+            --config-sha256 "$CONFIG_SHA256" \
+            --expected-commit "$AUTHORITY_COMMIT" \
+            --expected-tree "$AUTHORITY_TREE" \
+            --function-arn "$FUNCTION_ARN" \
+            --function-version "$FUNCTION_VERSION" \
+            --mcp-secret-arn "$MCP_SECRET_ARN" \
+            --mcp-secret-version-id "$MCP_SECRET_VERSION_ID" \
+            --mode "$REQUESTED_MODE" \
+            --receipt-output "$PRIVATE_ROOT/sanitized-receipt.json" \
+            --release-control-table-arn "$RELEASE_CONTROL_TABLE_ARN"
+
+      - name: Clear temporary AWS credentials
+        if: always()
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          {
+            printf '%s\n' 'AWS_ACCESS_KEY_ID='
+            printf '%s\n' 'AWS_SECRET_ACCESS_KEY='
+            printf '%s\n' 'AWS_SESSION_TOKEN='
+            printf '%s\n' 'AWS_SECURITY_TOKEN='
+          } >> "$GITHUB_ENV"
+
+      - name: Remove all private inputs and build bytes
+        if: always()
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          PRIVATE_ROOT: ${{ runner.temp }}/prooftoact-private-recovery-query
+        run: |
+          if [[ -d "$PRIVATE_ROOT" ]]; then
+            rm -f -- "$PRIVATE_ROOT/approval.json" "$PRIVATE_ROOT/build-stdout.json"
+            find "$PRIVATE_ROOT/build" -type f -delete 2>/dev/null || true
+            rmdir "$PRIVATE_ROOT/build" 2>/dev/null || true
+          fi
+
+      - name: Publish sanitized receipt only
+        if: always() && steps.execute.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          name: prooftoact-private-recovery-query-${{ github.run_id }}-${{ github.run_attempt }}
+          overwrite: false
+          path: ${{ runner.temp }}/prooftoact-private-recovery-query/sanitized-receipt.json
+          retention-days: 14

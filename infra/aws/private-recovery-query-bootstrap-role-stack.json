@@ -1,0 +1,801 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create-only, inert-until-pinned deployment bootstrap for the isolated ProofToAct private recovery-query mini-stack. It creates one protected GitHub OIDC dispatcher and one dedicated CloudFormation service role; it adopts no application resource.",
+  "Parameters": {
+    "ArtifactBucketName": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "DeploymentWorkflowCommit": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9a-f]{40}$"
+    },
+    "GitHubOidcProviderArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$"
+    },
+    "SecretSealWorkflowCommit": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9a-f]{40}$"
+    }
+  },
+  "Resources": {
+    "PrivateRecoveryBoundary": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": "ProofToActPrivateRecoveryQueryBoundary",
+        "Description": "Maximum-permission boundary shared only by the private recovery-query deployment and application roles; identity policies further narrow every role and operation.",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowExactArtifactPrefix",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetBucketVersioning",
+                "s3:GetObject",
+                "s3:GetObjectVersion",
+                "s3:ListBucketVersions",
+                "s3:PutObject"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/private-recovery-query/*"
+                }
+              ]
+            },
+            {
+              "Sid": "AllowExactCloudFormationLane",
+              "Effect": "Allow",
+              "Action": [
+                "cloudformation:CreateChangeSet",
+                "cloudformation:DeleteStack",
+                "cloudformation:DescribeChangeSet",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStackResources",
+                "cloudformation:DescribeStacks",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:GetTemplate",
+                "cloudformation:UpdateTerminationProtection"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-private-recovery-query/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:changeSet/prooftoact-private-recovery-query-create-*/*"
+                }
+              ]
+            },
+            {
+              "Sid": "AllowExactRoleLifecycleAndReadback",
+              "Effect": "Allow",
+              "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:DeleteRolePolicy",
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies",
+                "iam:ListRoleTags",
+                "iam:PassRole",
+                "iam:PutRolePolicy",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:UpdateRoleDescription"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryCloudFormation"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryRuntime"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryOperator"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryEvidence"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryTeardown"
+                }
+              ]
+            },
+            {
+              "Sid": "AllowExactLambdaLifecycleReadbackAndInvoke",
+              "Effect": "Allow",
+              "Action": [
+                "lambda:CreateFunction",
+                "lambda:DeleteFunction",
+                "lambda:DeleteFunctionConcurrency",
+                "lambda:GetFunction",
+                "lambda:GetFunctionConfiguration",
+                "lambda:GetFunctionConcurrency",
+                "lambda:GetPolicy",
+                "lambda:InvokeFunction",
+                "lambda:ListFunctionUrlConfigs",
+                "lambda:ListTags",
+                "lambda:PublishVersion",
+                "lambda:PutFunctionConcurrency",
+                "lambda:TagResource",
+                "lambda:UntagResource",
+                "lambda:UpdateFunctionCode",
+                "lambda:UpdateFunctionConfiguration"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-private-recovery-query"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-private-recovery-query:*"
+                }
+              ]
+            },
+            {
+              "Sid": "AllowEventSourceAbsenceCensus",
+              "Effect": "Allow",
+              "Action": "lambda:ListEventSourceMappings",
+              "Resource": "*"
+            },
+            {
+              "Sid": "AllowExactLogGroup",
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:DeleteLogGroup",
+                "logs:DescribeLogGroups",
+                "logs:ListTagsForResource",
+                "logs:PutLogEvents",
+                "logs:PutRetentionPolicy",
+                "logs:TagResource",
+                "logs:UntagResource"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:/aws/lambda/prooftoact-private-recovery-query"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:/aws/lambda/prooftoact-private-recovery-query:*"
+                }
+              ]
+            },
+            {
+              "Sid": "AllowExactReleaseControlState",
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:DescribeTable",
+                "dynamodb:GetItem",
+                "dynamodb:UpdateItem"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:dynamodb:us-east-1:${AWS::AccountId}:table/prooftoact-release-controller"
+              }
+            },
+            {
+              "Sid": "AllowPrivateRecoverySecretReadAndMetadata",
+              "Effect": "Allow",
+              "Action": [
+                "secretsmanager:DescribeSecret",
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:ListSecretVersionIds"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/private-recovery-query/managed-mcp-??????"
+              }
+            },
+            {
+              "Sid": "AllowOwnIdentityRead",
+              "Effect": "Allow",
+              "Action": "sts:GetCallerIdentity",
+              "Resource": "*"
+            },
+            {
+              "Sid": "DenyPublicAndUnrelatedProviders",
+              "Effect": "Deny",
+              "Action": [
+                "apigateway:*",
+                "apigatewayv2:*",
+                "bedrock:*",
+                "execute-api:Invoke",
+                "kms:*",
+                "lambda:CreateFunctionUrlConfig",
+                "lambda:PutFunctionEventInvokeConfig",
+                "secretsmanager:BatchGetSecretValue",
+                "secretsmanager:CreateSecret",
+                "secretsmanager:DeleteSecret",
+                "secretsmanager:ListSecrets",
+                "secretsmanager:PutSecretValue",
+                "secretsmanager:RotateSecret",
+                "secretsmanager:UpdateSecret",
+                "secretsmanager:UpdateSecretVersionStage",
+                "sts:AssumeRole"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
+    "PrivateRecoveryMcpSecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Name": "prooftoact/private-recovery-query/managed-mcp",
+        "Description": "Empty, retained target for one protected non-root copy of the immutable Managed MCP credential used by the private recovery-query Lambda.",
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "PrivateRecoveryQueryManagedMcp"
+          }
+        ]
+      }
+    },
+    "PrivateRecoveryCloudFormationRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActPrivateRecoveryQueryCloudFormation",
+        "Description": "Dedicated CloudFormation service role for create, automatic rollback, and separately governed teardown of only the private recovery-query mini-stack.",
+        "MaxSessionDuration": 3600,
+        "PermissionsBoundary": {
+          "Ref": "PrivateRecoveryBoundary"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudformation.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-private-recovery-query/*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActPrivateRecoveryQueryCloudFormationOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadExactVersionedArtifact",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/private-recovery-query/*"
+                  }
+                },
+                {
+                  "Sid": "CreateExactStackRolesWithBoundary",
+                  "Effect": "Allow",
+                  "Action": "iam:CreateRole",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryRuntime"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryOperator"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryEvidence"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryTeardown"
+                    }
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PermissionsBoundary": {
+                        "Ref": "PrivateRecoveryBoundary"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageExactStackRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:DeleteRole",
+                    "iam:DeleteRolePolicy",
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListRolePolicies",
+                    "iam:ListRoleTags",
+                    "iam:PutRolePolicy",
+                    "iam:TagRole",
+                    "iam:UntagRole",
+                    "iam:UpdateAssumeRolePolicy",
+                    "iam:UpdateRoleDescription"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryRuntime"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryOperator"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryEvidence"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryTeardown"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "PassExactLambdaRuntimeRole",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ProofToActPrivateRecoveryQueryRuntime"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "lambda.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageExactPrivateLambda",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:CreateFunction",
+                    "lambda:DeleteFunction",
+                    "lambda:DeleteFunctionConcurrency",
+                    "lambda:GetFunction",
+                    "lambda:GetFunctionConfiguration",
+                    "lambda:GetFunctionConcurrency",
+                    "lambda:GetPolicy",
+                    "lambda:ListTags",
+                    "lambda:PublishVersion",
+                    "lambda:PutFunctionConcurrency",
+                    "lambda:TagResource",
+                    "lambda:UntagResource",
+                    "lambda:UpdateFunctionCode",
+                    "lambda:UpdateFunctionConfiguration"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-private-recovery-query"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:lambda:us-east-1:${AWS::AccountId}:function:prooftoact-private-recovery-query:*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ManageExactLogGroup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:DeleteLogGroup",
+                    "logs:DescribeLogGroups",
+                    "logs:ListTagsForResource",
+                    "logs:PutRetentionPolicy",
+                    "logs:TagResource",
+                    "logs:UntagResource"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:/aws/lambda/prooftoact-private-recovery-query"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:us-east-1:${AWS::AccountId}:log-group:/aws/lambda/prooftoact-private-recovery-query:*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyRuntimeAndUnrelatedProviders",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:*",
+                    "apigatewayv2:*",
+                    "bedrock:*",
+                    "dynamodb:*",
+                    "execute-api:Invoke",
+                    "kms:*",
+                    "lambda:CreateFunctionUrlConfig",
+                    "lambda:Invoke*",
+                    "secretsmanager:*",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "PrivateRecoveryQueryCloudFormationOnly"
+          }
+        ]
+      }
+    },
+    "PrivateRecoveryDeploymentRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActPrivateRecoveryQueryDeployment",
+        "Description": "Protected GitHub OIDC dispatcher for one reviewed CREATE change set of the private recovery-query mini-stack; it cannot invoke, read secrets, update, or tear down.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-private-recovery-deploy",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-private-recovery-deploy",
+                  "token.actions.githubusercontent.com:job_workflow_ref": {
+                    "Fn::Sub": "Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-deploy.yml@${DeploymentWorkflowCommit}"
+                  },
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Private Recovery Deploy"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActPrivateRecoveryQueryCreateOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "UploadExactVersionedArtifactPrefix",
+                  "Effect": "Allow",
+                  "Action": "s3:PutObject",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/private-recovery-query/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:x-amz-server-side-encryption": "AES256"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadArtifactBucketVersioning",
+                  "Effect": "Allow",
+                  "Action": "s3:GetBucketVersioning",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}"
+                  }
+                },
+                {
+                  "Sid": "ReconcileExactArtifactUploadByReadback",
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucketVersions",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}"
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": "private-recovery-query/*"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadExactArtifactVersionMetadata",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/private-recovery-query/*"
+                  }
+                },
+                {
+                  "Sid": "PrepareAndExecuteOneCreateChangeSet",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:CreateChangeSet",
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:ExecuteChangeSet"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-private-recovery-query/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:changeSet/prooftoact-private-recovery-query-create-*/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadAndProtectExactStack",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:GetTemplate",
+                    "cloudformation:UpdateTerminationProtection"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/prooftoact-private-recovery-query/*"
+                  }
+                },
+                {
+                  "Sid": "PassOnlyDedicatedCloudFormationRole",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "PrivateRecoveryCloudFormationRole",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "cloudformation.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadOwnCallerIdentity",
+                  "Effect": "Allow",
+                  "Action": "sts:GetCallerIdentity",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyDirectServiceRoleAssumption",
+                  "Effect": "Deny",
+                  "Action": "sts:AssumeRole",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "PrivateRecoveryCloudFormationRole",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "DenyUpdateTeardownAndRuntime",
+                  "Effect": "Deny",
+                  "Action": [
+                    "cloudformation:DeleteStack",
+                    "cloudformation:ImportStacksToStackSet",
+                    "cloudformation:UpdateStack",
+                    "lambda:Invoke*",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecrets",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyPassingAnyOtherRole",
+                  "Effect": "Deny",
+                  "Action": "iam:PassRole",
+                  "NotResource": {
+                    "Fn::GetAtt": [
+                      "PrivateRecoveryCloudFormationRole",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "PrivateRecoveryQueryCreateOnly"
+          }
+        ]
+      }
+    },
+    "PrivateRecoverySecretSealerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActPrivateRecoveryQuerySecretSealer",
+        "Description": "Protected GitHub OIDC role that copies one exact immutable source Managed MCP key into one exact empty private target, reads it back, and cannot deploy or invoke the application.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-private-recovery-deploy",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-private-recovery-deploy",
+                  "token.actions.githubusercontent.com:job_workflow_ref": {
+                    "Fn::Sub": "Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml@${SecretSealWorkflowCommit}"
+                  },
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Private Recovery Secret Seal"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActPrivateRecoveryQuerySecretSealOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadOneImmutableSourceManagedMcpVersion",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecretVersionIds"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/gate2/managed-mcp-??????"
+                  }
+                },
+                {
+                  "Sid": "SealAndReadBackOnePrivateTargetVersion",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:ListSecretVersionIds",
+                    "secretsmanager:PutSecretValue"
+                  ],
+                  "Resource": {
+                    "Ref": "PrivateRecoveryMcpSecret"
+                  }
+                },
+                {
+                  "Sid": "ReadOwnCallerIdentity",
+                  "Effect": "Allow",
+                  "Action": "sts:GetCallerIdentity",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyWritingAnyOtherSecret",
+                  "Effect": "Deny",
+                  "Action": "secretsmanager:PutSecretValue",
+                  "NotResource": {
+                    "Ref": "PrivateRecoveryMcpSecret"
+                  }
+                },
+                {
+                  "Sid": "DenyApplicationAndAuthorityExpansion",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:*",
+                    "apigatewayv2:*",
+                    "bedrock:*",
+                    "cloudformation:*",
+                    "dynamodb:*",
+                    "execute-api:Invoke",
+                    "iam:*",
+                    "kms:*",
+                    "lambda:*",
+                    "logs:*",
+                    "s3:*",
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:ListSecrets",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "PrivateRecoveryQuerySecretSealOnly"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "PrivateRecoveryBoundaryArn": {
+      "Value": {
+        "Ref": "PrivateRecoveryBoundary"
+      }
+    },
+    "PrivateRecoveryCloudFormationRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "PrivateRecoveryCloudFormationRole",
+          "Arn"
+        ]
+      }
+    },
+    "PrivateRecoveryDeploymentRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "PrivateRecoveryDeploymentRole",
+          "Arn"
+        ]
+      }
+    },
+    "PrivateRecoveryMcpSecretArn": {
+      "Value": {
+        "Ref": "PrivateRecoveryMcpSecret"
+      }
+    },
+    "PrivateRecoverySecretSealerRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "PrivateRecoverySecretSealerRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

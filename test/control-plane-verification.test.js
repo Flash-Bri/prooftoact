@@ -278,9 +278,9 @@ test("candidate deterministically binds the complete control-plane surface", () 
       file);
   }
   assert.equal(
-    CONTROL_PLANE_VERIFICATION_CONSTANTS.SEALED_WORKFLOW_FILES.length, 7);
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SEALED_WORKFLOW_FILES.length, 12);
   assert.equal(
-    CONTROL_PLANE_VERIFICATION_CONSTANTS.SOURCE_ONLY_WORKFLOWS.length, 1);
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SOURCE_ONLY_WORKFLOWS.length, 6);
   for (const exactPath of [
     ".github/workflows/prooftoact-hosted-dual-root-verification.yml",
     "config/prooftoact-release-operator-public.pub",
@@ -348,7 +348,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     item.status === "VERIFIED"), true);
   assert.equal(candidate.body.security.checks.find(({ id }) =>
     id === "HOSTED_DUAL_ROOT_NO_OIDC_COMPLETE_EVIDENCE")?.passed, true);
-  assert.equal(candidate.body.policy.requiredWorkflowCount, 14);
+  assert.equal(candidate.body.policy.requiredWorkflowCount, 24);
   assert.equal(candidate.body.inventory.files.every((item) =>
     typeof item.gitTracked === "boolean" &&
     typeof item.gitMatchesHead === "boolean"), true);

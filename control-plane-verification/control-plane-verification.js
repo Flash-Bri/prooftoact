@@ -82,6 +82,31 @@ const SOURCE_ONLY_WORKFLOWS = Object.freeze([
     file: "prooftoact-hosted-dual-root-verification.yml",
     jobNames: Object.freeze(["verify-dual-root"]),
     name: "ProofToAct Hosted Dual Root Verification"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-deploy.yml",
+    jobNames: Object.freeze(["deploy"]),
+    name: "ProofToAct Private Recovery Deploy"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-evidence.yml",
+    jobNames: Object.freeze(["evidence"]),
+    name: "ProofToAct Private Recovery Evidence"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-query.yml",
+    jobNames: Object.freeze(["private-recovery-query"]),
+    name: "ProofToAct Private Recovery Query"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-secret-seal.yml",
+    jobNames: Object.freeze(["secret-seal"]),
+    name: "ProofToAct Private Recovery Secret Seal"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-teardown.yml",
+    jobNames: Object.freeze(["teardown"]),
+    name: "ProofToAct Private Recovery Teardown"
   })
 ]);
 
@@ -90,6 +115,11 @@ const SEALED_WORKFLOW_FILES = Object.freeze([
   "prooftoact-sealed-evidence.yml",
   "prooftoact-sealed-execute.yml",
   "prooftoact-sealed-live-drill.yml",
+  "prooftoact-sealed-private-recovery-deploy.yml",
+  "prooftoact-sealed-private-recovery-evidence.yml",
+  "prooftoact-sealed-private-recovery-query.yml",
+  "prooftoact-sealed-private-recovery-secret-seal.yml",
+  "prooftoact-sealed-private-recovery-teardown.yml",
   "prooftoact-sealed-prepare.yml",
   "prooftoact-sealed-teardown.yml",
   "prooftoact-sealed-terminalizer.yml"

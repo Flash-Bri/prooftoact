@@ -32,7 +32,7 @@ function normalizeCallerIdentity(value) {
   };
 }
 
-function decodePolicyDocument(value) {
+export function decodePolicyDocument(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value;
   }

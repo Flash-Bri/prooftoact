@@ -115,7 +115,7 @@
     {
       "id": "aws-gate2-design",
       "path": "docs/AWS_GATE2.md",
-      "sha256": "d18dff59e753b7013ea5f612bcd85abf5964946440b7ed06b129ff353c4fa991",
+      "sha256": "40e76d0d1eb7358393f66391c9d5c7abd0445b2012e6572f67afc21c7dabd75b",
       "kind": "boundary-ledger"
     },
     {
@@ -175,7 +175,7 @@
     {
       "id": "aws-provider-runtime",
       "path": "scripts/lib/aws-provider-runtime.js",
-      "sha256": "c0088da767c3429a9cca4f1599e529c0aa1ef9346279592722f6115c17ba30db",
+      "sha256": "755af11f2480bb45ed04330746770cdcbe157b05bda7193161165d11397248ca",
       "kind": "verification-code"
     },
     {
@@ -217,25 +217,25 @@
     {
       "id": "bundle-license-notice",
       "path": "THIRD_PARTY_NOTICES.txt",
-      "sha256": "4d022b8f1abe15c1f2accb8fc1e5433fe4a864812fce65f9433f9bdb8d63388a",
+      "sha256": "35644e75fd5b98eefbdd097f321cee008b985e8b7927f22c3e92a7693be8cf3f",
       "kind": "boundary-ledger"
     },
     {
       "id": "bundle-license-notice-library",
       "path": "scripts/lib/bundled-third-party-notices.js",
-      "sha256": "8cddc14a26eb5acb606204543cd9054b8f2bc4b7a71ee2eccfaeb55ed6a6f787",
+      "sha256": "32582489f6605ac910ba79d325d4b98204be424215fd23490f8b1d4957611acc",
       "kind": "verification-code"
     },
     {
       "id": "bundle-license-notice-tests",
       "path": "test/bundled-third-party-notices.test.js",
-      "sha256": "6e00e160d0d5d6453a439bb7ff2d129e55c69da60c1cc9f991fade114b9242dd",
+      "sha256": "ada3c5e985754c4d4d4fff847fd4faa6e06816fed5bc1a4b0496eb2738adbb46",
       "kind": "verification-code"
     },
     {
       "id": "bundle-license-notice-verifier",
       "path": "scripts/verify-bundled-third-party-notices.js",
-      "sha256": "7974f7346c919899c9af42eacd75107906c67b871c51ebc55d884e7564e072a9",
+      "sha256": "b382b7fa9694002e854682ca6a9062719756890c324e2d3b0c7a6dd2522eb5bf",
       "kind": "verification-code"
     },
     {
@@ -259,13 +259,13 @@
     {
       "id": "dependency-inventory",
       "path": "docs/DEPENDENCY_INVENTORY.md",
-      "sha256": "5d5102b2e3ef5e8893caa8e4ad53359d258c6893d1a0462817b818cd18482f6d",
+      "sha256": "1f904ae3b8b718dc786df02a7a53eedf443f9dcda582f956ea3f2c4df1f92b1b",
       "kind": "boundary-ledger"
     },
     {
       "id": "dependency-inventory-tests",
       "path": "test/dependency-inventory.test.js",
-      "sha256": "e59cd42a21b91b33665c373d723c0f271b3e975934ca0734d1dafabe7d6c7d35",
+      "sha256": "329972642ffb0798a94c37c6b1e3fc1921373bd5c52f777299da03f344f8feab",
       "kind": "verification-code"
     },
     {
@@ -277,7 +277,7 @@
     {
       "id": "dependency-lock",
       "path": "package-lock.json",
-      "sha256": "923be53e7c071361591b13ef4ed22abe6e2d5464184c8a51d7561c6440913e85",
+      "sha256": "6a96582e5e9fd3a488c41b729878345933ec57e9a5b90814d4c19016bb5ef58d",
       "kind": "boundary-ledger"
     },
     {
@@ -769,7 +769,7 @@
     {
       "id": "local-full-drill-receipt",
       "path": "evidence/local-full-drill-100-2026-08-04.json",
-      "sha256": "7c956428571b676c963b9de5cd0fb92b92d489461c2a7cf10a868c78dbd4b1b4",
+      "sha256": "b48fc8f5e16267c622fa69253f25c1cf1064da2d70babcfc0d47a9ecc7f96493",
       "kind": "local-validation"
     },
     {
@@ -955,7 +955,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "59047ae2cb1d35a7bc5aa550b5c4921a7f5c0144da5ca0eb8294bb680a82c6e4",
+      "sha256": "09158cee5935cef9630262d40f7ca77c665f24272cd0885350f4f4a2a1287b9d",
       "kind": "boundary-ledger"
     },
     {
@@ -1003,7 +1003,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "0ce11197b9bd1c515ae7ab853447867db7ac68fd6e847b0aa27a5b391b4ee473",
+      "sha256": "7031b4635307158e9a525dd6bed2969f56aa670f875da1fa24cb4e00f89bccbc",
       "kind": "boundary-ledger"
     },
     {
@@ -1069,7 +1069,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "876819467860c8bbaeaca7d473b8a09d02e7a9d39846881a11f41ccd6d8588c2",
+      "sha256": "79f862f176f8d594ac27b70701dd97af115887ad4f462dcc15d12a756642d9a5",
       "kind": "boundary-ledger"
     },
     {
@@ -1093,19 +1093,19 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "bf269d944f82fdcc7511ee4f988940f067a28d0861c2fb4ecc45f1e90704e314",
+      "sha256": "f3cd73bab2aa657b9ea164875bed27dfb932837b7e425ebf992f27f5fa5405ec",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "7be4ebccfca00638974043434588e7f5d917291570444bf825f49b4dfed3f672",
+      "sha256": "949e44c73ea4c75366431342854881a30410fcc57f2e9bf9ba918583166eb358",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "e9b336e90613d942a783ef49eab5ef0a72f9d6ee40b5a23e31a809ae407bee0f",
+      "sha256": "59fbe46048942e4a8667cbe2d797c900a9b07dac3271553203b4f51e72d1a55e",
       "kind": "verification-code"
     },
     {
@@ -1117,7 +1117,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "5b7b63503bb975f1557aa00896a343a50eec5319cde3373c114ba6d7d07ab6d0",
+      "sha256": "b993a4ab9fc12cc9e850d7b08206aea084749ffac0927054b1c2989d5f1033fc",
       "kind": "boundary-ledger"
     },
     {
@@ -1524,7 +1524,7 @@
         "dependency-inventory-verifier",
         "dependency-lock"
       ],
-      "boundary": "The exact current package lock, complete 76-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. The MPL-2.0 axe-core record is development-only and is not part of the bundled package union. These controls do not prove the final deployed bundle or independent legal clearance.",
+      "boundary": "The exact current package lock, complete 82-package inventory, fail-closed verifier, and focused tests are hash-bound. License identifiers come from package-lock metadata; the separate bundle-license control covers the current esbuild package union and notice texts, while the release-provenance control checks official history and installed identities. The MPL-2.0 axe-core record is development-only and is not part of the bundled package union. These controls do not prove the final deployed bundle or independent legal clearance.",
       "remainingRequirements": [
         "Rerun all dependency, provenance, vulnerability, and artifact controls at the final release commit and reconcile the exact uploaded and deployed bundles."
       ]

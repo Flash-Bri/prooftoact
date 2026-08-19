@@ -1,0 +1,23 @@
+name: ProofToAct Private Recovery Teardown
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type the exact governed teardown confirmation
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  teardown:
+    permissions:
+      contents: read
+      id-token: write
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-teardown.yml@0000000000000000000000000000000000000000
+    with:
+      authority_commit: "0000000000000000000000000000000000000000"
+      authority_tree: "0000000000000000000000000000000000000000"
+      confirmation: ${{ inputs.confirmation }}
+    secrets: inherit
