@@ -49,6 +49,7 @@ import { NodeHttpHandler } from "@smithy/node-http-handler";
 
 import {
   buildBootstrapNegativeSimulationPlan,
+  cleanupOnlyAuthorizationContract,
   oneTimeBootstrapConstants,
   operationTokenFor,
   validateBootstrapCompletionEvidence,
@@ -65,6 +66,12 @@ import {
   assumeOneTimeBootstrapRootSession,
   createNamedRootProfileStsClient
 } from "./assume-one-time-bootstrap-root-session.js";
+import {
+  validateProofToActB0A1HumanAuthorizationReceipt
+} from "./lib/prooftoact-b0-a1-human-authorization.js";
+import {
+  verifyProofToActB0A1HumanAuthorizationWithImsg
+} from "./materialize-prooftoact-b0-a1-human-authorization.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -88,28 +95,47 @@ const WRITER_VALUE_MAXIMUM_BYTES = Object.freeze({
 });
 const AUTHORIZATION_RECEIPT_FD = 4;
 const MFA_TOKEN_FD = 3;
+const IDENTITY_RECORD_FD = 10;
+const IDENTITY_HMAC_KEY_FD = 11;
+const HUMAN_AUTHORITY_ID = "BRIAN_SMITH";
 const CLOUDTRAIL_EVENT_LAG_MS = 5 * 60 * 1000;
 const SESSION_CLEANUP_RESERVE_MS = 2 * CLOUDTRAIL_EVENT_LAG_MS;
+const CLEANUP_START_RESERVE_MS = CLOUDTRAIL_EVENT_LAG_MS + 60 * 1000;
+const PROVIDER_CONVERGENCE_TAIL_MS = 45 * 60 * 1000;
 const ROOT_ACTIONS_BY_PHASE = Object.freeze({
   discovery: Object.freeze([
     "sts:GetCallerIdentity",
     "iam:ListMFADevices"
   ]),
   setup: Object.freeze([
+    "cloudformation:DescribeStacks",
+    "cloudformation:GetTemplate",
+    "cloudformation:ListChangeSets",
     "cloudtrail:LookupEvents",
     "iam:CreateRole",
     "iam:GetRole",
     "iam:TagRole",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListRolePolicies",
     "iam:ListRoleTags",
     "iam:PutRolePolicy",
     "iam:GetRolePolicy",
+    "secretsmanager:DescribeSecret",
+    "secretsmanager:ListSecretVersionIds",
     "sts:AssumeRole"
   ]),
   reconcile: Object.freeze([
+    "cloudformation:DescribeStacks",
+    "cloudformation:GetTemplate",
+    "cloudformation:ListChangeSets",
     "cloudtrail:LookupEvents",
     "iam:GetRole",
     "iam:GetRolePolicy",
-    "iam:ListRoleTags"
+    "iam:ListAttachedRolePolicies",
+    "iam:ListRolePolicies",
+    "iam:ListRoleTags",
+    "secretsmanager:DescribeSecret",
+    "secretsmanager:ListSecretVersionIds"
   ]),
   cleanup: Object.freeze([
     "cloudtrail:LookupEvents",
@@ -117,6 +143,9 @@ const ROOT_ACTIONS_BY_PHASE = Object.freeze({
     "iam:DeleteRole",
     "iam:GetRole",
     "iam:GetRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListRolePolicies",
+    "sts:GetCallerIdentity",
     "aws:Logout"
   ])
 });
@@ -217,6 +246,11 @@ export function validateOneTimeBootstrapTimingBudget({
     normalSessionExpiration: new Date(normalSessionExpiration).toISOString(),
     replacementSessionExpiration:
       new Date(replacementSessionExpiration).toISOString(),
+    latestNewDispatchAt: new Date(deadline).toISOString(),
+    providerConvergenceReadOnlyUntil: new Date(
+      deadline + PROVIDER_CONVERGENCE_TAIL_MS
+    ).toISOString(),
+    providerConvergenceTailMs: PROVIDER_CONVERGENCE_TAIL_MS,
     sessionCleanupReserveMs: SESSION_CLEANUP_RESERVE_MS,
     worstCaseCleanupBound: new Date(worstCaseCleanupBound).toISOString()
   });
@@ -745,8 +779,16 @@ export async function runCrashConvergentMutation({
   if (prior.state === "DISPATCH_STARTED") {
     reject("ONE_TIME_BOOTSTRAP_AMBIGUOUS_MUTATION_RETAIN_AND_RECONCILE");
   }
-  if (journal.mode === "RECONCILE_ONLY") {
-    reject("ONE_TIME_BOOTSTRAP_RECONCILE_ONLY_MUTATION_REQUIRED");
+  // A durable INTENT_RECORDED step with a null dispatchStartedAt is positive
+  // evidence that no provider call began. RECONCILE_ONLY may continue this
+  // exact operation; only DISPATCH_STARTED plus absent state is ambiguous.
+  requireCondition(prior.state === "INTENT_RECORDED" &&
+    prior.dispatchStartedAt === null, code);
+  if (journal.cleanupOnly === true) {
+    requireCondition([
+      "iam:DeleteRole", "iam:DeleteRolePolicy"
+    ].includes(mutationClass),
+    "ONE_TIME_BOOTSTRAP_EXPIRED_RECONCILIATION_MUTATION_REJECTED");
   }
   journal.recordDispatchStarted(id);
   let dispatchCause = null;
@@ -952,41 +994,61 @@ export function readAndValidateAuthorizationReceipt(plan, fd =
     "ONE_TIME_BOOTSTRAP_AUTHORIZATION_FD_REJECTED"
   );
   try {
-    const code = "ONE_TIME_BOOTSTRAP_AUTHORIZATION_RECEIPT_REJECTED";
-    let receipt;
-    try {
-      receipt = JSON.parse(bytes.toString("utf8"));
-    } catch (cause) {
-      reject(code, cause);
-    }
-    requireCondition(sha256(bytes) ===
-      plan.authorization.userAuthorizationReceiptSha256 &&
-      canonicalBytes(receipt).equals(bytes), code);
-    const now = clock();
-    validateOneTimeBootstrapAuthorizationReceipt(plan, receipt, now);
-    return Object.freeze({
-      bytes: bytes.length,
-      sha256: sha256(bytes),
-      rawReceiptRetained: false,
-      receipt,
-      writerValueSha256: Object.freeze({ ...receipt.writerValueSha256 })
-    });
+    return validateOneTimeBootstrapAuthorizationBytes(plan, bytes, clock);
   } finally {
     bytes.fill(0);
   }
 }
 
+export function validateOneTimeBootstrapAuthorizationBytes(plan, bytes,
+  clock = () => new Date(), { allowExpiredReconcile = false } = {}) {
+  const code = "ONE_TIME_BOOTSTRAP_AUTHORIZATION_RECEIPT_REJECTED";
+  requireCondition(Buffer.isBuffer(bytes) && bytes.length > 0 &&
+    bytes.length <= 256 * 1024 && typeof clock === "function", code);
+  let receipt;
+  try {
+    receipt = JSON.parse(bytes.toString("utf8"));
+  } catch (cause) {
+    reject(code, cause);
+  }
+  requireCondition(sha256(bytes) ===
+    plan.authorization.userAuthorizationReceiptSha256 &&
+    canonicalBytes(receipt).equals(bytes), code);
+  const now = clock();
+  validateOneTimeBootstrapAuthorizationReceipt(plan, receipt, now, {
+    allowExpiredReconcile
+  });
+  return Object.freeze({
+    bytes: bytes.length,
+    sha256: sha256(bytes),
+    rawReceiptRetained: false,
+    receipt,
+    writerValueSha256: Object.freeze({ ...receipt.writerValueSha256 })
+  });
+}
+
 export function validateOneTimeBootstrapAuthorizationReceipt(plan, receipt,
-  observedAt) {
+  observedAt, { allowExpiredReconcile = false } = {}) {
   const code = "ONE_TIME_BOOTSTRAP_AUTHORIZATION_RECEIPT_REJECTED";
   const rebuilt = buildOneTimeBootstrapAuthorizationReceipt({
     accountId: receipt?.accountId,
+    approvedBy: receipt?.approvedBy,
     approvedAt: receipt?.approvedAt,
     artifactBucketName: receipt?.existingInputs?.artifactBucketName,
+    cleanupOnlyAuthorizationApproved:
+      receipt?.cleanupOnlyAuthorizationApproved,
     costCeiling: receipt?.costCeiling,
     expiresAt: receipt?.expiresAt,
     githubOidcProviderArn: receipt?.existingInputs?.githubOidcProviderArn,
+    humanAuthorizationReceiptSha256:
+      receipt?.humanAuthorizationReceiptSha256,
+    humanAuthorizationBinding: receipt?.humanAuthorizationBinding,
+    humanAuthorizedTextSha256: receipt?.humanAuthorizedTextSha256,
     operationId: receipt?.operationId,
+    privateRecoveryWorkflowCommits:
+      receipt?.privateRecoveryWorkflowCommits,
+    runtimeExecutionBindingSha256:
+      receipt?.runtimeExecutionBindingSha256,
     sourceCommit: receipt?.sourceCommit,
     targetTemplateSha256: Object.fromEntries(
       oneTimeBootstrapConstants.TARGET_KEYS.map((key) =>
@@ -1004,15 +1066,39 @@ export function validateOneTimeBootstrapAuthorizationReceipt(plan, receipt,
     receipt.sourceCommit === plan.source.commit &&
     receipt.treeDigest === plan.source.tree &&
     receipt.expiresAt === plan.notAfter &&
+    canonicalJson(receipt.cleanupOnlyAuthorization) ===
+      canonicalJson(plan.authorization.cleanupOnlyAuthorization) &&
     sha256(canonicalBytes(receipt)) ===
       plan.authorization.userAuthorizationReceiptSha256 &&
     Date.parse(receipt.approvedAt) <= observedAt.getTime() &&
-    observedAt.getTime() < Date.parse(receipt.expiresAt) &&
+    (observedAt.getTime() < Date.parse(receipt.expiresAt) ||
+      allowExpiredReconcile &&
+      observedAt.getTime() >= Date.parse(receipt.expiresAt) &&
+      observedAt.getTime() < Date.parse(
+        receipt.cleanupOnlyAuthorization.expiresAt
+      )) &&
     canonicalJson(receipt.costCeiling) === canonicalJson(plan.costCeiling) &&
     receipt.existingInputs.artifactBucketName ===
       plan.existingInputs.artifactBucketName &&
     receipt.existingInputs.githubOidcProviderArn ===
       plan.existingInputs.githubOidcProviderArn &&
+    canonicalJson(receipt.privateRecoveryWorkflowCommits) ===
+      canonicalJson(Object.fromEntries(
+        oneTimeBootstrapConstants.PRIVATE_RECOVERY_WORKFLOW_KEYS.map((key) =>
+          [key, plan.source.privateRecoveryWorkflowPins[key].commit])
+      )) &&
+    receipt.runtimeExecutionBindingSha256 ===
+      digest(plan.source.runtimeExecutionBinding) &&
+    oneTimeBootstrapConstants.PRIVATE_RECOVERY_WORKFLOW_KEYS.every((key) => {
+      const definition =
+        oneTimeBootstrapConstants.PRIVATE_RECOVERY_WORKFLOW_DEFINITIONS[key];
+      return receipt.privateRecoveryWorkflowCommits[key] ===
+        plan.source.privateRecoveryWorkflowPins[key].commit &&
+        receipt.privateRecoveryWorkflowCommits[key] ===
+          plan.targets.privateRecoveryQueryBootstrap.parameters[
+            definition.parameterName
+          ];
+    }) &&
     oneTimeBootstrapConstants.TARGET_KEYS.every((key) =>
       receipt.targets[key].stackName === plan.targets[key].stackName &&
       receipt.targets[key].templateSha256 ===
@@ -1024,19 +1110,44 @@ export function buildOneTimeBootstrapAuthorizationReceipt(input) {
   const code = "ONE_TIME_BOOTSTRAP_AUTHORIZATION_BUILD_REJECTED";
   const writerNames = ["auditor", "cloudApi", "credential", "mcp",
     "publisher"];
+  let sharedAuthorization;
+  try {
+    sharedAuthorization =
+      validateProofToActB0A1HumanAuthorizationReceipt(
+        input?.humanAuthorizationBinding
+      );
+  } catch (cause) {
+    reject(code, cause);
+  }
+  const sharedIntent = sharedAuthorization.dynamicIntent;
   requireCondition(exactKeys(input, [
     "accountId",
+    "approvedBy",
     "approvedAt",
     "artifactBucketName",
+    "cleanupOnlyAuthorizationApproved",
     "costCeiling",
     "expiresAt",
     "githubOidcProviderArn",
+    "humanAuthorizationBinding",
+    "humanAuthorizationReceiptSha256",
+    "humanAuthorizedTextSha256",
     "operationId",
+    "privateRecoveryWorkflowCommits",
+    "runtimeExecutionBindingSha256",
     "sourceCommit",
     "targetTemplateSha256",
     "treeDigest",
     "writerValueSha256"
-  ]) && /^[0-9]{12}$/u.test(input.accountId ?? "") &&
+  ]) && input.cleanupOnlyAuthorizationApproved === true &&
+    input.approvedBy === HUMAN_AUTHORITY_ID &&
+    canonicalJson(sharedAuthorization) ===
+      canonicalJson(input.humanAuthorizationBinding) &&
+    input.humanAuthorizationReceiptSha256 ===
+      sharedAuthorization.receiptBindingSha256 &&
+    input.humanAuthorizedTextSha256 ===
+      sharedAuthorization.humanAuthorizedTextSha256 &&
+    /^[0-9]{12}$/u.test(input.accountId ?? "") &&
     /^[0-9a-f]{40}$/u.test(input.sourceCommit ?? "") &&
     /^[0-9a-f]{40}$/u.test(input.treeDigest ?? "") &&
     exactKeys(input.targetTemplateSha256,
@@ -1046,25 +1157,63 @@ export function buildOneTimeBootstrapAuthorizationReceipt(input) {
     exactKeys(input.writerValueSha256, writerNames) &&
     Object.values(input.writerValueSha256).every((value) =>
       /^[0-9a-f]{64}$/u.test(value ?? "")) &&
+    sharedIntent.accountId === input.accountId &&
+    sharedIntent.operationId === input.operationId &&
+    sharedIntent.sourceCommit === input.sourceCommit &&
+    sharedIntent.treeDigest === input.treeDigest &&
+    sharedAuthorization.externalHumanAuthorizationEvidence
+      .inboundApprovalEvent.receivedAt ===
+      input.approvedAt &&
+    Date.parse(sharedIntent.authorizationNotBefore) <=
+      Date.parse(input.approvedAt) &&
+    sharedIntent.b0DispatchDeadline === input.expiresAt &&
+    sharedIntent.a1ReservationDeadline === input.expiresAt &&
+    canonicalJson(sharedIntent.b0TargetTemplateSha256) ===
+      canonicalJson(input.targetTemplateSha256) &&
+    canonicalJson(sharedIntent.b0WriterValueSha256) ===
+      canonicalJson(input.writerValueSha256) &&
+    canonicalJson(sharedIntent.b0PrivateRecoveryWorkflowCommits) ===
+      canonicalJson(input.privateRecoveryWorkflowCommits) &&
+    sharedIntent.b0RuntimeExecutionBindingSha256 ===
+      input.runtimeExecutionBindingSha256 &&
     exactKeys(input.costCeiling, [
       "currency",
       "maximumMonthlyUsdCents",
       "maximumOneTimeUsdCents",
+      "reconciliationReceipt",
       "reconciliationReceiptSha256"
     ]) && input.costCeiling.currency === "USD" &&
     Number.isSafeInteger(input.costCeiling.maximumMonthlyUsdCents) &&
-    input.costCeiling.maximumMonthlyUsdCents >= 0 &&
+    input.costCeiling.maximumMonthlyUsdCents ===
+      oneTimeBootstrapConstants.EXACT_MONTHLY_AUTHORIZATION_USD_CENTS &&
     Number.isSafeInteger(input.costCeiling.maximumOneTimeUsdCents) &&
-    input.costCeiling.maximumOneTimeUsdCents >= 0 &&
+    input.costCeiling.maximumOneTimeUsdCents ===
+      oneTimeBootstrapConstants.EXACT_ONE_TIME_AUTHORIZATION_USD_CENTS &&
+    sharedIntent.costAuthorization.currency === input.costCeiling.currency &&
+    sharedIntent.costAuthorization.awsMonthlyResidualCeilingUsdCents ===
+      input.costCeiling.maximumMonthlyUsdCents &&
+    sharedIntent.costAuthorization.maximumOneTimeUsdCents ===
+      input.costCeiling.maximumOneTimeUsdCents &&
+    sharedIntent.costAuthorization.reconciliationReceiptSha256 ===
+      input.costCeiling.reconciliationReceiptSha256 &&
+    input.costCeiling.reconciliationReceipt?.receiptSha256 ===
+      input.costCeiling.reconciliationReceiptSha256 &&
     /^[0-9a-f]{64}$/u.test(
       input.costCeiling.reconciliationReceiptSha256 ?? "") &&
+    exactKeys(input.privateRecoveryWorkflowCommits,
+      oneTimeBootstrapConstants.PRIVATE_RECOVERY_WORKFLOW_KEYS) &&
+    oneTimeBootstrapConstants.PRIVATE_RECOVERY_WORKFLOW_KEYS.every((key) =>
+      /^[0-9a-f]{40}$/u.test(
+        input.privateRecoveryWorkflowCommits[key] ?? "") &&
+      input.privateRecoveryWorkflowCommits[key] !== "0".repeat(40)) &&
+    /^[0-9a-f]{64}$/u.test(input.runtimeExecutionBindingSha256 ?? "") &&
     input.githubOidcProviderArn ===
       `arn:aws:iam::${input.accountId}:oidc-provider/` +
         "token.actions.githubusercontent.com" &&
     typeof input.artifactBucketName === "string", code);
   const approved = canonicalInstant(input.approvedAt, code);
   const expires = canonicalInstant(input.expiresAt, code);
-  requireCondition(approved < expires && expires - approved ===
+  requireCondition(approved < expires && expires - approved <=
     oneTimeBootstrapConstants.MAX_PLAN_WINDOW_MS,
     code);
   const operationToken = operationTokenFor(input.operationId);
@@ -1080,9 +1229,20 @@ export function buildOneTimeBootstrapAuthorizationReceipt(input) {
     schemaVersion: "prooftoact.one-time-bootstrap-authorization.v1",
     status: "AUTHORIZED_EXACT_ROOT_B0_CEREMONY_AND_COST_CEILING",
     accountId: input.accountId,
+    approvedBy: HUMAN_AUTHORITY_ID,
     approvedAt: input.approvedAt,
+    cleanupOnlyAuthorizationApproved: true,
+    cleanupOnlyAuthorization: cleanupOnlyAuthorizationContract({
+      accountId: input.accountId,
+      beginsAt: input.expiresAt,
+      expiresAt: sharedIntent.cleanupRetentionDeadline,
+      operationId: input.operationId
+    }),
     costCeiling: { ...input.costCeiling },
     exactFiveWriterValuesAuthorized: true,
+    humanAuthorizationBinding: sharedAuthorization,
+    humanAuthorizationReceiptSha256: input.humanAuthorizationReceiptSha256,
+    humanAuthorizedTextSha256: sharedAuthorization.humanAuthorizedTextSha256,
     existingInputs: {
       artifactBucketName: input.artifactBucketName,
       githubOidcProviderArn: input.githubOidcProviderArn
@@ -1090,11 +1250,17 @@ export function buildOneTimeBootstrapAuthorizationReceipt(input) {
     expiresAt: input.expiresAt,
     fixedPrivateFdContract: {
       authorizationReceiptFd: AUTHORIZATION_RECEIPT_FD,
+      identityHmacKeyFd: IDENTITY_HMAC_KEY_FD,
+      identityRecordFd: IDENTITY_RECORD_FD,
       mfaTokenFd: MFA_TOKEN_FD,
       writerValueFds: { ...WRITER_VALUE_FDS }
     },
     operationId: input.operationId,
     operationToken,
+    privateRecoveryWorkflowCommits: {
+      ...input.privateRecoveryWorkflowCommits
+    },
+    runtimeExecutionBindingSha256: input.runtimeExecutionBindingSha256,
     reconcileOnlyResumeRequired: true,
     rootScope: {
       actions: [
@@ -1324,22 +1490,48 @@ async function paginateToken(sendPage) {
 }
 
 export class AwsOneTimeBootstrapRootProvider {
-  constructor({ awsCliPath, clock = () => new Date(), plan }) {
-    requireCondition(path.isAbsolute(awsCliPath) && typeof clock === "function",
+  constructor({ allowExpiredCleanup = false, awsCliGuard, awsCliPath,
+    clock = () => new Date(), plan }) {
+    requireCondition(path.isAbsolute(awsCliPath) && typeof clock === "function" &&
+      typeof awsCliGuard === "function" &&
+      typeof allowExpiredCleanup === "boolean",
       "ONE_TIME_BOOTSTRAP_AWS_ROOT_PROVIDER_REJECTED");
+    this.allowExpiredCleanup = allowExpiredCleanup;
+    this.awsCliGuard = awsCliGuard;
     this.awsCliPath = awsCliPath;
     this.clock = clock;
     this.plan = plan;
+    this.destroyed = false;
     this.sts = createNamedRootProfileStsClient(plan);
-    this.iam = new IAMClient(awsClientConfiguration());
+    const configuration = awsClientConfiguration();
+    this.iam = new IAMClient(configuration);
+    this.cloudFormation = new CloudFormationClient(configuration);
+    this.secrets = new SecretsManagerClient(configuration);
   }
 
   now() {
     const value = this.clock();
+    const preparedAt = Date.parse(this.plan.preparedAt);
+    const upperBound = this.operationDeadline().getTime();
     requireCondition(value instanceof Date && Number.isFinite(value.getTime()) &&
-      value.getTime() < Date.parse(this.plan.notAfter),
+      value.getTime() >= preparedAt && value.getTime() < upperBound,
     "ONE_TIME_BOOTSTRAP_AWS_ROOT_CLOCK_REJECTED");
     return value;
+  }
+
+  operationDeadline() {
+    return new Date(this.allowExpiredCleanup ?
+      this.plan.authorization.cleanupOnlyAuthorization.expiresAt :
+      this.plan.notAfter);
+  }
+
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.sts.destroy();
+    this.iam.destroy();
+    this.cloudFormation.destroy();
+    this.secrets.destroy();
   }
 
   async callerIdentity() {
@@ -1387,6 +1579,8 @@ export class AwsOneTimeBootstrapRootProvider {
       state: matches ? "MATCH" : "CONFLICT",
       receipt: {
         arn: role?.Arn ?? null,
+        createdAt: role?.CreateDate instanceof Date ?
+          role.CreateDate.toISOString() : null,
         exactTrust: matches,
         roleId: role?.RoleId ?? null,
         roleName: role?.RoleName ?? null
@@ -1395,6 +1589,7 @@ export class AwsOneTimeBootstrapRootProvider {
   }
 
   async createRole() {
+    this.now();
     await this.iam.send(new CreateRoleCommand({
       AssumeRolePolicyDocument: canonicalJson(
         this.plan.bootstrapRole.trustPolicy
@@ -1432,6 +1627,7 @@ export class AwsOneTimeBootstrapRootProvider {
   }
 
   async tagRole() {
+    this.now();
     await this.iam.send(new TagRoleCommand({
       RoleName: this.plan.bootstrapRole.name,
       Tags: this.plan.bootstrapRole.roleTags
@@ -1467,6 +1663,7 @@ export class AwsOneTimeBootstrapRootProvider {
   }
 
   async putPolicy() {
+    this.now();
     await this.iam.send(new PutRolePolicyCommand({
       PolicyDocument: canonicalJson(this.plan.bootstrapRole.inlinePolicy),
       PolicyName: this.plan.bootstrapRole.inlinePolicyName,
@@ -1474,14 +1671,68 @@ export class AwsOneTimeBootstrapRootProvider {
     }));
   }
 
-  async deletePolicy() {
+  async assertExactCleanupRole(expectedRoleId, {
+    inlinePolicyPresent,
+    tagsPresent = true
+  }) {
+    const code = "ONE_TIME_BOOTSTRAP_CLEANUP_ROLE_IDENTITY_REJECTED";
+    requireCondition(typeof expectedRoleId === "string" &&
+      /^[A-Z0-9]{8,128}$/u.test(expectedRoleId) &&
+      typeof inlinePolicyPresent === "boolean" &&
+      typeof tagsPresent === "boolean", code);
+    const role = await this.inspectRole();
+    const tags = await this.inspectTags();
+    const policy = await this.inspectPolicy();
+    requireCondition(role.state === "MATCH" &&
+      role.receipt.roleId === expectedRoleId &&
+      tags.state === (tagsPresent ? "MATCH" : "ABSENT") &&
+      policy.state === (inlinePolicyPresent ? "MATCH" : "ABSENT"), code);
+    const inlinePages = await paginateMarker((Marker) => this.iam.send(
+      new ListRolePoliciesCommand({
+        ...(Marker === undefined ? {} : { Marker }),
+        RoleName: this.plan.bootstrapRole.name
+      })
+    ));
+    const inlineNames = inlinePages.flatMap((page) =>
+      page.PolicyNames ?? []).sort();
+    const attachedPages = await paginateMarker((Marker) => this.iam.send(
+      new ListAttachedRolePoliciesCommand({
+        ...(Marker === undefined ? {} : { Marker }),
+        RoleName: this.plan.bootstrapRole.name
+      })
+    ));
+    const attachedArns = attachedPages.flatMap((page) =>
+      (page.AttachedPolicies ?? []).map(({ PolicyArn }) => PolicyArn)).sort();
+    requireCondition(canonicalJson(inlineNames) === canonicalJson(
+      inlinePolicyPresent ? [this.plan.bootstrapRole.inlinePolicyName] : []
+    ) && attachedArns.length === 0, code);
+    return Object.freeze({
+      attachedPolicyArnsSha256: digest(attachedArns),
+      exactRoleId: expectedRoleId,
+      inlinePolicyNamesSha256: digest(inlineNames),
+      policySha256: inlinePolicyPresent ? policy.receipt.policySha256 : null,
+      roleTagsSha256: tags.receipt.tagsSha256
+    });
+  }
+
+  async deletePolicy(expectedRoleId, { tagsPresent = true } = {}) {
+    await this.assertExactCleanupRole(expectedRoleId, {
+      inlinePolicyPresent: true,
+      tagsPresent
+    });
+    this.now();
     await this.iam.send(new DeleteRolePolicyCommand({
       PolicyName: this.plan.bootstrapRole.inlinePolicyName,
       RoleName: this.plan.bootstrapRole.name
     }));
   }
 
-  async deleteRole() {
+  async deleteRole(expectedRoleId, { tagsPresent = true } = {}) {
+    await this.assertExactCleanupRole(expectedRoleId, {
+      inlinePolicyPresent: false,
+      tagsPresent
+    });
+    this.now();
     await this.iam.send(new DeleteRoleCommand({
       RoleName: this.plan.bootstrapRole.name
     }));
@@ -1520,6 +1771,7 @@ export class AwsOneTimeBootstrapRootProvider {
     const code = "ONE_TIME_BOOTSTRAP_AWS_CLI_READBACK_REJECTED";
     requireCondition(Array.isArray(argumentsList) &&
       argumentsList.every((value) => typeof value === "string"), code);
+    this.awsCliGuard();
     const { stdout, stderr } = await execFileAsync(
       this.awsCliPath,
       argumentsList,
@@ -1576,6 +1828,7 @@ export class AwsOneTimeBootstrapRootProvider {
     }
     const rootEvents = [];
     const rootAssumeEventTimes = [];
+    const rootCreateRoleReceipts = [];
     const writerAssumeEventTimes = [];
     for (const outer of events) {
       let event;
@@ -1600,6 +1853,24 @@ export class AwsOneTimeBootstrapRootProvider {
       if (event?.userIdentity?.type === "Root" &&
         event.userIdentity.accountId === this.plan.account.accountId) {
         rootEvents.push({ event, outer });
+        if (event.eventName === "CreateRole" &&
+          event.errorCode === undefined) {
+          const role = event.responseElements?.role;
+          requireCondition(plainObject(role) &&
+            typeof role.arn === "string" &&
+            typeof role.createDate === "string" &&
+            typeof role.path === "string" &&
+            typeof role.roleId === "string" &&
+            typeof role.roleName === "string", code);
+          rootCreateRoleReceipts.push({
+            arn: role.arn,
+            createDate: role.createDate,
+            eventTime: event.eventTime,
+            path: role.path,
+            roleId: role.roleId,
+            roleName: role.roleName
+          });
+        }
         if (event.eventName === "AssumeRole" &&
           event.errorCode === undefined && plainObject(request) &&
           request.roleArn === this.plan.bootstrapRole.arn &&
@@ -1639,6 +1910,7 @@ export class AwsOneTimeBootstrapRootProvider {
     return Object.freeze({
       rootDirectEvents: direct,
       rootAssumeEventTimes: rootAssumeEventTimes.sort(),
+      rootCreateRoleReceipts,
       writerAssumeEventTimes: writerAssumeEventTimes.sort(),
       unexpectedRootMutationEvents: unexpected
     });
@@ -1700,11 +1972,212 @@ export class AwsOneTimeBootstrapRootProvider {
     reject(code);
   }
 
+  async inspectAbandonedTarget(targetKey, invoke) {
+    const code = "ONE_TIME_BOOTSTRAP_ABANDONED_RESOURCE_CENSUS_REJECTED";
+    const target = this.plan.targets?.[targetKey];
+    requireCondition(oneTimeBootstrapConstants.TARGET_KEYS.includes(targetKey) &&
+      plainObject(target) && typeof invoke === "function", code);
+    let stack = null;
+    try {
+      const response = await invoke("cloudformation:DescribeStacks", () =>
+        this.cloudFormation.send(
+          new DescribeStacksCommand({ StackName: target.stackName })
+        ));
+      requireCondition(Array.isArray(response.Stacks) &&
+        response.Stacks.length === 1, code);
+      [stack] = response.Stacks;
+    } catch (cause) {
+      if (!isNotFound(cause)) throw cause;
+    }
+    let stackReceipt;
+    if (stack === null) {
+      stackReceipt = {
+        exactIdentity: true,
+        stackIdSha256: null,
+        stackStatus: "ABSENT",
+        templateSha256: null,
+        terminationProtection: null
+      };
+    } else {
+      requireCondition(stack.StackName === target.stackName &&
+        typeof stack.StackId === "string" &&
+        !/(?:_IN_PROGRESS|_PENDING)$/u.test(stack.StackStatus ?? "") &&
+        canonicalJson(parameterMap(stack.Parameters)) ===
+          canonicalJson(target.parameters) && canonicalJson(stack.Tags ?? []) ===
+          canonicalJson(target.tags), code);
+      const template = await invoke("cloudformation:GetTemplate", () =>
+        this.cloudFormation.send(new GetTemplateCommand({
+          StackName: stack.StackId,
+          TemplateStage: "Original"
+        })));
+      const templateBytes = Buffer.from(exactTemplateBody(
+        template.TemplateBody,
+        "ONE_TIME_BOOTSTRAP_ABANDONED_RESOURCE_CENSUS_REJECTED"
+      ), "base64");
+      requireCondition(sha256(templateBytes) === target.templateSha256, code);
+      stackReceipt = {
+        exactIdentity: true,
+        stackIdSha256: sha256(stack.StackId),
+        stackStatus: stack.StackStatus,
+        templateSha256: target.templateSha256,
+        terminationProtection: stack.EnableTerminationProtection === true
+      };
+    }
+    const changeSets = [];
+    const seenTokens = new Set();
+    let nextToken;
+    for (let page = 0; page < 100; page += 1) {
+      let response;
+      try {
+        response = await invoke("cloudformation:ListChangeSets", () =>
+          this.cloudFormation.send(new ListChangeSetsCommand({
+            StackName: target.stackName,
+            ...(nextToken === undefined ? {} : { NextToken: nextToken })
+          })));
+      } catch (cause) {
+        if (stack === null && isNotFound(cause)) break;
+        throw cause;
+      }
+      for (const summary of response.Summaries ?? []) {
+        requireCondition(typeof summary.ChangeSetId === "string" &&
+          typeof summary.ChangeSetName === "string" &&
+          !["CREATE_PENDING", "CREATE_IN_PROGRESS", "DELETE_PENDING",
+            "DELETE_IN_PROGRESS"].includes(summary.Status) &&
+          summary.ExecutionStatus !== "EXECUTE_IN_PROGRESS", code);
+        changeSets.push({
+          changeSetIdSha256: sha256(summary.ChangeSetId),
+          changeSetName: summary.ChangeSetName,
+          executionStatus: summary.ExecutionStatus ?? null,
+          status: summary.Status ?? null
+        });
+      }
+      if (response.NextToken === undefined) break;
+      requireCondition(typeof response.NextToken === "string" &&
+        response.NextToken.length > 0 && !seenTokens.has(response.NextToken) &&
+        page < 99, code);
+      seenTokens.add(response.NextToken);
+      nextToken = response.NextToken;
+    }
+    const secrets = [];
+    for (const resource of target.resourceContract.filter(({ type }) =>
+      type === "AWS::SecretsManager::Secret")) {
+      let metadata;
+      try {
+        metadata = await invoke("secretsmanager:DescribeSecret", () =>
+          this.secrets.send(new DescribeSecretCommand({
+            SecretId: resource.secretName
+          })));
+      } catch (cause) {
+        if (isNotFound(cause)) {
+          secrets.push({
+            present: false,
+            secretNameSha256: sha256(resource.secretName),
+            versionCount: 0,
+            versionStageSetSha256: digest([])
+          });
+          continue;
+        }
+        throw cause;
+      }
+      requireCondition(metadata.Name === resource.secretName &&
+        typeof metadata.ARN === "string", code);
+      const versions = [];
+      const versionTokens = new Set();
+      let versionToken;
+      for (let page = 0; page < 100; page += 1) {
+        const response = await invoke("secretsmanager:ListSecretVersionIds",
+          () => this.secrets.send(new ListSecretVersionIdsCommand({
+            IncludeDeprecated: true,
+            SecretId: metadata.ARN,
+            ...(versionToken === undefined ? {} : { NextToken: versionToken })
+          })));
+        versions.push(...(response.Versions ?? []).map((version) => ({
+          stages: [...(version.VersionStages ?? [])].sort(),
+          versionIdSha256: sha256(String(version.VersionId ?? ""))
+        })));
+        if (response.NextToken === undefined) break;
+        requireCondition(typeof response.NextToken === "string" &&
+          response.NextToken.length > 0 &&
+          !versionTokens.has(response.NextToken) && page < 99, code);
+        versionTokens.add(response.NextToken);
+        versionToken = response.NextToken;
+      }
+      secrets.push({
+        present: true,
+        secretNameSha256: sha256(resource.secretName),
+        versionCount: versions.length,
+        versionStageSetSha256: digest(versions)
+      });
+    }
+    const body = {
+      changeSetCount: changeSets.length,
+      changeSetSetSha256: digest(changeSets),
+      secretCensus: secrets,
+      stack: stackReceipt,
+      targetKey
+    };
+    return Object.freeze({ ...body, censusSha256: digest(body) });
+  }
+
+  async inspectNamedRootLogin() {
+    const code = "ONE_TIME_BOOTSTRAP_AWS_LOGIN_READBACK_REJECTED";
+    this.awsCliGuard();
+    try {
+      const { stdout, stderr } = await execFileAsync(this.awsCliPath, [
+        "sts", "get-caller-identity", "--profile",
+        this.plan.account.rootProfile, "--region", REGION, "--output", "json",
+        "--no-cli-pager"
+      ], {
+        encoding: "utf8",
+        env: {
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_PROFILE: this.plan.account.rootProfile,
+          HOME: process.env.HOME,
+          LANG: "C",
+          LC_ALL: "C",
+          PATH: "/usr/bin:/bin"
+        },
+        maxBuffer: 64 * 1024,
+        timeout: 30_000
+      });
+      requireCondition(stderr.trim() === "", code);
+      const identity = JSON.parse(stdout);
+      requireCondition(plainObject(identity) &&
+        identity.Account === this.plan.account.accountId &&
+        identity.Arn === this.plan.account.rootPrincipalArn, code);
+      return Object.freeze({ state: "ACTIVE" });
+    } catch (cause) {
+      if (cause?.message === code) throw cause;
+      const expected = "Error loading login session token: Unable to load a " +
+        "existing login session for session " +
+        `${this.plan.account.rootPrincipalArn}, Please reauthenticate with ` +
+        "'aws login'.";
+      const stderrValue = typeof cause?.stderr === "string" ?
+        cause.stderr.trim() : "";
+      const stdoutValue = typeof cause?.stdout === "string" ?
+        cause.stdout.trim() : "";
+      const negativeReadback = cause?.code === 255 &&
+        (cause?.signal === null || cause?.signal === undefined) &&
+        stdoutValue === "" && stderrValue === expected;
+      requireCondition(negativeReadback, code);
+      return Object.freeze({
+        state: "ABSENT",
+        receipt: Object.freeze({
+          namedRootLoginSessionUnavailable: true,
+          noninteractiveCallerIdentityRejected: true,
+          profile: this.plan.account.rootProfile,
+          rootSdkClientsDestroyed: true
+        })
+      });
+    }
+  }
+
   async logout() {
+    this.awsCliGuard();
+    this.destroy();
+    this.now();
     const { stderr } = await execFileAsync(this.awsCliPath, [
-      "logout",
-      "--profile",
-      this.plan.account.rootProfile
+      "logout", "--profile", this.plan.account.rootProfile
     ], {
       encoding: "utf8",
       env: {
@@ -1720,14 +2193,9 @@ export class AwsOneTimeBootstrapRootProvider {
     });
     requireCondition(stderr === "",
       "ONE_TIME_BOOTSTRAP_AWS_LOGOUT_REJECTED");
-    return {
-      cachedRootSessionAbsent: true,
-      command: ["aws", "logout", "--profile",
-        this.plan.account.rootProfile],
-      exitCode: 0,
-      profile: this.plan.account.rootProfile
-    };
+    return Object.freeze({ logoutCommandCompleted: true });
   }
+
 }
 
 export class AwsOneTimeBootstrapB0Provider {
@@ -1747,6 +2215,16 @@ export class AwsOneTimeBootstrapB0Provider {
     const value = this.clock();
     requireCondition(value instanceof Date && Number.isFinite(value.getTime()),
       "ONE_TIME_BOOTSTRAP_AWS_CLOCK_REJECTED");
+    requireCondition(value.getTime() < Date.parse(this.plan.notAfter) +
+      PROVIDER_CONVERGENCE_TAIL_MS,
+    "ONE_TIME_BOOTSTRAP_AWS_CONVERGENCE_EXPIRED");
+    return value;
+  }
+
+  dispatchNow() {
+    const value = this.clock();
+    requireCondition(value instanceof Date && Number.isFinite(value.getTime()),
+      "ONE_TIME_BOOTSTRAP_AWS_CLOCK_REJECTED");
     requireCondition(value.getTime() < Date.parse(this.plan.notAfter),
       "ONE_TIME_BOOTSTRAP_AWS_OPERATION_EXPIRED");
     return value;
@@ -1761,6 +2239,7 @@ export class AwsOneTimeBootstrapB0Provider {
 
   async createChangeSet({ targetKey, templateBody }) {
     const target = this.plan.targets[targetKey];
+    this.dispatchNow();
     await this.cloudFormation.send(new CreateChangeSetCommand({
       Capabilities: target.capabilities,
       ChangeSetName: target.changeSetName,
@@ -1859,6 +2338,7 @@ export class AwsOneTimeBootstrapB0Provider {
 
   async executeChangeSet({ targetKey }) {
     const target = this.plan.targets[targetKey];
+    this.dispatchNow();
     await this.cloudFormation.send(new ExecuteChangeSetCommand({
       ChangeSetName: target.changeSetName,
       ClientRequestToken:
@@ -1972,6 +2452,7 @@ export class AwsOneTimeBootstrapB0Provider {
   async enableTerminationProtection({ stackArn, targetKey }) {
     requireCondition(typeof stackArn === "string",
       "ONE_TIME_BOOTSTRAP_STACK_ID_BINDING_REJECTED");
+    this.dispatchNow();
     await this.cloudFormation.send(new UpdateTerminationProtectionCommand({
       EnableTerminationProtection: true,
       StackName: stackArn
@@ -2315,6 +2796,7 @@ export class AwsOneTimeBootstrapB0Provider {
     const configuration = awsClientConfiguration(credentials);
     const secrets = new SecretsManagerClient(configuration);
     const sts = new STSClient(configuration);
+    const assertDispatchOpen = () => this.dispatchNow();
     function exactArn(arn) {
       requireCondition(allowed.has(arn),
         "ONE_TIME_BOOTSTRAP_AWS_WRITER_ARN_REJECTED");
@@ -2336,13 +2818,15 @@ export class AwsOneTimeBootstrapB0Provider {
           SecretId: exactArn(arn)
         })
       ),
-      putSecretVersion: ({ arn, clientRequestToken, secretString }) =>
-        secrets.send(new PutSecretValueCommand({
+      putSecretVersion: ({ arn, clientRequestToken, secretString }) => {
+        assertDispatchOpen();
+        return secrets.send(new PutSecretValueCommand({
           ClientRequestToken: clientRequestToken,
           SecretId: exactArn(arn),
           SecretString: secretString,
           VersionStages: ["AWSCURRENT"]
-        })),
+        }));
+      },
       async readSecretVersion({ arn, versionId }) {
         try {
           return await secrets.send(new GetSecretValueCommand({
@@ -2361,7 +2845,7 @@ export class AwsOneTimeBootstrapB0Provider {
   async assumeBootstrapSession({ writer }) {
     requireCondition(writer === true,
       "ONE_TIME_BOOTSTRAP_AWS_WRITER_ASSUME_REJECTED");
-    const requestTime = this.now();
+    const requestTime = this.dispatchNow();
     const response = await this.sts.send(new AssumeRoleCommand({
       DurationSeconds: oneTimeBootstrapConstants.SESSION_DURATION_SECONDS,
       ExternalId: this.plan.writerContract.externalId,
@@ -2444,7 +2928,7 @@ async function convergeRootSetup({ gate, journal, plan, rootProvider }) {
     () => rootProvider.discoverMfa()
   );
   gate.advance("setup");
-  const createReceipt = await runCrashConvergentMutation({
+  await runCrashConvergentMutation({
     acceptReceipt: sanitizedInspectionReceipt,
     classify: classifyMatch,
     contract: {
@@ -2644,7 +3128,7 @@ async function convergeTarget({
   );
   requireCondition(sha256(templateBytes) === target.templateSha256,
     "ONE_TIME_BOOTSTRAP_TEMPLATE_READ_REJECTED");
-  await runCrashConvergentMutation({
+  const createReceipt = await runCrashConvergentMutation({
     acceptReceipt: sanitizedInspectionReceipt,
     classify: classifyMatch,
     contract: {
@@ -2666,7 +3150,7 @@ async function convergeTarget({
   });
   const executeStep = journal.step(`execute-${targetKey}-change-set`);
   let preExecuteReceipt = createReceipt.preExecuteReceipt;
-  if (executeStep === null) {
+  if (preExecuteReceipt === undefined) {
     const changeSet = await provider.inspectChangeSet({ targetKey });
     requireCondition(changeSet.state === "MATCH",
       "ONE_TIME_BOOTSTRAP_CHANGE_SET_READBACK_REJECTED");
@@ -2676,6 +3160,10 @@ async function convergeTarget({
       changeSet.evidence
     );
   }
+  requireCondition(executeStep === null || executeStep.state === "ACCEPTED" ||
+    executeStep.state === "DISPATCH_STARTED" ||
+    executeStep.state === "INTENT_RECORDED",
+  "ONE_TIME_BOOTSTRAP_CHANGE_SET_READBACK_REJECTED");
   requireCondition(preExecuteReceipt?.status ===
     "EXACT_CREATE_CHANGE_SET_ACCEPTED_FOR_EXECUTION",
   "ONE_TIME_BOOTSTRAP_CHANGE_SET_READBACK_REJECTED");
@@ -2992,23 +3480,43 @@ export function buildCompletionEvidenceFromB0Result(plan, result,
   });
 }
 
-function rootAssumeStepIds(journal) {
-  return Object.keys(journal.value.steps).filter((id) =>
-    id === "root-assume-b0-session" ||
-    /^root-assume-b0-session-continuation-[0-9]{3}$/u.test(id)
+function exactAssumeStepIds(journal, base) {
+  const code = "ONE_TIME_BOOTSTRAP_SESSION_COUNT_REJECTED";
+  const continuation = `${base}-continuation-001`;
+  const relevant = Object.keys(journal.value.steps).filter((id) =>
+    id === base || id.startsWith(`${base}-continuation-`)
   ).sort();
+  requireCondition(relevant.length <= 2 && relevant.every((id) =>
+    [base, continuation].includes(id)) &&
+    (relevant.includes(continuation) ? relevant.includes(base) : true), code);
+  return [base, continuation].filter((id) => relevant.includes(id));
+}
+
+function rootAssumeStepIds(journal) {
+  return exactAssumeStepIds(journal, "root-assume-b0-session");
 }
 
 function writerAssumeStepIds(journal) {
-  return Object.keys(journal.value.steps).filter((id) =>
-    id === "b0-assume-a1-writer-session" ||
-    /^b0-assume-a1-writer-session-continuation-[0-9]{3}$/u.test(id)
-  ).sort();
+  return exactAssumeStepIds(journal, "b0-assume-a1-writer-session");
 }
 
 function nextSessionStepId(journal, base, ids) {
+  const code = "ONE_TIME_BOOTSTRAP_SESSION_COUNT_REJECTED";
+  requireCondition(journal instanceof OneTimeBootstrapJournal &&
+    ["root-assume-b0-session", "b0-assume-a1-writer-session"].includes(
+      base
+    ) && Array.isArray(ids) && ids.length <= 1 &&
+    (ids.length === 0 || ids[0] === base), code);
   if (ids.length === 0) return base;
-  return `${base}-continuation-${String(ids.length).padStart(3, "0")}`;
+  return `${base}-continuation-001`;
+}
+
+function safeSessionReplacementAt(receipt, code) {
+  const expiration = canonicalInstant(receipt?.credentialsExpiration, code);
+  return receipt.schemaVersion ===
+    "prooftoact.one-time-bootstrap-no-event-session-reconciliation.v1"
+    ? expiration
+    : expiration + CLOUDTRAIL_EVENT_LAG_MS;
 }
 
 function latestAcceptedSessionReceipt(journal, ids, code) {
@@ -3022,7 +3530,8 @@ function latestAcceptedSessionReceipt(journal, ids, code) {
 }
 
 function expectedRootDirectEvents(plan, includeCleanup, assumeCount = 1) {
-  requireCondition(Number.isSafeInteger(assumeCount) && assumeCount >= 1,
+  requireCondition(Number.isSafeInteger(assumeCount) && assumeCount >= 1 &&
+    assumeCount <= 2,
     "ONE_TIME_BOOTSTRAP_ROOT_ASSUME_COUNT_REJECTED");
   const events = [
     {
@@ -3064,18 +3573,23 @@ function expectedRootDirectEvents(plan, includeCleanup, assumeCount = 1) {
   return events;
 }
 
-async function waitUntilInstant({ clock, instant, notAfter }) {
+async function waitUntilInstant({
+  clock,
+  instant,
+  notAfter,
+  sleep = (milliseconds) => new Promise((resolve) =>
+    setTimeout(resolve, milliseconds))
+}) {
   const code = "ONE_TIME_BOOTSTRAP_SESSION_EXPIRY_WAIT_REJECTED";
   const target = canonicalInstant(instant, code);
   const deadline = canonicalInstant(notAfter, code);
-  requireCondition(target < deadline, code);
+  requireCondition(target < deadline && typeof sleep === "function", code);
   for (;;) {
     const now = clock();
     requireCondition(now instanceof Date && Number.isFinite(now.getTime()) &&
       now.getTime() < deadline, code);
     if (now.getTime() >= target) return now.toISOString();
-    await new Promise((resolve) => setTimeout(resolve,
-      Math.min(30_000, target - now.getTime())));
+    await sleep(Math.min(30_000, target - now.getTime()));
   }
 }
 
@@ -3133,6 +3647,10 @@ async function reconcilePriorLostSessions({
   rootProvider
 }) {
   const code = "ONE_TIME_BOOTSTRAP_SESSION_CONTINUATION_REJECTED";
+  const operationDeadline = rootProvider.operationDeadline();
+  requireCondition(operationDeadline instanceof Date &&
+    Number.isFinite(operationDeadline.getTime()), code);
+  const operationDeadlineIso = operationDeadline.toISOString();
   const groups = [
     { ids: rootAssumeStepIds(journal), kind: "root" },
     { ids: writerAssumeStepIds(journal), kind: "writer" }
@@ -3170,7 +3688,7 @@ async function reconcilePriorLostSessions({
           const now = rootProvider.now();
           if (now.getTime() >= noEventSafeAt) break;
           requireCondition(Math.min(noEventSafeAt,
-            now.getTime() + 5_000) < Date.parse(plan.notAfter), code);
+            now.getTime() + 5_000) < operationDeadline.getTime(), code);
           await new Promise((resolve) => setTimeout(resolve,
             Math.min(5_000, noEventSafeAt - now.getTime())));
         }
@@ -3198,27 +3716,26 @@ async function reconcilePriorLostSessions({
       }
     }
   }
-  if (journal.mode !== "RECONCILE_ONLY") return;
-  const acceptedExpirations = [...rootAssumeStepIds(journal),
+  const safeReplacementTimes = [...rootAssumeStepIds(journal),
     ...writerAssumeStepIds(journal)].flatMap((id) => {
     const step = journal.step(id);
     return step.state === "ACCEPTED" ?
-      [step.receipt.sessionReceipt.credentialsExpiration] : [];
+      [safeSessionReplacementAt(step.receipt.sessionReceipt, code)] : [];
   });
-  if (acceptedExpirations.length === 0) return;
-  const latest = new Date(Math.max(...acceptedExpirations.map(
-    (value) => canonicalInstant(value, code)
-  ))).toISOString();
+  if (safeReplacementTimes.length === 0) return;
+  const latest = new Date(Math.max(...safeReplacementTimes)).toISOString();
   await waitUntilInstant({
     clock: rootProvider.clock,
     instant: latest,
-    notAfter: plan.notAfter
+    notAfter: operationDeadlineIso,
+    sleep: rootProvider.sleep
   });
 }
 
 async function reconcileExactRootEvents({
   gate,
   includeCleanup,
+  journal,
   phase,
   plan,
   rootProvider
@@ -3240,19 +3757,108 @@ async function reconcileExactRootEvents({
     const cleanupWidth = includeCleanup ? 2 : 0;
     const assumptions = observed.slice(3,
       cleanupWidth === 0 ? undefined : -cleanupWidth);
-    const exact = observed.length >= 4 + cleanupWidth &&
+    const rootAssumeCount = rootAssumeStepIds(journal).length;
+    const writerAssumeCount = writerAssumeStepIds(journal).length;
+    const exact = rootAssumeCount >= 1 && rootAssumeCount <= 2 &&
+      writerAssumeCount >= 1 && writerAssumeCount <= 2 &&
+      observed.length >= 4 + cleanupWidth &&
       canonicalJson(observed.slice(0, 3)) === canonicalJson(setup) &&
-      assumptions.length >= 1 && assumptions.every((event) =>
+      assumptions.length === rootAssumeCount && assumptions.every((event) =>
         canonicalJson(event) === canonicalJson(expectedAssume)) &&
+      Array.isArray(evidence.rootAssumeEventTimes) &&
+      evidence.rootAssumeEventTimes.length === rootAssumeCount &&
+      Array.isArray(evidence.writerAssumeEventTimes) &&
+      evidence.writerAssumeEventTimes.length === writerAssumeCount &&
       (!includeCleanup || canonicalJson(observed.slice(-2)) ===
         canonicalJson(cleanup));
     if (exact) {
       return evidence;
     }
     const now = rootProvider.now();
-    requireCondition(now.getTime() + 5_000 < Date.parse(plan.notAfter), code);
+    requireCondition(now.getTime() + 5_000 <
+      rootProvider.operationDeadline().getTime(), code);
     await new Promise((resolve) => setTimeout(resolve, 5_000));
   }
+}
+
+function validateLogoutReceipt(plan, receipt) {
+  const code = "ONE_TIME_BOOTSTRAP_AWS_LOGOUT_RECEIPT_REJECTED";
+  requireCondition(plainObject(receipt) && exactKeys(receipt, [
+    "command", "dispatchOutcome", "namedRootLoginSessionUnavailable",
+    "noninteractiveCallerIdentityRejected", "profile", "receiptSha256",
+    "rootSdkClientsDestroyed", "schemaVersion", "status"
+  ]) && receipt.schemaVersion ===
+    "prooftoact.one-time-bootstrap-logout.v2" &&
+    receipt.status === "NAMED_ROOT_LOGIN_SESSION_UNAVAILABLE" &&
+    ["DISPATCHED_AND_NEGATIVELY_VERIFIED",
+      "PRESTATE_ABSENT_AFTER_DURABLE_INTENT_OR_DISPATCH"].includes(
+      receipt.dispatchOutcome
+    ) && canonicalJson(receipt.command) === canonicalJson([
+      "aws", "logout", "--profile", plan.account.rootProfile
+    ]) && receipt.namedRootLoginSessionUnavailable === true &&
+    receipt.noninteractiveCallerIdentityRejected === true &&
+    receipt.profile === plan.account.rootProfile &&
+    receipt.rootSdkClientsDestroyed === true &&
+    receipt.receiptSha256 === digest(Object.fromEntries(Object.entries(
+      receipt
+    ).filter(([key]) => key !== "receiptSha256"))), code);
+  return receipt;
+}
+
+async function convergeNamedRootLogout({ gate, journal, plan, rootProvider }) {
+  const code = "ONE_TIME_BOOTSTRAP_AWS_LOGOUT_CONVERGENCE_REJECTED";
+  const prior = journal.recordIntent("root-logout", "aws:Logout", {
+    command: ["aws", "logout", "--profile", plan.account.rootProfile],
+    rootPrincipalArn: plan.account.rootPrincipalArn
+  });
+  const before = await gate.invoke(
+    "cleanup",
+    "sts:GetCallerIdentity",
+    () => rootProvider.inspectNamedRootLogin()
+  );
+  requireCondition(["ACTIVE", "ABSENT"].includes(before?.state), code);
+  if (prior.state === "ACCEPTED") {
+    requireCondition(before.state === "ABSENT", code);
+    rootProvider.destroy();
+    return validateLogoutReceipt(plan, prior.receipt);
+  }
+  let dispatchOutcome =
+    "PRESTATE_ABSENT_AFTER_DURABLE_INTENT_OR_DISPATCH";
+  if (before.state === "ACTIVE") {
+    requireCondition(["INTENT_RECORDED", "DISPATCH_STARTED"].includes(
+      prior.state
+    ), code);
+    if (prior.state === "INTENT_RECORDED") {
+      journal.recordDispatchStarted("root-logout");
+    }
+    await gate.invoke("cleanup", "aws:Logout", () => rootProvider.logout());
+    const after = await gate.invoke(
+      "cleanup",
+      "sts:GetCallerIdentity",
+      () => rootProvider.inspectNamedRootLogin()
+    );
+    requireCondition(after?.state === "ABSENT", code);
+    dispatchOutcome = "DISPATCHED_AND_NEGATIVELY_VERIFIED";
+  } else {
+    rootProvider.destroy();
+  }
+  const body = {
+    schemaVersion: "prooftoact.one-time-bootstrap-logout.v2",
+    status: "NAMED_ROOT_LOGIN_SESSION_UNAVAILABLE",
+    command: ["aws", "logout", "--profile", plan.account.rootProfile],
+    dispatchOutcome,
+    namedRootLoginSessionUnavailable: true,
+    noninteractiveCallerIdentityRejected: true,
+    profile: plan.account.rootProfile,
+    rootSdkClientsDestroyed: true
+  };
+  const receipt = Object.freeze({ ...body, receiptSha256: digest(body) });
+  return journal.recordAccepted(
+    "root-logout",
+    before.state === "ABSENT" ? "PRESTATE_RECONCILIATION" :
+      "POST_DISPATCH_RECONCILIATION",
+    receipt
+  ).receipt;
 }
 
 async function cleanupAcceptedBootstrap({
@@ -3267,25 +3873,67 @@ async function cleanupAcceptedBootstrap({
   requireCondition(completionReceipt?.status ===
     "EXACT_STATE_ACCEPTED_FOR_B0_DELETION",
   "ONE_TIME_BOOTSTRAP_CLEANUP_COMPLETION_REJECTED");
+  const createdRoleStep = journal.step("root-create-b0-role");
+  const expectedRoleId = createdRoleStep?.receipt?.roleId;
+  requireCondition(createdRoleStep?.state === "ACCEPTED" &&
+    typeof expectedRoleId === "string" && /^[A-Z0-9]{8,128}$/u.test(
+      expectedRoleId
+    ), "ONE_TIME_BOOTSTRAP_CLEANUP_ROLE_IDENTITY_REJECTED");
+  let providerEvidence = acceptedLocalReceipt(
+    journal,
+    "local-accepted-cleanup-provider-evidence"
+  );
+  if (providerEvidence !== null) {
+    providerEvidence = validateAcceptedCleanupProviderEvidence(
+      plan,
+      providerEvidence,
+      expectedRoleId,
+      journal
+    );
+    gate.advance("reconcile");
+    gate.advance("cleanup");
+    const awsLogout = await convergeNamedRootLogout({
+      gate,
+      journal,
+      plan,
+      rootProvider
+    });
+    return buildAcceptedCleanupReceipt({
+      awsLogout,
+      b0SessionReceipt,
+      plan,
+      providerEvidence,
+      writerSessionReceipt
+    });
+  }
   gate.advance("reconcile");
   await reconcileExactRootEvents({
     gate,
     includeCleanup: false,
+    journal,
     phase: "reconcile",
     plan,
     rootProvider
   });
   gate.advance("cleanup");
+  const cleanupAlreadyStarted = journal.step("root-delete-b0-inline-policy") !==
+    null || journal.step("root-delete-b0-role") !== null;
+  if (!cleanupAlreadyStarted) {
+    requireCondition(rootProvider.now().getTime() + CLEANUP_START_RESERVE_MS <
+      rootProvider.operationDeadline().getTime(),
+    "ONE_TIME_BOOTSTRAP_CLEANUP_RESERVE_REJECTED");
+  }
   await runCrashConvergentMutation({
     acceptReceipt: sanitizedInspectionReceipt,
     classify: classifyMatch,
     contract: {
       completionReceiptSha256: completionReceipt.receiptSha256,
+      expectedRoleId,
       policyName: plan.bootstrapRole.inlinePolicyName,
       roleName: plan.bootstrapRole.name
     },
     dispatch: () => gate.invoke("cleanup", "iam:DeleteRolePolicy", () =>
-      rootProvider.deletePolicy()),
+      rootProvider.deletePolicy(expectedRoleId)),
     id: "root-delete-b0-inline-policy",
     inspect: () => gate.invoke("cleanup", "iam:GetRolePolicy", () =>
       rootProvider.inspectPolicyAbsent()),
@@ -3297,10 +3945,11 @@ async function cleanupAcceptedBootstrap({
     classify: classifyMatch,
     contract: {
       completionReceiptSha256: completionReceipt.receiptSha256,
+      expectedRoleId,
       roleName: plan.bootstrapRole.name
     },
     dispatch: () => gate.invoke("cleanup", "iam:DeleteRole", () =>
-      rootProvider.deleteRole()),
+      rootProvider.deleteRole(expectedRoleId)),
     id: "root-delete-b0-role",
     inspect: () => gate.invoke("cleanup", "iam:GetRole", () =>
       rootProvider.inspectRoleAbsent()),
@@ -3310,13 +3959,109 @@ async function cleanupAcceptedBootstrap({
   const cloudTrail = await reconcileExactRootEvents({
     gate,
     includeCleanup: true,
+    journal,
     phase: "cleanup",
     plan,
     rootProvider
   });
-  const awsLogout = await gate.invoke("cleanup", "aws:Logout", () =>
-    rootProvider.logout());
-  const observedAt = rootProvider.clock().toISOString();
+  const providerEvidenceBody = {
+    schemaVersion:
+      "prooftoact.one-time-bootstrap-accepted-cleanup-provider-evidence.v1",
+    status: "EXACT_B0_PROVIDER_CLEANUP_OBSERVED_BEFORE_LOGOUT",
+    expectedRoleId,
+    observedAt: rootProvider.now().toISOString(),
+    operationId: plan.operation.operationId,
+    planBodySha256: plan.planBodySha256,
+    rootDirectEvents: cloudTrail.rootDirectEvents,
+    rootAssumeEventTimes: cloudTrail.rootAssumeEventTimes,
+    unexpectedRootMutationEvents: cloudTrail.unexpectedRootMutationEvents,
+    writerAssumeEventTimes: cloudTrail.writerAssumeEventTimes
+  };
+  providerEvidence = persistLocalReceipt({
+    contract: {
+      completionReceiptSha256: completionReceipt.receiptSha256,
+      expectedRoleId,
+      planBodySha256: plan.planBodySha256
+    },
+    id: "local-accepted-cleanup-provider-evidence",
+    journal,
+    receipt: Object.freeze({
+      ...providerEvidenceBody,
+      receiptSha256: digest(providerEvidenceBody)
+    })
+  });
+  providerEvidence = validateAcceptedCleanupProviderEvidence(
+    plan,
+    providerEvidence,
+    expectedRoleId,
+    journal
+  );
+  const awsLogout = await convergeNamedRootLogout({
+    gate,
+    journal,
+    plan,
+    rootProvider
+  });
+  return buildAcceptedCleanupReceipt({
+    awsLogout,
+    b0SessionReceipt,
+    plan,
+    providerEvidence,
+    writerSessionReceipt
+  });
+}
+
+function validateAcceptedCleanupProviderEvidence(plan, receipt,
+  expectedRoleId, journal) {
+  const code = "ONE_TIME_BOOTSTRAP_CLEANUP_PROVIDER_EVIDENCE_REJECTED";
+  requireCondition(plainObject(receipt) && exactKeys(receipt, [
+    "expectedRoleId", "observedAt", "operationId", "planBodySha256",
+    "receiptSha256", "rootAssumeEventTimes", "rootDirectEvents",
+    "schemaVersion", "status", "unexpectedRootMutationEvents",
+    "writerAssumeEventTimes"
+  ]) && receipt.schemaVersion ===
+    "prooftoact.one-time-bootstrap-accepted-cleanup-provider-evidence.v1" &&
+    receipt.status === "EXACT_B0_PROVIDER_CLEANUP_OBSERVED_BEFORE_LOGOUT" &&
+    receipt.expectedRoleId === expectedRoleId &&
+    receipt.operationId === plan.operation.operationId &&
+    receipt.planBodySha256 === plan.planBodySha256 &&
+    Number.isFinite(Date.parse(receipt.observedAt)) &&
+    Array.isArray(receipt.rootDirectEvents) &&
+    Array.isArray(receipt.rootAssumeEventTimes) &&
+    receipt.rootAssumeEventTimes.length >= 1 &&
+    receipt.rootAssumeEventTimes.length <= 2 &&
+    receipt.rootAssumeEventTimes.length === rootAssumeStepIds(journal).length &&
+    receipt.rootAssumeEventTimes.length === rootAssumeStepIdsFromEvents(
+      receipt.rootDirectEvents
+    ) &&
+    Array.isArray(receipt.writerAssumeEventTimes) &&
+    receipt.writerAssumeEventTimes.length >= 1 &&
+    receipt.writerAssumeEventTimes.length <= 2 &&
+    receipt.writerAssumeEventTimes.length ===
+      writerAssumeStepIds(journal).length &&
+    [...receipt.rootAssumeEventTimes,
+      ...receipt.writerAssumeEventTimes].every((value) =>
+      Number.isFinite(Date.parse(value)) &&
+      new Date(Date.parse(value)).toISOString() === value) &&
+    Array.isArray(receipt.unexpectedRootMutationEvents) &&
+    receipt.unexpectedRootMutationEvents.length === 0 &&
+    receipt.receiptSha256 === digest(Object.fromEntries(Object.entries(
+      receipt
+    ).filter(([key]) => key !== "receiptSha256"))), code);
+  return receipt;
+}
+
+function rootAssumeStepIdsFromEvents(events) {
+  return events.filter((event) => event?.eventName === "AssumeRole").length;
+}
+
+function buildAcceptedCleanupReceipt({
+  awsLogout,
+  b0SessionReceipt,
+  plan,
+  providerEvidence,
+  writerSessionReceipt
+}) {
   return validateOneTimeBootstrapCleanupReceipt(plan, {
     schemaVersion: "prooftoact.one-time-bootstrap-cleanup.v1",
     accountId: plan.account.accountId,
@@ -3329,15 +4074,521 @@ async function cleanupAcceptedBootstrap({
     b0SessionExpiration: b0SessionReceipt.credentialsExpiration,
     bootstrapRoleAbsent: true,
     inlinePolicyAbsent: true,
-    observedAt,
+    observedAt: providerEvidence.observedAt,
     operationId: plan.operation.operationId,
     rawCredentialFieldsPresent: false,
-    rootDirectEvents: cloudTrail.rootDirectEvents,
+    rootAssumeEventTimes: providerEvidence.rootAssumeEventTimes,
+    rootAssumeSessionCount: providerEvidence.rootAssumeEventTimes.length,
+    rootDirectEvents: providerEvidence.rootDirectEvents,
     unexpectedRootMutationEvents:
-      cloudTrail.unexpectedRootMutationEvents,
+      providerEvidence.unexpectedRootMutationEvents,
     writerSessionExpiration: writerSessionReceipt.credentialsExpiration,
+    writerAssumeEventTimes: providerEvidence.writerAssumeEventTimes,
+    writerAssumeSessionCount: providerEvidence.writerAssumeEventTimes.length,
     writerSessionExpired: Date.parse(writerSessionReceipt
-      .credentialsExpiration) <= Date.parse(observedAt)
+      .credentialsExpiration) <= Date.parse(providerEvidence.observedAt)
+  });
+}
+
+function validateAbandonedRootEvents(plan, journal, evidence, {
+  requireCleanup
+}) {
+  const code = "ONE_TIME_BOOTSTRAP_ABANDONED_CLOUDTRAIL_REJECTED";
+  requireCondition(plainObject(evidence) &&
+    Array.isArray(evidence.rootDirectEvents) &&
+    Array.isArray(evidence.unexpectedRootMutationEvents) &&
+    evidence.unexpectedRootMutationEvents.length === 0, code);
+  const canonicalAllowed = new Set(expectedRootDirectEvents(
+    plan,
+    true,
+    1
+  ).map((event) => canonicalJson(event)));
+  const counts = new Map();
+  for (const event of evidence.rootDirectEvents) {
+    requireCondition(canonicalAllowed.has(canonicalJson(event)), code);
+    counts.set(event.eventName, (counts.get(event.eventName) ?? 0) + 1);
+  }
+  for (const name of ["CreateRole", "TagRole", "PutRolePolicy",
+    "DeleteRolePolicy", "DeleteRole"]) {
+    requireCondition((counts.get(name) ?? 0) <= 1, code);
+  }
+  requireCondition((counts.get("AssumeRole") ?? 0) <=
+    rootAssumeStepIds(journal).length, code);
+  if (requireCleanup) {
+    const policyDelete = journal.step("abandoned-root-delete-b0-inline-policy");
+    const roleDelete = journal.step("abandoned-root-delete-b0-role");
+    requireCondition((policyDelete?.state === "ACCEPTED" ?
+      counts.get("DeleteRolePolicy") === 1 : true) &&
+      (roleDelete?.state === "ACCEPTED" ?
+        counts.get("DeleteRole") === 1 : true), code);
+  }
+  return evidence;
+}
+
+function abandonedCleanupRoleId(journal, role) {
+  const code = "ONE_TIME_BOOTSTRAP_ABANDONED_CLEANUP_REJECTED";
+  requireCondition(journal instanceof OneTimeBootstrapJournal &&
+    plainObject(role) && ["ABSENT", "MATCH"].includes(role.state), code);
+  const createStep = journal.step("root-create-b0-role");
+  if (role.state === "ABSENT") {
+    // IAM and CloudTrail are eventually consistent and publish no bounded
+    // negative-delivery receipt. An ambiguous CreateRole dispatch therefore
+    // cannot be converted into a durable absence claim, regardless of how
+    // many adjacent negative reads are observed. Only an undispatched intent
+    // proves no role could later appear under the exact name.
+    requireCondition(createStep === null ||
+      createStep.state === "INTENT_RECORDED" &&
+      createStep.dispatchStartedAt === null, code);
+    return null;
+  }
+  requireCondition(createStep?.state === "ACCEPTED" &&
+    typeof createStep.receipt?.roleId === "string" &&
+    /^[A-Z0-9]{8,128}$/u.test(createStep.receipt.roleId) &&
+    role.receipt?.roleId === createStep.receipt.roleId, code);
+  return createStep.receipt.roleId;
+}
+
+function exactCreateRoleReceipt(plan, role, receipt, dispatchStartedAt) {
+  const code = "ONE_TIME_BOOTSTRAP_CREATE_ROLE_RECONCILIATION_REJECTED";
+  const eventTime = canonicalInstant(receipt?.eventTime, code);
+  const createDate = Date.parse(receipt?.createDate);
+  requireCondition(Number.isFinite(createDate) &&
+    role.state === "MATCH" && role.receipt?.arn === plan.bootstrapRole.arn &&
+    role.receipt.roleName === plan.bootstrapRole.name &&
+    role.receipt.roleId === receipt.roleId &&
+    role.receipt.createdAt === new Date(createDate).toISOString() &&
+    receipt.arn === plan.bootstrapRole.arn &&
+    receipt.roleName === plan.bootstrapRole.name &&
+    receipt.path === plan.bootstrapRole.path &&
+    eventTime >= Date.parse(dispatchStartedAt) - 30_000, code);
+  return receipt;
+}
+
+async function reconcileAbandonedCreateRole({
+  cloudTrail,
+  gate,
+  journal,
+  plan,
+  role,
+  rootProvider
+}) {
+  const code = "ONE_TIME_BOOTSTRAP_CREATE_ROLE_RECONCILIATION_REJECTED";
+  const step = journal.step("root-create-b0-role");
+  if (step?.state !== "DISPATCH_STARTED") return role;
+  requireCondition(Array.isArray(cloudTrail.rootCreateRoleReceipts), code);
+  if (role.state === "MATCH") {
+    requireCondition(cloudTrail.rootCreateRoleReceipts.length === 1, code);
+    const providerReceipt = exactCreateRoleReceipt(
+      plan,
+      role,
+      cloudTrail.rootCreateRoleReceipts[0],
+      step.dispatchStartedAt
+    );
+    journal.recordAccepted(
+      "root-create-b0-role",
+      "POST_DISPATCH_RECONCILIATION",
+      {
+        ...role.receipt,
+        cloudTrailCreateEventTime: new Date(Date.parse(
+          providerReceipt.eventTime
+        )).toISOString()
+      }
+    );
+    return role;
+  }
+  // A negative IAM read plus missing CloudTrail event is not an authoritative
+  // absence result. Preserve the journal and HOLD for later exact provider
+  // reconciliation; never delete or terminalize by role name alone.
+  requireCondition(role.state !== "ABSENT", code);
+  return role;
+}
+
+function validateAbandonmentDisposition(plan, receipt) {
+  const code = "ONE_TIME_BOOTSTRAP_ABANDONED_DISPOSITION_REJECTED";
+  requireCondition(plainObject(receipt) && exactKeys(receipt, [
+    "allObservedSessionsExpired", "authorizationReceiptSha256",
+    "expectedRoleId", "expectedRoleIdSha256", "inlinePolicyPresent",
+    "operationId", "planBodySha256",
+    "postExecutionMutationContinuationAuthorized",
+    "preCleanupCloudTrailSha256", "publicDisposition", "receiptSha256",
+    "schemaVersion", "status", "tagsPresent", "targetCensus",
+    "targetCensusSha256"
+  ]) && receipt.schemaVersion ===
+    "prooftoact.abandoned-partial-b0-disposition.v2" &&
+    receipt.status ===
+      "ABANDONED_PARTIAL_B0_TEMP_AUTHORITY_REMOVAL_AUTHORIZED" &&
+    receipt.operationId === plan.operation.operationId &&
+    receipt.planBodySha256 === plan.planBodySha256 &&
+    receipt.authorizationReceiptSha256 ===
+      plan.authorization.userAuthorizationReceiptSha256 &&
+    Array.isArray(receipt.targetCensus) &&
+    receipt.targetCensusSha256 === digest(receipt.targetCensus) &&
+    /^[0-9a-f]{64}$/u.test(receipt.preCleanupCloudTrailSha256 ?? "") &&
+    (receipt.expectedRoleId === null ?
+      receipt.expectedRoleIdSha256 === null :
+      /^[A-Z0-9]{8,128}$/u.test(receipt.expectedRoleId) &&
+      receipt.expectedRoleIdSha256 === sha256(receipt.expectedRoleId)) &&
+    typeof receipt.tagsPresent === "boolean" &&
+    typeof receipt.inlinePolicyPresent === "boolean" &&
+    receipt.allObservedSessionsExpired === true &&
+    receipt.postExecutionMutationContinuationAuthorized === false &&
+    receipt.publicDisposition === "HOLD" &&
+    receipt.receiptSha256 === digest(Object.fromEntries(Object.entries(
+      receipt
+    ).filter(([key]) => key !== "receiptSha256"))), code);
+  assertNoCredentialMaterial(receipt);
+  return receipt;
+}
+
+function validateAbandonedCleanupProviderEvidence(plan, receipt,
+  abandonmentReceipt) {
+  const code = "ONE_TIME_BOOTSTRAP_ABANDONED_PROVIDER_EVIDENCE_REJECTED";
+  requireCondition(plainObject(receipt) && exactKeys(receipt, [
+    "abandonmentReceiptSha256", "operationId", "planBodySha256",
+    "providerActionsCompletedAt", "receiptSha256", "rootDirectEvents",
+    "rootDirectEventsSha256", "schemaVersion", "status"
+  ]) && receipt.schemaVersion ===
+    "prooftoact.abandoned-partial-b0-provider-evidence.v1" &&
+    receipt.status === "ABANDONED_PARTIAL_B0_PROVIDER_CLEANUP_OBSERVED" &&
+    receipt.abandonmentReceiptSha256 ===
+      abandonmentReceipt.receiptSha256 &&
+    receipt.operationId === plan.operation.operationId &&
+    receipt.planBodySha256 === plan.planBodySha256 &&
+    Number.isFinite(Date.parse(receipt.providerActionsCompletedAt)) &&
+    Array.isArray(receipt.rootDirectEvents) &&
+    receipt.rootDirectEventsSha256 === digest(receipt.rootDirectEvents) &&
+    receipt.receiptSha256 === digest(Object.fromEntries(Object.entries(
+      receipt
+    ).filter(([key]) => key !== "receiptSha256"))), code);
+  assertNoCredentialMaterial(receipt);
+  return receipt;
+}
+
+function buildAbandonedCleanupReceipt({
+  abandonmentReceipt,
+  awsLogout,
+  plan,
+  providerEvidence
+}) {
+  const targetCensus = abandonmentReceipt.targetCensus;
+  const body = {
+    schemaVersion: "prooftoact.abandoned-partial-b0-cleanup.v2",
+    status: "ABANDONED_PARTIAL_B0_TEMP_AUTHORITY_REMOVED",
+    publicDisposition: "HOLD",
+    operationId: plan.operation.operationId,
+    planBodySha256: plan.planBodySha256,
+    abandonmentReceiptSha256: abandonmentReceipt.receiptSha256,
+    bootstrapRoleAbsent: true,
+    inlinePolicyAbsent: true,
+    targetCensus,
+    targetCensusSha256: abandonmentReceipt.targetCensusSha256,
+    allObservedSessionsExpired: true,
+    providerActionsCompletedAt: providerEvidence.providerActionsCompletedAt,
+    rootDirectEventsSha256: providerEvidence.rootDirectEventsSha256,
+    awsLogout,
+    retainedPartialResourcesRequireSeparateDisposition: targetCensus.some(
+      (target) => target.stack.stackStatus !== "ABSENT" ||
+        target.secretCensus.some(({ present }) => present)
+    ),
+    newProviderOrWorkloadMutationPerformed: false
+  };
+  assertNoCredentialMaterial(body);
+  return Object.freeze({ ...body, receiptSha256: digest(body) });
+}
+
+async function cleanupAbandonedPartialBootstrap({
+  gate,
+  journal,
+  plan,
+  rootProvider
+}) {
+  const code = "ONE_TIME_BOOTSTRAP_ABANDONED_CLEANUP_REJECTED";
+  requireCondition(journal.mode === "RECONCILE_ONLY" &&
+    journal.cleanupOnly === true &&
+    rootProvider.allowExpiredCleanup === true, code);
+  const dispositionStep = journal.step("abandoned-partial-b0-disposition");
+  let abandonmentReceipt = dispositionStep?.state === "ACCEPTED" ?
+    validateAbandonmentDisposition(plan, dispositionStep.receipt) : null;
+  let providerEvidence = acceptedLocalReceipt(
+    journal,
+    "local-abandoned-cleanup-provider-evidence"
+  );
+  if (providerEvidence !== null) {
+    requireCondition(abandonmentReceipt !== null, code);
+    providerEvidence = validateAbandonedCleanupProviderEvidence(
+      plan,
+      providerEvidence,
+      abandonmentReceipt
+    );
+    gate.advance("reconcile");
+    gate.advance("cleanup");
+    const awsLogout = await convergeNamedRootLogout({
+      gate,
+      journal,
+      plan,
+      rootProvider
+    });
+    return buildAbandonedCleanupReceipt({
+      abandonmentReceipt,
+      awsLogout,
+      plan,
+      providerEvidence
+    });
+  }
+  if (abandonmentReceipt === null) {
+    await reconcilePriorLostSessions({ gate, journal, plan, rootProvider });
+    const now = rootProvider.now();
+    const sessionReceipts = [...rootAssumeStepIds(journal),
+      ...writerAssumeStepIds(journal)].flatMap((id) => {
+      const step = journal.step(id);
+      return step?.state === "ACCEPTED" &&
+        plainObject(step.receipt?.sessionReceipt) ?
+        [step.receipt.sessionReceipt] : [];
+    });
+    requireCondition(sessionReceipts.every((receipt) =>
+      Date.parse(receipt.credentialsExpiration) <= now.getTime()), code);
+  }
+  const preCloudTrail = validateAbandonedRootEvents(
+    plan,
+    journal,
+    await gate.invoke("setup", "cloudtrail:LookupEvents", () =>
+      rootProvider.lookupRootMutationEvents()),
+    { requireCleanup: false }
+  );
+  const observedTargetCensus = [];
+  for (const targetKey of oneTimeBootstrapConstants.TARGET_KEYS) {
+    observedTargetCensus.push(await rootProvider.inspectAbandonedTarget(
+      targetKey,
+      (action, callback) => gate.invoke("setup", action, callback)
+    ));
+  }
+  if (abandonmentReceipt !== null) {
+    requireCondition(digest(observedTargetCensus) ===
+      abandonmentReceipt.targetCensusSha256, code);
+  }
+  let role = await gate.invoke("setup", "iam:GetRole", () =>
+    rootProvider.inspectRole());
+  if (abandonmentReceipt === null) {
+    role = await reconcileAbandonedCreateRole({
+      cloudTrail: preCloudTrail,
+      gate,
+      journal,
+      plan,
+      role,
+      rootProvider
+    });
+  }
+  let expectedRoleId;
+  let tagsPresent;
+  let inlinePolicyPresent;
+  if (abandonmentReceipt === null) {
+    expectedRoleId = abandonedCleanupRoleId(journal, role);
+    tagsPresent = false;
+    inlinePolicyPresent = false;
+  } else {
+    expectedRoleId = abandonmentReceipt.expectedRoleId;
+    tagsPresent = abandonmentReceipt.tagsPresent;
+    inlinePolicyPresent = abandonmentReceipt.inlinePolicyPresent;
+    requireCondition(role.state !== "CONFLICT" &&
+      (expectedRoleId === null ? role.state === "ABSENT" :
+        (role.state === "MATCH" &&
+          role.receipt?.roleId === expectedRoleId) ||
+        (role.state === "ABSENT" &&
+          ["DISPATCH_STARTED", "ACCEPTED"].includes(journal.step(
+            "abandoned-root-delete-b0-role"
+          )?.state))), code);
+  }
+  if (role.state === "MATCH") {
+    const tags = await gate.invoke("setup", "iam:ListRoleTags", () =>
+      rootProvider.inspectTags());
+    const policy = await gate.invoke("setup", "iam:GetRolePolicy", () =>
+      rootProvider.inspectPolicy());
+    requireCondition(["ABSENT", "MATCH"].includes(tags.state) &&
+      ["ABSENT", "MATCH"].includes(policy.state), code);
+    const currentTagsPresent = tags.state === "MATCH";
+    const currentInlinePolicyPresent = policy.state === "MATCH";
+    const tagStep = journal.step("root-tag-b0-role");
+    const policyStep = journal.step("root-put-b0-inline-policy");
+    if (abandonmentReceipt === null) {
+      tagsPresent = currentTagsPresent;
+      inlinePolicyPresent = currentInlinePolicyPresent;
+      requireCondition(tagsPresent ?
+        ["DISPATCH_STARTED", "ACCEPTED"].includes(tagStep?.state) :
+        tagStep === null || ["INTENT_RECORDED", "DISPATCH_STARTED"].includes(
+          tagStep.state
+        ), code);
+      requireCondition(inlinePolicyPresent ?
+        ["DISPATCH_STARTED", "ACCEPTED"].includes(policyStep?.state) :
+        policyStep === null ||
+          ["INTENT_RECORDED", "DISPATCH_STARTED"].includes(
+            policyStep.state
+          ), code);
+    } else {
+      requireCondition(currentTagsPresent === tagsPresent &&
+        (inlinePolicyPresent ?
+          currentInlinePolicyPresent ||
+            (!currentInlinePolicyPresent &&
+            ["DISPATCH_STARTED", "ACCEPTED"].includes(journal.step(
+              "abandoned-root-delete-b0-inline-policy"
+            )?.state)) :
+          !currentInlinePolicyPresent), code);
+    }
+    await rootProvider.assertExactCleanupRole(expectedRoleId, {
+      inlinePolicyPresent: currentInlinePolicyPresent,
+      tagsPresent: currentTagsPresent
+    });
+  }
+  if (abandonmentReceipt === null) {
+    const abandonmentBody = {
+      schemaVersion: "prooftoact.abandoned-partial-b0-disposition.v2",
+      status: "ABANDONED_PARTIAL_B0_TEMP_AUTHORITY_REMOVAL_AUTHORIZED",
+      operationId: plan.operation.operationId,
+      planBodySha256: plan.planBodySha256,
+      authorizationReceiptSha256:
+        plan.authorization.userAuthorizationReceiptSha256,
+      targetCensus: observedTargetCensus,
+      targetCensusSha256: digest(observedTargetCensus),
+      preCleanupCloudTrailSha256: digest(preCloudTrail.rootDirectEvents),
+      expectedRoleId,
+      expectedRoleIdSha256: expectedRoleId === null ? null :
+        sha256(expectedRoleId),
+      tagsPresent,
+      inlinePolicyPresent,
+      allObservedSessionsExpired: true,
+      postExecutionMutationContinuationAuthorized: false,
+      publicDisposition: "HOLD"
+    };
+    const candidate = Object.freeze({
+      ...abandonmentBody,
+      receiptSha256: digest(abandonmentBody)
+    });
+    const abandonmentStep = journal.recordIntent(
+      "abandoned-partial-b0-disposition",
+      "local:AbandonedPartialB0Disposition",
+      { receiptSha256: candidate.receiptSha256 }
+    );
+    if (abandonmentStep.state !== "ACCEPTED") {
+      abandonmentReceipt = journal.recordAccepted(
+        "abandoned-partial-b0-disposition",
+        "PRESTATE_RECONCILIATION",
+        candidate
+      ).receipt;
+    } else {
+      abandonmentReceipt = abandonmentStep.receipt;
+    }
+    abandonmentReceipt = validateAbandonmentDisposition(
+      plan,
+      abandonmentReceipt
+    );
+  }
+  gate.advance("reconcile");
+  gate.advance("cleanup");
+  const cleanupStarted = journal.step(
+    "abandoned-root-delete-b0-inline-policy"
+  ) !== null || journal.step("abandoned-root-delete-b0-role") !== null;
+  if (!cleanupStarted) {
+    requireCondition(rootProvider.now().getTime() + CLEANUP_START_RESERVE_MS <
+      rootProvider.operationDeadline().getTime(),
+    "ONE_TIME_BOOTSTRAP_CLEANUP_RESERVE_REJECTED");
+  }
+  if (expectedRoleId !== null && inlinePolicyPresent) {
+    await runCrashConvergentMutation({
+      acceptReceipt: sanitizedInspectionReceipt,
+      classify: classifyMatch,
+      contract: {
+        abandonmentReceiptSha256: abandonmentReceipt.receiptSha256,
+        expectedRoleId,
+        policyName: plan.bootstrapRole.inlinePolicyName,
+        roleName: plan.bootstrapRole.name,
+        tagsPresent
+      },
+      dispatch: () => gate.invoke("cleanup", "iam:DeleteRolePolicy", () =>
+        rootProvider.deletePolicy(expectedRoleId, { tagsPresent })),
+      id: "abandoned-root-delete-b0-inline-policy",
+      inspect: () => gate.invoke("cleanup", "iam:GetRolePolicy", () =>
+        rootProvider.inspectPolicyAbsent()),
+      journal,
+      mutationClass: "iam:DeleteRolePolicy"
+    });
+  }
+  if (expectedRoleId !== null) {
+    await runCrashConvergentMutation({
+      acceptReceipt: sanitizedInspectionReceipt,
+      classify: classifyMatch,
+      contract: {
+        abandonmentReceiptSha256: abandonmentReceipt.receiptSha256,
+        expectedRoleId,
+        roleName: plan.bootstrapRole.name,
+        tagsPresent
+      },
+      dispatch: () => gate.invoke("cleanup", "iam:DeleteRole", () =>
+        rootProvider.deleteRole(expectedRoleId, { tagsPresent })),
+      id: "abandoned-root-delete-b0-role",
+      inspect: () => gate.invoke("cleanup", "iam:GetRole", () =>
+        rootProvider.inspectRoleAbsent()),
+      journal,
+      mutationClass: "iam:DeleteRole"
+    });
+  } else {
+    requireCondition((await gate.invoke("cleanup", "iam:GetRole", () =>
+      rootProvider.inspectRoleAbsent())).state === "MATCH", code);
+  }
+  let postCloudTrail;
+  for (;;) {
+    postCloudTrail = await gate.invoke(
+      "cleanup",
+      "cloudtrail:LookupEvents",
+      () => rootProvider.lookupRootMutationEvents()
+    );
+    try {
+      validateAbandonedRootEvents(plan, journal, postCloudTrail, {
+        requireCleanup: true
+      });
+      break;
+    } catch (cause) {
+      requireCondition(rootProvider.now().getTime() + 5_000 <
+        rootProvider.operationDeadline().getTime(), code);
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+  }
+  const providerEvidenceBody = {
+    schemaVersion: "prooftoact.abandoned-partial-b0-provider-evidence.v1",
+    status: "ABANDONED_PARTIAL_B0_PROVIDER_CLEANUP_OBSERVED",
+    abandonmentReceiptSha256: abandonmentReceipt.receiptSha256,
+    operationId: plan.operation.operationId,
+    planBodySha256: plan.planBodySha256,
+    providerActionsCompletedAt: rootProvider.now().toISOString(),
+    rootDirectEvents: postCloudTrail.rootDirectEvents,
+    rootDirectEventsSha256: digest(postCloudTrail.rootDirectEvents)
+  };
+  providerEvidence = persistLocalReceipt({
+    contract: {
+      abandonmentReceiptSha256: abandonmentReceipt.receiptSha256,
+      planBodySha256: plan.planBodySha256
+    },
+    id: "local-abandoned-cleanup-provider-evidence",
+    journal,
+    receipt: Object.freeze({
+      ...providerEvidenceBody,
+      receiptSha256: digest(providerEvidenceBody)
+    })
+  });
+  providerEvidence = validateAbandonedCleanupProviderEvidence(
+    plan,
+    providerEvidence,
+    abandonmentReceipt
+  );
+  const awsLogout = await convergeNamedRootLogout({
+    gate,
+    journal,
+    plan,
+    rootProvider
+  });
+  return buildAbandonedCleanupReceipt({
+    abandonmentReceipt,
+    awsLogout,
+    plan,
+    providerEvidence
   });
 }
 
@@ -3378,6 +4629,17 @@ function writeTerminalReceipt(plan, completionReceipt, cleanupReceipt) {
   }) + "\n");
 }
 
+function writeAbandonedTerminalReceipt(plan, cleanupReceipt) {
+  process.stdout.write(canonicalJson({
+    cleanupReceipt,
+    completionReceipt: null,
+    operationId: plan.operation.operationId,
+    rawCredentialFieldsPresent: false,
+    schemaVersion: "prooftoact.one-time-bootstrap-run.v1",
+    status: "ABANDONED_PARTIAL_B0_TEMP_AUTHORITY_REMOVED_PUBLIC_HOLD"
+  }) + "\n");
+}
+
 function parseMainArguments(argv) {
   const code = "ONE_TIME_BOOTSTRAP_RUNNER_ARGUMENTS_REJECTED";
   const names = ["--aws-cli-path", "--journal-directory", "--mode",
@@ -3402,8 +4664,16 @@ function parseMainArguments(argv) {
   return parsed;
 }
 
-async function main() {
-  const parsed = parseMainArguments(process.argv.slice(2));
+export async function main(args, launchContext) {
+  const launchCode = "ONE_TIME_BOOTSTRAP_LAUNCH_CONTEXT_REJECTED";
+  requireCondition(Array.isArray(args) && exactKeys(launchContext, [
+    "authorizationBytes", "awsCliGuard", "bindingReceipt", "moduleRoot"
+  ]) && Buffer.isBuffer(launchContext.authorizationBytes) &&
+    typeof launchContext.awsCliGuard === "function" &&
+    plainObject(launchContext.bindingReceipt) &&
+    typeof launchContext.moduleRoot === "string" &&
+    path.isAbsolute(launchContext.moduleRoot), launchCode);
+  const parsed = parseMainArguments(args);
   let rawPlan;
   try {
     rawPlan = JSON.parse(readPrivateRegularFile(
@@ -3419,34 +4689,81 @@ async function main() {
     notAfter: plan.notAfter,
     preparedAt: plan.preparedAt
   });
-  validateOneTimeBootstrapCheckout({
+  const checkout = validateOneTimeBootstrapCheckout({
+    awsCliPath: parsed["--aws-cli-path"],
     expectedCommit: plan.source.commit,
     expectedTree: plan.source.tree,
+    homeDirectory: process.env.HOME,
     operationId: plan.operation.operationId,
+    privateRecoveryWorkflowCommits: Object.fromEntries(
+      oneTimeBootstrapConstants.PRIVATE_RECOVERY_WORKFLOW_KEYS.map((key) =>
+        [key, plan.source.privateRecoveryWorkflowPins[key].commit]
+      )
+    ),
     sourceRoot: parsed["--source-root"],
     targetTemplateSha256: Object.fromEntries(
       oneTimeBootstrapConstants.TARGET_KEYS.map((key) =>
         [key, plan.targets[key].templateSha256])
     )
   });
+  requireCondition(canonicalJson(checkout.runtimeExecutionBinding) ===
+    canonicalJson(plan.source.runtimeExecutionBinding) &&
+    launchContext.bindingReceipt.awsCliTreeSha256 ===
+      plan.source.runtimeExecutionBinding.awsCli.treeDigest &&
+    launchContext.bindingReceipt.dependencyTreeSha256 ===
+      plan.source.runtimeExecutionBinding.dependencies.treeDigest &&
+    launchContext.bindingReceipt.nodeExecutableSha256 ===
+      plan.source.runtimeExecutionBinding.node.executableSha256,
+  launchCode);
   const executingBytes = readReviewedRegularFile(
-    path.join(parsed["--source-root"], plan.source.ceremonyRunnerPath),
+    path.join(launchContext.moduleRoot, plan.source.ceremonyRunnerPath),
     2 * 1024 * 1024,
     "ONE_TIME_BOOTSTRAP_RUNNER_IDENTITY_REJECTED"
   );
   requireCondition(path.resolve(CURRENT_FILE) === path.join(
-    parsed["--source-root"], plan.source.ceremonyRunnerPath
+    launchContext.moduleRoot, plan.source.ceremonyRunnerPath
   ) && sha256(executingBytes) === plan.source.ceremonyRunnerSha256,
   "ONE_TIME_BOOTSTRAP_RUNNER_IDENTITY_REJECTED");
-  const authorization = readAndValidateAuthorizationReceipt(plan);
+  const authorization = validateOneTimeBootstrapAuthorizationBytes(
+    plan,
+    launchContext.authorizationBytes,
+    () => new Date(),
+    { allowExpiredReconcile: parsed["--mode"] === "RECONCILE_ONLY" }
+  );
+  const identityRecordBytes = readPrivateFdToBuffer(
+    IDENTITY_RECORD_FD,
+    16 * 1024,
+    "ONE_TIME_BOOTSTRAP_IDENTITY_RECORD_FD_REJECTED"
+  );
+  let identityHmacKey;
+  try {
+    identityHmacKey = readPrivateFdToBuffer(
+      IDENTITY_HMAC_KEY_FD,
+      32,
+      "ONE_TIME_BOOTSTRAP_IDENTITY_HMAC_KEY_FD_REJECTED"
+    );
+    requireCondition(identityHmacKey.length === 32 &&
+      sha256(identityHmacKey) === authorization.receipt
+        .humanAuthorizationBinding.dynamicIntent
+        .humanIdentityHmacKeySha256,
+    "ONE_TIME_BOOTSTRAP_IDENTITY_HMAC_KEY_FD_REJECTED");
+    await verifyProofToActB0A1HumanAuthorizationWithImsg(
+      authorization.receipt.humanAuthorizationBinding,
+      identityRecordBytes,
+      identityHmacKey
+    );
+  } finally {
+    identityHmacKey?.fill(0);
+    identityRecordBytes.fill(0);
+  }
   const valueLease = createFixedFdWriterValueLease();
   let journal;
   let b0Lease;
+  let rootProvider;
   try {
-    valueLease.prepare(authorization.receipt.writerValueSha256);
     const a1 = await loadA1Integration(
       plan,
-      parsed["--source-root"]
+      launchContext.moduleRoot
     );
     journal = new OneTimeBootstrapJournal({
       clock: () => new Date(),
@@ -3463,24 +4780,52 @@ async function main() {
       journal,
       "local-cleanup-receipt"
     );
+    const expiredCleanupOnly = Date.now() >= Date.parse(plan.notAfter);
+    requireCondition(!expiredCleanupOnly ||
+      parsed["--mode"] === "RECONCILE_ONLY" && Date.now() < Date.parse(
+        plan.authorization.cleanupOnlyAuthorization.expiresAt
+      ),
+    "ONE_TIME_BOOTSTRAP_EXPIRED_RECONCILIATION_REJECTED");
+    journal.cleanupOnly = expiredCleanupOnly;
     if (priorCleanupReceipt !== null) {
-      requireCondition(completionReceipt?.schemaVersion ===
-        "prooftoact.one-time-bootstrap-completion.v1" &&
-        priorCleanupReceipt.schemaVersion ===
-          "prooftoact.one-time-bootstrap-cleanup-accepted.v1",
-      "ONE_TIME_BOOTSTRAP_LOCAL_RECEIPT_REJECTED");
-      writeTerminalReceipt(plan, completionReceipt, priorCleanupReceipt);
+      if (priorCleanupReceipt.schemaVersion ===
+        "prooftoact.abandoned-partial-b0-cleanup.v2") {
+        requireCondition(priorCleanupReceipt.publicDisposition === "HOLD",
+          "ONE_TIME_BOOTSTRAP_LOCAL_RECEIPT_REJECTED");
+        writeAbandonedTerminalReceipt(plan, priorCleanupReceipt);
+      } else {
+        requireCondition(completionReceipt?.schemaVersion ===
+          "prooftoact.one-time-bootstrap-completion.v1" &&
+          priorCleanupReceipt.schemaVersion ===
+            "prooftoact.one-time-bootstrap-cleanup-accepted.v1",
+        "ONE_TIME_BOOTSTRAP_LOCAL_RECEIPT_REJECTED");
+        writeTerminalReceipt(plan, completionReceipt, priorCleanupReceipt);
+      }
       return;
     }
+    if (!expiredCleanupOnly && result === null &&
+      journal.step("seal-five-a1-writer-values")?.state !== "ACCEPTED") {
+      valueLease.prepare(authorization.receipt.writerValueSha256);
+    }
     const gate = new RootActionGate();
-    const rootProvider = new AwsOneTimeBootstrapRootProvider({
+    rootProvider = new AwsOneTimeBootstrapRootProvider({
+      allowExpiredCleanup: expiredCleanupOnly,
+      awsCliGuard: launchContext.awsCliGuard,
       awsCliPath: parsed["--aws-cli-path"],
       plan
     });
     const cleanupStarted = journal.step("root-delete-b0-inline-policy") !==
       null || journal.step("root-delete-b0-role") !== null;
+    const cleanupProviderEvidenceRecorded = [
+      "local-accepted-cleanup-provider-evidence",
+      "local-abandoned-cleanup-provider-evidence"
+    ].some((id) => journal.step(id)?.state === "ACCEPTED");
+    const logoutStarted = journal.step("root-logout") !== null;
     let mfaDiscoveryReceipt;
-    if (cleanupStarted) {
+    if (expiredCleanupOnly || cleanupProviderEvidenceRecorded ||
+      logoutStarted) {
+      gate.advance("setup");
+    } else if (cleanupStarted) {
       await gate.invoke("discovery", "sts:GetCallerIdentity", () =>
         rootProvider.callerIdentity());
       await gate.invoke("discovery", "iam:ListMFADevices", () =>
@@ -3493,6 +4838,65 @@ async function main() {
         plan,
         rootProvider
       });
+    }
+    if (expiredCleanupOnly && result !== null && completionReceipt === null) {
+      await reconcilePriorLostSessions({
+        gate,
+        journal,
+        plan,
+        rootProvider
+      });
+      const recoveredB0SessionReceipt = latestAcceptedSessionReceipt(
+        journal,
+        rootAssumeStepIds(journal),
+        "ONE_TIME_BOOTSTRAP_B0_SESSION_RECONCILIATION_REQUIRED"
+      );
+      requireCondition(plainObject(result.writerSessionReceipt),
+        "ONE_TIME_BOOTSTRAP_LOCAL_RECEIPT_REJECTED");
+      const latestExpiration = new Date(Math.max(
+        Date.parse(recoveredB0SessionReceipt.credentialsExpiration),
+        Date.parse(result.writerSessionReceipt.credentialsExpiration)
+      )).toISOString();
+      const observedAt = await waitUntilInstant({
+        clock: rootProvider.clock,
+        instant: latestExpiration,
+        notAfter: rootProvider.operationDeadline().toISOString()
+      });
+      completionReceipt = buildCompletionEvidenceFromB0Result(
+        plan,
+        result,
+        observedAt
+      );
+      completionReceipt = persistLocalReceipt({
+        contract: {
+          b0ResultSha256: digest(result),
+          planBodySha256: plan.planBodySha256
+        },
+        id: "local-completion-receipt",
+        journal,
+        receipt: completionReceipt
+      });
+    }
+    if (expiredCleanupOnly && result === null) {
+      requireCondition(completionReceipt === null,
+        "ONE_TIME_BOOTSTRAP_LOCAL_RECEIPT_REJECTED");
+      let abandonedCleanupReceipt = await cleanupAbandonedPartialBootstrap({
+        gate,
+        journal,
+        plan,
+        rootProvider
+      });
+      abandonedCleanupReceipt = persistLocalReceipt({
+        contract: {
+          planBodySha256: plan.planBodySha256,
+          targetCensusSha256: abandonedCleanupReceipt.targetCensusSha256
+        },
+        id: "local-cleanup-receipt",
+        journal,
+        receipt: abandonedCleanupReceipt
+      });
+      writeAbandonedTerminalReceipt(plan, abandonedCleanupReceipt);
+      return;
     }
     let b0SessionReceipt = null;
     if (result !== null) {
@@ -3603,6 +5007,7 @@ async function main() {
     writeTerminalReceipt(plan, completionReceipt, cleanupReceipt);
   } finally {
     b0Lease?.destroy();
+    rootProvider?.destroy();
     valueLease.destroy();
     // A real process crash cannot run this finally and intentionally leaves
     // the exclusive lock in place for audited stale-lock recovery.
@@ -3614,22 +5019,21 @@ const startedDirectly = process.argv[1] &&
   path.resolve(process.argv[1]) === CURRENT_FILE;
 
 if (startedDirectly) {
-  main().catch((cause) => {
-    const message = String(cause?.message ?? "");
-    const code = /^ONE_TIME_BOOTSTRAP_[A-Z0-9_]{1,160}$/u.test(message) ?
-      message : "ONE_TIME_BOOTSTRAP_RUNNER_UNKNOWN";
-    process.stderr.write(`${code}\n`);
-    process.exitCode = 1;
-  });
+  process.stderr.write("ONE_TIME_BOOTSTRAP_LAUNCHER_REQUIRED\n");
+  process.exitCode = 1;
 }
 
 export const oneTimeBootstrapRunnerConstants = Object.freeze({
   A1_INTEGRATION_PATHS,
   AUTHORIZATION_RECEIPT_FD,
   CLOUDTRAIL_EVENT_LAG_MS,
+  HUMAN_AUTHORITY_ID,
+  IDENTITY_HMAC_KEY_FD,
+  IDENTITY_RECORD_FD,
   JOURNAL_FILE_PREFIX,
   JOURNAL_SCHEMA,
   MFA_TOKEN_FD,
+  PROVIDER_CONVERGENCE_TAIL_MS,
   REGION,
   ROOT_ACTIONS_BY_PHASE,
   ROOT_PHASE_ORDER,
@@ -3650,7 +5054,16 @@ export const __test = Object.freeze({
   journalBodySha256,
   parseMainArguments,
   readPrivateFdToBuffer,
+  abandonedCleanupRoleId,
+  cleanupAbandonedPartialBootstrap,
+  exactCreateRoleReceipt,
+  nextSessionStepId,
+  reconcileAbandonedCreateRole,
   reconcilePriorLostSessions,
+  rootAssumeStepIds,
+  safeSessionReplacementAt,
   sha256,
-  verifyJournal
+  validateAbandonedRootEvents,
+  verifyJournal,
+  writerAssumeStepIds
 });

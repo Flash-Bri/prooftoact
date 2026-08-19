@@ -71,6 +71,7 @@ function validateCloudTokens(material) {
 
 export function createFreshClusterExecutionRuntime({
   adoptedAdminPassword,
+  assertCleanupOpen,
   awsRuntime,
   clock = Date.now,
   cloudRuntime,
@@ -100,6 +101,7 @@ export function createFreshClusterExecutionRuntime({
       "listCompleteClusters",
       "listCompleteSqlUsers"
     ].every((name) => typeof cloudRuntime[name] === "function") &&
+    typeof assertCleanupOpen === "function" &&
     typeof clock === "function" && typeof fetchImpl === "function" &&
     typeof freshPrimaryInvoker === "function" &&
     typeof freshRecoveryPublicationFactory === "function" &&
@@ -295,6 +297,7 @@ export function createFreshClusterExecutionRuntime({
       return recoveryPublication.verifyManagedMcp(value);
     },
     deleteSqlAdmin({ clusterId, username }) {
+      assertCleanupOpen();
       return cloudRuntime.deleteSqlAdmin({
         clusterId,
         token: tokens.creator,
@@ -302,6 +305,7 @@ export function createFreshClusterExecutionRuntime({
       });
     },
     deleteTemporaryIngress({ clusterId, entry }) {
+      assertCleanupOpen();
       return cloudRuntime.deleteTemporaryIngress({
         clusterId,
         entry,
@@ -312,6 +316,7 @@ export function createFreshClusterExecutionRuntime({
 }
 
 export function createFreshClusterCleanupRuntime({
+  assertCleanupOpen,
   clock = Date.now,
   cloudRuntime,
   material,
@@ -325,6 +330,7 @@ export function createFreshClusterCleanupRuntime({
     "listCompleteAllowlist",
     "listCompleteSqlUsers"
   ].every((name) => typeof cloudRuntime[name] === "function") &&
+    typeof assertCleanupOpen === "function" &&
     typeof clock === "function" && typeof sleep === "function",
   "FRESH_CLUSTER_CLEANUP_CONFIGURATION_REJECTED");
 
@@ -369,6 +375,7 @@ export function createFreshClusterCleanupRuntime({
       });
     },
     deleteSqlAdmin({ clusterId }) {
+      assertCleanupOpen();
       return cloudRuntime.deleteSqlAdmin({
         clusterId,
         token: tokens.creator,
@@ -376,6 +383,7 @@ export function createFreshClusterCleanupRuntime({
       });
     },
     deleteTemporaryIngress({ clusterId, entry }) {
+      assertCleanupOpen();
       return cloudRuntime.deleteTemporaryIngress({
         clusterId,
         entry,

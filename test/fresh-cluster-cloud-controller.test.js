@@ -14,12 +14,15 @@ import {
   validateFreshClusterReadback,
   validateTemporaryAllowlistReadback
 } from "../scripts/fresh-cluster-cloud-controller.js";
+import { buildSyntheticProofToActHumanAuthorization } from
+  "./helpers/prooftoact-human-authorization-fixture.js";
 
 const OPERATION_ID = "123e4567-e89b-42d3-a456-426614174000";
 const APPROVAL_ID = "223e4567-e89b-42d3-a456-426614174001";
 const FOLDER_ID = "323e4567-e89b-42d3-a456-426614174002";
 const CREATOR_ID = "423e4567-e89b-42d3-a456-426614174003";
 const CLUSTER_ID = "523e4567-e89b-42d3-a456-426614174004";
+const SQL_CLUSTER_ID = "923e4567-e89b-42d3-a456-426614174008";
 const AUDITOR_ID = "823e4567-e89b-42d3-a456-426614174007";
 const SOURCE_COMMIT = "a".repeat(40);
 const TREE_DIGEST = "b".repeat(40);
@@ -30,7 +33,7 @@ const CALLER_WORKFLOW_REF =
 
 function billingAuthorization(overrides = {}) {
   return {
-    schemaVersion: "prooftoact.fresh-cluster-billing-authorization.v1",
+    schemaVersion: "prooftoact.fresh-cluster-billing-authorization.v2",
     status: "AUTHORIZED_PAID_WORST_CASE",
     pricingSource: "https://www.cockroachlabs.com/pricing/",
     pricingObservedAt: "2026-08-19T08:05:00.000Z",
@@ -39,7 +42,7 @@ function billingAuthorization(overrides = {}) {
     authorizedMonthlyCeilingUsd: "2.00",
     authorizationReceiptSha256: "8".repeat(64),
     approvalExpiresAt: "2026-08-19T09:00:00.000Z",
-    retentionDeadline: "2026-08-19T20:00:00.000Z",
+    retentionDeadline: "2026-08-20T09:00:00.000Z",
     requestUnitLimit: "5000000",
     storageMiBLimit: "1024",
     requestUnitPriceUsdPerMillion: "0.20",
@@ -47,8 +50,134 @@ function billingAuthorization(overrides = {}) {
     freeBenefitsAssumed: false,
     paidWorstCaseMonthlyUsd: "1.50",
     clusterCreateApproved: true,
+    executeRerunAfterApprovalExpiryAuthorized: false,
+    executionAuthorizationBoundary:
+      "LATEST_DURABLE_OUTER_RESERVATION_BEFORE_APPROVAL_EXPIRY",
+    immutableOneShotSourceAndOperationRequired: true,
+    maximumReservedExecutionMinutes: 45,
+    newReservationAfterApprovalExpiryAuthorized: false,
+    reservedOneShotContinuationAfterApprovalExpiryAuthorized: true,
     separateTeardownApprovalRequired: true,
     ...overrides
+  };
+}
+
+function adoptedApproval(overrides = {}) {
+  const base = {
+    accountId: "111111111111",
+    schemaVersion: "prooftoact.fresh-cluster-approval.v1",
+    status: "APPROVED",
+    action: "ADOPT_AND_BOOTSTRAP_ONE_BOUND_FRESH_COCKROACH_CLUSTER",
+    adoptedAdminPasswordSha256: "7".repeat(64),
+    approvalId: APPROVAL_ID,
+    approvedAt: "2026-08-19T08:00:00.000Z",
+    approvedBy: "BRIAN_SMITH",
+    auditorAuthorityReceiptSha256: "1".repeat(64),
+    auditorServiceAccountId: AUDITOR_ID,
+    auditorTokenValueSha256: "2".repeat(64),
+    billingAuthorization: billingAuthorization({
+      clusterCreateApproved: false
+    }),
+    callerWorkflowRef: CALLER_WORKFLOW_REF,
+    callerWorkflowSha: "6".repeat(40),
+    clusterMode: "ADOPT_VERIFIED_EXISTING",
+    controllerImportGraphSha256: "7".repeat(64),
+    creatorAuthorityReceiptSha256: "d".repeat(64),
+    creatorProviderReadbackReceiptSha256: "e".repeat(64),
+    creatorServiceAccountId: CREATOR_ID,
+    creatorTokenValueSha256: "f".repeat(64),
+    derivedPrimaryApprovalAuthorized: true,
+    expiresAt: "2026-08-19T09:00:00.000Z",
+    oneShot: true,
+    operationId: OPERATION_ID,
+    manualClusterReceiptSha256: "8".repeat(64),
+    parentFolderId: "root",
+    partialFailureDisposition:
+      "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_SEPARATELY_TEARDOWN",
+    separateClusterTeardownApprovalRequired: true,
+    sourceCommit: SOURCE_COMMIT,
+    providerClusterId: CLUSTER_ID,
+    sqlBootstrapPort: "26257",
+    sqlBootstrapUsername: "prooftoact_bootstrap_admin",
+    sqlClusterId: SQL_CLUSTER_ID,
+    treeDigest: TREE_DIGEST,
+    ...overrides
+  };
+  const { humanAuthorizationBinding } =
+    buildSyntheticProofToActHumanAuthorization({
+      dynamicInput: {
+    a1ApprovalId: base.approvalId,
+    a1CallerWorkflowRef: base.callerWorkflowRef,
+    a1CallerWorkflowSha: base.callerWorkflowSha,
+    a1ControllerImportGraphSha256: base.controllerImportGraphSha256,
+    a1CredentialSha256: {
+      adoptedAdminPassword: base.adoptedAdminPasswordSha256,
+      auditorTokenValue: base.auditorTokenValueSha256,
+      creatorTokenValue: base.creatorTokenValueSha256
+    },
+    a1ProviderClusterId: base.providerClusterId,
+    a1ProviderReceiptSha256: {
+      auditorAuthority: base.auditorAuthorityReceiptSha256,
+      creatorAuthority: base.creatorAuthorityReceiptSha256,
+      creatorProviderReadback:
+        base.creatorProviderReadbackReceiptSha256,
+      manualCluster: base.manualClusterReceiptSha256,
+      pricingSource: base.billingAuthorization.pricingSourceSha256
+    },
+    a1ReservationDeadline: base.expiresAt,
+    a1SqlClusterId: base.sqlClusterId,
+    accountId: base.accountId,
+    authorizationNotBefore: base.approvedAt,
+    b0DispatchDeadline: base.expiresAt,
+    b0PrivateRecoveryWorkflowCommits: {
+      deployment: "3".repeat(40),
+      secretSeal: "4".repeat(40)
+    },
+    b0RuntimeExecutionBindingSha256: "5".repeat(64),
+    b0TargetTemplateSha256: {
+      freshPrimaryBootstrapRole: "6".repeat(64),
+      freshPrimaryCredentialCustody: "7".repeat(64),
+      privateRecoveryQueryBootstrap: "8".repeat(64)
+    },
+    b0WriterValueSha256: {
+      auditor: base.auditorTokenValueSha256,
+      cloudApi: base.creatorTokenValueSha256,
+      credential: "9".repeat(64),
+      mcp: "a".repeat(64),
+      publisher: "b".repeat(64)
+    },
+    cleanupRetentionDeadline:
+      base.billingAuthorization.retentionDeadline,
+    costAuthorization: {
+      awsMonthlyResidualCeilingUsdCents: 350,
+      cockroachMonthlySubCeilingUsdCents: 200,
+      cockroachPaidWorstCaseMonthlyUsdCents: 150,
+      combinedMonthlyCeilingUsdCents: 500,
+      currency: "USD",
+      freeBenefitsAssumed: false,
+      maximumOneTimeUsdCents: 500,
+      noAdditiveMonthlyCeilings: true,
+      reconciliationReceiptSha256: "c".repeat(64)
+    },
+    operationId: base.operationId,
+    sourceCommit: base.sourceCommit,
+    treeDigest: base.treeDigest
+      },
+      inboundAt: base.approvedAt,
+      outboundAt: base.approvedAt
+    });
+  return {
+    ...base,
+    billingAuthorization: {
+      ...base.billingAuthorization,
+      authorizationReceiptSha256:
+        humanAuthorizationBinding.receiptBindingSha256
+    },
+    humanAuthorizationBinding,
+    humanAuthorizationReceiptSha256:
+      humanAuthorizationBinding.receiptBindingSha256,
+    humanAuthorizedTextSha256:
+      humanAuthorizationBinding.humanAuthorizedTextSha256
   };
 }
 
@@ -167,6 +296,9 @@ test("pre-ID global slot is stable across approvals and binds physical intent", 
 test("root parent is an exact provider coordinate, never a fabricated UUID", () => {
   const adopted = command({
     adoptedAdminPasswordSha256: "7".repeat(64),
+    billingAuthorization: billingAuthorization({
+      clusterCreateApproved: false
+    }),
     clusterMode: "ADOPT_VERIFIED_EXISTING",
     manualClusterReceiptSha256: "8".repeat(64),
     parentFolderId: "root",
@@ -244,108 +376,117 @@ test("root parent is an exact provider coordinate, never a fabricated UUID", () 
   }
 });
 
-test("outer approval safely derives only post-create primary coordinates", () => {
-  const outer = {
-    schemaVersion: "prooftoact.fresh-cluster-approval.v1",
-    status: "APPROVED",
-    action: "CREATE_AND_BOOTSTRAP_ONE_FRESH_COCKROACH_CLUSTER",
-    adoptedAdminPasswordSha256: null,
-    approvalId: APPROVAL_ID,
-    approvedAt: "2026-08-19T08:00:00.000Z",
-    approvedBy: "BRIAN_SMITH",
-    auditorAuthorityReceiptSha256: "1".repeat(64),
-    auditorServiceAccountId: AUDITOR_ID,
-    auditorTokenValueSha256: "2".repeat(64),
-    billingAuthorization: billingAuthorization(),
-    callerWorkflowRef: CALLER_WORKFLOW_REF,
-    callerWorkflowSha: "6".repeat(40),
-    clusterMode: "CREATE_NEW",
-    controllerImportGraphSha256: "7".repeat(64),
-    creatorAuthorityReceiptSha256: "d".repeat(64),
-    creatorProviderReadbackReceiptSha256: "e".repeat(64),
-    creatorServiceAccountId: CREATOR_ID,
-    creatorTokenValueSha256: "f".repeat(64),
-    derivedPrimaryApprovalAuthorized: true,
-    expiresAt: "2026-08-19T09:00:00.000Z",
-    humanAuthorizationReceiptSha256: "8".repeat(64),
-    humanAuthorizedTextSha256: "9".repeat(64),
-    oneShot: true,
+test("outer ADOPT approval derives only bound bootstrap coordinates", () => {
+  const outer = adoptedApproval();
+  const binding = {
+    accountId: outer.accountId,
     operationId: OPERATION_ID,
-    manualClusterReceiptSha256: null,
-    parentFolderId: FOLDER_ID,
-    partialFailureDisposition:
-      "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_SEPARATELY_TEARDOWN",
-    separateClusterTeardownApprovalRequired: true,
     sourceCommit: SOURCE_COMMIT,
-    providerClusterId: null,
-    sqlBootstrapPort: "26257",
-    sqlBootstrapUsername: "prooftoact_bootstrap_admin",
     treeDigest: TREE_DIGEST
   };
-  const accepted = validateFreshClusterApproval(outer, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T08:10:00.000Z"));
+  const accepted = validateFreshClusterApproval(outer, binding,
+    Date.parse("2026-08-19T08:10:00.000Z"));
   assert.throws(() => validateFreshClusterApproval({
     ...outer,
-    parentFolderId: "root"
-  }, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T08:10:00.000Z")),
+    humanAuthorizedTextSha256: "f".repeat(64)
+  }, binding, Date.parse("2026-08-19T08:10:00.000Z")),
   /FRESH_CLUSTER_APPROVAL_REJECTED/u);
-  const adoptedOuter = {
+  assert.throws(() => validateFreshClusterApproval({
     ...outer,
-    adoptedAdminPasswordSha256: "7".repeat(64),
-    clusterMode: "ADOPT_VERIFIED_EXISTING",
-    manualClusterReceiptSha256: "8".repeat(64),
-    parentFolderId: "root",
-    providerClusterId: CLUSTER_ID
-  };
-  assert.equal(validateFreshClusterApproval(adoptedOuter, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T08:10:00.000Z")).parentFolderId, "root");
-  assert.throws(() => validateFreshClusterApproval(outer, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T09:00:00.000Z")),
+    action: "CREATE_AND_BOOTSTRAP_ONE_FRESH_COCKROACH_CLUSTER"
+  }, binding, Date.parse("2026-08-19T08:10:00.000Z")),
   /FRESH_CLUSTER_APPROVAL_REJECTED/u);
-  assert.deepEqual(validateFreshClusterCleanupApproval(outer, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T09:00:00.000Z")), outer);
-  assert.deepEqual(validateFreshClusterCleanupApproval(outer, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T19:59:59.999Z")), outer);
-  assert.throws(() => validateFreshClusterCleanupApproval(outer, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T20:00:00.000Z")),
+  assert.equal(accepted.parentFolderId, "root");
+  assert.throws(() => validateFreshClusterApproval(outer, binding,
+    Date.parse("2026-08-19T09:00:00.000Z")),
+  /FRESH_CLUSTER_APPROVAL_REJECTED/u);
+  assert.deepEqual(validateFreshClusterCleanupApproval(outer, binding,
+    Date.parse("2026-08-19T09:00:00.000Z")), outer);
+  assert.deepEqual(validateFreshClusterCleanupApproval(outer, binding,
+    Date.parse("2026-08-20T08:59:59.999Z")), outer);
+  assert.throws(() => validateFreshClusterCleanupApproval(outer, binding,
+    Date.parse("2026-08-20T09:00:00.000Z")),
   /FRESH_CLUSTER_CLEANUP_APPROVAL_REJECTED/u);
-  assert.throws(() => validateFreshClusterCleanupApproval(outer, {
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-19T07:59:59.999Z")),
+  assert.throws(() => validateFreshClusterCleanupApproval(outer, binding,
+    Date.parse("2026-08-19T07:59:59.999Z")),
   /FRESH_CLUSTER_CLEANUP_APPROVAL_REJECTED/u);
+  const clusterCommand = command({
+    adoptedAdminPasswordSha256: outer.adoptedAdminPasswordSha256,
+    billingAuthorization: outer.billingAuthorization,
+    clusterMode: outer.clusterMode,
+    manualClusterReceiptSha256: outer.manualClusterReceiptSha256,
+    parentFolderId: outer.parentFolderId,
+    providerClusterId: outer.providerClusterId
+  });
+  const outerAuthentication = {
+    providerBacked: true,
+    status: "AUTHENTICATED_PROVIDER_READBACK"
+  };
+  const outerReservation = {
+    schemaVersion: "prooftoact.fresh-cluster-reservation.v1",
+    status: "RESERVED_BEFORE_PROVIDER_IDENTIFIERS",
+    authenticationSha256: __test.digest(outerAuthentication),
+    commandSha256: clusterCommand.commandSha256,
+    controllerTableArn: clusterCommand.controllerTableArn,
+    durable: true,
+    globallyAuthoritative: true,
+    globalKeySha256: clusterCommand.globalKeySha256,
+    operationId: OPERATION_ID,
+    reservedAt: "2026-08-19T08:10:00.000Z",
+    version: 1
+  };
   const derived = deriveFreshPrimaryApproval({
     clusterApproval: accepted,
+    clusterCommand,
     clusterHostSha256: "1".repeat(64),
     credentialSealReceiptSha256: "2".repeat(64),
-    sqlClusterId: CLUSTER_ID
+    outerAuthentication,
+    outerReservation,
+    outerReservationAcknowledgedAt: "2026-08-19T08:10:01.000Z",
+    sqlClusterId: SQL_CLUSTER_ID
   });
-  assert.equal(derived.expectedClusterId, CLUSTER_ID);
+  assert.equal(derived.action, "BOOTSTRAP_ONE_BOUND_FRESH_PRIMARY");
+  assert.equal(derived.expectedClusterId, SQL_CLUSTER_ID);
   assert.equal(derived.maximumProjectedTotalUsd, 1.5);
   assert.equal(derived.approvedBy, "BRIAN_SMITH");
+  assert.equal(derived.expiresAt, "2026-08-19T08:55:00.000Z");
+  assert.equal(derived.outerReservedAt, derived.approvedAt);
+  for (const [label, reservationPatch] of [
+    ["outer authentication digest", {
+      authenticationSha256: "a".repeat(64)
+    }],
+    ["outer command digest", { commandSha256: "b".repeat(64) }],
+    ["controller table", {
+      controllerTableArn: clusterCommand.controllerTableArn.replace(
+        "us-east-1", "us-west-2"
+      )
+    }],
+    ["global reservation key", { globalKeySha256: "c".repeat(64) }],
+    ["durability", { durable: false }],
+    ["global authority", { globallyAuthoritative: false }]
+  ]) {
+    assert.throws(() => deriveFreshPrimaryApproval({
+      clusterApproval: accepted,
+      clusterCommand,
+      clusterHostSha256: "1".repeat(64),
+      credentialSealReceiptSha256: "2".repeat(64),
+      outerAuthentication,
+      outerReservation: { ...outerReservation, ...reservationPatch },
+      outerReservationAcknowledgedAt: "2026-08-19T08:10:01.000Z",
+      sqlClusterId: SQL_CLUSTER_ID
+    }), /FRESH_CLUSTER_DERIVED_PRIMARY_APPROVAL_REJECTED/u, label);
+  }
+  assert.throws(() => deriveFreshPrimaryApproval({
+    clusterApproval: accepted,
+    clusterCommand,
+    clusterHostSha256: "1".repeat(64),
+    credentialSealReceiptSha256: "2".repeat(64),
+    outerAuthentication,
+    outerReservation,
+    outerReservationAcknowledgedAt: accepted.expiresAt,
+    sqlClusterId: SQL_CLUSTER_ID
+  }), /FRESH_CLUSTER_DERIVED_PRIMARY_APPROVAL_REJECTED/u,
+  "reservation acknowledgement at the outer deadline");
 });
 
 test("fresh cluster readback binds creator, time, folder, labels, limits, and region", () => {

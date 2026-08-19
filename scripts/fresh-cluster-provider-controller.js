@@ -187,8 +187,18 @@ function validateAuthentication(value, command, observedNow) {
   return value;
 }
 
-function validateReservation(value, command, authentication) {
+function validateReservation(value, command, authentication, {
+  authenticationNow,
+  reservationObservedNow
+}) {
   const code = "FRESH_CLUSTER_RESERVATION_REJECTED";
+  const authorizedAt = Date.parse(
+    command.billingAuthorization.authorizedAt
+  );
+  const approvalExpiresAt = Date.parse(
+    command.billingAuthorization.approvalExpiresAt
+  );
+  const reservedAt = Date.parse(value?.reservedAt);
   requireCondition(exactKeys(value, [
     "authenticationSha256",
     "commandSha256",
@@ -208,7 +218,16 @@ function validateReservation(value, command, authentication) {
     value.globalKeySha256 === command.globalKeySha256 &&
     value.operationId === command.operationId &&
     value.authenticationSha256 === digest(authentication) &&
-    Number.isFinite(Date.parse(value.reservedAt)) && value.version === 1 &&
+    Number.isFinite(authenticationNow) &&
+    Number.isFinite(reservationObservedNow) &&
+    Number.isFinite(authorizedAt) && Number.isFinite(approvalExpiresAt) &&
+    Number.isFinite(reservedAt) &&
+    value.reservedAt === new Date(reservedAt).toISOString() &&
+    authorizedAt <= authenticationNow &&
+    authenticationNow <= reservedAt &&
+    reservedAt <= reservationObservedNow &&
+    reservationObservedNow < approvalExpiresAt &&
+    reservedAt < approvalExpiresAt && value.version === 1 &&
     value.durable === true && value.globallyAuthoritative === true, code);
   return value;
 }
@@ -903,6 +922,14 @@ function sameNames(left, right) {
   return canonicalJson(left) === canonicalJson(right);
 }
 
+function assertCleanupOpen(clock, command) {
+  const now = clock();
+  requireCondition(Number.isFinite(now) &&
+    now < Date.parse(command.billingAuthorization.retentionDeadline),
+  "FRESH_CLUSTER_CLEANUP_AUTHORIZATION_EXPIRED");
+  return now;
+}
+
 export async function runFreshClusterProviderController({
   clock = Date.now,
   command,
@@ -917,21 +944,34 @@ export async function runFreshClusterProviderController({
   requireCondition(typeof clock === "function",
     "FRESH_CLUSTER_CLOCK_REJECTED");
 
-  const authenticationNow = clock();
-  requireCondition(Number.isFinite(authenticationNow) &&
-    authenticationNow < Date.parse(command.billingAuthorization.approvalExpiresAt),
-  "FRESH_CLUSTER_APPROVAL_EXPIRED");
+  const reservationDeadline = Date.parse(
+    command.billingAuthorization.approvalExpiresAt
+  );
+  const requireReservationOpen = () => {
+    const observedAt = clock();
+    requireCondition(Number.isFinite(observedAt) &&
+      observedAt < reservationDeadline,
+    "FRESH_CLUSTER_APPROVAL_EXPIRED");
+    return observedAt;
+  };
+  const authenticationNow = requireReservationOpen();
   const authentication = validateAuthentication(
     await provider.authenticate(command), command, authenticationNow
   );
   const occupied = await provider.readStrong(controllerReadRequest(command));
   requireCondition(occupied === null,
     "FRESH_CLUSTER_OPERATION_OCCUPIED");
-  const reservation = validateReservation(
-    await provider.reserve({ command, authentication }),
+  requireReservationOpen();
+  const reserved = await provider.reserve({
     command,
-    authentication
-  );
+    authentication,
+    reservationDeadline
+  });
+  const reservationObservedNow = requireReservationOpen();
+  const reservation = validateReservation(reserved, command, authentication, {
+    authenticationNow,
+    reservationObservedNow
+  });
 
   let previousReceiptSha256 = digest(reservation);
   let sequence = 0;
@@ -970,9 +1010,9 @@ export async function runFreshClusterProviderController({
   let clusterId;
   let ingressEntry;
   let ingressPossible = false;
-  let ingressAbsent = false;
+  let ingressAbsent = true;
   let adminPossible = false;
-  let adminAbsent = false;
+  let adminAbsent = command.clusterMode === "CREATE_NEW";
   let sqlBaseline;
   let primaryCause;
 
@@ -1162,6 +1202,7 @@ export async function runFreshClusterProviderController({
       await record("ADMIN_CREATE_DISPATCHING", {
         usernameSha256: textDigest(BOOTSTRAP_USERNAME)
       }, true);
+      adminAbsent = false;
       try {
         await runtime.createSqlAdmin({
           clusterId,
@@ -1231,7 +1272,11 @@ export async function runFreshClusterProviderController({
         adminAuthentication,
         cluster,
         command,
-        credential
+        credential,
+        outerAuthentication: authentication,
+        outerReservationAcknowledgedAt:
+          new Date(reservationObservedNow).toISOString(),
+        reservation
       }),
       command,
       cluster,
@@ -1392,6 +1437,7 @@ export async function runFreshClusterProviderController({
       userCount: postBootstrapInventory.names.length
     });
 
+    assertCleanupOpen(clock, command);
     await record("ADMIN_DELETE_DISPATCHING", {
       usernameSha256: textDigest(BOOTSTRAP_USERNAME)
     }, true);
@@ -1432,6 +1478,7 @@ export async function runFreshClusterProviderController({
       "FRESH_CLUSTER_FINAL_PRINCIPAL_CENSUS_REJECTED");
     await record("FINAL_PRINCIPAL_CENSUS_ACCEPTED", finalCensus);
 
+    assertCleanupOpen(clock, command);
     await record("INGRESS_DELETE_DISPATCHING", {
       entrySha256: digest(ingressEntry)
     }, true);
@@ -1596,6 +1643,7 @@ export async function runFreshClusterProviderController({
   if (adminPossible && !adminAbsent && clusterId && sqlBaseline) {
     try {
       if (!phases.has("ADMIN_DELETE_DISPATCHING")) {
+        assertCleanupOpen(clock, command);
         await record("ADMIN_DELETE_DISPATCHING", {
           usernameSha256: textDigest(BOOTSTRAP_USERNAME)
         }, true);
@@ -1634,6 +1682,7 @@ export async function runFreshClusterProviderController({
   if (ingressPossible && !ingressAbsent && clusterId && ingressEntry) {
     try {
       if (!phases.has("INGRESS_DELETE_DISPATCHING")) {
+        assertCleanupOpen(clock, command);
         await record("INGRESS_DELETE_DISPATCHING", {
           entrySha256: digest(ingressEntry)
         }, true);
@@ -1699,6 +1748,7 @@ export async function runFreshClusterProviderController({
 }
 
 export const __test = Object.freeze({
+  assertCleanupOpen,
   BOOTSTRAP_USERNAME,
   buildPrimaryClusterMappingReceipt,
   canonicalJson,

@@ -58,7 +58,7 @@ test("current source cost guards match the reviewed non-final boundary", () => {
   const receipt = verifyReleaseCost({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_COST_GUARDS_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 20);
+  assert.equal(receipt.surfaceCount, 26);
   assert.equal(receipt.budgetAlertCount, 4);
   assert.equal(receipt.forbiddenResourceTypeCount, 5);
   assert.equal(receipt.unapprovedPurchaseClassCount, 5);
@@ -89,6 +89,27 @@ test("cost manifest binds the bounded OIDC preflight lane", () => {
   ]) {
     assert.equal(surfaces[id]?.path, path);
   }
+});
+
+test("cost manifest binds the complete executable B0/A1 cost lane", () => {
+  const expected = {
+    "b0-a1-human-authorization-contract":
+      "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+    "b0-a1-human-authorization-tests":
+      "test/prooftoact-b0-a1-human-authorization.test.js",
+    "one-time-bootstrap-authority-plan":
+      "scripts/prepare-one-time-bootstrap-authority.js",
+    "one-time-bootstrap-authority-tests":
+      "test/one-time-bootstrap-authority.test.js",
+    "one-time-bootstrap-ceremony-runner":
+      "scripts/run-one-time-bootstrap-ceremony.js",
+    "one-time-bootstrap-ceremony-runner-tests":
+      "test/run-one-time-bootstrap-ceremony.test.js"
+  };
+  const actual = Object.fromEntries(Object.entries(__test.EXPECTED_SURFACES)
+    .filter(([id]) => Object.hasOwn(expected, id))
+    .map(([id, surface]) => [id, surface.path]));
+  assert.deepEqual(actual, expected);
 });
 
 test("cost receipt contract is shared and rejects stale surface counts", () => {

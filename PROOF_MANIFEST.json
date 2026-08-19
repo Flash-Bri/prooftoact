@@ -973,25 +973,25 @@
     {
       "id": "release-cost-ledger",
       "path": "docs/RELEASE_COST.md",
-      "sha256": "1c3f7d20afb7b8f78a9ea383d54d66c17369dca9f211cce78682bf6e2b2c9365",
+      "sha256": "2262e2923b65271b5c87100dff97f3b97d8fc480b813bf5f4f7c829a26c83ed5",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "29bbe2ace4b262b5c1489cd14a1787d48ae9c5e7a958b0e0e47f0a370fae745d",
+      "sha256": "f70183e11196cd8acce8acf70e19b6adade4e99fba433f73bf1fe16eeb354701",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-tests",
       "path": "test/release-cost.test.js",
-      "sha256": "a299bd0d65ae2bbbc781dbc5c3abd0108bc1a7c43fdce2406f23583b7b1cbc87",
+      "sha256": "822cec64aa01680aa562bf9c26b9de8cfe282919151c2e28e6eb4b6af0b486af",
       "kind": "verification-code"
     },
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "e42048e42020041f0d663fd88c1290b3f80d8b0fa8baaccbcd2802d2ff70fa75",
+      "sha256": "adcf9ae220b6168323a7525fabf2733c678277651a6835f3ba42cfc926c8eeed",
       "kind": "verification-code"
     },
     {
@@ -1093,19 +1093,19 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "dfe43ba67b3e4e4a884e9598feb700db6f6e63653d34f1048fc0b707153d8a4f",
+      "sha256": "a8e6d5cb81f9ee26883237148084c6a675004acc9cad46e93d3ad5d1b1d2fec6",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-security-tests",
       "path": "test/release-security.test.js",
-      "sha256": "949e44c73ea4c75366431342854881a30410fcc57f2e9bf9ba918583166eb358",
+      "sha256": "a0a86ad651617929f43fae2289d5197d3e6262e54951c24094b700e90578cbf9",
       "kind": "verification-code"
     },
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "a0070f629382116542efacdab0996a30cf23c557fe8544a7a3b2a5c9216bcff7",
+      "sha256": "f6cce858dab47a9427cbb26ffd1ecb40b30b9877e239a7ee325d8de6c5c850e9",
       "kind": "verification-code"
     },
     {

@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   __test as runnerTest,
   AwsOneTimeBootstrapB0Provider,
+  AwsOneTimeBootstrapRootProvider,
   buildOneTimeBootstrapAuthorizationReceipt,
   deriveA1SecretCensus,
   OneTimeBootstrapJournal,
@@ -18,6 +19,10 @@ import {
   validateOneTimeBootstrapTimingBudget,
   validateOneTimeBootstrapAuthorizationReceipt
 } from "../scripts/run-one-time-bootstrap-ceremony.js";
+import { buildOneTimeBootstrapCostReconciliationReceipt } from
+  "../scripts/prepare-one-time-bootstrap-authority.js";
+import { buildSyntheticProofToActHumanAuthorization } from
+  "./helpers/prooftoact-human-authorization-fixture.js";
 
 const PLAN = Object.freeze({
   authorization: Object.freeze({
@@ -173,6 +178,34 @@ test("reconcile-only resume accepts strong matching state and never fills absent
   assert.equal(dispatchCount, 0);
 });
 
+test("reconcile-only safely dispatches a durable intent that never crossed dispatch boundary", async (t) => {
+  const directory = privateDirectory(t);
+  const active = journal(t, "NEW", directory);
+  active.recordIntent("create-stack", "cloudformation:CreateChangeSet", {
+    changeSetName: "exact-intent-only"
+  });
+  active.releaseLock();
+  const resumed = journal(t, "RECONCILE_ONLY", directory);
+  let state = "ABSENT";
+  let dispatchCount = 0;
+  const accepted = await runCrashConvergentMutation({
+    acceptReceipt: () => receipt(9),
+    classify: ({ state: value }) => value,
+    contract: { changeSetName: "exact-intent-only" },
+    dispatch: async () => {
+      dispatchCount += 1;
+      assert.equal(resumed.step("create-stack").state, "DISPATCH_STARTED");
+      state = "MATCH";
+    },
+    id: "create-stack",
+    inspect: async () => ({ state }),
+    journal: resumed,
+    mutationClass: "cloudformation:CreateChangeSet"
+  });
+  assert.deepEqual(accepted, receipt(9));
+  assert.equal(dispatchCount, 1);
+});
+
 test("exclusive operation lock rejects concurrent or stale-lock auto-break", (t) => {
   const directory = privateDirectory(t);
   const active = journal(t, "NEW", directory);
@@ -250,6 +283,149 @@ test("root action gate rejects phase skips and any unlisted project action", asy
   ), /ONE_TIME_BOOTSTRAP_ROOT_ACTION_REJECTED/u);
 });
 
+test("every root lifecycle mutation performs an immediate deadline read before SDK dispatch", () => {
+  const source = fs.readFileSync(new URL(
+    "../scripts/run-one-time-bootstrap-ceremony.js",
+    import.meta.url
+  ), "utf8");
+  for (const [method, command] of [
+    ["createRole", "CreateRoleCommand"],
+    ["tagRole", "TagRoleCommand"],
+    ["putPolicy", "PutRolePolicyCommand"],
+    ["deletePolicy", "DeleteRolePolicyCommand"],
+    ["deleteRole", "DeleteRoleCommand"]
+  ]) {
+    const start = source.indexOf(`  async ${method}(`);
+    const dispatch = source.indexOf(`new ${command}(`, start);
+    const deadlineRead = source.lastIndexOf("this.now();", dispatch);
+    assert.notEqual(start, -1, method);
+    assert.notEqual(dispatch, -1, command);
+    assert.equal(deadlineRead > start, true, `${method}:deadline`);
+    assert.match(source.slice(deadlineRead, dispatch + command.length + 5),
+      new RegExp(`this\\.now\\(\\);\\s*await this\\.iam\\.send\\(new ` +
+        `${command}\\(`, "u"), `${method}:immediate-deadline-check`);
+  }
+  const logoutStart = source.indexOf("  async logout()");
+  const logoutDispatch = source.indexOf(
+    "const { stderr } = await execFileAsync(this.awsCliPath",
+    logoutStart
+  );
+  assert.notEqual(logoutStart, -1);
+  assert.notEqual(logoutDispatch, -1);
+  assert.match(source.slice(logoutStart, logoutDispatch),
+    /this\.destroy\(\);\s*this\.now\(\);\s*$/u);
+
+  const boundaryPlan = {
+    preparedAt: "2026-08-19T14:00:00.000Z",
+    notAfter: "2026-08-19T15:00:00.000Z",
+    authorization: {
+      cleanupOnlyAuthorization: {
+        expiresAt: "2026-08-20T15:00:00.000Z"
+      }
+    }
+  };
+  for (const [instant, accepted] of [
+    ["2026-08-20T14:59:59.999Z", true],
+    ["2026-08-20T15:00:00.000Z", false],
+    ["2026-08-20T15:00:00.001Z", false]
+  ]) {
+    const provider = Object.create(AwsOneTimeBootstrapRootProvider.prototype);
+    provider.allowExpiredCleanup = true;
+    provider.clock = () => new Date(instant);
+    provider.plan = boundaryPlan;
+    if (accepted) {
+      assert.equal(provider.now().toISOString(), instant);
+    } else {
+      assert.throws(() => provider.now(),
+        /ONE_TIME_BOOTSTRAP_AWS_ROOT_CLOCK_REJECTED/u);
+    }
+  }
+});
+
+test("B0 mutation adapters recheck latest-dispatch deadline while read-only polling has a fixed tail", async () => {
+  const source = fs.readFileSync(new URL(
+    "../scripts/run-one-time-bootstrap-ceremony.js",
+    import.meta.url
+  ), "utf8");
+  for (const [method, command] of [
+    ["createChangeSet", "CreateChangeSetCommand"],
+    ["executeChangeSet", "ExecuteChangeSetCommand"],
+    ["enableTerminationProtection", "UpdateTerminationProtectionCommand"]
+  ]) {
+    const start = source.indexOf(`  async ${method}(`);
+    const dispatch = source.indexOf(`new ${command}(`, start);
+    const deadlineRead = source.lastIndexOf("this.dispatchNow();", dispatch);
+    assert.notEqual(start, -1, method);
+    assert.notEqual(dispatch, -1, command);
+    assert.equal(deadlineRead > start, true, `${method}:deadline`);
+    assert.match(source.slice(deadlineRead, dispatch + command.length + 5),
+      new RegExp(`this\\.dispatchNow\\(\\);\\s*await this\\.` +
+        `cloudFormation\\.send\\(new ${command}\\(`, "u"));
+  }
+  const writerStart = source.indexOf("  async createWriterProvider(");
+  const writerDispatch = source.indexOf("new PutSecretValueCommand(",
+    writerStart);
+  assert.match(source.slice(writerStart, writerDispatch),
+    /putSecretVersion:[\s\S]*?assertDispatchOpen\(\);\s*return secrets\.send\($/u);
+
+  const plan = {
+    notAfter: "2026-08-19T15:00:00.000Z",
+    targets: {
+      exact: {
+        changeSetName: "exact-change-set",
+        stackName: "exact-stack"
+      }
+    },
+    account: { accountId: "123456789012" }
+  };
+  for (const [instant, accepted] of [
+    ["2026-08-19T14:59:59.999Z", true],
+    ["2026-08-19T15:00:00.000Z", false],
+    ["2026-08-19T15:00:00.001Z", false]
+  ]) {
+    const provider = Object.create(AwsOneTimeBootstrapB0Provider.prototype);
+    provider.clock = () => new Date(instant);
+    provider.plan = plan;
+    if (accepted) assert.equal(provider.dispatchNow().toISOString(), instant);
+    else assert.throws(() => provider.dispatchNow(),
+      /ONE_TIME_BOOTSTRAP_AWS_OPERATION_EXPIRED/u, instant);
+  }
+  const convergence = Object.create(AwsOneTimeBootstrapB0Provider.prototype);
+  convergence.plan = plan;
+  convergence.clock = () => new Date("2026-08-19T15:44:59.999Z");
+  assert.equal(convergence.now().toISOString(),
+    "2026-08-19T15:44:59.999Z");
+  convergence.clock = () => new Date("2026-08-19T15:45:00.000Z");
+  assert.throws(() => convergence.now(),
+    /ONE_TIME_BOOTSTRAP_AWS_CONVERGENCE_EXPIRED/u);
+
+  const delayed = Object.create(AwsOneTimeBootstrapB0Provider.prototype);
+  let tick = 0;
+  delayed.plan = plan;
+  delayed.clock = () => new Date([
+    "2026-08-19T15:00:00.001Z",
+    "2026-08-19T15:00:01.001Z"
+  ][Math.min(tick++, 1)]);
+  let reads = 0;
+  delayed.cloudFormation = {
+    async send(command) {
+      reads += 1;
+      if (command.constructor.name === "DescribeChangeSetCommand") {
+        return reads === 1 ? {
+          Status: "CREATE_IN_PROGRESS"
+        } : {
+          Status: "FAILED",
+          ExecutionStatus: "UNAVAILABLE"
+        };
+      }
+      throw new Error("UNEXPECTED_READ");
+    }
+  };
+  const observed = await delayed.inspectChangeSet({ targetKey: "exact" });
+  assert.equal(observed.state, "CONFLICT");
+  assert.equal(reads, 2);
+});
+
 test("real root gate reconciles dispatched root and writer sessions from CloudTrail", async (t) => {
   const directory = privateDirectory(t);
   const plan = {
@@ -289,8 +465,9 @@ test("real root gate reconciles dispatched root and writer sessions from CloudTr
   const gate = new RootActionGate();
   gate.advance("setup");
   let lookups = 0;
+  let providerNow = Date.parse("2026-08-18T14:16:00.000Z");
   const rootProvider = {
-    clock: () => new Date("2026-08-18T14:16:00.000Z"),
+    clock: () => new Date(providerNow),
     async lookupRootMutationEvents() {
       lookups += 1;
       return {
@@ -302,6 +479,12 @@ test("real root gate reconciles dispatched root and writer sessions from CloudTr
     },
     now() {
       return this.clock();
+    },
+    async sleep(milliseconds) {
+      providerNow += milliseconds;
+    },
+    operationDeadline() {
+      return new Date(plan.notAfter);
     }
   };
   await runnerTest.reconcilePriorLostSessions({
@@ -316,11 +499,99 @@ test("real root gate reconciles dispatched root and writer sessions from CloudTr
     "ACCEPTED");
   assert.equal(resumed.step("root-assume-b0-session").receipt
     .sessionReceipt.recoveredAmbiguousDispatch, true);
+  assert.equal(new Date(providerNow).toISOString(),
+    "2026-08-18T14:20:30.000Z");
   assert.deepEqual(gate.invocations.map(({ action, phase }) =>
     `${phase}:${action}`), [
     "setup:cloudtrail:LookupEvents",
     "setup:cloudtrail:LookupEvents"
   ]);
+});
+
+test("accepted lost sessions wait through lifetime plus CloudTrail lag and cap each role at two", async (t) => {
+  const plan = {
+    ...PLAN,
+    account: { accountId: "123456789012" },
+    bootstrapRole: { arn: "arn:aws:iam::123456789012:role/B0" },
+    notAfter: "2026-08-18T15:30:00.000Z",
+    sessionContract: { roleSessionName: "b0-session" },
+    writerContract: {
+      roleArn: "arn:aws:iam::123456789012:role/Writer",
+      roleSessionName: "writer-session"
+    }
+  };
+  const active = new OneTimeBootstrapJournal({
+    clock: clock(),
+    directoryPath: privateDirectory(t),
+    mode: "NEW",
+    plan
+  });
+  for (const [id, roleArn, expiration] of [
+    ["root-assume-b0-session", plan.bootstrapRole.arn,
+      "2026-08-18T14:15:00.000Z"],
+    ["b0-assume-a1-writer-session", plan.writerContract.roleArn,
+      "2026-08-18T14:16:00.000Z"]
+  ]) {
+    active.recordIntent(id, "sts:AssumeRole", { roleArn });
+    active.recordDispatchStarted(id);
+    active.recordAccepted(id, "POST_DISPATCH_RECONCILIATION", {
+      sessionReceipt: {
+        credentialsExpiration: expiration,
+        roleArn,
+        schemaVersion: "prooftoact.test-session.v1"
+      }
+    });
+  }
+  let now = Date.parse("2026-08-18T14:16:30.000Z");
+  const gate = new RootActionGate();
+  gate.advance("setup");
+  let sleeps = 0;
+  await runnerTest.reconcilePriorLostSessions({
+    gate,
+    journal: active,
+    plan,
+    rootProvider: {
+      clock: () => new Date(now),
+      async lookupRootMutationEvents() {
+        throw new Error("ACCEPTED_SESSION_MUST_NOT_REQUERY");
+      },
+      now() {
+        return new Date(now);
+      },
+      operationDeadline() {
+        return new Date(plan.notAfter);
+      },
+      async sleep(milliseconds) {
+        sleeps += 1;
+        now += milliseconds;
+      }
+    }
+  });
+  assert.ok(sleeps > 0);
+  assert.equal(new Date(now).toISOString(),
+    "2026-08-18T14:21:00.000Z");
+  for (const [base, ids] of [
+    ["root-assume-b0-session", runnerTest.rootAssumeStepIds(active)],
+    ["b0-assume-a1-writer-session", runnerTest.writerAssumeStepIds(active)]
+  ]) {
+    const continuation = runnerTest.nextSessionStepId(active, base, ids);
+    assert.equal(continuation, `${base}-continuation-001`);
+    active.recordIntent(continuation, "sts:AssumeRole", { roleArn: base });
+    active.recordDispatchStarted(continuation);
+    active.recordAccepted(continuation, "POST_DISPATCH_RECONCILIATION", {
+      sessionReceipt: {
+        credentialsExpiration: "2026-08-18T14:36:00.000Z",
+        roleArn: base,
+        schemaVersion: "prooftoact.test-session.v1"
+      }
+    });
+    const capped = base.startsWith("root-") ?
+      runnerTest.rootAssumeStepIds(active) :
+      runnerTest.writerAssumeStepIds(active);
+    assert.equal(capped.length, 2);
+    assert.throws(() => runnerTest.nextSessionStepId(active, base, capped),
+      /ONE_TIME_BOOTSTRAP_SESSION_COUNT_REJECTED/u);
+  }
 });
 
 test("no-event AssumeRole ambiguity waits past max lifetime and never claims an event", async (t) => {
@@ -372,6 +643,9 @@ test("no-event AssumeRole ambiguity waits past max lifetime and never claims an 
     },
     now() {
       return this.clock();
+    },
+    operationDeadline() {
+      return new Date(plan.notAfter);
     }
   };
   await runnerTest.reconcilePriorLostSessions({
@@ -392,6 +666,548 @@ test("no-event AssumeRole ambiguity waits past max lifetime and never claims an 
   assert.equal(Object.keys(resumed.value.steps).length, 2);
 });
 
+test("cleanup tail reconciles a pre-expiry AssumeRole dispatch through session and CloudTrail lag", async (t) => {
+  const directory = privateDirectory(t);
+  const plan = {
+    ...PLAN,
+    account: { accountId: "123456789012" },
+    authorization: {
+      cleanupOnlyAuthorization: {
+        expiresAt: "2026-08-19T15:00:00.000Z"
+      },
+      userAuthorizationReceiptSha256: "d".repeat(64)
+    },
+    bootstrapRole: { arn: "arn:aws:iam::123456789012:role/B0" },
+    notAfter: "2026-08-18T15:00:00.000Z",
+    sessionContract: { roleSessionName: "b0-session" },
+    writerContract: {
+      roleArn: "arn:aws:iam::123456789012:role/Writer",
+      roleSessionName: "writer-session"
+    }
+  };
+  const dispatchedAt = "2026-08-18T14:59:59.000Z";
+  const active = new OneTimeBootstrapJournal({
+    clock: () => new Date(dispatchedAt),
+    directoryPath: directory,
+    mode: "NEW",
+    plan
+  });
+  active.recordIntent("root-assume-b0-session", "sts:AssumeRole", {
+    roleArn: plan.bootstrapRole.arn
+  });
+  active.recordDispatchStarted("root-assume-b0-session");
+  active.releaseLock();
+  const cleanupNow = new Date("2026-08-18T15:20:00.000Z");
+  const resumed = new OneTimeBootstrapJournal({
+    clock: () => cleanupNow,
+    directoryPath: directory,
+    mode: "RECONCILE_ONLY",
+    plan
+  });
+  const gate = new RootActionGate();
+  gate.advance("setup");
+  const rootProvider = {
+    allowExpiredCleanup: true,
+    clock: () => cleanupNow,
+    async lookupRootMutationEvents() {
+      return {
+        rootAssumeEventTimes: [],
+        rootDirectEvents: [],
+        unexpectedRootMutationEvents: [],
+        writerAssumeEventTimes: []
+      };
+    },
+    now() {
+      return cleanupNow;
+    },
+    operationDeadline() {
+      return new Date(plan.authorization.cleanupOnlyAuthorization.expiresAt);
+    }
+  };
+  await runnerTest.reconcilePriorLostSessions({
+    gate,
+    journal: resumed,
+    plan,
+    rootProvider
+  });
+  const accepted = resumed.step("root-assume-b0-session");
+  assert.equal(accepted.state, "ACCEPTED");
+  assert.equal(accepted.receipt.sessionReceipt.assumeEventObserved, false);
+  assert.equal(accepted.receipt.sessionReceipt.credentialsExpiration,
+    "2026-08-18T15:19:59.000Z");
+});
+
+test("abandoned cleanup never adopts a same-name role after ambiguous CreateRole", (t) => {
+  const ambiguous = journal(t);
+  ambiguous.recordIntent("root-create-b0-role", "iam:CreateRole", {
+    roleName: "exact"
+  });
+  ambiguous.recordDispatchStarted("root-create-b0-role");
+  const observed = {
+    state: "MATCH",
+    receipt: { roleId: "AROAEXACTROLE1234" }
+  };
+  assert.throws(() => runnerTest.abandonedCleanupRoleId(
+    ambiguous,
+    observed
+  ), /ONE_TIME_BOOTSTRAP_ABANDONED_CLEANUP_REJECTED/u);
+  assert.throws(() => runnerTest.abandonedCleanupRoleId(
+    ambiguous,
+    { state: "ABSENT" }
+  ), /ONE_TIME_BOOTSTRAP_ABANDONED_CLEANUP_REJECTED/u);
+
+  const neverDispatched = journal(t);
+  neverDispatched.recordIntent("root-create-b0-role", "iam:CreateRole", {
+    roleName: "exact"
+  });
+  assert.equal(runnerTest.abandonedCleanupRoleId(
+    neverDispatched,
+    { state: "ABSENT" }
+  ), null);
+
+  const accepted = journal(t);
+  accepted.recordIntent("root-create-b0-role", "iam:CreateRole", {
+    roleName: "exact"
+  });
+  accepted.recordDispatchStarted("root-create-b0-role");
+  accepted.recordAccepted(
+    "root-create-b0-role",
+    "POST_DISPATCH_RECONCILIATION",
+    { roleId: "AROAEXACTROLE1234" }
+  );
+  assert.equal(runnerTest.abandonedCleanupRoleId(accepted, observed),
+    "AROAEXACTROLE1234");
+  assert.throws(() => runnerTest.abandonedCleanupRoleId(accepted, {
+    state: "MATCH",
+    receipt: { roleId: "AROAREPLACED12345" }
+  }), /ONE_TIME_BOOTSTRAP_ABANDONED_CLEANUP_REJECTED/u);
+});
+
+function ambiguousCreateJournal(t, plan) {
+  const active = new OneTimeBootstrapJournal({
+    clock: () => new Date("2026-08-19T14:00:00.000Z"),
+    directoryPath: privateDirectory(t),
+    mode: "NEW",
+    plan
+  });
+  active.recordIntent("root-create-b0-role", "iam:CreateRole", {
+    roleName: plan.bootstrapRole.name
+  });
+  active.recordDispatchStarted("root-create-b0-role");
+  return active;
+}
+
+function exactAmbiguousCreateRole(plan) {
+  return {
+    state: "MATCH",
+    receipt: {
+      arn: plan.bootstrapRole.arn,
+      createdAt: "2026-08-19T14:00:00.000Z",
+      exactTrust: true,
+      roleId: "AROAEXACTROLE1234",
+      roleName: plan.bootstrapRole.name
+    }
+  };
+}
+
+function exactCreateCloudTrail(plan) {
+  return {
+    rootAssumeEventTimes: [],
+    rootCreateRoleReceipts: [{
+      arn: plan.bootstrapRole.arn,
+      createDate: "2026-08-19T14:00:00Z",
+      eventTime: "2026-08-19T14:00:00.000Z",
+      path: plan.bootstrapRole.path,
+      roleId: "AROAEXACTROLE1234",
+      roleName: plan.bootstrapRole.name
+    }],
+    rootDirectEvents: [{
+      eventName: "CreateRole",
+      roleName: plan.bootstrapRole.name,
+      rolePath: plan.bootstrapRole.path
+    }],
+    unexpectedRootMutationEvents: [],
+    writerAssumeEventTimes: []
+  };
+}
+
+test("ambiguous CreateRole adopts only an exact CloudTrail response RoleId", async (t) => {
+  const plan = abandonedCleanupPlan();
+  const active = ambiguousCreateJournal(t, plan);
+  const role = exactAmbiguousCreateRole(plan);
+  const gate = new RootActionGate();
+  gate.advance("setup");
+  const reconciled = await runnerTest.reconcileAbandonedCreateRole({
+    cloudTrail: exactCreateCloudTrail(plan),
+    gate,
+    journal: active,
+    plan,
+    role,
+    rootProvider: {
+      now: () => new Date("2026-08-19T16:00:00.000Z")
+    }
+  });
+  assert.equal(reconciled, role);
+  assert.equal(active.step("root-create-b0-role").state, "ACCEPTED");
+  assert.equal(active.step("root-create-b0-role").receipt.roleId,
+    "AROAEXACTROLE1234");
+  assert.equal(runnerTest.abandonedCleanupRoleId(active, role),
+    "AROAEXACTROLE1234");
+});
+
+test("ambiguous CreateRole holds on an absent read without authoritative provider evidence", async (t) => {
+  const plan = abandonedCleanupPlan();
+  const active = ambiguousCreateJournal(t, plan);
+  const gate = new RootActionGate();
+  gate.advance("setup");
+  await assert.rejects(() => runnerTest.reconcileAbandonedCreateRole({
+    cloudTrail: {
+      rootCreateRoleReceipts: [],
+      rootDirectEvents: [],
+      unexpectedRootMutationEvents: []
+    },
+    gate,
+    journal: active,
+    plan,
+    role: { state: "ABSENT" },
+    rootProvider: {
+      async inspectRole() {
+        return exactAmbiguousCreateRole(plan);
+      },
+      async lookupRootMutationEvents() {
+        return exactCreateCloudTrail(plan);
+      },
+      now: () => new Date("2026-08-19T16:00:00.000Z")
+    }
+  }), /ONE_TIME_BOOTSTRAP_CREATE_ROLE_RECONCILIATION_REJECTED/u);
+  assert.equal(active.step("root-create-b0-role").state,
+    "DISPATCH_STARTED");
+  assert.equal(active.step("local-abandoned-create-role-absence"), null);
+});
+
+test("ambiguous CreateRole never converts repeated eventual-consistency absences into a terminal claim", async (t) => {
+  const plan = abandonedCleanupPlan();
+  const active = ambiguousCreateJournal(t, plan);
+  const gate = new RootActionGate();
+  gate.advance("setup");
+  const noCreateEvidence = {
+    rootCreateRoleReceipts: [],
+    rootDirectEvents: [],
+    unexpectedRootMutationEvents: []
+  };
+  await assert.rejects(() => runnerTest.reconcileAbandonedCreateRole({
+    cloudTrail: noCreateEvidence,
+    gate,
+    journal: active,
+    plan,
+    role: { state: "ABSENT" },
+    rootProvider: {
+      async inspectRole() {
+        return { state: "ABSENT" };
+      },
+      async lookupRootMutationEvents() {
+        return noCreateEvidence;
+      },
+      now: () => new Date("2026-08-19T16:00:00.000Z")
+    }
+  }), /ONE_TIME_BOOTSTRAP_CREATE_ROLE_RECONCILIATION_REJECTED/u);
+  assert.equal(active.step("local-abandoned-create-role-absence"), null);
+  assert.throws(() => runnerTest.abandonedCleanupRoleId(
+    active,
+    { state: "ABSENT" }
+  ), /ONE_TIME_BOOTSTRAP_ABANDONED_CLEANUP_REJECTED/u);
+});
+
+function abandonedCleanupPlan() {
+  const roleName = "ProofToActBootstrapCreator-0123456789abcdef";
+  const inlinePolicyName = "ProofToActBootstrapCreatorOnly-0123456789abcdef";
+  const roleTags = [{ Key: "OperationId", Value: PLAN.operation.operationId }];
+  return {
+    ...PLAN,
+    account: {
+      accountId: "123456789012",
+      mfaSerialArn:
+        "arn:aws:iam::123456789012:mfa/root-account-mfa-device",
+      rootPrincipalArn: "arn:aws:iam::123456789012:root",
+      rootProfile: "default"
+    },
+    authorization: {
+      cleanupOnlyAuthorization: {
+        expiresAt: "2026-08-20T15:00:00.000Z"
+      },
+      userAuthorizationReceiptSha256: "d".repeat(64)
+    },
+    bootstrapRole: {
+      arn: `arn:aws:iam::123456789012:role/prooftoact/bootstrap/${roleName}`,
+      inlinePolicyName,
+      inlinePolicySha256: "e".repeat(64),
+      name: roleName,
+      path: "/prooftoact/bootstrap/",
+      roleTags
+    },
+    notAfter: "2026-08-19T15:00:00.000Z",
+    preparedAt: "2026-08-19T14:00:00.000Z",
+    sessionContract: {
+      roleSessionName: "prooftoact-b0",
+      sourceIdentity: "prooftoact-b0-source"
+    },
+    writerContract: {
+      roleArn: "arn:aws:iam::123456789012:role/Writer",
+      roleSessionName: "prooftoact-writer"
+    }
+  };
+}
+
+function abandonedSetupEvents(plan, state) {
+  const events = [
+    {
+      eventName: "CreateRole",
+      roleName: plan.bootstrapRole.name,
+      rolePath: plan.bootstrapRole.path
+    },
+    {
+      eventName: "TagRole",
+      roleName: plan.bootstrapRole.name,
+      tagsSha256: runnerTest.digest(plan.bootstrapRole.roleTags)
+    },
+    {
+      eventName: "PutRolePolicy",
+      policyName: plan.bootstrapRole.inlinePolicyName,
+      policySha256: plan.bootstrapRole.inlinePolicySha256,
+      roleName: plan.bootstrapRole.name
+    }
+  ];
+  if (!state.policyPresent) events.push({
+    eventName: "DeleteRolePolicy",
+    policyName: plan.bootstrapRole.inlinePolicyName,
+    roleName: plan.bootstrapRole.name
+  });
+  if (!state.rolePresent) events.push({
+    eventName: "DeleteRole",
+    roleName: plan.bootstrapRole.name
+  });
+  return events;
+}
+
+function abandonedRootProvider(plan, state, crashPoint) {
+  const roleId = "AROAEXACTROLE1234";
+  const targetCensus = Object.freeze(
+    ["freshPrimaryBootstrapRole", "freshPrimaryCredentialCustody",
+      "privateRecoveryQueryBootstrap"].map((targetKey) => Object.freeze({
+      censusSha256: runnerTest.digest({ targetKey, absent: true }),
+      changeSetCount: 0,
+      changeSetSetSha256: runnerTest.digest([]),
+      secretCensus: [],
+      stack: {
+        exactIdentity: true,
+        stackIdSha256: null,
+        stackStatus: "ABSENT",
+        templateSha256: null,
+        terminationProtection: null
+      },
+      targetKey
+    }))
+  );
+  function inject(point) {
+    if (crashPoint === point && !state.crashed) {
+      state.crashed = true;
+      throw new Error(`INJECTED_${point.toUpperCase().replaceAll("-", "_")}`);
+    }
+  }
+  return {
+    allowExpiredCleanup: true,
+    clock: () => new Date("2026-08-19T16:00:00.000Z"),
+    destroy() {
+      state.destroyed = true;
+    },
+    async assertExactCleanupRole(expectedRoleId, posture) {
+      assert.equal(expectedRoleId, roleId);
+      assert.equal(state.rolePresent, true);
+      assert.equal(posture.inlinePolicyPresent, state.policyPresent);
+      assert.equal(posture.tagsPresent, true);
+      return {};
+    },
+    async deletePolicy(expectedRoleId) {
+      assert.equal(expectedRoleId, roleId);
+      state.policyPresent = false;
+    },
+    async deleteRole(expectedRoleId) {
+      assert.equal(expectedRoleId, roleId);
+      assert.equal(state.policyPresent, false);
+      state.rolePresent = false;
+    },
+    async inspectAbandonedTarget(targetKey, invoke) {
+      await invoke("cloudformation:DescribeStacks", async () => ({}));
+      await invoke("cloudformation:ListChangeSets", async () => ({}));
+      return targetCensus.find((value) => value.targetKey === targetKey);
+    },
+    async inspectNamedRootLogin() {
+      if (state.loginPresent) return { state: "ACTIVE" };
+      inject("after-logout");
+      return {
+        state: "ABSENT",
+        receipt: { namedRootLoginSessionUnavailable: true }
+      };
+    },
+    async inspectPolicy() {
+      return state.policyPresent ? {
+        state: "MATCH",
+        receipt: { policySha256: plan.bootstrapRole.inlinePolicySha256 }
+      } : { state: "ABSENT" };
+    },
+    async inspectPolicyAbsent() {
+      return state.policyPresent ? { state: "ABSENT" } : {
+        state: "MATCH",
+        receipt: { inlinePolicyAbsent: true }
+      };
+    },
+    async inspectRole() {
+      return state.rolePresent ? {
+        state: "MATCH",
+        receipt: { roleId }
+      } : { state: "ABSENT" };
+    },
+    async inspectRoleAbsent() {
+      if (state.rolePresent) {
+        inject("after-policy-delete");
+        return { state: "ABSENT" };
+      }
+      return {
+        state: "MATCH",
+        receipt: { bootstrapRoleAbsent: true }
+      };
+    },
+    async inspectTags() {
+      return { state: "MATCH", receipt: { tagsSha256: "f".repeat(64) } };
+    },
+    async logout() {
+      state.loginPresent = false;
+      return { logoutCommandCompleted: true };
+    },
+    async lookupRootMutationEvents() {
+      if (!state.rolePresent) inject("after-role-delete");
+      const evidence = {
+        rootAssumeEventTimes: [],
+        rootCreateRoleReceipts: [],
+        rootDirectEvents: abandonedSetupEvents(plan, state),
+        unexpectedRootMutationEvents: [],
+        writerAssumeEventTimes: []
+      };
+      if (!state.rolePresent && crashPoint === "after-cloudtrail" &&
+        !state.crashed) state.crashOnNextNow = true;
+      return evidence;
+    },
+    now() {
+      if (state.crashOnNextNow) {
+        state.crashOnNextNow = false;
+        inject("after-cloudtrail");
+      }
+      return this.clock();
+    },
+    operationDeadline() {
+      return new Date(plan.authorization.cleanupOnlyAuthorization.expiresAt);
+    }
+  };
+}
+
+function abandonedJournal(t, plan) {
+  const directory = privateDirectory(t);
+  const initial = new OneTimeBootstrapJournal({
+    clock: clock(),
+    directoryPath: directory,
+    mode: "NEW",
+    plan
+  });
+  for (const [id, mutationClass, value] of [
+    ["root-create-b0-role", "iam:CreateRole", {
+      roleId: "AROAEXACTROLE1234"
+    }],
+    ["root-tag-b0-role", "iam:TagRole", { exactTags: true }],
+    ["root-put-b0-inline-policy", "iam:PutRolePolicy", {
+      exactPolicy: true
+    }]
+  ]) {
+    initial.recordIntent(id, mutationClass, { exact: id });
+    initial.recordDispatchStarted(id);
+    initial.recordAccepted(id, "POST_DISPATCH_RECONCILIATION", value);
+  }
+  initial.releaseLock();
+  return { directory };
+}
+
+test("abandoned partial cleanup resumes every durable crash boundary without recomputing authority", async (t) => {
+  for (const crashPoint of [
+    "after-disposition", "after-policy-delete", "after-role-delete",
+    "after-cloudtrail", "after-logout"
+  ]) {
+    const plan = abandonedCleanupPlan();
+    const { directory } = abandonedJournal(t, plan);
+    const state = {
+      crashed: false,
+      destroyed: false,
+      loginPresent: true,
+      policyPresent: true,
+      rolePresent: true
+    };
+    let active = new OneTimeBootstrapJournal({
+      clock: clock(),
+      directoryPath: directory,
+      mode: "RECONCILE_ONLY",
+      plan
+    });
+    active.cleanupOnly = true;
+    const firstGate = new RootActionGate();
+    firstGate.advance("setup");
+    const firstProvider = abandonedRootProvider(plan, state, crashPoint);
+    if (crashPoint === "after-disposition") {
+      const original = firstProvider.inspectPolicyAbsent;
+      firstProvider.inspectPolicyAbsent = async () => {
+        injectAfterDisposition();
+        return original.call(firstProvider);
+      };
+      function injectAfterDisposition() {
+        if (!state.crashed) {
+          state.crashed = true;
+          throw new Error("INJECTED_AFTER_DISPOSITION");
+        }
+      }
+    }
+    await assert.rejects(() => runnerTest.cleanupAbandonedPartialBootstrap({
+      gate: firstGate,
+      journal: active,
+      plan,
+      rootProvider: firstProvider
+    }), /INJECTED_/u, crashPoint);
+    assert.equal(active.step("abandoned-partial-b0-disposition")?.state,
+      "ACCEPTED", crashPoint);
+    active.releaseLock();
+
+    active = new OneTimeBootstrapJournal({
+      clock: clock(),
+      directoryPath: directory,
+      mode: "RECONCILE_ONLY",
+      plan
+    });
+    active.cleanupOnly = true;
+    const resumedGate = new RootActionGate();
+    resumedGate.advance("setup");
+    const resumed = await runnerTest.cleanupAbandonedPartialBootstrap({
+      gate: resumedGate,
+      journal: active,
+      plan,
+      rootProvider: abandonedRootProvider(plan, state, crashPoint)
+    });
+    assert.equal(resumed.schemaVersion,
+      "prooftoact.abandoned-partial-b0-cleanup.v2", crashPoint);
+    assert.equal(resumed.publicDisposition, "HOLD", crashPoint);
+    assert.equal(state.rolePresent, false, crashPoint);
+    assert.equal(state.policyPresent, false, crashPoint);
+    assert.equal(state.loginPresent, false, crashPoint);
+    assert.equal(active.step("root-logout")?.state, "ACCEPTED", crashPoint);
+    active.releaseLock();
+  }
+});
+
 test("authorization receipt semantically binds root scope, cost, source, targets, and five value digests", () => {
   const accountId = "123456789012";
   const operationId = "123e4567-e89b-42d3-a456-426614174000";
@@ -409,21 +1225,103 @@ test("authorization receipt semantically binds root scope, cost, source, targets
     mcp: "9".repeat(64),
     publisher: "a".repeat(64)
   };
+  const costReconciliation =
+    buildOneTimeBootstrapCostReconciliationReceipt({
+      accountId,
+      operationId,
+      pricingObservedAt: "2026-08-18T14:00:00.000Z",
+      pricingSourceSha256: {
+        awsSecretsManager: "b".repeat(64),
+        cockroachBasic: "c".repeat(64)
+      },
+      sourceCommit,
+      targetTemplateSha256,
+      treeDigest
+    });
   const costCeiling = {
     currency: "USD",
-    maximumMonthlyUsdCents: 1000,
+    maximumMonthlyUsdCents: 350,
     maximumOneTimeUsdCents: 500,
-    reconciliationReceiptSha256: "b".repeat(64)
+    reconciliationReceipt: costReconciliation,
+    reconciliationReceiptSha256: costReconciliation.receiptSha256
   };
+  const privateRecoveryWorkflowCommits = {
+    deployment: "c".repeat(40),
+    secretSeal: "d".repeat(40)
+  };
+  const runtimeExecutionBinding = {
+    exactRuntimeFixture: true
+  };
+  const runtimeExecutionBindingSha256 =
+    runnerTest.digest(runtimeExecutionBinding);
+  const { humanAuthorizationBinding } =
+    buildSyntheticProofToActHumanAuthorization({
+      dynamicInput: {
+    a1ApprovalId: "223e4567-e89b-42d3-a456-426614174001",
+    a1CallerWorkflowRef: "Flash-Bri/prooftoact/.github/workflows/" +
+      "prooftoact-fresh-primary.yml@refs/heads/main",
+    a1CallerWorkflowSha: "e".repeat(40),
+    a1ControllerImportGraphSha256: "f".repeat(64),
+    a1CredentialSha256: {
+      adoptedAdminPassword: "5".repeat(64),
+      auditorTokenValue: writerValueSha256.auditor,
+      creatorTokenValue: writerValueSha256.cloudApi
+    },
+    a1ProviderClusterId: "323e4567-e89b-42d3-a456-426614174002",
+    a1ProviderReceiptSha256: {
+      auditorAuthority: "0".repeat(64),
+      creatorAuthority: "1".repeat(64),
+      creatorProviderReadback: "2".repeat(64),
+      manualCluster: "3".repeat(64),
+      pricingSource: "4".repeat(64)
+    },
+    a1ReservationDeadline: "2026-08-18T15:00:00.000Z",
+    a1SqlClusterId: "423e4567-e89b-42d3-a456-426614174003",
+    accountId,
+    authorizationNotBefore: "2026-08-18T14:00:00.000Z",
+    b0DispatchDeadline: "2026-08-18T15:00:00.000Z",
+    b0PrivateRecoveryWorkflowCommits: privateRecoveryWorkflowCommits,
+    b0RuntimeExecutionBindingSha256: runtimeExecutionBindingSha256,
+    b0TargetTemplateSha256: targetTemplateSha256,
+    b0WriterValueSha256: writerValueSha256,
+    cleanupRetentionDeadline: "2026-08-19T15:00:00.000Z",
+    costAuthorization: {
+      awsMonthlyResidualCeilingUsdCents: 350,
+      cockroachMonthlySubCeilingUsdCents: 200,
+      cockroachPaidWorstCaseMonthlyUsdCents: 150,
+      combinedMonthlyCeilingUsdCents: 500,
+      currency: "USD",
+      freeBenefitsAssumed: false,
+      maximumOneTimeUsdCents: 500,
+      noAdditiveMonthlyCeilings: true,
+      reconciliationReceiptSha256:
+        costCeiling.reconciliationReceiptSha256
+    },
+    operationId,
+    sourceCommit,
+    treeDigest
+      },
+      inboundAt: "2026-08-18T14:00:00.000Z",
+      outboundAt: "2026-08-18T14:00:00.000Z"
+    });
   const receipt = buildOneTimeBootstrapAuthorizationReceipt({
     accountId,
+    approvedBy: "BRIAN_SMITH",
     approvedAt: "2026-08-18T14:00:00.000Z",
     artifactBucketName: "prooftoact-private-artifacts-123456789012",
+    cleanupOnlyAuthorizationApproved: true,
     costCeiling,
     expiresAt: "2026-08-18T15:00:00.000Z",
     githubOidcProviderArn: `arn:aws:iam::${accountId}:oidc-provider/` +
       "token.actions.githubusercontent.com",
+    humanAuthorizationBinding,
+    humanAuthorizationReceiptSha256:
+      humanAuthorizationBinding.receiptBindingSha256,
+    humanAuthorizedTextSha256:
+      humanAuthorizationBinding.humanAuthorizedTextSha256,
     operationId,
+    privateRecoveryWorkflowCommits,
+    runtimeExecutionBindingSha256,
     sourceCommit,
     targetTemplateSha256,
     treeDigest,
@@ -432,6 +1330,7 @@ test("authorization receipt semantically binds root scope, cost, source, targets
   const plan = {
     account: { accountId },
     authorization: {
+      cleanupOnlyAuthorization: receipt.cleanupOnlyAuthorization,
       userAuthorizationReceiptSha256: runnerTest.sha256(
         runnerTest.canonicalBytes(receipt)
       )
@@ -443,9 +1342,21 @@ test("authorization receipt semantically binds root scope, cost, source, targets
       operationId,
       operationToken: receipt.operationToken
     },
-    source: { commit: sourceCommit, tree: treeDigest },
+    source: {
+      commit: sourceCommit,
+      privateRecoveryWorkflowPins: {
+        deployment: { commit: privateRecoveryWorkflowCommits.deployment },
+        secretSeal: { commit: privateRecoveryWorkflowCommits.secretSeal }
+      },
+      runtimeExecutionBinding,
+      tree: treeDigest
+    },
     targets: Object.fromEntries(Object.entries(receipt.targets).map(
       ([key, value]) => [key, {
+        parameters: key === "privateRecoveryQueryBootstrap" ? {
+          DeploymentWorkflowCommit: privateRecoveryWorkflowCommits.deployment,
+          SecretSealWorkflowCommit: privateRecoveryWorkflowCommits.secretSeal
+        } : {},
         stackName: value.stackName,
         templateSha256: value.templateSha256
       }]
@@ -729,12 +1640,14 @@ test("termination protection uses the exact accepted StackId and rejects replace
   const stackArn = "arn:aws:cloudformation:us-east-1:123456789012:stack/" +
     "exact/123e4567-e89b-42d3-a456-426614174000";
   const provider = new AwsOneTimeBootstrapB0Provider({
+    clock: () => new Date("2026-08-18T14:00:00.000Z"),
     credentials: {
       accessKeyId: "ASIAEXACTTESTCREDENTIAL",
       secretAccessKey: "x".repeat(40),
       sessionToken: "y".repeat(32)
     },
     plan: {
+      notAfter: "2026-08-18T15:00:00.000Z",
       targets: { exact: { stackName: "exact" } }
     }
   });
@@ -788,10 +1701,10 @@ test("main prepares authorized writer values before any AWS provider and destroy
     "../scripts/run-one-time-bootstrap-ceremony.js",
     import.meta.url
   ), "utf8");
-  const main = source.slice(source.indexOf("async function main()"),
+  const main = source.slice(source.indexOf("export async function main"),
     source.indexOf("const startedDirectly"));
   const authorization = main.indexOf(
-    "const authorization = readAndValidateAuthorizationReceipt(plan);"
+    "const authorization = validateOneTimeBootstrapAuthorizationBytes("
   );
   const prepare = main.indexOf(
     "valueLease.prepare(authorization.receipt.writerValueSha256);"

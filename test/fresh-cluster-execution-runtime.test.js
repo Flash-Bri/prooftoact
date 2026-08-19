@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   __test,
+  createFreshClusterCleanupRuntime,
   createFreshClusterExecutionRuntime
 } from "../scripts/fresh-cluster-execution-runtime.js";
 
@@ -13,10 +14,11 @@ const ARN = "arn:aws:secretsmanager:us-east-1:111111111111:secret:" +
   `prooftoact/fresh-primary/admin-${OPERATION_ID}-Ab12Cd`;
 const VERSION = "1".repeat(32);
 
-function harness() {
+function harness({ assertCleanupOpen = () => {} } = {}) {
   let sealed;
   let clusterReads = 0;
   let allowlistReads = 0;
+  let deleteCalls = 0;
   const description = () => ({
     ARN,
     Name: `prooftoact/fresh-primary/admin-${OPERATION_ID}`,
@@ -48,8 +50,8 @@ function harness() {
     addTemporaryIngress: noOp,
     createCluster: noOp,
     createSqlAdmin: noOp,
-    deleteSqlAdmin: noOp,
-    deleteTemporaryIngress: noOp,
+    async deleteSqlAdmin() { deleteCalls += 1; return { ok: true }; },
+    async deleteTemporaryIngress() { deleteCalls += 1; return { ok: true }; },
     async getCluster() {
       clusterReads += 1;
       return {
@@ -74,6 +76,7 @@ function harness() {
   };
   const runtime = createFreshClusterExecutionRuntime({
     adoptedAdminPassword: PASSWORD,
+    assertCleanupOpen,
     awsRuntime,
     clock: () => Date.parse("2026-08-19T08:00:01.000Z"),
     cloudRuntime,
@@ -96,7 +99,12 @@ function harness() {
     secretCoordinates: { admin: { arn: ARN, versionId: VERSION } },
     sleep: async () => {}
   });
-  return { getAllowlistReads: () => allowlistReads, runtime };
+  return {
+    cloudRuntime,
+    getAllowlistReads: () => allowlistReads,
+    getDeleteCalls: () => deleteCalls,
+    runtime
+  };
 }
 
 test("provider-generated 22-character adoption password is accepted at port 26257", () => {
@@ -134,4 +142,56 @@ test("execution runtime waits only with read calls and seals exact admin version
   assert.equal(seal.status, "SEALED");
   assert.equal(seal.operationId, OPERATION_ID);
   assert.equal(seal.secretValueSha256, credential.connectionStringSha256);
+});
+
+test("execution and cleanup runtime adapters guard immediately before both provider deletes", async () => {
+  let open = true;
+  const assertCleanupOpen = () => {
+    if (!open) throw new Error("EXPIRED_AT_ADAPTER");
+  };
+  const execution = harness({ assertCleanupOpen });
+  await execution.runtime.deleteSqlAdmin({
+    clusterId: CLUSTER_ID,
+    username: "prooftoact_bootstrap_admin"
+  });
+  await execution.runtime.deleteTemporaryIngress({
+    clusterId: CLUSTER_ID,
+    entry: { cidr: "203.0.113.7/32" }
+  });
+  assert.equal(execution.getDeleteCalls(), 2);
+  open = false;
+  assert.throws(() => execution.runtime.deleteSqlAdmin({
+    clusterId: CLUSTER_ID,
+    username: "prooftoact_bootstrap_admin"
+  }), /EXPIRED_AT_ADAPTER/u);
+  assert.throws(() => execution.runtime.deleteTemporaryIngress({
+    clusterId: CLUSTER_ID,
+    entry: { cidr: "203.0.113.7/32" }
+  }), /EXPIRED_AT_ADAPTER/u);
+  assert.equal(execution.getDeleteCalls(), 2);
+
+  open = true;
+  const cleanup = createFreshClusterCleanupRuntime({
+    assertCleanupOpen,
+    cloudRuntime: execution.cloudRuntime,
+    material: {
+      auditor: { secretValue: "auditor-token-with-twenty-characters" },
+      cloudApi: { secretValue: "creator-token-with-twenty-characters" }
+    },
+    sleep: async () => {}
+  });
+  await cleanup.deleteSqlAdmin({ clusterId: CLUSTER_ID });
+  await cleanup.deleteTemporaryIngress({
+    clusterId: CLUSTER_ID,
+    entry: { cidr: "203.0.113.7/32" }
+  });
+  assert.equal(execution.getDeleteCalls(), 4);
+  open = false;
+  assert.throws(() => cleanup.deleteSqlAdmin({ clusterId: CLUSTER_ID }),
+    /EXPIRED_AT_ADAPTER/u);
+  assert.throws(() => cleanup.deleteTemporaryIngress({
+    clusterId: CLUSTER_ID,
+    entry: { cidr: "203.0.113.7/32" }
+  }), /EXPIRED_AT_ADAPTER/u);
+  assert.equal(execution.getDeleteCalls(), 4);
 });

@@ -42,6 +42,9 @@ import {
   freshPrimaryRuntimePolicySha256,
   main as runFreshPrimaryProvider
 } from "./run-fresh-primary-provider.js";
+import {
+  validateProofToActB0A1HumanAuthorizationReceipt
+} from "./lib/prooftoact-b0-a1-human-authorization.js";
 import { loadReleaseControlRuntime } from
   "../release-control/src/release-control-runtime-loader.js";
 
@@ -134,6 +137,7 @@ function parseArguments(args) {
     "--credential-secret-version-id",
     "--expected-commit",
     "--expected-tree",
+    "--human-authorization-signer-sha256",
     "--mcp-secret-arn",
     "--mcp-secret-version-id",
     "--mode",
@@ -160,6 +164,7 @@ function parseArguments(args) {
     HEX_40.test(values["--expected-tree"]) &&
     HEX_40.test(values["--caller-workflow-sha"]) &&
     HEX_64.test(values["--approval-sha256"]) &&
+    HEX_64.test(values["--human-authorization-signer-sha256"]) &&
     values["--caller-workflow-ref"] === CALLER_WORKFLOW_REF &&
     ["execute", "reconcile-only"].includes(values["--mode"]) &&
     UUID.test(values["--operation-id"]) &&
@@ -170,10 +175,21 @@ function parseArguments(args) {
 }
 
 function validateApprovedAdoption(approval, authority) {
+  let sharedAuthorization;
+  try {
+    sharedAuthorization =
+      validateProofToActB0A1HumanAuthorizationReceipt(
+        approval?.humanAuthorizationBinding,
+        authority?.humanAuthorizationSignerSha256
+      );
+  } catch (cause) {
+    reject("FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED", cause);
+  }
   requireCondition(approval?.clusterMode === "ADOPT_VERIFIED_EXISTING" &&
     plainObject(authority) &&
     HEX_64.test(authority.approvalSha256 ?? "") &&
     HEX_64.test(authority.controllerImportGraphSha256 ?? "") &&
+    HEX_64.test(authority.humanAuthorizationSignerSha256 ?? "") &&
     HEX_40.test(authority.callerWorkflowSha ?? "") &&
     authority.callerWorkflowRef === CALLER_WORKFLOW_REF &&
     approval.callerWorkflowRef === authority.callerWorkflowRef &&
@@ -182,7 +198,14 @@ function validateApprovedAdoption(approval, authority) {
       authority.controllerImportGraphSha256 &&
     approval.humanAuthorizationReceiptSha256 ===
       approval.billingAuthorization?.authorizationReceiptSha256 &&
-    HEX_64.test(approval.humanAuthorizedTextSha256 ?? "") &&
+    approval.humanAuthorizationReceiptSha256 ===
+      sharedAuthorization.receiptBindingSha256 &&
+    approval.humanAuthorizedTextSha256 ===
+      sharedAuthorization.humanAuthorizedTextSha256 &&
+    sharedAuthorization.dynamicIntent.a1ProviderClusterId ===
+      approval.providerClusterId &&
+    sharedAuthorization.dynamicIntent.a1SqlClusterId ===
+      approval.sqlClusterId &&
     sha256(canonicalBytes(approval)) === authority.approvalSha256 &&
     approval.adoptedAdminPasswordSha256 ===
       APPROVED_ADOPTION.adoptedAdminPasswordSha256 &&
@@ -202,6 +225,7 @@ function validateApprovedAdoption(approval, authority) {
     approval.creatorTokenValueSha256 ===
       APPROVED_ADOPTION.creatorTokenValueSha256 &&
     approval.providerClusterId === APPROVED_ADOPTION.providerClusterId &&
+    approval.sqlClusterId === APPROVED_ADOPTION.sqlClusterId &&
     approval.manualClusterReceiptSha256 ===
       APPROVED_ADOPTION.manualClusterReceiptSha256,
   "FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED");
@@ -531,6 +555,7 @@ export async function main(
     128 * 1024,
     "FRESH_CLUSTER_RUNNER_APPROVAL_REJECTED"
   ), "FRESH_CLUSTER_RUNNER_APPROVAL_REJECTED"), {
+    accountId: parsed["--controller-table-arn"].split(":")[4],
     operationId: parsed["--operation-id"],
     sourceCommit: source.sourceCommit,
     treeDigest: source.treeDigest
@@ -539,7 +564,9 @@ export async function main(
     callerWorkflowRef: parsed["--caller-workflow-ref"],
     callerWorkflowSha: parsed["--caller-workflow-sha"],
     controllerImportGraphSha256:
-      trustedRuntime.controllerImportGraphSha256
+      trustedRuntime.controllerImportGraphSha256,
+    humanAuthorizationSignerSha256:
+      parsed["--human-authorization-signer-sha256"]
   });
   const adoptedAdmin = parsed["--mode"] === "execute"
     ? readApprovedAdoptedAdminPassword(
@@ -612,11 +639,17 @@ export async function main(
     secretCoordinates: coordinates,
     tableArn: parsed["--controller-table-arn"]
   });
+  const assertCleanupOpen = () => {
+    requireCondition(Date.now() < Date.parse(
+      approval.billingAuthorization.retentionDeadline
+    ), "FRESH_CLUSTER_RUNNER_CLEANUP_AUTHORIZATION_EXPIRED");
+  };
   if (parsed["--mode"] === "reconcile-only") {
     const reconciliation = await reconcileFreshClusterProviderAccess({
       command,
       provider,
       runtime: createFreshClusterCleanupRuntime({
+        assertCleanupOpen,
         cloudRuntime,
         material
       })
@@ -633,6 +666,7 @@ export async function main(
   const adoptedAdminPassword = adoptedAdmin.password;
   const execution = createFreshClusterExecutionRuntime({
     adoptedAdminPassword,
+    assertCleanupOpen,
     awsRuntime,
     cloudRuntime,
     material,
@@ -781,7 +815,10 @@ export async function main(
     async freshPrimaryInvoker({
       adminAuthentication,
       cluster,
-      command: acceptedCommand
+      command: acceptedCommand,
+      outerAuthentication,
+      outerReservationAcknowledgedAt,
+      reservation
     }) {
       requireCondition(
         cluster.clusterId === APPROVED_ADOPTION.providerClusterId &&
@@ -799,15 +836,26 @@ export async function main(
       const derivedApproval = validateFreshPrimaryApproval(
         deriveFreshPrimaryApproval({
           clusterApproval: approval,
+          clusterCommand: acceptedCommand,
           clusterHostSha256: sha256(cluster.sqlDns),
           credentialSealReceiptSha256:
             binding.credentialSealReceiptSha256,
+          outerAuthentication,
+          outerReservation: reservation,
+          outerReservationAcknowledgedAt,
           sqlClusterId: adminAuthentication.sqlClusterId
         }), {
           clusterHostSha256: sha256(cluster.sqlDns),
           credentialSealReceiptSha256:
             binding.credentialSealReceiptSha256,
           operationId: acceptedCommand.operationId,
+          outerAuthenticationReceiptSha256:
+            sha256(canonicalBytes(outerAuthentication)),
+          outerCommandSha256: acceptedCommand.commandSha256,
+          outerReservedAt: reservation.reservedAt,
+          outerReservationAcknowledgedAt,
+          outerReservationReceiptSha256:
+            sha256(canonicalBytes(reservation)),
           sourceCommit: acceptedCommand.sourceCommit,
           treeDigest: acceptedCommand.treeDigest
         });
@@ -834,6 +882,14 @@ export async function main(
         "--expected-commit", source.sourceCommit,
         "--expected-tree", source.treeDigest,
         "--operation-id", acceptedCommand.operationId,
+        "--outer-authentication-receipt-sha256",
+        sha256(canonicalBytes(outerAuthentication)),
+        "--outer-command-sha256", acceptedCommand.commandSha256,
+        "--outer-reservation-receipt-sha256",
+        sha256(canonicalBytes(reservation)),
+        "--outer-reserved-at", reservation.reservedAt,
+        "--outer-reservation-acknowledged-at",
+        outerReservationAcknowledgedAt,
         "--provider-cluster-id", cluster.clusterId,
         "--recovery-security-receipt-sha256",
         parsed["--recovery-security-receipt-sha256"],

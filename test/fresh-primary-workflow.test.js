@@ -160,6 +160,11 @@ test("protected environment pins approval bytes to the actual caller identity", 
     /CALLER_WORKFLOW_REF: \$\{\{ github\.workflow_ref \}\}/u);
   assert.match(SEALED,
     /CALLER_WORKFLOW_SHA: \$\{\{ github\.workflow_sha \}\}/u);
+  assert.equal((SEALED.match(
+    /HUMAN_AUTHORIZATION_SIGNER_SHA256: \$\{\{ vars\.PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256 \}\}/gu
+  ) ?? []).length, 3);
+  assert.match(SEALED,
+    /\[\[ "\$HUMAN_AUTHORIZATION_SIGNER_SHA256" =~ \^\[0-9a-f\]\{64\}\$ \]\]/u);
   assert.match(SEALED,
     /--approval-sha256 "\$APPROVAL_SHA256"/u);
   assert.match(SEALED,
@@ -167,6 +172,9 @@ test("protected environment pins approval bytes to the actual caller identity", 
   assert.match(SEALED,
     /--caller-workflow-sha "\$CALLER_WORKFLOW_SHA"/u);
   assert.equal((SEALED.match(/--approval-sha256/gu) ?? []).length, 2);
+  assert.equal((SEALED.match(
+    /--human-authorization-signer-sha256 "\$HUMAN_AUTHORIZATION_SIGNER_SHA256"/gu
+  ) ?? []).length, 2);
   assert.doesNotMatch(SEALED,
     /workflow_call:[\s\S]{0,600}approval_sha256:/u);
 });

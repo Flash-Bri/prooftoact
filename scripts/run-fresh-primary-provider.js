@@ -85,6 +85,11 @@ function parseArguments(args) {
     "--expected-commit",
     "--expected-tree",
     "--operation-id",
+    "--outer-authentication-receipt-sha256",
+    "--outer-reservation-receipt-sha256",
+    "--outer-reserved-at",
+    "--outer-reservation-acknowledged-at",
+    "--outer-command-sha256",
     "--provider-cluster-id",
     "--recovery-security-receipt-sha256",
     "--receipt-output",
@@ -105,6 +110,22 @@ function parseArguments(args) {
   requireCondition(HEX_40.test(values["--expected-commit"]) &&
     HEX_40.test(values["--expected-tree"]) &&
     UUID.test(values["--operation-id"]) &&
+    HEX_64.test(values["--outer-authentication-receipt-sha256"]) &&
+    HEX_64.test(values["--outer-reservation-receipt-sha256"]) &&
+    HEX_64.test(values["--outer-command-sha256"]) &&
+    Number.isFinite(Date.parse(values["--outer-reserved-at"] ?? "")) &&
+    values["--outer-reserved-at"] === new Date(Date.parse(
+      values["--outer-reserved-at"]
+    )).toISOString() &&
+    Number.isFinite(Date.parse(
+      values["--outer-reservation-acknowledged-at"] ?? ""
+    )) &&
+    values["--outer-reservation-acknowledged-at"] === new Date(Date.parse(
+      values["--outer-reservation-acknowledged-at"]
+    )).toISOString() &&
+    Date.parse(values["--outer-reserved-at"]) <= Date.parse(
+      values["--outer-reservation-acknowledged-at"]
+    ) &&
     UUID.test(values["--provider-cluster-id"]) &&
     COCKROACH_SQL_CLUSTER_ID.test(values["--sql-cluster-id"]) &&
     values["--provider-cluster-id"] !== values["--sql-cluster-id"] &&
@@ -332,6 +353,14 @@ export async function main(
     clusterHostSha256: admin.hostSha256,
     credentialSealReceiptSha256,
     operationId: parsed["--operation-id"],
+    outerAuthenticationReceiptSha256:
+      parsed["--outer-authentication-receipt-sha256"],
+    outerCommandSha256: parsed["--outer-command-sha256"],
+    outerReservedAt: parsed["--outer-reserved-at"],
+    outerReservationAcknowledgedAt:
+      parsed["--outer-reservation-acknowledged-at"],
+    outerReservationReceiptSha256:
+      parsed["--outer-reservation-receipt-sha256"],
     sourceCommit: source.sourceCommit,
     treeDigest: source.treeDigest
   });
@@ -354,6 +383,14 @@ export async function main(
     credentialBundleSha256,
     credentialSealReceiptSha256,
     operationId: parsed["--operation-id"],
+    outerAuthenticationReceiptSha256:
+      parsed["--outer-authentication-receipt-sha256"],
+    outerCommandSha256: parsed["--outer-command-sha256"],
+    outerReservedAt: parsed["--outer-reserved-at"],
+    outerReservationAcknowledgedAt:
+      parsed["--outer-reservation-acknowledged-at"],
+    outerReservationReceiptSha256:
+      parsed["--outer-reservation-receipt-sha256"],
     providerClusterId: parsed["--provider-cluster-id"],
     recoveryPublisherKeySetDigest:
       recoveryPublisherSecret.publisherKeySetDigest,

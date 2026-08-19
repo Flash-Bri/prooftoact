@@ -157,6 +157,14 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate2-aws-readiness.js",
     role: "EXACT_CHECKOUT_RELEASE_GATE"
   }),
+  "b0-a1-human-authorization-contract": Object.freeze({
+    path: "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+    role: "SIGNED_COMBINED_COST_AUTHORIZATION_CONTRACT"
+  }),
+  "b0-a1-human-authorization-tests": Object.freeze({
+    path: "test/prooftoact-b0-a1-human-authorization.test.js",
+    role: "COMBINED_COST_AUTHORIZATION_VERIFICATION"
+  }),
   "boundary-semantic-metric-runtime": Object.freeze({
     path: "infra/aws/lambda/boundary.cjs",
     role: "SEMANTIC_METRIC_CARDINALITY"
@@ -180,6 +188,22 @@ const EXPECTED_SURFACES = Object.freeze({
   "gate2-console-stop-receipt": Object.freeze({
     path: "evidence/gate2-console-stop-receipt-2026-07-30.md",
     role: "SANITIZED_FAIL_CLOSED_STOP_RECEIPT"
+  }),
+  "one-time-bootstrap-authority-plan": Object.freeze({
+    path: "scripts/prepare-one-time-bootstrap-authority.js",
+    role: "ITEMIZED_AWS_RESIDUAL_COST_PLAN"
+  }),
+  "one-time-bootstrap-authority-tests": Object.freeze({
+    path: "test/one-time-bootstrap-authority.test.js",
+    role: "ITEMIZED_COST_PLAN_NEGATIVE_VERIFICATION"
+  }),
+  "one-time-bootstrap-ceremony-runner": Object.freeze({
+    path: "scripts/run-one-time-bootstrap-ceremony.js",
+    role: "EXECUTABLE_AWS_RESIDUAL_COST_GATE"
+  }),
+  "one-time-bootstrap-ceremony-runner-tests": Object.freeze({
+    path: "test/run-one-time-bootstrap-ceremony.test.js",
+    role: "EXECUTABLE_COST_AUTHORIZATION_VERIFICATION"
   }),
   "private-recovery-bootstrap-template": Object.freeze({
     path: "infra/aws/private-recovery-query-bootstrap-role-stack.json",
@@ -807,6 +831,36 @@ function assertPreflightDefaults() {
 }
 
 function assertSourceContracts(sources) {
+  assertMarkers(
+    sources.get("b0-a1-human-authorization-contract"),
+    [
+      "awsMonthlyResidualCeilingUsdCents === 350",
+      "cockroachPaidWorstCaseMonthlyUsdCents === 150",
+      "combinedMonthlyCeilingUsdCents === 500",
+      "noAdditiveMonthlyCeilings === true"
+    ],
+    "RELEASE_COST_B0_A1_AUTHORIZATION_MARKERS"
+  );
+  assertMarkers(
+    sources.get("one-time-bootstrap-authority-plan"),
+    [
+      "EXACT_MONTHLY_AUTHORIZATION_USD_CENTS = 350",
+      "ITEMIZED_EXACT_RESOURCE_ENVELOPE_REVIEWED",
+      "AWS_SECRETS_MANAGER_EIGHT_RETAINED_SECRETS",
+      "COST_RECONCILIATION_MAXIMUM_AGE_MS",
+      "ONE_TIME_BOOTSTRAP_COST_CEILING_REJECTED"
+    ],
+    "RELEASE_COST_B0_PLAN_MARKERS"
+  );
+  assertMarkers(
+    sources.get("one-time-bootstrap-ceremony-runner"),
+    [
+      "sharedIntent.costAuthorization.awsMonthlyResidualCeilingUsdCents",
+      "input.costCeiling.reconciliationReceipt?.receiptSha256",
+      "EXACT_MONTHLY_AUTHORIZATION_USD_CENTS"
+    ],
+    "RELEASE_COST_B0_RUNNER_MARKERS"
+  );
   assertSemanticMetricCardinality(
     sources.get("authority-semantic-metric-runtime"),
     "authority",

@@ -18,7 +18,7 @@
       "id": "fresh-primary-sealed-workflow",
       "path": ".github/workflows/prooftoact-sealed-fresh-primary.yml",
       "role": "PROTECTED_FRESH_PRIMARY_PROVIDER_EXECUTION",
-      "sha256": "1d6f962f23da6e7f3a13b530e535c50df03ed911782cb286bc81bedf8d091692"
+      "sha256": "a2c68d871db8d5735f45ca2cbc38e27475fff25b6ee875a479cc65dd7cf22f76"
     },
     {
       "id": "fresh-primary-oidc-boundary",
@@ -45,16 +45,58 @@
       "sha256": "04dfb9af2a18e849427ff5d5bfc8cbfba39bb4c6733845cd90ba724f845b3c74"
     },
     {
+      "id": "one-time-bootstrap-root-session",
+      "path": "scripts/assume-one-time-bootstrap-root-session.js",
+      "role": "B0_NAMED_ROOT_MFA_SESSION_CUSTODY",
+      "sha256": "ad23e1fe372e3f90c5d1d97863334a4721cfd744b7db8759e71a20f7a8a096ee"
+    },
+    {
+      "id": "b0-a1-human-authorization-contract",
+      "path": "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+      "role": "INDEPENDENTLY_SIGNED_B0_A1_HUMAN_AUTHORIZATION",
+      "sha256": "28618fae2dbe290d1f0ac8ce5a00e124f3cbe9c1775572948c2b3c1dc98ae3ff"
+    },
+    {
+      "id": "b0-a1-human-authorization-materializer",
+      "path": "scripts/materialize-prooftoact-b0-a1-human-authorization.js",
+      "role": "PINNED_IMESSAGE_HUMAN_AUTHORIZATION_MATERIALIZER",
+      "sha256": "3f5777bbeb25b539243e5420372fb8cb462ce67a0867954c7931aff1f1d28c8c"
+    },
+    {
+      "id": "one-time-bootstrap-authority-plan",
+      "path": "scripts/prepare-one-time-bootstrap-authority.js",
+      "role": "B0_EXACT_AUTHORITY_AND_COST_PLAN",
+      "sha256": "0e024be17f7cdbf96a4ff6a9151a9a2c74ee9c98ac760af21590ab21bcd35ec3"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-launcher",
+      "path": "scripts/launch-one-time-bootstrap-ceremony.js",
+      "role": "SEALED_EXACT_SOURCE_B0_LAUNCHER",
+      "sha256": "b393f56afbcbd42f1deb9ad9a81e181a79a1b45278a12e1ce178e194cb1ef095"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner",
+      "path": "scripts/run-one-time-bootstrap-ceremony.js",
+      "role": "B0_CRASH_CONVERGENT_CEREMONY_RUNNER",
+      "sha256": "7f6dbd3792ded4195e4b91db9e424a4e3280595a5318043a05fc8d54d72344b0"
+    },
+    {
+      "id": "fresh-cluster-provider-key-revocation-finalizer",
+      "path": "scripts/finalize-fresh-cluster-provider-key-revocation.js",
+      "role": "FAIL_CLOSED_SEPARATE_ORG_ADMIN_REVOCATION_GATE",
+      "sha256": "ac07b51f32f6eae8ad8567bc0242a0b1bd6259d6887e399ffdb1e05c2419fe73"
+    },
+    {
       "id": "fresh-primary-bootstrap",
       "path": "scripts/bootstrap-fresh-primary.js",
       "role": "FRESH_PRIMARY_DATABASE_BOOTSTRAP",
-      "sha256": "1bc00b27aee7b4424b7b2274a0153c5911ffbd3f69c8c3038989f92188c7d41d"
+      "sha256": "7021acc2fe589a74557e3d31bef4d66708003b8cd97881fdaa602f93926cf15c"
     },
     {
       "id": "fresh-cluster-aws-provider",
       "path": "scripts/fresh-cluster-aws-provider.js",
       "role": "FRESH_CLUSTER_AWS_PROVIDER_CLIENT",
-      "sha256": "60fa486e1bcc1392994f685fd3b903bf06d7ebe95aab9d9339e8122311c1e54e"
+      "sha256": "28432bf5f19b40c63d071fed715c2fe19174d300de0b12af7fc097ca4a8dd9f8"
     },
     {
       "id": "fresh-cluster-aws-runtime",
@@ -66,25 +108,25 @@
       "id": "fresh-cluster-cloud-controller",
       "path": "scripts/fresh-cluster-cloud-controller.js",
       "role": "FRESH_CLUSTER_CLOUD_API_CONTROLLER",
-      "sha256": "b1ec6c212085b9a4b4b0beb218e9b1dfb8043b55096104c71a0b57286ff515dd"
+      "sha256": "b085fd6c7d9ad725890f56c88e0c2a4bc2b60edc1380c2741614467c320ebb6e"
     },
     {
       "id": "fresh-cluster-execution-runtime",
       "path": "scripts/fresh-cluster-execution-runtime.js",
       "role": "FRESH_CLUSTER_JOINED_EXECUTION_RUNTIME",
-      "sha256": "37145ebc1ae0df5936499e7472fdbe5117bc3762ea71f7ee21dbded236204510"
+      "sha256": "9b2d4ad80dfe385ba434c71c1d270e72e8adb9ae8ad13f2195c04858b1fd4679"
     },
     {
       "id": "fresh-cluster-provider-controller",
       "path": "scripts/fresh-cluster-provider-controller.js",
       "role": "FRESH_CLUSTER_PROVIDER_EFFECT_CONTROLLER",
-      "sha256": "ceb9354e50838a6a44e7327192443db3cc7b47de97964245d16e5f45f08a2cf8"
+      "sha256": "dd4caace957ba4815a1cb5b15a8558c4fcbbae0b0c4fa8acd521e14523ec2017"
     },
     {
       "id": "fresh-cluster-reconciliation-controller",
       "path": "scripts/fresh-cluster-reconciliation-controller.js",
       "role": "FRESH_CLUSTER_READ_ONLY_RECONCILIATION",
-      "sha256": "093c7f2e9c11441549c088a5a659dcf15a73209b39bb36b8d2f0471aceef7309"
+      "sha256": "8dbfea6b67cfab65f13b100bb17e086a2221890a315d6784032c4176f07dbc50"
     },
     {
       "id": "fresh-primary-aws-provider",
@@ -126,7 +168,7 @@
       "id": "fresh-primary-provider-controller",
       "path": "scripts/fresh-primary-provider-controller.js",
       "role": "FRESH_PRIMARY_PROVIDER_CONTROLLER",
-      "sha256": "e9b4b65165d3c6d1e2d58d61742e07f66b336baec6a74731ceff6f7307780d25"
+      "sha256": "235955a9716f49ac66200405fc2494cb11e3aa7a8e64f17d93ad83fb796450b6"
     },
     {
       "id": "fresh-recovery-publication-execution",
@@ -144,7 +186,7 @@
       "id": "fresh-cluster-provider-launcher",
       "path": "scripts/launch-fresh-cluster-provider.js",
       "role": "EXACT_SOURCE_FRESH_PROVIDER_LAUNCHER",
-      "sha256": "0f0178c22a667f33d7bf4874b3028a152dff6218c5e3da3983133d72dc9893e1"
+      "sha256": "58a0057fb1a8d6bd65a7a70f7933be234755c5a5e2bc4a103c41edfefaf6312b"
     },
     {
       "id": "fresh-bootstrap-collector-binding",
@@ -192,7 +234,7 @@
       "id": "fresh-cluster-provider-runner",
       "path": "scripts/run-fresh-cluster-provider.js",
       "role": "FRESH_CLUSTER_PRIVATE_PROVIDER_RUNNER",
-      "sha256": "6855b80471168d5992db75cfeeca971080c6a5f4e04eeea1c95f330e935c114d"
+      "sha256": "b8f2c870871b0bd210e4340000fe3d9b78bfddf9fa3276150e84562bd865742e"
     },
     {
       "id": "fresh-primary-credential-sealer-runner",
@@ -204,7 +246,7 @@
       "id": "fresh-primary-provider-runner",
       "path": "scripts/run-fresh-primary-provider.js",
       "role": "FRESH_PRIMARY_PRIVATE_PROVIDER_RUNNER",
-      "sha256": "11803225eb978086c06283d664ec482274ea85d2e3314fcbc96075dff2bd82c3"
+      "sha256": "f10005ecefbd67e477d8ba5a0068b34dc77d55e6aaad5f24ad0ac186e725c733"
     },
     {
       "id": "fresh-primary-bootstrap-role-stack-tests",
@@ -216,13 +258,13 @@
       "id": "fresh-primary-bootstrap-tests",
       "path": "test/fresh-primary-bootstrap.test.js",
       "role": "FRESH_PRIMARY_BOOTSTRAP_VERIFICATION",
-      "sha256": "91830d6e4e48aabb98754753319d34bcfa43fb7190b557b112894b83d90eba3c"
+      "sha256": "ba705075ea56d9235da8bc5e3fb0a108fbba39188b3a35e9c8e3fc10104623bf"
     },
     {
       "id": "fresh-primary-provider-controller-tests",
       "path": "test/fresh-primary-provider-controller.test.js",
       "role": "FRESH_PRIMARY_CONTROLLER_VERIFICATION",
-      "sha256": "e94332c29ac8d0feb0cfae04cd1ea2b76432d785eed3c9c23176fd6af4524989"
+      "sha256": "86ea56cdf7052f082cf8cd8bd86ada1b5a9be538c49dd3c51c8a6264afdbe323"
     },
     {
       "id": "release-control-aws-runtime-tests",
@@ -240,7 +282,7 @@
       "id": "fresh-cluster-aws-provider-tests",
       "path": "test/fresh-cluster-aws-provider.test.js",
       "role": "FRESH_CLUSTER_AWS_PROVIDER_VERIFICATION",
-      "sha256": "19f0a77eb1331ea1e4e23a736132a67f60d70240d8a909d0f5589d97b8487504"
+      "sha256": "e929f95e2ed0a517bfcb63834cc96c19659f98e59d51bc047c9ccd768f83f0e2"
     },
     {
       "id": "fresh-cluster-aws-runtime-tests",
@@ -252,31 +294,31 @@
       "id": "fresh-cluster-cloud-controller-tests",
       "path": "test/fresh-cluster-cloud-controller.test.js",
       "role": "FRESH_CLUSTER_CLOUD_CONTROLLER_VERIFICATION",
-      "sha256": "c10d83c0a716afe8cff1bf2f18fb23f734efb8e9990b9b84912cd310c2c6ac1c"
+      "sha256": "66aab577c6d0b3640bad89d803ed1cc1efa3ab46081f594a99b4e1e72e51c9a6"
     },
     {
       "id": "fresh-cluster-execution-runtime-tests",
       "path": "test/fresh-cluster-execution-runtime.test.js",
       "role": "FRESH_CLUSTER_EXECUTION_VERIFICATION",
-      "sha256": "f5b5e9381fb00f723cc03c8c8f4824e24589295f59e04aa8f4f0b245e825a0fb"
+      "sha256": "1caafabc62d5a091f950d32f6a334f930659fc500817f5e84c0d06a9fa13d837"
     },
     {
       "id": "fresh-cluster-provider-controller-tests",
       "path": "test/fresh-cluster-provider-controller.test.js",
       "role": "FRESH_CLUSTER_PROVIDER_CONTROLLER_VERIFICATION",
-      "sha256": "cd2541c057d2be2c280103326c29534d3babae8cdf36838e65eabb6ca435a8c6"
+      "sha256": "7c0a3dc775540c8b4a6e743c4806742af7a05fcc3ff083026c54e85d8abd32aa"
     },
     {
       "id": "fresh-cluster-reconciliation-controller-tests",
       "path": "test/fresh-cluster-reconciliation-controller.test.js",
       "role": "FRESH_CLUSTER_RECONCILIATION_VERIFICATION",
-      "sha256": "ca9e2bac475afdc982344e840ec9d04170f10557ffcd1b2b3577fbfe0d8ecbe8"
+      "sha256": "298e3ab0f4d0bd41d97a0863316906d9a77b62bb7e963f589cd5d9c74dc760a6"
     },
     {
       "id": "fresh-primary-aws-provider-tests",
       "path": "test/fresh-primary-aws-provider.test.js",
       "role": "FRESH_PRIMARY_AWS_PROVIDER_VERIFICATION",
-      "sha256": "07a1ba54a5282dee29da970fdc9977c6ccec05fa379cda4478bc99b0523c6e57"
+      "sha256": "2781a27b721dc3de814c947809e3299f8205dde178a30c37d7f02d807de51141"
     },
     {
       "id": "fresh-primary-aws-runtime-tests",
@@ -324,7 +366,7 @@
       "id": "fresh-primary-workflow-tests",
       "path": "test/fresh-primary-workflow.test.js",
       "role": "FRESH_PRIMARY_WORKFLOW_VERIFICATION",
-      "sha256": "75d6738d9adc6cbd4a1ff92c224bfda3cf180ad506350cb8e50a093e9647e68d"
+      "sha256": "45130730a7692f0acfa7372fcdbfb1c870c1a319fa287b3f65cf7c449283a754"
     },
     {
       "id": "fresh-recovery-publication-execution-tests",
@@ -348,19 +390,61 @@
       "id": "fresh-cluster-provider-launcher-tests",
       "path": "test/launch-fresh-cluster-provider.test.js",
       "role": "FRESH_PROVIDER_LAUNCHER_VERIFICATION",
-      "sha256": "3243c61b187b07e3758a1a6e77589aa4ff60bc233e628f0382000ba14d77e2c9"
+      "sha256": "758c07a94ca495f9fe32c255c75c8d69d3405fd1a9ca90c4e583a33762d28cc1"
     },
     {
       "id": "fresh-cluster-provider-runner-tests",
       "path": "test/run-fresh-cluster-provider.test.js",
       "role": "FRESH_CLUSTER_RUNNER_VERIFICATION",
-      "sha256": "9ac3ae81b000512b65df1544495dbbb2adfcc89a7c896c22ad6d61a98838deef"
+      "sha256": "540d06852a3caf6139cb43233a958b63d1c6e7808de27de03d0953cc06a0762a"
     },
     {
       "id": "fresh-primary-provider-runner-tests",
       "path": "test/run-fresh-primary-provider.test.js",
       "role": "FRESH_PRIMARY_RUNNER_VERIFICATION",
-      "sha256": "12e7ff4b4719e8404311dc18f7ae4e1133087a6021601f79b2da5953f58dc15a"
+      "sha256": "868c85416f5d65f7852f7c143525c8f5b4fd7dce51991a7f913791725714d7b2"
+    },
+    {
+      "id": "one-time-bootstrap-authority-tests",
+      "path": "test/one-time-bootstrap-authority.test.js",
+      "role": "B0_AUTHORITY_COST_AND_CREDENTIAL_VERIFICATION",
+      "sha256": "8da5682fc9c0f81ee6a6739420ab709568195ab0fb160df0e9cc4d3016988038"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-launcher-tests",
+      "path": "test/launch-one-time-bootstrap-ceremony.test.js",
+      "role": "SEALED_B0_LAUNCHER_VERIFICATION",
+      "sha256": "63b267babdf181f66f82f9c06431a99e95f3dc3b221d210eb4c7a0935dd67aeb"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner-tests",
+      "path": "test/run-one-time-bootstrap-ceremony.test.js",
+      "role": "B0_CRASH_CONVERGENCE_VERIFICATION",
+      "sha256": "e4f51e7787abce2764395a8949d5f6ad773067aa16394b4c4cd7fe6fa421fa1c"
+    },
+    {
+      "id": "b0-a1-human-authorization-tests",
+      "path": "test/prooftoact-b0-a1-human-authorization.test.js",
+      "role": "B0_A1_SIGNED_AUTHORIZATION_CONTRACT_VERIFICATION",
+      "sha256": "a14da27b3b9fe6cd23bae3e970599c6afed7afea3814e78ee59ad0c4573f43e9"
+    },
+    {
+      "id": "b0-a1-imessage-authorization-tests",
+      "path": "test/prooftoact-imessage-human-authorization.test.js",
+      "role": "IMESSAGE_IDENTITY_AND_SIGNATURE_VERIFICATION",
+      "sha256": "10b938146ef2324635d08f67c0f08464b34badde1526341fc1e739bea6a68180"
+    },
+    {
+      "id": "b0-a1-human-authorization-fixture",
+      "path": "test/helpers/prooftoact-human-authorization-fixture.js",
+      "role": "SYNTHETIC_AUTHORIZATION_NEGATIVE_CONTROL_FIXTURE",
+      "sha256": "41330fd9bb49f292c3daef04bfc62939c169092616912974d2edeb75cb038144"
+    },
+    {
+      "id": "fresh-cluster-provider-key-revocation-tests",
+      "path": "test/finalize-fresh-cluster-provider-key-revocation.test.js",
+      "role": "FAIL_CLOSED_REVOCATION_GATE_VERIFICATION",
+      "sha256": "26ffcc3db257f6e10d86d9b0e85a583469090458b34aaaaf369c44bf35e06f59"
     },
     {
       "id": "actions-checkout-normalizer",

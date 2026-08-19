@@ -56,6 +56,14 @@ function readRequest(command) {
   });
 }
 
+function assertCleanupOpen(clock, command) {
+  const now = clock();
+  requireCondition(Number.isFinite(now) &&
+    now < Date.parse(command?.billingAuthorization?.retentionDeadline),
+  "FRESH_CLUSTER_CLEANUP_APPROVAL_EXPIRED");
+  return now;
+}
+
 export async function reconcileFreshClusterProviderAccess({
   clock = Date.now,
   command,
@@ -72,6 +80,8 @@ export async function reconcileFreshClusterProviderAccess({
     ].every((name) => typeof runtime[name] === "function") &&
     typeof clock === "function",
   "FRESH_CLUSTER_RECONCILIATION_CONFIGURATION_REJECTED");
+
+  const requireCleanupDispatch = () => assertCleanupOpen(clock, command);
 
   const stored = await provider.readStrong(readRequest(command));
   requireCondition(stored !== null,
@@ -123,7 +133,10 @@ export async function reconcileFreshClusterProviderAccess({
     sequence += 1;
   };
 
-  const observedAt = new Date(clock()).toISOString();
+  const observedAtMilliseconds = clock();
+  requireCondition(Number.isFinite(observedAtMilliseconds),
+    "FRESH_CLUSTER_RECONCILIATION_CONFIGURATION_REJECTED");
+  const observedAt = new Date(observedAtMilliseconds).toISOString();
   const cluster = validateFreshClusterReadback(
     await runtime.waitForFreshClusterCreated({
       clusterId: command.providerClusterId
@@ -131,11 +144,14 @@ export async function reconcileFreshClusterProviderAccess({
     command,
     { dispatchedAt: observedAt, observedAt }
   );
-  await record("RECOVERY_CLEANUP_STARTED", {
-    authenticationSha256: digest(authentication),
-    clusterIdSha256: cluster.clusterIdSha256,
-    interruptedPhaseSha256: textDigest(stored.state)
-  });
+  if (!phases.has("RECOVERY_CLEANUP_STARTED")) {
+    requireCleanupDispatch();
+    await record("RECOVERY_CLEANUP_STARTED", {
+      authenticationSha256: digest(authentication),
+      clusterIdSha256: cluster.clusterIdSha256,
+      interruptedPhaseSha256: textDigest(stored.state)
+    });
+  }
 
   let adminAbsent = false;
   let ingressEmpty = false;
@@ -146,6 +162,9 @@ export async function reconcileFreshClusterProviderAccess({
       await runtime.listCompleteSqlUsers({ clusterId: cluster.clusterId })
     );
     if (initial.names.includes(BOOTSTRAP_USERNAME)) {
+      requireCondition(!phases.has("RECOVERY_ADMIN_DELETE_DISPATCHING"),
+        "FRESH_CLUSTER_RECONCILIATION_ADMIN_DELETE_AMBIGUOUS");
+      requireCleanupDispatch();
       await record("RECOVERY_ADMIN_DELETE_DISPATCHING", {
         inventorySha256: initial.snapshotSha256,
         usernameSha256: textDigest(BOOTSTRAP_USERNAME)
@@ -187,6 +206,9 @@ export async function reconcileFreshClusterProviderAccess({
     if (initial.entry !== null) {
       requireCondition(phases.has("INGRESS_CREATE_DISPATCHING"),
         "FRESH_CLUSTER_RECONCILIATION_INGRESS_NOT_AUTHORIZED");
+      requireCondition(!phases.has("RECOVERY_INGRESS_DELETE_DISPATCHING"),
+        "FRESH_CLUSTER_RECONCILIATION_INGRESS_DELETE_AMBIGUOUS");
+      requireCleanupDispatch();
       await record("RECOVERY_INGRESS_DELETE_DISPATCHING", {
         allowlistSha256: initial.allowlistSha256,
         entrySha256: digest(initial.entry)
@@ -259,6 +281,7 @@ export async function reconcileFreshClusterProviderAccess({
 }
 
 export const __test = Object.freeze({
+  assertCleanupOpen,
   canonicalJson,
   digest,
   readRequest,

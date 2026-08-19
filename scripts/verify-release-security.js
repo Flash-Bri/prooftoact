@@ -28,6 +28,13 @@ const FRESH_PRIMARY_SURFACES = Object.freeze(Object.fromEntries([
   ["fresh-primary-bootstrap-role-template", "infra/aws/fresh-primary-bootstrap-role-stack.json", "FRESH_PRIMARY_EXACT_OIDC_ROLE_TEMPLATE"],
   ["fresh-primary-credential-custody-template", "infra/aws/fresh-primary-credential-custody-stack.json", "CREATE_ONLY_SEVEN_SECRET_CUSTODY_TEMPLATE"],
   ["release-control-aws-runtime", "release-control/src/release-control-aws-runtime.js", "FRESH_PROVIDER_DURABLE_CONTROL_RUNTIME"],
+  ["one-time-bootstrap-root-session", "scripts/assume-one-time-bootstrap-root-session.js", "B0_NAMED_ROOT_MFA_SESSION_CUSTODY"],
+  ["b0-a1-human-authorization-contract", "scripts/lib/prooftoact-b0-a1-human-authorization.js", "INDEPENDENTLY_SIGNED_B0_A1_HUMAN_AUTHORIZATION"],
+  ["b0-a1-human-authorization-materializer", "scripts/materialize-prooftoact-b0-a1-human-authorization.js", "PINNED_IMESSAGE_HUMAN_AUTHORIZATION_MATERIALIZER"],
+  ["one-time-bootstrap-authority-plan", "scripts/prepare-one-time-bootstrap-authority.js", "B0_EXACT_AUTHORITY_AND_COST_PLAN"],
+  ["one-time-bootstrap-ceremony-launcher", "scripts/launch-one-time-bootstrap-ceremony.js", "SEALED_EXACT_SOURCE_B0_LAUNCHER"],
+  ["one-time-bootstrap-ceremony-runner", "scripts/run-one-time-bootstrap-ceremony.js", "B0_CRASH_CONVERGENT_CEREMONY_RUNNER"],
+  ["fresh-cluster-provider-key-revocation-finalizer", "scripts/finalize-fresh-cluster-provider-key-revocation.js", "FAIL_CLOSED_SEPARATE_ORG_ADMIN_REVOCATION_GATE"],
   ["fresh-primary-bootstrap", "scripts/bootstrap-fresh-primary.js", "FRESH_PRIMARY_DATABASE_BOOTSTRAP"],
   ["fresh-cluster-aws-provider", "scripts/fresh-cluster-aws-provider.js", "FRESH_CLUSTER_AWS_PROVIDER_CLIENT"],
   ["fresh-cluster-aws-runtime", "scripts/fresh-cluster-aws-runtime.js", "FRESH_CLUSTER_AWS_PROVIDER_RUNTIME"],
@@ -80,7 +87,14 @@ const FRESH_PRIMARY_SURFACES = Object.freeze(Object.fromEntries([
   ["fresh-recovery-source-execution-tests", "test/fresh-recovery-source-execution.test.js", "FRESH_RECOVERY_SOURCE_VERIFICATION"],
   ["fresh-cluster-provider-launcher-tests", "test/launch-fresh-cluster-provider.test.js", "FRESH_PROVIDER_LAUNCHER_VERIFICATION"],
   ["fresh-cluster-provider-runner-tests", "test/run-fresh-cluster-provider.test.js", "FRESH_CLUSTER_RUNNER_VERIFICATION"],
-  ["fresh-primary-provider-runner-tests", "test/run-fresh-primary-provider.test.js", "FRESH_PRIMARY_RUNNER_VERIFICATION"]
+  ["fresh-primary-provider-runner-tests", "test/run-fresh-primary-provider.test.js", "FRESH_PRIMARY_RUNNER_VERIFICATION"],
+  ["one-time-bootstrap-authority-tests", "test/one-time-bootstrap-authority.test.js", "B0_AUTHORITY_COST_AND_CREDENTIAL_VERIFICATION"],
+  ["one-time-bootstrap-ceremony-launcher-tests", "test/launch-one-time-bootstrap-ceremony.test.js", "SEALED_B0_LAUNCHER_VERIFICATION"],
+  ["one-time-bootstrap-ceremony-runner-tests", "test/run-one-time-bootstrap-ceremony.test.js", "B0_CRASH_CONVERGENCE_VERIFICATION"],
+  ["b0-a1-human-authorization-tests", "test/prooftoact-b0-a1-human-authorization.test.js", "B0_A1_SIGNED_AUTHORIZATION_CONTRACT_VERIFICATION"],
+  ["b0-a1-imessage-authorization-tests", "test/prooftoact-imessage-human-authorization.test.js", "IMESSAGE_IDENTITY_AND_SIGNATURE_VERIFICATION"],
+  ["b0-a1-human-authorization-fixture", "test/helpers/prooftoact-human-authorization-fixture.js", "SYNTHETIC_AUTHORIZATION_NEGATIVE_CONTROL_FIXTURE"],
+  ["fresh-cluster-provider-key-revocation-tests", "test/finalize-fresh-cluster-provider-key-revocation.test.js", "FAIL_CLOSED_REVOCATION_GATE_VERIFICATION"]
 ].map(([id, path, role]) => [id, Object.freeze({ path, role })])));
 
 const EXPECTED_SURFACES = Object.freeze({
@@ -1358,6 +1372,7 @@ const SOURCE_MARKERS = Object.freeze({
       "environment: aws-release-database-bootstrap",
       "timeout-minutes: 45",
       "PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256",
+      "PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256",
       "github.workflow_ref",
       "github.workflow_sha",
       "--mode reconcile-only"
@@ -1382,6 +1397,51 @@ const SOURCE_MARKERS = Object.freeze({
       "new dynamodb.PutItemCommand",
       "requireExactTable(input, tableName)",
       "maxAttempts: 1"
+    ]),
+    "one-time-bootstrap-root-session": Object.freeze([
+      "createNamedRootProfileStsClient",
+      "assumeOneTimeBootstrapRootSession",
+      "bytes.fill(0)",
+      "ONE_TIME_BOOTSTRAP_ROOT_ASSUME_REJECTED"
+    ]),
+    "b0-a1-human-authorization-contract": Object.freeze([
+      "prooftoact.b0-a1-human-authorization-contract.v4",
+      "humanAuthorizationSignerPublicKeySha256",
+      "crypto.verify(",
+      "awsMonthlyResidualCeilingUsdCents === 350",
+      "DELETE_OR_ROTATE_CREATOR_OR_AUDITOR_PROVIDER_KEYS"
+    ]),
+    "b0-a1-human-authorization-materializer": Object.freeze([
+      "AUTHORIZATION_SIGNING_SEED_DOMAIN",
+      "authorizationSigner(hmacKey)",
+      "crypto.sign(null, signaturePayload.bytes",
+      "verifyProofToActB0A1HumanAuthorizationWithImsg",
+      "hmacKey.fill(0)"
+    ]),
+    "one-time-bootstrap-authority-plan": Object.freeze([
+      "EXACT_MONTHLY_AUTHORIZATION_USD_CENTS = 350",
+      "ITEMIZED_EXACT_RESOURCE_ENVELOPE_REVIEWED",
+      "COST_RECONCILIATION_MAXIMUM_AGE_MS",
+      "AWS_SECRETS_MANAGER_EIGHT_RETAINED_SECRETS",
+      "ONE_TIME_BOOTSTRAP_COST_CEILING_REJECTED"
+    ]),
+    "one-time-bootstrap-ceremony-launcher": Object.freeze([
+      "ONE_TIME_BOOTSTRAP_LAUNCH_IMPORT_GRAPH_REJECTED",
+      "createSealedSnapshot",
+      "maximumMonthlyUsdCents === 350",
+      "authorizationBytes.fill(0)"
+    ]),
+    "one-time-bootstrap-ceremony-runner": Object.freeze([
+      "runCrashConvergentMutation",
+      "runCrashConvergentSecretSeal",
+      "validateOneTimeBootstrapTimingBudget",
+      "verifyProofToActB0A1HumanAuthorizationWithImsg",
+      "awsMonthlyResidualCeilingUsdCents"
+    ]),
+    "fresh-cluster-provider-key-revocation-finalizer": Object.freeze([
+      "HOLD_REQUIRES_SEPARATE_SIGNED_ORGANIZATION_ADMIN_AUTHORIZATION",
+      "FRESH_CLUSTER_KEY_REVOCATION_INDEPENDENT_ORG_ADMIN_AUTHORIZATION_REQUIRED",
+      "void provider"
     ]),
     "fresh-primary-bootstrap": Object.freeze([
       "validateFreshPrimaryCredentialBundle",
@@ -1421,12 +1481,15 @@ const SOURCE_MARKERS = Object.freeze({
       "PROVIDER_KEYS_REVOCATION_PENDING",
       "providerKeyRevocationCeremony",
       "completeShowUsersPrincipalCensusSha256",
-      "commitValidatorSequenceMatchedDirectDvi"
+      "commitValidatorSequenceMatchedDirectDvi",
+      "assertCleanupOpen(clock, command);"
     ]),
     "fresh-cluster-reconciliation-controller": Object.freeze([
       "reconcileFreshClusterProviderAccess",
       "AUTHENTICATED_PROVIDER_READBACK",
-      "FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED"
+      "FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED",
+      "requireCleanupDispatch();",
+      "FRESH_CLUSTER_CLEANUP_APPROVAL_EXPIRED"
     ]),
     "fresh-primary-aws-provider": Object.freeze([
       "createFreshPrimaryAwsProvider",
@@ -1529,6 +1592,8 @@ const SOURCE_MARKERS = Object.freeze({
       "sha256(canonicalBytes(approval)) === authority.approvalSha256",
       "approval.controllerImportGraphSha256",
       "approval.callerWorkflowSha === authority.callerWorkflowSha",
+      "authority?.humanAuthorizationSignerSha256",
+      "--human-authorization-signer-sha256",
       "--receipt-output",
       "FRESH_CLUSTER_PROVIDER_HOLD_PROVIDER_KEYS_REVOCATION_PENDING"
     ]),
@@ -1540,6 +1605,34 @@ const SOURCE_MARKERS = Object.freeze({
     "fresh-primary-provider-runner": Object.freeze([
       "runFreshPrimaryProvider",
       "--receipt-output"
+    ]),
+    "one-time-bootstrap-authority-tests": Object.freeze([
+      "planner rejects 351-cent AWS authority, fabricated cost digests, and inflated item sums",
+      "root AssumeRole rechecks the exact execution deadline immediately before dispatch"
+    ]),
+    "one-time-bootstrap-ceremony-launcher-tests": Object.freeze([
+      "B0 launcher statically imports built-ins only and runner is launcher-only",
+      "authorization must bind the exact runtime snapshot"
+    ]),
+    "one-time-bootstrap-ceremony-runner-tests": Object.freeze([
+      "mutation classes journal before dispatch and converge ACK loss without redispatch",
+      "A1 nested continuation resumes crashes"
+    ]),
+    "b0-a1-human-authorization-tests": Object.freeze([
+      "external evidence finalizes a non-circular receipt",
+      "authorizationSignatureBase64"
+    ]),
+    "b0-a1-imessage-authorization-tests": Object.freeze([
+      "live verifier re-materializes the exact two events",
+      "event materialization rejects key, identity, body, thread, time, and cardinality drift"
+    ]),
+    "b0-a1-human-authorization-fixture": Object.freeze([
+      "buildSyntheticProofToActHumanAuthorization",
+      "humanAuthorizationSignerPublicKeySha256"
+    ]),
+    "fresh-cluster-provider-key-revocation-tests": Object.freeze([
+      "revocation proposal remains fail-closed before any provider access",
+      "HOLD_REQUIRES_SEPARATE_SIGNED_ORGANIZATION_ADMIN_AUTHORIZATION"
     ])
   }),
   "actions-checkout-normalizer": Object.freeze([

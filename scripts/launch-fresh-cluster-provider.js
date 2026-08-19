@@ -31,6 +31,7 @@ const EXPECTED_ARGUMENTS = Object.freeze([
   "--credential-secret-version-id",
   "--expected-commit",
   "--expected-tree",
+  "--human-authorization-signer-sha256",
   "--mcp-secret-arn",
   "--mcp-secret-version-id",
   "--mode",
@@ -99,6 +100,8 @@ function parseArguments(args) {
     values["--caller-workflow-ref"] === CALLER_WORKFLOW_REF &&
     HEX_40.test(values["--expected-commit"] ?? "") &&
     HEX_40.test(values["--expected-tree"] ?? ""), code);
+  requireCondition(HEX_64.test(
+    values["--human-authorization-signer-sha256"] ?? ""), code);
   return Object.freeze(values);
 }
 

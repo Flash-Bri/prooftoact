@@ -153,6 +153,18 @@
       "sha256": "8fc5633ffa025161945a2f65e4086c927d0867a222dcc8ffa9b9bedb658d3ed3"
     },
     {
+      "id": "b0-a1-human-authorization-contract",
+      "path": "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+      "role": "SIGNED_COMBINED_COST_AUTHORIZATION_CONTRACT",
+      "sha256": "28618fae2dbe290d1f0ac8ce5a00e124f3cbe9c1775572948c2b3c1dc98ae3ff"
+    },
+    {
+      "id": "b0-a1-human-authorization-tests",
+      "path": "test/prooftoact-b0-a1-human-authorization.test.js",
+      "role": "COMBINED_COST_AUTHORIZATION_VERIFICATION",
+      "sha256": "a14da27b3b9fe6cd23bae3e970599c6afed7afea3814e78ee59ad0c4573f43e9"
+    },
+    {
       "id": "boundary-semantic-metric-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "SEMANTIC_METRIC_CARDINALITY",
@@ -162,13 +174,13 @@
       "id": "cost-boundary-ledger",
       "path": "docs/COST_GATES.md",
       "role": "COST_AND_RESOURCE_BOUNDARY",
-      "sha256": "33cdf86cef3da42f8f39ca591af022826865e956e82f84b133168c54f8a7bb57"
+      "sha256": "f2851087e551c90fc12827d38f12b0c63d3abd2757af3f6135d782af4ef9fafb"
     },
     {
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "1c3f7d20afb7b8f78a9ea383d54d66c17369dca9f211cce78682bf6e2b2c9365"
+      "sha256": "2262e2923b65271b5c87100dff97f3b97d8fc480b813bf5f4f7c829a26c83ed5"
     },
     {
       "id": "cost-guard-receipt",
@@ -187,6 +199,30 @@
       "path": "evidence/gate2-console-stop-receipt-2026-07-30.md",
       "role": "SANITIZED_FAIL_CLOSED_STOP_RECEIPT",
       "sha256": "7a891b1810d8343e19c3cff40591302b2c483b8fdacf7b68edf68596ad18258d"
+    },
+    {
+      "id": "one-time-bootstrap-authority-plan",
+      "path": "scripts/prepare-one-time-bootstrap-authority.js",
+      "role": "ITEMIZED_AWS_RESIDUAL_COST_PLAN",
+      "sha256": "0e024be17f7cdbf96a4ff6a9151a9a2c74ee9c98ac760af21590ab21bcd35ec3"
+    },
+    {
+      "id": "one-time-bootstrap-authority-tests",
+      "path": "test/one-time-bootstrap-authority.test.js",
+      "role": "ITEMIZED_COST_PLAN_NEGATIVE_VERIFICATION",
+      "sha256": "8da5682fc9c0f81ee6a6739420ab709568195ab0fb160df0e9cc4d3016988038"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner",
+      "path": "scripts/run-one-time-bootstrap-ceremony.js",
+      "role": "EXECUTABLE_AWS_RESIDUAL_COST_GATE",
+      "sha256": "7f6dbd3792ded4195e4b91db9e424a4e3280595a5318043a05fc8d54d72344b0"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner-tests",
+      "path": "test/run-one-time-bootstrap-ceremony.test.js",
+      "role": "EXECUTABLE_COST_AUTHORIZATION_VERIFICATION",
+      "sha256": "e4f51e7787abce2764395a8949d5f6ad773067aa16394b4c4cd7fe6fa421fa1c"
     },
     {
       "id": "private-recovery-bootstrap-template",

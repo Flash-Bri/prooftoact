@@ -132,6 +132,8 @@ test("security manifest binds the complete private recovery-query lane", () => {
       "src/cloud/private-recovery-query-aws-runtime.js",
     "private-recovery-query-aws-store":
       "src/cloud/private-recovery-query-aws-store.js",
+    "private-recovery-query-binding":
+      "scripts/lib/private-recovery-query-binding.js",
     "private-recovery-query-bootstrap-role-stack":
       "infra/aws/private-recovery-query-bootstrap-role-stack.json",
     "private-recovery-query-bootstrap-tests":
@@ -204,6 +206,46 @@ test("security manifest binds the complete private recovery-query lane", () => {
   };
   const actual = Object.fromEntries(Object.entries(__test.EXPECTED_SURFACES)
     .filter(([id]) => id.startsWith("private-recovery-query-"))
+    .map(([id, surface]) => [id, surface.path]));
+  assert.deepEqual(actual, expected);
+  for (const id of Object.keys(expected)) {
+    assert.equal(__test.SOURCE_MARKERS[id]?.length > 0, true);
+  }
+});
+
+test("security manifest binds the complete B0/A1 authorization and revocation lane", () => {
+  const expected = {
+    "b0-a1-human-authorization-contract":
+      "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+    "b0-a1-human-authorization-fixture":
+      "test/helpers/prooftoact-human-authorization-fixture.js",
+    "b0-a1-human-authorization-materializer":
+      "scripts/materialize-prooftoact-b0-a1-human-authorization.js",
+    "b0-a1-human-authorization-tests":
+      "test/prooftoact-b0-a1-human-authorization.test.js",
+    "b0-a1-imessage-authorization-tests":
+      "test/prooftoact-imessage-human-authorization.test.js",
+    "fresh-cluster-provider-key-revocation-finalizer":
+      "scripts/finalize-fresh-cluster-provider-key-revocation.js",
+    "fresh-cluster-provider-key-revocation-tests":
+      "test/finalize-fresh-cluster-provider-key-revocation.test.js",
+    "one-time-bootstrap-authority-plan":
+      "scripts/prepare-one-time-bootstrap-authority.js",
+    "one-time-bootstrap-authority-tests":
+      "test/one-time-bootstrap-authority.test.js",
+    "one-time-bootstrap-ceremony-launcher":
+      "scripts/launch-one-time-bootstrap-ceremony.js",
+    "one-time-bootstrap-ceremony-launcher-tests":
+      "test/launch-one-time-bootstrap-ceremony.test.js",
+    "one-time-bootstrap-ceremony-runner":
+      "scripts/run-one-time-bootstrap-ceremony.js",
+    "one-time-bootstrap-ceremony-runner-tests":
+      "test/run-one-time-bootstrap-ceremony.test.js",
+    "one-time-bootstrap-root-session":
+      "scripts/assume-one-time-bootstrap-root-session.js"
+  };
+  const actual = Object.fromEntries(Object.entries(__test.EXPECTED_SURFACES)
+    .filter(([id]) => Object.hasOwn(expected, id))
     .map(([id, surface]) => [id, surface.path]));
   assert.deepEqual(actual, expected);
   for (const id of Object.keys(expected)) {

@@ -229,6 +229,10 @@ export async function assumeOneTimeBootstrapRootSession(input) {
     TokenCode: tokenCode
   };
   let response;
+  const dispatchTime = input.clock();
+  requireCondition(dispatchTime instanceof Date &&
+    Number.isFinite(dispatchTime.getTime()) &&
+    dispatchTime.getTime() < Date.parse(plan.notAfter), code);
   try {
     response = await input.stsClient.send(new AssumeRoleCommand(assumeInput));
   } catch (error) {

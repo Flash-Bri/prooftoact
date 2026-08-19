@@ -109,6 +109,11 @@ export function buildFreshPrimaryProviderCommand(value) {
     "credentialBundleSha256",
     "credentialSealReceiptSha256",
     "operationId",
+    "outerAuthenticationReceiptSha256",
+    "outerCommandSha256",
+    "outerReservedAt",
+    "outerReservationAcknowledgedAt",
+    "outerReservationReceiptSha256",
     "providerClusterId",
     "recoveryPublisherKeySetDigest",
     "recoveryPublisherTrustRootCommitment",
@@ -123,6 +128,20 @@ export function buildFreshPrimaryProviderCommand(value) {
   ]) &&
     UUID.test(value.approvalId ?? "") &&
     UUID.test(value.operationId ?? "") &&
+    HEX_64.test(value.outerAuthenticationReceiptSha256 ?? "") &&
+    HEX_64.test(value.outerCommandSha256 ?? "") &&
+    Number.isFinite(Date.parse(value.outerReservedAt ?? "")) &&
+    value.outerReservedAt === new Date(Date.parse(
+      value.outerReservedAt
+    )).toISOString() &&
+    Number.isFinite(Date.parse(
+      value.outerReservationAcknowledgedAt ?? ""
+    )) &&
+    value.outerReservationAcknowledgedAt === new Date(Date.parse(
+      value.outerReservationAcknowledgedAt
+    )).toISOString() &&
+    Date.parse(value.outerReservedAt) <=
+      Date.parse(value.outerReservationAcknowledgedAt) &&
     UUID.test(value.providerClusterId ?? "") &&
     COCKROACH_SQL_CLUSTER_ID.test(value.sqlClusterId ?? "") &&
     value.providerClusterId !== value.sqlClusterId &&
@@ -142,6 +161,7 @@ export function buildFreshPrimaryProviderCommand(value) {
       value.credentialSecretArnSha256,
       value.credentialSecretVersionIdSha256,
       value.credentialSealReceiptSha256,
+      value.outerReservationReceiptSha256,
       value.recoveryPublisherKeySetDigest,
       value.recoveryPublisherTrustRootCommitment,
       value.recoverySecurityPostureReceiptSha256,
@@ -201,6 +221,11 @@ function validateCommand(command) {
     "effectIdentitySha256",
     "globalKeySha256",
     "operationId",
+    "outerAuthenticationReceiptSha256",
+    "outerCommandSha256",
+    "outerReservedAt",
+    "outerReservationAcknowledgedAt",
+    "outerReservationReceiptSha256",
     "providerClusterId",
     "recoveryPublisherKeySetDigest",
     "recoveryPublisherTrustRootCommitment",
@@ -614,6 +639,14 @@ function controllerReceipt({
     globalKeySha256: command.globalKeySha256,
     operationId: command.operationId,
     namespaceArn: command.controllerTableArn,
+    outerAuthenticationReceiptSha256:
+      command.outerAuthenticationReceiptSha256,
+    outerCommandSha256: command.outerCommandSha256,
+    outerReservedAt: command.outerReservedAt,
+    outerReservationAcknowledgedAt:
+      command.outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256:
+      command.outerReservationReceiptSha256,
     providerClusterId: command.providerClusterId,
     recoverySecurityPostureReceiptSha256:
       command.recoverySecurityPostureReceiptSha256,

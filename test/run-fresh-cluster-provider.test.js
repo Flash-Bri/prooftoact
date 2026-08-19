@@ -8,6 +8,8 @@ import test from "node:test";
 import { FRESH_PRIMARY_RUNTIME_USERS } from
   "../scripts/bootstrap-fresh-primary.js";
 import { __test } from "../scripts/run-fresh-cluster-provider.js";
+import { buildSyntheticProofToActHumanAuthorization } from
+  "./helpers/prooftoact-human-authorization-fixture.js";
 
 const OPERATION_ID = "123e4567-e89b-42d3-a456-426614174000";
 const SOURCE_COMMIT = "a".repeat(40);
@@ -23,6 +25,70 @@ const CONTROLLER_IMPORT_GRAPH_SHA256 = "e".repeat(64);
 
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function sharedHumanBinding(approval) {
+  return buildSyntheticProofToActHumanAuthorization({
+    dynamicInput: {
+    a1ApprovalId: approval.approvalId,
+    a1CallerWorkflowRef: approval.callerWorkflowRef,
+    a1CallerWorkflowSha: approval.callerWorkflowSha,
+    a1ControllerImportGraphSha256: approval.controllerImportGraphSha256,
+    a1CredentialSha256: {
+      adoptedAdminPassword: approval.adoptedAdminPasswordSha256,
+      auditorTokenValue: approval.auditorTokenValueSha256,
+      creatorTokenValue: approval.creatorTokenValueSha256
+    },
+    a1ProviderClusterId: approval.providerClusterId,
+    a1ProviderReceiptSha256: {
+      auditorAuthority: approval.auditorAuthorityReceiptSha256,
+      creatorAuthority: approval.creatorAuthorityReceiptSha256,
+      creatorProviderReadback:
+        approval.creatorProviderReadbackReceiptSha256,
+      manualCluster: approval.manualClusterReceiptSha256,
+      pricingSource: "1".repeat(64)
+    },
+    a1ReservationDeadline: "2026-08-19T09:00:00.000Z",
+    a1SqlClusterId: approval.sqlClusterId,
+    accountId: approval.accountId,
+    authorizationNotBefore: "2026-08-19T08:00:00.000Z",
+    b0DispatchDeadline: "2026-08-19T09:00:00.000Z",
+    b0PrivateRecoveryWorkflowCommits: {
+      deployment: "2".repeat(40),
+      secretSeal: "3".repeat(40)
+    },
+    b0RuntimeExecutionBindingSha256: "4".repeat(64),
+    b0TargetTemplateSha256: {
+      freshPrimaryBootstrapRole: "5".repeat(64),
+      freshPrimaryCredentialCustody: "6".repeat(64),
+      privateRecoveryQueryBootstrap: "7".repeat(64)
+    },
+    b0WriterValueSha256: {
+      auditor: approval.auditorTokenValueSha256,
+      cloudApi: approval.creatorTokenValueSha256,
+      credential: "8".repeat(64),
+      mcp: "9".repeat(64),
+      publisher: "a".repeat(64)
+    },
+    cleanupRetentionDeadline: "2026-08-20T09:00:00.000Z",
+    costAuthorization: {
+      awsMonthlyResidualCeilingUsdCents: 350,
+      cockroachMonthlySubCeilingUsdCents: 200,
+      cockroachPaidWorstCaseMonthlyUsdCents: 150,
+      combinedMonthlyCeilingUsdCents: 500,
+      currency: "USD",
+      freeBenefitsAssumed: false,
+      maximumOneTimeUsdCents: 500,
+      noAdditiveMonthlyCeilings: true,
+      reconciliationReceiptSha256: "b".repeat(64)
+    },
+    operationId: OPERATION_ID,
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST
+    },
+    inboundAt: "2026-08-19T08:00:00.000Z",
+    outboundAt: "2026-08-19T08:00:00.000Z"
+  }).humanAuthorizationBinding;
 }
 
 function args() {
@@ -44,6 +110,7 @@ function args() {
     "--credential-secret-version-id", "4".repeat(32),
     "--expected-commit", SOURCE_COMMIT,
     "--expected-tree", TREE_DIGEST,
+    "--human-authorization-signer-sha256", "f".repeat(64),
     "--mcp-secret-arn", "mcp-arn",
     "--mcp-secret-version-id", "6".repeat(32),
     "--mode", "execute",
@@ -140,9 +207,11 @@ test("admin password custody unlinks the exact private inode and clears bytes", 
 });
 
 test("executable adoption path is pinned to the reviewed manual receipt", () => {
-  const approval = {
+  const baseApproval = {
+    accountId: ACCOUNT,
     adoptedAdminPasswordSha256:
       __test.APPROVED_ADOPTION.adoptedAdminPasswordSha256,
+    approvalId: "223e4567-e89b-42d3-a456-426614174001",
     billingAuthorization: {
       authorizationReceiptSha256: "8".repeat(64),
       authorizedMonthlyCeilingUsd: "2.00"
@@ -167,17 +236,40 @@ test("executable adoption path is pinned to the reviewed manual receipt", () => 
       __test.APPROVED_ADOPTION.creatorTokenValueSha256,
     manualClusterReceiptSha256:
       __test.APPROVED_ADOPTION.manualClusterReceiptSha256,
-    humanAuthorizationReceiptSha256: "8".repeat(64),
-    humanAuthorizedTextSha256: "9".repeat(64),
-    providerClusterId: __test.APPROVED_ADOPTION.providerClusterId
+    operationId: OPERATION_ID,
+    providerClusterId: __test.APPROVED_ADOPTION.providerClusterId,
+    sourceCommit: SOURCE_COMMIT,
+    sqlClusterId: __test.APPROVED_ADOPTION.sqlClusterId,
+    treeDigest: TREE_DIGEST
+  };
+  const humanAuthorizationBinding = sharedHumanBinding(baseApproval);
+  const approval = {
+    ...baseApproval,
+    billingAuthorization: {
+      ...baseApproval.billingAuthorization,
+      authorizationReceiptSha256:
+        humanAuthorizationBinding.receiptBindingSha256
+    },
+    humanAuthorizationBinding,
+    humanAuthorizationReceiptSha256:
+      humanAuthorizationBinding.receiptBindingSha256,
+    humanAuthorizedTextSha256:
+      humanAuthorizationBinding.humanAuthorizedTextSha256
   };
   const authority = {
     approvalSha256: __test.sha256(__test.canonicalBytes(approval)),
     callerWorkflowRef: CALLER_WORKFLOW_REF,
     callerWorkflowSha: CALLER_WORKFLOW_SHA,
-    controllerImportGraphSha256: CONTROLLER_IMPORT_GRAPH_SHA256
+    controllerImportGraphSha256: CONTROLLER_IMPORT_GRAPH_SHA256,
+    humanAuthorizationSignerSha256:
+      humanAuthorizationBinding.dynamicIntent
+        .humanAuthorizationSignerPublicKeySha256
   };
   assert.equal(__test.validateApprovedAdoption(approval, authority), approval);
+  assert.throws(() => __test.validateApprovedAdoption(approval, {
+    ...authority,
+    humanAuthorizationSignerSha256: "0".repeat(64)
+  }), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
   assert.throws(() => __test.validateApprovedAdoption({
     ...approval,
     clusterMode: "CREATE_NEW"

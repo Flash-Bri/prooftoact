@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
 
+import {
+  validateProofToActB0A1HumanAuthorizationReceipt
+} from "./lib/prooftoact-b0-a1-human-authorization.js";
+
 const API_ORIGIN = "https://cockroachlabs.cloud";
 const API_VERSION = "2024-09-16";
 const CLUSTER_NAME = "prooftoact-gate2";
@@ -160,6 +164,8 @@ export function buildFreshClusterCreateCommand(value) {
   const billingAuthorization = validateFreshClusterBillingAuthorization(
     value.billingAuthorization
   );
+  requireCondition(billingAuthorization.clusterCreateApproved ===
+    (value.clusterMode === "CREATE_NEW"), code);
   const createRequest = freshClusterCreateRequest(value);
   const effectIdentitySha256 = textDigest(
     `prooftoact-fresh-cluster-effect-v1\n${value.parentFolderId}\n${CLUSTER_NAME}`
@@ -169,7 +175,7 @@ export function buildFreshClusterCreateCommand(value) {
     status: "AUTHORIZED_COORDINATES",
     action: value.clusterMode === "CREATE_NEW"
       ? "CREATE_ONE_FRESH_COCKROACH_CLUSTER"
-      : "ADOPT_ONE_VERIFIED_FRESH_COCKROACH_CLUSTER",
+      : "ADOPT_ONE_BOUND_FRESH_COCKROACH_CLUSTER",
     apiVersion: API_VERSION,
     region: REGION,
     ...value,
@@ -200,7 +206,12 @@ export function validateFreshClusterBillingAuthorization(value) {
     "authorizedAt",
     "authorizedMonthlyCeilingUsd",
     "clusterCreateApproved",
+    "executeRerunAfterApprovalExpiryAuthorized",
+    "executionAuthorizationBoundary",
     "freeBenefitsAssumed",
+    "immutableOneShotSourceAndOperationRequired",
+    "maximumReservedExecutionMinutes",
+    "newReservationAfterApprovalExpiryAuthorized",
     "paidWorstCaseMonthlyUsd",
     "pricingObservedAt",
     "pricingSource",
@@ -212,9 +223,10 @@ export function validateFreshClusterBillingAuthorization(value) {
     "separateTeardownApprovalRequired",
     "status",
     "storageMiBLimit",
-    "storagePriceUsdPerGiBMonth"
+    "storagePriceUsdPerGiBMonth",
+    "reservedOneShotContinuationAfterApprovalExpiryAuthorized"
   ]) && value.schemaVersion ===
-      "prooftoact.fresh-cluster-billing-authorization.v1" &&
+      "prooftoact.fresh-cluster-billing-authorization.v2" &&
     value.status === "AUTHORIZED_PAID_WORST_CASE" &&
     value.pricingSource === "https://www.cockroachlabs.com/pricing/" &&
     HEX_64.test(value.pricingSourceSha256 ?? "") &&
@@ -228,7 +240,14 @@ export function validateFreshClusterBillingAuthorization(value) {
     HEX_64.test(value.authorizationReceiptSha256 ?? "") &&
     Number(value.paidWorstCaseMonthlyUsd) <=
       Number(value.authorizedMonthlyCeilingUsd) &&
-    value.clusterCreateApproved === true &&
+    typeof value.clusterCreateApproved === "boolean" &&
+    value.executionAuthorizationBoundary ===
+      "LATEST_DURABLE_OUTER_RESERVATION_BEFORE_APPROVAL_EXPIRY" &&
+    value.maximumReservedExecutionMinutes === 45 &&
+    value.immutableOneShotSourceAndOperationRequired === true &&
+    value.reservedOneShotContinuationAfterApprovalExpiryAuthorized === true &&
+    value.newReservationAfterApprovalExpiryAuthorized === false &&
+    value.executeRerunAfterApprovalExpiryAuthorized === false &&
     value.separateTeardownApprovalRequired === true &&
     Number.isFinite(pricingObservedAt) && Number.isFinite(authorizedAt) &&
     Number.isFinite(approvalExpiresAt) && Number.isFinite(retentionDeadline) &&
@@ -237,7 +256,7 @@ export function validateFreshClusterBillingAuthorization(value) {
     authorizedAt < approvalExpiresAt &&
     approvalExpiresAt - authorizedAt <= 60 * 60 * 1000 &&
     approvalExpiresAt <= retentionDeadline &&
-    retentionDeadline - authorizedAt <= 24 * 60 * 60 * 1000 &&
+    retentionDeadline - approvalExpiresAt === 24 * 60 * 60 * 1000 &&
     value.pricingObservedAt === new Date(pricingObservedAt).toISOString() &&
     value.authorizedAt === new Date(authorizedAt).toISOString() &&
     value.approvalExpiresAt === new Date(approvalExpiresAt).toISOString() &&
@@ -248,7 +267,18 @@ export function validateFreshClusterBillingAuthorization(value) {
 
 function validateFreshClusterApprovalContract(value, binding) {
   const code = "FRESH_CLUSTER_APPROVAL_REJECTED";
+  let sharedAuthorization;
+  try {
+    sharedAuthorization =
+      validateProofToActB0A1HumanAuthorizationReceipt(
+        value?.humanAuthorizationBinding
+      );
+  } catch (cause) {
+    reject(code, cause);
+  }
+  const sharedIntent = sharedAuthorization.dynamicIntent;
   requireCondition(exactKeys(value, [
+    "accountId",
     "action",
     "adoptedAdminPasswordSha256",
     "approvalId",
@@ -268,6 +298,7 @@ function validateFreshClusterApprovalContract(value, binding) {
     "creatorTokenValueSha256",
     "derivedPrimaryApprovalAuthorized",
     "expiresAt",
+    "humanAuthorizationBinding",
     "humanAuthorizationReceiptSha256",
     "humanAuthorizedTextSha256",
     "oneShot",
@@ -279,25 +310,32 @@ function validateFreshClusterApprovalContract(value, binding) {
     "separateClusterTeardownApprovalRequired",
     "sourceCommit",
     "providerClusterId",
+    "sqlClusterId",
     "sqlBootstrapPort",
     "sqlBootstrapUsername",
     "status",
     "treeDigest"
   ]) && exactKeys(binding, [
-    "operationId", "sourceCommit", "treeDigest"
+    "accountId", "operationId", "sourceCommit", "treeDigest"
   ]) && value.schemaVersion === "prooftoact.fresh-cluster-approval.v1" &&
     value.status === "APPROVED" &&
-    value.action === "CREATE_AND_BOOTSTRAP_ONE_FRESH_COCKROACH_CLUSTER" &&
+    value.action ===
+      "ADOPT_AND_BOOTSTRAP_ONE_BOUND_FRESH_COCKROACH_CLUSTER" &&
     value.approvedBy === "BRIAN_SMITH" && value.oneShot === true &&
     value.callerWorkflowRef ===
       "Flash-Bri/prooftoact/.github/workflows/" +
       "prooftoact-fresh-primary.yml@refs/heads/main" &&
     HEX_40.test(value.callerWorkflowSha ?? "") &&
     HEX_64.test(value.controllerImportGraphSha256 ?? "") &&
-    HEX_64.test(value.humanAuthorizationReceiptSha256 ?? "") &&
-    HEX_64.test(value.humanAuthorizedTextSha256 ?? "") &&
+    canonicalJson(sharedAuthorization) ===
+      canonicalJson(value.humanAuthorizationBinding) &&
+    value.humanAuthorizationReceiptSha256 ===
+      sharedAuthorization.receiptBindingSha256 &&
+    value.humanAuthorizedTextSha256 ===
+      sharedAuthorization.humanAuthorizedTextSha256 &&
     value.humanAuthorizationReceiptSha256 ===
       value.billingAuthorization?.authorizationReceiptSha256 &&
+    value.accountId === binding.accountId &&
     value.operationId === binding.operationId &&
     value.sourceCommit === binding.sourceCommit &&
     value.treeDigest === binding.treeDigest &&
@@ -311,16 +349,12 @@ function validateFreshClusterApprovalContract(value, binding) {
     HEX_64.test(value.creatorAuthorityReceiptSha256 ?? "") &&
     HEX_64.test(value.creatorProviderReadbackReceiptSha256 ?? "") &&
     HEX_64.test(value.creatorTokenValueSha256 ?? "") &&
-    ["ADOPT_VERIFIED_EXISTING", "CREATE_NEW"].includes(value.clusterMode) &&
-    (value.clusterMode === "CREATE_NEW"
-      ? UUID.test(value.parentFolderId ?? "") &&
-        value.providerClusterId === null &&
-        value.manualClusterReceiptSha256 === null &&
-        value.adoptedAdminPasswordSha256 === null
-      : value.parentFolderId === "root" &&
-        UUID.test(value.providerClusterId ?? "") &&
-        HEX_64.test(value.manualClusterReceiptSha256 ?? "") &&
-        HEX_64.test(value.adoptedAdminPasswordSha256 ?? "")) &&
+    value.clusterMode === "ADOPT_VERIFIED_EXISTING" &&
+    value.parentFolderId === "root" &&
+    UUID.test(value.providerClusterId ?? "") &&
+    COCKROACH_SQL_CLUSTER_ID.test(value.sqlClusterId ?? "") &&
+    HEX_64.test(value.manualClusterReceiptSha256 ?? "") &&
+    HEX_64.test(value.adoptedAdminPasswordSha256 ?? "") &&
     value.derivedPrimaryApprovalAuthorized === true &&
     value.separateClusterTeardownApprovalRequired === true &&
     value.sqlBootstrapPort === "26257" &&
@@ -329,7 +363,46 @@ function validateFreshClusterApprovalContract(value, binding) {
       "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_SEPARATELY_TEARDOWN" &&
     canonicalJson(validateFreshClusterBillingAuthorization(
       value.billingAuthorization
-    )) === canonicalJson(value.billingAuthorization), code);
+    )) === canonicalJson(value.billingAuthorization) &&
+    value.billingAuthorization.clusterCreateApproved === false &&
+    sharedIntent.accountId === value.accountId &&
+    sharedIntent.operationId === value.operationId &&
+    sharedIntent.sourceCommit === value.sourceCommit &&
+    sharedIntent.treeDigest === value.treeDigest &&
+    sharedAuthorization.externalHumanAuthorizationEvidence
+      .inboundApprovalEvent.receivedAt ===
+      value.approvedAt &&
+    sharedIntent.a1ReservationDeadline === value.expiresAt &&
+    sharedIntent.cleanupRetentionDeadline ===
+      value.billingAuthorization.retentionDeadline &&
+    sharedIntent.a1ApprovalId === value.approvalId &&
+    sharedIntent.a1CallerWorkflowRef === value.callerWorkflowRef &&
+    sharedIntent.a1CallerWorkflowSha === value.callerWorkflowSha &&
+    sharedIntent.a1ControllerImportGraphSha256 ===
+      value.controllerImportGraphSha256 &&
+    sharedIntent.a1ProviderClusterId === value.providerClusterId &&
+    sharedIntent.a1SqlClusterId === value.sqlClusterId &&
+    sharedIntent.a1CredentialSha256.adoptedAdminPassword ===
+      value.adoptedAdminPasswordSha256 &&
+    sharedIntent.a1CredentialSha256.auditorTokenValue ===
+      value.auditorTokenValueSha256 &&
+    sharedIntent.a1CredentialSha256.creatorTokenValue ===
+      value.creatorTokenValueSha256 &&
+    sharedIntent.a1ProviderReceiptSha256.auditorAuthority ===
+      value.auditorAuthorityReceiptSha256 &&
+    sharedIntent.a1ProviderReceiptSha256.creatorAuthority ===
+      value.creatorAuthorityReceiptSha256 &&
+    sharedIntent.a1ProviderReceiptSha256.creatorProviderReadback ===
+      value.creatorProviderReadbackReceiptSha256 &&
+    sharedIntent.a1ProviderReceiptSha256.manualCluster ===
+      value.manualClusterReceiptSha256 &&
+    sharedIntent.a1ProviderReceiptSha256.pricingSource ===
+      value.billingAuthorization.pricingSourceSha256 &&
+    sharedIntent.costAuthorization.cockroachPaidWorstCaseMonthlyUsdCents ===
+      Number(value.billingAuthorization.paidWorstCaseMonthlyUsd) * 100 &&
+    sharedIntent.costAuthorization.cockroachMonthlySubCeilingUsdCents ===
+      Number(value.billingAuthorization.authorizedMonthlyCeilingUsd) * 100,
+  code);
   const approvedAt = Date.parse(value.approvedAt);
   const expiresAt = Date.parse(value.expiresAt);
   requireCondition(Number.isFinite(approvedAt) && Number.isFinite(expiresAt) &&
@@ -366,21 +439,75 @@ export function validateFreshClusterCleanupApproval(
 
 export function deriveFreshPrimaryApproval({
   clusterApproval,
+  clusterCommand,
   clusterHostSha256,
   credentialSealReceiptSha256,
+  outerAuthentication,
+  outerReservation,
+  outerReservationAcknowledgedAt,
   sqlClusterId
 }) {
   const code = "FRESH_CLUSTER_DERIVED_PRIMARY_APPROVAL_REJECTED";
+  const reservedAt = Date.parse(outerReservation?.reservedAt);
+  const outerApprovalExpiresAt = Date.parse(clusterApproval?.expiresAt);
+  const reservationAcknowledgedAt = Date.parse(
+    outerReservationAcknowledgedAt
+  );
+  const expiresAt = reservedAt + 45 * 60 * 1000;
   requireCondition(clusterApproval?.derivedPrimaryApprovalAuthorized === true &&
+    plainObject(clusterCommand) &&
+    clusterCommand.operationId === clusterApproval.operationId &&
+    clusterCommand.sourceCommit === clusterApproval.sourceCommit &&
+    clusterCommand.treeDigest === clusterApproval.treeDigest &&
+    HEX_64.test(clusterCommand.commandSha256 ?? "") &&
     HEX_64.test(clusterHostSha256 ?? "") &&
     HEX_64.test(credentialSealReceiptSha256 ?? "") &&
-    COCKROACH_SQL_CLUSTER_ID.test(sqlClusterId ?? ""), code);
+    plainObject(outerAuthentication) &&
+    HEX_64.test(digest(outerAuthentication)) &&
+    COCKROACH_SQL_CLUSTER_ID.test(sqlClusterId ?? "") &&
+    exactKeys(outerReservation, [
+      "authenticationSha256",
+      "commandSha256",
+      "controllerTableArn",
+      "durable",
+      "globallyAuthoritative",
+      "globalKeySha256",
+      "operationId",
+      "reservedAt",
+      "schemaVersion",
+      "status",
+      "version"
+    ]) &&
+    outerReservation.operationId === clusterApproval.operationId &&
+    outerReservation.schemaVersion ===
+      "prooftoact.fresh-cluster-reservation.v1" &&
+    outerReservation.status === "RESERVED_BEFORE_PROVIDER_IDENTIFIERS" &&
+    outerReservation.version === 1 &&
+    outerReservation.commandSha256 === clusterCommand.commandSha256 &&
+    outerReservation.authenticationSha256 === digest(outerAuthentication) &&
+    outerReservation.globalKeySha256 === clusterCommand.globalKeySha256 &&
+    outerReservation.controllerTableArn === clusterCommand.controllerTableArn &&
+    [outerReservation.authenticationSha256,
+      outerReservation.commandSha256,
+      outerReservation.globalKeySha256].every((value) =>
+      HEX_64.test(value ?? "")) &&
+    outerReservation.durable === true &&
+    outerReservation.globallyAuthoritative === true &&
+    Number.isFinite(reservedAt) && Number.isFinite(outerApprovalExpiresAt) &&
+    outerReservation.reservedAt === new Date(reservedAt).toISOString() &&
+    Number.isFinite(reservationAcknowledgedAt) &&
+    outerReservationAcknowledgedAt ===
+      new Date(reservationAcknowledgedAt).toISOString() &&
+    reservedAt <= reservationAcknowledgedAt &&
+    reservationAcknowledgedAt < outerApprovalExpiresAt &&
+    reservedAt < outerApprovalExpiresAt &&
+    HEX_64.test(digest(outerReservation)), code);
   return Object.freeze({
-    schemaVersion: "prooftoact.fresh-primary-approval.v1",
+    schemaVersion: "prooftoact.fresh-primary-approval.v2",
     status: "APPROVED",
-    action: "CREATE_ONE_FRESH_PRIMARY",
+    action: "BOOTSTRAP_ONE_BOUND_FRESH_PRIMARY",
     approvalId: clusterApproval.approvalId,
-    approvedAt: clusterApproval.approvedAt,
+    approvedAt: outerReservation.reservedAt,
     approvedBy: clusterApproval.approvedBy,
     clusterHostSha256,
     credentialDisposition:
@@ -388,10 +515,17 @@ export function deriveFreshPrimaryApproval({
     credentialSealReceiptSha256,
     database: "tideproof",
     expectedClusterId: sqlClusterId,
-    expiresAt: clusterApproval.expiresAt,
+    expiresAt: new Date(expiresAt).toISOString(),
+    maximumReservedExecutionMinutes: 45,
     maximumProjectedTotalUsd: 1.5,
     oneShot: true,
     operationId: clusterApproval.operationId,
+    outerApprovalExpiresAt: clusterApproval.expiresAt,
+    outerAuthenticationReceiptSha256: digest(outerAuthentication),
+    outerCommandSha256: clusterCommand.commandSha256,
+    outerReservedAt: outerReservation.reservedAt,
+    outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256: digest(outerReservation),
     partialFailureDisposition:
       "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD",
     sourceCommit: clusterApproval.sourceCommit,

@@ -10,10 +10,12 @@ const REGION = "us-east-1";
 const ROLE_PATH = "/prooftoact/bootstrap/";
 const SESSION_DURATION_SECONDS = 900;
 const MAX_PLAN_WINDOW_MS = 60 * 60 * 1000;
+const MAX_CLEANUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 const INLINE_POLICY_MAX_NON_WHITESPACE_BYTES = 10_240;
 const PLANNER_PATH = "scripts/prepare-one-time-bootstrap-authority.js";
 const ROOT_ASSUME_RUNTIME_PATH =
   "scripts/assume-one-time-bootstrap-root-session.js";
+const CEREMONY_LAUNCHER_PATH = "scripts/launch-one-time-bootstrap-ceremony.js";
 const CEREMONY_RUNNER_PATH = "scripts/run-one-time-bootstrap-ceremony.js";
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
@@ -23,6 +25,167 @@ const UUID =
 const BUCKET_NAME =
   /^(?!xn--)(?!.*\.\.)(?!.*\.-)(?!.*-\.)[a-z0-9](?:[a-z0-9.-]*[a-z0-9])$/u;
 const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
+const EXACT_MONTHLY_AUTHORIZATION_USD_CENTS = 350;
+const EXACT_ONE_TIME_AUTHORIZATION_USD_CENTS = 500;
+const COST_RECONCILIATION_MAXIMUM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const COST_RECONCILIATION_LINE_ITEMS = Object.freeze([
+  Object.freeze({
+    monthlyUsdCents: 320,
+    resourceClass: "AWS_SECRETS_MANAGER_EIGHT_RETAINED_SECRETS"
+  }),
+  Object.freeze({
+    monthlyUsdCents: 30,
+    resourceClass: "AWS_VARIABLE_SERVICES_EXPLICIT_HEADROOM"
+  }),
+  Object.freeze({
+    monthlyUsdCents: 150,
+    resourceClass: "COCKROACH_BASIC_PAID_WORST_CASE"
+  })
+]);
+const PRIVATE_RECOVERY_WORKFLOW_DEFINITIONS = Object.freeze({
+  deployment: Object.freeze({
+    parameterName: "DeploymentWorkflowCommit",
+    path: ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml"
+  }),
+  secretSeal: Object.freeze({
+    parameterName: "SecretSealWorkflowCommit",
+    path:
+      ".github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml"
+  })
+});
+const PRIVATE_RECOVERY_WORKFLOW_KEYS = Object.freeze(
+  Object.keys(PRIVATE_RECOVERY_WORKFLOW_DEFINITIONS)
+);
+const A1_INTEGRATION_RUNTIME_PATHS = Object.freeze([
+  "scripts/bootstrap-fresh-primary.js",
+  "scripts/fresh-primary-bootstrap-role-readback.js",
+  "scripts/fresh-primary-credential-custody-readback.js",
+  "scripts/fresh-primary-credential-sealer.js",
+  "scripts/lib/fresh-bootstrap-collector-binding.js",
+  "scripts/prepare-fresh-primary-bootstrap-role.js",
+  "scripts/prepare-fresh-primary-credential-custody.js"
+]);
+const RUNTIME_DEPENDENCY_PATHS = Object.freeze([
+  "package-lock.json",
+  "package.json",
+  ...A1_INTEGRATION_RUNTIME_PATHS,
+  ...Object.values(PRIVATE_RECOVERY_WORKFLOW_DEFINITIONS)
+    .map(({ path: workflowPath }) => workflowPath)
+]);
+
+function runtimeTree(rootPath, code, { skipRootBin = false } = {}) {
+  let root;
+  let rootStat;
+  try {
+    root = fs.realpathSync(rootPath);
+    rootStat = fs.lstatSync(rootPath);
+  } catch (cause) {
+    reject(code, cause);
+  }
+  requireCondition(root === path.resolve(rootPath) && rootStat.isDirectory() &&
+    !rootStat.isSymbolicLink(), code);
+  const records = [];
+  let totalBytes = 0;
+  function visit(directory, relativeDirectory = "") {
+    for (const name of fs.readdirSync(directory).sort()) {
+      if (skipRootBin && relativeDirectory === "" && name === ".bin") {
+        continue;
+      }
+      requireCondition(name !== "" && name !== "." && name !== ".." &&
+        !name.includes("\0"), code);
+      const relativePath = relativeDirectory ?
+        `${relativeDirectory}/${name}` : name;
+      const absolutePath = path.join(directory, name);
+      const stat = fs.lstatSync(absolutePath);
+      if (stat.isDirectory()) {
+        records.push({ mode: stat.mode & 0o777, path: `${relativePath}/`,
+          size: 0, type: "directory", valueSha256: sha256("") });
+        visit(absolutePath, relativePath);
+        continue;
+      }
+      if (stat.isSymbolicLink()) {
+        const target = fs.readlinkSync(absolutePath);
+        const bytes = Buffer.from(target, "utf8");
+        totalBytes += bytes.length;
+        records.push({ mode: stat.mode & 0o777, path: relativePath,
+          size: bytes.length, type: "symlink", valueSha256: sha256(bytes) });
+        continue;
+      }
+      requireCondition(stat.isFile(), code);
+      const bytes = fs.readFileSync(absolutePath);
+      requireCondition(bytes.length === stat.size, code);
+      totalBytes += bytes.length;
+      records.push({ mode: stat.mode & 0o777, path: relativePath,
+        size: bytes.length, type: "file", valueSha256: sha256(bytes) });
+    }
+  }
+  visit(root);
+  return Object.freeze({
+    fileCount: records.filter(({ type }) => type !== "directory").length,
+    recordCount: records.length,
+    totalBytes,
+    treeDigest: sha256(Buffer.from(records.map((record) =>
+      `${record.path}\0${record.type}\0${record.mode}\0${record.size}\0` +
+      `${record.valueSha256}\n`).join(""), "utf8"))
+  });
+}
+
+function awsCliRuntimeBinding(awsCliPath) {
+  const code = "ONE_TIME_BOOTSTRAP_AWS_CLI_RUNTIME_REJECTED";
+  requireCondition(typeof awsCliPath === "string" &&
+    path.isAbsolute(awsCliPath), code);
+  let realPath;
+  let requestedStat;
+  let realStat;
+  try {
+    realPath = fs.realpathSync(awsCliPath);
+    requestedStat = fs.lstatSync(awsCliPath);
+    realStat = fs.lstatSync(realPath);
+  } catch (cause) {
+    reject(code, cause);
+  }
+  requireCondition((requestedStat.isFile() || requestedStat.isSymbolicLink()) &&
+    realStat.isFile() && !realStat.isSymbolicLink() &&
+    (realStat.mode & 0o111) !== 0, code);
+  const parent = path.dirname(realPath);
+  const runtimeRoot = path.basename(parent) === "bin" ?
+    path.dirname(parent) : parent;
+  const tree = runtimeTree(runtimeRoot, code);
+  return Object.freeze({
+    entrySha256: sha256(fs.readFileSync(realPath)),
+    requestedPath: awsCliPath,
+    realPath,
+    runtimeRoot,
+    ...tree
+  });
+}
+
+function runtimeExecutionBinding(sourceRoot, awsCliPath, homeDirectory) {
+  const code = "ONE_TIME_BOOTSTRAP_RUNTIME_EXECUTION_REJECTED";
+  const nodeRealPath = fs.realpathSync(process.execPath);
+  const nodeStat = fs.lstatSync(nodeRealPath);
+  requireCondition(nodeStat.isFile() && !nodeStat.isSymbolicLink() &&
+    (nodeStat.mode & 0o111) !== 0, code);
+  const dependencies = runtimeTree(path.join(sourceRoot, "node_modules"),
+    code, { skipRootBin: true });
+  requireCondition(path.isAbsolute(homeDirectory ?? "") &&
+    fs.realpathSync(homeDirectory) === homeDirectory &&
+    fs.lstatSync(homeDirectory).isDirectory() &&
+    fs.lstatSync(homeDirectory).uid === process.getuid(), code);
+  return Object.freeze({
+    schemaVersion: "prooftoact.one-time-bootstrap-runtime-execution.v1",
+    awsCli: awsCliRuntimeBinding(awsCliPath),
+    dependencies,
+    homeDirectory,
+    node: Object.freeze({
+      architecture: process.arch,
+      executableSha256: sha256(fs.readFileSync(nodeRealPath)),
+      platform: process.platform,
+      realPath: nodeRealPath,
+      version: process.version
+    })
+  });
+}
 
 const TARGET_DEFINITIONS = Object.freeze({
   freshPrimaryBootstrapRole: Object.freeze({
@@ -96,7 +259,9 @@ const TARGET_DEFINITIONS = Object.freeze({
     stackTagKeys: Object.freeze(["Project"]),
     parameterNames: Object.freeze([
       "ArtifactBucketName",
-      "GitHubOidcProviderArn"
+      "DeploymentWorkflowCommit",
+      "GitHubOidcProviderArn",
+      "SecretSealWorkflowCommit"
     ]),
     resources: Object.freeze({
       PrivateRecoveryBoundary: Object.freeze({
@@ -330,11 +495,37 @@ function allowedGitCommand(argv) {
     ["remote", "get-url", "origin"]
   ];
   if (fixed.some((entry) => JSON.stringify(entry) === key)) return true;
-  return argv.length === 4 && argv[0] === "ls-files" &&
-    argv[1] === "--error-unmatch" && argv[2] === "--" &&
-    [PLANNER_PATH, ROOT_ASSUME_RUNTIME_PATH, CEREMONY_RUNNER_PATH,
+  if (argv.length === 4 && argv[0] === "ls-files" &&
+    argv[1] === "--error-unmatch" && argv[2] === "--") {
+    return [PLANNER_PATH, ROOT_ASSUME_RUNTIME_PATH, CEREMONY_LAUNCHER_PATH,
+      CEREMONY_RUNNER_PATH,
+      ...RUNTIME_DEPENDENCY_PATHS,
       ...TARGET_KEYS.map((targetKey) =>
       TARGET_DEFINITIONS[targetKey].path)].includes(argv[3]);
+  }
+  if (argv.length === 2 && argv[0] === "show") {
+    const match = /^([0-9a-f]{40}):(.+)$/u.exec(argv[1]);
+    return match !== null && [PLANNER_PATH, ROOT_ASSUME_RUNTIME_PATH,
+      CEREMONY_LAUNCHER_PATH, CEREMONY_RUNNER_PATH,
+      ...RUNTIME_DEPENDENCY_PATHS,
+      ...TARGET_KEYS.map((targetKey) => TARGET_DEFINITIONS[targetKey].path)]
+      .includes(match[2]);
+  }
+  return argv.length === 4 && argv[0] === "merge-base" &&
+    argv[1] === "--is-ancestor" && HEX_40.test(argv[2]) &&
+    argv[3] === "HEAD";
+}
+
+function gitArguments(argv) {
+  return [
+    "-c", "core.attributesFile=/dev/null",
+    "-c", "core.autocrlf=false",
+    "-c", "core.eol=lf",
+    "-c", "core.fsmonitor=false",
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "core.untrackedCache=false",
+    ...argv
+  ];
 }
 
 function runReadOnlyGit(root, argv) {
@@ -343,15 +534,7 @@ function runReadOnlyGit(root, argv) {
   try {
     return execFileSync(
       "/usr/bin/git",
-      [
-        "-c", "core.attributesFile=/dev/null",
-        "-c", "core.autocrlf=false",
-        "-c", "core.eol=lf",
-        "-c", "core.fsmonitor=false",
-        "-c", "core.hooksPath=/dev/null",
-        "-c", "core.untrackedCache=false",
-        ...argv
-      ],
+      gitArguments(argv),
       {
         cwd: root,
         encoding: "utf8",
@@ -359,6 +542,22 @@ function runReadOnlyGit(root, argv) {
         stdio: ["ignore", "pipe", "pipe"]
       }
     ).trim();
+  } catch (error) {
+    reject("ONE_TIME_BOOTSTRAP_GIT_READ_REJECTED", error);
+  }
+}
+
+function runReadOnlyGitBytes(root, argv) {
+  requireCondition(Array.isArray(argv) && allowedGitCommand(argv),
+    "ONE_TIME_BOOTSTRAP_GIT_COMMAND_REJECTED");
+  try {
+    return execFileSync("/usr/bin/git", gitArguments(argv), {
+      cwd: root,
+      encoding: null,
+      env: gitEnvironment(),
+      maxBuffer: 8 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
   } catch (error) {
     reject("ONE_TIME_BOOTSTRAP_GIT_READ_REJECTED", error);
   }
@@ -472,6 +671,38 @@ function validateTargetTemplate(targetKey, bytes, expectedSha256,
     [...definition.parameterNames].sort().join("\n") &&
     Object.keys(template.Resources).sort().join("\n") ===
     Object.keys(definition.resources).sort().join("\n"), code);
+  if (targetKey === "privateRecoveryQueryBootstrap") {
+    const commitParameter = {
+      Type: "String",
+      AllowedPattern: "^[0-9a-f]{40}$"
+    };
+    requireCondition(canonicalJson(
+      template.Parameters.DeploymentWorkflowCommit
+    ) === canonicalJson(commitParameter) && canonicalJson(
+      template.Parameters.SecretSealWorkflowCommit
+    ) === canonicalJson(commitParameter), code);
+    const expectedWorkflowRefs = {
+      PrivateRecoveryDeploymentRole: {
+        "Fn::Sub": "Flash-Bri/prooftoact/.github/workflows/" +
+          "prooftoact-sealed-private-recovery-deploy.yml@" +
+          "${DeploymentWorkflowCommit}"
+      },
+      PrivateRecoverySecretSealerRole: {
+        "Fn::Sub": "Flash-Bri/prooftoact/.github/workflows/" +
+          "prooftoact-sealed-private-recovery-secret-seal.yml@" +
+          "${SecretSealWorkflowCommit}"
+      }
+    };
+    for (const [logicalId, expectedWorkflowRef] of
+      Object.entries(expectedWorkflowRefs)) {
+      const statements = template.Resources[logicalId]?.Properties
+        ?.AssumeRolePolicyDocument?.Statement;
+      requireCondition(Array.isArray(statements) && statements.length === 1 &&
+        canonicalJson(statements[0]?.Condition?.StringEquals?.[
+          "token.actions.githubusercontent.com:job_workflow_ref"
+        ]) === canonicalJson(expectedWorkflowRef), code);
+    }
+  }
   walk(template, (value, parts) => {
     const key = parts.at(-1);
     requireCondition(!["GenerateSecretString", "SecretBinary", "SecretString",
@@ -530,6 +761,50 @@ export function operationTokenFor(operationId) {
   )).slice(0, 16);
 }
 
+export function cleanupOnlyAuthorizationContract({
+  accountId,
+  beginsAt,
+  expiresAt,
+  operationId
+}) {
+  const code = "ONE_TIME_BOOTSTRAP_CLEANUP_AUTHORIZATION_REJECTED";
+  const begins = Date.parse(beginsAt);
+  const expires = Date.parse(expiresAt);
+  requireCondition(ACCOUNT_ID.test(accountId ?? "") &&
+    UUID.test(operationId ?? "") && Number.isFinite(begins) &&
+    Number.isFinite(expires) && new Date(begins).toISOString() === beginsAt &&
+    new Date(expires).toISOString() === expiresAt && begins < expires &&
+    expires - begins === MAX_CLEANUP_WINDOW_MS, code);
+  const operationToken = operationTokenFor(operationId);
+  const bootstrapRoleName = `ProofToActBootstrapCreator-${operationToken}`;
+  return deepFreeze({
+    schemaVersion: "prooftoact.one-time-bootstrap-cleanup-authorization.v2",
+    mode: "RECONCILE_ONLY",
+    beginsAt,
+    expiresAt,
+    bootstrapRoleArn: `arn:aws:iam::${accountId}:role${ROLE_PATH}` +
+      bootstrapRoleName,
+    bootstrapRoleName,
+    inlinePolicyName: `ProofToActBootstrapCreatorOnly-${operationToken}`,
+    exactMutationActions: ["iam:DeleteRolePolicy", "iam:DeleteRole"],
+    exactReadbackActions: [
+      "cloudformation:DescribeStacks", "cloudformation:GetTemplate",
+      "cloudformation:ListChangeSets", "cloudtrail:LookupEvents",
+      "iam:GetRole", "iam:GetRolePolicy",
+      "iam:ListAttachedRolePolicies", "iam:ListRolePolicies",
+      "iam:ListRoleTags", "secretsmanager:DescribeSecret",
+      "secretsmanager:ListSecretVersionIds", "sts:GetCallerIdentity",
+      "aws:Logout"
+    ],
+    existingAcceptedJournalRequired: true,
+    acceptedCompletionOrAbandonedPartialDispositionRequired: true,
+    acceptedCompletionReceiptRequiredForCompletedExecution: true,
+    abandonedPartialDispositionRequiredForIncompleteExecution: true,
+    createUpdateSealOrProviderMutationAuthorized: false,
+    newSessionAssumptionAuthorized: false
+  });
+}
+
 export function rootLoginProfileMetadataSha256({
   configuredRegion,
   effectiveRegion,
@@ -564,34 +839,195 @@ function validateTargetDigestInput(value) {
   "ONE_TIME_BOOTSTRAP_TARGET_DIGEST_INPUT_REJECTED");
 }
 
-function validateReconciledCostCeiling(value) {
+function validatePrivateRecoveryWorkflowCommits(value) {
+  requireCondition(exactKeys(value, PRIVATE_RECOVERY_WORKFLOW_KEYS) &&
+    PRIVATE_RECOVERY_WORKFLOW_KEYS.every((key) =>
+      HEX_40.test(value[key] ?? "") && value[key] !== "0".repeat(40)),
+  "ONE_TIME_BOOTSTRAP_WORKFLOW_COMMIT_INPUT_REJECTED");
+  return value;
+}
+
+export function buildOneTimeBootstrapCostReconciliationReceipt({
+  accountId,
+  operationId,
+  pricingObservedAt,
+  pricingSourceSha256,
+  sourceCommit,
+  targetTemplateSha256,
+  treeDigest
+}) {
+  const code = "ONE_TIME_BOOTSTRAP_COST_RECONCILIATION_REJECTED";
+  requireCondition(ACCOUNT_ID.test(accountId ?? "") &&
+    UUID.test(operationId ?? "") && HEX_40.test(sourceCommit ?? "") &&
+    sourceCommit !== "0".repeat(40) && HEX_40.test(treeDigest ?? "") &&
+    treeDigest !== "0".repeat(40), code);
+  canonicalInstant(pricingObservedAt, code);
+  validateTargetDigestInput(targetTemplateSha256);
+  requireCondition(exactKeys(pricingSourceSha256, [
+    "awsSecretsManager", "cockroachBasic"
+  ]) && Object.values(pricingSourceSha256).every((value) =>
+    HEX_64.test(value ?? "")), code);
+  const body = {
+    schemaVersion: "prooftoact.b0-a1-cost-reconciliation.v1",
+    status: "ITEMIZED_EXACT_RESOURCE_ENVELOPE_REVIEWED",
+    accountId,
+    operationId,
+    sourceCommit,
+    treeDigest,
+    targetTemplateSetSha256: digest(Object.fromEntries(
+      TARGET_KEYS.map((key) => [key, targetTemplateSha256[key]])
+    )),
+    pricingObservedAt,
+    pricingSourceSha256: {
+      awsSecretsManager: pricingSourceSha256.awsSecretsManager,
+      cockroachBasic: pricingSourceSha256.cockroachBasic
+    },
+    currency: "USD",
+    freeBenefitsAssumed: false,
+    lineItems: COST_RECONCILIATION_LINE_ITEMS.map((item) => ({ ...item })),
+    awsMonthlyResidualCeilingUsdCents: 350,
+    cockroachPaidWorstCaseMonthlyUsdCents: 150,
+    combinedMonthlyCeilingUsdCents: 500
+  };
+  return deepFreeze({ ...body, receiptSha256: digest(body) });
+}
+
+function validateReconciledCostCeiling(value, binding = null) {
   const code = "ONE_TIME_BOOTSTRAP_COST_CEILING_REJECTED";
   requireCondition(exactKeys(value, [
     "currency",
     "maximumMonthlyUsdCents",
     "maximumOneTimeUsdCents",
+    "reconciliationReceipt",
     "reconciliationReceiptSha256"
   ]) && value.currency === "USD" &&
     Number.isSafeInteger(value.maximumMonthlyUsdCents) &&
-    value.maximumMonthlyUsdCents >= 0 &&
+    value.maximumMonthlyUsdCents ===
+      EXACT_MONTHLY_AUTHORIZATION_USD_CENTS &&
     Number.isSafeInteger(value.maximumOneTimeUsdCents) &&
-    value.maximumOneTimeUsdCents >= 0 &&
+    value.maximumOneTimeUsdCents ===
+      EXACT_ONE_TIME_AUTHORIZATION_USD_CENTS &&
     HEX_64.test(value.reconciliationReceiptSha256 ?? ""), code);
+  const receipt = value.reconciliationReceipt;
+  requireCondition(plainObject(receipt) && exactKeys(receipt, [
+    "accountId", "awsMonthlyResidualCeilingUsdCents",
+    "cockroachPaidWorstCaseMonthlyUsdCents",
+    "combinedMonthlyCeilingUsdCents", "currency", "freeBenefitsAssumed",
+    "lineItems", "operationId", "pricingObservedAt", "pricingSourceSha256",
+    "receiptSha256", "schemaVersion", "sourceCommit", "status",
+    "targetTemplateSetSha256", "treeDigest"
+  ]) && receipt.schemaVersion ===
+      "prooftoact.b0-a1-cost-reconciliation.v1" &&
+    receipt.status === "ITEMIZED_EXACT_RESOURCE_ENVELOPE_REVIEWED" &&
+    receipt.currency === "USD" && receipt.freeBenefitsAssumed === false &&
+    receipt.awsMonthlyResidualCeilingUsdCents === 350 &&
+    receipt.cockroachPaidWorstCaseMonthlyUsdCents === 150 &&
+    receipt.combinedMonthlyCeilingUsdCents === 500 &&
+    receipt.awsMonthlyResidualCeilingUsdCents +
+      receipt.cockroachPaidWorstCaseMonthlyUsdCents ===
+        receipt.combinedMonthlyCeilingUsdCents &&
+    canonicalJson(receipt.lineItems) ===
+      canonicalJson(COST_RECONCILIATION_LINE_ITEMS) &&
+    receipt.lineItems.filter(({ resourceClass }) =>
+      resourceClass.startsWith("AWS_")).reduce((sum, item) =>
+      sum + item.monthlyUsdCents, 0) === 350 &&
+    receipt.lineItems.reduce((sum, item) =>
+      sum + item.monthlyUsdCents, 0) === 500 &&
+    exactKeys(receipt.pricingSourceSha256, [
+      "awsSecretsManager", "cockroachBasic"
+    ]) && Object.values(receipt.pricingSourceSha256).every((item) =>
+      HEX_64.test(item ?? "")) &&
+    ACCOUNT_ID.test(receipt.accountId ?? "") &&
+    UUID.test(receipt.operationId ?? "") &&
+    HEX_40.test(receipt.sourceCommit ?? "") &&
+    receipt.sourceCommit !== "0".repeat(40) &&
+    HEX_40.test(receipt.treeDigest ?? "") &&
+    receipt.treeDigest !== "0".repeat(40) &&
+    HEX_64.test(receipt.targetTemplateSetSha256 ?? "") &&
+    canonicalInstant(receipt.pricingObservedAt, code) >= 0 &&
+    receipt.receiptSha256 === digest(Object.fromEntries(
+      Object.entries(receipt).filter(([key]) => key !== "receiptSha256")
+    )) && value.reconciliationReceiptSha256 === receipt.receiptSha256,
+  code);
+  if (binding !== null) {
+    requireCondition(plainObject(binding) &&
+      receipt.accountId === binding.accountId &&
+      receipt.operationId === binding.operationId &&
+      receipt.sourceCommit === binding.sourceCommit &&
+      receipt.treeDigest === binding.treeDigest &&
+      receipt.targetTemplateSetSha256 === digest(Object.fromEntries(
+        TARGET_KEYS.map((key) => [key, binding.targetTemplateSha256?.[key]])
+      )), code);
+    const maximumObservedAt = canonicalInstant(binding.maximumObservedAt,
+      code);
+    const pricingObservedAt = Date.parse(receipt.pricingObservedAt);
+    requireCondition(pricingObservedAt <= maximumObservedAt &&
+      maximumObservedAt - pricingObservedAt <=
+        COST_RECONCILIATION_MAXIMUM_AGE_MS,
+    code);
+  }
+  return value;
+}
+
+function validateRuntimeTreeReceipt(value, code) {
+  requireCondition(exactKeys(value, [
+    "fileCount", "recordCount", "totalBytes", "treeDigest"
+  ]) && Number.isSafeInteger(value.fileCount) && value.fileCount >= 0 &&
+    Number.isSafeInteger(value.recordCount) &&
+    value.recordCount >= value.fileCount &&
+    Number.isSafeInteger(value.totalBytes) && value.totalBytes >= 0 &&
+    HEX_64.test(value.treeDigest ?? ""), code);
+  return value;
+}
+
+function validateRuntimeExecutionBinding(value) {
+  const code = "ONE_TIME_BOOTSTRAP_RUNTIME_EXECUTION_REJECTED";
+  requireCondition(exactKeys(value, [
+    "awsCli", "dependencies", "homeDirectory", "node", "schemaVersion"
+  ]) && value.schemaVersion ===
+    "prooftoact.one-time-bootstrap-runtime-execution.v1" &&
+    path.isAbsolute(value.homeDirectory ?? ""), code);
+  requireCondition(exactKeys(value.node, [
+    "architecture", "executableSha256", "platform", "realPath", "version"
+  ]) && typeof value.node.architecture === "string" &&
+    typeof value.node.platform === "string" &&
+    typeof value.node.version === "string" &&
+    path.isAbsolute(value.node.realPath ?? "") &&
+    HEX_64.test(value.node.executableSha256 ?? ""), code);
+  requireCondition(exactKeys(value.awsCli, [
+    "entrySha256", "fileCount", "realPath", "recordCount", "requestedPath",
+    "runtimeRoot", "totalBytes", "treeDigest"
+  ]) && path.isAbsolute(value.awsCli.requestedPath ?? "") &&
+    path.isAbsolute(value.awsCli.realPath ?? "") &&
+    path.isAbsolute(value.awsCli.runtimeRoot ?? "") &&
+    HEX_64.test(value.awsCli.entrySha256 ?? ""), code);
+  validateRuntimeTreeReceipt(Object.fromEntries(Object.entries(
+    value.awsCli
+  ).filter(([key]) => [
+    "fileCount", "recordCount", "totalBytes", "treeDigest"
+  ].includes(key))), code);
+  validateRuntimeTreeReceipt(value.dependencies, code);
   return value;
 }
 
 export function validateOneTimeBootstrapCheckout({
+  awsCliPath,
   expectedCommit,
   expectedTree,
+  homeDirectory,
   operationId,
+  privateRecoveryWorkflowCommits,
   sourceRoot,
   targetTemplateSha256
 }) {
   const code = "ONE_TIME_BOOTSTRAP_CHECKOUT_REJECTED";
   requireCondition(typeof sourceRoot === "string" && sourceRoot.length > 0 &&
+    typeof awsCliPath === "string" && path.isAbsolute(awsCliPath) &&
+    typeof homeDirectory === "string" && path.isAbsolute(homeDirectory) &&
     HEX_40.test(expectedCommit ?? "") && HEX_40.test(expectedTree ?? "") &&
     UUID.test(operationId ?? ""), code);
   validateTargetDigestInput(targetTemplateSha256);
+  validatePrivateRecoveryWorkflowCommits(privateRecoveryWorkflowCommits);
   const resolvedRoot = path.resolve(sourceRoot);
   let realRoot;
   let rootStat;
@@ -627,10 +1063,12 @@ export function validateOneTimeBootstrapCheckout({
   const requiredPaths = [
     PLANNER_PATH,
     ROOT_ASSUME_RUNTIME_PATH,
+    CEREMONY_LAUNCHER_PATH,
     CEREMONY_RUNNER_PATH,
+    ...RUNTIME_DEPENDENCY_PATHS,
     ...TARGET_KEYS.map((targetKey) =>
     TARGET_DEFINITIONS[targetKey].path)];
-  for (const relativePath of requiredPaths) {
+  for (const relativePath of [...new Set(requiredPaths)].sort()) {
     requireCondition(runReadOnlyGit(resolvedRoot,
       ["ls-files", "--error-unmatch", "--", relativePath]) === relativePath,
     code);
@@ -652,10 +1090,61 @@ export function validateOneTimeBootstrapCheckout({
     512 * 1024,
     "ONE_TIME_BOOTSTRAP_ROOT_ASSUME_RUNTIME_REJECTED"
   );
+  const ceremonyLauncherBytes = checkedRegularFile(
+    path.join(resolvedRoot, CEREMONY_LAUNCHER_PATH),
+    2 * 1024 * 1024,
+    "ONE_TIME_BOOTSTRAP_CEREMONY_LAUNCHER_REJECTED"
+  );
   const ceremonyRunnerBytes = checkedRegularFile(
     path.join(resolvedRoot, CEREMONY_RUNNER_PATH),
     2 * 1024 * 1024,
     "ONE_TIME_BOOTSTRAP_CEREMONY_RUNNER_REJECTED"
+  );
+  const runtimeDependencyInventory = [...new Set([
+    PLANNER_PATH,
+    ROOT_ASSUME_RUNTIME_PATH,
+    CEREMONY_LAUNCHER_PATH,
+    CEREMONY_RUNNER_PATH,
+    ...RUNTIME_DEPENDENCY_PATHS
+  ])].sort().map((relativePath) => {
+    const bytes = checkedRegularFile(
+      path.join(resolvedRoot, relativePath),
+      8 * 1024 * 1024,
+      "ONE_TIME_BOOTSTRAP_RUNTIME_DEPENDENCY_REJECTED"
+    );
+    const committedBytes = runReadOnlyGitBytes(resolvedRoot,
+      ["show", `${before.commit}:${relativePath}`]);
+    requireCondition(bytes.equals(committedBytes),
+      "ONE_TIME_BOOTSTRAP_RUNTIME_DEPENDENCY_REJECTED");
+    return Object.freeze({
+      bytes: bytes.length,
+      path: relativePath,
+      sha256: sha256(bytes)
+    });
+  });
+  const privateRecoveryWorkflowPins = Object.fromEntries(
+    PRIVATE_RECOVERY_WORKFLOW_KEYS.map((key) => {
+      const definition = PRIVATE_RECOVERY_WORKFLOW_DEFINITIONS[key];
+      const commit = privateRecoveryWorkflowCommits[key];
+      runReadOnlyGit(resolvedRoot,
+        ["merge-base", "--is-ancestor", commit, "HEAD"]);
+      const checkedOutBytes = checkedRegularFile(
+        path.join(resolvedRoot, definition.path),
+        2 * 1024 * 1024,
+        "ONE_TIME_BOOTSTRAP_WORKFLOW_PIN_REJECTED"
+      );
+      const pinnedBytes = runReadOnlyGitBytes(resolvedRoot,
+        ["show", `${commit}:${definition.path}`]);
+      requireCondition(checkedOutBytes.equals(pinnedBytes),
+        "ONE_TIME_BOOTSTRAP_WORKFLOW_PIN_REJECTED");
+      return [key, Object.freeze({
+        bytes: pinnedBytes.length,
+        commit,
+        parameterName: definition.parameterName,
+        path: definition.path,
+        sha256: sha256(pinnedBytes)
+      })];
+    })
   );
   const operationToken = operationTokenFor(operationId);
   const targets = {};
@@ -681,10 +1170,18 @@ export function validateOneTimeBootstrapCheckout({
   requireCondition(canonicalJson(after) === canonicalJson(before), code);
   return deepFreeze({
     commit: before.commit,
+    ceremonyLauncherSha256: sha256(ceremonyLauncherBytes),
     ceremonyRunnerSha256: sha256(ceremonyRunnerBytes),
     officialOrigin: OFFICIAL_ORIGIN,
     plannerSha256: sha256(plannerBytes),
+    privateRecoveryWorkflowPins,
     rootAssumeRuntimeSha256: sha256(rootAssumeRuntimeBytes),
+    runtimeDependencyInventory,
+    runtimeExecutionBinding: runtimeExecutionBinding(
+      resolvedRoot,
+      awsCliPath,
+      homeDirectory
+    ),
     targets,
     tree: before.tree
   });
@@ -766,7 +1263,11 @@ function targetParameters(binding, targetKey, templateSha256) {
   }
   return {
     ArtifactBucketName: binding.artifactBucketName,
-    GitHubOidcProviderArn: binding.githubOidcProviderArn
+    DeploymentWorkflowCommit:
+      binding.privateRecoveryWorkflowCommits.deployment,
+    GitHubOidcProviderArn: binding.githubOidcProviderArn,
+    SecretSealWorkflowCommit:
+      binding.privateRecoveryWorkflowCommits.secretSeal
   };
 }
 
@@ -838,6 +1339,7 @@ export function buildBootstrapRoleDocuments(binding) {
     "notAfter",
     "operationId",
     "operationToken",
+    "privateRecoveryWorkflowCommits",
     "sessionName",
     "sourceCommit",
     "sourceIdentity",
@@ -850,6 +1352,11 @@ export function buildBootstrapRoleDocuments(binding) {
   ]) && ACCOUNT_ID.test(binding.accountId) && UUID.test(binding.operationId) &&
     HEX_40.test(binding.sourceCommit) && HEX_40.test(binding.sourceTree) &&
     HEX_64.test(binding.userAuthorizationReceiptSha256) &&
+    exactKeys(binding.privateRecoveryWorkflowCommits,
+      PRIVATE_RECOVERY_WORKFLOW_KEYS) &&
+    PRIVATE_RECOVERY_WORKFLOW_KEYS.every((key) =>
+      HEX_40.test(binding.privateRecoveryWorkflowCommits[key]) &&
+      binding.privateRecoveryWorkflowCommits[key] !== "0".repeat(40)) &&
     HEX_64.test(binding.writerExternalId), code);
   const exactSessionTags = sessionTags(binding);
   const requestTagConditions = Object.fromEntries(exactSessionTags.map(
@@ -1151,8 +1658,60 @@ export function verifyOneTimeBootstrapPlan(plan) {
     plan.schemaVersion === "prooftoact.one-time-bootstrap-authority-plan.v1" &&
     plan.status === "SOURCE_REVIEWED_CEREMONY_PLAN" &&
     plan.directProviderExecutionPerformed === false &&
+    plan.authorization?.activationStatus ===
+      "HOLD_PENDING_EXACT_350_CENT_MONTHLY_AWS_AND_500_CENT_ONE_TIME_AUTHORIZATION_AND_LIVE_READBACK" &&
+    canonicalJson(plan.authorization?.cleanupOnlyAuthorization) ===
+      canonicalJson(cleanupOnlyAuthorizationContract({
+        accountId: plan.account?.accountId,
+        beginsAt: plan.notAfter,
+        expiresAt: new Date(Date.parse(plan.notAfter) +
+          MAX_CLEANUP_WINDOW_MS).toISOString(),
+        operationId: plan.operation?.operationId
+      })) &&
     plan.sessionContract?.durationSeconds === SESSION_DURATION_SECONDS,
   code);
+  validateReconciledCostCeiling(plan.costCeiling, {
+    accountId: plan.account?.accountId,
+    maximumObservedAt: plan.preparedAt,
+    operationId: plan.operation?.operationId,
+    sourceCommit: plan.source?.commit,
+    targetTemplateSha256: Object.fromEntries(TARGET_KEYS.map((key) =>
+      [key, plan.targets?.[key]?.templateSha256])),
+    treeDigest: plan.source?.tree
+  });
+  const pins = plan.source?.privateRecoveryWorkflowPins;
+  requireCondition(exactKeys(pins, PRIVATE_RECOVERY_WORKFLOW_KEYS) &&
+    PRIVATE_RECOVERY_WORKFLOW_KEYS.every((key) => {
+      const definition = PRIVATE_RECOVERY_WORKFLOW_DEFINITIONS[key];
+      const pin = pins[key];
+      return exactKeys(pin, ["bytes", "commit", "parameterName", "path",
+        "sha256"]) && Number.isSafeInteger(pin.bytes) && pin.bytes > 0 &&
+        HEX_40.test(pin.commit ?? "") && pin.commit !== "0".repeat(40) &&
+        pin.parameterName === definition.parameterName &&
+        pin.path === definition.path && HEX_64.test(pin.sha256 ?? "") &&
+        plan.targets?.privateRecoveryQueryBootstrap?.parameters?.[
+          definition.parameterName
+        ] === pin.commit;
+    }), code);
+  const inventory = plan.source?.runtimeDependencyInventory;
+  const expectedInventoryPaths = [...new Set([
+    PLANNER_PATH,
+    ROOT_ASSUME_RUNTIME_PATH,
+    CEREMONY_LAUNCHER_PATH,
+    CEREMONY_RUNNER_PATH,
+    ...RUNTIME_DEPENDENCY_PATHS
+  ])].sort();
+  requireCondition(Array.isArray(inventory) &&
+    inventory.map(({ path: itemPath }) => itemPath).join("\n") ===
+      expectedInventoryPaths.join("\n") &&
+    inventory.every((item) => exactKeys(item,
+      ["bytes", "path", "sha256"]) &&
+      Number.isSafeInteger(item.bytes) && item.bytes > 0 &&
+      HEX_64.test(item.sha256 ?? "")), code);
+  validateRuntimeExecutionBinding(plan.source?.runtimeExecutionBinding);
+  requireCondition(path.isAbsolute(plan.source?.ceremonyLauncherPath ?? "") ===
+    false && plan.source?.ceremonyLauncherPath === CEREMONY_LAUNCHER_PATH &&
+    HEX_64.test(plan.source?.ceremonyLauncherSha256 ?? ""), code);
   return plan;
 }
 
@@ -1166,13 +1725,16 @@ export function buildOneTimeBootstrapAuthorityPlan(input) {
   requireCondition(exactKeys(input, [
     "accountId",
     "artifactBucketName",
+    "awsCliPath",
     "expectedSourceCommit",
     "expectedSourceTree",
     "githubOidcProviderArn",
+    "homeDirectory",
     "mfaSerialArn",
     "notAfter",
     "now",
     "operationId",
+    "privateRecoveryWorkflowCommits",
     "reconciledCostCeiling",
     "rootProfile",
     "rootProfileConfiguredRegion",
@@ -1181,6 +1743,8 @@ export function buildOneTimeBootstrapAuthorityPlan(input) {
     "targetTemplateSha256",
     "userAuthorizationReceiptSha256"
   ]) && ACCOUNT_ID.test(input.accountId ?? "") &&
+    path.isAbsolute(input.awsCliPath ?? "") &&
+    path.isAbsolute(input.homeDirectory ?? "") &&
     UUID.test(input.operationId ?? "") && HEX_40.test(
       input.expectedSourceCommit ?? "") &&
     HEX_40.test(input.expectedSourceTree ?? "") &&
@@ -1205,15 +1769,29 @@ export function buildOneTimeBootstrapAuthorityPlan(input) {
     input.mfaSerialArn.startsWith(`arn:aws:iam::${input.accountId}:mfa/`) &&
     input.mfaSerialArn.length <= 256, code);
   validateTargetDigestInput(input.targetTemplateSha256);
-  validateReconciledCostCeiling(input.reconciledCostCeiling);
+  validatePrivateRecoveryWorkflowCommits(
+    input.privateRecoveryWorkflowCommits
+  );
+  validateReconciledCostCeiling(input.reconciledCostCeiling, {
+    accountId: input.accountId,
+    maximumObservedAt: input.now,
+    operationId: input.operationId,
+    sourceCommit: input.expectedSourceCommit,
+    targetTemplateSha256: input.targetTemplateSha256,
+    treeDigest: input.expectedSourceTree
+  });
   const now = canonicalInstant(input.now, code);
   const notAfter = canonicalInstant(input.notAfter, code);
   requireCondition(now < notAfter && notAfter - now === MAX_PLAN_WINDOW_MS,
     "ONE_TIME_BOOTSTRAP_PLAN_TIME_REJECTED");
   const checkout = validateOneTimeBootstrapCheckout({
+    awsCliPath: input.awsCliPath,
     expectedCommit: input.expectedSourceCommit,
     expectedTree: input.expectedSourceTree,
+    homeDirectory: input.homeDirectory,
     operationId: input.operationId,
+    privateRecoveryWorkflowCommits:
+      input.privateRecoveryWorkflowCommits,
     sourceRoot: input.sourceRoot,
     targetTemplateSha256: input.targetTemplateSha256
   });
@@ -1232,6 +1810,9 @@ export function buildOneTimeBootstrapAuthorityPlan(input) {
     notAfter: input.notAfter,
     operationId: input.operationId,
     operationToken,
+    privateRecoveryWorkflowCommits: {
+      ...input.privateRecoveryWorkflowCommits
+    },
     sessionName: `prooftoact-bootstrap-${operationToken}`,
     sourceCommit: checkout.commit,
     sourceIdentity: `prooftoact-b0-${operationToken}`,
@@ -1279,6 +1860,15 @@ export function buildOneTimeBootstrapAuthorityPlan(input) {
     notAfter: input.notAfter,
     directProviderExecutionPerformed: false,
     authorization: {
+      activationStatus:
+        "HOLD_PENDING_EXACT_350_CENT_MONTHLY_AWS_AND_500_CENT_ONE_TIME_AUTHORIZATION_AND_LIVE_READBACK",
+      cleanupOnlyAuthorization: cleanupOnlyAuthorizationContract({
+        accountId: input.accountId,
+        beginsAt: input.notAfter,
+        expiresAt: new Date(Date.parse(input.notAfter) +
+          MAX_CLEANUP_WINDOW_MS).toISOString(),
+        operationId: input.operationId
+      }),
       executionAuthorizationInferred: false,
       userAuthorizationReceiptSha256:
         input.userAuthorizationReceiptSha256
@@ -1301,12 +1891,18 @@ export function buildOneTimeBootstrapAuthorityPlan(input) {
       tree: checkout.tree,
       officialOrigin: checkout.officialOrigin,
       cleanStandaloneMainCheckout: true,
+      ceremonyLauncherPath: CEREMONY_LAUNCHER_PATH,
+      ceremonyLauncherSha256: checkout.ceremonyLauncherSha256,
       ceremonyRunnerPath: CEREMONY_RUNNER_PATH,
       ceremonyRunnerSha256: checkout.ceremonyRunnerSha256,
       plannerPath: PLANNER_PATH,
       plannerSha256: checkout.plannerSha256,
       rootAssumeRuntimePath: ROOT_ASSUME_RUNTIME_PATH,
-      rootAssumeRuntimeSha256: checkout.rootAssumeRuntimeSha256
+      rootAssumeRuntimeSha256: checkout.rootAssumeRuntimeSha256,
+      privateRecoveryWorkflowPins:
+        checkout.privateRecoveryWorkflowPins,
+      runtimeDependencyInventory: checkout.runtimeDependencyInventory,
+      runtimeExecutionBinding: checkout.runtimeExecutionBinding
     },
     existingInputs: {
       artifactBucketName: input.artifactBucketName,
@@ -1482,12 +2078,17 @@ export function renderOneTimeBootstrapCeremony(plan, options) {
   verifyOneTimeBootstrapPlan(plan);
   const code = "ONE_TIME_BOOTSTRAP_RENDER_INPUT_REJECTED";
   requireCondition(exactKeys(options, [
-    "artifactDirectory", "awsCliPath", "mfaTokenFd", "sourceRoot"
+    "artifactDirectory", "awsCliPath", "homeDirectory", "mfaTokenFd",
+    "sourceRoot"
   ]) &&
     path.isAbsolute(options.artifactDirectory) &&
-    path.isAbsolute(options.awsCliPath) && path.isAbsolute(options.sourceRoot) &&
-    Number.isSafeInteger(options.mfaTokenFd) && options.mfaTokenFd >= 3 &&
-    options.mfaTokenFd <= 1024, code);
+    path.isAbsolute(options.awsCliPath) &&
+    path.isAbsolute(options.homeDirectory) &&
+    path.isAbsolute(options.sourceRoot) &&
+    options.mfaTokenFd === 3 && options.awsCliPath ===
+      plan.source.runtimeExecutionBinding.awsCli.requestedPath &&
+    options.homeDirectory === plan.source.runtimeExecutionBinding.homeDirectory,
+  code);
   let artifactStat;
   let sourceReal;
   try {
@@ -1511,6 +2112,8 @@ export function renderOneTimeBootstrapCeremony(plan, options) {
     `b0-${plan.operation.operationToken}-trust.json`);
   const policyPath = path.join(options.artifactDirectory,
     `b0-${plan.operation.operationToken}-policy.json`);
+  const planPath = path.join(options.artifactDirectory,
+    `b0-${plan.operation.operationToken}-plan.json`);
   const rootProfileArgs = ["--profile", plan.account.rootProfile,
     "--region", REGION, "--no-cli-pager"];
   const rootCommands = [
@@ -1625,6 +2228,12 @@ export function renderOneTimeBootstrapCeremony(plan, options) {
     planBodySha256: plan.planBodySha256,
     artifacts: [
       {
+        path: planPath,
+        privateModeRequired: "0600",
+        sha256: sha256(canonicalBytes(plan)),
+        bytesBase64: canonicalBytes(plan).toString("base64")
+      },
+      {
         path: trustPath,
         privateModeRequired: "0600",
         sha256: plan.bootstrapRole.trustPolicySha256,
@@ -1640,6 +2249,29 @@ export function renderOneTimeBootstrapCeremony(plan, options) {
       }
     ],
     rootSetupAndAssume: rootCommands,
+    launcherInvocation: {
+      executable: "/usr/bin/env",
+      argv: [
+        "/usr/bin/env", "-i",
+        `HOME=${options.homeDirectory}`,
+        "PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C",
+        `AWS_PROFILE=${plan.account.rootProfile}`,
+        "AWS_REGION=us-east-1", "AWS_DEFAULT_REGION=us-east-1",
+        "AWS_EC2_METADATA_DISABLED=true", "AWS_SDK_LOAD_CONFIG=1",
+        plan.source.runtimeExecutionBinding.node.realPath,
+        path.join(sourceReal, plan.source.ceremonyLauncherPath),
+        "--aws-cli-path",
+        plan.source.runtimeExecutionBinding.awsCli.requestedPath,
+        "--journal-directory", options.artifactDirectory,
+        "--mode", "NEW", "--plan-file", planPath,
+        "--source-root", sourceReal
+      ],
+      authorizationReceiptFd: 4,
+      identityHmacKeyFd: 11,
+      identityRecordFd: 10,
+      mfaTokenFd: 3,
+      writerValueFds: [5, 6, 7, 8, 9]
+    },
     rootAssumeInProcess: {
       modulePath: plan.source.rootAssumeRuntimePath,
       moduleSha256: plan.source.rootAssumeRuntimeSha256,
@@ -2220,9 +2852,13 @@ export function validateOneTimeBootstrapCleanupReceipt(plan, receipt) {
     "observedAt",
     "operationId",
     "rawCredentialFieldsPresent",
+    "rootAssumeEventTimes",
+    "rootAssumeSessionCount",
     "rootDirectEvents",
     "schemaVersion",
     "unexpectedRootMutationEvents",
+    "writerAssumeEventTimes",
+    "writerAssumeSessionCount",
     "writerSessionExpiration",
     "writerSessionExpired"
   ]) && receipt.schemaVersion ===
@@ -2234,6 +2870,17 @@ export function validateOneTimeBootstrapCleanupReceipt(plan, receipt) {
     receipt.b0CredentialsDestroyed === true &&
     receipt.writerSessionExpired === true &&
     receipt.rawCredentialFieldsPresent === false &&
+    Number.isSafeInteger(receipt.rootAssumeSessionCount) &&
+    receipt.rootAssumeSessionCount >= 1 &&
+    receipt.rootAssumeSessionCount <= 2 &&
+    Number.isSafeInteger(receipt.writerAssumeSessionCount) &&
+    receipt.writerAssumeSessionCount >= 1 &&
+    receipt.writerAssumeSessionCount <= 2 &&
+    Array.isArray(receipt.rootAssumeEventTimes) &&
+    receipt.rootAssumeEventTimes.length === receipt.rootAssumeSessionCount &&
+    Array.isArray(receipt.writerAssumeEventTimes) &&
+    receipt.writerAssumeEventTimes.length ===
+      receipt.writerAssumeSessionCount &&
     Array.isArray(receipt.b0CredentialEnvironmentKeysPresent) &&
     receipt.b0CredentialEnvironmentKeysPresent.length === 0 &&
     Array.isArray(receipt.unexpectedRootMutationEvents) &&
@@ -2241,7 +2888,9 @@ export function validateOneTimeBootstrapCleanupReceipt(plan, receipt) {
   const observedAt = canonicalInstant(receipt.observedAt, code);
   requireCondition(canonicalInstant(receipt.b0SessionExpiration, code) <=
     observedAt && canonicalInstant(receipt.writerSessionExpiration, code) <=
-    observedAt, code);
+    observedAt && [...receipt.rootAssumeEventTimes,
+      ...receipt.writerAssumeEventTimes].every((value) =>
+      canonicalInstant(value, code) <= observedAt), code);
   const setupEvents = [
     {
       eventName: "CreateRole",
@@ -2283,13 +2932,27 @@ export function validateOneTimeBootstrapCleanupReceipt(plan, receipt) {
       canonicalJson(setupEvents) &&
     canonicalJson(receipt.rootDirectEvents.slice(-2)) ===
       canonicalJson(cleanupEvents) &&
-    receipt.rootDirectEvents.slice(3, -2).length >= 1 &&
+    receipt.rootDirectEvents.slice(3, -2).length ===
+      receipt.rootAssumeSessionCount &&
     receipt.rootDirectEvents.slice(3, -2).every((event) =>
       canonicalJson(event) === canonicalJson(expectedAssumeEvent)) &&
     exactKeys(receipt.awsLogout, [
-      "cachedRootSessionAbsent", "command", "exitCode", "profile"
-    ]) && receipt.awsLogout.cachedRootSessionAbsent === true &&
-    receipt.awsLogout.exitCode === 0 &&
+      "command", "dispatchOutcome", "namedRootLoginSessionUnavailable",
+      "noninteractiveCallerIdentityRejected", "profile", "receiptSha256",
+      "rootSdkClientsDestroyed", "schemaVersion", "status"
+    ]) && receipt.awsLogout.schemaVersion ===
+      "prooftoact.one-time-bootstrap-logout.v2" &&
+    receipt.awsLogout.status === "NAMED_ROOT_LOGIN_SESSION_UNAVAILABLE" &&
+    ["DISPATCHED_AND_NEGATIVELY_VERIFIED",
+      "PRESTATE_ABSENT_AFTER_DURABLE_INTENT_OR_DISPATCH"].includes(
+      receipt.awsLogout.dispatchOutcome
+    ) && receipt.awsLogout.namedRootLoginSessionUnavailable === true &&
+    receipt.awsLogout.noninteractiveCallerIdentityRejected === true &&
+    receipt.awsLogout.rootSdkClientsDestroyed === true &&
+    receipt.awsLogout.receiptSha256 === digest(Object.fromEntries(
+      Object.entries(receipt.awsLogout).filter(([key]) =>
+        key !== "receiptSha256")
+    )) &&
     receipt.awsLogout.profile === plan.account.rootProfile &&
     canonicalJson(receipt.awsLogout.command) === canonicalJson([
       "aws", "logout", "--profile", plan.account.rootProfile
@@ -2299,7 +2962,9 @@ export function validateOneTimeBootstrapCleanupReceipt(plan, receipt) {
     status: "B0_DELETED_TEMPORARY_CREDENTIALS_EXPIRED_AND_ROOT_LOGGED_OUT",
     planBodySha256: plan.planBodySha256,
     observedAt: receipt.observedAt,
+    rootAssumeSessionCount: receipt.rootAssumeSessionCount,
     rootDirectEventCount: receipt.rootDirectEvents.length,
+    writerAssumeSessionCount: receipt.writerAssumeSessionCount,
     bootstrapRoleAbsent: true,
     inlinePolicyAbsent: true,
     rootLoggedOut: true,
@@ -2309,16 +2974,24 @@ export function validateOneTimeBootstrapCleanupReceipt(plan, receipt) {
 }
 
 export const oneTimeBootstrapConstants = deepFreeze({
+  A1_INTEGRATION_RUNTIME_PATHS,
   CONDITION_KEYS: [...CONDITION_KEYS],
+  CEREMONY_LAUNCHER_PATH,
   CEREMONY_RUNNER_PATH,
+  EXACT_MONTHLY_AUTHORIZATION_USD_CENTS,
+  EXACT_ONE_TIME_AUTHORIZATION_USD_CENTS,
   INLINE_POLICY_MAX_NON_WHITESPACE_BYTES,
   MANAGED_POLICY_METADATA_READ_ACTIONS,
   MANAGED_POLICY_MUTATION_ACTIONS,
+  MAX_CLEANUP_WINDOW_MS,
   MAX_PLAN_WINDOW_MS,
   OFFICIAL_ORIGIN,
   PLANNER_PATH,
+  PRIVATE_RECOVERY_WORKFLOW_DEFINITIONS,
+  PRIVATE_RECOVERY_WORKFLOW_KEYS,
   REGION,
   ROOT_ASSUME_RUNTIME_PATH,
+  RUNTIME_DEPENDENCY_PATHS,
   ROLE_METADATA_READ_ACTIONS,
   ROLE_MUTATION_ACTIONS,
   ROLE_PATH,
@@ -2332,6 +3005,7 @@ export const oneTimeBootstrapConstants = deepFreeze({
 });
 
 export const __test = Object.freeze({
+  awsCliRuntimeBinding,
   canonicalBytes,
   canonicalJson,
   digest,
@@ -2339,6 +3013,8 @@ export const __test = Object.freeze({
   exactStackName,
   secretResourceArns,
   sha256,
+  runtimeExecutionBinding,
+  runtimeTree,
   validateTargetTemplate
 });
 

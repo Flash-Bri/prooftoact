@@ -21,7 +21,7 @@ const NOW = Date.parse("2026-08-19T10:00:00.000Z");
 
 function billingAuthorization() {
   return {
-    schemaVersion: "prooftoact.fresh-cluster-billing-authorization.v1",
+    schemaVersion: "prooftoact.fresh-cluster-billing-authorization.v2",
     status: "AUTHORIZED_PAID_WORST_CASE",
     pricingSource: "https://www.cockroachlabs.com/pricing/",
     pricingObservedAt: "2026-08-19T08:00:00.000Z",
@@ -30,14 +30,21 @@ function billingAuthorization() {
     authorizedMonthlyCeilingUsd: "2.00",
     authorizationReceiptSha256: "8".repeat(64),
     approvalExpiresAt: "2026-08-19T09:00:00.000Z",
-    retentionDeadline: "2026-08-19T20:00:00.000Z",
+    retentionDeadline: "2026-08-20T09:00:00.000Z",
     requestUnitLimit: "5000000",
     storageMiBLimit: "1024",
     requestUnitPriceUsdPerMillion: "0.20",
     storagePriceUsdPerGiBMonth: "0.50",
     freeBenefitsAssumed: false,
     paidWorstCaseMonthlyUsd: "1.50",
-    clusterCreateApproved: true,
+    clusterCreateApproved: false,
+    executeRerunAfterApprovalExpiryAuthorized: false,
+    executionAuthorizationBoundary:
+      "LATEST_DURABLE_OUTER_RESERVATION_BEFORE_APPROVAL_EXPIRY",
+    immutableOneShotSourceAndOperationRequired: true,
+    maximumReservedExecutionMinutes: 45,
+    newReservationAfterApprovalExpiryAuthorized: false,
+    reservedOneShotContinuationAfterApprovalExpiryAuthorized: true,
     separateTeardownApprovalRequired: true
   };
 }
@@ -50,7 +57,9 @@ function command() {
     auditorAuthorityReceiptSha256: "1".repeat(64),
     auditorServiceAccountId: AUDITOR_ID,
     auditorTokenValueSha256: "2".repeat(64),
-    billingAuthorization: billingAuthorization(),
+    billingAuthorization: billingAuthorization({
+      clusterCreateApproved: false
+    }),
     clusterMode: "ADOPT_VERIFIED_EXISTING",
     controllerTableArn: TABLE_ARN,
     creatorAuthorityReceiptSha256: "d".repeat(64),
@@ -108,18 +117,19 @@ function snapshot(name, values) {
 }
 
 function harness({ adminDeleteFails = false, finalReceipt = null,
-  terminalReceipt = null } = {}) {
+  storedTransitions = null, terminalReceipt = null } = {}) {
   const input = command();
   const initial = {
     phase: "INGRESS_CREATE_DISPATCHING"
   };
+  const transitions = storedTransitions ?? [initial];
   const stored = {
     finalReceipt,
     lastReceiptSha256: "3".repeat(64),
     state: initial.phase,
     terminalReceipt,
-    transitionCount: 1,
-    transitions: [initial],
+    transitionCount: transitions.length,
+    transitions: structuredClone(transitions),
     version: terminalReceipt || finalReceipt ? 3 : 2
   };
   let users = ["prooftoact_bootstrap_admin", "tp_gate2_authorizer_user"];
@@ -185,7 +195,11 @@ function harness({ adminDeleteFails = false, finalReceipt = null,
     provider,
     runtime,
     stored,
-    allowAdminRetry() { failAdmin = false; }
+    allowAdminRetry() { failAdmin = false; },
+    completeAdminDeletion() {
+      users = users.filter((name) => name !==
+        "prooftoact_bootstrap_admin");
+    }
   };
 }
 
@@ -211,7 +225,7 @@ test("post-expiry cleanup revokes exact admin and /32 without replay", async () 
   ].includes(item)), false);
 });
 
-test("ambiguous cleanup stays nonterminal and a later retry completes", async () => {
+test("ambiguous cleanup stays nonterminal and later absence reconciles without redispatch", async () => {
   const value = harness({ adminDeleteFails: true });
   await assert.rejects(reconcileFreshClusterProviderAccess({
     clock: () => NOW,
@@ -221,6 +235,9 @@ test("ambiguous cleanup stays nonterminal and a later retry completes", async ()
   }), /FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED/u);
   assert.equal(value.stored.terminalReceipt, null);
   value.allowAdminRetry();
+  value.completeAdminDeletion();
+  const deletesBeforeReadback = value.calls.filter((item) =>
+    item === "deleteSqlAdmin").length;
   const receipt = await reconcileFreshClusterProviderAccess({
     clock: () => NOW,
     command: value.command,
@@ -229,6 +246,8 @@ test("ambiguous cleanup stays nonterminal and a later retry completes", async ()
   });
   assert.equal(receipt.adminCredentialAbsent, true);
   assert.equal(receipt.ingressEmpty, true);
+  assert.equal(value.calls.filter((item) =>
+    item === "deleteSqlAdmin").length, deletesBeforeReadback);
 });
 
 test("only PASS or a clean-access terminal can fast-return", async () => {
@@ -254,3 +273,59 @@ test("only PASS or a clean-access terminal can fast-return", async () => {
   }), /FRESH_CLUSTER_RECONCILIATION_UNSAFE_TERMINAL_REJECTED/u);
   assert.deepEqual(unsafe.calls, ["readStrong"]);
 });
+
+for (const [label, now] of [
+  ["at", Date.parse("2026-08-20T09:00:00.000Z")],
+  ["after", Date.parse("2026-08-20T09:00:00.001Z")]
+]) {
+  test(`cleanup already ${label} expiry emits no durable transition or mutation`,
+    async () => {
+      const value = harness();
+      await assert.rejects(reconcileFreshClusterProviderAccess({
+        clock: () => now,
+        command: value.command,
+        provider: value.provider,
+        runtime: value.runtime
+      }), /FRESH_CLUSTER_CLEANUP_APPROVAL_EXPIRED/u);
+      assert.equal(value.stored.transitions.length, 1);
+      assert.equal(value.calls.includes("deleteSqlAdmin"), false);
+      assert.equal(value.calls.includes("deleteTemporaryIngress"), false);
+    });
+}
+
+test("expiry immediately before admin dispatch emits no dispatch transition",
+  async () => {
+    const value = harness();
+    const moments = [
+      Date.parse("2026-08-20T08:59:59.999Z"),
+      Date.parse("2026-08-20T08:59:59.999Z"),
+      Date.parse("2026-08-20T09:00:00.000Z")
+    ];
+    await assert.rejects(reconcileFreshClusterProviderAccess({
+      clock: () => moments.length > 0
+        ? moments.shift()
+        : Date.parse("2026-08-20T09:00:00.000Z"),
+      command: value.command,
+      provider: value.provider,
+      runtime: value.runtime
+    }), /FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED/u);
+    assert.equal(value.stored.transitions.some(({ phase }) =>
+      phase === "RECOVERY_ADMIN_DELETE_DISPATCHING"), false);
+    assert.equal(value.calls.includes("deleteSqlAdmin"), false);
+  });
+
+test("a durable pre-expiry dispatch is reconciled read-only without redispatch",
+  async () => {
+    const value = harness({ storedTransitions: [
+      { phase: "INGRESS_CREATE_DISPATCHING" },
+      { phase: "RECOVERY_CLEANUP_STARTED" },
+      { phase: "RECOVERY_ADMIN_DELETE_DISPATCHING" }
+    ] });
+    await assert.rejects(reconcileFreshClusterProviderAccess({
+      clock: () => Date.parse("2026-08-20T09:00:00.001Z"),
+      command: value.command,
+      provider: value.provider,
+      runtime: value.runtime
+    }), /FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED/u);
+    assert.equal(value.calls.includes("deleteSqlAdmin"), false);
+  });

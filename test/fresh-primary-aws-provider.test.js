@@ -94,6 +94,11 @@ function command() {
     credentialBundleSha256: "5".repeat(64),
     credentialSealReceiptSha256: "6".repeat(64),
     operationId: OPERATION_ID,
+    outerAuthenticationReceiptSha256: "8".repeat(64),
+    outerCommandSha256: "9".repeat(64),
+    outerReservedAt: "2026-08-19T08:00:00.000Z",
+    outerReservationAcknowledgedAt: "2026-08-19T08:00:01.000Z",
+    outerReservationReceiptSha256: "7".repeat(64),
     providerClusterId: PROVIDER_CLUSTER_ID,
     recoveryPublisherKeySetDigest: RECOVERY_SIGNER.publisherKeySetDigest,
     recoveryPublisherTrustRootCommitment:

@@ -258,9 +258,16 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
       "database",
       "expectedClusterId",
       "expiresAt",
+      "maximumReservedExecutionMinutes",
       "maximumProjectedTotalUsd",
       "oneShot",
       "operationId",
+      "outerApprovalExpiresAt",
+      "outerAuthenticationReceiptSha256",
+      "outerCommandSha256",
+      "outerReservedAt",
+      "outerReservationAcknowledgedAt",
+      "outerReservationReceiptSha256",
       "partialFailureDisposition",
       "schemaVersion",
       "sourceCommit",
@@ -271,12 +278,17 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
         "clusterHostSha256",
         "credentialSealReceiptSha256",
         "operationId",
+        "outerAuthenticationReceiptSha256",
+        "outerCommandSha256",
+        "outerReservedAt",
+        "outerReservationAcknowledgedAt",
+        "outerReservationReceiptSha256",
         "sourceCommit",
         "treeDigest"
       ]) &&
-      value.schemaVersion === "prooftoact.fresh-primary-approval.v1" &&
+      value.schemaVersion === "prooftoact.fresh-primary-approval.v2" &&
       value.status === "APPROVED" &&
-      value.action === "CREATE_ONE_FRESH_PRIMARY" &&
+      value.action === "BOOTSTRAP_ONE_BOUND_FRESH_PRIMARY" &&
       value.approvedBy === "BRIAN_SMITH" &&
       value.oneShot === true &&
       value.database === DATABASE_NAME &&
@@ -286,10 +298,22 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
       value.clusterHostSha256 === binding.clusterHostSha256 &&
       value.credentialSealReceiptSha256 ===
         binding.credentialSealReceiptSha256 &&
+      value.outerReservationReceiptSha256 ===
+        binding.outerReservationReceiptSha256 &&
+      value.outerAuthenticationReceiptSha256 ===
+        binding.outerAuthenticationReceiptSha256 &&
+      value.outerCommandSha256 === binding.outerCommandSha256 &&
+      value.outerReservedAt === binding.outerReservedAt &&
+      value.outerReservationAcknowledgedAt ===
+        binding.outerReservationAcknowledgedAt &&
       UUID.test(value.approvalId ?? "") &&
       COCKROACH_SQL_CLUSTER_ID.test(value.expectedClusterId ?? "") &&
       HEX_64.test(value.clusterHostSha256 ?? "") &&
       HEX_64.test(value.credentialSealReceiptSha256 ?? "") &&
+      HEX_64.test(value.outerReservationReceiptSha256 ?? "") &&
+      HEX_64.test(value.outerAuthenticationReceiptSha256 ?? "") &&
+      HEX_64.test(value.outerCommandSha256 ?? "") &&
+      value.maximumReservedExecutionMinutes === 45 &&
       Number.isFinite(value.maximumProjectedTotalUsd) &&
       value.maximumProjectedTotalUsd >= 0 &&
       value.maximumProjectedTotalUsd <= 12 &&
@@ -298,18 +322,35 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
       value.partialFailureDisposition ===
         "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD" &&
       typeof value.approvedAt === "string" &&
-      typeof value.expiresAt === "string",
+      typeof value.expiresAt === "string" &&
+      typeof value.outerApprovalExpiresAt === "string",
     code
   );
   const approvedAt = Date.parse(value.approvedAt);
   const expiresAt = Date.parse(value.expiresAt);
+  const outerApprovalExpiresAt = Date.parse(value.outerApprovalExpiresAt);
+  const outerReservationAcknowledgedAt = Date.parse(
+    value.outerReservationAcknowledgedAt
+  );
   requireCondition(
     Number.isFinite(now) &&
       Number.isFinite(approvedAt) &&
       Number.isFinite(expiresAt) &&
+      Number.isFinite(outerApprovalExpiresAt) &&
+      Number.isFinite(outerReservationAcknowledgedAt) &&
+      value.approvedAt === new Date(approvedAt).toISOString() &&
+      value.expiresAt === new Date(expiresAt).toISOString() &&
+      value.outerApprovalExpiresAt ===
+        new Date(outerApprovalExpiresAt).toISOString() &&
+      value.outerReservedAt === value.approvedAt &&
+      value.outerReservationAcknowledgedAt ===
+        new Date(outerReservationAcknowledgedAt).toISOString() &&
+      approvedAt <= outerReservationAcknowledgedAt &&
+      outerReservationAcknowledgedAt < outerApprovalExpiresAt &&
+      approvedAt < outerApprovalExpiresAt &&
       approvedAt <= now &&
       now < expiresAt &&
-      expiresAt - approvedAt <= 60 * 60 * 1000,
+      expiresAt - approvedAt === 45 * 60 * 1000,
     code
   );
   return Object.freeze({ ...value });
@@ -543,6 +584,14 @@ async function runFreshPrimaryBootstrap({
     clusterHostSha256: admin.hostSha256,
     credentialSealReceiptSha256: sha256(canonicalBytes(seal)),
     operationId,
+    outerAuthenticationReceiptSha256:
+      approval?.outerAuthenticationReceiptSha256,
+    outerCommandSha256: approval?.outerCommandSha256,
+    outerReservedAt: approval?.outerReservedAt,
+    outerReservationAcknowledgedAt:
+      approval?.outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256:
+      approval?.outerReservationReceiptSha256,
     sourceCommit,
     treeDigest
   }, approvalNow);
@@ -913,6 +962,14 @@ async function runFreshPrimaryProviderControlledBootstrapWithRuntime({
       command?.approvalId === approval?.approvalId &&
       command?.sqlClusterId === approval?.expectedClusterId &&
       command?.approvalSha256 === sha256(canonicalBytes(approval)) &&
+      command?.outerAuthenticationReceiptSha256 ===
+        approval?.outerAuthenticationReceiptSha256 &&
+      command?.outerCommandSha256 === approval?.outerCommandSha256 &&
+      command?.outerReservedAt === approval?.outerReservedAt &&
+      command?.outerReservationAcknowledgedAt ===
+        approval?.outerReservationAcknowledgedAt &&
+      command?.outerReservationReceiptSha256 ===
+        approval?.outerReservationReceiptSha256 &&
       command?.adminSecretValueSha256 === sha256(adminConnectionString) &&
       command?.credentialBundleRawSha256 === credentialBundleRawSha256 &&
       command?.credentialBundleSha256 === credentialBundleSha256 &&
@@ -1546,6 +1603,14 @@ export async function main(args = process.argv.slice(2)) {
     clusterHostSha256: admin.hostSha256,
     credentialSealReceiptSha256: sha256(canonicalBytes(acceptedSeal)),
     operationId: parsed["--operation-id"],
+    outerAuthenticationReceiptSha256:
+      approval?.outerAuthenticationReceiptSha256,
+    outerCommandSha256: approval?.outerCommandSha256,
+    outerReservedAt: approval?.outerReservedAt,
+    outerReservationAcknowledgedAt:
+      approval?.outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256:
+      approval?.outerReservationReceiptSha256,
     sourceCommit: source.sourceCommit,
     treeDigest: source.treeDigest
   });

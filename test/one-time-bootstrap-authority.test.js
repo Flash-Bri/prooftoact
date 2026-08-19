@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import {
   __test,
   buildBootstrapNegativeSimulationPlan,
+  buildOneTimeBootstrapCostReconciliationReceipt,
   buildOneTimeBootstrapAuthorityPlan,
   oneTimeBootstrapConstants,
   operationTokenFor,
@@ -41,6 +42,10 @@ const PLANNER_BYTES = fs.readFileSync(path.join(
 const ROOT_ASSUME_BYTES = fs.readFileSync(path.join(
   ROOT,
   oneTimeBootstrapConstants.ROOT_ASSUME_RUNTIME_PATH
+));
+const CEREMONY_LAUNCHER_BYTES = fs.readFileSync(path.join(
+  ROOT,
+  oneTimeBootstrapConstants.CEREMONY_LAUNCHER_PATH
 ));
 const CEREMONY_RUNNER_BYTES = fs.readFileSync(path.join(
   ROOT,
@@ -197,7 +202,13 @@ function targetTemplates() {
       AWSTemplateFormatVersion: "2010-09-09",
       Parameters: {
         ArtifactBucketName: { Type: "String" },
-        GitHubOidcProviderArn: { Type: "String" }
+        DeploymentWorkflowCommit: {
+          Type: "String", AllowedPattern: "^[0-9a-f]{40}$"
+        },
+        GitHubOidcProviderArn: { Type: "String" },
+        SecretSealWorkflowCommit: {
+          Type: "String", AllowedPattern: "^[0-9a-f]{40}$"
+        }
       },
       Resources: {
         PrivateRecoveryBoundary: {
@@ -219,12 +230,44 @@ function targetTemplates() {
           { PermissionsBoundary: { Ref: "PrivateRecoveryBoundary" } }
         ),
         PrivateRecoveryDeploymentRole: role(
-          "ProofToActPrivateRecoveryQueryDeployment"
+          "ProofToActPrivateRecoveryQueryDeployment", {
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [{
+                Effect: "Allow",
+                Principal: { Federated: { Ref: "GitHubOidcProviderArn" } },
+                Action: "sts:AssumeRoleWithWebIdentity",
+                Condition: { StringEquals: {
+                  "token.actions.githubusercontent.com:job_workflow_ref": {
+                    "Fn::Sub": "Flash-Bri/prooftoact/.github/workflows/" +
+                      "prooftoact-sealed-private-recovery-deploy.yml@" +
+                      "${DeploymentWorkflowCommit}"
+                  }
+                } }
+              }]
+            }
+          }
         ),
         PrivateRecoveryMcpSecret:
           secret("prooftoact/private-recovery-query/managed-mcp"),
         PrivateRecoverySecretSealerRole: role(
-          "ProofToActPrivateRecoveryQuerySecretSealer"
+          "ProofToActPrivateRecoveryQuerySecretSealer", {
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [{
+                Effect: "Allow",
+                Principal: { Federated: { Ref: "GitHubOidcProviderArn" } },
+                Action: "sts:AssumeRoleWithWebIdentity",
+                Condition: { StringEquals: {
+                  "token.actions.githubusercontent.com:job_workflow_ref": {
+                    "Fn::Sub": "Flash-Bri/prooftoact/.github/workflows/" +
+                      "prooftoact-sealed-private-recovery-secret-seal.yml@" +
+                      "${SecretSealWorkflowCommit}"
+                  }
+                } }
+              }]
+            }
+          }
         )
       },
       Outputs: {}
@@ -255,8 +298,29 @@ function fixture(t, overrides = {}) {
     oneTimeBootstrapConstants.ROOT_ASSUME_RUNTIME_PATH), ROOT_ASSUME_BYTES,
   { mode: 0o600 });
   fs.writeFileSync(path.join(root,
+    oneTimeBootstrapConstants.CEREMONY_LAUNCHER_PATH),
+  CEREMONY_LAUNCHER_BYTES, { mode: 0o600 });
+  fs.writeFileSync(path.join(root,
     oneTimeBootstrapConstants.CEREMONY_RUNNER_PATH), CEREMONY_RUNNER_BYTES,
   { mode: 0o600 });
+  for (const relativePath of
+    oneTimeBootstrapConstants.RUNTIME_DEPENDENCY_PATHS) {
+    const target = path.join(root, relativePath);
+    if (fs.existsSync(target)) continue;
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+    fs.copyFileSync(path.join(ROOT, relativePath), target);
+    fs.chmodSync(target, 0o600);
+  }
+  fs.writeFileSync(path.join(root, ".gitignore"), "node_modules/\n", {
+    mode: 0o600
+  });
+  fs.mkdirSync(path.join(root, "node_modules"), { mode: 0o700 });
+  const awsCliRuntime = path.join(parent, "aws-cli-runtime");
+  const awsCliPath = path.join(awsCliRuntime, "bin", "aws");
+  fs.mkdirSync(path.dirname(awsCliPath), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(awsCliPath, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+  fs.writeFileSync(path.join(awsCliRuntime, "runtime.marker"),
+    "aws-cli-fixture-v1\n", { mode: 0o600 });
   const templates = targetTemplates();
   const bytes = {};
   for (const targetKey of oneTimeBootstrapConstants.TARGET_KEYS) {
@@ -282,6 +346,7 @@ function fixture(t, overrides = {}) {
   t.after(() => fs.rmSync(parent, { force: true, recursive: true }));
   return {
     artifacts,
+    awsCliPath,
     bytes,
     digests: Object.fromEntries(Object.entries(bytes).map(([key, value]) =>
       [key, sha256(value)])),
@@ -292,22 +357,42 @@ function fixture(t, overrides = {}) {
 }
 
 function input(checkout) {
+  const costReconciliation =
+    buildOneTimeBootstrapCostReconciliationReceipt({
+      accountId: ACCOUNT_ID,
+      operationId: OPERATION_ID,
+      pricingObservedAt: NOW,
+      pricingSourceSha256: {
+        awsSecretsManager: "b".repeat(64),
+        cockroachBasic: "c".repeat(64)
+      },
+      sourceCommit: checkout.identity.commit,
+      targetTemplateSha256: checkout.digests,
+      treeDigest: checkout.identity.tree
+    });
   return {
     accountId: ACCOUNT_ID,
     artifactBucketName: "prooftoact-private-artifacts-123456789012",
+    awsCliPath: checkout.awsCliPath,
     expectedSourceCommit: checkout.identity.commit,
     expectedSourceTree: checkout.identity.tree,
     githubOidcProviderArn: `arn:aws:iam::${ACCOUNT_ID}:oidc-provider/` +
       "token.actions.githubusercontent.com",
+    homeDirectory: checkout.parent,
     mfaSerialArn: MFA_ARN,
     notAfter: NOT_AFTER,
     now: NOW,
     operationId: OPERATION_ID,
+    privateRecoveryWorkflowCommits: {
+      deployment: checkout.identity.commit,
+      secretSeal: checkout.identity.commit
+    },
     reconciledCostCeiling: {
       currency: "USD",
-      maximumMonthlyUsdCents: 1000,
+      maximumMonthlyUsdCents: 350,
       maximumOneTimeUsdCents: 500,
-      reconciliationReceiptSha256: "c".repeat(64)
+      reconciliationReceipt: costReconciliation,
+      reconciliationReceiptSha256: costReconciliation.receiptSha256
     },
     rootProfile: "default",
     rootProfileConfiguredRegion: null,
@@ -325,6 +410,21 @@ function input(checkout) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function logoutReceipt(profile, dispatchOutcome =
+  "DISPATCHED_AND_NEGATIVELY_VERIFIED") {
+  const body = {
+    schemaVersion: "prooftoact.one-time-bootstrap-logout.v2",
+    status: "NAMED_ROOT_LOGIN_SESSION_UNAVAILABLE",
+    command: ["aws", "logout", "--profile", profile],
+    dispatchOutcome,
+    namedRootLoginSessionUnavailable: true,
+    noninteractiveCallerIdentityRejected: true,
+    profile,
+    rootSdkClientsDestroyed: true
+  };
+  return { ...body, receiptSha256: __test.digest(body) };
 }
 
 function uuidFor(index) {
@@ -471,6 +571,32 @@ test("planner binds exact source, A1 formulas, target-specific tags, and policy"
   assert.equal(plan.writerContract.durationSeconds, 900);
   assert.equal(plan.sessionContract.durationSeconds, 900);
   assert.equal(plan.sessionContract.exactDurationEnforcedByIam, false);
+  assert.deepEqual(plan.authorization.cleanupOnlyAuthorization, {
+    schemaVersion: "prooftoact.one-time-bootstrap-cleanup-authorization.v2",
+    mode: "RECONCILE_ONLY",
+    beginsAt: NOT_AFTER,
+    expiresAt: "2026-08-19T15:00:00.000Z",
+    bootstrapRoleArn: `arn:aws:iam::${ACCOUNT_ID}:role/` +
+      `prooftoact/bootstrap/ProofToActBootstrapCreator-${token}`,
+    bootstrapRoleName: `ProofToActBootstrapCreator-${token}`,
+    inlinePolicyName: `ProofToActBootstrapCreatorOnly-${token}`,
+    exactMutationActions: ["iam:DeleteRolePolicy", "iam:DeleteRole"],
+    exactReadbackActions: [
+      "cloudformation:DescribeStacks", "cloudformation:GetTemplate",
+      "cloudformation:ListChangeSets", "cloudtrail:LookupEvents",
+      "iam:GetRole", "iam:GetRolePolicy",
+      "iam:ListAttachedRolePolicies", "iam:ListRolePolicies",
+      "iam:ListRoleTags", "secretsmanager:DescribeSecret",
+      "secretsmanager:ListSecretVersionIds", "sts:GetCallerIdentity",
+      "aws:Logout"
+    ],
+    existingAcceptedJournalRequired: true,
+    acceptedCompletionOrAbandonedPartialDispositionRequired: true,
+    acceptedCompletionReceiptRequiredForCompletedExecution: true,
+    abandonedPartialDispositionRequiredForIncompleteExecution: true,
+    createUpdateSealOrProviderMutationAuthorized: false,
+    newSessionAssumptionAuthorized: false
+  });
   assert.equal(
     plan.targets.freshPrimaryCredentialCustody.parameters
       .OperatorAuthorizationSha256,
@@ -524,6 +650,33 @@ test("planner binds exact source, A1 formulas, target-specific tags, and policy"
   }), /ONE_TIME_BOOTSTRAP_PLAN_TIME_REJECTED/u);
 });
 
+test("planner rejects 351-cent AWS authority, fabricated cost digests, and inflated item sums", (t) => {
+  const checkout = fixture(t);
+  const overAws = structuredClone(input(checkout));
+  overAws.reconciledCostCeiling.maximumMonthlyUsdCents = 351;
+  assert.throws(() => buildOneTimeBootstrapAuthorityPlan(overAws),
+    /ONE_TIME_BOOTSTRAP_COST_CEILING_REJECTED/u);
+
+  const fabricated = structuredClone(input(checkout));
+  fabricated.reconciledCostCeiling.reconciliationReceiptSha256 =
+    "f".repeat(64);
+  assert.throws(() => buildOneTimeBootstrapAuthorityPlan(fabricated),
+    /ONE_TIME_BOOTSTRAP_COST_CEILING_REJECTED/u);
+
+  const inflated = structuredClone(input(checkout));
+  const costReceipt = inflated.reconciledCostCeiling.reconciliationReceipt;
+  costReceipt.lineItems[1].monthlyUsdCents = 31;
+  costReceipt.awsMonthlyResidualCeilingUsdCents = 351;
+  costReceipt.combinedMonthlyCeilingUsdCents = 501;
+  costReceipt.receiptSha256 = __test.digest(Object.fromEntries(
+    Object.entries(costReceipt).filter(([key]) => key !== "receiptSha256")
+  ));
+  inflated.reconciledCostCeiling.reconciliationReceiptSha256 =
+    costReceipt.receiptSha256;
+  assert.throws(() => buildOneTimeBootstrapAuthorityPlan(inflated),
+    /ONE_TIME_BOOTSTRAP_COST_CEILING_REJECTED/u);
+});
+
 test("trust request rejects any account IAM user or role despite matching MFA and tags", (t) => {
   const checkout = fixture(t);
   const plan = buildOneTimeBootstrapAuthorityPlan(input(checkout));
@@ -558,12 +711,19 @@ test("renderer uses TemplateBody, stages execute, and keeps MFA token out of arg
   const plan = buildOneTimeBootstrapAuthorityPlan(input(checkout));
   const rendered = renderOneTimeBootstrapCeremony(plan, {
     artifactDirectory: checkout.artifacts,
-    awsCliPath: "/usr/local/bin/aws",
+    awsCliPath: checkout.awsCliPath,
+    homeDirectory: checkout.parent,
     mfaTokenFd: 3,
     sourceRoot: checkout.root
   });
   const serialized = JSON.stringify(rendered);
   assert.equal(rendered.cleanupCommandsRendered, false);
+  assert.deepEqual(rendered.launcherInvocation.argv.slice(0, 6), [
+    "/usr/bin/env", "-i", `HOME=${checkout.parent}`, "PATH=/usr/bin:/bin",
+    "LANG=C", "LC_ALL=C"
+  ]);
+  assert.equal(rendered.launcherInvocation.argv.includes("NODE_OPTIONS"),
+    false);
   assert.equal(rendered.mfaTokenContract.tokenInArgv, false);
   assert.equal(rendered.mfaTokenContract.tokenInEnvironment, false);
   assert.equal(rendered.rootAssumeInProcess.exportName,
@@ -715,6 +875,65 @@ test("root AssumeRole has one SDK attempt and ambiguous failure never redispatch
     stsClient: ambiguousClient
   }), /ONE_TIME_BOOTSTRAP_ROOT_ASSUME_AMBIGUOUS_RECONCILE_CLOUDTRAIL/u);
   assert.deepEqual(commands, [
+    "GetCallerIdentityCommand",
+    "AssumeRoleCommand"
+  ]);
+});
+
+test("root AssumeRole rechecks the exact execution deadline immediately before dispatch", async (t) => {
+  const checkout = fixture(t);
+  const plan = buildOneTimeBootstrapAuthorityPlan(input(checkout));
+  const mfaDiscoveryReceipt = validateRootMfaDiscoveryEvidence(
+    plan,
+    mfaEvidence()
+  );
+  for (const dispatchAt of [NOT_AFTER, "2026-08-18T15:00:00.001Z"]) {
+    const commands = [];
+    const client = {
+      async send(commandValue) {
+        commands.push(commandValue.constructor.name);
+        return {
+          Account: ACCOUNT_ID,
+          Arn: `arn:aws:iam::${ACCOUNT_ID}:root`,
+          UserId: ACCOUNT_ID
+        };
+      }
+    };
+    await assert.rejects(() => assumeOneTimeBootstrapRootSession({
+      clock: clockSequence("2026-08-18T14:59:59.998Z", dispatchAt),
+      mfaDiscoveryReceipt,
+      mfaFd: ownerOnlyMfaFd(t),
+      plan,
+      stsClient: client
+    }), /ONE_TIME_BOOTSTRAP_ROOT_ASSUME_REJECTED/u);
+    assert.deepEqual(commands, ["GetCallerIdentityCommand"]);
+  }
+
+  const justBeforeCommands = [];
+  const justBeforeClient = {
+    async send(commandValue) {
+      justBeforeCommands.push(commandValue.constructor.name);
+      if (commandValue.constructor.name === "GetCallerIdentityCommand") {
+        return {
+          Account: ACCOUNT_ID,
+          Arn: `arn:aws:iam::${ACCOUNT_ID}:root`,
+          UserId: ACCOUNT_ID
+        };
+      }
+      throw new Error("EXPECTED_DISPATCH_BOUNDARY_PROBE");
+    }
+  };
+  await assert.rejects(() => assumeOneTimeBootstrapRootSession({
+    clock: clockSequence(
+      "2026-08-18T14:59:59.997Z",
+      "2026-08-18T14:59:59.999Z"
+    ),
+    mfaDiscoveryReceipt,
+    mfaFd: ownerOnlyMfaFd(t),
+    plan,
+    stsClient: justBeforeClient
+  }), /ONE_TIME_BOOTSTRAP_ROOT_ASSUME_AMBIGUOUS_RECONCILE_CLOUDTRAIL/u);
+  assert.deepEqual(justBeforeCommands, [
     "GetCallerIdentityCommand",
     "AssumeRoleCommand"
   ]);
@@ -908,6 +1127,10 @@ test("cleanup receipt permits only exact root role lifecycle, serial-bound Assum
     rawCredentialFieldsPresent: false,
     b0CredentialEnvironmentKeysPresent: [],
     unexpectedRootMutationEvents: [],
+    rootAssumeEventTimes: ["2026-08-18T14:02:00.000Z"],
+    rootAssumeSessionCount: 1,
+    writerAssumeEventTimes: ["2026-08-18T14:05:00.000Z"],
+    writerAssumeSessionCount: 1,
     rootDirectEvents: [
       {
         eventName: "CreateRole",
@@ -941,18 +1164,15 @@ test("cleanup receipt permits only exact root role lifecycle, serial-bound Assum
       },
       { eventName: "DeleteRole", roleName: plan.bootstrapRole.name }
     ],
-    awsLogout: {
-      cachedRootSessionAbsent: true,
-      command: ["aws", "logout", "--profile", plan.account.rootProfile],
-      exitCode: 0,
-      profile: plan.account.rootProfile
-    }
+    awsLogout: logoutReceipt(plan.account.rootProfile)
   };
   assert.equal(validateOneTimeBootstrapCleanupReceipt(plan, receipt)
     .rootLoggedOut, true);
   const continued = clone(receipt);
   continued.rootDirectEvents.splice(4, 0,
     clone(continued.rootDirectEvents[3]));
+  continued.rootAssumeEventTimes.push("2026-08-18T14:03:00.000Z");
+  continued.rootAssumeSessionCount = 2;
   assert.equal(validateOneTimeBootstrapCleanupReceipt(plan, continued)
     .rootDirectEventCount, 7);
   const forbidden = clone(receipt);
@@ -991,6 +1211,22 @@ test("target integration hook rejects missing parameter, secret value, workload,
     ...wrongDigest.targetTemplateSha256,
     freshPrimaryBootstrapRole: "f".repeat(64)
   };
+  const wrongCostReceipt =
+    buildOneTimeBootstrapCostReconciliationReceipt({
+      accountId: ACCOUNT_ID,
+      operationId: OPERATION_ID,
+      pricingObservedAt: NOW,
+      pricingSourceSha256: {
+        awsSecretsManager: "b".repeat(64),
+        cockroachBasic: "c".repeat(64)
+      },
+      sourceCommit: checkout.identity.commit,
+      targetTemplateSha256: wrongDigest.targetTemplateSha256,
+      treeDigest: checkout.identity.tree
+    });
+  wrongDigest.reconciledCostCeiling.reconciliationReceipt = wrongCostReceipt;
+  wrongDigest.reconciledCostCeiling.reconciliationReceiptSha256 =
+    wrongCostReceipt.receiptSha256;
   assert.throws(() => buildOneTimeBootstrapAuthorityPlan(wrongDigest),
     /ONE_TIME_BOOTSTRAP_TARGET_TEMPLATE_REJECTED/u);
 });
@@ -999,9 +1235,15 @@ test("checkout rejects dirty source, linked worktree, and missing reviewed runti
   const dirty = fixture(t);
   fs.writeFileSync(path.join(dirty.root, "dirty"), "x\n");
   assert.throws(() => validateOneTimeBootstrapCheckout({
+    awsCliPath: dirty.awsCliPath,
     expectedCommit: dirty.identity.commit,
     expectedTree: dirty.identity.tree,
+    homeDirectory: dirty.parent,
     operationId: OPERATION_ID,
+    privateRecoveryWorkflowCommits: {
+      deployment: dirty.identity.commit,
+      secretSeal: dirty.identity.commit
+    },
     sourceRoot: dirty.root,
     targetTemplateSha256: dirty.digests
   }), /ONE_TIME_BOOTSTRAP_CHECKOUT_REJECTED/u);
@@ -1010,9 +1252,15 @@ test("checkout rejects dirty source, linked worktree, and missing reviewed runti
   const linked = path.join(base.parent, "linked");
   git(base.root, ["worktree", "add", "-b", "linked-main", linked, "HEAD"]);
   assert.throws(() => validateOneTimeBootstrapCheckout({
+    awsCliPath: base.awsCliPath,
     expectedCommit: base.identity.commit,
     expectedTree: base.identity.tree,
+    homeDirectory: base.parent,
     operationId: OPERATION_ID,
+    privateRecoveryWorkflowCommits: {
+      deployment: base.identity.commit,
+      secretSeal: base.identity.commit
+    },
     sourceRoot: linked,
     targetTemplateSha256: base.digests
   }), /ONE_TIME_BOOTSTRAP_CHECKOUT_REJECTED/u);
@@ -1022,7 +1270,7 @@ test("planner stays built-ins-only; SDK root runtime has no logging or token ser
   assert.doesNotMatch(PLANNER_SOURCE, /@aws-sdk|\bfetch\s*\(/u);
   assert.doesNotMatch(PLANNER_SOURCE,
     /from\s+["']node:(?:http|https|net|tls|dns|dgram)["']/u);
-  assert.equal((PLANNER_SOURCE.match(/execFileSync\s*\(/gu) ?? []).length, 1);
+  assert.equal((PLANNER_SOURCE.match(/execFileSync\s*\(/gu) ?? []).length, 2);
   assert.match(PLANNER_SOURCE, /execFileSync\(\s*"\/usr\/bin\/git"/u);
   assert.match(ROOT_ASSUME_SOURCE, /@aws-sdk\/client-sts/u);
   assert.doesNotMatch(ROOT_ASSUME_SOURCE,

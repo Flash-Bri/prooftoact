@@ -35,6 +35,8 @@ const TABLE_ARN =
 const SQL_DNS = "fresh.aws.cockroachlabs.cloud";
 const PASSWORD = "Z".repeat(40);
 const START_MS = Date.parse("2026-08-19T08:00:00.000Z");
+const EXECUTION_DEADLINE_MS = Date.parse("2026-08-19T09:00:00.000Z");
+const CLEANUP_DEADLINE_MS = Date.parse("2026-08-20T09:00:00.000Z");
 const RECOVERY_CLUSTER_ID = "d23e4567-e89b-42d3-a456-42661417400c";
 const QUERY_SIGNER = generateFreshRecoveryPublisherSecret({
   operationId: OPERATION_ID,
@@ -43,9 +45,9 @@ const QUERY_SIGNER = generateFreshRecoveryPublisherSecret({
 });
 const QUERY_TRUST_ROOT = JSON.parse(QUERY_SIGNER.trustRootJson);
 
-function billingAuthorization() {
+function billingAuthorization(overrides = {}) {
   return {
-    schemaVersion: "prooftoact.fresh-cluster-billing-authorization.v1",
+    schemaVersion: "prooftoact.fresh-cluster-billing-authorization.v2",
     status: "AUTHORIZED_PAID_WORST_CASE",
     pricingSource: "https://www.cockroachlabs.com/pricing/",
     pricingObservedAt: "2026-08-19T08:00:00.000Z",
@@ -54,7 +56,7 @@ function billingAuthorization() {
     authorizedMonthlyCeilingUsd: "2.00",
     authorizationReceiptSha256: "8".repeat(64),
     approvalExpiresAt: "2026-08-19T09:00:00.000Z",
-    retentionDeadline: "2026-08-19T20:00:00.000Z",
+    retentionDeadline: "2026-08-20T09:00:00.000Z",
     requestUnitLimit: "5000000",
     storageMiBLimit: "1024",
     requestUnitPriceUsdPerMillion: "0.20",
@@ -62,7 +64,15 @@ function billingAuthorization() {
     freeBenefitsAssumed: false,
     paidWorstCaseMonthlyUsd: "1.50",
     clusterCreateApproved: true,
-    separateTeardownApprovalRequired: true
+    executeRerunAfterApprovalExpiryAuthorized: false,
+    executionAuthorizationBoundary:
+      "LATEST_DURABLE_OUTER_RESERVATION_BEFORE_APPROVAL_EXPIRY",
+    immutableOneShotSourceAndOperationRequired: true,
+    maximumReservedExecutionMinutes: 45,
+    newReservationAfterApprovalExpiryAuthorized: false,
+    reservedOneShotContinuationAfterApprovalExpiryAuthorized: true,
+    separateTeardownApprovalRequired: true,
+    ...overrides
   };
 }
 
@@ -100,7 +110,7 @@ function cluster(input = command()) {
     parent_id: input.parentFolderId,
     creator_id: CREATOR_ID,
     created_at: input.clusterMode === "CREATE_NEW"
-      ? "2026-08-19T08:00:02.000Z"
+      ? "2026-08-19T08:00:03.000Z"
       : "2026-08-18T20:00:00.000Z",
     delete_protection: "ENABLED",
     cockroach_version: "v26.2.1",
@@ -141,6 +151,47 @@ function authentication(input) {
     providerBacked: true
   };
 }
+
+test("durable outer reservation must return before approval expiry", () => {
+  const input = command();
+  const acceptedAuthentication = authentication(input);
+  const reservation = {
+    schemaVersion: "prooftoact.fresh-cluster-reservation.v1",
+    status: "RESERVED_BEFORE_PROVIDER_IDENTIFIERS",
+    authenticationSha256: __test.digest(acceptedAuthentication),
+    commandSha256: input.commandSha256,
+    controllerTableArn: TABLE_ARN,
+    durable: true,
+    globalKeySha256: input.globalKeySha256,
+    globallyAuthoritative: true,
+    operationId: OPERATION_ID,
+    reservedAt: "2026-08-19T08:59:59.998Z",
+    version: 1
+  };
+  assert.equal(__test.validateReservation(
+    reservation,
+    input,
+    acceptedAuthentication,
+    {
+      authenticationNow: Date.parse("2026-08-19T08:59:59.997Z"),
+      reservationObservedNow: Date.parse("2026-08-19T08:59:59.999Z")
+    }
+  ), reservation);
+  for (const observedAt of [
+    "2026-08-19T09:00:00.000Z",
+    "2026-08-19T09:00:00.001Z"
+  ]) {
+    assert.throws(() => __test.validateReservation(
+      reservation,
+      input,
+      acceptedAuthentication,
+      {
+        authenticationNow: Date.parse("2026-08-19T08:59:59.997Z"),
+        reservationObservedNow: Date.parse(observedAt)
+      }
+    ), /FRESH_CLUSTER_RESERVATION_REJECTED/u, observedAt);
+  }
+});
 
 function bootstrapReceipt(input) {
   const value = {
@@ -460,12 +511,19 @@ function createHarness({
   adopt = false,
   bootstrapFailure = false,
   cleanupFailure = false,
+  forceClockAfterInitialRead = null,
+  forceClockAfterPhase = null,
+  forceClockAfterReserve = null,
   ingressReadbackFailureAfterCreate = false,
   mcpFailure = false,
-  recoveryPreparationMutator = null
+  recoveryPreparationMutator = null,
+  reservationReservedAt = "2026-08-19T08:00:01.000Z"
 } = {}) {
   const input = command(adopt ? {
     adoptedAdminPasswordSha256: "7".repeat(64),
+    billingAuthorization: billingAuthorization({
+      clusterCreateApproved: false
+    }),
     clusterMode: "ADOPT_VERIFIED_EXISTING",
     manualClusterReceiptSha256: "8".repeat(64),
     parentFolderId: "root",
@@ -483,13 +541,19 @@ function createHarness({
   let preparedRecovery;
   let reserved = false;
   let tick = 0;
-  const clock = () => START_MS + tick++ * 1000;
+  let forcedClock = null;
+  const clock = () => forcedClock ?? START_MS + tick++ * 1000;
   const provider = {
     async authenticate() {
       return authentication(input);
     },
     async readStrong() {
-      if (!reserved) return null;
+      if (!reserved) {
+        if (forceClockAfterInitialRead !== null) {
+          forcedClock = forceClockAfterInitialRead;
+        }
+        return null;
+      }
       const latest = transitions.at(-1);
       return {
         command: input,
@@ -504,8 +568,9 @@ function createHarness({
       };
     },
     async reserve({ authentication: accepted }) {
+      calls.push("reserve");
       reserved = true;
-      return {
+      const value = {
         schemaVersion: "prooftoact.fresh-cluster-reservation.v1",
         status: "RESERVED_BEFORE_PROVIDER_IDENTIFIERS",
         authenticationSha256: __test.digest(accepted),
@@ -515,12 +580,19 @@ function createHarness({
         globalKeySha256: input.globalKeySha256,
         globallyAuthoritative: true,
         operationId: OPERATION_ID,
-        reservedAt: "2026-08-19T08:00:01.000Z",
+        reservedAt: reservationReservedAt,
         version: 1
       };
+      if (forceClockAfterReserve !== null) {
+        forcedClock = forceClockAfterReserve;
+      }
+      return value;
     },
     async appendTransition({ transition }) {
       transitions.push(transition);
+      if (transition.phase === forceClockAfterPhase?.phase) {
+        forcedClock = forceClockAfterPhase.at;
+      }
       return transition;
     },
     async finalize({ receipt }) {
@@ -734,6 +806,7 @@ function createHarness({
         });
         assert.equal(guard.status,
           "DURABLE_PLAN_STRONGLY_RECONCILED");
+        calls.push(`managedMcp:${externalAction}`);
       }
       if (mcpFailure) throw new Error("MCP_RESPONSE_AMBIGUOUS");
       const preparation = preparedRecovery;
@@ -829,6 +902,102 @@ test("fresh cluster lifecycle journals every mutation and cleans temporary acces
   ]);
   assert.equal(harness.getTerminal(), undefined);
 });
+
+for (const [label, at, succeeds] of [
+  ["just below", EXECUTION_DEADLINE_MS - 1, true],
+  ["equal to", EXECUTION_DEADLINE_MS, false],
+  ["just above", EXECUTION_DEADLINE_MS + 1, false]
+]) {
+  test(`reservation boundary ${label} expiry is enforced`, async () => {
+    const harness = createHarness({
+      adopt: succeeds,
+      forceClockAfterInitialRead: at
+    });
+    if (succeeds) {
+      const receipt = await runFreshClusterProviderController(harness);
+      assert.equal(receipt.coreStatus, "PASS");
+      assert.equal(harness.calls.filter((item) => item === "reserve").length, 1);
+      return;
+    }
+    await assert.rejects(
+      runFreshClusterProviderController(harness),
+      /FRESH_CLUSTER_APPROVAL_EXPIRED/u
+    );
+    assert.equal(harness.calls.includes("reserve"), false);
+    assert.equal(harness.transitions.length, 0);
+  });
+}
+
+test("a predeadline reservation authorizes only its running bounded one-shot", async () => {
+  const harness = createHarness({
+    adopt: true,
+    forceClockAfterPhase: {
+      at: EXECUTION_DEADLINE_MS + 1,
+      phase: "CLUSTER_ADOPTION_OBSERVED"
+    }
+  });
+  const receipt = await runFreshClusterProviderController(harness);
+  assert.equal(receipt.coreStatus, "PASS");
+  assert.equal(receipt.operationId, OPERATION_ID);
+  assert.equal(receipt.sourceCommit, SOURCE_COMMIT);
+  assert.equal(receipt.treeDigest, TREE_DIGEST);
+  assert.equal(harness.calls.filter((item) => item === "reserve").length, 1);
+});
+
+test("reservation receipt must remain inside the authorized window", async () => {
+  const harness = createHarness({
+    reservationReservedAt: "2026-08-19T09:00:00.000Z"
+  });
+  await assert.rejects(
+    runFreshClusterProviderController(harness),
+    /FRESH_CLUSTER_RESERVATION_REJECTED/u
+  );
+  assert.equal(harness.calls.filter((item) => item === "reserve").length, 1);
+  assert.equal(harness.transitions.length, 0);
+});
+
+test("reservation acknowledgement must return before the outer deadline", async () => {
+  const harness = createHarness({
+    forceClockAfterReserve: EXECUTION_DEADLINE_MS
+  });
+  await assert.rejects(
+    runFreshClusterProviderController(harness),
+    /FRESH_CLUSTER_APPROVAL_EXPIRED/u
+  );
+  assert.equal(harness.calls.filter((item) => item === "reserve").length, 1);
+  assert.equal(harness.transitions.length, 0);
+});
+
+for (const [label, at, cleanupAllowed] of [
+  ["just below", CLEANUP_DEADLINE_MS - 1, true],
+  ["equal to", CLEANUP_DEADLINE_MS, false],
+  ["just above", CLEANUP_DEADLINE_MS + 1, false]
+]) {
+  test(`cleanup deadline ${label} expiry is enforced`, async () => {
+    const harness = createHarness({
+      forceClockAfterPhase: { at, phase: "BOOTSTRAP_DISPATCHING" }
+    });
+    if (cleanupAllowed) {
+      const receipt = await runFreshClusterProviderController(harness);
+      assert.equal(receipt.coreStatus, "PASS");
+      assert.equal(harness.calls.includes("runFreshPrimaryBootstrap"), true);
+      assert.equal(harness.calls.includes("deleteSqlAdmin"), true);
+      assert.equal(harness.calls.includes("deleteTemporaryIngress"), true);
+      return;
+    }
+    await assert.rejects(
+      runFreshClusterProviderController(harness),
+      /FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED/u
+    );
+    assert.equal(harness.calls.includes("runFreshPrimaryBootstrap"), true);
+    assert.equal(harness.calls.includes("deleteSqlAdmin"), false);
+    assert.equal(harness.calls.includes("deleteTemporaryIngress"), false);
+    assert.equal(harness.transitions.some(({ phase, mutationDispatched }) =>
+      mutationDispatched === true && [
+        "ADMIN_DELETE_DISPATCHING", "INGRESS_DELETE_DISPATCHING"
+      ].includes(phase)), false);
+  });
+}
 
 test("acknowledgement loss reconciles exact inventory and never retries mutation", async () => {
   const harness = createHarness({ ackLoss: true });

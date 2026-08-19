@@ -62,6 +62,15 @@ function digest(value) {
   return crypto.createHash("sha256").update(canonicalBytes(value)).digest("hex");
 }
 
+function reservationTime(clock, reservationDeadline) {
+  const reservedAt = clock();
+  requireCondition(Number.isFinite(reservedAt) &&
+    Number.isFinite(reservationDeadline) &&
+    reservedAt < reservationDeadline,
+  "FRESH_CLUSTER_AWS_CLOCK_REJECTED");
+  return reservedAt;
+}
+
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
@@ -82,6 +91,31 @@ function effectKey(globalKeySha256) {
   requireCondition(HEX_64.test(globalKeySha256 ?? ""),
     "FRESH_CLUSTER_AWS_KEY_REJECTED");
   return `FRESH_CLUSTER#${globalKeySha256}`;
+}
+
+function validateReservationDispatchTime(command, reservedAt) {
+  const code = "FRESH_CLUSTER_AWS_RESERVATION_DEADLINE_REJECTED";
+  const authorizedAt = Date.parse(
+    command?.billingAuthorization?.authorizedAt
+  );
+  const approvalExpiresAt = Date.parse(
+    command?.billingAuthorization?.approvalExpiresAt
+  );
+  requireCondition(Number.isFinite(reservedAt) &&
+    Number.isFinite(authorizedAt) && Number.isFinite(approvalExpiresAt) &&
+    authorizedAt <= reservedAt && reservedAt < approvalExpiresAt &&
+    command.billingAuthorization.executionAuthorizationBoundary ===
+      "LATEST_DURABLE_OUTER_RESERVATION_BEFORE_APPROVAL_EXPIRY" &&
+    command.billingAuthorization.maximumReservedExecutionMinutes === 45 &&
+    command.billingAuthorization.immutableOneShotSourceAndOperationRequired ===
+      true &&
+    command.billingAuthorization
+      .reservedOneShotContinuationAfterApprovalExpiryAuthorized === true &&
+    command.billingAuthorization.newReservationAfterApprovalExpiryAuthorized ===
+      false &&
+    command.billingAuthorization.executeRerunAfterApprovalExpiryAuthorized ===
+      false, code);
+  return reservedAt;
 }
 
 function stringAttribute(item, name, code) {
@@ -607,9 +641,7 @@ export function createFreshClusterAwsProvider({
     },
 
     async reserve({ command, authentication }) {
-      const reservedAt = clock();
-      requireCondition(Number.isFinite(reservedAt),
-        "FRESH_CLUSTER_AWS_CLOCK_REJECTED");
+      const reservedAt = validateReservationDispatchTime(command, clock());
       const reservation = Object.freeze({
         schemaVersion: "prooftoact.fresh-cluster-reservation.v1",
         status: "RESERVED_BEFORE_PROVIDER_IDENTIFIERS",
@@ -814,6 +846,7 @@ export const __test = Object.freeze({
   normalizeCallerIdentity,
   normalizeSecretReadback,
   parseStored,
+  validateReservationDispatchTime,
   validateAdminSecretPrestate,
   validateTableReadback
 });

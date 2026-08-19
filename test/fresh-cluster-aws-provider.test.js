@@ -77,3 +77,33 @@ test("admin prestate is empty and post-seal metadata binds one exact version", (
     secretValueSha256: sha256(VALUE)
   }), /FRESH_CLUSTER_AWS_ADMIN_SECRET_SEAL_READBACK_REJECTED/u);
 });
+
+test("outer reservation dispatch is allowed only inside the exact latest-reservation window", () => {
+  const command = {
+    billingAuthorization: {
+      authorizedAt: "2026-08-19T08:00:00.000Z",
+      approvalExpiresAt: "2026-08-19T09:00:00.000Z",
+      executeRerunAfterApprovalExpiryAuthorized: false,
+      executionAuthorizationBoundary:
+        "LATEST_DURABLE_OUTER_RESERVATION_BEFORE_APPROVAL_EXPIRY",
+      immutableOneShotSourceAndOperationRequired: true,
+      maximumReservedExecutionMinutes: 45,
+      newReservationAfterApprovalExpiryAuthorized: false,
+      reservedOneShotContinuationAfterApprovalExpiryAuthorized: true
+    }
+  };
+  assert.equal(__test.validateReservationDispatchTime(
+    command,
+    Date.parse("2026-08-19T08:59:59.999Z")
+  ), Date.parse("2026-08-19T08:59:59.999Z"));
+  for (const instant of [
+    "2026-08-19T07:59:59.999Z",
+    "2026-08-19T09:00:00.000Z",
+    "2026-08-19T09:00:00.001Z"
+  ]) {
+    assert.throws(() => __test.validateReservationDispatchTime(
+      command,
+      Date.parse(instant)
+    ), /FRESH_CLUSTER_AWS_RESERVATION_DEADLINE_REJECTED/u, instant);
+  }
+});

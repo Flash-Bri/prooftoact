@@ -375,6 +375,7 @@ jobs:
           CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
           MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_ARN }}
           MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_VERSION_ID }}
+          HUMAN_AUTHORIZATION_SIGNER_SHA256: ${{ vars.PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256 }}
           OPERATION_ID: ${{ inputs.operation_id }}
           PUBLISHER_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_ARN }}
           PUBLISHER_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_VERSION_ID }}
@@ -387,6 +388,7 @@ jobs:
           [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
           [[ "$APPROVAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HUMAN_AUTHORIZATION_SIGNER_SHA256" =~ ^[0-9a-f]{64}$ ]]
           test "$CALLER_WORKFLOW_REF" = "Flash-Bri/prooftoact/.github/workflows/prooftoact-fresh-primary.yml@refs/heads/main"
           [[ "$OPERATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
           [[ "$RECOVERY_SECURITY_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
@@ -518,6 +520,7 @@ jobs:
           CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
           MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_ARN }}
           MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_VERSION_ID }}
+          HUMAN_AUTHORIZATION_SIGNER_SHA256: ${{ vars.PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256 }}
           NODE_COMPILE_CACHE: ""
           NODE_EXTRA_CA_CERTS: ""
           NODE_OPTIONS: ""
@@ -551,6 +554,7 @@ jobs:
             --credential-secret-version-id "$CREDENTIAL_SECRET_VERSION_ID" \
             --expected-commit "$AUTHORITY_COMMIT" \
             --expected-tree "$AUTHORITY_TREE" \
+            --human-authorization-signer-sha256 "$HUMAN_AUTHORIZATION_SIGNER_SHA256" \
             --mcp-secret-arn "$MCP_SECRET_ARN" \
             --mcp-secret-version-id "$MCP_SECRET_VERSION_ID" \
             --mode execute \
@@ -584,6 +588,7 @@ jobs:
           CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
           MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_ARN }}
           MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_VERSION_ID }}
+          HUMAN_AUTHORIZATION_SIGNER_SHA256: ${{ vars.PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256 }}
           NODE_COMPILE_CACHE: ""
           NODE_EXTRA_CA_CERTS: ""
           NODE_OPTIONS: ""
@@ -617,6 +622,7 @@ jobs:
             --credential-secret-version-id "$CREDENTIAL_SECRET_VERSION_ID" \
             --expected-commit "$AUTHORITY_COMMIT" \
             --expected-tree "$AUTHORITY_TREE" \
+            --human-authorization-signer-sha256 "$HUMAN_AUTHORIZATION_SIGNER_SHA256" \
             --mcp-secret-arn "$MCP_SECRET_ARN" \
             --mcp-secret-version-id "$MCP_SECRET_VERSION_ID" \
             --mode reconcile-only \

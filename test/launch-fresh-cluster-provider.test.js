@@ -28,6 +28,8 @@ function args() {
       ? "a".repeat(40)
       : name === "--expected-tree"
         ? "b".repeat(40)
+        : name === "--human-authorization-signer-sha256"
+          ? "c".repeat(64)
         : String(index + 1)
   ]);
 }

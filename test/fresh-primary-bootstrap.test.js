@@ -102,13 +102,13 @@ function credentialSeal(bundle = credentialBundle()) {
 function approval(seal = credentialSeal()) {
   const admin = validateFreshClusterAdminConnectionString(ADMIN_URL);
   return {
-    schemaVersion: "prooftoact.fresh-primary-approval.v1",
+    schemaVersion: "prooftoact.fresh-primary-approval.v2",
     status: "APPROVED",
-    action: "CREATE_ONE_FRESH_PRIMARY",
+    action: "BOOTSTRAP_ONE_BOUND_FRESH_PRIMARY",
     approvalId: APPROVAL_ID,
     approvedBy: "BRIAN_SMITH",
     approvedAt: "2026-08-17T17:55:00.000Z",
-    expiresAt: "2026-08-17T18:25:00.000Z",
+    expiresAt: "2026-08-17T18:40:00.000Z",
     oneShot: true,
     operationId: OPERATION_ID,
     sourceCommit: SOURCE_COMMIT,
@@ -116,13 +116,38 @@ function approval(seal = credentialSeal()) {
     clusterHostSha256: admin.hostSha256,
     expectedClusterId: CLUSTER_ID,
     database: "tideproof",
-    maximumProjectedTotalUsd: 12,
+    maximumReservedExecutionMinutes: 45,
+    maximumProjectedTotalUsd: 1.5,
+    outerApprovalExpiresAt: "2026-08-17T18:25:00.000Z",
+    outerAuthenticationReceiptSha256: "8".repeat(64),
+    outerCommandSha256: "9".repeat(64),
+    outerReservedAt: "2026-08-17T17:55:00.000Z",
+    outerReservationAcknowledgedAt: "2026-08-17T17:55:01.000Z",
+    outerReservationReceiptSha256: "a".repeat(64),
     credentialSealReceiptSha256:
       __test.sha256(__test.canonicalBytes(seal)),
     credentialDisposition:
       "REQUIRE_PROVIDER_SEAL_THEN_UNLINK_LOCAL_COPY_BEFORE_MUTATION",
     partialFailureDisposition:
       "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD"
+  };
+}
+
+function approvalBinding(value, seal = credentialSeal()) {
+  return {
+    clusterHostSha256: value.clusterHostSha256,
+    credentialSealReceiptSha256:
+      __test.sha256(__test.canonicalBytes(seal)),
+    operationId: OPERATION_ID,
+    outerAuthenticationReceiptSha256:
+      value.outerAuthenticationReceiptSha256,
+    outerCommandSha256: value.outerCommandSha256,
+    outerReservedAt: value.outerReservedAt,
+    outerReservationAcknowledgedAt:
+      value.outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256: value.outerReservationReceiptSha256,
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST
   };
 }
 
@@ -330,6 +355,14 @@ function providerControlledInput(state = clients()) {
     credentialSealReceiptSha256:
       __test.sha256(__test.canonicalBytes(input.credentialSeal)),
     operationId: input.operationId,
+    outerAuthenticationReceiptSha256:
+      input.approval.outerAuthenticationReceiptSha256,
+    outerCommandSha256: input.approval.outerCommandSha256,
+    outerReservedAt: input.approval.outerReservedAt,
+    outerReservationAcknowledgedAt:
+      input.approval.outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256:
+      input.approval.outerReservationReceiptSha256,
     providerClusterId: "523e4567-e89b-42d3-a456-426614174004",
     recoveryPublisherKeySetDigest: signer.publisherKeySetDigest,
     recoveryPublisherTrustRootCommitment: signer.trustRootCommitment,
@@ -544,37 +577,91 @@ test("credential seal and one-shot approval bind source, cluster, cost, and expi
     treeDigest: TREE_DIGEST
   }).status, "SEALED");
   const acceptedApproval = approval(seal);
-  assert.equal(validateFreshPrimaryApproval(acceptedApproval, {
-    clusterHostSha256:
-      validateFreshClusterAdminConnectionString(ADMIN_URL).hostSha256,
-    credentialSealReceiptSha256:
-      __test.sha256(__test.canonicalBytes(seal)),
-    operationId: OPERATION_ID,
-    sourceCommit: SOURCE_COMMIT,
-    treeDigest: TREE_DIGEST
-  }, NOW).oneShot, true);
+  const binding = approvalBinding(acceptedApproval, seal);
+  assert.equal(validateFreshPrimaryApproval(
+    acceptedApproval,
+    binding,
+    NOW
+  ).oneShot, true);
   assert.throws(
     () => validateFreshPrimaryApproval(acceptedApproval, {
-      clusterHostSha256: "0".repeat(64),
-      credentialSealReceiptSha256:
-        __test.sha256(__test.canonicalBytes(seal)),
-      operationId: OPERATION_ID,
-      sourceCommit: SOURCE_COMMIT,
-      treeDigest: TREE_DIGEST
+      ...binding,
+      clusterHostSha256: "0".repeat(64)
     }, NOW),
     /FRESH_PRIMARY_APPROVAL_REJECTED/u
   );
   assert.throws(
-    () => validateFreshPrimaryApproval(acceptedApproval, {
-      clusterHostSha256: acceptedApproval.clusterHostSha256,
-      credentialSealReceiptSha256:
-        __test.sha256(__test.canonicalBytes(seal)),
-      operationId: OPERATION_ID,
-      sourceCommit: SOURCE_COMMIT,
-      treeDigest: TREE_DIGEST
-    }, Date.parse("2026-08-17T18:25:00.000Z")),
+    () => validateFreshPrimaryApproval(
+      acceptedApproval,
+      binding,
+      Date.parse("2026-08-17T18:40:00.000Z")
+    ),
     /FRESH_PRIMARY_APPROVAL_REJECTED/u
   );
+  assert.equal(validateFreshPrimaryApproval(
+    acceptedApproval,
+    binding,
+    Date.parse("2026-08-17T18:39:59.999Z")
+  ).status, "APPROVED");
+  assert.equal(validateFreshPrimaryApproval(
+    acceptedApproval,
+    binding,
+    Date.parse(acceptedApproval.outerApprovalExpiresAt)
+  ).status, "APPROVED");
+  for (const field of [
+    "outerAuthenticationReceiptSha256",
+    "outerCommandSha256",
+    "outerReservationReceiptSha256"
+  ]) {
+    assert.throws(() => validateFreshPrimaryApproval({
+      ...acceptedApproval,
+      [field]: "0".repeat(64)
+    }, binding, NOW), /FRESH_PRIMARY_APPROVAL_REJECTED/u, field);
+  }
+  for (const field of [
+    "outerReservedAt",
+    "outerReservationAcknowledgedAt"
+  ]) {
+    assert.throws(() => validateFreshPrimaryApproval({
+      ...acceptedApproval,
+      [field]: "2026-08-17T17:56:00.000Z"
+    }, binding, NOW), /FRESH_PRIMARY_APPROVAL_REJECTED/u, field);
+  }
+  for (const hostile of [
+    { ...acceptedApproval, schemaVersion: "prooftoact.fresh-primary-approval.v1" },
+    { ...acceptedApproval, maximumReservedExecutionMinutes: 44 },
+    {
+      ...acceptedApproval,
+      approvedAt: "2026-08-17T17:55:00Z",
+      outerReservedAt: "2026-08-17T17:55:00Z"
+    },
+    {
+      ...acceptedApproval,
+      outerReservationAcknowledgedAt: "2026-08-17T17:54:59.999Z"
+    },
+    {
+      ...acceptedApproval,
+      outerReservationAcknowledgedAt:
+        acceptedApproval.outerApprovalExpiresAt
+    }
+  ]) {
+    assert.throws(() => validateFreshPrimaryApproval(
+      hostile,
+      approvalBinding(hostile, seal),
+      NOW
+    ), /FRESH_PRIMARY_APPROVAL_REJECTED/u);
+  }
+  const missingOuter = { ...acceptedApproval };
+  delete missingOuter.outerCommandSha256;
+  assert.throws(() => validateFreshPrimaryApproval(
+    missingOuter,
+    binding,
+    NOW
+  ), /FRESH_PRIMARY_APPROVAL_REJECTED/u);
+  assert.throws(() => validateFreshPrimaryApproval({
+    ...acceptedApproval,
+    unexpectedOuterCoordinate: "0".repeat(64)
+  }, binding, NOW), /FRESH_PRIMARY_APPROVAL_REJECTED/u);
 });
 
 test("fresh-primary intent binds exact fresh census and one-shot approval", () => {
@@ -831,6 +918,41 @@ test("provider controller binds authenticated secret values to bootstrap inputs"
         ...drift
       }),
       /FRESH_PRIMARY_PROVIDER_BINDING_REJECTED/u
+    );
+    assert.equal(state.calls.length, 0);
+  }
+});
+
+test("provider wrapper rejects outer approval coordinate drift before dispatch", async () => {
+  for (const field of [
+    "outerAuthenticationReceiptSha256",
+    "outerCommandSha256",
+    "outerReservationReceiptSha256"
+  ]) {
+    const state = clients();
+    const input = providerControlledInput(state);
+    const unsigned = { ...input.command };
+    for (const name of [
+      "action",
+      "cloud",
+      "commandSha256",
+      "effectIdentitySha256",
+      "globalKeySha256",
+      "region",
+      "schemaVersion",
+      "status"
+    ]) delete unsigned[name];
+    const driftedCommand = buildFreshPrimaryProviderCommand({
+      ...unsigned,
+      [field]: "0".repeat(64)
+    });
+    await assert.rejects(
+      __test.runFreshPrimaryProviderControlledBootstrapWithRuntime({
+        ...input,
+        command: driftedCommand
+      }),
+      /FRESH_PRIMARY_PROVIDER_BINDING_REJECTED/u,
+      field
     );
     assert.equal(state.calls.length, 0);
   }
