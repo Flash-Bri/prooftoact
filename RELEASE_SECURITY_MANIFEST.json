@@ -12,7 +12,7 @@
       "id": "fresh-primary-caller-workflow",
       "path": ".github/workflows/prooftoact-fresh-primary.yml",
       "role": "EXACT_MAIN_FRESH_PRIMARY_CALLER",
-      "sha256": "96e8810d08fea83ae393f2610f26fba3f3bc7a9cfdee12a4cf7e78cdd7c7e0fd"
+      "sha256": "8a3e4161dc0a730de3606ae7ad48778e16b192348068cdb5d1e9c944293db7ae"
     },
     {
       "id": "fresh-primary-sealed-workflow",
@@ -24,13 +24,13 @@
       "id": "fresh-primary-oidc-boundary",
       "path": "docs/RELEASE_OIDC_BOUNDARY.md",
       "role": "FRESH_PRIMARY_OIDC_AND_CREDENTIAL_BOUNDARY",
-      "sha256": "895c2a436b8baff217e0b0e5f7d027f14b5535b2c0d26c6f3f1ed09b87a5325a"
+      "sha256": "fb308e348324fb3d8b208c04158fccde3e42ab79dac2cc4ba3779d66bc80b05b"
     },
     {
       "id": "fresh-primary-bootstrap-role-template",
       "path": "infra/aws/fresh-primary-bootstrap-role-stack.json",
       "role": "FRESH_PRIMARY_EXACT_OIDC_ROLE_TEMPLATE",
-      "sha256": "ced2992afdbce22188672235d12c613fbea941d2d502b56ddf00df78a5dbeb06"
+      "sha256": "0ecab5c430720c7ec030dbd49e48abab3b9554cf2820368f17a3a8f89c13d08b"
     },
     {
       "id": "fresh-primary-credential-custody-template",
@@ -216,7 +216,7 @@
       "id": "fresh-primary-bootstrap-role-plan",
       "path": "scripts/prepare-fresh-primary-bootstrap-role.js",
       "role": "FRESH_PRIMARY_ROLE_CREATE_ONLY_PLAN",
-      "sha256": "fb041d3a463e32b5fff6b2dff5b05749c3e4ff25b9996e53c9ade934c206c983"
+      "sha256": "c7053aa47d42b26d949bfa1b63e0d535ac8a0a8468bdf08f4d5ad62a5277e2f8"
     },
     {
       "id": "fresh-primary-credential-custody-plan",
@@ -252,7 +252,7 @@
       "id": "fresh-primary-bootstrap-role-stack-tests",
       "path": "test/fresh-primary-bootstrap-role-stack.test.js",
       "role": "FRESH_PRIMARY_ROLE_TEMPLATE_VERIFICATION",
-      "sha256": "7f7fbdec613f0c4cb78379f1d0d6073d2d81a977ec583a628940a6ff68f88cb1"
+      "sha256": "6099e9e0c84e10314ccea63d31af13d72c76ee28e0aff7e35156590a06c901f2"
     },
     {
       "id": "fresh-primary-bootstrap-tests",
@@ -366,7 +366,7 @@
       "id": "fresh-primary-workflow-tests",
       "path": "test/fresh-primary-workflow.test.js",
       "role": "FRESH_PRIMARY_WORKFLOW_VERIFICATION",
-      "sha256": "45130730a7692f0acfa7372fcdbfb1c870c1a319fa287b3f65cf7c449283a754"
+      "sha256": "5bc397895fa454172dfc393c41494247ebbcf16764be35cce18ff456482ff263"
     },
     {
       "id": "fresh-recovery-publication-execution-tests",

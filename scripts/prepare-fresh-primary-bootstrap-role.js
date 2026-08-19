@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE_PATH = "infra/aws/fresh-primary-bootstrap-role-stack.json";
 const TEMPLATE_SHA256 =
-  "ced2992afdbce22188672235d12c613fbea941d2d502b56ddf00df78a5dbeb06";
+  "0ecab5c430720c7ec030dbd49e48abab3b9554cf2820368f17a3a8f89c13d08b";
 const STACK_NAME = "prooftoact-fresh-primary-bootstrap-role";
 const ROLE_NAME = "ProofToActFreshPrimaryBootstrap";
 const REGION = "us-east-1";
