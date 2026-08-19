@@ -830,10 +830,19 @@ export async function main(
     provider,
     runtime: execution
   });
+  requireCondition(
+    receipt?.status === "PROVIDER_KEYS_REVOCATION_PENDING" &&
+      receipt.coreStatus === "PASS" &&
+      receipt.publicDisposition === "HOLD" &&
+      receipt.providerKeysRevoked === false,
+    "FRESH_CLUSTER_RUNNER_PROVIDER_KEY_CEREMONY_PENDING_REJECTED"
+  );
   const receiptSha256 = publishPrivateReceipt(
     parsed["--receipt-output"], receipt
   );
-  process.stdout.write(`FRESH_CLUSTER_PROVIDER_PASS:${receiptSha256}\n`);
+  process.stdout.write(
+    `FRESH_CLUSTER_PROVIDER_HOLD_PROVIDER_KEYS_REVOCATION_PENDING:${receiptSha256}\n`
+  );
   return receipt;
 }
 

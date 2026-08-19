@@ -22,6 +22,11 @@ const PROOF_SCHEMA = "tideproof.gate1.admissible-vector-proof.v2";
 const PROOF_CANDIDATE_COUNT = 10_000;
 const PROOF_LIMIT = 10;
 const PROOF_TTL_MS = 60_000;
+const FRESH_PROOF_SCHEMA =
+  "prooftoact.fresh-recovery-admissible-vector-proof.v1";
+const FRESH_PROOF_CANDIDATE_COUNT = PROOF_LIMIT + 1;
+const FRESH_PROOF_TTL_MS = 30 * 60_000;
+const FRESH_PROOF_EXCLUSION_REASON = "out_of_scope";
 const REQUIRED_EXCLUSION_REASONS = Object.freeze([
   "expired",
   "future_observation",
@@ -100,7 +105,7 @@ function requireEmbedding(value) {
   return `[${value.join(",")}]`;
 }
 
-function validateProofSpec(value) {
+function validateProofSpec(value, boundary = "fixed") {
   exactKeys(
     value,
     [
@@ -125,16 +130,22 @@ function validateProofSpec(value) {
   const incidentId = requireUuid(value.incidentId, "incidentId");
   const agency = requireText(value.agency, "agency");
   const vector = requireEmbedding(value.queryEmbedding);
+  const fresh = boundary === "fresh";
   assert(
-    value.expectedCandidateCount === PROOF_CANDIDATE_COUNT &&
+    ["fixed", "fresh"].includes(boundary) &&
+      value.expectedCandidateCount === (fresh
+        ? FRESH_PROOF_CANDIDATE_COUNT
+        : PROOF_CANDIDATE_COUNT) &&
       value.limit === PROOF_LIMIT &&
-      value.ttlMs === PROOF_TTL_MS &&
+      value.ttlMs === (fresh ? FRESH_PROOF_TTL_MS : PROOF_TTL_MS) &&
       SHA256.test(value.expectedCandidateSetSha256),
     "ADMISSIBLE_VECTOR_PROOF_SPEC_BOUNDARY"
   );
   assert(
     Array.isArray(value.exclusionCases) &&
-      value.exclusionCases.length === REQUIRED_EXCLUSION_REASONS.length,
+      value.exclusionCases.length === (fresh
+        ? 1
+        : REQUIRED_EXCLUSION_REASONS.length),
     "ADMISSIBLE_VECTOR_PROOF_EXCLUSIONS"
   );
   const exclusionCases = value.exclusionCases.map((entry) => {
@@ -153,7 +164,9 @@ function validateProofSpec(value) {
       exclusionCases.length &&
       JSON.stringify(
         [...exclusionCases.map(({ reason }) => reason)].sort()
-      ) === JSON.stringify(REQUIRED_EXCLUSION_REASONS),
+      ) === JSON.stringify(fresh
+        ? [FRESH_PROOF_EXCLUSION_REASON]
+        : REQUIRED_EXCLUSION_REASONS),
     "ADMISSIBLE_VECTOR_PROOF_EXCLUSIONS"
   );
   const nearestExcludedEvidenceId = requireUuid(
@@ -174,14 +187,16 @@ function validateProofSpec(value) {
     agency,
     queryEmbedding: [...value.queryEmbedding],
     vector,
-    expectedCandidateCount: PROOF_CANDIDATE_COUNT,
+    expectedCandidateCount: fresh
+      ? FRESH_PROOF_CANDIDATE_COUNT
+      : PROOF_CANDIDATE_COUNT,
     expectedCandidateSetSha256: value.expectedCandidateSetSha256,
     exclusionCases: [...exclusionCases].sort((left, right) =>
       left.reason.localeCompare(right.reason)
     ),
     nearestExcludedEvidenceId,
     limit: PROOF_LIMIT,
-    ttlMs: PROOF_TTL_MS
+    ttlMs: fresh ? FRESH_PROOF_TTL_MS : PROOF_TTL_MS
   };
 }
 
@@ -512,14 +527,78 @@ function explainText(result) {
   return plan;
 }
 
-function proofPlan(plan, spec) {
+function forcedIndexRankSql({ explain = false } = {}) {
+  return `
+    ${explain ? "EXPLAIN (VERBOSE)" : ""}
+    WITH ann AS MATERIALIZED (
+      SELECT
+        evidence_id,
+        evidence_digest,
+        assertion,
+        embedding <=> $3::VECTOR(3) AS distance
+      FROM tp_private.g1_vector_candidates@{
+        FORCE_INDEX=${VECTOR_INDEX_NAME}
+      }
+      WHERE tenant_id = $1::UUID
+        AND retrieval_id = $2::UUID
+      ORDER BY embedding <=> $3::VECTOR(3)
+      LIMIT 10
+    )
+    SELECT evidence_id, evidence_digest, assertion, distance
+    FROM ann
+    ORDER BY distance, evidence_id
+  `;
+}
+
+function naturalRankSql({ explain = false } = {}) {
+  return `
+    ${explain ? "EXPLAIN (VERBOSE)" : ""}
+    SELECT
+      evidence_id,
+      evidence_digest,
+      assertion,
+      embedding <=> $3::VECTOR(3) AS distance
+    FROM tp_private.g1_vector_candidates
+    WHERE tenant_id = $1::UUID
+      AND retrieval_id = $2::UUID
+    ORDER BY embedding <=> $3::VECTOR(3), evidence_id
+    LIMIT $4::INT8
+  `;
+}
+
+function proofPlan(plan, spec, mode = "fixed") {
   const normalized = plan.toLowerCase();
+  if (mode === "fixed") {
+    assert(
+      normalized.includes("vector search") &&
+        normalized.includes(VECTOR_INDEX_NAME) &&
+        normalized.includes("prefix spans") &&
+        normalized.includes(spec.tenantId) &&
+        normalized.includes(spec.retrievalId),
+      "ADMISSIBLE_VECTOR_PLAN_INDEX_MISSING"
+    );
+    return {
+      indexName: VECTOR_INDEX_NAME,
+      planSha256: sha256(plan),
+      vectorSearchUsed: true,
+      exactPrefixSpansUsed: true
+    };
+  }
+  assert(mode === "fresh", "ADMISSIBLE_VECTOR_PLAN_MODE_INVALID");
+  const lines = normalized.split(/\r?\n/u).map((line) => line.trim());
+  const vectorSearch = lines.some((line) => line.includes("vector search"));
+  const indexedTable = lines.some((line) =>
+    line.includes("table:") &&
+      line.includes(`@${VECTOR_INDEX_NAME}`)
+  );
+  const prefixIndex = lines.findIndex((line) => line.includes("prefix spans"));
+  const prefixSpan = prefixIndex < 0
+    ? ""
+    : lines.slice(prefixIndex, prefixIndex + 3).join(" ");
   assert(
-    normalized.includes("vector search") &&
-      normalized.includes(VECTOR_INDEX_NAME) &&
-      normalized.includes("prefix spans") &&
-      normalized.includes(spec.tenantId) &&
-      normalized.includes(spec.retrievalId),
+    vectorSearch && indexedTable && prefixIndex >= 0 &&
+      prefixSpan.includes(spec.tenantId.toLowerCase()) &&
+      prefixSpan.includes(spec.retrievalId.toLowerCase()),
     "ADMISSIBLE_VECTOR_PLAN_INDEX_MISSING"
   );
   return {
@@ -530,13 +609,13 @@ function proofPlan(plan, spec) {
   };
 }
 
-export async function proveAdmissibleVectorSnapshot({
+async function proveAdmissibleVectorSnapshotWithBoundary({
   authorizerPool,
   auditorPool,
   spec,
   sourceCommit,
   treeDigest
-} = {}) {
+} = {}, proofBoundary) {
   assert(
     authorizerPool && typeof authorizerPool.connect === "function",
     "ADMISSIBLE_VECTOR_AUTHORIZER_POOL_REQUIRED"
@@ -549,7 +628,16 @@ export async function proveAdmissibleVectorSnapshot({
     GIT_OBJECT_ID.test(sourceCommit) && GIT_OBJECT_ID.test(treeDigest),
     "ADMISSIBLE_VECTOR_SOURCE_BINDING_INVALID"
   );
-  const accepted = validateProofSpec(spec);
+  assert(
+    proofBoundary &&
+      ["fixed", "fresh"].includes(proofBoundary.mode) &&
+      Number.isSafeInteger(proofBoundary.candidateMaximum) &&
+      proofBoundary.candidateMaximum >= PROOF_LIMIT + 1 &&
+      typeof proofBoundary.claimBoundary === "string" &&
+      typeof proofBoundary.schema === "string",
+    "ADMISSIBLE_VECTOR_PROOF_BOUNDARY_INVALID"
+  );
+  const accepted = validateProofSpec(spec, proofBoundary.mode);
   const { vector: _vector, ...canonicalSpec } = accepted;
   const specSha256 = sha256(canonicalJson(canonicalSpec));
   let authorizer;
@@ -560,6 +648,7 @@ export async function proveAdmissibleVectorSnapshot({
   let primaryError = null;
   let cleanupError = null;
   let receipt;
+  let privateSelection;
   try {
     authorizer = await authorizerPool.connect();
     auditor = await auditorPool.connect();
@@ -618,7 +707,7 @@ export async function proveAdmissibleVectorSnapshot({
     preparedCandidateCount = integerFromRow(
       preparedResult.rows[0]?.candidate_count,
       "candidate_count",
-      PROOF_CANDIDATE_COUNT
+      proofBoundary.candidateMaximum
     );
     assert(
       preparedCandidateCount === accepted.expectedCandidateCount,
@@ -665,6 +754,26 @@ export async function proveAdmissibleVectorSnapshot({
       ),
       "ADMISSIBLE_VECTOR_PROOF_EXCLUDED_CANDIDATE_PRESENT"
     );
+    if (proofBoundary.mode === "fresh") {
+      const exclusionCount = await auditor.query(
+        `
+          SELECT count(*)::INT8 AS exclusion_count
+          FROM tp_private.g1_vector_exclusions
+          WHERE tenant_id = $1::UUID
+            AND retrieval_id = $2::UUID
+        `,
+        [accepted.tenantId, accepted.retrievalId]
+      );
+      assert(
+        exclusionCount.rowCount === 1 &&
+          integerFromRow(
+            exclusionCount.rows[0]?.exclusion_count,
+            "exclusion_count",
+            10_000
+          ) === accepted.exclusionCases.length,
+        "ADMISSIBLE_VECTOR_PROOF_EXCLUSION_COUNT"
+      );
+    }
 
     const exclusionReasons = {};
     const exclusionObservations = [];
@@ -718,46 +827,44 @@ export async function proveAdmissibleVectorSnapshot({
       )
     ));
 
+    const rankValues = [
+      accepted.tenantId,
+      accepted.retrievalId,
+      accepted.vector,
+      accepted.limit
+    ];
+    const directDviValues = rankValues.slice(0, 3);
     const planResult = await auditor.query(
-      `
-        EXPLAIN (VERBOSE)
-        SELECT
-          evidence_id,
-          evidence_digest,
-          assertion,
-          embedding <=> $3::VECTOR(3) AS distance
-        FROM tp_private.g1_vector_candidates
-        WHERE tenant_id = $1::UUID
-          AND retrieval_id = $2::UUID
-        ORDER BY embedding <=> $3::VECTOR(3), evidence_id
-        LIMIT $4::INT8
-      `,
-      [
-        accepted.tenantId,
-        accepted.retrievalId,
-        accepted.vector,
-        accepted.limit
-      ]
+      (proofBoundary.mode === "fresh"
+        ? forcedIndexRankSql({ explain: true })
+        : naturalRankSql({ explain: true })),
+      proofBoundary.mode === "fresh" ? directDviValues : rankValues
     );
-    const plan = proofPlan(explainText(planResult), accepted);
+    const plan = proofPlan(
+      explainText(planResult),
+      accepted,
+      proofBoundary.mode
+    );
 
-    const rankedResult = await authorizer.query(
-      `
-        SELECT *
-        FROM tp_api.g1_rank_vector_set_v1(
-          $1::UUID, $2::UUID, $3::UUID, $4, $5, $6, $7::INT8
-        )
-      `,
-      [
-        accepted.tenantId,
-        accepted.retrievalId,
-        accepted.incidentId,
-        accepted.agency,
-        POLICY_VERSION,
-        accepted.vector,
-        accepted.limit
-      ]
-    );
+    const rankedResult = proofBoundary.mode === "fresh"
+      ? await auditor.query(forcedIndexRankSql(), directDviValues)
+      : await authorizer.query(
+        `
+          SELECT *
+          FROM tp_api.g1_rank_vector_set_v1(
+            $1::UUID, $2::UUID, $3::UUID, $4, $5, $6, $7::INT8
+          )
+        `,
+        [
+          accepted.tenantId,
+          accepted.retrievalId,
+          accepted.incidentId,
+          accepted.agency,
+          POLICY_VERSION,
+          accepted.vector,
+          accepted.limit
+        ]
+      );
     assert(
       rankedResult.rowCount === accepted.limit &&
         Array.isArray(rankedResult.rows) &&
@@ -765,41 +872,30 @@ export async function proveAdmissibleVectorSnapshot({
       "ADMISSIBLE_VECTOR_PROOF_RANKED_COUNT"
     );
     const ranked = validatedRankedResults(rankedResult.rows);
+    if (proofBoundary.mode === "fresh") {
+      assert(new Set(ranked.map(({ distance }) => distance)).size ===
+        ranked.length, "ADMISSIBLE_VECTOR_PROOF_DISTANCE_TIE");
+    }
     assert(
       ranked.every(({ evidenceId }) => candidateSet.has(evidenceId)),
       "ADMISSIBLE_VECTOR_PROOF_RANKED_OUTSIDE_SNAPSHOT"
     );
-    const auditorRankedResult = await auditor.query(
-      `
-        SELECT
-          evidence_id,
-          evidence_digest,
-          assertion,
-          embedding <=> $3::VECTOR(3) AS distance
-        FROM tp_private.g1_vector_candidates
-        WHERE tenant_id = $1::UUID
-          AND retrieval_id = $2::UUID
-        ORDER BY embedding <=> $3::VECTOR(3), evidence_id
-        LIMIT $4::INT8
-      `,
-      [
-        accepted.tenantId,
-        accepted.retrievalId,
-        accepted.vector,
-        accepted.limit
-      ]
-    );
-    assert(
-      auditorRankedResult.rowCount === accepted.limit &&
-        Array.isArray(auditorRankedResult.rows) &&
-        auditorRankedResult.rows.length === accepted.limit,
-      "ADMISSIBLE_VECTOR_PROOF_AUDITOR_RANKED_COUNT"
-    );
-    const auditorRanked = validatedRankedResults(auditorRankedResult.rows);
-    assert(
-      canonicalJson(auditorRanked) === canonicalJson(ranked),
-      "ADMISSIBLE_VECTOR_PROOF_RANKED_RESULT_MISMATCH"
-    );
+    if (proofBoundary.mode === "fixed") {
+      const auditorRankedResult = await auditor.query(
+        naturalRankSql(), rankValues
+      );
+      assert(
+        auditorRankedResult.rowCount === accepted.limit &&
+          Array.isArray(auditorRankedResult.rows) &&
+          auditorRankedResult.rows.length === accepted.limit,
+        "ADMISSIBLE_VECTOR_PROOF_AUDITOR_RANKED_COUNT"
+      );
+      const auditorRanked = validatedRankedResults(auditorRankedResult.rows);
+      assert(
+        canonicalJson(auditorRanked) === canonicalJson(ranked),
+        "ADMISSIBLE_VECTOR_PROOF_RANKED_RESULT_MISMATCH"
+      );
+    }
 
     const nearestExcluded = await auditor.query(
       `
@@ -907,9 +1003,27 @@ export async function proveAdmissibleVectorSnapshot({
           preparedTiming.expiresAt,
       "ADMISSIBLE_VECTOR_SELECTION_COMMIT_INVALID"
     );
+    privateSelection = Object.freeze({
+      dviProposal: Object.freeze({
+        tenantId: accepted.tenantId,
+        runId: accepted.runId,
+        incidentId: accepted.incidentId,
+        retrievalId: accepted.retrievalId,
+        authorityEvidenceBindingSha256,
+        selectedEvidenceId: ranked[0].evidenceId,
+        selectedEvidenceDigest: ranked[0].evidenceDigest,
+        policyVersion: POLICY_VERSION,
+        selectedRank: 1,
+        admittedAt: preparedTiming.admittedAt,
+        expiresAt: preparedTiming.expiresAt
+      }),
+      selectedEvidenceId: ranked[0].evidenceId,
+      selectedEvidenceDigest: ranked[0].evidenceDigest,
+      ranked: Object.freeze(ranked.map((item) => Object.freeze({ ...item })))
+    });
 
     receipt = {
-      schemaVersion: PROOF_SCHEMA,
+      schemaVersion: proofBoundary.schema,
       status: "PASS",
       sourceCommit,
       treeDigest,
@@ -950,16 +1064,21 @@ export async function proveAdmissibleVectorSnapshot({
       },
       ranking: {
         ...plan,
+        ...(proofBoundary.mode === "fresh"
+          ? {
+              directDviQueryForcedIndex: true,
+              directDviResultValidated: true,
+              commitValidatorSequenceMatchedDirectDvi: true
+            }
+          : { auditorRankMatchesAuthorizer: true }),
         rankedCount: ranked.length,
         rankedSetSha256,
         rankedSequenceSha256,
-        auditorRankMatchesAuthorizer: true,
         approximateNearestNeighbor: true,
         authorizationRecheckRequired: true
       },
       cleanup: null,
-      claimBoundary:
-        "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, its synthetic drill identity, non-reversible bindings from the top-ranked admissible evidence to the exact source, spec, snapshot, ranked sequence, and selected evidence, the persisted snapshot-bound adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove that AWS consumed the binding, authorization, the +1 integrated live drill, production suitability, or final release readiness."
+      claimBoundary: proofBoundary.claimBoundary
     };
   } catch (error) {
     primaryError = error;
@@ -976,7 +1095,7 @@ export async function proveAdmissibleVectorSnapshot({
         const deletedCandidateCount = integerFromRow(
           cleaned.rows[0]?.deleted_candidates,
           "deleted_candidates",
-          PROOF_CANDIDATE_COUNT
+          proofBoundary.candidateMaximum
         );
         const retiredSetCount = integerFromRow(
           cleaned.rows[0]?.retired_sets,
@@ -1027,14 +1146,14 @@ export async function proveAdmissibleVectorSnapshot({
               integerFromRow(
                 retired.rows[0]?.candidate_count,
                 "candidate_count",
-                PROOF_CANDIDATE_COUNT
+                proofBoundary.candidateMaximum
               ) === deletedCandidateCount &&
               (!preparedTiming ||
                 cleanedAtMs >= Date.parse(preparedTiming.admittedAt)) &&
               integerFromRow(
                 retired.rows[0]?.remaining_candidates,
                 "remaining_candidates",
-                PROOF_CANDIDATE_COUNT
+                proofBoundary.candidateMaximum
               ) === 0 &&
               integerFromRow(
                 retired.rows[0]?.remaining_exclusions,
@@ -1075,7 +1194,36 @@ export async function proveAdmissibleVectorSnapshot({
     throw cleanupError;
   }
   assert(receipt?.cleanup?.snapshotRetired, "ADMISSIBLE_VECTOR_PROOF_INCOMPLETE");
-  return receipt;
+  return proofBoundary.mode === "fresh"
+    ? Object.freeze({
+        receipt: Object.freeze(receipt),
+        privateSelection
+      })
+    : receipt;
+}
+
+const FIXED_PROOF_BOUNDARY = Object.freeze({
+  candidateMaximum: PROOF_CANDIDATE_COUNT,
+  claimBoundary:
+    "This sanitized provider-backed receipt records one exact clean-source integrated admissibility-snapshot run, its synthetic drill identity, non-reversible bindings from the top-ranked admissible evidence to the exact source, spec, snapshot, ranked sequence, and selected evidence, the persisted snapshot-bound adversarial exclusions, the named DVI with exact tenant/retrieval prefix spans, ranked-set containment, and snapshot retirement. It requires independent acceptance review and does not prove that AWS consumed the binding, authorization, the +1 integrated live drill, production suitability, or final release readiness.",
+  mode: "fixed",
+  schema: PROOF_SCHEMA
+});
+
+const FRESH_PROOF_BOUNDARY = Object.freeze({
+  candidateMaximum: FRESH_PROOF_CANDIDATE_COUNT,
+  claimBoundary:
+    "This sanitized receipt proves one bounded fresh-recovery DVI snapshot with limit-plus-one admitted contenders, one semantically closer excluded row, one forced direct DVI query through the private admin auditor session, an independently recomputed unhinted commit-validator sequence, a durable selection, and complete snapshot retirement. Non-selected candidate and ranked-set identities remain private; the selected synthetic identity is carried only in the private source binding. It does not prove provider-key revocation, successful cross-run phase continuation, public availability, or final release acceptance.",
+  mode: "fresh",
+  schema: FRESH_PROOF_SCHEMA
+});
+
+export function proveAdmissibleVectorSnapshot(input) {
+  return proveAdmissibleVectorSnapshotWithBoundary(input, FIXED_PROOF_BOUNDARY);
+}
+
+export function proveFreshAdmissibleVectorSnapshot(input) {
+  return proveAdmissibleVectorSnapshotWithBoundary(input, FRESH_PROOF_BOUNDARY);
 }
 
 export class AdmissibleVectorRetriever {
@@ -1296,6 +1444,9 @@ export class AdmissibleVectorRetriever {
 }
 
 export const __test = Object.freeze({
+  FRESH_PROOF_CANDIDATE_COUNT,
+  FRESH_PROOF_SCHEMA,
+  FRESH_PROOF_TTL_MS,
   POLICY_VERSION,
   PROOF_CANDIDATE_COUNT,
   PROOF_LIMIT,
@@ -1305,7 +1456,10 @@ export const __test = Object.freeze({
   VECTOR_INDEX_NAME,
   authorityEvidenceBindingDigest,
   executeVectorPreparation,
+  forcedIndexRankSql,
   identifierSetDigest,
+  naturalRankSql,
+  proofPlan,
   preparedSnapshot,
   validateProofSpec,
   validatedRankedResults

@@ -7,6 +7,7 @@ import {
   admissibleVectorAuditorPoolConfig,
   admissibleVectorPoolConfig,
   proveAdmissibleVectorSnapshot,
+  proveFreshAdmissibleVectorSnapshot,
   __test
 } from "../src/cloud/admissible-vector-retrieval.js";
 import { safeAdmissibleVectorFailureCode } from "../scripts/gate1-admissible-vector.js";
@@ -429,6 +430,7 @@ function proofSpec(overrides = {}) {
 }
 
 function proofPools({
+  requestedSpec = null,
   planUsesVectorIndex = true,
   nearestExcludedDistance = 0.001,
   changedExclusionReason = null,
@@ -443,7 +445,12 @@ function proofPools({
   authorizerClusterId = "77777777-7777-4777-8777-777777777777",
   auditorClusterId = authorizerClusterId
 } = {}) {
-  const spec = proofSpec();
+  const spec = requestedSpec ?? proofSpec();
+  const exclusions = spec.exclusionCases;
+  const admittedAt = "2026-08-01T12:00:00.000Z";
+  const expiresAt = new Date(
+    Date.parse(admittedAt) + spec.ttlMs
+  ).toISOString();
   const authorizerCalls = [];
   const auditorCalls = [];
   let authorizerConnections = 0;
@@ -485,18 +492,18 @@ function proofPools({
           rowCount: 1,
           rows: [{
             retrieval_id: spec.retrievalId,
-            candidate_count: String(__test.PROOF_CANDIDATE_COUNT),
-            admitted_at: "2026-08-01T12:00:00.000Z",
-            expires_at: "2026-08-01T12:01:00.000Z"
+            candidate_count: String(candidateIds.length),
+            admitted_at: admittedAt,
+            expires_at: expiresAt
           }]
         };
       }
       if (text.includes("g1_resolve_vector_set_v1")) {
         const rows = resolvedPreparationRows ?? [{
           retrieval_id: spec.retrievalId,
-          candidate_count: String(__test.PROOF_CANDIDATE_COUNT),
-          admitted_at: "2026-08-01T12:00:00.000Z",
-          expires_at: "2026-08-01T12:01:00.000Z",
+          candidate_count: String(candidateIds.length),
+          admitted_at: admittedAt,
+          expires_at: expiresAt,
           database_now: new Date("2026-08-01T12:00:01.000Z")
         }];
         return {
@@ -511,7 +518,7 @@ function proofPools({
           values[3] === spec.incidentId &&
           values[4] === spec.agency &&
           values[5] === "g1-admissibility-v2";
-        const exclusion = PROOF_EXCLUSIONS.find(
+        const exclusion = exclusions.find(
           ({ evidenceId }) => evidenceId === values[2]
         );
         if (!exactBinding || !exclusion) return { rowCount: 0, rows: [] };
@@ -523,14 +530,15 @@ function proofPools({
             evidence_digest: missingExclusionDigest ? null : "e".repeat(64),
             snapshot_admitted_at:
               changedExclusionSnapshotTime ??
-              new Date("2026-08-01T12:00:00.000Z")
+              new Date(admittedAt)
           }]
         };
       }
-      if (text.includes("g1_rank_vector_set_v1")) {
+      if (text.includes("g1_rank_vector_set_v1") ||
+          text.includes("FROM tp_api.g1_vector_ann_candidates_v1")) {
         return {
           rowCount: __test.PROOF_LIMIT,
-          rows: PROOF_CANDIDATE_IDS.slice(0, __test.PROOF_LIMIT).map(
+          rows: candidateIds.slice(0, __test.PROOF_LIMIT).map(
             (evidenceId, index) => ({
               evidence_id: evidenceId,
               evidence_digest: (index + 1).toString(16).repeat(64),
@@ -541,7 +549,7 @@ function proofPools({
         };
       }
       if (text.includes("g1_commit_dvi_selection_v1")) {
-        const selectedRows = PROOF_CANDIDATE_IDS.slice(
+        const selectedRows = candidateIds.slice(
           0,
           __test.PROOF_LIMIT
         ).map((evidenceId, index) => ({
@@ -552,8 +560,8 @@ function proofPools({
           rowCount: 1,
           rows: [{
             authority_evidence_binding_sha256: values[11],
-            admitted_at: "2026-08-01T12:00:00.000Z",
-            expires_at: "2026-08-01T12:01:00.000Z",
+            admitted_at: admittedAt,
+            expires_at: expiresAt,
             ranked_sequence_sha256: dviRankedSequenceSha256For(
               selectedRows.map(({ evidence_id, evidence_digest }) => ({
                 evidenceId: evidence_id,
@@ -572,7 +580,7 @@ function proofPools({
         return {
           rowCount: 1,
           rows: [{
-            deleted_candidates: String(__test.PROOF_CANDIDATE_COUNT),
+            deleted_candidates: String(candidateIds.length),
             retired_sets: "1"
           }]
         };
@@ -604,21 +612,23 @@ function proofPools({
           ? `vector search ${__test.VECTOR_INDEX_NAME}`
           : "scan g1_vector_candidates_pkey";
         return {
-          rowCount: 3,
+          rowCount: 4,
           rows: [
             { info: operator },
+            { info: `table: g1_vector_candidates@${__test.VECTOR_INDEX_NAME}` },
             { info: `prefix spans: ${spec.tenantId}` },
             { info: `retrieval: ${spec.retrievalId}` }
           ]
         };
       }
       if (
-        text.includes("FROM tp_private.g1_vector_candidates") &&
+        (text.includes("FROM tp_private.g1_vector_candidates") ||
+          text.includes("FROM tp_api.g1_vector_ann_candidates_v1")) &&
         text.includes("AS distance")
       ) {
         return {
           rowCount: __test.PROOF_LIMIT,
-          rows: PROOF_CANDIDATE_IDS.slice(0, __test.PROOF_LIMIT).map(
+          rows: candidateIds.slice(0, __test.PROOF_LIMIT).map(
             (evidenceId, index) => ({
               evidence_id: evidenceId,
               evidence_digest: (index + 1).toString(16).repeat(64),
@@ -640,11 +650,17 @@ function proofPools({
           }]
         };
       }
+      if (text.includes("AS exclusion_count")) {
+        return {
+          rowCount: 1,
+          rows: [{ exclusion_count: String(exclusions.length) }]
+        };
+      }
       if (text.includes("remaining_candidates")) {
         return {
           rowCount: 1,
           rows: [{
-            candidate_count: String(__test.PROOF_CANDIDATE_COUNT),
+            candidate_count: String(candidateIds.length),
             cleaned_at: "2026-08-01T12:00:02.000Z",
             remaining_candidates: "0",
             remaining_exclusions: "0"
@@ -689,6 +705,100 @@ async function runProof(pools, spec = proofSpec()) {
     treeDigest: "b".repeat(40)
   });
 }
+
+const FRESH_CANDIDATE_IDS = Object.freeze(Array.from(
+  { length: __test.FRESH_PROOF_CANDIDATE_COUNT },
+  (_, index) => proofUuid(30_001 + index)
+));
+const FRESH_EXCLUDED_ID = proofUuid(40_001);
+
+function freshProofSpec(overrides = {}) {
+  return proofSpec({
+    expectedCandidateCount: __test.FRESH_PROOF_CANDIDATE_COUNT,
+    expectedCandidateSetSha256: __test.identifierSetDigest(
+      FRESH_CANDIDATE_IDS,
+      "candidateEvidenceId"
+    ),
+    exclusionCases: [{
+      evidenceId: FRESH_EXCLUDED_ID,
+      reason: "out_of_scope"
+    }],
+    nearestExcludedEvidenceId: FRESH_EXCLUDED_ID,
+    ttlMs: __test.FRESH_PROOF_TTL_MS,
+    ...overrides
+  });
+}
+
+async function runFreshProof(pools, spec = freshProofSpec()) {
+  return proveFreshAdmissibleVectorSnapshot({
+    authorizerPool: pools.authorizerPool,
+    auditorPool: pools.auditorPool,
+    spec,
+    sourceCommit: "a".repeat(40),
+    treeDigest: "b".repeat(40)
+  });
+}
+
+test("fresh DVI uses one private direct ANN query and matches durable commit", async () => {
+  const spec = freshProofSpec();
+  const pools = proofPools({
+    requestedSpec: spec,
+    candidateIds: FRESH_CANDIDATE_IDS
+  });
+  const proof = await runFreshProof(pools, spec);
+  assert.equal(proof.receipt.schemaVersion, __test.FRESH_PROOF_SCHEMA);
+  assert.equal(proof.receipt.fixture.candidateCount, 11);
+  assert.equal(proof.receipt.fixture.exclusionCaseCount, 1);
+  assert.equal(proof.receipt.ranking.directDviQueryForcedIndex, true);
+  assert.equal(proof.receipt.ranking.directDviResultValidated, true);
+  assert.equal(
+    proof.receipt.ranking.commitValidatorSequenceMatchedDirectDvi,
+    true
+  );
+  assert.equal(proof.privateSelection.ranked.length, 10);
+  const direct = pools.auditorCalls.find((text) =>
+    text.includes("FROM tp_private.g1_vector_candidates@{") &&
+    !text.includes("EXPLAIN"));
+  assert.ok(direct);
+  assert.match(direct,
+    /ORDER BY embedding <=> \$3::VECTOR\(3\)\s+LIMIT 10/u);
+  assert.match(direct, /ORDER BY distance, evidence_id/u);
+  assert.equal(pools.authorizerCalls.some(({ text }) =>
+    text.includes("FROM tp_private.g1_vector_candidates@{")), false);
+  assert.equal(pools.authorizerCalls.some(({ text }) =>
+    text.includes("g1_rank_vector_set_v1")), false);
+});
+
+test("fresh DVI rejects boundary ties and index-name-only plans", async () => {
+  const spec = freshProofSpec();
+  const tied = proofPools({
+    requestedSpec: spec,
+    candidateIds: FRESH_CANDIDATE_IDS,
+    auditorRankDrift: false
+  });
+  const originalQuery = tied.auditorPool.connect;
+  tied.auditorPool.connect = async () => {
+    const client = await originalQuery.call(tied.auditorPool);
+    const query = client.query.bind(client);
+    client.query = async (text, values) => {
+      const result = await query(text, values);
+      if (text.includes("FROM tp_private.g1_vector_candidates@{") &&
+          !text.includes("EXPLAIN")) {
+        result.rows[1].distance = result.rows[0].distance;
+      }
+      return result;
+    };
+    return client;
+  };
+  await assert.rejects(runFreshProof(tied, spec),
+    /ADMISSIBLE_VECTOR_PROOF_DISTANCE_TIE/u);
+  assert.throws(() => __test.proofPlan([
+    `vector search ${__test.VECTOR_INDEX_NAME}`,
+    `prefix spans: ${spec.tenantId}`,
+    `retrieval: ${spec.retrievalId}`
+  ].join("\n"), spec, "fresh"),
+  /ADMISSIBLE_VECTOR_PLAN_INDEX_MISSING/u);
+});
 
 test("integrated DVI proof binds exclusions, physical plan, ranking, and cleanup", async () => {
   const pools = proofPools();

@@ -48,13 +48,13 @@
       "id": "fresh-primary-bootstrap",
       "path": "scripts/bootstrap-fresh-primary.js",
       "role": "FRESH_PRIMARY_DATABASE_BOOTSTRAP",
-      "sha256": "3b7411d66a0fbc0049ad52d163cfbf7e3e939ef5520e91e32dde1aa6059e33fe"
+      "sha256": "1bc00b27aee7b4424b7b2274a0153c5911ffbd3f69c8c3038989f92188c7d41d"
     },
     {
       "id": "fresh-cluster-aws-provider",
       "path": "scripts/fresh-cluster-aws-provider.js",
       "role": "FRESH_CLUSTER_AWS_PROVIDER_CLIENT",
-      "sha256": "2205b11f27aeaf9b4366a7c16476b1aab03726de0270df4fe301e5f6c7b17405"
+      "sha256": "60fa486e1bcc1392994f685fd3b903bf06d7ebe95aab9d9339e8122311c1e54e"
     },
     {
       "id": "fresh-cluster-aws-runtime",
@@ -78,7 +78,7 @@
       "id": "fresh-cluster-provider-controller",
       "path": "scripts/fresh-cluster-provider-controller.js",
       "role": "FRESH_CLUSTER_PROVIDER_EFFECT_CONTROLLER",
-      "sha256": "cec6e24a96e5430506a447c18ffddc2d949ddcfadae4c834ee1e88547bf0b76f"
+      "sha256": "ceb9354e50838a6a44e7327192443db3cc7b47de97964245d16e5f45f08a2cf8"
     },
     {
       "id": "fresh-cluster-reconciliation-controller",
@@ -132,13 +132,13 @@
       "id": "fresh-recovery-publication-execution",
       "path": "scripts/fresh-recovery-publication-execution.js",
       "role": "FRESH_RECOVERY_PUBLICATION_EXECUTION",
-      "sha256": "c6732c72e5026eb73ecd5a2f0bed1a66f8bcfb0cd7c2b124e9bbe37357a26fe1"
+      "sha256": "6f11876abb881de10a9a7f7f7c8119c3d2aa3eed57a9f91988196b22d3feaaa2"
     },
     {
       "id": "fresh-recovery-source-execution",
       "path": "scripts/fresh-recovery-source-execution.js",
       "role": "FRESH_RECOVERY_SOURCE_EXECUTION",
-      "sha256": "a6044cc85831251e286fe286030467e358d680969e2581e1e762d9f30f1ff64c"
+      "sha256": "2557b9325bd9a3c2bcb50f2568d4f7371cffbbfb6bd2f063becdae2a7aac1066"
     },
     {
       "id": "fresh-cluster-provider-launcher",
@@ -192,7 +192,7 @@
       "id": "fresh-cluster-provider-runner",
       "path": "scripts/run-fresh-cluster-provider.js",
       "role": "FRESH_CLUSTER_PRIVATE_PROVIDER_RUNNER",
-      "sha256": "66ca55c906a6f804b19a2b0c0baab793b9c8d406e7b10813f95fa860e94e718c"
+      "sha256": "c5f97bc6d87adec62e4be3cd8a670f8b1eea36719f05f44174e65cdee3cdc989"
     },
     {
       "id": "fresh-primary-credential-sealer-runner",
@@ -216,7 +216,7 @@
       "id": "fresh-primary-bootstrap-tests",
       "path": "test/fresh-primary-bootstrap.test.js",
       "role": "FRESH_PRIMARY_BOOTSTRAP_VERIFICATION",
-      "sha256": "9b8951a938263113bccf4e69aeb4b8d8ebebcdea9b17630384b7e42c584bb60a"
+      "sha256": "91830d6e4e48aabb98754753319d34bcfa43fb7190b557b112894b83d90eba3c"
     },
     {
       "id": "fresh-primary-provider-controller-tests",
@@ -264,7 +264,7 @@
       "id": "fresh-cluster-provider-controller-tests",
       "path": "test/fresh-cluster-provider-controller.test.js",
       "role": "FRESH_CLUSTER_PROVIDER_CONTROLLER_VERIFICATION",
-      "sha256": "21585a7ff6b563467d12970bbb4273d6d7c193e2d45cd7504798a87cb55922b5"
+      "sha256": "17ff3a715d4e1412a80fdc6403e92f477c8103df606bf547f00cca8df22e05d1"
     },
     {
       "id": "fresh-cluster-reconciliation-controller-tests",
@@ -330,7 +330,7 @@
       "id": "fresh-recovery-publication-execution-tests",
       "path": "test/fresh-recovery-publication-execution.test.js",
       "role": "FRESH_RECOVERY_PUBLICATION_VERIFICATION",
-      "sha256": "4d09cadf503982bb9caed30f7792acf75015e31783663525e53de539a9adfc9b"
+      "sha256": "742801f03651cd7cc8b9aac5e91f4d0aa2b94506b22ee75c4c31a4c6b171fc39"
     },
     {
       "id": "fresh-recovery-publisher-key-tests",
@@ -342,7 +342,7 @@
       "id": "fresh-recovery-source-execution-tests",
       "path": "test/fresh-recovery-source-execution.test.js",
       "role": "FRESH_RECOVERY_SOURCE_VERIFICATION",
-      "sha256": "e54f63158e1551091225eeeed3736124c38f0edb3b80ee462a4278535c25bcb3"
+      "sha256": "8666e571c41cc9bb536e6b58b83b350b57b6a1e001cd2d4b78980183e7b72631"
     },
     {
       "id": "fresh-cluster-provider-launcher-tests",
@@ -354,7 +354,7 @@
       "id": "fresh-cluster-provider-runner-tests",
       "path": "test/run-fresh-cluster-provider.test.js",
       "role": "FRESH_CLUSTER_RUNNER_VERIFICATION",
-      "sha256": "027e9dac6ad50c7c41efb48940929e5ca65850b9810b5650bc292bbf633cbd98"
+      "sha256": "fee59c3f5bfddd90d460978faa403309e2e32bcefdf0e570d0a77ab6559df9d2"
     },
     {
       "id": "fresh-primary-provider-runner-tests",
@@ -384,7 +384,7 @@
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
       "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
-      "sha256": "0fa708862a99ff1737ec934799c835002d6244bc0ba6c3e88a54fa54ef1dfc55"
+      "sha256": "93b46db98bb4a3be29bdfa1f20836c861f5ec5dc3d18eee4b5e170fc051ccfa0"
     },
     {
       "id": "admissible-vector-runner",
@@ -444,7 +444,7 @@
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "843e110bf7c14f3c7ff8313429275e924b3855ab456b02915d178b7723c9e973"
+      "sha256": "7a645a30a891d5962184d2a5110bf5ee4602b485a4d1448aabae5dbab68b7891"
     },
     {
       "id": "aws-alternate-principal-denial-runner",
@@ -666,7 +666,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "05a5a38119bceba8ffa3f837f19a275f7603ec7728b203528fd866bfe4cb9180"
+      "sha256": "46461a9910e6ed0e4ac4b8d60f436d809b64c4494f5bb46587985eee530b653d"
     },
     {
       "id": "database-security-posture",
@@ -726,7 +726,7 @@
       "id": "dvi-reconciliation-tests",
       "path": "test/admissible-vector-retrieval.test.js",
       "role": "DVI_PREPARATION_RECONCILIATION_VERIFICATION",
-      "sha256": "598d6fd154cee5ef7fbb2f47aba43c23a76120d580c2ca1387a11b297520e226"
+      "sha256": "928a639c27ac5492d2e17c9f3b12c3de670797b138f2a7cb4bfd693dad5e7767"
     },
     {
       "id": "exact-git-source",
@@ -1380,7 +1380,7 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "3d6f1331875a58f5c1a99ec0fa00c6ec84e815cc8738ae41c2748582ace5e7f9"
+      "sha256": "14baf50701dc79c2e1f701af5aa8514068ea4df47cf310b6fe30c34271454aea"
     },
     {
       "id": "primary-security-runner",
@@ -1530,7 +1530,7 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "a082914bcb63ea74945732144d31079d2be93b448a2754eb93927cd2ea49e114"
+      "sha256": "5ce9dfcc4907b96b403d32deb8b3c61ac8d0daf3b3a3ecf4b6bb88b4570f7cd2"
     },
     {
       "id": "recovery-broker-tests",
@@ -1584,7 +1584,7 @@
       "id": "recovery-publisher-key-tests",
       "path": "test/recovery-publisher-key.test.js",
       "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
-      "sha256": "84103f0e7f8ff499ca00fdeb6778427c279096dc968857ffbed723c9984f046e"
+      "sha256": "16eb6b2868ecbfb08ab35aa4f79d986688e0081281bebe1fed9a03015099d363"
     },
     {
       "id": "recovery-publisher-schema-repair",
@@ -1645,12 +1645,6 @@
       "path": "src/cloud/strict-json.js",
       "role": "STRICT_JSON_DUPLICATE_MEMBER_REJECTION",
       "sha256": "9406ba23f88b4653c58fc33d53454e61156548c76cb426b06eac46247e4532ec"
-    },
-    {
-      "id": "synthetic-authority-proposal",
-      "path": "scripts/lib/synthetic-authority-proposal.js",
-      "role": "SYNTHETIC_AUTHORITY_PROPOSAL_FIXTURE",
-      "sha256": "54d135783595dcfa833de2000af2f2ce491fc75fca606099d7774e4add9e018f"
     }
   ],
   "finalReleaseReady": false

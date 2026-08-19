@@ -24,6 +24,9 @@ function fixtureManifest(overrides = {}) {
     reviewedOn: "2026-07-31",
     claimBoundary: "Fixture current-source cost boundary.",
     limits: { ...__test.EXPECTED_LIMITS },
+    retainedMonthlyCost: structuredClone(
+      __test.EXPECTED_RETAINED_MONTHLY_COST
+    ),
     budgetAlerts: structuredClone(__test.EXPECTED_BUDGET_ALERTS),
     forbiddenResourceTypes: [...__test.EXPECTED_FORBIDDEN_RESOURCE_TYPES],
     unapprovedPurchaseClasses: [
@@ -149,6 +152,20 @@ test("cost manifest rejects final approval, arithmetic drift, or surface drift",
     () => validateManifest(changedSurface),
     /RELEASE_COST_MANIFEST_SURFACE/
   );
+
+  for (const mutate of [
+    (posture) => { posture.totalRetainedSecretCount = 7; },
+    (posture) => { posture.secretsManagerMonthlyEstimateUsd = 2.8; },
+    (posture) => { posture.maximumMonthlyExposureUsd = 5.01; },
+    (posture) => { posture.activationBlockedUntilAuthorization = false; }
+  ]) {
+    const changedPosture = fixtureManifest();
+    mutate(changedPosture.retainedMonthlyCost);
+    assert.throws(
+      () => validateManifest(changedPosture),
+      /RELEASE_COST_MANIFEST_BOUNDARY/
+    );
+  }
 });
 
 test("bootstrap contract rejects a weakened budget or alert", () => {

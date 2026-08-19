@@ -413,12 +413,14 @@ function parseStored(item, command) {
   const state = stringAttribute(item, "state", code);
   const lastReceiptSha256 = stringAttribute(item, "lastReceiptSha256", code);
   if (finalReceipt) {
+    const finalStatus = finalReceipt.status;
     requireCondition(finalReceipt.commandSha256 === command.commandSha256 &&
       finalReceipt.operationId === command.operationId &&
       finalReceipt.previousReceiptSha256 === previousReceiptSha256 &&
       finalReceipt.transitionCount === transitionCount &&
-      finalReceipt.status === "PASS" && version === transitionCount + 2 &&
-      state === "PASS" && lastReceiptSha256 === digest(finalReceipt), code);
+      ["PASS", "PROVIDER_KEYS_REVOCATION_PENDING"].includes(finalStatus) &&
+      version === transitionCount + 2 && state === finalStatus &&
+      lastReceiptSha256 === digest(finalReceipt), code);
   } else if (terminalReceipt) {
     requireCondition(terminalReceipt.commandSha256 === command.commandSha256 &&
       terminalReceipt.operationId === command.operationId &&
@@ -710,7 +712,7 @@ export function createFreshClusterAwsProvider({
           ":expectedVersion": n(receipt.transitionCount + 1),
           ":final": b(receipt),
           ":last": s(receiptSha256),
-          ":state": s("PASS"),
+          ":state": s(receipt.status),
           ":version": n(receipt.transitionCount + 2)
         },
         Key: { pk: s(effectKey(command.globalKeySha256)) },

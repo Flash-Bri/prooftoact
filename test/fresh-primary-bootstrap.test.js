@@ -18,6 +18,10 @@ import {
 } from "../scripts/bootstrap-fresh-primary.js";
 import { buildFreshPrimaryProviderCommand } from
   "../scripts/fresh-primary-provider-controller.js";
+import { __test as freshClusterControllerContract } from
+  "../scripts/fresh-cluster-provider-controller.js";
+import { __test as primarySecurityContract } from
+  "../src/cloud/primary-security.js";
 
 const runFreshPrimaryBootstrap = __test.runFreshPrimaryBootstrap;
 
@@ -128,14 +132,65 @@ function bootstrapReceipt(roleNames = __test.MANAGED_PRINCIPALS) {
     preflightPostureDigest: "8".repeat(64),
     finalPostureDigest: "9".repeat(64),
     clusterPreflightPostureDigest: "a".repeat(64),
-    clusterFinalPostureDigest: "b".repeat(64)
+    clusterFinalPostureDigest: "b".repeat(64),
+    principalLoginPosture: {
+      schemaVersion: "prooftoact.primary-principal-login-posture.v2",
+      status: "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
+      builtinAdminOptionsSha256:
+        __test.sha256(__test.canonicalBytes([])),
+      builtinAdminRolePresent: true,
+      bootstrapPrincipal: "prooftoact_bootstrap_admin",
+      bootstrapPrincipalCanLogin: true,
+      bootstrapPrincipalOptionsSha256:
+        __test.sha256(__test.canonicalBytes([])),
+      capabilityNoLoginCount: 15,
+      databaseObservedAt: "2026-08-19T08:00:14.000Z",
+      exactPrincipalCount: 32,
+      fullPrincipalCensusSha256: "c".repeat(64),
+      immutableBuiltinAdminRoleExceptionPresent: true,
+      rootCanLogin: false,
+      rootMemberOfSha256:
+        __test.sha256(__test.canonicalBytes(["admin"])),
+      rootNoLoginProvedFromShowUsers: true,
+      rootOptions: ["NOLOGIN"],
+      rootOptionsSha256:
+        __test.sha256(__test.canonicalBytes(["NOLOGIN"])),
+      runtimeLoginCount: 14
+    }
   };
+}
+
+function completeShowUsersRows() {
+  const databaseNow = "2026-08-19T08:00:14.000Z";
+  return [
+    { username: "admin", options: [], member_of: [], database_now: databaseNow },
+    {
+      username: "prooftoact_bootstrap_admin",
+      options: [],
+      member_of: ["admin"],
+      database_now: databaseNow
+    },
+    {
+      username: "root",
+      options: ["NOLOGIN"],
+      member_of: ["admin"],
+      database_now: databaseNow
+    },
+    ...__test.MANAGED_PRINCIPALS.map((username) => ({
+      username,
+      options: username.endsWith("_user") ? [] : ["NOLOGIN"],
+      member_of: username.endsWith("_user")
+        ? [username.replace(/_user$/u, "_role")]
+        : [],
+      database_now: databaseNow
+    }))
+  ];
 }
 
 function clients({
   clusterId = CLUSTER_ID,
   databases = ["defaultdb", "postgres", "system"],
-  users = ["prooftoact_bootstrap_admin", "root"],
+  users = ["admin", "prooftoact_bootstrap_admin", "root"],
   defaultTables = [],
   postgresTables = [],
   directTableDenied = true
@@ -169,7 +224,11 @@ function clients({
         return { rows: databases.map((database_name) => ({ database_name })) };
       }
       if (normalized === "SHOW USERS") {
-        return { rows: users.map((username) => ({ username })) };
+        return { rows: users.map((username) => ({
+          username,
+          options: [],
+          member_of: username === "admin" ? [] : ["admin"]
+        })) };
       }
       if (normalized === "SHOW TABLES FROM defaultdb") {
         return { rows: defaultTables };
@@ -630,8 +689,9 @@ test("fresh-primary exact census rejects extra database, user, or table before m
   for (const [state, code] of [
     [clients({ databases: ["defaultdb", "postgres", "system", "customer-prod"] }),
       "FRESH_PRIMARY_DATABASE_CENSUS_REJECTED"],
-    [clients({ users: ["prooftoact_bootstrap_admin", "root", "alice"] }),
-      "FRESH_PRIMARY_PRINCIPAL_CENSUS_REJECTED"],
+    [clients({
+      users: ["admin", "prooftoact_bootstrap_admin", "root", "alice"]
+    }), "FRESH_PRIMARY_SHOW_USERS_POSTURE_REJECTED"],
     [clients({ defaultTables: [{ schema_name: "public", table_name: "orders" }] }),
       "FRESH_PRIMARY_USER_TABLE_CENSUS_REJECTED"]
   ]) {
@@ -699,6 +759,40 @@ test("fresh-primary bootstrap creates one database and validates exact roles", a
     "POSTFLIGHT_STARTED",
     "ACCEPTED"
   ]);
+});
+
+test("real SHOW USERS collector output passes both bootstrap receipt validators", async () => {
+  const rows = completeShowUsersRows();
+  const principalLoginPosture = await primarySecurityContract
+    .collectPrincipalLoginPosture({
+      async query(sql) {
+        assert.match(sql, /FROM \[SHOW USERS\]/u);
+        return { rows, rowCount: rows.length };
+      }
+    }, "prooftoact_bootstrap_admin");
+  assert.equal(
+    principalLoginPosture.rootOptionsSha256,
+    freshClusterControllerContract.digest(["NOLOGIN"])
+  );
+  const state = clients();
+  const receipt = await runFreshPrimaryBootstrap(runInput(state, {
+    bootstrap: async () => ({
+      ...bootstrapReceipt(),
+      principalLoginPosture
+    })
+  }));
+  assert.equal(freshClusterControllerContract.validateBootstrapReceipt(
+    receipt,
+    {
+      approvalId: APPROVAL_ID,
+      operationId: OPERATION_ID,
+      sourceCommit: SOURCE_COMMIT,
+      treeDigest: TREE_DIGEST
+    },
+    {},
+    { secretValueSha256: "f".repeat(64) },
+    { sqlClusterId: CLUSTER_ID }
+  ), receipt);
 });
 
 test("provider controller wraps the real bootstrap core in durable global transitions", async () => {

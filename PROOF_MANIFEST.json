@@ -901,7 +901,7 @@
     {
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
-      "sha256": "a082914bcb63ea74945732144d31079d2be93b448a2754eb93927cd2ea49e114",
+      "sha256": "5ce9dfcc4907b96b403d32deb8b3c61ac8d0daf3b3a3ecf4b6bb88b4570f7cd2",
       "kind": "verification-code"
     },
     {
@@ -973,25 +973,25 @@
     {
       "id": "release-cost-ledger",
       "path": "docs/RELEASE_COST.md",
-      "sha256": "12b44eb9f9cd2b498d4de40b885c295da1c25f8d1c48a451fe2734c3d79dfff3",
+      "sha256": "1c3f7d20afb7b8f78a9ea383d54d66c17369dca9f211cce78682bf6e2b2c9365",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "1fc20331cdb25d52f7cdd9d0c18e885376f26ed3ff8df9765d7eb2af57338898",
+      "sha256": "29bbe2ace4b262b5c1489cd14a1787d48ae9c5e7a958b0e0e47f0a370fae745d",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-tests",
       "path": "test/release-cost.test.js",
-      "sha256": "b9a881a8db95d5071cd869b931f51d9769399875add13d897a1f05a3aec8c47d",
+      "sha256": "a299bd0d65ae2bbbc781dbc5c3abd0108bc1a7c43fdce2406f23583b7b1cbc87",
       "kind": "verification-code"
     },
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "27ffc88aab39e13508fa47939ddf7cd4844286c43ba9e8190b071f36a47c40fa",
+      "sha256": "e42048e42020041f0d663fd88c1290b3f80d8b0fa8baaccbcd2802d2ff70fa75",
       "kind": "verification-code"
     },
     {
@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "33c5e106f79432f563924a122f93c7a195f127767c3b975fb2457aac373a4e18",
+      "sha256": "b686198c1e7bac88f8178d3974640d0f0f6123329d5ce8f8b6ffba161681d424",
       "kind": "boundary-ledger"
     },
     {
@@ -1105,7 +1105,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "b7abbe3c73e078d85d739b314f8b16b5a9fb9af903411b18ca61ccc85893617a",
+      "sha256": "09a825c509d70c414bc059b51592385c5538803d4eb6d581fec82f3e84942846",
       "kind": "verification-code"
     },
     {

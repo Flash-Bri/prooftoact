@@ -181,6 +181,7 @@ test("fresh recovery publishes, replays, and strongly guards exact Managed MCP",
     reason: null,
     recorded_at: new Date(sourceCommitMs).toISOString(),
     database_now: new Date(sourceCommitMs + 500).toISOString(),
+    minimum_residual_ms: 20 * 60 * 1_000,
     request_digest: sourceBinding.requestDigest,
     resource_id: sourceBinding.resourceId,
     run_id: RUN_ID,
@@ -302,6 +303,12 @@ test("fresh recovery publishes, replays, and strongly guards exact Managed MCP",
   assert.equal(preparation.expiryPolicy.canonicalRecoveryTtlMs,
     30 * 60 * 1_000);
   assert.match(preparation.expiryPolicySha256, /^[0-9a-f]{64}$/u);
+  assert.deepEqual(preparation.sourceAuthorityWindow, {
+    databaseObservedAt: rawSourceReceipt.database_now,
+    minimumRequiredMs: 10 * 60 * 1_000,
+    minimumResidualMs: 20 * 60 * 1_000,
+    source: "COCKROACHDB_CLOCK"
+  });
   const canonical = canonicalRecoveryAttempt({
     tenantId: TENANT_ID,
     subjectBindingHash: persistedBundle.subjectBindingHash,
@@ -355,6 +362,26 @@ test("fresh recovery publishes, replays, and strongly guards exact Managed MCP",
   ]);
   assert.equal(appendCount, 2);
   assert.equal(databaseClockIndex, 3);
+});
+
+test("source authority residual enforces the exact ten-minute boundary", () => {
+  const source = {
+    database_now: "2026-08-19T10:00:00.000Z",
+    minimum_residual_ms: 10 * 60 * 1_000
+  };
+  assert.equal(__test.validateSourceAuthorityWindow({
+    ...source,
+    minimum_residual_ms: source.minimum_residual_ms + 1
+  }).minimumResidualMs, 600_001);
+  assert.equal(__test.validateSourceAuthorityWindow(source).minimumResidualMs,
+    600_000);
+  assert.throws(
+    () => __test.validateSourceAuthorityWindow({
+      ...source,
+      minimum_residual_ms: source.minimum_residual_ms - 1
+    }),
+    /FRESH_RECOVERY_PUBLICATION_SOURCE_AUTHORITY_TTL_REJECTED/u
+  );
 });
 
 test("fresh publication clocks enforce exact five-minute provider boundary", () => {

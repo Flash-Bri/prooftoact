@@ -29,6 +29,31 @@ const EXPECTED_LIMITS = Object.freeze({
   unexplainedSpendStopUsd: 3
 });
 
+const EXPECTED_RETAINED_MONTHLY_COST = Object.freeze({
+  activationAuthorizationStatus: "REQUESTED_NOT_EVIDENCED_AS_APPROVED",
+  activationBlockedUntilAuthorization: true,
+  a1RetainedSecretCount: 7,
+  a1RetainedSecretPurposes: Object.freeze([
+    "admin",
+    "auditor",
+    "cloudApi",
+    "credential",
+    "mcp",
+    "publisher",
+    "signer"
+  ]),
+  a1RetainedSecretsMustRemain: true,
+  a2RetainedSecretCount: 1,
+  cockroachBasicMonthlyCapUsd: 1.5,
+  explicitHeadroomUsd: 0.3,
+  maximumMonthlyExposureUsd: 5,
+  publicOssLifecycleAdditionalMonthlyUsd: 0,
+  publicOssLifecycleCostNeutral: true,
+  secretsManagerMonthlyEstimateUsd: 3.2,
+  secretsManagerMonthlyUnitUsd: 0.4,
+  totalRetainedSecretCount: 8
+});
+
 const EXPECTED_BUDGET_ALERTS = Object.freeze([
   Object.freeze({
     metric: "ACTUAL",
@@ -73,6 +98,7 @@ const EXPECTED_UNAPPROVED_PURCHASE_CLASSES = Object.freeze([
 ]);
 
 const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
+  "Explicit owner authorization for the retained A1/A2 monthly maximum of 5.00 USD before activation; the current authorization is requested but not evidenced as approved.",
   "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with the greater of budget-reported spend and conservative account-wide positive record-type exposure plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
   "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
   "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",
@@ -335,6 +361,7 @@ export function validateManifest(manifest) {
       "forbiddenResourceTypes",
       "limits",
       "reviewedOn",
+      "retainedMonthlyCost",
       "schema",
       "status",
       "surfaces",
@@ -347,6 +374,11 @@ export function validateManifest(manifest) {
     Object.keys(EXPECTED_LIMITS),
     "RELEASE_COST_LIMIT_KEYS"
   );
+  exactKeys(
+    manifest.retainedMonthlyCost,
+    Object.keys(EXPECTED_RETAINED_MONTHLY_COST),
+    "RELEASE_COST_RETAINED_MONTHLY_KEYS"
+  );
   assert(
     manifest.schema === MANIFEST_SCHEMA &&
       manifest.status === MANIFEST_STATUS &&
@@ -355,6 +387,24 @@ export function validateManifest(manifest) {
       manifest.claimBoundary.length > 0 &&
       manifest.finalReleaseReady === false &&
       sameJson(manifest.limits, EXPECTED_LIMITS) &&
+      sameJson(
+        manifest.retainedMonthlyCost,
+        EXPECTED_RETAINED_MONTHLY_COST
+      ) &&
+      manifest.retainedMonthlyCost.a1RetainedSecretCount +
+        manifest.retainedMonthlyCost.a2RetainedSecretCount ===
+          manifest.retainedMonthlyCost.totalRetainedSecretCount &&
+      Number((
+        manifest.retainedMonthlyCost.totalRetainedSecretCount *
+        manifest.retainedMonthlyCost.secretsManagerMonthlyUnitUsd
+      ).toFixed(2)) ===
+        manifest.retainedMonthlyCost.secretsManagerMonthlyEstimateUsd &&
+      Number((
+        manifest.retainedMonthlyCost.secretsManagerMonthlyEstimateUsd +
+        manifest.retainedMonthlyCost.cockroachBasicMonthlyCapUsd +
+        manifest.retainedMonthlyCost.explicitHeadroomUsd
+      ).toFixed(2)) ===
+        manifest.retainedMonthlyCost.maximumMonthlyExposureUsd &&
       Number(
         (
           manifest.limits.totalProjectExposureCeilingUsd -
@@ -813,7 +863,14 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       "no accepted AWS read-only preflight receipt exists",
       "main-stack deployment, DNS change",
       "semantic-failure alarms",
-      "stack/service custom"
+      "stack/service custom",
+      "A1/A2 RETAINED ACTIVATION AUTHORIZATION PENDING",
+      "8 retained Secrets Manager secrets",
+      "$3.20",
+      "$1.50",
+      "$0.30",
+      "$5.00",
+      "public OSS lifecycle"
     ],
     "RELEASE_COST_LEDGER_MARKERS"
   );
@@ -825,7 +882,12 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       "**$13.14**",
       "daily cost exceeds $5",
       "unexplained spend exceeds $3",
-      "introduces NAT Gateway"
+      "introduces NAT Gateway",
+      "A1/A2 retained activation posture",
+      "8 retained Secrets Manager secrets",
+      "$5.00 per month",
+      "authorization is requested but not evidenced as approved",
+      "public OSS lifecycle"
     ],
     "RELEASE_COST_BOUNDARY_MARKERS"
   );
@@ -899,7 +961,7 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       unapprovedPurchasesRemainBlocked: true
     },
     claimBoundary:
-      "This receipt verifies current source cost guards, recorded owner inputs, budget prerequisites, bounded deployment resources, and explicit stop conditions. It does not assert current AWS spend, independently verify registrar evidence, authorize cloud or DNS mutation, prove final cost, or approve publication or submission."
+      "This receipt verifies current source cost guards, the exact eight-secret A1/A2 retained posture, 3.20 USD Secrets Manager estimate, 1.50 USD CockroachDB cap, 0.30 USD headroom, 5.00 USD monthly maximum, public-OSS lifecycle neutrality, recorded owner inputs, budget prerequisites, bounded deployment resources, and explicit stop conditions. Activation authorization is requested but not evidenced as approved. It does not assert current AWS spend, independently verify registrar evidence, authorize cloud or DNS mutation, prove final cost, or approve publication or submission."
   });
 }
 
@@ -931,6 +993,7 @@ export const __test = Object.freeze({
   EXPECTED_FORBIDDEN_RESOURCE_TYPES,
   EXPECTED_FUNCTION_CAPS,
   EXPECTED_LIMITS,
+  EXPECTED_RETAINED_MONTHLY_COST,
   EXPECTED_SURFACES,
   EXPECTED_UNAPPROVED_PURCHASE_CLASSES,
   MANIFEST_SCHEMA,

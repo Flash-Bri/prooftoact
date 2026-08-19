@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 
 import { FRESH_PRIMARY_RUNTIME_USERS } from "./bootstrap-fresh-primary.js";
+import { freshRecoverySourceIdentity } from
+  "./fresh-recovery-source-execution.js";
 import {
   buildFreshClusterCreateCommand,
   reconcileFreshClusterCreateIdentity,
@@ -395,6 +397,66 @@ function validateBootstrapReceipt(
     "trustRootJsonSha256"
   ]) && Object.values(recoveryPublisher).every((item) =>
     HEX_64.test(item ?? "")), code);
+  const rootCredentialLifecycle =
+    value.credentialLifecycle?.rootCredentialLifecycle;
+  requireCondition(exactKeys(rootCredentialLifecycle, [
+    "connectionStringCreated", "connectionStringUsed", "passwordCreated",
+    "secretStored"
+  ]) && Object.values(rootCredentialLifecycle).every((item) => item === false),
+  code);
+  const preflightPrincipalPosture = value.preflight?.principalPosture;
+  requireCondition(exactKeys(preflightPrincipalPosture, [
+    "builtinAdminRolePresent", "exactPrincipalCount",
+    "fullPrincipalCensusSha256", "rootCanLogin", "rootOptions",
+    "rootOptionsSha256", "schemaVersion", "status"
+  ]) && preflightPrincipalPosture.schemaVersion ===
+      "prooftoact.fresh-primary-preflight-principal-posture.v1" &&
+    preflightPrincipalPosture.status === "EXACT_SHOW_USERS_PRESTATE" &&
+    preflightPrincipalPosture.builtinAdminRolePresent === true &&
+    preflightPrincipalPosture.exactPrincipalCount === 3 &&
+    preflightPrincipalPosture.rootCanLogin === true &&
+    JSON.stringify(preflightPrincipalPosture.rootOptions) ===
+      JSON.stringify([]) &&
+    preflightPrincipalPosture.rootOptionsSha256 === digest([]) &&
+    HEX_64.test(preflightPrincipalPosture.fullPrincipalCensusSha256 ?? "") &&
+    value.preflight.principalPostureSha256 ===
+      digest(preflightPrincipalPosture), code);
+  const loginPosture = value.bootstrap?.principalLoginPosture;
+  requireCondition(exactKeys(loginPosture, [
+    "builtinAdminOptionsSha256", "builtinAdminRolePresent",
+    "bootstrapPrincipal", "bootstrapPrincipalCanLogin",
+    "bootstrapPrincipalOptionsSha256", "capabilityNoLoginCount",
+    "databaseObservedAt", "exactPrincipalCount",
+    "fullPrincipalCensusSha256", "immutableBuiltinAdminRoleExceptionPresent",
+    "rootCanLogin", "rootMemberOfSha256", "rootNoLoginProvedFromShowUsers",
+    "rootOptions", "rootOptionsSha256", "runtimeLoginCount",
+    "schemaVersion", "status"
+  ]) && loginPosture.schemaVersion ===
+      "prooftoact.primary-principal-login-posture.v2" &&
+    loginPosture.status === "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE" &&
+    loginPosture.builtinAdminRolePresent === true &&
+    loginPosture.immutableBuiltinAdminRoleExceptionPresent === true &&
+    loginPosture.bootstrapPrincipal === BOOTSTRAP_USERNAME &&
+    loginPosture.bootstrapPrincipalCanLogin === true &&
+    loginPosture.rootCanLogin === false &&
+    loginPosture.rootNoLoginProvedFromShowUsers === true &&
+    JSON.stringify(loginPosture.rootOptions) ===
+      JSON.stringify(["NOLOGIN"]) &&
+    loginPosture.builtinAdminOptionsSha256 === digest([]) &&
+    loginPosture.bootstrapPrincipalOptionsSha256 === digest([]) &&
+    loginPosture.rootMemberOfSha256 === digest(["admin"]) &&
+    loginPosture.rootOptionsSha256 === digest(["NOLOGIN"]) &&
+    loginPosture.runtimeLoginCount === FRESH_PRIMARY_RUNTIME_USERS.length &&
+    loginPosture.capabilityNoLoginCount === 15 &&
+    loginPosture.exactPrincipalCount === 32 &&
+    [
+      loginPosture.builtinAdminOptionsSha256,
+      loginPosture.bootstrapPrincipalOptionsSha256,
+      loginPosture.fullPrincipalCensusSha256,
+      loginPosture.rootMemberOfSha256
+    ].every((item) => HEX_64.test(item ?? "")) &&
+    Number.isFinite(Date.parse(loginPosture.databaseObservedAt)) &&
+    value.bootstrap.principalLoginPostureSha256 === digest(loginPosture), code);
   return value;
 }
 
@@ -425,10 +487,17 @@ function validateFreshRecoveryPreparation(
   requireCondition(exactKeys(source, [
     "authorityOutcome",
     "durableAuthorityReceipt",
+    "dviAuthorityWindow",
     "dviPolicyVersion",
+    "dviProof",
+    "dviProofSha256",
     "evidenceDigest",
     "evidenceVerified",
     "operationId",
+    "raceProof",
+    "raceProofSha256",
+    "recoverySemantics",
+    "residualAuthority",
     "schemaVersion",
     "sourceBinding",
     "sourceBindingSha256",
@@ -436,7 +505,7 @@ function validateFreshRecoveryPreparation(
     "status",
     "treeDigest"
   ]) && source.schemaVersion ===
-      "prooftoact.fresh-recovery-source-receipt.v1" &&
+      "prooftoact.fresh-recovery-source-receipt.v2" &&
     source.status === "PASS" && source.operationId === command.operationId &&
     source.sourceCommit === command.sourceCommit &&
     source.treeDigest === command.treeDigest &&
@@ -445,8 +514,15 @@ function validateFreshRecoveryPreparation(
     source.durableAuthorityReceipt === true &&
     source.evidenceVerified === true &&
     HEX_64.test(source.evidenceDigest ?? "") &&
+    source.dviProofSha256 === digest(source.dviProof) &&
+    source.raceProofSha256 === digest(source.raceProof) &&
     source.sourceBindingSha256 === digest(source.sourceBinding) &&
     value.sourceReceiptSha256 === digest(source), code);
+  const deterministicIdentity = freshRecoverySourceIdentity(
+    command.operationId,
+    command.sourceCommit,
+    command.treeDigest
+  );
   requireCondition(exactKeys(source.sourceBinding, [
     "authorityEvidenceBindingSha256",
     "evidenceId",
@@ -457,7 +533,12 @@ function validateFreshRecoveryPreparation(
     "runId",
     "selectedEvidenceBindingSha256",
     "tenantId"
-  ]) && source.sourceBinding.operationId === command.operationId &&
+  ]) && source.sourceBinding.operationId !== command.operationId &&
+    source.sourceBinding.tenantId === deterministicIdentity.tenantId &&
+    source.sourceBinding.runId === deterministicIdentity.runId &&
+    source.sourceBinding.incidentId === deterministicIdentity.incidentId &&
+    source.sourceBinding.evidenceId === deterministicIdentity.evidenceId &&
+    source.sourceBinding.resourceId === deterministicIdentity.resourceId &&
     [source.sourceBinding.evidenceId, source.sourceBinding.incidentId,
       source.sourceBinding.operationId, source.sourceBinding.runId,
       source.sourceBinding.tenantId].every((item) => UUID.test(item ?? "")) &&
@@ -467,18 +548,124 @@ function validateFreshRecoveryPreparation(
       HEX_64.test(item ?? "")) &&
     typeof source.sourceBinding.resourceId === "string" &&
     source.sourceBinding.resourceId.length > 0, code);
+  const dvi = source.dviProof;
+  requireCondition(dvi?.schemaVersion ===
+      "prooftoact.fresh-recovery-admissible-vector-proof.v1" &&
+    dvi.status === "PASS" && dvi.sourceCommit === command.sourceCommit &&
+    dvi.treeDigest === command.treeDigest &&
+    dvi.drill?.durableSelectionCommitted === true &&
+    dvi.drill?.runId === source.sourceBinding.runId &&
+    dvi.drill?.authorityEvidenceBindingSha256 ===
+      source.sourceBinding.authorityEvidenceBindingSha256 &&
+    dvi.drill?.selectedEvidenceBindingSha256 ===
+      source.sourceBinding.selectedEvidenceBindingSha256 &&
+    dvi.fixture?.candidateCount === 11 &&
+    dvi.fixture?.exclusionCaseCount === 1 &&
+    dvi.fixture?.exclusionReasons?.out_of_scope === 1 &&
+    dvi.snapshot?.ttlMs === 30 * 60 * 1_000 &&
+    dvi.ranking?.directDviQueryForcedIndex === true &&
+    dvi.ranking?.directDviResultValidated === true &&
+    dvi.ranking?.commitValidatorSequenceMatchedDirectDvi === true &&
+    dvi.ranking?.vectorSearchUsed === true &&
+    dvi.ranking?.exactPrefixSpansUsed === true &&
+    dvi.cleanup?.snapshotRetired === true &&
+    typeof dvi.claimBoundary === "string" &&
+    dvi.claimBoundary.includes("bounded fresh-recovery DVI snapshot") &&
+    dvi.claimBoundary.includes("does not prove provider-key revocation"), code);
+  const authorityWindow = (window) => exactKeys(window, [
+    "admittedAt", "databaseObservedAt", "expiresAt", "minimumRequiredMs",
+    "minimumResidualMs", "source"
+  ]) && window.admittedAt === dvi.snapshot.admittedAt &&
+    window.expiresAt === dvi.snapshot.expiresAt &&
+    Number.isFinite(Date.parse(window.databaseObservedAt)) &&
+    window.minimumRequiredMs === 10 * 60 * 1_000 &&
+    Number.isSafeInteger(window.minimumResidualMs) &&
+    window.minimumResidualMs >= window.minimumRequiredMs &&
+    window.source === "COCKROACHDB_CLOCK";
+  requireCondition(exactKeys(source.dviAuthorityWindow, [
+    "beforeAuthorization", "beforeSpend"
+  ]) && authorityWindow(source.dviAuthorityWindow.beforeAuthorization) &&
+    authorityWindow(source.dviAuthorityWindow.beforeSpend), code);
+  const race = source.raceProof;
+  const expectedContenderIdentitySetSha256 = textDigest(`${
+    deterministicIdentity.contenders.map(
+      ({ effectKey, intentNonce, operationId }) =>
+        `${operationId}:${effectKey}:${intentNonce}`
+    ).sort().join("\n")
+  }\n`);
+  requireCondition(exactKeys(race, [
+    "changedInputMismatchDenied", "contenderCount",
+    "contenderIdentitySetSha256", "deniedReplayKind",
+    "deniedReplayOutcome", "deterministicOuterSourceBindingSha256",
+    "distinctAuthorizationSessionCount", "distinctLogicalActionCount",
+    "distinctSpendSessionCount", "durableDenialCount",
+    "durableReceiptCount", "outboxCount", "promiseAllSettled",
+    "protectedEffectCount", "schemaVersion", "serializable", "status",
+    "winnerFence", "winnerOperationIdSha256", "winnerRequestDigest"
+  ]) && race.schemaVersion ===
+      "prooftoact.fresh-recovery-authority-race.v1" &&
+    race.status === "PASS" && race.contenderCount === 2 &&
+    race.distinctAuthorizationSessionCount === 2 &&
+    race.distinctLogicalActionCount === 2 &&
+    race.distinctSpendSessionCount === 2 &&
+    race.durableReceiptCount === 2 && race.durableDenialCount === 1 &&
+    race.outboxCount === 1 && race.protectedEffectCount === 0 &&
+    race.winnerFence === "1" && race.changedInputMismatchDenied === true &&
+    race.deniedReplayOutcome === "resource_held_denied" &&
+    race.deniedReplayKind === "operation_replay" &&
+    race.serializable === true && race.promiseAllSettled === true &&
+    race.winnerOperationIdSha256 ===
+      textDigest(source.sourceBinding.operationId) &&
+    deterministicIdentity.contenders.some(({ operationId }) =>
+      operationId === source.sourceBinding.operationId) &&
+    race.winnerRequestDigest === source.sourceBinding.requestDigest &&
+    race.deterministicOuterSourceBindingSha256 === textDigest(canonicalJson({
+      operationId: command.operationId,
+      sourceCommit: command.sourceCommit,
+      treeDigest: command.treeDigest
+    })) && race.contenderIdentitySetSha256 ===
+      expectedContenderIdentitySetSha256, code);
+  requireCondition(exactKeys(source.recoverySemantics, [
+    "boundedOneShotAvailabilityRiskPresent", "crossRunRecoveryScope",
+    "outerReleaseOperationIdSha256", "safetyPreservedByFreshAuthorityRequirement",
+    "signedRecoveryMustBindExactWinner", "successfulPhaseContinuation",
+    "winnerAuthorityOperationIdSha256"
+  ]) && source.recoverySemantics.crossRunRecoveryScope === "CLEANUP_ONLY" &&
+    source.recoverySemantics.successfulPhaseContinuation === false &&
+    source.recoverySemantics.signedRecoveryMustBindExactWinner === true &&
+    source.recoverySemantics.boundedOneShotAvailabilityRiskPresent === true &&
+    source.recoverySemantics.safetyPreservedByFreshAuthorityRequirement ===
+      true && source.recoverySemantics.outerReleaseOperationIdSha256 ===
+      textDigest(command.operationId) &&
+    source.recoverySemantics.winnerAuthorityOperationIdSha256 ===
+      textDigest(source.sourceBinding.operationId), code);
+  requireCondition(exactKeys(source.residualAuthority, [
+    "databaseObservedAt", "minimumRequiredMs", "minimumResidualMs", "source"
+  ]) && Number.isFinite(Date.parse(
+    source.residualAuthority.databaseObservedAt)) &&
+    source.residualAuthority.minimumRequiredMs === 10 * 60 * 1_000 &&
+    Number.isSafeInteger(source.residualAuthority.minimumResidualMs) &&
+    source.residualAuthority.minimumResidualMs >=
+      source.residualAuthority.minimumRequiredMs &&
+    source.residualAuthority.source === "COCKROACHDB_CLOCK", code);
   const preparation = value.preparationReceipt;
   requireCondition(exactKeys(preparation, [
     "authorityTransferred",
     "bundleDigest",
+    "expiresAt",
+    "expiryPolicy",
+    "expiryPolicySha256",
     "persistenceReceiptSha256",
     "privateRecoveryQueryBinding",
     "privateRecoveryQueryBindingSha256",
     "publisherKeySetDigest",
+    "primaryDatabaseObservedAt",
+    "primaryRemainingWindowMs",
     "recoverySessionId",
     "requiresFreshAuthorization",
     "schemaVersion",
     "sourceDigest",
+    "sourceAuthorityWindow",
     "sourceReceiptSha256",
     "status"
   ]) && preparation.schemaVersion ===
@@ -486,12 +673,27 @@ function validateFreshRecoveryPreparation(
     preparation.status === "PREPARED" &&
     preparation.authorityTransferred === false &&
     preparation.requiresFreshAuthorization === true &&
+    Number.isFinite(Date.parse(preparation.expiresAt)) &&
+    Number.isFinite(Date.parse(preparation.primaryDatabaseObservedAt)) &&
+    Number.isSafeInteger(preparation.primaryRemainingWindowMs) &&
+    preparation.primaryRemainingWindowMs >= 10 * 60 * 1_000 &&
     UUID.test(preparation.recoverySessionId ?? "") &&
     [preparation.bundleDigest, preparation.persistenceReceiptSha256,
       preparation.publisherKeySetDigest, preparation.sourceDigest,
       preparation.sourceReceiptSha256,
       preparation.privateRecoveryQueryBindingSha256].every((item) =>
       HEX_64.test(item ?? "")) &&
+    preparation.expiryPolicySha256 === digest(preparation.expiryPolicy) &&
+    exactKeys(preparation.sourceAuthorityWindow, [
+      "databaseObservedAt", "minimumRequiredMs", "minimumResidualMs", "source"
+    ]) && Number.isFinite(Date.parse(
+      preparation.sourceAuthorityWindow.databaseObservedAt)) &&
+    preparation.sourceAuthorityWindow.minimumRequiredMs === 10 * 60 * 1_000 &&
+    Number.isSafeInteger(
+      preparation.sourceAuthorityWindow.minimumResidualMs) &&
+    preparation.sourceAuthorityWindow.minimumResidualMs >=
+      preparation.sourceAuthorityWindow.minimumRequiredMs &&
+    preparation.sourceAuthorityWindow.source === "COCKROACHDB_CLOCK" &&
     preparation.publisherKeySetDigest === bootstrapReceipt
       .credentialLifecycle?.recoveryPublisher?.publisherKeySetDigest &&
     value.preparationReceiptSha256 === digest(preparation), code);
@@ -946,6 +1148,8 @@ export async function runFreshClusterProviderController({
       names: Object.freeze(initialSqlInventory.names.filter((name) =>
         name !== BOOTSTRAP_USERNAME))
     });
+    requireCondition(sameNames(sqlBaseline.names, ["root"]),
+      "FRESH_CLUSTER_SQL_BASELINE_REJECTED");
     await record(adminInitiallyPresent
       ? "ADOPTED_ADMIN_USER_PRESTATE_PRESENT"
       : "ADMIN_USER_PRESTATE_ABSENT", {
@@ -1206,10 +1410,8 @@ export async function runFreshClusterProviderController({
       });
     }
     const adminDeleted = validateSqlUserInventory(await readSqlUsers());
-    requireCondition(sameNames(adminDeleted.names, [
-      ...sqlBaseline.names,
-      ...expectedRuntimeNames
-    ].sort()),
+    const expectedFinalProviderNames = ["root", ...expectedRuntimeNames].sort();
+    requireCondition(sameNames(adminDeleted.names, expectedFinalProviderNames),
       "FRESH_CLUSTER_ADMIN_DELETE_READBACK_REJECTED");
     adminAbsent = true;
     await record("ADMIN_DELETE_ABSENT", {
@@ -1250,9 +1452,51 @@ export async function runFreshClusterProviderController({
     ingressAbsent = true;
     await record("INGRESS_DELETE_ABSENT", ingressDeleted);
 
+    const providerKeyRevocationCeremony = Object.freeze({
+      schemaVersion:
+        "prooftoact.cockroach-provider-key-revocation-ceremony.v1",
+      status: "PENDING_ORGANIZATION_ADMIN",
+      operationId: command.operationId,
+      sourceCommit: command.sourceCommit,
+      treeDigest: command.treeDigest,
+      organizationAdministratorRequired: true,
+      selfRevocationForbidden: true,
+      serviceAccountsAndRolesMustBePreserved: true,
+      creatorMustBeRevokedBeforeAuditor: true,
+      creator: Object.freeze({
+        serviceAccountId: authentication.creatorServiceAccountId,
+        credentialPurpose: "A1_PROVIDER_CREATOR",
+        exactUniqueProviderKeyName: null,
+        keyNameDisposition:
+          "ORG_ADMIN_MUST_RECORD_EXACT_UNIQUE_NAME_BEFORE_DELETE",
+        sequence: 1
+      }),
+      auditor: Object.freeze({
+        serviceAccountId: authentication.auditorServiceAccountId,
+        credentialPurpose: "A1_PROVIDER_AUDITOR",
+        exactUniqueProviderKeyName: null,
+        keyNameDisposition:
+          "ORG_ADMIN_MUST_RECORD_EXACT_UNIQUE_NAME_BEFORE_DELETE",
+        sequence: 2
+      }),
+      requiredProofSequence: Object.freeze([
+        "RECORD_EXACT_CREATOR_KEY_ID_AND_UNIQUE_NAME",
+        "DELETE_CREATOR_KEY",
+        "PROVE_CREATOR_KEY_GET_404",
+        "PROVE_CREATOR_FILTERED_KEY_LIST_ABSENCE",
+        "OPTIONALLY_RETAIN_AUDITOR_FOR_INDEPENDENT_READBACK",
+        "RECORD_EXACT_AUDITOR_KEY_ID_AND_UNIQUE_NAME",
+        "DELETE_AUDITOR_KEY",
+        "PROVE_AUDITOR_KEY_GET_404",
+        "PROVE_AUDITOR_FILTERED_KEY_LIST_ABSENCE"
+      ]),
+      ceremonyReceiptMustBindControllerReceiptSha256: true
+    });
     const receipt = Object.freeze({
       schemaVersion: CONTROLLER_SCHEMA,
-      status: "PASS",
+      status: "PROVIDER_KEYS_REVOCATION_PENDING",
+      coreStatus: "PASS",
+      publicDisposition: "HOLD",
       adminCredentialAbsent: true,
       adminSecretCredentialRevokedByPrincipalDeletion: true,
       adminSecretVersionRetained: true,
@@ -1266,11 +1510,30 @@ export async function runFreshClusterProviderController({
       controllerGeneratedRecoverySource: true,
       controllerTableArn: command.controllerTableArn,
       finalPrincipalCensusSha256: finalCensus.namesSha256,
+      finalProviderSqlUserInventorySha256: adminDeleted.snapshotSha256,
       freshClusterRetained: true,
       globalKeySha256: command.globalKeySha256,
       ingressEmpty: true,
       manualClusterReceiptSha256: command.manualClusterReceiptSha256,
       operationId: command.operationId,
+      principalLoginPostureSha256:
+        bootstrapReceipt.bootstrap.principalLoginPostureSha256,
+      completeShowUsersPrincipalCensusSha256:
+        bootstrapReceipt.bootstrap.principalLoginPosture
+          .fullPrincipalCensusSha256,
+      completeShowUsersPrincipalCountBeforeAdminDeletion: 32,
+      immutableBuiltinAdminRoleExceptionPresent: true,
+      noApplicationRetainedSqlAdministrator: true,
+      proofToActRootConnectionStringCreated: false,
+      proofToActRootConnectionStringUsed: false,
+      proofToActRootPasswordCreated: false,
+      proofToActRootSecretStored: false,
+      rootNoLoginProvedBeforeAdminDeletion: true,
+      runtimeLoginCountProvedBeforeAdminDeletion:
+        FRESH_PRIMARY_RUNTIME_USERS.length,
+      capabilityNoLoginCountProvedBeforeAdminDeletion: 15,
+      bootstrapAdminAbsentInFinalProviderReadback: true,
+      rootPresentInFinalProviderReadback: true,
       recoveryAppendReceiptSha256: digest(recoveryAppend),
       recoveryManagedMcpProofSha256: digest(recoveryMcpProof),
       recoveryManagedMcpRequestSha256: plannedRequestSha256,
@@ -1290,6 +1553,10 @@ export async function runFreshClusterProviderController({
       privateRecoveryQueryBindingSha256:
         recoveryPreparation.preparationReceipt.
           privateRecoveryQueryBindingSha256,
+      providerKeyRevocationCeremony,
+      providerKeyRevocationCeremonySha256:
+        digest(providerKeyRevocationCeremony),
+      providerKeysRevoked: false,
       separateTeardownApprovalRequired: true,
       sourceCommit: command.sourceCommit,
       transitionCount: sequence,
@@ -1439,5 +1706,6 @@ export const __test = Object.freeze({
   textDigest,
   validateAdminCredential,
   validateAuthentication,
+  validateBootstrapReceipt,
   validateReservation
 });

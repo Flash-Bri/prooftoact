@@ -237,7 +237,7 @@ export async function resolveCommittedRecoverySourceReceipt({
     const result = await client.query(
       `
         SELECT *
-        FROM tp_api.g1_resolve_recovery_source_receipt_v2(
+        FROM tp_api.g1_resolve_recovery_source_receipt_v3(
           $1::UUID, $2::UUID, $3::UUID, $4::UUID,
           $5, $6::UUID, $7
         )
@@ -258,6 +258,7 @@ export async function resolveCommittedRecoverySourceReceipt({
     const row = result.rows[0];
     const recordedAt = new Date(row.recorded_at);
     const databaseNow = new Date(row.database_now);
+    const minimumResidualMs = Number(row.minimum_residual_ms);
     if (
       row.tenant_id !== expected.tenantId ||
       row.run_id !== expected.runId ||
@@ -272,6 +273,8 @@ export async function resolveCommittedRecoverySourceReceipt({
       row.has_durable_intent !== true ||
       !Number.isFinite(recordedAt.getTime()) ||
       !Number.isFinite(databaseNow.getTime()) ||
+      !Number.isSafeInteger(minimumResidualMs) ||
+      minimumResidualMs < 1 ||
       recordedAt.getTime() > databaseNow.getTime() ||
       databaseNow.getTime() - recordedAt.getTime() > 50 * 60 * 1_000
     ) {
@@ -309,6 +312,7 @@ export async function resolveCommittedRecoverySourceReceipt({
       selected_evidence_binding_sha256: selectedEvidenceBindingSha256,
       recorded_at: recordedAt.toISOString(),
       database_now: databaseNow.toISOString(),
+      minimum_residual_ms: minimumResidualMs,
       admittedCount: 1,
       unresolvedCount: 0
     });

@@ -258,6 +258,36 @@ test("request digests are deterministic and bind every authority input", () => {
   );
 });
 
+test("extended authority lease is reserved for one exact 30-minute DVI window", () => {
+  const exactExtended = structuredClone(REQUEST);
+  exactExtended.leaseMs = 30 * 60_000;
+  exactExtended.dviAuthorization.dviProposal.expiresAt =
+    "2026-08-01T18:30:00.000Z";
+  assert.equal(
+    normalizedAuthorityRequestFor(exactExtended).requestPayload.leaseMs,
+    30 * 60_000
+  );
+
+  for (const changed of [
+    { ...exactExtended, leaseMs: 10 * 60_000 + 1 },
+    {
+      ...exactExtended,
+      dviAuthorization: {
+        ...exactExtended.dviAuthorization,
+        dviProposal: {
+          ...exactExtended.dviAuthorization.dviProposal,
+          expiresAt: "2026-08-01T18:29:59.999Z"
+        }
+      }
+    }
+  ]) {
+    assert.throws(
+      () => normalizedAuthorityRequestFor(changed),
+      /extended lease is reserved for the exact fresh recovery window/u
+    );
+  }
+});
+
 test("only CockroachDB serialization failures are transaction-retryable", () => {
   assert.equal(isRetryableTransactionError({ code: "40001" }), true);
   assert.equal(isRetryableTransactionError({ code: "23505" }), false);
