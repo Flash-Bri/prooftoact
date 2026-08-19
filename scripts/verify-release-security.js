@@ -1357,6 +1357,9 @@ const SOURCE_MARKERS = Object.freeze({
       "name: ProofToAct Sealed Fresh Cluster And Primary",
       "environment: aws-release-database-bootstrap",
       "timeout-minutes: 45",
+      "PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256",
+      "github.workflow_ref",
+      "github.workflow_sha",
       "--mode reconcile-only"
     ]),
     "fresh-primary-oidc-boundary": Object.freeze([
@@ -1402,6 +1405,9 @@ const SOURCE_MARKERS = Object.freeze({
     "fresh-cluster-cloud-controller": Object.freeze([
       "createFreshClusterCloudRuntime",
       "reconcileFreshClusterInventory",
+      "approvalExpiresAt - authorizedAt <= 60 * 60 * 1000",
+      "now < Date.parse(accepted.approval.billingAuthorization.retentionDeadline)",
+      "humanAuthorizationReceiptSha256",
       "FRESH_CLUSTER_CLOUD_REQUEST_FAILED_NO_RETRY"
     ]),
     "fresh-cluster-execution-runtime": Object.freeze([
@@ -1477,6 +1483,8 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-cluster-provider-launcher": Object.freeze([
       "FRESH_CLUSTER_LAUNCH_IMPORT_GRAPH_REJECTED",
+      "controllerImportGraphSha256: graph.graphSha256",
+      "--approval-sha256",
       "tideproof.gate2-build.v9",
       "export async function main"
     ]),
@@ -1487,6 +1495,7 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-primary-source-lock": Object.freeze([
       "prooftoact-fresh-primary-source-lock-v1",
+      "caller_sha != expected_caller_sha",
       "job_workflow_ref",
       "job_workflow_sha",
       "FRESH_PRIMARY_SOURCE_LOCK_REJECTED"
@@ -1517,6 +1526,9 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-cluster-provider-runner": Object.freeze([
       "runFreshClusterProvider",
+      "sha256(canonicalBytes(approval)) === authority.approvalSha256",
+      "approval.controllerImportGraphSha256",
+      "approval.callerWorkflowSha === authority.callerWorkflowSha",
       "--receipt-output",
       "FRESH_CLUSTER_PROVIDER_HOLD_PROVIDER_KEYS_REVOCATION_PENDING"
     ]),

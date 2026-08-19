@@ -136,11 +136,15 @@ def validate_endpoint(audience, value):
     return value + "&audience=" + urllib.parse.quote(audience, safe="")
 
 
-def validate_token_response(audience, expected_commit, expected_tree, raw):
+def validate_token_response(
+    audience, expected_commit, expected_tree, expected_caller_sha, raw
+):
     validate_audience(audience)
     if HEX_40.fullmatch(expected_commit or "") is None:
         reject()
     if HEX_40.fullmatch(expected_tree or "") is None:
+        reject()
+    if HEX_40.fullmatch(expected_caller_sha or "") is None:
         reject()
     response = strict_json(raw, 32768)
     if not isinstance(response, dict) or set(response) != {"value"}:
@@ -196,6 +200,7 @@ def validate_token_response(audience, expected_commit, expected_tree, raw):
     if (
         not isinstance(caller_sha, str)
         or HEX_40.fullmatch(caller_sha) is None
+        or caller_sha != expected_caller_sha
         or payload.get("workflow_sha") != caller_sha
     ):
         reject()
@@ -230,10 +235,10 @@ def validate_token_response(audience, expected_commit, expected_tree, raw):
 def main():
     if len(sys.argv) == 4 and sys.argv[1] == "--validate-endpoint":
         output = validate_endpoint(sys.argv[2], sys.argv[3])
-    elif len(sys.argv) == 5 and sys.argv[1] == "--validate-token":
+    elif len(sys.argv) == 6 and sys.argv[1] == "--validate-token":
         raw = sys.stdin.buffer.read(32769)
         output = validate_token_response(
-            sys.argv[2], sys.argv[3], sys.argv[4], raw
+            sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], raw
         )
     else:
         reject()

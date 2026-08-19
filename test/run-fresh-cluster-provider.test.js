@@ -15,6 +15,11 @@ const TREE_DIGEST = "b".repeat(40);
 const ACCOUNT = "111111111111";
 const TABLE_ARN = `arn:aws:dynamodb:us-east-1:${ACCOUNT}:table/` +
   "prooftoact-release-controller";
+const CALLER_WORKFLOW_REF =
+  "Flash-Bri/prooftoact/.github/workflows/" +
+  "prooftoact-fresh-primary.yml@refs/heads/main";
+const CALLER_WORKFLOW_SHA = "d".repeat(40);
+const CONTROLLER_IMPORT_GRAPH_SHA256 = "e".repeat(64);
 
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -26,11 +31,14 @@ function args() {
     "--admin-secret-arn", "admin-arn",
     "--admin-secret-version-id", "1".repeat(32),
     "--approval-file", "/private/approval.json",
+    "--approval-sha256", "f".repeat(64),
     "--auditor-secret-arn", "auditor-arn",
     "--auditor-secret-version-id", "2".repeat(32),
     "--build-receipt", "/private/build.json",
     "--cloud-api-secret-arn", "cloud-arn",
     "--cloud-api-secret-version-id", "3".repeat(32),
+    "--caller-workflow-ref", CALLER_WORKFLOW_REF,
+    "--caller-workflow-sha", CALLER_WORKFLOW_SHA,
     "--controller-table-arn", TABLE_ARN,
     "--credential-secret-arn", "credential-arn",
     "--credential-secret-version-id", "4".repeat(32),
@@ -136,11 +144,11 @@ test("executable adoption path is pinned to the reviewed manual receipt", () => 
     adoptedAdminPasswordSha256:
       __test.APPROVED_ADOPTION.adoptedAdminPasswordSha256,
     billingAuthorization: {
-      authorizationReceiptSha256:
-        __test.APPROVED_ADOPTION.billingAuthorizationReceiptSha256,
-      authorizedAt: __test.APPROVED_ADOPTION.billingAuthorizedAt,
+      authorizationReceiptSha256: "8".repeat(64),
       authorizedMonthlyCeilingUsd: "2.00"
     },
+    callerWorkflowRef: CALLER_WORKFLOW_REF,
+    callerWorkflowSha: CALLER_WORKFLOW_SHA,
     auditorAuthorityReceiptSha256:
       __test.APPROVED_ADOPTION.auditorAuthorityReceiptSha256,
     auditorServiceAccountId:
@@ -148,6 +156,7 @@ test("executable adoption path is pinned to the reviewed manual receipt", () => 
     auditorTokenValueSha256:
       __test.APPROVED_ADOPTION.auditorTokenValueSha256,
     clusterMode: "ADOPT_VERIFIED_EXISTING",
+    controllerImportGraphSha256: CONTROLLER_IMPORT_GRAPH_SHA256,
     creatorAuthorityReceiptSha256:
       __test.APPROVED_ADOPTION.creatorAuthorityReceiptSha256,
     creatorProviderReadbackReceiptSha256:
@@ -158,21 +167,41 @@ test("executable adoption path is pinned to the reviewed manual receipt", () => 
       __test.APPROVED_ADOPTION.creatorTokenValueSha256,
     manualClusterReceiptSha256:
       __test.APPROVED_ADOPTION.manualClusterReceiptSha256,
+    humanAuthorizationReceiptSha256: "8".repeat(64),
+    humanAuthorizedTextSha256: "9".repeat(64),
     providerClusterId: __test.APPROVED_ADOPTION.providerClusterId
   };
-  assert.equal(__test.validateApprovedAdoption(approval), approval);
+  const authority = {
+    approvalSha256: __test.sha256(__test.canonicalBytes(approval)),
+    callerWorkflowRef: CALLER_WORKFLOW_REF,
+    callerWorkflowSha: CALLER_WORKFLOW_SHA,
+    controllerImportGraphSha256: CONTROLLER_IMPORT_GRAPH_SHA256
+  };
+  assert.equal(__test.validateApprovedAdoption(approval, authority), approval);
   assert.throws(() => __test.validateApprovedAdoption({
     ...approval,
     clusterMode: "CREATE_NEW"
-  }), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
+  }, authority), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
   assert.throws(() => __test.validateApprovedAdoption({
     ...approval,
     manualClusterReceiptSha256: "f".repeat(64)
-  }), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
+  }, authority), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
   assert.throws(() => __test.validateApprovedAdoption({
     ...approval,
     providerClusterId: "223e4567-e89b-42d3-a456-426614174002"
+  }, authority), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
+  assert.throws(() => __test.validateApprovedAdoption(approval, {
+    ...authority,
+    approvalSha256: "0".repeat(64)
   }), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
+  assert.throws(() => __test.validateApprovedAdoption({
+    ...approval,
+    callerWorkflowSha: "0".repeat(40)
+  }, authority), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
+  assert.throws(() => __test.validateApprovedAdoption({
+    ...approval,
+    humanAuthorizationReceiptSha256: "0".repeat(64)
+  }, authority), /FRESH_CLUSTER_RUNNER_ADOPTION_AUTHORITY_REJECTED/u);
 });
 
 test("wrong adopted admin password is rejected before provider setup", () => {

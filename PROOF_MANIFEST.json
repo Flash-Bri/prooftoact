@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "b686198c1e7bac88f8178d3974640d0f0f6123329d5ce8f8b6ffba161681d424",
+      "sha256": "dfe43ba67b3e4e4a884e9598feb700db6f6e63653d34f1048fc0b707153d8a4f",
       "kind": "boundary-ledger"
     },
     {
@@ -1105,7 +1105,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "09a825c509d70c414bc059b51592385c5538803d4eb6d581fec82f3e84942846",
+      "sha256": "a0070f629382116542efacdab0996a30cf23c557fe8544a7a3b2a5c9216bcff7",
       "kind": "verification-code"
     },
     {

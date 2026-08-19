@@ -17,7 +17,14 @@ const WORKFLOW = fs.readFileSync(path.join(
 function args() {
   return __test.EXPECTED_ARGUMENTS.flatMap((name, index) => [
     name,
-    name === "--expected-commit"
+    name === "--approval-sha256"
+      ? "c".repeat(64)
+      : name === "--caller-workflow-ref"
+        ? "Flash-Bri/prooftoact/.github/workflows/" +
+          "prooftoact-fresh-primary.yml@refs/heads/main"
+        : name === "--caller-workflow-sha"
+          ? "d".repeat(40)
+          : name === "--expected-commit"
       ? "a".repeat(40)
       : name === "--expected-tree"
         ? "b".repeat(40)

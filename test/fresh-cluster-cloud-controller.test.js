@@ -24,6 +24,9 @@ const AUDITOR_ID = "823e4567-e89b-42d3-a456-426614174007";
 const SOURCE_COMMIT = "a".repeat(40);
 const TREE_DIGEST = "b".repeat(40);
 const TOKEN = "creator-service-account-api-token";
+const CALLER_WORKFLOW_REF =
+  "Flash-Bri/prooftoact/.github/workflows/" +
+  "prooftoact-fresh-primary.yml@refs/heads/main";
 
 function billingAuthorization(overrides = {}) {
   return {
@@ -134,6 +137,9 @@ test("billing permits ceiling-first pricing only before expiry and under ceiling
     }),
     billingAuthorization({ authorizedMonthlyCeilingUsd: "1.49" }),
     billingAuthorization({ authorizationReceiptSha256: "not-a-receipt" }),
+    billingAuthorization({
+      approvalExpiresAt: "2026-08-19T09:00:00.001Z"
+    }),
     billingAuthorization({
       authorizedAt: "2026-08-19T08:06:00.000Z",
       pricingObservedAt: "2026-08-19T08:05:00.000Z"
@@ -251,13 +257,18 @@ test("outer approval safely derives only post-create primary coordinates", () =>
     auditorServiceAccountId: AUDITOR_ID,
     auditorTokenValueSha256: "2".repeat(64),
     billingAuthorization: billingAuthorization(),
+    callerWorkflowRef: CALLER_WORKFLOW_REF,
+    callerWorkflowSha: "6".repeat(40),
     clusterMode: "CREATE_NEW",
+    controllerImportGraphSha256: "7".repeat(64),
     creatorAuthorityReceiptSha256: "d".repeat(64),
     creatorProviderReadbackReceiptSha256: "e".repeat(64),
     creatorServiceAccountId: CREATOR_ID,
     creatorTokenValueSha256: "f".repeat(64),
     derivedPrimaryApprovalAuthorized: true,
     expiresAt: "2026-08-19T09:00:00.000Z",
+    humanAuthorizationReceiptSha256: "8".repeat(64),
+    humanAuthorizedTextSha256: "9".repeat(64),
     oneShot: true,
     operationId: OPERATION_ID,
     manualClusterReceiptSha256: null,
@@ -313,7 +324,13 @@ test("outer approval safely derives only post-create primary coordinates", () =>
     operationId: OPERATION_ID,
     sourceCommit: SOURCE_COMMIT,
     treeDigest: TREE_DIGEST
-  }, Date.parse("2026-08-20T08:00:00.000Z")), outer);
+  }, Date.parse("2026-08-19T19:59:59.999Z")), outer);
+  assert.throws(() => validateFreshClusterCleanupApproval(outer, {
+    operationId: OPERATION_ID,
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST
+  }, Date.parse("2026-08-19T20:00:00.000Z")),
+  /FRESH_CLUSTER_CLEANUP_APPROVAL_REJECTED/u);
   assert.throws(() => validateFreshClusterCleanupApproval(outer, {
     operationId: OPERATION_ID,
     sourceCommit: SOURCE_COMMIT,

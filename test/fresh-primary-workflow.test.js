@@ -153,6 +153,24 @@ test("sealed workflow owns the protected environment and exact OIDC job", () => 
   assert.equal((SEALED.match(/id-token: write/gu) ?? []).length, 1);
 });
 
+test("protected environment pins approval bytes to the actual caller identity", () => {
+  assert.match(SEALED,
+    /APPROVAL_SHA256: \$\{\{ vars\.PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256 \}\}/u);
+  assert.match(SEALED,
+    /CALLER_WORKFLOW_REF: \$\{\{ github\.workflow_ref \}\}/u);
+  assert.match(SEALED,
+    /CALLER_WORKFLOW_SHA: \$\{\{ github\.workflow_sha \}\}/u);
+  assert.match(SEALED,
+    /--approval-sha256 "\$APPROVAL_SHA256"/u);
+  assert.match(SEALED,
+    /--caller-workflow-ref "\$CALLER_WORKFLOW_REF"/u);
+  assert.match(SEALED,
+    /--caller-workflow-sha "\$CALLER_WORKFLOW_SHA"/u);
+  assert.equal((SEALED.match(/--approval-sha256/gu) ?? []).length, 2);
+  assert.doesNotMatch(SEALED,
+    /workflow_call:[\s\S]{0,600}approval_sha256:/u);
+});
+
 test("standalone trust binds top-level workflow and reusable byte identity", () => {
   const condition = TEMPLATE.Resources.FreshPrimaryBootstrapRole.Properties
     .AssumeRolePolicyDocument.Statement[0].Condition.StringEquals;
@@ -210,7 +228,8 @@ test("source-lock token accepts only exact reusable identity and bounded claims"
   const accepted = runSourceLock("--validate-token", [
     SOURCE_LOCK_AUDIENCE,
     EXPECTED_COMMIT,
-    EXPECTED_TREE
+    EXPECTED_TREE,
+    CALLER_COMMIT
   ], tokenResponse());
   assert.equal(accepted.status, 0, accepted.stderr);
   assert.equal(accepted.stdout.trim(),
@@ -223,7 +242,8 @@ test("source-lock token accepts only exact reusable identity and bounded claims"
   const optionalAccepted = runSourceLock("--validate-token", [
     SOURCE_LOCK_AUDIENCE,
     EXPECTED_COMMIT,
-    EXPECTED_TREE
+    EXPECTED_TREE,
+    CALLER_COMMIT
   ], tokenResponse({}, { payloadSource: JSON.stringify(optionalPayload) }));
   assert.equal(optionalAccepted.status, 0, optionalAccepted.stderr);
 
@@ -271,12 +291,22 @@ test("source-lock token accepts only exact reusable identity and bounded claims"
     const rejected = runSourceLock("--validate-token", [
       SOURCE_LOCK_AUDIENCE,
       EXPECTED_COMMIT,
-      EXPECTED_TREE
+      EXPECTED_TREE,
+      CALLER_COMMIT
     ], response);
     assert.notEqual(rejected.status, 0);
     assert.equal(rejected.stderr.trim(),
       "FRESH_PRIMARY_SOURCE_LOCK_REJECTED");
   }
+  const wrongExpectedCaller = runSourceLock("--validate-token", [
+    SOURCE_LOCK_AUDIENCE,
+    EXPECTED_COMMIT,
+    EXPECTED_TREE,
+    "d".repeat(40)
+  ], tokenResponse());
+  assert.notEqual(wrongExpectedCaller.status, 0);
+  assert.equal(wrongExpectedCaller.stderr.trim(),
+    "FRESH_PRIMARY_SOURCE_LOCK_REJECTED");
 });
 
 test("source-lock contract fails closed if request or source/tree guards are removed", () => {

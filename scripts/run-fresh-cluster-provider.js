@@ -51,12 +51,12 @@ const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const TABLE_ARN =
   /^arn:aws:dynamodb:us-east-1:[0-9]{12}:table\/prooftoact-release-controller$/u;
+const CALLER_WORKFLOW_REF =
+  "Flash-Bri/prooftoact/.github/workflows/" +
+  "prooftoact-fresh-primary.yml@refs/heads/main";
 const APPROVED_ADOPTION = Object.freeze({
   adoptedAdminPasswordSha256:
     "94b8dd5d33cd6c92162fe203545fed13456bc26fcb5a5fb53b5df381c2dfcdd9",
-  billingAuthorizationReceiptSha256:
-    "e6025302e65a3664fccd9dc9d8eaf128ce2f8505b53f4c186cd4fc9123d68b12",
-  billingAuthorizedAt: "2026-08-19T00:34:00.550Z",
   auditorAuthorityReceiptSha256:
     "b24aacad3eb5a3d5232870823694eda725c0baa9c0f6efe917215d6cf28d5579",
   auditorServiceAccountId: "485a992f-e5ea-45a3-b415-cb70fcb0a5f5",
@@ -121,11 +121,14 @@ function parseArguments(args) {
     "--admin-secret-arn",
     "--admin-secret-version-id",
     "--approval-file",
+    "--approval-sha256",
     "--auditor-secret-arn",
     "--auditor-secret-version-id",
     "--build-receipt",
     "--cloud-api-secret-arn",
     "--cloud-api-secret-version-id",
+    "--caller-workflow-ref",
+    "--caller-workflow-sha",
     "--controller-table-arn",
     "--credential-secret-arn",
     "--credential-secret-version-id",
@@ -155,6 +158,9 @@ function parseArguments(args) {
   }
   requireCondition(HEX_40.test(values["--expected-commit"]) &&
     HEX_40.test(values["--expected-tree"]) &&
+    HEX_40.test(values["--caller-workflow-sha"]) &&
+    HEX_64.test(values["--approval-sha256"]) &&
+    values["--caller-workflow-ref"] === CALLER_WORKFLOW_REF &&
     ["execute", "reconcile-only"].includes(values["--mode"]) &&
     UUID.test(values["--operation-id"]) &&
     HEX_64.test(values["--recovery-security-receipt-sha256"]) &&
@@ -163,14 +169,23 @@ function parseArguments(args) {
   return Object.freeze(values);
 }
 
-function validateApprovedAdoption(approval) {
+function validateApprovedAdoption(approval, authority) {
   requireCondition(approval?.clusterMode === "ADOPT_VERIFIED_EXISTING" &&
+    plainObject(authority) &&
+    HEX_64.test(authority.approvalSha256 ?? "") &&
+    HEX_64.test(authority.controllerImportGraphSha256 ?? "") &&
+    HEX_40.test(authority.callerWorkflowSha ?? "") &&
+    authority.callerWorkflowRef === CALLER_WORKFLOW_REF &&
+    approval.callerWorkflowRef === authority.callerWorkflowRef &&
+    approval.callerWorkflowSha === authority.callerWorkflowSha &&
+    approval.controllerImportGraphSha256 ===
+      authority.controllerImportGraphSha256 &&
+    approval.humanAuthorizationReceiptSha256 ===
+      approval.billingAuthorization?.authorizationReceiptSha256 &&
+    HEX_64.test(approval.humanAuthorizedTextSha256 ?? "") &&
+    sha256(canonicalBytes(approval)) === authority.approvalSha256 &&
     approval.adoptedAdminPasswordSha256 ===
       APPROVED_ADOPTION.adoptedAdminPasswordSha256 &&
-    approval.billingAuthorization?.authorizationReceiptSha256 ===
-      APPROVED_ADOPTION.billingAuthorizationReceiptSha256 &&
-    approval.billingAuthorization?.authorizedAt ===
-      APPROVED_ADOPTION.billingAuthorizedAt &&
     approval.billingAuthorization?.authorizedMonthlyCeilingUsd === "2.00" &&
     approval.auditorAuthorityReceiptSha256 ===
       APPROVED_ADOPTION.auditorAuthorityReceiptSha256 &&
@@ -193,13 +208,19 @@ function validateApprovedAdoption(approval) {
   return approval;
 }
 
-function validateRunnerApproval(value, binding, mode, now = Date.now()) {
+function validateRunnerApproval(
+  value,
+  binding,
+  mode,
+  authority,
+  now = Date.now()
+) {
   requireCondition(["execute", "reconcile-only"].includes(mode),
     "FRESH_CLUSTER_RUNNER_APPROVAL_REJECTED");
   const accepted = mode === "reconcile-only"
     ? validateFreshClusterCleanupApproval(value, binding, now)
     : validateFreshClusterApproval(value, binding, now);
-  return validateApprovedAdoption(accepted);
+  return validateApprovedAdoption(accepted, authority);
 }
 
 function readPrivateFile(filePath, maximumBytes, code) {
@@ -490,7 +511,8 @@ function publishPrivateReceipt(filePath, receipt) {
 
 export async function main(
   args = process.argv.slice(2),
-  environment = process.env
+  environment = process.env,
+  trustedRuntime = Object.freeze({})
 ) {
   const parsed = parseArguments(args);
   const buildReceipt = parseJson(readPrivateFile(
@@ -512,7 +534,13 @@ export async function main(
     operationId: parsed["--operation-id"],
     sourceCommit: source.sourceCommit,
     treeDigest: source.treeDigest
-  }, parsed["--mode"]);
+  }, parsed["--mode"], {
+    approvalSha256: parsed["--approval-sha256"],
+    callerWorkflowRef: parsed["--caller-workflow-ref"],
+    callerWorkflowSha: parsed["--caller-workflow-sha"],
+    controllerImportGraphSha256:
+      trustedRuntime.controllerImportGraphSha256
+  });
   const adoptedAdmin = parsed["--mode"] === "execute"
     ? readApprovedAdoptedAdminPassword(
       parsed["--admin-password-file"], approval

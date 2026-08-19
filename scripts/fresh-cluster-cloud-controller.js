@@ -235,6 +235,7 @@ export function validateFreshClusterBillingAuthorization(value) {
     authorizedAt <= pricingObservedAt &&
     pricingObservedAt <= approvalExpiresAt &&
     authorizedAt < approvalExpiresAt &&
+    approvalExpiresAt - authorizedAt <= 60 * 60 * 1000 &&
     approvalExpiresAt <= retentionDeadline &&
     retentionDeadline - authorizedAt <= 24 * 60 * 60 * 1000 &&
     value.pricingObservedAt === new Date(pricingObservedAt).toISOString() &&
@@ -257,13 +258,18 @@ function validateFreshClusterApprovalContract(value, binding) {
     "auditorServiceAccountId",
     "auditorTokenValueSha256",
     "billingAuthorization",
+    "callerWorkflowRef",
+    "callerWorkflowSha",
     "clusterMode",
+    "controllerImportGraphSha256",
     "creatorServiceAccountId",
     "creatorAuthorityReceiptSha256",
     "creatorProviderReadbackReceiptSha256",
     "creatorTokenValueSha256",
     "derivedPrimaryApprovalAuthorized",
     "expiresAt",
+    "humanAuthorizationReceiptSha256",
+    "humanAuthorizedTextSha256",
     "oneShot",
     "operationId",
     "manualClusterReceiptSha256",
@@ -283,6 +289,15 @@ function validateFreshClusterApprovalContract(value, binding) {
     value.status === "APPROVED" &&
     value.action === "CREATE_AND_BOOTSTRAP_ONE_FRESH_COCKROACH_CLUSTER" &&
     value.approvedBy === "BRIAN_SMITH" && value.oneShot === true &&
+    value.callerWorkflowRef ===
+      "Flash-Bri/prooftoact/.github/workflows/" +
+      "prooftoact-fresh-primary.yml@refs/heads/main" &&
+    HEX_40.test(value.callerWorkflowSha ?? "") &&
+    HEX_64.test(value.controllerImportGraphSha256 ?? "") &&
+    HEX_64.test(value.humanAuthorizationReceiptSha256 ?? "") &&
+    HEX_64.test(value.humanAuthorizedTextSha256 ?? "") &&
+    value.humanAuthorizationReceiptSha256 ===
+      value.billingAuthorization?.authorizationReceiptSha256 &&
     value.operationId === binding.operationId &&
     value.sourceCommit === binding.sourceCommit &&
     value.treeDigest === binding.treeDigest &&
@@ -343,7 +358,8 @@ export function validateFreshClusterCleanupApproval(
   now = Date.now()
 ) {
   const accepted = validateFreshClusterApprovalContract(value, binding);
-  requireCondition(Number.isFinite(now) && accepted.approvedAt <= now,
+  requireCondition(Number.isFinite(now) && accepted.approvedAt <= now &&
+    now < Date.parse(accepted.approval.billingAuthorization.retentionDeadline),
     "FRESH_CLUSTER_CLEANUP_APPROVAL_REJECTED");
   return accepted.approval;
 }

@@ -18,7 +18,7 @@
       "id": "fresh-primary-sealed-workflow",
       "path": ".github/workflows/prooftoact-sealed-fresh-primary.yml",
       "role": "PROTECTED_FRESH_PRIMARY_PROVIDER_EXECUTION",
-      "sha256": "41ea81f4e5780268536086cd4a66de887a1506e4b49e6668bd11331f133a8a70"
+      "sha256": "1d6f962f23da6e7f3a13b530e535c50df03ed911782cb286bc81bedf8d091692"
     },
     {
       "id": "fresh-primary-oidc-boundary",
@@ -66,7 +66,7 @@
       "id": "fresh-cluster-cloud-controller",
       "path": "scripts/fresh-cluster-cloud-controller.js",
       "role": "FRESH_CLUSTER_CLOUD_API_CONTROLLER",
-      "sha256": "26382581afd5888f02cd0b0356267b9ace8635407e2cc109b4222af9b7c94fce"
+      "sha256": "b1ec6c212085b9a4b4b0beb218e9b1dfb8043b55096104c71a0b57286ff515dd"
     },
     {
       "id": "fresh-cluster-execution-runtime",
@@ -144,7 +144,7 @@
       "id": "fresh-cluster-provider-launcher",
       "path": "scripts/launch-fresh-cluster-provider.js",
       "role": "EXACT_SOURCE_FRESH_PROVIDER_LAUNCHER",
-      "sha256": "b30ebdd7e9a632bb70f2a37d809d12f9dc342eacab026b2a814bc7b6a8208ac8"
+      "sha256": "0f0178c22a667f33d7bf4874b3028a152dff6218c5e3da3983133d72dc9893e1"
     },
     {
       "id": "fresh-bootstrap-collector-binding",
@@ -156,7 +156,7 @@
       "id": "fresh-primary-source-lock",
       "path": "scripts/lib/fresh-primary-source-lock.py",
       "role": "PRE_CHECKOUT_REUSABLE_OIDC_SOURCE_LOCK",
-      "sha256": "b8e7a4602772f56dac134fa8b0fa1f828d0719548258b0ae340e09c313f99745"
+      "sha256": "fc866771e5d92631dfdcfde3d4dfdd280279c24adf8fb0adee851e527876300d"
     },
     {
       "id": "fresh-recovery-publisher-key",
@@ -192,7 +192,7 @@
       "id": "fresh-cluster-provider-runner",
       "path": "scripts/run-fresh-cluster-provider.js",
       "role": "FRESH_CLUSTER_PRIVATE_PROVIDER_RUNNER",
-      "sha256": "c5f97bc6d87adec62e4be3cd8a670f8b1eea36719f05f44174e65cdee3cdc989"
+      "sha256": "6855b80471168d5992db75cfeeca971080c6a5f4e04eeea1c95f330e935c114d"
     },
     {
       "id": "fresh-primary-credential-sealer-runner",
@@ -252,7 +252,7 @@
       "id": "fresh-cluster-cloud-controller-tests",
       "path": "test/fresh-cluster-cloud-controller.test.js",
       "role": "FRESH_CLUSTER_CLOUD_CONTROLLER_VERIFICATION",
-      "sha256": "d7c9fa76774a1f2c50cc11c02157ec515161bc58f4d73dc6ac92cff970b40ce6"
+      "sha256": "c10d83c0a716afe8cff1bf2f18fb23f734efb8e9990b9b84912cd310c2c6ac1c"
     },
     {
       "id": "fresh-cluster-execution-runtime-tests",
@@ -264,13 +264,13 @@
       "id": "fresh-cluster-provider-controller-tests",
       "path": "test/fresh-cluster-provider-controller.test.js",
       "role": "FRESH_CLUSTER_PROVIDER_CONTROLLER_VERIFICATION",
-      "sha256": "17ff3a715d4e1412a80fdc6403e92f477c8103df606bf547f00cca8df22e05d1"
+      "sha256": "cd2541c057d2be2c280103326c29534d3babae8cdf36838e65eabb6ca435a8c6"
     },
     {
       "id": "fresh-cluster-reconciliation-controller-tests",
       "path": "test/fresh-cluster-reconciliation-controller.test.js",
       "role": "FRESH_CLUSTER_RECONCILIATION_VERIFICATION",
-      "sha256": "faee3cb549cf5a989d4953ff2978e0f98f489e7b0dca35dd3193dca894d1d956"
+      "sha256": "ca9e2bac475afdc982344e840ec9d04170f10557ffcd1b2b3577fbfe0d8ecbe8"
     },
     {
       "id": "fresh-primary-aws-provider-tests",
@@ -324,7 +324,7 @@
       "id": "fresh-primary-workflow-tests",
       "path": "test/fresh-primary-workflow.test.js",
       "role": "FRESH_PRIMARY_WORKFLOW_VERIFICATION",
-      "sha256": "cc8f6a299d9e372f5e1335e4bcd9365606b7e95ccec87010684aa553e2e42196"
+      "sha256": "75d6738d9adc6cbd4a1ff92c224bfda3cf180ad506350cb8e50a093e9647e68d"
     },
     {
       "id": "fresh-recovery-publication-execution-tests",
@@ -348,13 +348,13 @@
       "id": "fresh-cluster-provider-launcher-tests",
       "path": "test/launch-fresh-cluster-provider.test.js",
       "role": "FRESH_PROVIDER_LAUNCHER_VERIFICATION",
-      "sha256": "d28e3f7a1b720f826d13a6107f61dc554277e2dc30dd2c6540f28bffc80bc38b"
+      "sha256": "3243c61b187b07e3758a1a6e77589aa4ff60bc233e628f0382000ba14d77e2c9"
     },
     {
       "id": "fresh-cluster-provider-runner-tests",
       "path": "test/run-fresh-cluster-provider.test.js",
       "role": "FRESH_CLUSTER_RUNNER_VERIFICATION",
-      "sha256": "fee59c3f5bfddd90d460978faa403309e2e32bcefdf0e570d0a77ab6559df9d2"
+      "sha256": "9ac3ae81b000512b65df1544495dbbb2adfcc89a7c896c22ad6d61a98838deef"
     },
     {
       "id": "fresh-primary-provider-runner-tests",

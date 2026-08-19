@@ -10,16 +10,22 @@ const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/prooftoact.git";
 const TRUSTED_GIT = "/usr/bin/git";
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
+const CALLER_WORKFLOW_REF =
+  "Flash-Bri/prooftoact/.github/workflows/" +
+  "prooftoact-fresh-primary.yml@refs/heads/main";
 const EXPECTED_ARGUMENTS = Object.freeze([
   "--admin-password-file",
   "--admin-secret-arn",
   "--admin-secret-version-id",
   "--approval-file",
+  "--approval-sha256",
   "--auditor-secret-arn",
   "--auditor-secret-version-id",
   "--build-receipt",
   "--cloud-api-secret-arn",
   "--cloud-api-secret-version-id",
+  "--caller-workflow-ref",
+  "--caller-workflow-sha",
   "--controller-table-arn",
   "--credential-secret-arn",
   "--credential-secret-version-id",
@@ -88,6 +94,9 @@ function parseArguments(args) {
     values[name] = value;
   }
   requireCondition(Object.keys(values).length === EXPECTED_ARGUMENTS.length &&
+    HEX_64.test(values["--approval-sha256"] ?? "") &&
+    HEX_40.test(values["--caller-workflow-sha"] ?? "") &&
+    values["--caller-workflow-ref"] === CALLER_WORKFLOW_REF &&
     HEX_40.test(values["--expected-commit"] ?? "") &&
     HEX_40.test(values["--expected-tree"] ?? ""), code);
   return Object.freeze(values);
@@ -398,7 +407,9 @@ export async function main(args = process.argv.slice(2)) {
   const module = await import("./run-fresh-cluster-provider.js");
   requireCondition(typeof module.main === "function",
     "FRESH_CLUSTER_LAUNCH_ENTRY_REJECTED");
-  return module.main(args, process.env);
+  return module.main(args, process.env, Object.freeze({
+    controllerImportGraphSha256: graph.graphSha256
+  }));
 }
 
 const startedDirectly = process.argv[1] && import.meta.url ===

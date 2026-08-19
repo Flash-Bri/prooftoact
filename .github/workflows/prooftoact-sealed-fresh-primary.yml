@@ -34,6 +34,7 @@ jobs:
         env:
           AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
           AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set +x
           fail_closed() {
@@ -43,6 +44,7 @@ jobs:
           }
           [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail_closed
           [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || fail_closed
           for unsafe_name in ALL_PROXY CURL_CA_BUNDLE HTTPS_PROXY HTTP_PROXY NO_PROXY REQUESTS_CA_BUNDLE SSL_CERT_DIR SSL_CERT_FILE; do
             [[ -z "${!unsafe_name:-}" ]] || fail_closed
           done
@@ -188,11 +190,15 @@ jobs:
               return value + "&audience=" + urllib.parse.quote(audience, safe="")
 
 
-          def validate_token_response(audience, expected_commit, expected_tree, raw):
+          def validate_token_response(
+              audience, expected_commit, expected_tree, expected_caller_sha, raw
+          ):
               validate_audience(audience)
               if HEX_40.fullmatch(expected_commit or "") is None:
                   reject()
               if HEX_40.fullmatch(expected_tree or "") is None:
+                  reject()
+              if HEX_40.fullmatch(expected_caller_sha or "") is None:
                   reject()
               response = strict_json(raw, 32768)
               if not isinstance(response, dict) or set(response) != {"value"}:
@@ -248,6 +254,7 @@ jobs:
               if (
                   not isinstance(caller_sha, str)
                   or HEX_40.fullmatch(caller_sha) is None
+                  or caller_sha != expected_caller_sha
                   or payload.get("workflow_sha") != caller_sha
               ):
                   reject()
@@ -282,10 +289,10 @@ jobs:
           def main():
               if len(sys.argv) == 4 and sys.argv[1] == "--validate-endpoint":
                   output = validate_endpoint(sys.argv[2], sys.argv[3])
-              elif len(sys.argv) == 5 and sys.argv[1] == "--validate-token":
+              elif len(sys.argv) == 6 and sys.argv[1] == "--validate-token":
                   raw = sys.stdin.buffer.read(32769)
                   output = validate_token_response(
-                      sys.argv[2], sys.argv[3], sys.argv[4], raw
+                      sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], raw
                   )
               else:
                   reject()
@@ -331,7 +338,8 @@ jobs:
               /usr/bin/env -i LC_ALL=C PATH=/usr/bin:/bin \
               /usr/bin/python3 -I -S -B -c "$source_lock_program" \
                 --validate-token "$source_lock_audience" \
-                "$AUTHORITY_COMMIT" "$AUTHORITY_TREE" 2>/dev/null
+                "$AUTHORITY_COMMIT" "$AUTHORITY_TREE" \
+                "$CALLER_WORKFLOW_SHA" 2>/dev/null
           )"; then
             fail_closed
           fi
@@ -353,12 +361,15 @@ jobs:
           ADMIN_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_ARN }}
           ADMIN_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_VERSION_ID }}
           APPROVAL_B64: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_APPROVAL_B64 }}
+          APPROVAL_SHA256: ${{ vars.PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256 }}
           AUDITOR_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_ARN }}
           AUDITOR_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_VERSION_ID }}
           AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
           AUTHORITY_TREE: ${{ inputs.authority_tree }}
           CLOUD_API_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_ARN }}
           CLOUD_API_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_VERSION_ID }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CONTROLLER_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
           CREDENTIAL_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_ARN }}
           CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
@@ -374,6 +385,9 @@ jobs:
         run: |
           [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$APPROVAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$CALLER_WORKFLOW_REF" = "Flash-Bri/prooftoact/.github/workflows/prooftoact-fresh-primary.yml@refs/heads/main"
           [[ "$OPERATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
           [[ "$RECOVERY_SECURITY_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$CONTROLLER_TABLE_ARN" =~ ^arn:aws:dynamodb:us-east-1:[0-9]{12}:table/prooftoact-release-controller$ ]]
@@ -492,10 +506,13 @@ jobs:
           ADMIN_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_VERSION_ID }}
           AUDITOR_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_ARN }}
           AUDITOR_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_VERSION_ID }}
+          APPROVAL_SHA256: ${{ vars.PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256 }}
           AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
           AUTHORITY_TREE: ${{ inputs.authority_tree }}
           CLOUD_API_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_ARN }}
           CLOUD_API_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_VERSION_ID }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CONTROLLER_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
           CREDENTIAL_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_ARN }}
           CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
@@ -521,11 +538,14 @@ jobs:
             --admin-secret-arn "$ADMIN_SECRET_ARN" \
             --admin-secret-version-id "$ADMIN_SECRET_VERSION_ID" \
             --approval-file "$PRIVATE_ROOT/approval.json" \
+            --approval-sha256 "$APPROVAL_SHA256" \
             --auditor-secret-arn "$AUDITOR_SECRET_ARN" \
             --auditor-secret-version-id "$AUDITOR_SECRET_VERSION_ID" \
             --build-receipt "$PRIVATE_ROOT/build-receipt.json" \
             --cloud-api-secret-arn "$CLOUD_API_SECRET_ARN" \
             --cloud-api-secret-version-id "$CLOUD_API_SECRET_VERSION_ID" \
+            --caller-workflow-ref "$CALLER_WORKFLOW_REF" \
+            --caller-workflow-sha "$CALLER_WORKFLOW_SHA" \
             --controller-table-arn "$CONTROLLER_TABLE_ARN" \
             --credential-secret-arn "$CREDENTIAL_SECRET_ARN" \
             --credential-secret-version-id "$CREDENTIAL_SECRET_VERSION_ID" \
@@ -552,10 +572,13 @@ jobs:
           ADMIN_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_VERSION_ID }}
           AUDITOR_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_ARN }}
           AUDITOR_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_VERSION_ID }}
+          APPROVAL_SHA256: ${{ vars.PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256 }}
           AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
           AUTHORITY_TREE: ${{ inputs.authority_tree }}
           CLOUD_API_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_ARN }}
           CLOUD_API_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_VERSION_ID }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
           CONTROLLER_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
           CREDENTIAL_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_ARN }}
           CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
@@ -581,11 +604,14 @@ jobs:
             --admin-secret-arn "$ADMIN_SECRET_ARN" \
             --admin-secret-version-id "$ADMIN_SECRET_VERSION_ID" \
             --approval-file "$PRIVATE_ROOT/approval.json" \
+            --approval-sha256 "$APPROVAL_SHA256" \
             --auditor-secret-arn "$AUDITOR_SECRET_ARN" \
             --auditor-secret-version-id "$AUDITOR_SECRET_VERSION_ID" \
             --build-receipt "$PRIVATE_ROOT/build-receipt.json" \
             --cloud-api-secret-arn "$CLOUD_API_SECRET_ARN" \
             --cloud-api-secret-version-id "$CLOUD_API_SECRET_VERSION_ID" \
+            --caller-workflow-ref "$CALLER_WORKFLOW_REF" \
+            --caller-workflow-sha "$CALLER_WORKFLOW_SHA" \
             --controller-table-arn "$CONTROLLER_TABLE_ARN" \
             --credential-secret-arn "$CREDENTIAL_SECRET_ARN" \
             --credential-secret-version-id "$CREDENTIAL_SECRET_VERSION_ID" \

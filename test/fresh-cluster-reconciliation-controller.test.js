@@ -26,7 +26,7 @@ function billingAuthorization() {
     pricingSource: "https://www.cockroachlabs.com/pricing/",
     pricingObservedAt: "2026-08-19T08:00:00.000Z",
     pricingSourceSha256: "9".repeat(64),
-    authorizedAt: "2026-08-19T07:59:00.000Z",
+    authorizedAt: "2026-08-19T08:00:00.000Z",
     authorizedMonthlyCeilingUsd: "2.00",
     authorizationReceiptSha256: "8".repeat(64),
     approvalExpiresAt: "2026-08-19T09:00:00.000Z",
