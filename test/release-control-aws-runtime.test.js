@@ -56,6 +56,7 @@ test("release-control AWS runtime fixes endpoints, signing, and one attempt", as
     "getReleaseControlItem",
     "getReleaseControlCallerIdentity",
     "listReleaseControlTags",
+    "putReleaseControlItem",
     "transactReleaseControlItems",
     "updateReleaseControlItem"
   ]);

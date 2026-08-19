@@ -24,16 +24,29 @@ on:
       phase:
         required: true
         type: string
+      lookup_base64:
+        required: false
+        type: string
+        default: ""
+    outputs:
+      dispatch_permitted:
+        value: ${{ jobs.sealed-credential-boundary.outputs.dispatch_permitted }}
+      lookup_base64:
+        value: ${{ jobs.sealed-credential-boundary.outputs.lookup_base64 }}
 
 permissions: {}
 
 jobs:
   sealed-credential-boundary:
+    outputs:
+      dispatch_permitted: ${{ steps.phase.outputs.dispatch_permitted }}
+      lookup_base64: ${{ steps.phase.outputs.lookup_b64 }}
     permissions:
+      contents: read
       id-token: write
     environment: aws-release-coordination
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
 
     steps:
       - name: Validate immutable artifact coordinates
@@ -46,6 +59,7 @@ jobs:
           MANIFEST_BASE64: ${{ inputs.manifest_base64 }}
           MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
           PHASE: ${{ inputs.phase }}
+          LOOKUP_BASE64: ${{ inputs.lookup_base64 }}
         run: |
           [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
@@ -55,8 +69,14 @@ jobs:
           [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "${#COMMAND_BASE64}" -le 8192 && "${#MANIFEST_BASE64}" -le 8192 ]]
           [[ "$PHASE" == "reserve" || "$PHASE" == "finalize" ]]
+          if [[ "$PHASE" == "reserve" ]]; then
+            [[ -z "$LOOKUP_BASE64" ]]
+          else
+            [[ "$LOOKUP_BASE64" =~ ^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$ ]]
+            [[ -n "$LOOKUP_BASE64" && "${#LOOKUP_BASE64}" -le 32768 ]]
+          fi
 
-      - name: Verify exact non-executable command and manifest bytes
+      - name: Verify exact executable coordinates and manifest bytes
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
           AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
@@ -88,8 +108,8 @@ jobs:
             --arg command "$COMMAND_SHA256" --arg phase "$PHASE" '
             (keys | sort) == ["authorityCommit","authorityTree","commandSha256","environment","lane","phase","schemaVersion","status"] and
             .schemaVersion == "prooftoact.sealed-credential-manifest.v1" and
-            .status == "HASH_BOUND_NOT_EXECUTABLE" and
-            .lane == "COORDINATOR" and
+            .status == "HASH_BOUND_EXECUTABLE_COORDINATES" and
+            .lane == "EXECUTE_COORDINATOR" and
             .environment == "aws-release-coordination" and
             .phase == $phase and .authorityCommit == $commit and
             .authorityTree == $tree and .commandSha256 == $command
@@ -98,13 +118,149 @@ jobs:
             --arg phase "$PHASE" '
             (keys | sort) == ["action","authorityCommit","authorityTree","lane","phase","schemaVersion"] and
             .schemaVersion == "prooftoact.sealed-credential-command.v1" and
-            .action == "HOLD_NO_PROVIDER_EXECUTION" and
-            .lane == "COORDINATOR" and .phase == $phase and
+            .action == "ACTIVATE_SIGNED_EXECUTE_PHASE" and
+            .lane == "EXECUTE_COORDINATOR" and .phase == $phase and
             .authorityCommit == $commit and .authorityTree == $tree
           ' "$SEALED_ROOT/command.json" >/dev/null
 
-      - name: Hold before AWS credential configuration
-        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+      - name: Check out exact control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: control-plane
+          persist-credentials: false
+          ref: ${{ inputs.authority_commit }}
+          show-progress: false
+          submodules: false
+
+      - name: Check out frozen application source separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: frozen-application
+          persist-credentials: false
+          ref: 963937a9873f0199b91897fe88da1b91bc84b5e3
+          show-progress: false
+          submodules: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          check-latest: false
+          node-version: 22.23.1
+
+      - name: Verify and normalize exact separate checkouts before OIDC
+        working-directory: control-plane
+        env:
+          EXPECTED_AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.authority_commit }}
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+          PROOFTOACT_RELEASE_CALLER_JOB: ${{ inputs.phase == 'reserve' && 'coordinator-reserve' || 'coordinator-finalize' }}
+          PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          PROOFTOACT_RELEASE_SEALED_WORKFLOW: prooftoact-sealed-coordinator.yml
         run: |
-          echo 'HOLD:SEALED_COORDINATOR_RUNTIME_NOT_ACTIVATED' >&2
-          exit 1
+          test "$(git rev-parse HEAD)" = "$EXPECTED_OFFICIAL_MAIN_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_AUTHORITY_TREE"
+          node scripts/normalize-release-control-checkouts.js
+
+      - name: Verify frozen application identity and directory separation
+        working-directory: frozen-application
+        env:
+          EXPECTED_APP_COMMIT: 963937a9873f0199b91897fe88da1b91bc84b5e3
+          EXPECTED_APP_TREE: a330e0d57328e63a568be73c523b2cae6338f26c
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_APP_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_APP_TREE"
+          test "$GITHUB_WORKSPACE/frozen-application" != "$GITHUB_WORKSPACE/control-plane"
+
+      - name: Install exact hermetic executable dependencies before OIDC
+        working-directory: control-plane
+        env:
+          NODE_COMPILE_CACHE: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+        run: |
+          npm ci --ignore-scripts --prefix release-control
+          npm ci --ignore-scripts --prefix release-provider
+
+      - name: Verify signed EXECUTE manifest and protected bootstrap before OIDC
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.authority_commit }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
+          PROOFTOACT_RELEASE_CALLER_JOB: ${{ inputs.phase == 'reserve' && 'coordinator-reserve' || 'coordinator-finalize' }}
+          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
+          PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64 }}
+          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-coordination
+          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
+          PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          PROOFTOACT_RELEASE_SEALED_WORKFLOW: prooftoact-sealed-coordinator.yml
+        run: node scripts/run-release-execute-preflight.js ${{ inputs.phase }}
+
+      - name: Assume only the release coordinator role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          disable-retry: true
+          mask-aws-account-id: true
+          output-env-credentials: true
+          role-duration-seconds: 900
+          role-session-name: pta-${{ github.run_id }}-1-${{ inputs.phase == 'reserve' && 'coordinator-reserve' || 'coordinator-finalize' }}
+          role-to-assume: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
+          unset-current-credentials: true
+
+      - name: Reserve or finalize only through the coordinator authority
+        id: phase
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.authority_commit }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
+          PROOFTOACT_RELEASE_CALLER_JOB: ${{ inputs.phase == 'reserve' && 'coordinator-reserve' || 'coordinator-finalize' }}
+          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
+          PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64 }}
+          PROOFTOACT_RELEASE_EXECUTE_LOOKUP_B64: ${{ inputs.lookup_base64 }}
+          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-coordination
+          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_COORDINATOR_ROLE_ARN }}
+          PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          PROOFTOACT_RELEASE_SEALED_WORKFLOW: prooftoact-sealed-coordinator.yml
+        run: node scripts/run-release-execute-phase.js ${{ inputs.phase }}
+
+      - name: Publish exact finalizer receipt
+        if: ${{ always() && inputs.phase == 'finalize' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          name: prooftoact-execute-finalizer-${{ github.run_id }}-${{ github.run_attempt }}
+          overwrite: false
+          path: ${{ runner.temp }}/prooftoact-execute-receipts/*.json
+          retention-days: 14

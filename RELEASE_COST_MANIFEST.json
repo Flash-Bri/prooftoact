@@ -1,22 +1,55 @@
 {
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
-  "reviewedOn": "2026-08-09",
-  "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
+  "reviewedOn": "2026-08-19",
+  "claimBoundary": "This manifest binds current source cost guards, the exact retained A1/A2 monthly posture, recorded spend inputs, budget prerequisites, and stop conditions. The retained monthly activation authorization is requested but not evidenced as approved. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize activation or deployment, or approve publication or submission.",
   "limits": {
+    "a1RetainedSecretCountBeforeGovernedCleanup": 7,
+    "a2RetainedSecretCount": 1,
     "awsBudgetLimitUsd": 15,
+    "cockroachBasicMonthlyCapUsd": 1.5,
     "dailyStopUsd": 5,
     "effectiveAwsSpendCeilingUsd": 13.14,
     "expectedMeteredSpendHighUsd": 12,
     "expectedMeteredSpendLowUsd": 3,
     "minimumBudgetCoverageEnd": "2026-09-16T00:00:00.000Z",
+    "pendingPrivateRecoveryMonthlyAuthorizationUsd": 5,
+    "postGovernedA1CleanupRecurringBaseUsd": 1.9,
     "preflightAllowanceReserveUsd": 0.02,
     "preflightObservedAwsRejectAtUsd": 13.12,
     "projectCostWindowStart": "2026-07-01",
     "recordedNonAwsSpendUsd": 11.86,
+    "recurringBaseBeforeGovernedCleanupUsd": 4.7,
     "releaseHorizonEnd": "2026-09-15",
+    "retainedSecretsMonthlyUsdBeforeGovernedCleanup": 3.2,
+    "secretsManagerSecretMonthlyUsd": 0.4,
     "totalProjectExposureCeilingUsd": 25,
-    "unexplainedSpendStopUsd": 3
+    "unexplainedSpendStopUsd": 3,
+    "variableServiceHeadroomUsd": 0.3
+  },
+  "retainedMonthlyCost": {
+    "activationAuthorizationStatus": "REQUESTED_NOT_EVIDENCED_AS_APPROVED",
+    "activationBlockedUntilAuthorization": true,
+    "a1RetainedSecretCount": 7,
+    "a1RetainedSecretPurposes": [
+      "admin",
+      "auditor",
+      "cloudApi",
+      "credential",
+      "mcp",
+      "publisher",
+      "signer"
+    ],
+    "a1RetainedSecretsMustRemain": true,
+    "a2RetainedSecretCount": 1,
+    "cockroachBasicMonthlyCapUsd": 1.5,
+    "explicitHeadroomUsd": 0.3,
+    "maximumMonthlyExposureUsd": 5,
+    "publicOssLifecycleAdditionalMonthlyUsd": 0,
+    "publicOssLifecycleCostNeutral": true,
+    "secretsManagerMonthlyEstimateUsd": 3.2,
+    "secretsManagerMonthlyUnitUsd": 0.4,
+    "totalRetainedSecretCount": 8
   },
   "budgetAlerts": [
     {
@@ -120,6 +153,18 @@
       "sha256": "8fc5633ffa025161945a2f65e4086c927d0867a222dcc8ffa9b9bedb658d3ed3"
     },
     {
+      "id": "b0-a1-human-authorization-contract",
+      "path": "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+      "role": "SIGNED_COMBINED_COST_AUTHORIZATION_CONTRACT",
+      "sha256": "28618fae2dbe290d1f0ac8ce5a00e124f3cbe9c1775572948c2b3c1dc98ae3ff"
+    },
+    {
+      "id": "b0-a1-human-authorization-tests",
+      "path": "test/prooftoact-b0-a1-human-authorization.test.js",
+      "role": "COMBINED_COST_AUTHORIZATION_VERIFICATION",
+      "sha256": "a14da27b3b9fe6cd23bae3e970599c6afed7afea3814e78ee59ad0c4573f43e9"
+    },
+    {
       "id": "boundary-semantic-metric-runtime",
       "path": "infra/aws/lambda/boundary.cjs",
       "role": "SEMANTIC_METRIC_CARDINALITY",
@@ -129,13 +174,13 @@
       "id": "cost-boundary-ledger",
       "path": "docs/COST_GATES.md",
       "role": "COST_AND_RESOURCE_BOUNDARY",
-      "sha256": "fa9e580e4f9467a5a84eb23cb0690157a821aed490273d82201a32e0ff6ca65b"
+      "sha256": "f2851087e551c90fc12827d38f12b0c63d3abd2757af3f6135d782af4ef9fafb"
     },
     {
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "12b44eb9f9cd2b498d4de40b885c295da1c25f8d1c48a451fe2734c3d79dfff3"
+      "sha256": "2262e2923b65271b5c87100dff97f3b97d8fc480b813bf5f4f7c829a26c83ed5"
     },
     {
       "id": "cost-guard-receipt",
@@ -154,9 +199,58 @@
       "path": "evidence/gate2-console-stop-receipt-2026-07-30.md",
       "role": "SANITIZED_FAIL_CLOSED_STOP_RECEIPT",
       "sha256": "7a891b1810d8343e19c3cff40591302b2c483b8fdacf7b68edf68596ad18258d"
+    },
+    {
+      "id": "one-time-bootstrap-authority-plan",
+      "path": "scripts/prepare-one-time-bootstrap-authority.js",
+      "role": "ITEMIZED_AWS_RESIDUAL_COST_PLAN",
+      "sha256": "0e024be17f7cdbf96a4ff6a9151a9a2c74ee9c98ac760af21590ab21bcd35ec3"
+    },
+    {
+      "id": "one-time-bootstrap-authority-tests",
+      "path": "test/one-time-bootstrap-authority.test.js",
+      "role": "ITEMIZED_COST_PLAN_NEGATIVE_VERIFICATION",
+      "sha256": "8da5682fc9c0f81ee6a6739420ab709568195ab0fb160df0e9cc4d3016988038"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner",
+      "path": "scripts/run-one-time-bootstrap-ceremony.js",
+      "role": "EXECUTABLE_AWS_RESIDUAL_COST_GATE",
+      "sha256": "7f6dbd3792ded4195e4b91db9e424a4e3280595a5318043a05fc8d54d72344b0"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner-tests",
+      "path": "test/run-one-time-bootstrap-ceremony.test.js",
+      "role": "EXECUTABLE_COST_AUTHORIZATION_VERIFICATION",
+      "sha256": "e4f51e7787abce2764395a8949d5f6ad773067aa16394b4c4cd7fe6fa421fa1c"
+    },
+    {
+      "id": "private-recovery-bootstrap-template",
+      "path": "infra/aws/private-recovery-query-bootstrap-role-stack.json",
+      "role": "PRIVATE_RECOVERY_RETAINED_SECRET_INVENTORY",
+      "sha256": "fdf8abc83bc0843170c774505d164cef5edbb0163e8219a3cd370bfcdf6dc41c"
+    },
+    {
+      "id": "private-recovery-deploy-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
+      "role": "PRIVATE_RECOVERY_VERSIONED_ARTIFACT_RETENTION",
+      "sha256": "8471f0f43da383011052e2cc7e6cf9a7e8c18e11653714e98a7b5d9b900c6d85"
+    },
+    {
+      "id": "private-recovery-stack-template",
+      "path": "src/cloud/private-recovery-query-template.js",
+      "role": "PRIVATE_RECOVERY_TEMPORARY_RUNTIME_AND_LOG_RETENTION",
+      "sha256": "1bae17a5c27e792316cee0c6e9462b4a229b16930ee449abb28b00a3b172319c"
+    },
+    {
+      "id": "private-recovery-teardown-runner",
+      "path": "scripts/teardown-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_EXACT_STACK_CLEANUP",
+      "sha256": "f9494563923b2f89235cec2187dfb3ba833c01b8cc69d6687c085202481915ec"
     }
   ],
   "finalReleaseRequirements": [
+    "Explicit owner authorization for the retained A1/A2 monthly maximum of 5.00 USD before activation; the current authorization is requested but not evidenced as approved.",
     "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with the greater of budget-reported spend and conservative account-wide positive record-type exposure plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
     "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
     "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",

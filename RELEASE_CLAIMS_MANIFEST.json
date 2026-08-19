@@ -18,7 +18,7 @@
       "id": "aws-boundary",
       "path": "docs/AWS_GATE2.md",
       "role": "TECHNICAL_BOUNDARY",
-      "sha256": "d18dff59e753b7013ea5f612bcd85abf5964946440b7ed06b129ff353c4fa991"
+      "sha256": "40e76d0d1eb7358393f66391c9d5c7abd0445b2012e6572f67afc21c7dabd75b"
     },
     {
       "id": "aws-demo-entry",
@@ -72,7 +72,7 @@
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "7c38cfdeffaa42acaf00c5e8fa0fc99655000c89107d42a5971db0a0f8fdafb8"
+      "sha256": "0ac5a530a50deda0ec65bf0f1a14aa634ce98965c61a9f8eb01e6cc5a456b403"
     },
     {
       "id": "release-claims-ledger",

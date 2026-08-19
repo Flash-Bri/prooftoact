@@ -9,6 +9,444 @@
   ],
   "surfaces": [
     {
+      "id": "fresh-primary-caller-workflow",
+      "path": ".github/workflows/prooftoact-fresh-primary.yml",
+      "role": "EXACT_MAIN_FRESH_PRIMARY_CALLER",
+      "sha256": "96e8810d08fea83ae393f2610f26fba3f3bc7a9cfdee12a4cf7e78cdd7c7e0fd"
+    },
+    {
+      "id": "fresh-primary-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-fresh-primary.yml",
+      "role": "PROTECTED_FRESH_PRIMARY_PROVIDER_EXECUTION",
+      "sha256": "a2c68d871db8d5735f45ca2cbc38e27475fff25b6ee875a479cc65dd7cf22f76"
+    },
+    {
+      "id": "fresh-primary-oidc-boundary",
+      "path": "docs/RELEASE_OIDC_BOUNDARY.md",
+      "role": "FRESH_PRIMARY_OIDC_AND_CREDENTIAL_BOUNDARY",
+      "sha256": "895c2a436b8baff217e0b0e5f7d027f14b5535b2c0d26c6f3f1ed09b87a5325a"
+    },
+    {
+      "id": "fresh-primary-bootstrap-role-template",
+      "path": "infra/aws/fresh-primary-bootstrap-role-stack.json",
+      "role": "FRESH_PRIMARY_EXACT_OIDC_ROLE_TEMPLATE",
+      "sha256": "ced2992afdbce22188672235d12c613fbea941d2d502b56ddf00df78a5dbeb06"
+    },
+    {
+      "id": "fresh-primary-credential-custody-template",
+      "path": "infra/aws/fresh-primary-credential-custody-stack.json",
+      "role": "CREATE_ONLY_SEVEN_SECRET_CUSTODY_TEMPLATE",
+      "sha256": "0d23509291626d7e3d91d1454e581e36bb6721166e84747791ce5a3c7d6bb474"
+    },
+    {
+      "id": "release-control-aws-runtime",
+      "path": "release-control/src/release-control-aws-runtime.js",
+      "role": "FRESH_PROVIDER_DURABLE_CONTROL_RUNTIME",
+      "sha256": "04dfb9af2a18e849427ff5d5bfc8cbfba39bb4c6733845cd90ba724f845b3c74"
+    },
+    {
+      "id": "one-time-bootstrap-root-session",
+      "path": "scripts/assume-one-time-bootstrap-root-session.js",
+      "role": "B0_NAMED_ROOT_MFA_SESSION_CUSTODY",
+      "sha256": "ad23e1fe372e3f90c5d1d97863334a4721cfd744b7db8759e71a20f7a8a096ee"
+    },
+    {
+      "id": "b0-a1-human-authorization-contract",
+      "path": "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+      "role": "INDEPENDENTLY_SIGNED_B0_A1_HUMAN_AUTHORIZATION",
+      "sha256": "28618fae2dbe290d1f0ac8ce5a00e124f3cbe9c1775572948c2b3c1dc98ae3ff"
+    },
+    {
+      "id": "b0-a1-human-authorization-materializer",
+      "path": "scripts/materialize-prooftoact-b0-a1-human-authorization.js",
+      "role": "PINNED_IMESSAGE_HUMAN_AUTHORIZATION_MATERIALIZER",
+      "sha256": "3f5777bbeb25b539243e5420372fb8cb462ce67a0867954c7931aff1f1d28c8c"
+    },
+    {
+      "id": "one-time-bootstrap-authority-plan",
+      "path": "scripts/prepare-one-time-bootstrap-authority.js",
+      "role": "B0_EXACT_AUTHORITY_AND_COST_PLAN",
+      "sha256": "0e024be17f7cdbf96a4ff6a9151a9a2c74ee9c98ac760af21590ab21bcd35ec3"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-launcher",
+      "path": "scripts/launch-one-time-bootstrap-ceremony.js",
+      "role": "SEALED_EXACT_SOURCE_B0_LAUNCHER",
+      "sha256": "b393f56afbcbd42f1deb9ad9a81e181a79a1b45278a12e1ce178e194cb1ef095"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner",
+      "path": "scripts/run-one-time-bootstrap-ceremony.js",
+      "role": "B0_CRASH_CONVERGENT_CEREMONY_RUNNER",
+      "sha256": "7f6dbd3792ded4195e4b91db9e424a4e3280595a5318043a05fc8d54d72344b0"
+    },
+    {
+      "id": "fresh-cluster-provider-key-revocation-finalizer",
+      "path": "scripts/finalize-fresh-cluster-provider-key-revocation.js",
+      "role": "FAIL_CLOSED_SEPARATE_ORG_ADMIN_REVOCATION_GATE",
+      "sha256": "ac07b51f32f6eae8ad8567bc0242a0b1bd6259d6887e399ffdb1e05c2419fe73"
+    },
+    {
+      "id": "fresh-primary-bootstrap",
+      "path": "scripts/bootstrap-fresh-primary.js",
+      "role": "FRESH_PRIMARY_DATABASE_BOOTSTRAP",
+      "sha256": "7021acc2fe589a74557e3d31bef4d66708003b8cd97881fdaa602f93926cf15c"
+    },
+    {
+      "id": "fresh-cluster-aws-provider",
+      "path": "scripts/fresh-cluster-aws-provider.js",
+      "role": "FRESH_CLUSTER_AWS_PROVIDER_CLIENT",
+      "sha256": "28432bf5f19b40c63d071fed715c2fe19174d300de0b12af7fc097ca4a8dd9f8"
+    },
+    {
+      "id": "fresh-cluster-aws-runtime",
+      "path": "scripts/fresh-cluster-aws-runtime.js",
+      "role": "FRESH_CLUSTER_AWS_PROVIDER_RUNTIME",
+      "sha256": "1fc3bf92f5a9be7130041c4ac0520fea8164ee4b76c8f5faec80ca4114426256"
+    },
+    {
+      "id": "fresh-cluster-cloud-controller",
+      "path": "scripts/fresh-cluster-cloud-controller.js",
+      "role": "FRESH_CLUSTER_CLOUD_API_CONTROLLER",
+      "sha256": "b085fd6c7d9ad725890f56c88e0c2a4bc2b60edc1380c2741614467c320ebb6e"
+    },
+    {
+      "id": "fresh-cluster-execution-runtime",
+      "path": "scripts/fresh-cluster-execution-runtime.js",
+      "role": "FRESH_CLUSTER_JOINED_EXECUTION_RUNTIME",
+      "sha256": "9b2d4ad80dfe385ba434c71c1d270e72e8adb9ae8ad13f2195c04858b1fd4679"
+    },
+    {
+      "id": "fresh-cluster-provider-controller",
+      "path": "scripts/fresh-cluster-provider-controller.js",
+      "role": "FRESH_CLUSTER_PROVIDER_EFFECT_CONTROLLER",
+      "sha256": "dd4caace957ba4815a1cb5b15a8558c4fcbbae0b0c4fa8acd521e14523ec2017"
+    },
+    {
+      "id": "fresh-cluster-reconciliation-controller",
+      "path": "scripts/fresh-cluster-reconciliation-controller.js",
+      "role": "FRESH_CLUSTER_READ_ONLY_RECONCILIATION",
+      "sha256": "8dbfea6b67cfab65f13b100bb17e086a2221890a315d6784032c4176f07dbc50"
+    },
+    {
+      "id": "fresh-primary-aws-provider",
+      "path": "scripts/fresh-primary-aws-provider.js",
+      "role": "FRESH_PRIMARY_AWS_PROVIDER_CLIENT",
+      "sha256": "2a68d03685c96528007b71ea7b950e3c09d237c9b10fe48248a230685c06a276"
+    },
+    {
+      "id": "fresh-primary-aws-runtime",
+      "path": "scripts/fresh-primary-aws-runtime.js",
+      "role": "FRESH_PRIMARY_AWS_PROVIDER_RUNTIME",
+      "sha256": "d2f1277372168021163296f0f8ae57cf1663b35a770351d7d9d371c567124c04"
+    },
+    {
+      "id": "fresh-primary-bootstrap-role-readback",
+      "path": "scripts/fresh-primary-bootstrap-role-readback.js",
+      "role": "FRESH_PRIMARY_ROLE_PROVIDER_READBACK",
+      "sha256": "ab1589e1f1f1553e70c376f46d53ea65551c11aa90b71ab72234ec61e8ee8160"
+    },
+    {
+      "id": "fresh-primary-credential-custody-readback",
+      "path": "scripts/fresh-primary-credential-custody-readback.js",
+      "role": "SEVEN_SECRET_CUSTODY_PROVIDER_READBACK",
+      "sha256": "a04e52e559a25ffae5bbee9b437944a51dd39366779b37bebf2881c6632d44f5"
+    },
+    {
+      "id": "fresh-primary-credential-sealer-aws-runtime",
+      "path": "scripts/fresh-primary-credential-sealer-aws-runtime.js",
+      "role": "FIVE_VERSION_SECRET_SEAL_AWS_RUNTIME",
+      "sha256": "6a2af4864fc97f60dc06ca6d5b1503ed11cc7c29f591a10e884df8f83b72e336"
+    },
+    {
+      "id": "fresh-primary-credential-sealer",
+      "path": "scripts/fresh-primary-credential-sealer.js",
+      "role": "FIVE_VERSION_SECRET_SEAL_CONTROLLER",
+      "sha256": "c3e075207d79662cadd35496b36d69e7efa6deb30eb26312a049fffc9f5ce41b"
+    },
+    {
+      "id": "fresh-primary-provider-controller",
+      "path": "scripts/fresh-primary-provider-controller.js",
+      "role": "FRESH_PRIMARY_PROVIDER_CONTROLLER",
+      "sha256": "235955a9716f49ac66200405fc2494cb11e3aa7a8e64f17d93ad83fb796450b6"
+    },
+    {
+      "id": "fresh-recovery-publication-execution",
+      "path": "scripts/fresh-recovery-publication-execution.js",
+      "role": "FRESH_RECOVERY_PUBLICATION_EXECUTION",
+      "sha256": "6f11876abb881de10a9a7f7f7c8119c3d2aa3eed57a9f91988196b22d3feaaa2"
+    },
+    {
+      "id": "fresh-recovery-source-execution",
+      "path": "scripts/fresh-recovery-source-execution.js",
+      "role": "FRESH_RECOVERY_SOURCE_EXECUTION",
+      "sha256": "2557b9325bd9a3c2bcb50f2568d4f7371cffbbfb6bd2f063becdae2a7aac1066"
+    },
+    {
+      "id": "fresh-cluster-provider-launcher",
+      "path": "scripts/launch-fresh-cluster-provider.js",
+      "role": "EXACT_SOURCE_FRESH_PROVIDER_LAUNCHER",
+      "sha256": "58a0057fb1a8d6bd65a7a70f7933be234755c5a5e2bc4a103c41edfefaf6312b"
+    },
+    {
+      "id": "fresh-bootstrap-collector-binding",
+      "path": "scripts/lib/fresh-bootstrap-collector-binding.js",
+      "role": "EXACT_B0_COLLECTOR_IDENTITY_BINDING",
+      "sha256": "c512da35984dc5ef7c1df8a5b9d19d8841346e1b667abe438f79064214da9aa1"
+    },
+    {
+      "id": "fresh-primary-source-lock",
+      "path": "scripts/lib/fresh-primary-source-lock.py",
+      "role": "PRE_CHECKOUT_REUSABLE_OIDC_SOURCE_LOCK",
+      "sha256": "fc866771e5d92631dfdcfde3d4dfdd280279c24adf8fb0adee851e527876300d"
+    },
+    {
+      "id": "fresh-recovery-publisher-key",
+      "path": "scripts/lib/fresh-recovery-publisher-key.js",
+      "role": "FRESH_RECOVERY_SIGNER_KEY_CUSTODY",
+      "sha256": "ee77a4402e8665a5c2ca5276dfa5671f641d704e6545e5abbcf4473f899756a7"
+    },
+    {
+      "id": "private-recovery-query-binding",
+      "path": "scripts/lib/private-recovery-query-binding.js",
+      "role": "PRIVATE_MANAGED_MCP_QUERY_BINDING",
+      "sha256": "41be56c1027fe5536720bc5f605671a059d95ba91f8fe2ad6209bfc5b8ba770e"
+    },
+    {
+      "id": "fresh-primary-bootstrap-role-plan",
+      "path": "scripts/prepare-fresh-primary-bootstrap-role.js",
+      "role": "FRESH_PRIMARY_ROLE_CREATE_ONLY_PLAN",
+      "sha256": "fb041d3a463e32b5fff6b2dff5b05749c3e4ff25b9996e53c9ade934c206c983"
+    },
+    {
+      "id": "fresh-primary-credential-custody-plan",
+      "path": "scripts/prepare-fresh-primary-credential-custody.js",
+      "role": "SEVEN_SECRET_CUSTODY_CREATE_ONLY_PLAN",
+      "sha256": "fb9a7c8a226ef70d0585f60be923cfab2afcea0305d05c4244078c557a2ce7cc"
+    },
+    {
+      "id": "release-deployment-plan",
+      "path": "scripts/prepare-release-deployment.js",
+      "role": "FRESH_PRIMARY_RELEASE_DEPLOYMENT_PLAN",
+      "sha256": "a3b124603368250bc301d892914062eda3a7068da481f7474b50ca18a5eafcd1"
+    },
+    {
+      "id": "fresh-cluster-provider-runner",
+      "path": "scripts/run-fresh-cluster-provider.js",
+      "role": "FRESH_CLUSTER_PRIVATE_PROVIDER_RUNNER",
+      "sha256": "b8f2c870871b0bd210e4340000fe3d9b78bfddf9fa3276150e84562bd865742e"
+    },
+    {
+      "id": "fresh-primary-credential-sealer-runner",
+      "path": "scripts/run-fresh-primary-credential-sealer.js",
+      "role": "PRIVATE_FIVE_VERSION_SEAL_RUNNER",
+      "sha256": "b9b77476c3a4c36d0f42a956ce8a6718294634cc4f6a0c352c94c2b3f9eaa109"
+    },
+    {
+      "id": "fresh-primary-provider-runner",
+      "path": "scripts/run-fresh-primary-provider.js",
+      "role": "FRESH_PRIMARY_PRIVATE_PROVIDER_RUNNER",
+      "sha256": "f10005ecefbd67e477d8ba5a0068b34dc77d55e6aaad5f24ad0ac186e725c733"
+    },
+    {
+      "id": "fresh-primary-bootstrap-role-stack-tests",
+      "path": "test/fresh-primary-bootstrap-role-stack.test.js",
+      "role": "FRESH_PRIMARY_ROLE_TEMPLATE_VERIFICATION",
+      "sha256": "7f7fbdec613f0c4cb78379f1d0d6073d2d81a977ec583a628940a6ff68f88cb1"
+    },
+    {
+      "id": "fresh-primary-bootstrap-tests",
+      "path": "test/fresh-primary-bootstrap.test.js",
+      "role": "FRESH_PRIMARY_BOOTSTRAP_VERIFICATION",
+      "sha256": "ba705075ea56d9235da8bc5e3fb0a108fbba39188b3a35e9c8e3fc10104623bf"
+    },
+    {
+      "id": "fresh-primary-provider-controller-tests",
+      "path": "test/fresh-primary-provider-controller.test.js",
+      "role": "FRESH_PRIMARY_CONTROLLER_VERIFICATION",
+      "sha256": "86ea56cdf7052f082cf8cd8bd86ada1b5a9be538c49dd3c51c8a6264afdbe323"
+    },
+    {
+      "id": "release-control-aws-runtime-tests",
+      "path": "test/release-control-aws-runtime.test.js",
+      "role": "FRESH_PROVIDER_CONTROL_RUNTIME_VERIFICATION",
+      "sha256": "438b5c4d08b1c44d4c05a9a6e5110d7ef807c9fd1b52de2473ee7d225ef0d1eb"
+    },
+    {
+      "id": "release-control-runtime-loader-tests",
+      "path": "test/release-control-runtime-loader.test.js",
+      "role": "FRESH_PROVIDER_CONTROL_LOADER_VERIFICATION",
+      "sha256": "277935fb6e0dd52e3a3927bca3875420f19c0890b34b0e11fb1ce8e9972b07eb"
+    },
+    {
+      "id": "fresh-cluster-aws-provider-tests",
+      "path": "test/fresh-cluster-aws-provider.test.js",
+      "role": "FRESH_CLUSTER_AWS_PROVIDER_VERIFICATION",
+      "sha256": "e929f95e2ed0a517bfcb63834cc96c19659f98e59d51bc047c9ccd768f83f0e2"
+    },
+    {
+      "id": "fresh-cluster-aws-runtime-tests",
+      "path": "test/fresh-cluster-aws-runtime.test.js",
+      "role": "FRESH_CLUSTER_AWS_RUNTIME_VERIFICATION",
+      "sha256": "a2e538103d0338fdd0a5c01d036d06dbe24a31214b70a85abfac40f57cdd0931"
+    },
+    {
+      "id": "fresh-cluster-cloud-controller-tests",
+      "path": "test/fresh-cluster-cloud-controller.test.js",
+      "role": "FRESH_CLUSTER_CLOUD_CONTROLLER_VERIFICATION",
+      "sha256": "66aab577c6d0b3640bad89d803ed1cc1efa3ab46081f594a99b4e1e72e51c9a6"
+    },
+    {
+      "id": "fresh-cluster-execution-runtime-tests",
+      "path": "test/fresh-cluster-execution-runtime.test.js",
+      "role": "FRESH_CLUSTER_EXECUTION_VERIFICATION",
+      "sha256": "1caafabc62d5a091f950d32f6a334f930659fc500817f5e84c0d06a9fa13d837"
+    },
+    {
+      "id": "fresh-cluster-provider-controller-tests",
+      "path": "test/fresh-cluster-provider-controller.test.js",
+      "role": "FRESH_CLUSTER_PROVIDER_CONTROLLER_VERIFICATION",
+      "sha256": "7c0a3dc775540c8b4a6e743c4806742af7a05fcc3ff083026c54e85d8abd32aa"
+    },
+    {
+      "id": "fresh-cluster-reconciliation-controller-tests",
+      "path": "test/fresh-cluster-reconciliation-controller.test.js",
+      "role": "FRESH_CLUSTER_RECONCILIATION_VERIFICATION",
+      "sha256": "298e3ab0f4d0bd41d97a0863316906d9a77b62bb7e963f589cd5d9c74dc760a6"
+    },
+    {
+      "id": "fresh-primary-aws-provider-tests",
+      "path": "test/fresh-primary-aws-provider.test.js",
+      "role": "FRESH_PRIMARY_AWS_PROVIDER_VERIFICATION",
+      "sha256": "2781a27b721dc3de814c947809e3299f8205dde178a30c37d7f02d807de51141"
+    },
+    {
+      "id": "fresh-primary-aws-runtime-tests",
+      "path": "test/fresh-primary-aws-runtime.test.js",
+      "role": "FRESH_PRIMARY_AWS_RUNTIME_VERIFICATION",
+      "sha256": "d284597329b28cd2835d2156170913abc6437b3d003de0a9b6381efefc3b0b7b"
+    },
+    {
+      "id": "fresh-primary-bootstrap-role-plan-tests",
+      "path": "test/fresh-primary-bootstrap-role-plan.test.js",
+      "role": "FRESH_PRIMARY_ROLE_PLAN_VERIFICATION",
+      "sha256": "599a98d87f56d93ef086a8d364155c734517513b1669a9ae27d55e0303082487"
+    },
+    {
+      "id": "fresh-primary-bootstrap-role-readback-tests",
+      "path": "test/fresh-primary-bootstrap-role-readback.test.js",
+      "role": "FRESH_PRIMARY_ROLE_READBACK_VERIFICATION",
+      "sha256": "a51ccddd53d56642d5ade673b13434154c11f57fec4e7a0ba87d5b7c75a9e31d"
+    },
+    {
+      "id": "fresh-primary-credential-custody-plan-tests",
+      "path": "test/fresh-primary-credential-custody-plan.test.js",
+      "role": "SEVEN_SECRET_CUSTODY_PLAN_VERIFICATION",
+      "sha256": "bca8a599744a72a96e693dda75894971ad31f8fbdd5c887bd9fbbed3af2cd2f6"
+    },
+    {
+      "id": "fresh-primary-credential-custody-readback-tests",
+      "path": "test/fresh-primary-credential-custody-readback.test.js",
+      "role": "SEVEN_SECRET_CUSTODY_READBACK_VERIFICATION",
+      "sha256": "0b75fd1a2abb7d398f236393ca6a9e4b692cefaf4a85c03027e5b3d5fae7a04e"
+    },
+    {
+      "id": "fresh-primary-credential-sealer-runtime-tests",
+      "path": "test/fresh-primary-credential-sealer-runtime.test.js",
+      "role": "FIVE_VERSION_SEAL_RUNTIME_VERIFICATION",
+      "sha256": "9a36ae5e6bbea725a4b660aa691e7d302c63d75ab3d83564f1d9198b440b3dd6"
+    },
+    {
+      "id": "fresh-primary-credential-sealer-tests",
+      "path": "test/fresh-primary-credential-sealer.test.js",
+      "role": "FIVE_VERSION_SEAL_CONTROLLER_VERIFICATION",
+      "sha256": "e9284d4e2dd9a5030b382e2119e7eb014fd2b7118deec468d8bdb7460859b9a5"
+    },
+    {
+      "id": "fresh-primary-workflow-tests",
+      "path": "test/fresh-primary-workflow.test.js",
+      "role": "FRESH_PRIMARY_WORKFLOW_VERIFICATION",
+      "sha256": "45130730a7692f0acfa7372fcdbfb1c870c1a319fa287b3f65cf7c449283a754"
+    },
+    {
+      "id": "fresh-recovery-publication-execution-tests",
+      "path": "test/fresh-recovery-publication-execution.test.js",
+      "role": "FRESH_RECOVERY_PUBLICATION_VERIFICATION",
+      "sha256": "742801f03651cd7cc8b9aac5e91f4d0aa2b94506b22ee75c4c31a4c6b171fc39"
+    },
+    {
+      "id": "fresh-recovery-publisher-key-tests",
+      "path": "test/fresh-recovery-publisher-key.test.js",
+      "role": "FRESH_RECOVERY_SIGNER_VERIFICATION",
+      "sha256": "6be28eea7b6a3a728dfdf3ad19a7c14bed5a8d22201ba33af59f7f5ffb02c492"
+    },
+    {
+      "id": "fresh-recovery-source-execution-tests",
+      "path": "test/fresh-recovery-source-execution.test.js",
+      "role": "FRESH_RECOVERY_SOURCE_VERIFICATION",
+      "sha256": "8666e571c41cc9bb536e6b58b83b350b57b6a1e001cd2d4b78980183e7b72631"
+    },
+    {
+      "id": "fresh-cluster-provider-launcher-tests",
+      "path": "test/launch-fresh-cluster-provider.test.js",
+      "role": "FRESH_PROVIDER_LAUNCHER_VERIFICATION",
+      "sha256": "758c07a94ca495f9fe32c255c75c8d69d3405fd1a9ca90c4e583a33762d28cc1"
+    },
+    {
+      "id": "fresh-cluster-provider-runner-tests",
+      "path": "test/run-fresh-cluster-provider.test.js",
+      "role": "FRESH_CLUSTER_RUNNER_VERIFICATION",
+      "sha256": "540d06852a3caf6139cb43233a958b63d1c6e7808de27de03d0953cc06a0762a"
+    },
+    {
+      "id": "fresh-primary-provider-runner-tests",
+      "path": "test/run-fresh-primary-provider.test.js",
+      "role": "FRESH_PRIMARY_RUNNER_VERIFICATION",
+      "sha256": "868c85416f5d65f7852f7c143525c8f5b4fd7dce51991a7f913791725714d7b2"
+    },
+    {
+      "id": "one-time-bootstrap-authority-tests",
+      "path": "test/one-time-bootstrap-authority.test.js",
+      "role": "B0_AUTHORITY_COST_AND_CREDENTIAL_VERIFICATION",
+      "sha256": "8da5682fc9c0f81ee6a6739420ab709568195ab0fb160df0e9cc4d3016988038"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-launcher-tests",
+      "path": "test/launch-one-time-bootstrap-ceremony.test.js",
+      "role": "SEALED_B0_LAUNCHER_VERIFICATION",
+      "sha256": "63b267babdf181f66f82f9c06431a99e95f3dc3b221d210eb4c7a0935dd67aeb"
+    },
+    {
+      "id": "one-time-bootstrap-ceremony-runner-tests",
+      "path": "test/run-one-time-bootstrap-ceremony.test.js",
+      "role": "B0_CRASH_CONVERGENCE_VERIFICATION",
+      "sha256": "e4f51e7787abce2764395a8949d5f6ad773067aa16394b4c4cd7fe6fa421fa1c"
+    },
+    {
+      "id": "b0-a1-human-authorization-tests",
+      "path": "test/prooftoact-b0-a1-human-authorization.test.js",
+      "role": "B0_A1_SIGNED_AUTHORIZATION_CONTRACT_VERIFICATION",
+      "sha256": "a14da27b3b9fe6cd23bae3e970599c6afed7afea3814e78ee59ad0c4573f43e9"
+    },
+    {
+      "id": "b0-a1-imessage-authorization-tests",
+      "path": "test/prooftoact-imessage-human-authorization.test.js",
+      "role": "IMESSAGE_IDENTITY_AND_SIGNATURE_VERIFICATION",
+      "sha256": "10b938146ef2324635d08f67c0f08464b34badde1526341fc1e739bea6a68180"
+    },
+    {
+      "id": "b0-a1-human-authorization-fixture",
+      "path": "test/helpers/prooftoact-human-authorization-fixture.js",
+      "role": "SYNTHETIC_AUTHORIZATION_NEGATIVE_CONTROL_FIXTURE",
+      "sha256": "41330fd9bb49f292c3daef04bfc62939c169092616912974d2edeb75cb038144"
+    },
+    {
+      "id": "fresh-cluster-provider-key-revocation-tests",
+      "path": "test/finalize-fresh-cluster-provider-key-revocation.test.js",
+      "role": "FAIL_CLOSED_REVOCATION_GATE_VERIFICATION",
+      "sha256": "26ffcc3db257f6e10d86d9b0e85a583469090458b34aaaaf369c44bf35e06f59"
+    },
+    {
       "id": "actions-checkout-normalizer",
       "path": "scripts/normalize-actions-checkout.js",
       "role": "GITHUB_ACTIONS_EXACT_CHECKOUT_NORMALIZATION",
@@ -30,7 +468,7 @@
       "id": "admissible-vector-retrieval",
       "path": "src/cloud/admissible-vector-retrieval.js",
       "role": "INTEGRATED_ADMISSIBLE_VECTOR_RUNTIME",
-      "sha256": "0fa708862a99ff1737ec934799c835002d6244bc0ba6c3e88a54fa54ef1dfc55"
+      "sha256": "93b46db98bb4a3be29bdfa1f20836c861f5ec5dc3d18eee4b5e170fc051ccfa0"
     },
     {
       "id": "admissible-vector-runner",
@@ -90,7 +528,7 @@
       "id": "authority-store",
       "path": "src/cloud/authority-store.js",
       "role": "PRIMARY_AUTHORITY_STORE",
-      "sha256": "843e110bf7c14f3c7ff8313429275e924b3855ab456b02915d178b7723c9e973"
+      "sha256": "7a645a30a891d5962184d2a5110bf5ee4602b485a4d1448aabae5dbab68b7891"
     },
     {
       "id": "aws-alternate-principal-denial-runner",
@@ -114,7 +552,7 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "d18dff59e753b7013ea5f612bcd85abf5964946440b7ed06b129ff353c4fa991"
+      "sha256": "40e76d0d1eb7358393f66391c9d5c7abd0445b2012e6572f67afc21c7dabd75b"
     },
     {
       "id": "aws-deployment-attestation",
@@ -198,7 +636,7 @@
       "id": "aws-provider-runtime",
       "path": "scripts/lib/aws-provider-runtime.js",
       "role": "AWS_ATTESTATION_PROVIDER_RUNTIME",
-      "sha256": "c0088da767c3429a9cca4f1599e529c0aa1ef9346279592722f6115c17ba30db"
+      "sha256": "755af11f2480bb45ed04330746770cdcbe157b05bda7193161165d11397248ca"
     },
     {
       "id": "aws-provider-runtime-loader",
@@ -246,7 +684,7 @@
       "id": "aws-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
       "role": "EXACT_CHECKOUT_READINESS_VERIFICATION",
-      "sha256": "9ba122781f46b4fc762281f1b0c17ed48f940f28f66031c632499d4643c2d97d"
+      "sha256": "ebe8a71809961b45b2b08a53deece4d49550799839a9fa67a0afdf682fcae046"
     },
     {
       "id": "aws-security-tests",
@@ -312,7 +750,7 @@
       "id": "database-security-bootstrap-tests",
       "path": "test/database-security-bootstrap.test.js",
       "role": "DATABASE_BOOTSTRAP_SECURITY_VERIFICATION",
-      "sha256": "05a5a38119bceba8ffa3f837f19a275f7603ec7728b203528fd866bfe4cb9180"
+      "sha256": "46461a9910e6ed0e4ac4b8d60f436d809b64c4494f5bb46587985eee530b653d"
     },
     {
       "id": "database-security-posture",
@@ -372,7 +810,7 @@
       "id": "dvi-reconciliation-tests",
       "path": "test/admissible-vector-retrieval.test.js",
       "role": "DVI_PREPARATION_RECONCILIATION_VERIFICATION",
-      "sha256": "598d6fd154cee5ef7fbb2f47aba43c23a76120d580c2ca1387a11b297520e226"
+      "sha256": "928a639c27ac5492d2e17c9f3b12c3de670797b138f2a7cb4bfd693dad5e7767"
     },
     {
       "id": "exact-git-source",
@@ -1008,13 +1446,13 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "3b671005ab48a5bbfb76b00c8963f7b188d31ff3df7fa72f9d8d9a996b181243"
+      "sha256": "bb98dbdab730abb4ed4f7632df18fdc65646fe3175220f25fbe68a472321af71"
     },
     {
       "id": "managed-mcp-client-tests",
       "path": "test/managed-mcp-client.test.js",
       "role": "RECOVERY_MCP_STRICT_TRANSPORT_VERIFICATION",
-      "sha256": "6a1a6c05e6e5baf0afc092daf562fbd0049c824eafe56db40ec0f77e4d231705"
+      "sha256": "7ccfe7729cb37afea6983b5ab45ab18c8c9cbd18212203dbc830b66cdc42b9b7"
     },
     {
       "id": "managed-mcp-recovery-grant-repair",
@@ -1026,13 +1464,247 @@
       "id": "primary-security-bootstrap",
       "path": "src/cloud/primary-security.js",
       "role": "PRIMARY_DATABASE_SECURITY",
-      "sha256": "3d6f1331875a58f5c1a99ec0fa00c6ec84e815cc8738ae41c2748582ace5e7f9"
+      "sha256": "14baf50701dc79c2e1f701af5aa8514068ea4df47cf310b6fe30c34271454aea"
     },
     {
       "id": "primary-security-runner",
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
       "sha256": "c4f9398a497efdd9edfff1da62a28afebb0318276221e40a0f468cd7cf4440c9"
+    },
+    {
+      "id": "private-recovery-query-approval-generator",
+      "path": "scripts/generate-private-recovery-query-approval.js",
+      "role": "PRIVATE_RECOVERY_QUERY_PROVIDER_BOUND_APPROVAL_GENERATOR",
+      "sha256": "c5c6c8a8ad64dedf4398d3228a5a6803783baf832be9d41617d4c43e5334d956"
+    },
+    {
+      "id": "private-recovery-query-approval-tests",
+      "path": "test/private-recovery-query-approval.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_APPROVAL_AND_WINDOW_VERIFICATION",
+      "sha256": "05de6ddd57abb0e3e05016da2445b0bac79112568361be670bedd982a14d7502"
+    },
+    {
+      "id": "private-recovery-query-aws-runtime",
+      "path": "src/cloud/private-recovery-query-aws-runtime.js",
+      "role": "PRIVATE_RECOVERY_QUERY_AWS_RUNTIME",
+      "sha256": "28c3cff1f455657eb93f4adf11f7d0a11981c84a86516f6eb650cdd5c5576ff4"
+    },
+    {
+      "id": "private-recovery-query-aws-store",
+      "path": "src/cloud/private-recovery-query-aws-store.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DURABLE_ONE_SHOT_STORE",
+      "sha256": "2f5e2ad1053e956ccbcb1e6a08d6ec9ab2a323db01e47ce67e0893294ba630c8"
+    },
+    {
+      "id": "private-recovery-query-bootstrap-role-stack",
+      "path": "infra/aws/private-recovery-query-bootstrap-role-stack.json",
+      "role": "PRIVATE_RECOVERY_QUERY_DEDICATED_DEPLOYMENT_BOUNDARY",
+      "sha256": "fdf8abc83bc0843170c774505d164cef5edbb0163e8219a3cd370bfcdf6dc41c"
+    },
+    {
+      "id": "private-recovery-query-bootstrap-tests",
+      "path": "test/private-recovery-query-bootstrap-role-stack.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_BOOTSTRAP_IAM_VERIFICATION",
+      "sha256": "81408da1dd69e354d547ddf2f03da270b6854ca69e669f355890d916ba307f71"
+    },
+    {
+      "id": "private-recovery-query-build",
+      "path": "scripts/build-private-recovery-query-lambda.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DETERMINISTIC_BUILD",
+      "sha256": "6ea73ddffe0f704058bc943df681946bdb46c022916d58120264cd905442ca87"
+    },
+    {
+      "id": "private-recovery-query-core",
+      "path": "src/cloud/private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_FIXED_MCP_RUNTIME_CONTRACT",
+      "sha256": "ae7521ba8cd9ee782d03b0d4c7742d810159622748351f2c1132b80e68731896"
+    },
+    {
+      "id": "private-recovery-query-core-tests",
+      "path": "test/private-recovery-query.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_RUNTIME_VERIFICATION",
+      "sha256": "3e8ea7802628334ce2f197e72b064f3e11abb88ae4b74c04e5df96d1468a8b0c"
+    },
+    {
+      "id": "private-recovery-query-deploy-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-deploy.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_DEPLOY_CALLER",
+      "sha256": "20507573ec177e2c8db50f399307a3019013d6f5e106681b61828db4b1ec2bd9"
+    },
+    {
+      "id": "private-recovery-query-deploy-preparer",
+      "path": "scripts/prepare-private-recovery-query-deployment.js",
+      "role": "PRIVATE_RECOVERY_QUERY_CREATE_ONLY_DEPLOYMENT_PREPARER",
+      "sha256": "d1a2be59a2aeb64dc4d2858a9c29a659a99f592555679709a6540f4f9d2ea820"
+    },
+    {
+      "id": "private-recovery-query-deploy-runner",
+      "path": "scripts/deploy-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_RESTART_CONVERGENT_DEPLOYMENT",
+      "sha256": "8de5e026bab325863a039ce4f1596ffca3784986d78b87e58bb2daa3f49969c9"
+    },
+    {
+      "id": "private-recovery-query-deploy-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_CREATE_ONLY_DEPLOYMENT",
+      "sha256": "8471f0f43da383011052e2cc7e6cf9a7e8c18e11653714e98a7b5d9b900c6d85"
+    },
+    {
+      "id": "private-recovery-query-evidence",
+      "path": "src/cloud/private-recovery-query-evidence.js",
+      "role": "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_CONTRACT",
+      "sha256": "96c9e81ed3fd589b6f42f33f036a6cc6bc1bce15d417affe6fab949db45cb18e"
+    },
+    {
+      "id": "private-recovery-query-evidence-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-evidence.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_EVIDENCE_CALLER",
+      "sha256": "5558a0898ae9686b07ee6507a4206da01ca354d153780bd3cf349c40df18df0b"
+    },
+    {
+      "id": "private-recovery-query-evidence-readback",
+      "path": "scripts/readback-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_PROVIDER_READBACK_COLLECTOR",
+      "sha256": "1c2b12148e0963c352303d129d2aa237b8cab7c33ce13d2574f2628ce2954302"
+    },
+    {
+      "id": "private-recovery-query-evidence-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-evidence.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_SIGNED_EVIDENCE",
+      "sha256": "31852e1eb1129efc27ef01f052afc4aa0c2f9af49dfe8f1003886655e8d2eea8"
+    },
+    {
+      "id": "private-recovery-query-evidence-tests",
+      "path": "test/private-recovery-query-evidence.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_VERIFICATION",
+      "sha256": "94547f9c0944cd2af96df189dc563014f8eaf6c784ef48a8517d628f2e8abff9"
+    },
+    {
+      "id": "private-recovery-query-deployment-state-tests",
+      "path": "test/private-recovery-query-deployment-state.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DEPLOYMENT_RESTART_VERIFICATION",
+      "sha256": "42e3c1898abac6c618926c37f02e425ce2b8ea6cc2c9002e225725695ed128ca"
+    },
+    {
+      "id": "private-recovery-query-lambda-entry",
+      "path": "infra/aws/lambda/private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_LAMBDA_ENTRY",
+      "sha256": "8ad55257d11fbfef6457a963f3d3c751280289f85d661529a6e7069c7309410c"
+    },
+    {
+      "id": "private-recovery-query-operator",
+      "path": "src/cloud/private-recovery-query-operator.js",
+      "role": "PRIVATE_RECOVERY_QUERY_ONE_SHOT_OPERATOR",
+      "sha256": "194bdeb7a7022d66fb834a9d8ed3c4e0b76c58aba81e6f429db5221d1e2b989e"
+    },
+    {
+      "id": "private-recovery-query-operator-aws",
+      "path": "src/cloud/private-recovery-query-operator-aws.js",
+      "role": "PRIVATE_RECOVERY_QUERY_AWS_EXACT_VERSION_INVOKER",
+      "sha256": "87478b947a559db0a440af843cb13d76e624974479ca116db7b0cd4e869423a0"
+    },
+    {
+      "id": "private-recovery-query-query-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-query.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_EXECUTION_CALLER",
+      "sha256": "ee4a79c9452703901a11181b0ad3eaaadd8a8d1255ef06bf24caeeb87adf6899"
+    },
+    {
+      "id": "private-recovery-query-query-runner",
+      "path": "scripts/run-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_EXECUTE_OR_RECONCILE_RUNNER",
+      "sha256": "c2cc4b9eaa5df002f9ea36bdd38b389f13506d0494ab199159e5626ad8f1c9e3"
+    },
+    {
+      "id": "private-recovery-query-query-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-query.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_EXECUTION",
+      "sha256": "74317638fe1438e621f3ff6fcdb9b22acc386ce1cd1580e694c77f237869d2be"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-secret-seal.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CALLER",
+      "sha256": "0b836b671ac1f29706a430409feb4b0e38f9894036fc77e94d4a5fd4774a0dc5"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-runner",
+      "path": "scripts/seal-private-recovery-query-secret.js",
+      "role": "PRIVATE_RECOVERY_QUERY_ONE_VERSION_SECRET_SEAL",
+      "sha256": "b4d0d1a201b7c9d4e0c5ef8cf500d601457bbfa044046f8936cae3d0ab7d2756"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_SECRET_SEAL",
+      "sha256": "4e0d6391f9c12372838d5c5e63ea68023e05a586cccf8fbecdccb6bc3e00e27b"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-tests",
+      "path": "test/private-recovery-query-secret-seal.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_SECRET_CUSTODY_VERIFICATION",
+      "sha256": "72965e6e0be9532b8c492672a6f215dce34bb23442230471dbaf3f161a94297c"
+    },
+    {
+      "id": "private-recovery-query-source-lock",
+      "path": "scripts/lib/private-recovery-source-lock.py",
+      "role": "PRIVATE_RECOVERY_QUERY_REUSABLE_WORKFLOW_SOURCE_LOCK",
+      "sha256": "58340e3362677848df88573675c5a2e31ed54f75595b177fcb5a7c2a1389608a"
+    },
+    {
+      "id": "private-recovery-query-source-lock-tests",
+      "path": "test/private-recovery-source-lock.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_REUSABLE_SOURCE_LOCK_VERIFICATION",
+      "sha256": "3bfe7fc7ed606d7049c357951e47a04c0e3d4e27dfde25e8b093e0ed39078657"
+    },
+    {
+      "id": "private-recovery-query-store-tests",
+      "path": "test/private-recovery-query-aws-store.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DURABLE_STORE_VERIFICATION",
+      "sha256": "f2775a6cd23d33eaf32c4a1e3d32b48401087b7b2b53357609c3a371860c2b81"
+    },
+    {
+      "id": "private-recovery-query-teardown-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-teardown.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_TEARDOWN_CALLER",
+      "sha256": "1e557a56d07f4e763abe6ed6501ecf8fd0ec3e7958a2183293d27ab7c9c6144b"
+    },
+    {
+      "id": "private-recovery-query-teardown-runner",
+      "path": "scripts/teardown-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_EVIDENCE_GATED_TEARDOWN",
+      "sha256": "f9494563923b2f89235cec2187dfb3ba833c01b8cc69d6687c085202481915ec"
+    },
+    {
+      "id": "private-recovery-query-teardown-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-teardown.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_TEARDOWN",
+      "sha256": "df68a34ae8c23e25dd43921e79aaf21ef4f2ea940659a012810a3ae9c9493c17"
+    },
+    {
+      "id": "private-recovery-query-teardown-tests",
+      "path": "test/private-recovery-query-teardown.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_TEARDOWN_VERIFICATION",
+      "sha256": "9ec45e8fb58419b18034701be792c62d22871283d53717386980634420aab119"
+    },
+    {
+      "id": "private-recovery-query-template",
+      "path": "src/cloud/private-recovery-query-template.js",
+      "role": "PRIVATE_RECOVERY_QUERY_MINI_STACK_SOURCE",
+      "sha256": "1bae17a5c27e792316cee0c6e9462b4a229b16930ee449abb28b00a3b172319c"
+    },
+    {
+      "id": "private-recovery-query-template-tests",
+      "path": "test/private-recovery-query-template.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_TEMPLATE_AND_WORKFLOW_VERIFICATION",
+      "sha256": "6fbad2ad0a18498f7368384b24939bb550424807d4937ec83ed2015d45e1c90c"
+    },
+    {
+      "id": "private-recovery-query-window-check",
+      "path": "scripts/check-private-recovery-query-window.js",
+      "role": "PRIVATE_RECOVERY_QUERY_REMAINING_WINDOW_GATE",
+      "sha256": "895f46900ee7b0d24a36d077aa4c777b903ad0d525f153be8458d0f0564522aa"
     },
     {
       "id": "provider-dispatch-control",
@@ -1164,7 +1836,7 @@
       "id": "recovery-security-bootstrap",
       "path": "src/cloud/recovery-security.js",
       "role": "RECOVERY_DATABASE_SECURITY",
-      "sha256": "4e3216d1c2c3017ca2c7834e7eed6d8aebef8f53a3771342c87bda79cd59c5c6"
+      "sha256": "1ad9aea35bafcae349332808218e0bb30b453d2e42b3bb5cce115ab9203c4c08"
     },
     {
       "id": "recovery-audit-reconciliation-tests",
@@ -1176,7 +1848,7 @@
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
       "role": "RECOVERY_BROKER_RUNTIME",
-      "sha256": "a082914bcb63ea74945732144d31079d2be93b448a2754eb93927cd2ea49e114"
+      "sha256": "5ce9dfcc4907b96b403d32deb8b3c61ac8d0daf3b3a3ecf4b6bb88b4570f7cd2"
     },
     {
       "id": "recovery-broker-tests",
@@ -1230,7 +1902,7 @@
       "id": "recovery-publisher-key-tests",
       "path": "test/recovery-publisher-key.test.js",
       "role": "RECOVERY_PUBLISHER_TRUST_ROOT_VERIFICATION",
-      "sha256": "84103f0e7f8ff499ca00fdeb6778427c279096dc968857ffbed723c9984f046e"
+      "sha256": "16eb6b2868ecbfb08ab35aa4f79d986688e0081281bebe1fed9a03015099d363"
     },
     {
       "id": "recovery-publisher-schema-repair",
@@ -1291,12 +1963,6 @@
       "path": "src/cloud/strict-json.js",
       "role": "STRICT_JSON_DUPLICATE_MEMBER_REJECTION",
       "sha256": "9406ba23f88b4653c58fc33d53454e61156548c76cb426b06eac46247e4532ec"
-    },
-    {
-      "id": "synthetic-authority-proposal",
-      "path": "scripts/lib/synthetic-authority-proposal.js",
-      "role": "SYNTHETIC_AUTHORITY_PROPOSAL_FIXTURE",
-      "sha256": "ce9b3931483279c350e16fd3ca4bffb758a20b2efe0520c57b65bf403688bdee"
     }
   ],
   "finalReleaseReady": false

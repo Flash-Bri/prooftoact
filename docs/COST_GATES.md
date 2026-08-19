@@ -7,9 +7,8 @@ requires new approval.
 ## Expected contest-period cost
 
 Target architecture: CockroachDB Basic, AWS Lambda, API Gateway, bounded
-Bedrock calls, one project-owned Secrets Manager credential for the
-least-privilege CockroachDB authorizer, a bundled signed-out read-only demo,
-and short-retention CloudWatch logs.
+Bedrock calls, the exact retained Secrets Manager posture below, a bundled
+signed-out read-only demo, and short-retention CloudWatch logs.
 
 - Local scaffold and tests: **$0**
 - Low case with applicable free allowances: **$0–$3**
@@ -20,8 +19,11 @@ and short-retention CloudWatch logs.
   `tideproof.net` registration
 - Remaining total-project envelope before AWS or any other new spend:
   **$13.14**
-- CockroachDB: two Basic clusters, each configured with a **$5 monthly cap**,
-  currently covered by trial credit
+- Private-recovery CockroachDB: one Basic cluster capped at **$1.50 per
+  month**. Any legacy or separately retained cluster remains outside this
+  lane's forecast until an exact provider inventory prices it.
+- The A1/A2 retained activation posture is separately bounded to **$5.00 per
+  month** as detailed below. It is not yet authorized for activation.
 
 The domain purchase is a sunk project cost and is included in the $25 total
 ceiling. Auto-renew is owner-reported as disabled. The sanitized owner record
@@ -34,6 +36,28 @@ is strictly below **$13.14**. It separately requires the recorded non-AWS spend
 plus observed AWS spend plus that allowance to remain strictly below **$25**.
 An observation at exactly **$13.12** therefore fails, and any later non-AWS
 expense reduces the effective AWS ceiling dollar for dollar.
+
+## A1/A2 retained activation posture
+
+Status: **AUTHORIZATION REQUESTED BUT NOT EVIDENCED AS APPROVED**. Activation
+must remain blocked until the owner explicitly authorizes this exact monthly
+maximum. The authorization is requested but not evidenced as approved.
+
+- A1 retains exactly seven Secrets Manager secrets: `admin`, `auditor`,
+  `cloudApi`, `credential`, `mcp`, `publisher`, and `signer`. All seven remain
+  required by the reviewed custody and proof design; this cost record does not
+  authorize deleting any of them.
+- A2 retains one additional secret, for **8 retained Secrets Manager secrets**
+  in total.
+- Eight secrets at **$0.40 per secret-month** are estimated at **$3.20**.
+- The retained CockroachDB Basic cluster is capped at **$1.50** per month.
+- Explicit contingency headroom is **$0.30**.
+- Exact arithmetic: **$3.20 + $1.50 + $0.30 = $5.00 per month**.
+
+This is a conservative monthly ceiling, not an observed invoice or a claim
+that trial credits will apply. The public OSS lifecycle is cost-neutral:
+publishing or retaining source code adds **$0.00** to this monthly posture and
+does not change the live-resource authorization boundary.
 
 Price inputs checked on 2026-07-29:
 
@@ -51,6 +75,41 @@ Sources:
 - https://aws.amazon.com/lambda/pricing/
 - https://aws.amazon.com/api-gateway/pricing/
 - https://aws.amazon.com/bedrock/pricing/
+
+## Private recovery lane retained-cost posture
+
+The private AWS-to-Managed-MCP recovery lane has a narrower recurring-cost
+forecast that is source-bound here but is not yet provider-observed or
+authorized for activation:
+
+- A1 defines seven retained Secrets Manager secrets and A2 defines one, for
+  eight retained secrets before any separately governed cleanup. At the
+  current planning input of **$0.40 per secret-month**, that is **$3.20 per
+  month**.
+- One CockroachDB Basic cluster is capped at **$1.50 per month**.
+- The recurring base before cleanup is therefore **$4.70 per month**. A
+  proposed **$5.00 monthly** private-recovery ceiling would leave only
+  **$0.30** for bounded Lambda calls, one-day CloudWatch logs, DynamoDB and
+  Secrets Manager requests, and retained S3 object storage. That proposed
+  ceiling remains pending explicit authorization and fresh provider price
+  readback; it is not granted by this document.
+- The application stack owns one 256 MiB Lambda with reserved concurrency one
+  and one one-day log group. Governed teardown deletes that exact stack and
+  log group only after signed POST evidence and a durable terminal receipt.
+- Deployment stores one content-addressed, versioned ZIP in the retained
+  artifact bucket. Application-stack teardown does not delete that object
+  version. The bucket expires noncurrent versions after 45 days, but a current
+  version can remain and must be included in observed variable spend.
+- The A2 Managed MCP secret is intentionally retained by its bootstrap stack.
+  The seven A1 secrets likewise remain retained unless an independent,
+  reviewed deletion workflow produces exact deletion and absence receipts.
+  Only after those seven receipts exist does the modeled recurring base fall
+  to **$1.90 per month**: one A2 secret plus the CockroachDB Basic cap. That is
+  a conditional target, not the current source-proven posture.
+
+Open-source users supply and pay for their own AWS and CockroachDB accounts,
+credentials, protected environments, and provider usage. The repository does
+not provide shared paid-service access or a public provider proxy.
 
 ## Operator stop conditions
 
@@ -71,9 +130,10 @@ Stop new cloud work and investigate if:
 ## Controls before first deployment
 
 1. Confirm official price inputs for the selected region and Bedrock model.
-   Recheck and include one Secrets Manager secret plus its bounded read calls
-   in the conservative forecast before creating it; the local template does
-   not create or price that external secret.
+   Recheck the exact eight-secret retained posture and its bounded read calls
+   in the conservative forecast. The local Gate Two template's one secret is
+   only one member of the combined A1/A2 posture; the remaining retained
+   secrets are external custody prerequisites.
 2. Create project-specific least-privilege identities; never reuse OpenClaw
    OAuth or another product credential.
 3. Update the prerequisite bootstrap stack first and verify its account-wide

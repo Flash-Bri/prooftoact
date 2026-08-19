@@ -9,6 +9,8 @@ import {
   assertBootstrapContract,
   assertBudgetReceipt,
   assertGate2TemplateContract,
+  assertPrivateRecoveryBootstrapCostContract,
+  assertPrivateRecoveryStackCostContract,
   validateReleaseCostReceipt,
   validateManifest,
   verifyReleaseCost
@@ -24,6 +26,9 @@ function fixtureManifest(overrides = {}) {
     reviewedOn: "2026-07-31",
     claimBoundary: "Fixture current-source cost boundary.",
     limits: { ...__test.EXPECTED_LIMITS },
+    retainedMonthlyCost: structuredClone(
+      __test.EXPECTED_RETAINED_MONTHLY_COST
+    ),
     budgetAlerts: structuredClone(__test.EXPECTED_BUDGET_ALERTS),
     forbiddenResourceTypes: [...__test.EXPECTED_FORBIDDEN_RESOURCE_TYPES],
     unapprovedPurchaseClasses: [
@@ -53,7 +58,7 @@ test("current source cost guards match the reviewed non-final boundary", () => {
   const receipt = verifyReleaseCost({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_COST_GUARDS_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 16);
+  assert.equal(receipt.surfaceCount, 26);
   assert.equal(receipt.budgetAlertCount, 4);
   assert.equal(receipt.forbiddenResourceTypeCount, 5);
   assert.equal(receipt.unapprovedPurchaseClassCount, 5);
@@ -84,6 +89,27 @@ test("cost manifest binds the bounded OIDC preflight lane", () => {
   ]) {
     assert.equal(surfaces[id]?.path, path);
   }
+});
+
+test("cost manifest binds the complete executable B0/A1 cost lane", () => {
+  const expected = {
+    "b0-a1-human-authorization-contract":
+      "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+    "b0-a1-human-authorization-tests":
+      "test/prooftoact-b0-a1-human-authorization.test.js",
+    "one-time-bootstrap-authority-plan":
+      "scripts/prepare-one-time-bootstrap-authority.js",
+    "one-time-bootstrap-authority-tests":
+      "test/one-time-bootstrap-authority.test.js",
+    "one-time-bootstrap-ceremony-runner":
+      "scripts/run-one-time-bootstrap-ceremony.js",
+    "one-time-bootstrap-ceremony-runner-tests":
+      "test/run-one-time-bootstrap-ceremony.test.js"
+  };
+  const actual = Object.fromEntries(Object.entries(__test.EXPECTED_SURFACES)
+    .filter(([id]) => Object.hasOwn(expected, id))
+    .map(([id, surface]) => [id, surface.path]));
+  assert.deepEqual(actual, expected);
 });
 
 test("cost receipt contract is shared and rejects stale surface counts", () => {
@@ -149,6 +175,20 @@ test("cost manifest rejects final approval, arithmetic drift, or surface drift",
     () => validateManifest(changedSurface),
     /RELEASE_COST_MANIFEST_SURFACE/
   );
+
+  for (const mutate of [
+    (posture) => { posture.totalRetainedSecretCount = 7; },
+    (posture) => { posture.secretsManagerMonthlyEstimateUsd = 2.8; },
+    (posture) => { posture.maximumMonthlyExposureUsd = 5.01; },
+    (posture) => { posture.activationBlockedUntilAuthorization = false; }
+  ]) {
+    const changedPosture = fixtureManifest();
+    mutate(changedPosture.retainedMonthlyCost);
+    assert.throws(
+      () => validateManifest(changedPosture),
+      /RELEASE_COST_MANIFEST_BOUNDARY/
+    );
+  }
 });
 
 test("bootstrap contract rejects a weakened budget or alert", () => {
@@ -200,6 +240,35 @@ test("Gate Two template contract rejects fixed-charge or expanded runtime resour
   assert.throws(
     () => assertGate2TemplateContract(expanded),
     /RELEASE_COST_GATE2_FUNCTION_DemoFunction/
+  );
+});
+
+test("private recovery forecast binds retained secret, bounded runtime, and one-day logs", async () => {
+  const bootstrap = readJson(
+    "infra/aws/private-recovery-query-bootstrap-role-stack.json"
+  );
+  assert.equal(assertPrivateRecoveryBootstrapCostContract(bootstrap), true);
+  const { buildPrivateRecoveryQueryTemplate } = await import(
+    "../src/cloud/private-recovery-query-template.js"
+  );
+  const stack = buildPrivateRecoveryQueryTemplate();
+  assert.equal(assertPrivateRecoveryStackCostContract(stack), true);
+
+  const extraSecret = structuredClone(bootstrap);
+  extraSecret.Resources.UnreviewedSecret = {
+    Type: "AWS::SecretsManager::Secret",
+    Properties: { Name: "unreviewed" }
+  };
+  assert.throws(
+    () => assertPrivateRecoveryBootstrapCostContract(extraSecret),
+    /RELEASE_COST_PRIVATE_RECOVERY_SECRET_COUNT/
+  );
+
+  const longLogs = structuredClone(stack);
+  longLogs.Resources.PrivateRecoveryLogGroup.Properties.RetentionInDays = 30;
+  assert.throws(
+    () => assertPrivateRecoveryStackCostContract(longLogs),
+    /RELEASE_COST_PRIVATE_RECOVERY_LOG_POSTURE/
   );
 });
 

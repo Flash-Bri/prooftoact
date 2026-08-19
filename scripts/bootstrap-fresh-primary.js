@@ -7,12 +7,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/prooftoact.git";
 const DATABASE_NAME = "tideproof";
+const FRESH_BOOTSTRAP_USERNAME = "prooftoact_bootstrap_admin";
+const FRESH_SQL_PORT = "26257";
 const TRUSTED_GIT = "/usr/bin/git";
 const FRESH_DATABASES = Object.freeze(["defaultdb", "postgres", "system"]);
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const COCKROACH_SQL_CLUSTER_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const STATEFUL_TRANSITION_JOURNAL = Symbol(
   "prooftoact.stateful-transition-journal"
 );
@@ -20,6 +24,17 @@ const PREIMPORT_BOUND_FILES = Object.freeze([
   "package-lock.json",
   "package.json",
   "scripts/bootstrap-fresh-primary.js",
+  "scripts/fresh-cluster-aws-provider.js",
+  "scripts/fresh-cluster-aws-runtime.js",
+  "scripts/fresh-cluster-cloud-controller.js",
+  "scripts/fresh-cluster-execution-runtime.js",
+  "scripts/fresh-cluster-provider-controller.js",
+  "scripts/fresh-primary-aws-provider.js",
+  "scripts/fresh-primary-aws-runtime.js",
+  "scripts/fresh-primary-provider-controller.js",
+  "scripts/run-fresh-primary-provider.js",
+  "scripts/run-fresh-cluster-provider.js",
+  "scripts/lib/fresh-recovery-publisher-key.js",
   "scripts/gate2-aws-readiness.js",
   "scripts/lib/dependency-snapshot.js",
   "scripts/lib/exact-git-source.js",
@@ -156,14 +171,10 @@ export function validateFreshPrimaryCredentialBundle(value) {
   requireCondition(
     exactKeys(value, [
       "passwords",
-      "recoveryPublisherKeySetDigest",
-      "recoveryPublisherTrustRootCommitment",
       "schemaVersion"
     ]) &&
-      value.schemaVersion === "prooftoact.fresh-primary-credentials.v1" &&
-      exactKeys(value.passwords, FRESH_PRIMARY_RUNTIME_USERS) &&
-      HEX_64.test(value.recoveryPublisherKeySetDigest ?? "") &&
-      HEX_64.test(value.recoveryPublisherTrustRootCommitment ?? ""),
+      value.schemaVersion === "prooftoact.fresh-primary-credentials.v2" &&
+      exactKeys(value.passwords, FRESH_PRIMARY_RUNTIME_USERS),
     code
   );
   const passwords = Object.values(value.passwords);
@@ -178,10 +189,7 @@ export function validateFreshPrimaryCredentialBundle(value) {
   );
   return Object.freeze({
     schemaVersion: value.schemaVersion,
-    passwords: Object.freeze({ ...value.passwords }),
-    recoveryPublisherKeySetDigest: value.recoveryPublisherKeySetDigest,
-    recoveryPublisherTrustRootCommitment:
-      value.recoveryPublisherTrustRootCommitment
+    passwords: Object.freeze({ ...value.passwords })
   });
 }
 
@@ -250,9 +258,16 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
       "database",
       "expectedClusterId",
       "expiresAt",
+      "maximumReservedExecutionMinutes",
       "maximumProjectedTotalUsd",
       "oneShot",
       "operationId",
+      "outerApprovalExpiresAt",
+      "outerAuthenticationReceiptSha256",
+      "outerCommandSha256",
+      "outerReservedAt",
+      "outerReservationAcknowledgedAt",
+      "outerReservationReceiptSha256",
       "partialFailureDisposition",
       "schemaVersion",
       "sourceCommit",
@@ -263,12 +278,17 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
         "clusterHostSha256",
         "credentialSealReceiptSha256",
         "operationId",
+        "outerAuthenticationReceiptSha256",
+        "outerCommandSha256",
+        "outerReservedAt",
+        "outerReservationAcknowledgedAt",
+        "outerReservationReceiptSha256",
         "sourceCommit",
         "treeDigest"
       ]) &&
-      value.schemaVersion === "prooftoact.fresh-primary-approval.v1" &&
+      value.schemaVersion === "prooftoact.fresh-primary-approval.v2" &&
       value.status === "APPROVED" &&
-      value.action === "CREATE_ONE_FRESH_PRIMARY" &&
+      value.action === "BOOTSTRAP_ONE_BOUND_FRESH_PRIMARY" &&
       value.approvedBy === "BRIAN_SMITH" &&
       value.oneShot === true &&
       value.database === DATABASE_NAME &&
@@ -278,10 +298,22 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
       value.clusterHostSha256 === binding.clusterHostSha256 &&
       value.credentialSealReceiptSha256 ===
         binding.credentialSealReceiptSha256 &&
+      value.outerReservationReceiptSha256 ===
+        binding.outerReservationReceiptSha256 &&
+      value.outerAuthenticationReceiptSha256 ===
+        binding.outerAuthenticationReceiptSha256 &&
+      value.outerCommandSha256 === binding.outerCommandSha256 &&
+      value.outerReservedAt === binding.outerReservedAt &&
+      value.outerReservationAcknowledgedAt ===
+        binding.outerReservationAcknowledgedAt &&
       UUID.test(value.approvalId ?? "") &&
-      UUID.test(value.expectedClusterId ?? "") &&
+      COCKROACH_SQL_CLUSTER_ID.test(value.expectedClusterId ?? "") &&
       HEX_64.test(value.clusterHostSha256 ?? "") &&
       HEX_64.test(value.credentialSealReceiptSha256 ?? "") &&
+      HEX_64.test(value.outerReservationReceiptSha256 ?? "") &&
+      HEX_64.test(value.outerAuthenticationReceiptSha256 ?? "") &&
+      HEX_64.test(value.outerCommandSha256 ?? "") &&
+      value.maximumReservedExecutionMinutes === 45 &&
       Number.isFinite(value.maximumProjectedTotalUsd) &&
       value.maximumProjectedTotalUsd >= 0 &&
       value.maximumProjectedTotalUsd <= 12 &&
@@ -290,18 +322,35 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
       value.partialFailureDisposition ===
         "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD" &&
       typeof value.approvedAt === "string" &&
-      typeof value.expiresAt === "string",
+      typeof value.expiresAt === "string" &&
+      typeof value.outerApprovalExpiresAt === "string",
     code
   );
   const approvedAt = Date.parse(value.approvedAt);
   const expiresAt = Date.parse(value.expiresAt);
+  const outerApprovalExpiresAt = Date.parse(value.outerApprovalExpiresAt);
+  const outerReservationAcknowledgedAt = Date.parse(
+    value.outerReservationAcknowledgedAt
+  );
   requireCondition(
     Number.isFinite(now) &&
       Number.isFinite(approvedAt) &&
       Number.isFinite(expiresAt) &&
+      Number.isFinite(outerApprovalExpiresAt) &&
+      Number.isFinite(outerReservationAcknowledgedAt) &&
+      value.approvedAt === new Date(approvedAt).toISOString() &&
+      value.expiresAt === new Date(expiresAt).toISOString() &&
+      value.outerApprovalExpiresAt ===
+        new Date(outerApprovalExpiresAt).toISOString() &&
+      value.outerReservedAt === value.approvedAt &&
+      value.outerReservationAcknowledgedAt ===
+        new Date(outerReservationAcknowledgedAt).toISOString() &&
+      approvedAt <= outerReservationAcknowledgedAt &&
+      outerReservationAcknowledgedAt < outerApprovalExpiresAt &&
+      approvedAt < outerApprovalExpiresAt &&
       approvedAt <= now &&
       now < expiresAt &&
-      expiresAt - approvedAt <= 60 * 60 * 1000,
+      expiresAt - approvedAt === 45 * 60 * 1000,
     code
   );
   return Object.freeze({ ...value });
@@ -317,10 +366,10 @@ export function validateFreshClusterAdminConnectionString(value) {
   }
   requireCondition(
     ["postgres:", "postgresql:"].includes(parsed.protocol) &&
-      parsed.username.length > 0 &&
+      decodeURIComponent(parsed.username) === FRESH_BOOTSTRAP_USERNAME &&
       parsed.password.length > 0 &&
       parsed.hostname.endsWith(".cockroachlabs.cloud") &&
-      /^[1-9][0-9]{0,4}$/u.test(parsed.port) &&
+      parsed.port === FRESH_SQL_PORT &&
       ["/defaultdb", "/postgres"].includes(parsed.pathname) &&
       parsed.hash === "" &&
       [...parsed.searchParams.keys()].join("\n") === "sslmode" &&
@@ -344,6 +393,59 @@ function rowValue(row, names) {
   return null;
 }
 
+function normalizedShowUsersArray(value) {
+  let items;
+  if (Array.isArray(value)) {
+    items = value;
+  } else if (value === "{}") {
+    items = [];
+  } else if (typeof value === "string" && /^\{[^{}]*\}$/u.test(value)) {
+    items = value.slice(1, -1).split(",").filter((item) => item !== "");
+  } else {
+    reject("FRESH_PRIMARY_SHOW_USERS_POSTURE_REJECTED");
+  }
+  requireCondition(items.every((item) => typeof item === "string" &&
+    /^[A-Za-z_][A-Za-z0-9_=-]{0,127}$/u.test(item)) &&
+    new Set(items).size === items.length,
+  "FRESH_PRIMARY_SHOW_USERS_POSTURE_REJECTED");
+  return Object.freeze([...items].sort());
+}
+
+function validateFreshPreflightPrincipalPosture(rows, bootstrapPrincipal) {
+  const posture = rows.map((row) => Object.freeze({
+    roleName: rowValue(row, ["username", "user_name", "name"]),
+    options: normalizedShowUsersArray(row.options),
+    memberOf: normalizedShowUsersArray(row.member_of)
+  })).sort((left, right) => left.roleName.localeCompare(right.roleName));
+  const expectedNames = ["admin", bootstrapPrincipal, "root"].sort();
+  const byName = new Map(posture.map((row) => [row.roleName, row]));
+  requireCondition(
+    posture.length === expectedNames.length &&
+      JSON.stringify(posture.map(({ roleName }) => roleName)) ===
+        JSON.stringify(expectedNames) &&
+      JSON.stringify(byName.get("admin")?.options) === JSON.stringify([]) &&
+      JSON.stringify(byName.get("admin")?.memberOf) === JSON.stringify([]) &&
+      JSON.stringify(byName.get("root")?.options) === JSON.stringify([]) &&
+      JSON.stringify(byName.get("root")?.memberOf) ===
+        JSON.stringify(["admin"]) &&
+      JSON.stringify(byName.get(bootstrapPrincipal)?.options) ===
+        JSON.stringify([]) &&
+      JSON.stringify(byName.get(bootstrapPrincipal)?.memberOf) ===
+        JSON.stringify(["admin"]),
+    "FRESH_PRIMARY_SHOW_USERS_POSTURE_REJECTED"
+  );
+  return Object.freeze({
+    schemaVersion: "prooftoact.fresh-primary-preflight-principal-posture.v1",
+    status: "EXACT_SHOW_USERS_PRESTATE",
+    builtinAdminRolePresent: true,
+    exactPrincipalCount: posture.length,
+    fullPrincipalCensusSha256: sha256(canonicalBytes(posture)),
+    rootCanLogin: true,
+    rootOptions: Object.freeze([]),
+    rootOptionsSha256: sha256(canonicalBytes([]))
+  });
+}
+
 export function freshPrimaryIntent({
   approvalId,
   expectedClusterId,
@@ -354,7 +456,7 @@ export function freshPrimaryIntent({
 }) {
   requireCondition(
     UUID.test(approvalId ?? "") &&
-      UUID.test(expectedClusterId ?? "") &&
+      COCKROACH_SQL_CLUSTER_ID.test(expectedClusterId ?? "") &&
       UUID.test(operationId ?? "") &&
       HEX_40.test(sourceCommit ?? "") &&
       HEX_40.test(treeDigest ?? "") &&
@@ -429,6 +531,7 @@ async function runFreshPrimaryBootstrap({
   discardAdminCredential,
   localCredentialDiscarded,
   operationId,
+  recoveryPublisherTrustRoot,
   runtimeDatabaseConfig,
   sourceCommit,
   transitionJournal,
@@ -447,6 +550,20 @@ async function runFreshPrimaryBootstrap({
     "FRESH_PRIMARY_BOUND_DEPENDENCIES_REJECTED"
   );
   const bundle = validateFreshPrimaryCredentialBundle(credentialBundle);
+  requireCondition(
+    exactKeys(recoveryPublisherTrustRoot, [
+      "publisherKeyIdSha256",
+      "publisherKeySetDigest",
+      "signerSecretArnSha256",
+      "signerSecretSealReceiptSha256",
+      "signerSecretValueSha256",
+      "signerSecretVersionIdSha256",
+      "trustRootCommitment",
+      "trustRootJsonSha256"
+    ]) && Object.values(recoveryPublisherTrustRoot).every((value) =>
+      HEX_64.test(value ?? "")),
+    "FRESH_PRIMARY_RECOVERY_PUBLISHER_TRUST_ROOT_REJECTED"
+  );
   requireCondition(
     HEX_64.test(credentialBundleRawSha256 ?? "") &&
       HEX_64.test(credentialBundleSha256 ?? "") &&
@@ -467,6 +584,14 @@ async function runFreshPrimaryBootstrap({
     clusterHostSha256: admin.hostSha256,
     credentialSealReceiptSha256: sha256(canonicalBytes(seal)),
     operationId,
+    outerAuthenticationReceiptSha256:
+      approval?.outerAuthenticationReceiptSha256,
+    outerCommandSha256: approval?.outerCommandSha256,
+    outerReservedAt: approval?.outerReservedAt,
+    outerReservationAcknowledgedAt:
+      approval?.outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256:
+      approval?.outerReservationReceiptSha256,
     sourceCommit,
     treeDigest
   }, approvalNow);
@@ -489,6 +614,7 @@ async function runFreshPrimaryBootstrap({
   let phase = "PREFLIGHT_NOT_STARTED";
   let clusterId;
   let serverVersion;
+  let preflightPrincipalPosture;
   let adminCredentialDiscarded = false;
   const transition = (phaseName, payload) =>
     transitionJournal.record(phaseName, payload);
@@ -530,15 +656,9 @@ async function runFreshPrimaryBootstrap({
     );
 
     const usersResult = await adminClient.query("SHOW USERS");
-    const users = usersResult.rows.map((row) =>
-      rowValue(row, ["username", "user_name", "name"])
-    );
-    const expectedUsers = admin.username === "root"
-      ? ["root"]
-      : ["root", admin.username];
-    requireCondition(
-      exactStringSet(users, expectedUsers),
-      "FRESH_PRIMARY_PRINCIPAL_CENSUS_REJECTED"
+    preflightPrincipalPosture = validateFreshPreflightPrincipalPosture(
+      usersResult.rows,
+      admin.username
     );
 
     for (const database of ["defaultdb", "postgres"]) {
@@ -553,7 +673,10 @@ async function runFreshPrimaryBootstrap({
       clusterIdSha256: sha256(clusterId),
       databaseCensusSha256: sha256(canonicalBytes(databases.sort())),
       mutationDispatched: false,
-      principalCensusSha256: sha256(canonicalBytes(users.sort()))
+      principalCensusSha256:
+        preflightPrincipalPosture.fullPrincipalCensusSha256,
+      preflightPrincipalPostureSha256:
+        sha256(canonicalBytes(preflightPrincipalPosture))
     });
 
     phase = "ADMIN_CREDENTIAL_DISCARDING";
@@ -603,14 +726,16 @@ async function runFreshPrimaryBootstrap({
       adminConnectionString: admin.connectionString,
       passwords: bundle.passwords,
       recoveryPublisherTrustRootCommitment:
-        bundle.recoveryPublisherTrustRootCommitment,
-      recoveryPublisherKeySetDigest: bundle.recoveryPublisherKeySetDigest
+        recoveryPublisherTrustRoot.trustRootCommitment,
+      recoveryPublisherKeySetDigest:
+        recoveryPublisherTrustRoot.publisherKeySetDigest
     });
     requireCondition(
       exactKeys(bootstrapResult, [
         "clusterFinalPostureDigest",
         "clusterPreflightPostureDigest",
         "finalPostureDigest",
+        "principalLoginPosture",
         "preflightPostureDigest",
         "roles"
       ]) &&
@@ -622,6 +747,44 @@ async function runFreshPrimaryBootstrap({
         ].every((digest) => HEX_64.test(digest ?? "")),
       "FRESH_PRIMARY_BOOTSTRAP_RESULT_REJECTED"
     );
+    requireCondition(exactKeys(bootstrapResult.principalLoginPosture, [
+      "builtinAdminOptionsSha256", "builtinAdminRolePresent",
+      "bootstrapPrincipal",
+      "bootstrapPrincipalCanLogin", "bootstrapPrincipalOptionsSha256",
+      "capabilityNoLoginCount", "databaseObservedAt", "exactPrincipalCount",
+      "fullPrincipalCensusSha256", "immutableBuiltinAdminRoleExceptionPresent",
+      "rootCanLogin", "rootMemberOfSha256", "rootNoLoginProvedFromShowUsers",
+      "rootOptions", "rootOptionsSha256", "runtimeLoginCount",
+      "schemaVersion", "status"
+    ]) && bootstrapResult.principalLoginPosture.schemaVersion ===
+        "prooftoact.primary-principal-login-posture.v2" &&
+      bootstrapResult.principalLoginPosture.status ===
+        "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE" &&
+      bootstrapResult.principalLoginPosture.bootstrapPrincipal ===
+        admin.username &&
+      bootstrapResult.principalLoginPosture.bootstrapPrincipalCanLogin ===
+        true && bootstrapResult.principalLoginPosture.rootCanLogin === false &&
+      bootstrapResult.principalLoginPosture.rootNoLoginProvedFromShowUsers ===
+        true &&
+      bootstrapResult.principalLoginPosture.builtinAdminRolePresent === true &&
+      bootstrapResult.principalLoginPosture
+        .immutableBuiltinAdminRoleExceptionPresent === true &&
+      JSON.stringify(bootstrapResult.principalLoginPosture.rootOptions) ===
+        JSON.stringify(["NOLOGIN"]) &&
+      bootstrapResult.principalLoginPosture.runtimeLoginCount ===
+        FRESH_PRIMARY_RUNTIME_USERS.length &&
+      bootstrapResult.principalLoginPosture.capabilityNoLoginCount === 15 &&
+      bootstrapResult.principalLoginPosture.exactPrincipalCount === 32 &&
+      [
+        bootstrapResult.principalLoginPosture.builtinAdminOptionsSha256,
+        bootstrapResult.principalLoginPosture.bootstrapPrincipalOptionsSha256,
+        bootstrapResult.principalLoginPosture.fullPrincipalCensusSha256,
+        bootstrapResult.principalLoginPosture.rootMemberOfSha256,
+        bootstrapResult.principalLoginPosture.rootOptionsSha256
+      ].every((value) => HEX_64.test(value ?? "")) &&
+      Number.isFinite(Date.parse(
+        bootstrapResult.principalLoginPosture.databaseObservedAt)),
+    "FRESH_PRIMARY_LOGIN_POSTURE_REJECTED");
     validateManagedRoleResult(bootstrapResult.roles);
     phase = "SECURITY_BOOTSTRAPPED";
     await transition(phase, {
@@ -697,7 +860,7 @@ async function runFreshPrimaryBootstrap({
   }
 
   return Object.freeze({
-    schemaVersion: "prooftoact.fresh-primary-bootstrap-receipt.v2",
+    schemaVersion: "prooftoact.fresh-primary-bootstrap-receipt.v3",
     status: "PASS",
     approvalId: acceptedApproval.approvalId,
     operationId,
@@ -710,8 +873,15 @@ async function runFreshPrimaryBootstrap({
       credentialBundleSha256,
       localCopyDiscardedBeforeMutation: true,
       callerSuppliedSealReceiptSha256: sha256(canonicalBytes(seal)),
+      recoveryPublisher: Object.freeze({ ...recoveryPublisherTrustRoot }),
       providerReadbackAuthenticatedByThisModule: false,
-      providerRevocationValidatedByThisModule: false
+      providerRevocationValidatedByThisModule: false,
+      rootCredentialLifecycle: Object.freeze({
+        connectionStringCreated: false,
+        connectionStringUsed: false,
+        passwordCreated: false,
+        secretStored: false
+      })
     }),
     provider: Object.freeze({
       database: DATABASE_NAME,
@@ -723,6 +893,10 @@ async function runFreshPrimaryBootstrap({
     preflight: Object.freeze({
       exactDatabaseCensus: FRESH_DATABASES,
       managedPrincipalCount: 0,
+      principalPosture: preflightPrincipalPosture,
+      principalPostureSha256: sha256(canonicalBytes(
+        preflightPrincipalPosture
+      )),
       userTableCount: 0
     }),
     bootstrap: Object.freeze({
@@ -732,7 +906,10 @@ async function runFreshPrimaryBootstrap({
         bootstrapResult.clusterPreflightPostureDigest,
       clusterFinalPostureDigest: bootstrapResult.clusterFinalPostureDigest,
       managedRoleCount: bootstrapResult.roles.length,
-      managedRoleSetSha256: sha256(canonicalBytes([...MANAGED_PRINCIPALS].sort()))
+      managedRoleSetSha256: sha256(canonicalBytes([...MANAGED_PRINCIPALS].sort())),
+      principalLoginPosture: bootstrapResult.principalLoginPosture,
+      principalLoginPostureSha256:
+        sha256(canonicalBytes(bootstrapResult.principalLoginPosture))
     }),
     postflight: Object.freeze({
       databaseTime: identity.database_now,
@@ -743,7 +920,204 @@ async function runFreshPrimaryBootstrap({
     partialFailureDisposition:
       "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD",
     claimBoundary:
-      "This receipt proves one caller-supplied fresh-cluster census, one exact managed-principal bootstrap result, local credential-file discard, and one least-privilege Gate Two runtime identity check for the bound source and dependency closure. This module structurally binds but does not independently authenticate a Secrets Manager receipt/readback or validate provider revocation. Provider execution remains HOLD until the separate controller performs those provider checks, exact change-set binding, IAM and cost census, one-shot execution approval, and partial-failure reconciliation. It does not prove DVI execution, Lambda deployment or overlap, Managed MCP, an integrated live drill, public availability, teardown, or final release acceptance."
+      "This receipt proves one caller-supplied fresh-cluster census, the exact complete SHOW USERS prestate, one exact 32-row SHOW USERS post-bootstrap posture with root plus 15 ProofToAct capability roles set NOLOGIN and 14 runtime users LOGIN, no ProofToAct root password, secret, or connection string created or used, local credential-file discard, a separately sealed fresh recovery-publisher trust-root binding, and one least-privilege Gate Two runtime identity check for the bound source and dependency closure. CockroachDB's immutable built-in admin role remains a provider-managed exception; the claim is no application-retained SQL administrator after the nested controller deletes the bootstrap principal, not no administrative control path. The nested provider controller independently authenticates the exact Secrets Manager versions and fresh signer seal. This receipt does not prove DVI execution, Lambda deployment or overlap, Managed MCP, an integrated live drill, public availability, teardown, provider-key revocation, or final release acceptance."
+  });
+}
+
+function createProviderTransitionJournal(recordTransition) {
+  requireCondition(
+    typeof recordTransition === "function",
+    "FRESH_PRIMARY_PROVIDER_TRANSITION_REJECTED"
+  );
+  return Object.freeze({
+    [STATEFUL_TRANSITION_JOURNAL]: true,
+    record: recordTransition
+  });
+}
+
+async function runFreshPrimaryProviderControlledBootstrapWithRuntime({
+  adminConnectionString,
+  approval,
+  approvalNow = Date.now(),
+  clock = Date.now,
+  command,
+  credentialBundle,
+  credentialBundleRawSha256,
+  credentialBundleSha256,
+  credentialSeal,
+  databaseEnvironment = process.env,
+  discardAdminCredential,
+  localCredentialDiscarded,
+  operationId,
+  provider,
+  recoveryPublisherSecret,
+  runtime,
+  sourceCommit,
+  treeDigest
+}) {
+  requireCondition(
+    command?.sourceCommit === sourceCommit &&
+      command?.treeDigest === treeDigest &&
+      command?.operationId === operationId &&
+      command?.approvalId === approval?.approvalId &&
+      command?.sqlClusterId === approval?.expectedClusterId &&
+      command?.approvalSha256 === sha256(canonicalBytes(approval)) &&
+      command?.outerAuthenticationReceiptSha256 ===
+        approval?.outerAuthenticationReceiptSha256 &&
+      command?.outerCommandSha256 === approval?.outerCommandSha256 &&
+      command?.outerReservedAt === approval?.outerReservedAt &&
+      command?.outerReservationAcknowledgedAt ===
+        approval?.outerReservationAcknowledgedAt &&
+      command?.outerReservationReceiptSha256 ===
+        approval?.outerReservationReceiptSha256 &&
+      command?.adminSecretValueSha256 === sha256(adminConnectionString) &&
+      command?.credentialBundleRawSha256 === credentialBundleRawSha256 &&
+      command?.credentialBundleSha256 === credentialBundleSha256 &&
+      command?.credentialBundleSha256 ===
+        sha256(canonicalBytes(credentialBundle)) &&
+      command?.credentialSealReceiptSha256 ===
+        sha256(canonicalBytes(credentialSeal)) &&
+      command?.credentialSecretArnSha256 === credentialSeal?.secretArnSha256 &&
+      command?.credentialSecretVersionIdSha256 ===
+        credentialSeal?.secretVersionIdSha256 &&
+      command?.credentialBundleRawSha256 ===
+        credentialSeal?.credentialBundleRawSha256 &&
+      command?.credentialBundleSha256 ===
+        credentialSeal?.credentialBundleSha256 &&
+      recoveryPublisherSecret?.secretBytesSha256 ===
+        command?.signerSecretValueSha256 &&
+      recoveryPublisherSecret?.trustRootJsonSha256 ===
+        command?.trustRootJsonSha256 &&
+      recoveryPublisherSecret?.trustRootCommitment ===
+        command?.recoveryPublisherTrustRootCommitment &&
+      recoveryPublisherSecret?.publisherKeySetDigest ===
+        command?.recoveryPublisherKeySetDigest &&
+      typeof provider?.sealRecoveryPublisherSecret === "function" &&
+      runtime && [
+        "bootstrap",
+        "bootstrapDatabaseConfig",
+        "clientFactory",
+        "connectionStringForUser",
+        "runtimeDatabaseConfig"
+      ].every((name) => typeof runtime[name] === "function"),
+    "FRESH_PRIMARY_PROVIDER_BINDING_REJECTED"
+  );
+  // This controller is imported only after the public entry point has bound
+  // its exact bytes with the rest of the pre-import helper closure. Tests use
+  // the same path with injected non-provider dependencies.
+  const { runFreshPrimaryProviderController } = await import(
+    "./fresh-primary-provider-controller.js"
+  );
+  return runFreshPrimaryProviderController({
+    clock,
+    command,
+    provider,
+    dispatch: async ({ recordTransition }) => {
+      await recordTransition("SIGNER_SECRET_DISPATCHING", {
+        mutationDispatched: true,
+        signerSecretArnSha256: command.signerSecretArnSha256,
+        signerSecretVersionIdSha256: command.signerSecretVersionIdSha256
+      });
+      const signerSeal = await provider.sealRecoveryPublisherSecret({
+        command,
+        secret: recoveryPublisherSecret
+      });
+      requireCondition(
+        exactKeys(signerSeal, [
+          "createdAt",
+          "immutableVersion",
+          "provider",
+          "providerBacked",
+          "schemaVersion",
+          "secretArnSha256",
+          "secretValueSha256",
+          "secretVersionIdSha256",
+          "status"
+        ]) &&
+          signerSeal.schemaVersion ===
+            "prooftoact.fresh-recovery-publisher-secret-seal.v1" &&
+          signerSeal.status === "SEALED" &&
+          signerSeal.provider === "AWS_SECRETS_MANAGER" &&
+          signerSeal.providerBacked === true &&
+          signerSeal.immutableVersion === true &&
+          signerSeal.secretArnSha256 === command.signerSecretArnSha256 &&
+          signerSeal.secretVersionIdSha256 ===
+            command.signerSecretVersionIdSha256 &&
+          signerSeal.secretValueSha256 === command.signerSecretValueSha256,
+        "FRESH_PRIMARY_RECOVERY_PUBLISHER_SEAL_REJECTED"
+      );
+      const signerSecretSealReceiptSha256 = sha256(canonicalBytes(signerSeal));
+      await recordTransition("SIGNER_SECRET_SEALED", {
+        mutationDispatched: true,
+        signerSecretSealReceiptSha256
+      });
+      return runFreshPrimaryBootstrap({
+        adminConnectionString,
+        approval,
+        approvalNow,
+        bootstrap: runtime.bootstrap,
+        bootstrapDatabaseConfig: runtime.bootstrapDatabaseConfig,
+        clientFactory: runtime.clientFactory,
+        connectionStringForUser: runtime.connectionStringForUser,
+        credentialBundle,
+        credentialBundleRawSha256,
+        credentialBundleSha256,
+        credentialSeal,
+        databaseEnvironment,
+        discardAdminCredential,
+        localCredentialDiscarded,
+        operationId,
+        recoveryPublisherTrustRoot: {
+          publisherKeyIdSha256: sha256(recoveryPublisherSecret.publisherKeyId),
+          publisherKeySetDigest:
+            recoveryPublisherSecret.publisherKeySetDigest,
+          signerSecretArnSha256: command.signerSecretArnSha256,
+          signerSecretSealReceiptSha256,
+          signerSecretValueSha256: command.signerSecretValueSha256,
+          signerSecretVersionIdSha256: command.signerSecretVersionIdSha256,
+          trustRootCommitment:
+            recoveryPublisherSecret.trustRootCommitment,
+          trustRootJsonSha256: recoveryPublisherSecret.trustRootJsonSha256
+        },
+        runtimeDatabaseConfig: runtime.runtimeDatabaseConfig,
+        sourceCommit,
+        transitionJournal: createProviderTransitionJournal(recordTransition),
+        treeDigest
+      });
+    }
+  });
+}
+
+export async function runFreshPrimaryProviderControlledBootstrap({
+  buildReceipt,
+  expectedCommit,
+  expectedTree,
+  ...input
+}) {
+  const source = preliminaryExactSourceBinding(expectedCommit, expectedTree);
+  const runtime = await loadBoundRuntime({ buildReceipt, source });
+  return runFreshPrimaryProviderControlledBootstrapWithRuntime({
+    ...input,
+    runtime,
+    sourceCommit: source.sourceCommit,
+    treeDigest: source.treeDigest
+  });
+}
+
+export async function verifyFreshPrimaryProviderPrerequisites({
+  buildReceipt,
+  expectedCommit,
+  expectedTree
+}) {
+  const source = preliminaryExactSourceBinding(expectedCommit, expectedTree);
+  const runtime = await loadBoundRuntime({ buildReceipt, source });
+  return Object.freeze({
+    dependencyTreeSha256: runtime.dependencyTreeSha256,
+    packageLockSha256: runtime.packageLockSha256,
+    preImportHelperBytesSha256: runtime.preImportHelperBytesSha256,
+    runtimeNodeSha256: runtime.runtimeNodeSha256,
+    sourceCommit: source.sourceCommit,
+    treeDigest: source.treeDigest
   });
 }
 
@@ -1229,6 +1603,14 @@ export async function main(args = process.argv.slice(2)) {
     clusterHostSha256: admin.hostSha256,
     credentialSealReceiptSha256: sha256(canonicalBytes(acceptedSeal)),
     operationId: parsed["--operation-id"],
+    outerAuthenticationReceiptSha256:
+      approval?.outerAuthenticationReceiptSha256,
+    outerCommandSha256: approval?.outerCommandSha256,
+    outerReservedAt: approval?.outerReservedAt,
+    outerReservationAcknowledgedAt:
+      approval?.outerReservationAcknowledgedAt,
+    outerReservationReceiptSha256:
+      approval?.outerReservationReceiptSha256,
     sourceCommit: source.sourceCommit,
     treeDigest: source.treeDigest
   });
@@ -1358,6 +1740,7 @@ export const __test = Object.freeze({
     process.env.NODE_TEST_CONTEXT !== "" ? {
       createStatefulTestTransitionJournal,
       openFreshOperationJournal,
+      runFreshPrimaryProviderControlledBootstrapWithRuntime,
       runFreshPrimaryBootstrap
     } : {})
 });

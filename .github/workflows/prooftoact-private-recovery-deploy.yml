@@ -1,0 +1,17 @@
+name: ProofToAct Private Recovery Deploy
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  deploy:
+    permissions:
+      contents: read
+      id-token: write
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-deploy.yml@0000000000000000000000000000000000000000
+    with:
+      authority_commit: "0000000000000000000000000000000000000000"
+      authority_tree: "0000000000000000000000000000000000000000"
+    secrets: inherit

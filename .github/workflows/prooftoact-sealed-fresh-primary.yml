@@ -1,0 +1,676 @@
+name: ProofToAct Sealed Fresh Cluster And Primary
+
+on:
+  workflow_call:
+    inputs:
+      authority_commit:
+        required: true
+        type: string
+      authority_tree:
+        required: true
+        type: string
+      operation_id:
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: prooftoact-fresh-cluster-${{ inputs.operation_id }}
+  cancel-in-progress: false
+
+jobs:
+  sealed-fresh-cluster-and-primary:
+    permissions:
+      contents: read
+      id-token: write
+    environment: aws-release-database-bootstrap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Bind immutable reusable source before protected material
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set +x
+          fail_closed() {
+            unset oidc_response oidc_url source_lock_program source_lock_result
+            printf '%s\n' 'FRESH_PRIMARY_SOURCE_LOCK_REJECTED' >&2
+            exit 1
+          }
+          [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]] || fail_closed
+          for unsafe_name in ALL_PROXY CURL_CA_BUNDLE HTTPS_PROXY HTTP_PROXY NO_PROXY REQUESTS_CA_BUNDLE SSL_CERT_DIR SSL_CERT_FILE; do
+            [[ -z "${!unsafe_name:-}" ]] || fail_closed
+          done
+          unset unsafe_name
+          [[ "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" =~ ^[A-Za-z0-9._~-]{20,32768}$ ]] || fail_closed
+          source_lock_audience='prooftoact-fresh-primary-source-lock-v1'
+          if ! source_lock_program="$(/usr/bin/cat <<'FRESH_PRIMARY_SOURCE_LOCK_PY'
+          #!/usr/bin/env python3
+          import base64
+          import json
+          import re
+          import sys
+          import time
+          import urllib.parse
+
+
+          AUDIENCE = "prooftoact-fresh-primary-source-lock-v1"
+          REPOSITORY = "Flash-Bri/prooftoact"
+          REPOSITORY_ID = "1317716765"
+          REPOSITORY_OWNER = "Flash-Bri"
+          REPOSITORY_OWNER_ID = "252500266"
+          ENVIRONMENT = "aws-release-database-bootstrap"
+          CALLER_WORKFLOW = "ProofToAct Fresh Cluster And Primary"
+          CALLER_WORKFLOW_REF = (
+              "Flash-Bri/prooftoact/.github/workflows/"
+              "prooftoact-fresh-primary.yml@refs/heads/main"
+          )
+          SEALED_WORKFLOW_PREFIX = (
+              "Flash-Bri/prooftoact/.github/workflows/"
+              "prooftoact-sealed-fresh-primary.yml@"
+          )
+          SUBJECT = (
+              "repo:Flash-Bri@252500266/prooftoact@1317716765:"
+              "environment:aws-release-database-bootstrap"
+          )
+          HEX_40 = re.compile(r"^[0-9a-f]{40}$")
+          BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
+          GITHUB_TOKEN_HOST = re.compile(
+              r"^(?:pipelines|run-actions-[0-9]+-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)"
+              r"\.actions\.githubusercontent\.com$"
+          )
+          SAFE_PATH = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$")
+          SAFE_JTI = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+
+
+          class Rejected(Exception):
+              pass
+
+
+          def reject():
+              raise Rejected()
+
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if not isinstance(key, str) or key in result:
+                      reject()
+                  result[key] = value
+              return result
+
+
+          def strict_json(raw, maximum):
+              if not isinstance(raw, bytes) or not raw or len(raw) > maximum:
+                  reject()
+              try:
+                  text = raw.decode("utf-8", errors="strict")
+                  return json.loads(text, object_pairs_hook=unique_object)
+              except (UnicodeDecodeError, json.JSONDecodeError, Rejected):
+                  reject()
+
+
+          def decode_base64url(segment, maximum):
+              if (
+                  not isinstance(segment, str)
+                  or not segment
+                  or len(segment) > maximum
+                  or BASE64URL.fullmatch(segment) is None
+                  or len(segment) % 4 == 1
+              ):
+                  reject()
+              padded = segment + ("=" * ((4 - (len(segment) % 4)) % 4))
+              try:
+                  decoded = base64.b64decode(
+                      padded.encode("ascii"), altchars=b"-_", validate=True
+                  )
+              except (ValueError, UnicodeEncodeError):
+                  reject()
+              canonical = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
+              if canonical != segment:
+                  reject()
+              return decoded
+
+
+          def validate_audience(value):
+              if value != AUDIENCE:
+                  reject()
+
+
+          def validate_endpoint(audience, value):
+              validate_audience(audience)
+              if not isinstance(value, str) or not 1 <= len(value) <= 2048:
+                  reject()
+              try:
+                  parsed = urllib.parse.urlsplit(value)
+                  port = parsed.port
+              except ValueError:
+                  reject()
+              host = parsed.hostname
+              if (
+                  parsed.scheme != "https"
+                  or host is None
+                  or GITHUB_TOKEN_HOST.fullmatch(host) is None
+                  or parsed.username is not None
+                  or parsed.password is not None
+                  or port is not None
+                  or parsed.fragment
+                  or not parsed.path
+                  or len(parsed.path) > 1536
+                  or SAFE_PATH.fullmatch(parsed.path) is None
+                  or "//" in parsed.path
+              ):
+                  reject()
+              if any(part in ("", ".", "..") for part in parsed.path.split("/")[1:]):
+                  reject()
+              for index, character in enumerate(parsed.path):
+                  if character == "%" and (
+                      index + 2 >= len(parsed.path)
+                      or re.fullmatch(r"[0-9A-Fa-f]{2}", parsed.path[index + 1:index + 3])
+                      is None
+                  ):
+                      reject()
+              try:
+                  query = urllib.parse.parse_qsl(
+                      parsed.query,
+                      keep_blank_values=True,
+                      strict_parsing=True
+                  )
+              except ValueError:
+                  reject()
+              if query != [("api-version", "2.0")]:
+                  reject()
+              return value + "&audience=" + urllib.parse.quote(audience, safe="")
+
+
+          def validate_token_response(
+              audience, expected_commit, expected_tree, expected_caller_sha, raw
+          ):
+              validate_audience(audience)
+              if HEX_40.fullmatch(expected_commit or "") is None:
+                  reject()
+              if HEX_40.fullmatch(expected_tree or "") is None:
+                  reject()
+              if HEX_40.fullmatch(expected_caller_sha or "") is None:
+                  reject()
+              response = strict_json(raw, 32768)
+              if not isinstance(response, dict) or set(response) != {"value"}:
+                  reject()
+              token = response["value"]
+              if not isinstance(token, str) or not 1 <= len(token) <= 24576:
+                  reject()
+              parts = token.split(".")
+              if len(parts) != 3:
+                  reject()
+              header = strict_json(decode_base64url(parts[0], 4096), 3072)
+              payload = strict_json(decode_base64url(parts[1], 24576), 16384)
+              decode_base64url(parts[2], 16384)
+              if (
+                  not isinstance(header, dict)
+                  or set(header) != {"alg", "kid", "typ"}
+                  or header.get("alg") != "RS256"
+                  or header.get("typ") != "JWT"
+                  or not isinstance(header.get("kid"), str)
+                  or not 1 <= len(header["kid"]) <= 256
+              ):
+                  reject()
+              if not isinstance(payload, dict):
+                  reject()
+              required_strings = {
+                  "iss": "https://token.actions.githubusercontent.com",
+                  "aud": AUDIENCE,
+                  "repository": REPOSITORY,
+                  "repository_id": REPOSITORY_ID,
+                  "repository_owner": REPOSITORY_OWNER,
+                  "repository_owner_id": REPOSITORY_OWNER_ID,
+                  "repository_visibility": "public",
+                  "ref": "refs/heads/main",
+                  "ref_type": "branch",
+                  "environment": ENVIRONMENT,
+                  "sub": SUBJECT,
+                  "workflow": CALLER_WORKFLOW,
+                  "workflow_ref": CALLER_WORKFLOW_REF,
+                  "event_name": "workflow_dispatch",
+                  "runner_environment": "github-hosted",
+                  "job_workflow_ref": SEALED_WORKFLOW_PREFIX + expected_commit,
+                  "job_workflow_sha": expected_commit
+              }
+              for name, expected in required_strings.items():
+                  if payload.get(name) != expected or not isinstance(payload.get(name), str):
+                      reject()
+              if (
+                  "ref_protected" in payload
+                  and payload.get("ref_protected") != "true"
+              ):
+                  reject()
+              caller_sha = payload.get("sha")
+              if (
+                  not isinstance(caller_sha, str)
+                  or HEX_40.fullmatch(caller_sha) is None
+                  or caller_sha != expected_caller_sha
+                  or payload.get("workflow_sha") != caller_sha
+              ):
+                  reject()
+              now = int(time.time())
+              iat = payload.get("iat")
+              nbf = payload.get("nbf")
+              exp = payload.get("exp")
+              if (
+                  isinstance(iat, bool)
+                  or not isinstance(iat, int)
+                  or isinstance(nbf, bool)
+                  or not isinstance(nbf, int)
+                  or isinstance(exp, bool)
+                  or not isinstance(exp, int)
+                  or iat < now - 600
+                  or iat > now + 60
+                  or nbf > now + 60
+                  or exp <= now
+                  or exp > now + 600
+                  or exp <= iat
+              ):
+                  reject()
+              jti = payload.get("jti")
+              if not isinstance(jti, str) or SAFE_JTI.fullmatch(jti) is None:
+                  reject()
+              for name, value in payload.items():
+                  if not isinstance(name, str) or isinstance(value, (dict, list)):
+                      reject()
+              return "SOURCE_LOCKED:" + expected_commit + ":" + expected_tree
+
+
+          def main():
+              if len(sys.argv) == 4 and sys.argv[1] == "--validate-endpoint":
+                  output = validate_endpoint(sys.argv[2], sys.argv[3])
+              elif len(sys.argv) == 6 and sys.argv[1] == "--validate-token":
+                  raw = sys.stdin.buffer.read(32769)
+                  output = validate_token_response(
+                      sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], raw
+                  )
+              else:
+                  reject()
+              sys.stdout.write(output + "\n")
+
+
+          try:
+              main()
+          except (Rejected, BrokenPipeError):
+              sys.stderr.write("FRESH_PRIMARY_SOURCE_LOCK_REJECTED\n")
+              raise SystemExit(1)
+          FRESH_PRIMARY_SOURCE_LOCK_PY
+          )"; then
+            fail_closed
+          fi
+          if ! oidc_url="$(/usr/bin/env -i LC_ALL=C PATH=/usr/bin:/bin \
+            /usr/bin/python3 -I -S -B -c "$source_lock_program" \
+            --validate-endpoint "$source_lock_audience" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" 2>/dev/null)"; then
+            fail_closed
+          fi
+          if ! oidc_response="$(
+            {
+              printf '%s\n' \
+                "header = \"Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}\""
+            } | /usr/bin/env -i LC_ALL=C PATH=/usr/bin:/bin \
+              /usr/bin/timeout --signal=KILL 30s \
+              /usr/bin/curl \
+                --disable \
+                --proto '=https' \
+                --tlsv1.2 \
+                --connect-timeout 10 \
+                --max-time 20 \
+                --fail \
+                --silent \
+                --config - \
+                "$oidc_url" 2>/dev/null
+          )"; then
+            fail_closed
+          fi
+          if ! source_lock_result="$(
+            printf '%s' "$oidc_response" |
+              /usr/bin/env -i LC_ALL=C PATH=/usr/bin:/bin \
+              /usr/bin/python3 -I -S -B -c "$source_lock_program" \
+                --validate-token "$source_lock_audience" \
+                "$AUTHORITY_COMMIT" "$AUTHORITY_TREE" \
+                "$CALLER_WORKFLOW_SHA" 2>/dev/null
+          )"; then
+            fail_closed
+          fi
+          test "$source_lock_result" = \
+            "SOURCE_LOCKED:${AUTHORITY_COMMIT}:${AUTHORITY_TREE}" || fail_closed
+          unset \
+            ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            ACTIONS_ID_TOKEN_REQUEST_URL \
+            oidc_response \
+            oidc_url \
+            source_lock_audience \
+            source_lock_program \
+            source_lock_result
+
+      - name: Validate protected immutable coordinates before AWS credential exchange
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          ADMIN_PASSWORD_B64: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_ADMIN_PASSWORD_B64 }}
+          ADMIN_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_ARN }}
+          ADMIN_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_VERSION_ID }}
+          APPROVAL_B64: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_APPROVAL_B64 }}
+          APPROVAL_SHA256: ${{ vars.PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256 }}
+          AUDITOR_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_ARN }}
+          AUDITOR_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_VERSION_ID }}
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          CLOUD_API_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_ARN }}
+          CLOUD_API_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_VERSION_ID }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CONTROLLER_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
+          CREDENTIAL_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_ARN }}
+          CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
+          MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_ARN }}
+          MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_VERSION_ID }}
+          HUMAN_AUTHORIZATION_SIGNER_SHA256: ${{ vars.PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256 }}
+          OPERATION_ID: ${{ inputs.operation_id }}
+          PUBLISHER_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_ARN }}
+          PUBLISHER_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_VERSION_ID }}
+          RECOVERY_SECURITY_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RECOVERY_SECURITY_RECEIPT_SHA256 }}
+          ROLE_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_ROLE_ARN }}
+          SIGNER_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_SIGNER_SECRET_ARN }}
+          SIGNER_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_SIGNER_SECRET_VERSION_ID }}
+        run: |
+          [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$APPROVAL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$CALLER_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HUMAN_AUTHORIZATION_SIGNER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$CALLER_WORKFLOW_REF" = "Flash-Bri/prooftoact/.github/workflows/prooftoact-fresh-primary.yml@refs/heads/main"
+          [[ "$OPERATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+          [[ "$RECOVERY_SECURITY_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$CONTROLLER_TABLE_ARN" =~ ^arn:aws:dynamodb:us-east-1:[0-9]{12}:table/prooftoact-release-controller$ ]]
+          [[ "$ROLE_ARN" =~ ^arn:aws:iam::[0-9]{12}:role/ProofToActFreshPrimaryBootstrap$ ]]
+          [[ "$ADMIN_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/fresh-primary/admin-${OPERATION_ID}-[A-Za-z0-9]{6}$ ]]
+          [[ "$AUDITOR_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/fresh-cluster/auditor-[A-Za-z0-9]{6}$ ]]
+          [[ "$CLOUD_API_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/fresh-primary/cloud-api-[A-Za-z0-9]{6}$ ]]
+          [[ "$CREDENTIAL_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/fresh-primary/runtime-credentials-[A-Za-z0-9]{6}$ ]]
+          [[ "$MCP_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/gate2/managed-mcp-[A-Za-z0-9]{6}$ ]]
+          [[ "$PUBLISHER_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/gate2/recovery-publisher-[A-Za-z0-9]{6}$ ]]
+          [[ "$SIGNER_SECRET_ARN" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact/fresh-primary/recovery-signer-${OPERATION_ID}-[A-Za-z0-9]{6}$ ]]
+          for version in "$ADMIN_SECRET_VERSION_ID" "$AUDITOR_SECRET_VERSION_ID" "$CLOUD_API_SECRET_VERSION_ID" "$CREDENTIAL_SECRET_VERSION_ID" "$MCP_SECRET_VERSION_ID" "$PUBLISHER_SECRET_VERSION_ID" "$SIGNER_SECRET_VERSION_ID"; do
+            [[ "$version" =~ ^[A-Za-z0-9_-]{32,64}$ ]]
+          done
+          for encoded in "$ADMIN_PASSWORD_B64" "$APPROVAL_B64"; do
+            [[ "$encoded" =~ ^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$ ]]
+            [[ -n "$encoded" && "${#encoded}" -le 174764 ]]
+          done
+
+      - name: Check out exact control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: control-plane
+          persist-credentials: false
+          ref: ${{ inputs.authority_commit }}
+          show-progress: false
+          submodules: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          check-latest: false
+          node-version: 22.23.1
+
+      - name: Verify exact source and install locked dependencies before AWS credential exchange
+        working-directory: control-plane
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_TLS_REJECT_UNAUTHORIZED: ""
+          NODE_V8_COVERAGE: ""
+        run: |
+          test "$(git rev-parse HEAD)" = "$AUTHORITY_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$AUTHORITY_TREE"
+          test "$(git remote get-url origin)" = "https://github.com/Flash-Bri/prooftoact"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund --prefix release-control
+
+      - name: Reproduce exact build and seal private inputs before AWS credential exchange
+        working-directory: control-plane
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          ADMIN_PASSWORD_B64: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_ADMIN_PASSWORD_B64 }}
+          APPROVAL_B64: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_APPROVAL_B64 }}
+          PRIVATE_ROOT: ${{ runner.temp }}/prooftoact-fresh-cluster-private
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_TLS_REJECT_UNAUTHORIZED: ""
+          NODE_V8_COVERAGE: ""
+        run: |
+          umask 077
+          test ! -e "$PRIVATE_ROOT"
+          install -d -m 700 "$PRIVATE_ROOT"
+          printf '%s' "$APPROVAL_B64" | base64 --decode > "$PRIVATE_ROOT/approval.json"
+          printf '%s' "$ADMIN_PASSWORD_B64" | base64 --decode > "$PRIVATE_ROOT/admin-password.txt"
+          test "$(base64 < "$PRIVATE_ROOT/approval.json" | tr -d '\n')" = "$APPROVAL_B64"
+          test "$(base64 < "$PRIVATE_ROOT/admin-password.txt" | tr -d '\n')" = "$ADMIN_PASSWORD_B64"
+          test "$(stat -c '%a' "$PRIVATE_ROOT/approval.json")" = "600"
+          test "$(stat -c '%a' "$PRIVATE_ROOT/admin-password.txt")" = "600"
+          test "$(stat -c '%s' "$PRIVATE_ROOT/approval.json")" -gt 0
+          test "$(stat -c '%s' "$PRIVATE_ROOT/approval.json")" -le 131072
+          test "$(stat -c '%s' "$PRIVATE_ROOT/admin-password.txt")" -ge 20
+          test "$(stat -c '%s' "$PRIVATE_ROOT/admin-password.txt")" -le 256
+          jq -e 'type == "object"' "$PRIVATE_ROOT/approval.json" >/dev/null
+          node scripts/build-gate2-exact.js > "$PRIVATE_ROOT/build-receipt.json"
+          node release-control/build-release-control-runtime.js \
+            "$PRIVATE_ROOT" "$AUTHORITY_COMMIT" "$AUTHORITY_TREE" \
+            > "$PRIVATE_ROOT/release-control-runtime-receipt.json"
+          test "$(stat -c '%a' "$PRIVATE_ROOT/build-receipt.json")" = "600"
+          jq -e '.status == null and .mode == "CLEAN_ARTIFACT_BUILD"' "$PRIVATE_ROOT/build-receipt.json" >/dev/null
+          jq -e '.controlPlaneCommit == env.AUTHORITY_COMMIT and .controlPlaneTree == env.AUTHORITY_TREE' \
+            "$PRIVATE_ROOT/release-control-runtime-receipt.json" >/dev/null
+
+      - name: Assume only the fresh cluster and primary bootstrap role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          disable-retry: true
+          mask-aws-account-id: true
+          output-env-credentials: true
+          role-duration-seconds: 2700
+          role-session-name: pta-${{ github.run_id }}-1-bootstrap
+          role-to-assume: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_ROLE_ARN }}
+          unset-current-credentials: true
+
+      - name: Adopt cluster and execute one sealed fresh primary bootstrap
+        id: execute
+        working-directory: control-plane
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          ADMIN_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_ARN }}
+          ADMIN_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_VERSION_ID }}
+          AUDITOR_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_ARN }}
+          AUDITOR_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_VERSION_ID }}
+          APPROVAL_SHA256: ${{ vars.PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256 }}
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          CLOUD_API_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_ARN }}
+          CLOUD_API_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_VERSION_ID }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CONTROLLER_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
+          CREDENTIAL_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_ARN }}
+          CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
+          MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_ARN }}
+          MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_VERSION_ID }}
+          HUMAN_AUTHORIZATION_SIGNER_SHA256: ${{ vars.PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256 }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_TLS_REJECT_UNAUTHORIZED: ""
+          NODE_V8_COVERAGE: ""
+          OPERATION_ID: ${{ inputs.operation_id }}
+          PRIVATE_ROOT: ${{ runner.temp }}/prooftoact-fresh-cluster-private
+          PUBLISHER_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_ARN }}
+          PUBLISHER_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_VERSION_ID }}
+          RECOVERY_SECURITY_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RECOVERY_SECURITY_RECEIPT_SHA256 }}
+          SIGNER_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_SIGNER_SECRET_ARN }}
+          SIGNER_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_SIGNER_SECRET_VERSION_ID }}
+        run: |
+          node scripts/launch-fresh-cluster-provider.js \
+            --admin-password-file "$PRIVATE_ROOT/admin-password.txt" \
+            --admin-secret-arn "$ADMIN_SECRET_ARN" \
+            --admin-secret-version-id "$ADMIN_SECRET_VERSION_ID" \
+            --approval-file "$PRIVATE_ROOT/approval.json" \
+            --approval-sha256 "$APPROVAL_SHA256" \
+            --auditor-secret-arn "$AUDITOR_SECRET_ARN" \
+            --auditor-secret-version-id "$AUDITOR_SECRET_VERSION_ID" \
+            --build-receipt "$PRIVATE_ROOT/build-receipt.json" \
+            --cloud-api-secret-arn "$CLOUD_API_SECRET_ARN" \
+            --cloud-api-secret-version-id "$CLOUD_API_SECRET_VERSION_ID" \
+            --caller-workflow-ref "$CALLER_WORKFLOW_REF" \
+            --caller-workflow-sha "$CALLER_WORKFLOW_SHA" \
+            --controller-table-arn "$CONTROLLER_TABLE_ARN" \
+            --credential-secret-arn "$CREDENTIAL_SECRET_ARN" \
+            --credential-secret-version-id "$CREDENTIAL_SECRET_VERSION_ID" \
+            --expected-commit "$AUTHORITY_COMMIT" \
+            --expected-tree "$AUTHORITY_TREE" \
+            --human-authorization-signer-sha256 "$HUMAN_AUTHORIZATION_SIGNER_SHA256" \
+            --mcp-secret-arn "$MCP_SECRET_ARN" \
+            --mcp-secret-version-id "$MCP_SECRET_VERSION_ID" \
+            --mode execute \
+            --operation-id "$OPERATION_ID" \
+            --publisher-secret-arn "$PUBLISHER_SECRET_ARN" \
+            --publisher-secret-version-id "$PUBLISHER_SECRET_VERSION_ID" \
+            --receipt-output "$PRIVATE_ROOT/provider-receipt.json" \
+            --release-control-runtime-receipt "$PRIVATE_ROOT/release-control-runtime-receipt.json" \
+            --recovery-security-receipt-sha256 "$RECOVERY_SECURITY_RECEIPT_SHA256" \
+            --signer-secret-arn "$SIGNER_SECRET_ARN" \
+            --signer-secret-version-id "$SIGNER_SECRET_VERSION_ID"
+
+      - name: Reconcile interrupted bootstrap access without replay
+        if: failure() && steps.execute.outcome == 'failure'
+        working-directory: control-plane
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          ADMIN_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_ARN }}
+          ADMIN_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_ADMIN_SECRET_VERSION_ID }}
+          AUDITOR_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_ARN }}
+          AUDITOR_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_CLUSTER_AUDITOR_SECRET_VERSION_ID }}
+          APPROVAL_SHA256: ${{ vars.PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256 }}
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          CLOUD_API_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_ARN }}
+          CLOUD_API_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CLOUD_API_SECRET_VERSION_ID }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          CONTROLLER_TABLE_ARN: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ARN }}
+          CREDENTIAL_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_ARN }}
+          CREDENTIAL_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_CREDENTIAL_SECRET_VERSION_ID }}
+          MCP_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_ARN }}
+          MCP_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_MANAGED_MCP_SECRET_VERSION_ID }}
+          HUMAN_AUTHORIZATION_SIGNER_SHA256: ${{ vars.PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256 }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_TLS_REJECT_UNAUTHORIZED: ""
+          NODE_V8_COVERAGE: ""
+          OPERATION_ID: ${{ inputs.operation_id }}
+          PRIVATE_ROOT: ${{ runner.temp }}/prooftoact-fresh-cluster-private
+          PUBLISHER_SECRET_ARN: ${{ secrets.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_ARN }}
+          PUBLISHER_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_GATE2_RECOVERY_PUBLISHER_SECRET_VERSION_ID }}
+          RECOVERY_SECURITY_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RECOVERY_SECURITY_RECEIPT_SHA256 }}
+          SIGNER_SECRET_ARN: ${{ secrets.PROOFTOACT_FRESH_PRIMARY_SIGNER_SECRET_ARN }}
+          SIGNER_SECRET_VERSION_ID: ${{ vars.PROOFTOACT_FRESH_PRIMARY_SIGNER_SECRET_VERSION_ID }}
+        run: |
+          node scripts/launch-fresh-cluster-provider.js \
+            --admin-password-file "$PRIVATE_ROOT/admin-password.txt" \
+            --admin-secret-arn "$ADMIN_SECRET_ARN" \
+            --admin-secret-version-id "$ADMIN_SECRET_VERSION_ID" \
+            --approval-file "$PRIVATE_ROOT/approval.json" \
+            --approval-sha256 "$APPROVAL_SHA256" \
+            --auditor-secret-arn "$AUDITOR_SECRET_ARN" \
+            --auditor-secret-version-id "$AUDITOR_SECRET_VERSION_ID" \
+            --build-receipt "$PRIVATE_ROOT/build-receipt.json" \
+            --cloud-api-secret-arn "$CLOUD_API_SECRET_ARN" \
+            --cloud-api-secret-version-id "$CLOUD_API_SECRET_VERSION_ID" \
+            --caller-workflow-ref "$CALLER_WORKFLOW_REF" \
+            --caller-workflow-sha "$CALLER_WORKFLOW_SHA" \
+            --controller-table-arn "$CONTROLLER_TABLE_ARN" \
+            --credential-secret-arn "$CREDENTIAL_SECRET_ARN" \
+            --credential-secret-version-id "$CREDENTIAL_SECRET_VERSION_ID" \
+            --expected-commit "$AUTHORITY_COMMIT" \
+            --expected-tree "$AUTHORITY_TREE" \
+            --human-authorization-signer-sha256 "$HUMAN_AUTHORIZATION_SIGNER_SHA256" \
+            --mcp-secret-arn "$MCP_SECRET_ARN" \
+            --mcp-secret-version-id "$MCP_SECRET_VERSION_ID" \
+            --mode reconcile-only \
+            --operation-id "$OPERATION_ID" \
+            --publisher-secret-arn "$PUBLISHER_SECRET_ARN" \
+            --publisher-secret-version-id "$PUBLISHER_SECRET_VERSION_ID" \
+            --receipt-output "$PRIVATE_ROOT/reconciliation-receipt.json" \
+            --release-control-runtime-receipt "$PRIVATE_ROOT/release-control-runtime-receipt.json" \
+            --recovery-security-receipt-sha256 "$RECOVERY_SECURITY_RECEIPT_SHA256" \
+            --signer-secret-arn "$SIGNER_SECRET_ARN" \
+            --signer-secret-version-id "$SIGNER_SECRET_VERSION_ID"
+
+      - name: Clear temporary AWS credentials before artifact handling
+        if: always()
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        run: |
+          {
+            printf '%s\n' 'AWS_ACCESS_KEY_ID='
+            printf '%s\n' 'AWS_SECRET_ACCESS_KEY='
+            printf '%s\n' 'AWS_SESSION_TOKEN='
+            printf '%s\n' 'AWS_SECURITY_TOKEN='
+          } >> "$GITHUB_ENV"
+
+      - name: Remove private credential-bearing runner files
+        if: always()
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          PRIVATE_ROOT: ${{ runner.temp }}/prooftoact-fresh-cluster-private
+        run: |
+          if [[ -d "$PRIVATE_ROOT" ]]; then
+            rm -f -- \
+              "$PRIVATE_ROOT/admin-password.txt" \
+              "$PRIVATE_ROOT/approval.json" \
+              "$PRIVATE_ROOT/derived-primary-approval.json"
+            rm -f -- "$PRIVATE_ROOT/release-control-runtime-receipt.json"
+            find "$PRIVATE_ROOT/dist" -type f -delete 2>/dev/null || true
+          fi
+
+      - name: Publish joined provider receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          name: prooftoact-fresh-cluster-${{ github.run_id }}-${{ github.run_attempt }}
+          overwrite: false
+          path: |
+            ${{ runner.temp }}/prooftoact-fresh-cluster-private/provider-receipt.json
+            ${{ runner.temp }}/prooftoact-fresh-cluster-private/reconciliation-receipt.json
+          retention-days: 14

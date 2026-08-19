@@ -5,6 +5,49 @@
 Gate Two is a locally tested deployment candidate. It is not yet evidence of
 live AWS behavior.
 
+The repository also contains a separate private recovery-query mini-stack.
+Its create-only workflow deploys one concurrency-one, outside-VPC Lambda at an
+exact numeric version. The function has no API Gateway route, function URL,
+Lambda permission resource, event source, VPC, or public trigger. A protected
+OIDC operator can invoke only that version for one globally journaled
+operation. The runtime reads one immutable `AWSCURRENT` CockroachDB Managed MCP
+secret version, performs one fixed `select_query`, accepts exactly one
+provider-bound signed recovery row, and stores only a sanitized context-only
+receipt. Independent protected roles collect Ed25519-signed pre/post provider
+readback and delete the exact stack only after a matching successful terminal
+receipt. These are source and workflow controls until exact provider receipts
+exist; they do not make the private lane a public demo or a live-cloud claim.
+
+Each private-lane reusable workflow begins with a memory-only source lock
+before protected inputs, checkout, dependency installation, or AWS role
+assumption. It obtains a GitHub-issued OIDC token for a fixed lane-specific
+audience and requires the expected repository, protected `main` ref,
+environment, top-level workflow, reusable-workflow path, reusable commit, and
+GitHub-reported reusable workflow SHA. It then checks out that exact commit
+and independently verifies its exact Git tree. The public callers remain
+zero-pinned and inert in the reusable-source commit; a separate reviewed
+activation commit must pin both the `uses:` coordinate and the commit/tree
+inputs to those immutable reviewed bytes. The bootstrap and application role
+trust policies must independently pin the same called reusable commit.
+
+A distinct protected secret-seal role is the only identity defined by this
+lane with `secretsmanager:PutSecretValue` on the private lane's one-version
+secret. This source contract does not exclude account administrators or
+permissions granted outside the reviewed lane. After explicit operator
+authorization, it reads one exact immutable version of the Gate Two read-only
+Managed MCP secret, validates the credential shape, writes the canonical
+one-key secret value once, and reconciles only that deterministic version after
+an ambiguous write acknowledgement. The seal can run before the fresh
+recovery-row window. The source and target AWS secrets contain the same
+read-only provider key: the control provides storage, role, and lifecycle
+isolation, not separate provider credentials.
+
+Operators of an open-source checkout must supply and pay for their own AWS and
+CockroachDB accounts, their own read-only Managed MCP provider key, immutable
+secret versions, provider authorization, and protected GitHub environments.
+The repository contains no shared provider credential, hosted paid-service
+entitlement, or public proxy to those services.
+
 The exact `4acafa9` release build and the current AWS account-verification
 handoff block are recorded in
 `evidence/gate2-release-build-4acafa9-2026-07-30.md`. No main Gate Two stack
@@ -216,9 +259,9 @@ remain outside this local source claim. On that commit it bundles each runtime
 role separately into six two-entry, stored ZIPs
 with fixed metadata, so artifact bytes are independent of host timezone. Every
 ZIP contains `index.js` plus the exact verified `THIRD_PARTY_NOTICES.txt` for
-the 46-package union present across the six Lambda graphs, the separately
-content-addressed evidence-provider graph, and twelve integrated-live runtime
-graphs. Over-inclusion in each ZIP
+the 52-package union present across the six Lambda graphs, the separate private
+recovery-query graph, the separately content-addressed evidence-provider graph,
+and twelve integrated-live runtime graphs. Over-inclusion in each ZIP
 is intentional so every independently distributed ZIP carries the complete
 reviewed notice set.
 The v9 receipt also binds twelve content-addressed integrated-live ESM bundles,

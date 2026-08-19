@@ -47,6 +47,25 @@ Final23 compatibility gate, and a locally tested AWS Gate Two candidate:
   mechanics separately from the new admissible-snapshot integration;
 - an isolated CockroachDB recovery cluster and deterministic Managed MCP
   fixed-query broker with signed context-only bundles;
+- an isolated private AWS recovery-query candidate: one outside-VPC Lambda
+  numeric version can issue one fixed CockroachDB Cloud Managed MCP
+  `select_query`, accept exactly one provider-bound P-256-signed recovery row,
+  and emit only a sanitized context-only receipt. It has no API, function URL,
+  event source, VPC, or public invocation policy; separate protected OIDC roles
+  own create-only deployment, exact-version invocation, signed readback, and
+  evidence-gated teardown. A dedicated protected secret-seal role copies one
+  explicitly authorized immutable read-only Managed MCP key from the Gate Two
+  source secret into this lane's isolated one-version secret. It is the only
+  identity defined by this lane with `secretsmanager:PutSecretValue` on the
+  target; this source contract does not exclude account administrators or
+  permissions granted outside the reviewed lane. The two secrets contain the
+  same provider credential; this is storage and role isolation, not
+  provider-credential separation. Each protected reusable first requests a
+  GitHub-issued OIDC identity token with a lane-specific audience and binds
+  its own exact reusable-workflow commit before reading protected inputs or
+  checking out source. The checked-out commit and tree must then match that
+  bound identity. Public callers remain inert until a later reviewed commit
+  pins the immutable reusable commit and tree;
 - separate pre-read and terminal recovery-audit events on the primary cluster;
 - historical accepted Gate One receipts recording 100 live 50-contender races
   and 100 runs at each ambiguity boundary with no invariant violation; Final23
@@ -92,7 +111,15 @@ in `package.json`. Install the exact lockfile without lifecycle scripts first:
 `npm ci --ignore-scripts`. Local tests and the browser demo need no cloud
 credentials. Live Gate One scripts use the `pg` dependency and explicit
 project credentials supplied through the environment; secrets must remain in
-a secret store and never enter the repository.
+a secret store and never enter the repository. The private AWS recovery-query
+lane likewise requires each operator to supply and pay for their own AWS and
+CockroachDB accounts, their own read-only Managed MCP provider key, protected
+environments, immutable secret versions, and provider authorization. Its
+dedicated protected sealer copies an explicitly authorized exact source-secret
+version into the private lane before the fresh-row execution window begins;
+the copied value remains the same provider credential in a separately governed
+AWS secret. This repository distributes no hosted credential, shared
+paid-service access, or public provider proxy.
 
 ```sh
 npm run proof:verify
@@ -124,8 +151,9 @@ The implementation uses or is planned to use:
 3. CockroachDB serializable transactions, immutable-shaped receipts, fencing,
    and transactional outbox;
 4. AWS Lambda/API Gateway for a capability-free signed-out judge surface plus
-   separated IAM-authenticated proposal roles, KMS, and Amazon Bedrock; the
-   local candidate is not a live-cloud claim.
+   separated IAM-authenticated proposal roles, KMS, and Amazon Bedrock, and a
+   separate private exact-version Lambda for the fixed Managed MCP recovery
+   read; the local candidates are not live-cloud claims.
 
 The machine-checked [`PROOF_MANIFEST.json`](PROOF_MANIFEST.json) maps every
 current claims-ledger row to exact evidence bytes and leaves incomplete live
@@ -161,9 +189,10 @@ identifiers, optional state, and install-script flag. Run
 `npm run dependencies:verify` to reject drift, unreviewed license identifiers,
 non-registry sources, missing SHA-512 integrity, or non-exact direct versions.
 The generated [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) separately
-binds the 46-package union whose source is actually present across the six Gate
-Two Lambda bundles, the evidence-provider runtime, and the twelve integrated-
-live runtime bundles, including exact license-text hashes and five explicit fallbacks
+binds the 52-package union whose source is actually present across the six Gate
+Two Lambda bundles, the private recovery-query Lambda, the evidence-provider
+runtime, and the twelve integrated-live runtime bundles, including exact
+license-text hashes and five explicit fallbacks
 for published packages that omit a standalone license file. Run
 `npm run licenses:verify` to rebuild the esbuild input graph and reject package,
 version, integrity, license-source, fallback, or notice-byte drift. Every Gate

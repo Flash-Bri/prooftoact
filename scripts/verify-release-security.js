@@ -21,7 +21,84 @@ const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
   "Separate private human security and abuse review of the exact deployed application, repository metadata, CloudFormation change set, IAM policies, database grants, logs, receipts, media, public URLs, and submission fields."
 ]);
 
+const FRESH_PRIMARY_SURFACES = Object.freeze(Object.fromEntries([
+  ["fresh-primary-caller-workflow", ".github/workflows/prooftoact-fresh-primary.yml", "EXACT_MAIN_FRESH_PRIMARY_CALLER"],
+  ["fresh-primary-sealed-workflow", ".github/workflows/prooftoact-sealed-fresh-primary.yml", "PROTECTED_FRESH_PRIMARY_PROVIDER_EXECUTION"],
+  ["fresh-primary-oidc-boundary", "docs/RELEASE_OIDC_BOUNDARY.md", "FRESH_PRIMARY_OIDC_AND_CREDENTIAL_BOUNDARY"],
+  ["fresh-primary-bootstrap-role-template", "infra/aws/fresh-primary-bootstrap-role-stack.json", "FRESH_PRIMARY_EXACT_OIDC_ROLE_TEMPLATE"],
+  ["fresh-primary-credential-custody-template", "infra/aws/fresh-primary-credential-custody-stack.json", "CREATE_ONLY_SEVEN_SECRET_CUSTODY_TEMPLATE"],
+  ["release-control-aws-runtime", "release-control/src/release-control-aws-runtime.js", "FRESH_PROVIDER_DURABLE_CONTROL_RUNTIME"],
+  ["one-time-bootstrap-root-session", "scripts/assume-one-time-bootstrap-root-session.js", "B0_NAMED_ROOT_MFA_SESSION_CUSTODY"],
+  ["b0-a1-human-authorization-contract", "scripts/lib/prooftoact-b0-a1-human-authorization.js", "INDEPENDENTLY_SIGNED_B0_A1_HUMAN_AUTHORIZATION"],
+  ["b0-a1-human-authorization-materializer", "scripts/materialize-prooftoact-b0-a1-human-authorization.js", "PINNED_IMESSAGE_HUMAN_AUTHORIZATION_MATERIALIZER"],
+  ["one-time-bootstrap-authority-plan", "scripts/prepare-one-time-bootstrap-authority.js", "B0_EXACT_AUTHORITY_AND_COST_PLAN"],
+  ["one-time-bootstrap-ceremony-launcher", "scripts/launch-one-time-bootstrap-ceremony.js", "SEALED_EXACT_SOURCE_B0_LAUNCHER"],
+  ["one-time-bootstrap-ceremony-runner", "scripts/run-one-time-bootstrap-ceremony.js", "B0_CRASH_CONVERGENT_CEREMONY_RUNNER"],
+  ["fresh-cluster-provider-key-revocation-finalizer", "scripts/finalize-fresh-cluster-provider-key-revocation.js", "FAIL_CLOSED_SEPARATE_ORG_ADMIN_REVOCATION_GATE"],
+  ["fresh-primary-bootstrap", "scripts/bootstrap-fresh-primary.js", "FRESH_PRIMARY_DATABASE_BOOTSTRAP"],
+  ["fresh-cluster-aws-provider", "scripts/fresh-cluster-aws-provider.js", "FRESH_CLUSTER_AWS_PROVIDER_CLIENT"],
+  ["fresh-cluster-aws-runtime", "scripts/fresh-cluster-aws-runtime.js", "FRESH_CLUSTER_AWS_PROVIDER_RUNTIME"],
+  ["fresh-cluster-cloud-controller", "scripts/fresh-cluster-cloud-controller.js", "FRESH_CLUSTER_CLOUD_API_CONTROLLER"],
+  ["fresh-cluster-execution-runtime", "scripts/fresh-cluster-execution-runtime.js", "FRESH_CLUSTER_JOINED_EXECUTION_RUNTIME"],
+  ["fresh-cluster-provider-controller", "scripts/fresh-cluster-provider-controller.js", "FRESH_CLUSTER_PROVIDER_EFFECT_CONTROLLER"],
+  ["fresh-cluster-reconciliation-controller", "scripts/fresh-cluster-reconciliation-controller.js", "FRESH_CLUSTER_READ_ONLY_RECONCILIATION"],
+  ["fresh-primary-aws-provider", "scripts/fresh-primary-aws-provider.js", "FRESH_PRIMARY_AWS_PROVIDER_CLIENT"],
+  ["fresh-primary-aws-runtime", "scripts/fresh-primary-aws-runtime.js", "FRESH_PRIMARY_AWS_PROVIDER_RUNTIME"],
+  ["fresh-primary-bootstrap-role-readback", "scripts/fresh-primary-bootstrap-role-readback.js", "FRESH_PRIMARY_ROLE_PROVIDER_READBACK"],
+  ["fresh-primary-credential-custody-readback", "scripts/fresh-primary-credential-custody-readback.js", "SEVEN_SECRET_CUSTODY_PROVIDER_READBACK"],
+  ["fresh-primary-credential-sealer-aws-runtime", "scripts/fresh-primary-credential-sealer-aws-runtime.js", "FIVE_VERSION_SECRET_SEAL_AWS_RUNTIME"],
+  ["fresh-primary-credential-sealer", "scripts/fresh-primary-credential-sealer.js", "FIVE_VERSION_SECRET_SEAL_CONTROLLER"],
+  ["fresh-primary-provider-controller", "scripts/fresh-primary-provider-controller.js", "FRESH_PRIMARY_PROVIDER_CONTROLLER"],
+  ["fresh-recovery-publication-execution", "scripts/fresh-recovery-publication-execution.js", "FRESH_RECOVERY_PUBLICATION_EXECUTION"],
+  ["fresh-recovery-source-execution", "scripts/fresh-recovery-source-execution.js", "FRESH_RECOVERY_SOURCE_EXECUTION"],
+  ["fresh-cluster-provider-launcher", "scripts/launch-fresh-cluster-provider.js", "EXACT_SOURCE_FRESH_PROVIDER_LAUNCHER"],
+  ["fresh-bootstrap-collector-binding", "scripts/lib/fresh-bootstrap-collector-binding.js", "EXACT_B0_COLLECTOR_IDENTITY_BINDING"],
+  ["fresh-primary-source-lock", "scripts/lib/fresh-primary-source-lock.py", "PRE_CHECKOUT_REUSABLE_OIDC_SOURCE_LOCK"],
+  ["fresh-recovery-publisher-key", "scripts/lib/fresh-recovery-publisher-key.js", "FRESH_RECOVERY_SIGNER_KEY_CUSTODY"],
+  ["private-recovery-query-binding", "scripts/lib/private-recovery-query-binding.js", "PRIVATE_MANAGED_MCP_QUERY_BINDING"],
+  ["fresh-primary-bootstrap-role-plan", "scripts/prepare-fresh-primary-bootstrap-role.js", "FRESH_PRIMARY_ROLE_CREATE_ONLY_PLAN"],
+  ["fresh-primary-credential-custody-plan", "scripts/prepare-fresh-primary-credential-custody.js", "SEVEN_SECRET_CUSTODY_CREATE_ONLY_PLAN"],
+  ["release-deployment-plan", "scripts/prepare-release-deployment.js", "FRESH_PRIMARY_RELEASE_DEPLOYMENT_PLAN"],
+  ["fresh-cluster-provider-runner", "scripts/run-fresh-cluster-provider.js", "FRESH_CLUSTER_PRIVATE_PROVIDER_RUNNER"],
+  ["fresh-primary-credential-sealer-runner", "scripts/run-fresh-primary-credential-sealer.js", "PRIVATE_FIVE_VERSION_SEAL_RUNNER"],
+  ["fresh-primary-provider-runner", "scripts/run-fresh-primary-provider.js", "FRESH_PRIMARY_PRIVATE_PROVIDER_RUNNER"],
+  ["fresh-primary-bootstrap-role-stack-tests", "test/fresh-primary-bootstrap-role-stack.test.js", "FRESH_PRIMARY_ROLE_TEMPLATE_VERIFICATION"],
+  ["fresh-primary-bootstrap-tests", "test/fresh-primary-bootstrap.test.js", "FRESH_PRIMARY_BOOTSTRAP_VERIFICATION"],
+  ["fresh-primary-provider-controller-tests", "test/fresh-primary-provider-controller.test.js", "FRESH_PRIMARY_CONTROLLER_VERIFICATION"],
+  ["release-control-aws-runtime-tests", "test/release-control-aws-runtime.test.js", "FRESH_PROVIDER_CONTROL_RUNTIME_VERIFICATION"],
+  ["release-control-runtime-loader-tests", "test/release-control-runtime-loader.test.js", "FRESH_PROVIDER_CONTROL_LOADER_VERIFICATION"],
+  ["fresh-cluster-aws-provider-tests", "test/fresh-cluster-aws-provider.test.js", "FRESH_CLUSTER_AWS_PROVIDER_VERIFICATION"],
+  ["fresh-cluster-aws-runtime-tests", "test/fresh-cluster-aws-runtime.test.js", "FRESH_CLUSTER_AWS_RUNTIME_VERIFICATION"],
+  ["fresh-cluster-cloud-controller-tests", "test/fresh-cluster-cloud-controller.test.js", "FRESH_CLUSTER_CLOUD_CONTROLLER_VERIFICATION"],
+  ["fresh-cluster-execution-runtime-tests", "test/fresh-cluster-execution-runtime.test.js", "FRESH_CLUSTER_EXECUTION_VERIFICATION"],
+  ["fresh-cluster-provider-controller-tests", "test/fresh-cluster-provider-controller.test.js", "FRESH_CLUSTER_PROVIDER_CONTROLLER_VERIFICATION"],
+  ["fresh-cluster-reconciliation-controller-tests", "test/fresh-cluster-reconciliation-controller.test.js", "FRESH_CLUSTER_RECONCILIATION_VERIFICATION"],
+  ["fresh-primary-aws-provider-tests", "test/fresh-primary-aws-provider.test.js", "FRESH_PRIMARY_AWS_PROVIDER_VERIFICATION"],
+  ["fresh-primary-aws-runtime-tests", "test/fresh-primary-aws-runtime.test.js", "FRESH_PRIMARY_AWS_RUNTIME_VERIFICATION"],
+  ["fresh-primary-bootstrap-role-plan-tests", "test/fresh-primary-bootstrap-role-plan.test.js", "FRESH_PRIMARY_ROLE_PLAN_VERIFICATION"],
+  ["fresh-primary-bootstrap-role-readback-tests", "test/fresh-primary-bootstrap-role-readback.test.js", "FRESH_PRIMARY_ROLE_READBACK_VERIFICATION"],
+  ["fresh-primary-credential-custody-plan-tests", "test/fresh-primary-credential-custody-plan.test.js", "SEVEN_SECRET_CUSTODY_PLAN_VERIFICATION"],
+  ["fresh-primary-credential-custody-readback-tests", "test/fresh-primary-credential-custody-readback.test.js", "SEVEN_SECRET_CUSTODY_READBACK_VERIFICATION"],
+  ["fresh-primary-credential-sealer-runtime-tests", "test/fresh-primary-credential-sealer-runtime.test.js", "FIVE_VERSION_SEAL_RUNTIME_VERIFICATION"],
+  ["fresh-primary-credential-sealer-tests", "test/fresh-primary-credential-sealer.test.js", "FIVE_VERSION_SEAL_CONTROLLER_VERIFICATION"],
+  ["fresh-primary-workflow-tests", "test/fresh-primary-workflow.test.js", "FRESH_PRIMARY_WORKFLOW_VERIFICATION"],
+  ["fresh-recovery-publication-execution-tests", "test/fresh-recovery-publication-execution.test.js", "FRESH_RECOVERY_PUBLICATION_VERIFICATION"],
+  ["fresh-recovery-publisher-key-tests", "test/fresh-recovery-publisher-key.test.js", "FRESH_RECOVERY_SIGNER_VERIFICATION"],
+  ["fresh-recovery-source-execution-tests", "test/fresh-recovery-source-execution.test.js", "FRESH_RECOVERY_SOURCE_VERIFICATION"],
+  ["fresh-cluster-provider-launcher-tests", "test/launch-fresh-cluster-provider.test.js", "FRESH_PROVIDER_LAUNCHER_VERIFICATION"],
+  ["fresh-cluster-provider-runner-tests", "test/run-fresh-cluster-provider.test.js", "FRESH_CLUSTER_RUNNER_VERIFICATION"],
+  ["fresh-primary-provider-runner-tests", "test/run-fresh-primary-provider.test.js", "FRESH_PRIMARY_RUNNER_VERIFICATION"],
+  ["one-time-bootstrap-authority-tests", "test/one-time-bootstrap-authority.test.js", "B0_AUTHORITY_COST_AND_CREDENTIAL_VERIFICATION"],
+  ["one-time-bootstrap-ceremony-launcher-tests", "test/launch-one-time-bootstrap-ceremony.test.js", "SEALED_B0_LAUNCHER_VERIFICATION"],
+  ["one-time-bootstrap-ceremony-runner-tests", "test/run-one-time-bootstrap-ceremony.test.js", "B0_CRASH_CONVERGENCE_VERIFICATION"],
+  ["b0-a1-human-authorization-tests", "test/prooftoact-b0-a1-human-authorization.test.js", "B0_A1_SIGNED_AUTHORIZATION_CONTRACT_VERIFICATION"],
+  ["b0-a1-imessage-authorization-tests", "test/prooftoact-imessage-human-authorization.test.js", "IMESSAGE_IDENTITY_AND_SIGNATURE_VERIFICATION"],
+  ["b0-a1-human-authorization-fixture", "test/helpers/prooftoact-human-authorization-fixture.js", "SYNTHETIC_AUTHORIZATION_NEGATIVE_CONTROL_FIXTURE"],
+  ["fresh-cluster-provider-key-revocation-tests", "test/finalize-fresh-cluster-provider-key-revocation.test.js", "FAIL_CLOSED_REVOCATION_GATE_VERIFICATION"]
+].map(([id, path, role]) => [id, Object.freeze({ path, role })])));
+
 const EXPECTED_SURFACES = Object.freeze({
+  ...FRESH_PRIMARY_SURFACES,
   "actions-checkout-normalizer": Object.freeze({
     path: "scripts/normalize-actions-checkout.js",
     role: "GITHUB_ACTIONS_EXACT_CHECKOUT_NORMALIZATION"
@@ -715,6 +792,162 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate1-security.js",
     role: "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER"
   }),
+  "private-recovery-query-approval-generator": Object.freeze({
+    path: "scripts/generate-private-recovery-query-approval.js",
+    role: "PRIVATE_RECOVERY_QUERY_PROVIDER_BOUND_APPROVAL_GENERATOR"
+  }),
+  "private-recovery-query-approval-tests": Object.freeze({
+    path: "test/private-recovery-query-approval.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_APPROVAL_AND_WINDOW_VERIFICATION"
+  }),
+  "private-recovery-query-aws-runtime": Object.freeze({
+    path: "src/cloud/private-recovery-query-aws-runtime.js",
+    role: "PRIVATE_RECOVERY_QUERY_AWS_RUNTIME"
+  }),
+  "private-recovery-query-aws-store": Object.freeze({
+    path: "src/cloud/private-recovery-query-aws-store.js",
+    role: "PRIVATE_RECOVERY_QUERY_DURABLE_ONE_SHOT_STORE"
+  }),
+  "private-recovery-query-bootstrap-role-stack": Object.freeze({
+    path: "infra/aws/private-recovery-query-bootstrap-role-stack.json",
+    role: "PRIVATE_RECOVERY_QUERY_DEDICATED_DEPLOYMENT_BOUNDARY"
+  }),
+  "private-recovery-query-bootstrap-tests": Object.freeze({
+    path: "test/private-recovery-query-bootstrap-role-stack.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_BOOTSTRAP_IAM_VERIFICATION"
+  }),
+  "private-recovery-query-build": Object.freeze({
+    path: "scripts/build-private-recovery-query-lambda.js",
+    role: "PRIVATE_RECOVERY_QUERY_DETERMINISTIC_BUILD"
+  }),
+  "private-recovery-query-core": Object.freeze({
+    path: "src/cloud/private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_FIXED_MCP_RUNTIME_CONTRACT"
+  }),
+  "private-recovery-query-core-tests": Object.freeze({
+    path: "test/private-recovery-query.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_RUNTIME_VERIFICATION"
+  }),
+  "private-recovery-query-deploy-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-deploy.yml",
+    role: "PRIVATE_RECOVERY_QUERY_DEPLOY_CALLER"
+  }),
+  "private-recovery-query-deploy-preparer": Object.freeze({
+    path: "scripts/prepare-private-recovery-query-deployment.js",
+    role: "PRIVATE_RECOVERY_QUERY_CREATE_ONLY_DEPLOYMENT_PREPARER"
+  }),
+  "private-recovery-query-deploy-runner": Object.freeze({
+    path: "scripts/deploy-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_RESTART_CONVERGENT_DEPLOYMENT"
+  }),
+  "private-recovery-query-deploy-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_CREATE_ONLY_DEPLOYMENT"
+  }),
+  "private-recovery-query-evidence": Object.freeze({
+    path: "src/cloud/private-recovery-query-evidence.js",
+    role: "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_CONTRACT"
+  }),
+  "private-recovery-query-evidence-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-evidence.yml",
+    role: "PRIVATE_RECOVERY_QUERY_EVIDENCE_CALLER"
+  }),
+  "private-recovery-query-evidence-readback": Object.freeze({
+    path: "scripts/readback-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_PROVIDER_READBACK_COLLECTOR"
+  }),
+  "private-recovery-query-evidence-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-evidence.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_SIGNED_EVIDENCE"
+  }),
+  "private-recovery-query-evidence-tests": Object.freeze({
+    path: "test/private-recovery-query-evidence.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_VERIFICATION"
+  }),
+  "private-recovery-query-deployment-state-tests": Object.freeze({
+    path: "test/private-recovery-query-deployment-state.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_DEPLOYMENT_RESTART_VERIFICATION"
+  }),
+  "private-recovery-query-lambda-entry": Object.freeze({
+    path: "infra/aws/lambda/private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_LAMBDA_ENTRY"
+  }),
+  "private-recovery-query-operator": Object.freeze({
+    path: "src/cloud/private-recovery-query-operator.js",
+    role: "PRIVATE_RECOVERY_QUERY_ONE_SHOT_OPERATOR"
+  }),
+  "private-recovery-query-operator-aws": Object.freeze({
+    path: "src/cloud/private-recovery-query-operator-aws.js",
+    role: "PRIVATE_RECOVERY_QUERY_AWS_EXACT_VERSION_INVOKER"
+  }),
+  "private-recovery-query-query-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-query.yml",
+    role: "PRIVATE_RECOVERY_QUERY_EXECUTION_CALLER"
+  }),
+  "private-recovery-query-query-runner": Object.freeze({
+    path: "scripts/run-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_EXECUTE_OR_RECONCILE_RUNNER"
+  }),
+  "private-recovery-query-query-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-query.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_EXECUTION"
+  }),
+  "private-recovery-query-secret-seal-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-secret-seal.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CALLER"
+  }),
+  "private-recovery-query-secret-seal-runner": Object.freeze({
+    path: "scripts/seal-private-recovery-query-secret.js",
+    role: "PRIVATE_RECOVERY_QUERY_ONE_VERSION_SECRET_SEAL"
+  }),
+  "private-recovery-query-secret-seal-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_SECRET_SEAL"
+  }),
+  "private-recovery-query-secret-seal-tests": Object.freeze({
+    path: "test/private-recovery-query-secret-seal.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_SECRET_CUSTODY_VERIFICATION"
+  }),
+  "private-recovery-query-source-lock": Object.freeze({
+    path: "scripts/lib/private-recovery-source-lock.py",
+    role: "PRIVATE_RECOVERY_QUERY_REUSABLE_WORKFLOW_SOURCE_LOCK"
+  }),
+  "private-recovery-query-source-lock-tests": Object.freeze({
+    path: "test/private-recovery-source-lock.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_REUSABLE_SOURCE_LOCK_VERIFICATION"
+  }),
+  "private-recovery-query-store-tests": Object.freeze({
+    path: "test/private-recovery-query-aws-store.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_DURABLE_STORE_VERIFICATION"
+  }),
+  "private-recovery-query-teardown-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-teardown.yml",
+    role: "PRIVATE_RECOVERY_QUERY_TEARDOWN_CALLER"
+  }),
+  "private-recovery-query-teardown-runner": Object.freeze({
+    path: "scripts/teardown-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_EVIDENCE_GATED_TEARDOWN"
+  }),
+  "private-recovery-query-teardown-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-teardown.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_TEARDOWN"
+  }),
+  "private-recovery-query-teardown-tests": Object.freeze({
+    path: "test/private-recovery-query-teardown.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_TEARDOWN_VERIFICATION"
+  }),
+  "private-recovery-query-template": Object.freeze({
+    path: "src/cloud/private-recovery-query-template.js",
+    role: "PRIVATE_RECOVERY_QUERY_MINI_STACK_SOURCE"
+  }),
+  "private-recovery-query-template-tests": Object.freeze({
+    path: "test/private-recovery-query-template.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_TEMPLATE_AND_WORKFLOW_VERIFICATION"
+  }),
+  "private-recovery-query-window-check": Object.freeze({
+    path: "scripts/check-private-recovery-query-window.js",
+    role: "PRIVATE_RECOVERY_QUERY_REMAINING_WINDOW_GATE"
+  }),
   "provider-dispatch-control": Object.freeze({
     path: "src/cloud/provider-dispatch-control.js",
     role: "DISABLED_LEGACY_PROVIDER_DISPATCH_INTERFACE"
@@ -886,10 +1119,6 @@ const EXPECTED_SURFACES = Object.freeze({
   "strict-json-contract": Object.freeze({
     path: "src/cloud/strict-json.js",
     role: "STRICT_JSON_DUPLICATE_MEMBER_REJECTION"
-  }),
-  "synthetic-authority-proposal": Object.freeze({
-    path: "scripts/lib/synthetic-authority-proposal.js",
-    role: "SYNTHETIC_AUTHORITY_PROPOSAL_FIXTURE"
   })
 });
 
@@ -1129,6 +1358,283 @@ const REQUIRED_DENY_ACTIONS = Object.freeze({
 });
 
 const SOURCE_MARKERS = Object.freeze({
+  ...Object.freeze({
+    ...Object.fromEntries(Object.keys(FRESH_PRIMARY_SURFACES).map((id) =>
+      [id, Object.freeze([])])),
+    "fresh-primary-caller-workflow": Object.freeze([
+      "name: ProofToAct Fresh Cluster And Primary",
+      "github.ref == 'refs/heads/main'",
+      "cancel-in-progress: false",
+      "id-token: write"
+    ]),
+    "fresh-primary-sealed-workflow": Object.freeze([
+      "name: ProofToAct Sealed Fresh Cluster And Primary",
+      "environment: aws-release-database-bootstrap",
+      "timeout-minutes: 45",
+      "PROOFTOACT_FRESH_CLUSTER_APPROVAL_SHA256",
+      "PROOFTOACT_HUMAN_AUTHORIZATION_SIGNER_SHA256",
+      "github.workflow_ref",
+      "github.workflow_sha",
+      "--mode reconcile-only"
+    ]),
+    "fresh-primary-oidc-boundary": Object.freeze([
+      "credential custody boundary",
+      "exactly seven empty retained Secrets Manager containers",
+      "exactly five one-version containers"
+    ]),
+    "fresh-primary-bootstrap-role-template": Object.freeze([
+      "ProofToActFreshPrimaryBootstrap",
+      "token.actions.githubusercontent.com:job_workflow_ref",
+      "DenyUnrelatedProviderCapabilities"
+    ]),
+    "fresh-primary-credential-custody-template": Object.freeze([
+      "FreshPrimaryCredentialWriterRole",
+      "SealAndReadExactFiveCredentialVersions",
+      "DenySecretLifecycleMutation"
+    ]),
+    "release-control-aws-runtime": Object.freeze([
+      "putReleaseControlItem",
+      "new dynamodb.PutItemCommand",
+      "requireExactTable(input, tableName)",
+      "maxAttempts: 1"
+    ]),
+    "one-time-bootstrap-root-session": Object.freeze([
+      "createNamedRootProfileStsClient",
+      "assumeOneTimeBootstrapRootSession",
+      "bytes.fill(0)",
+      "ONE_TIME_BOOTSTRAP_ROOT_ASSUME_REJECTED"
+    ]),
+    "b0-a1-human-authorization-contract": Object.freeze([
+      "prooftoact.b0-a1-human-authorization-contract.v4",
+      "humanAuthorizationSignerPublicKeySha256",
+      "crypto.verify(",
+      "awsMonthlyResidualCeilingUsdCents === 350",
+      "DELETE_OR_ROTATE_CREATOR_OR_AUDITOR_PROVIDER_KEYS"
+    ]),
+    "b0-a1-human-authorization-materializer": Object.freeze([
+      "AUTHORIZATION_SIGNING_SEED_DOMAIN",
+      "authorizationSigner(hmacKey)",
+      "crypto.sign(null, signaturePayload.bytes",
+      "verifyProofToActB0A1HumanAuthorizationWithImsg",
+      "hmacKey.fill(0)"
+    ]),
+    "one-time-bootstrap-authority-plan": Object.freeze([
+      "EXACT_MONTHLY_AUTHORIZATION_USD_CENTS = 350",
+      "ITEMIZED_EXACT_RESOURCE_ENVELOPE_REVIEWED",
+      "COST_RECONCILIATION_MAXIMUM_AGE_MS",
+      "AWS_SECRETS_MANAGER_EIGHT_RETAINED_SECRETS",
+      "ONE_TIME_BOOTSTRAP_COST_CEILING_REJECTED"
+    ]),
+    "one-time-bootstrap-ceremony-launcher": Object.freeze([
+      "ONE_TIME_BOOTSTRAP_LAUNCH_IMPORT_GRAPH_REJECTED",
+      "createSealedSnapshot",
+      "maximumMonthlyUsdCents === 350",
+      "authorizationBytes.fill(0)"
+    ]),
+    "one-time-bootstrap-ceremony-runner": Object.freeze([
+      "runCrashConvergentMutation",
+      "runCrashConvergentSecretSeal",
+      "validateOneTimeBootstrapTimingBudget",
+      "verifyProofToActB0A1HumanAuthorizationWithImsg",
+      "awsMonthlyResidualCeilingUsdCents"
+    ]),
+    "fresh-cluster-provider-key-revocation-finalizer": Object.freeze([
+      "HOLD_REQUIRES_SEPARATE_SIGNED_ORGANIZATION_ADMIN_AUTHORIZATION",
+      "FRESH_CLUSTER_KEY_REVOCATION_INDEPENDENT_ORG_ADMIN_AUTHORIZATION_REQUIRED",
+      "void provider"
+    ]),
+    "fresh-primary-bootstrap": Object.freeze([
+      "validateFreshPrimaryCredentialBundle",
+      "runFreshPrimaryProviderControlledBootstrap",
+      "freshPrimaryIntent",
+      "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
+      "rootNoLoginProvedFromShowUsers",
+      "rootCredentialLifecycle",
+      "immutable built-in admin role remains a provider-managed exception"
+    ]),
+    "fresh-cluster-aws-provider": Object.freeze([
+      "createFreshClusterAwsProvider",
+      "readFreshClusterSecretMaterial",
+      "normalizeFreshClusterAdminSealReadback"
+    ]),
+    "fresh-cluster-aws-runtime": Object.freeze([
+      "createFreshClusterAwsRuntime",
+      "FRESH_CLUSTER_AWS_CONFIGURATION_REJECTED",
+      "maxAttempts: 1"
+    ]),
+    "fresh-cluster-cloud-controller": Object.freeze([
+      "createFreshClusterCloudRuntime",
+      "reconcileFreshClusterInventory",
+      "approvalExpiresAt - authorizedAt <= 60 * 60 * 1000",
+      "now < Date.parse(accepted.approval.billingAuthorization.retentionDeadline)",
+      "humanAuthorizationReceiptSha256",
+      "FRESH_CLUSTER_CLOUD_REQUEST_FAILED_NO_RETRY"
+    ]),
+    "fresh-cluster-execution-runtime": Object.freeze([
+      "createFreshClusterExecutionRuntime",
+      "createFreshClusterCleanupRuntime",
+      "FRESH_CLUSTER_EXECUTION_CONFIGURATION_REJECTED"
+    ]),
+    "fresh-cluster-provider-controller": Object.freeze([
+      "FreshClusterProviderController",
+      "UNKNOWN_DO_NOT_RETRY",
+      "PROVIDER_KEYS_REVOCATION_PENDING",
+      "providerKeyRevocationCeremony",
+      "completeShowUsersPrincipalCensusSha256",
+      "commitValidatorSequenceMatchedDirectDvi",
+      "assertCleanupOpen(clock, command);"
+    ]),
+    "fresh-cluster-reconciliation-controller": Object.freeze([
+      "reconcileFreshClusterProviderAccess",
+      "AUTHENTICATED_PROVIDER_READBACK",
+      "FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED",
+      "requireCleanupDispatch();",
+      "FRESH_CLUSTER_CLEANUP_APPROVAL_EXPIRED"
+    ]),
+    "fresh-primary-aws-provider": Object.freeze([
+      "createFreshPrimaryAwsProvider",
+      "putRecoverySignerSecret",
+      "FRESH_PRIMARY_AWS_SIGNER_SECRET_UNKNOWN_DO_NOT_RETRY"
+    ]),
+    "fresh-primary-aws-runtime": Object.freeze([
+      "createFreshPrimaryAwsRuntime",
+      "FRESH_PRIMARY_AWS_RUNTIME_CONFIGURATION_REJECTED",
+      "maxAttempts: 1"
+    ]),
+    "fresh-primary-bootstrap-role-readback": Object.freeze([
+      "verifyFreshPrimaryBootstrapRoleReadback",
+      "permissionsBoundaryArn",
+      "validateFreshBootstrapCollectorCaller"
+    ]),
+    "fresh-primary-credential-custody-readback": Object.freeze([
+      "verifyFreshPrimaryCredentialCustodyReadback",
+      "freshPrimaryCredentialSecretArnsFromStackOutputs",
+      "EXACT_FIVE_SEALED_TWO_EMPTY_CREATOR_LIFECYCLE_ACCEPTED"
+    ]),
+    "fresh-primary-credential-sealer-aws-runtime": Object.freeze([
+      "createFreshPrimaryCredentialSealerAwsRuntime",
+      "IncludeDeprecated: true",
+      "maxAttempts: 1"
+    ]),
+    "fresh-primary-credential-sealer": Object.freeze([
+      "buildFreshPrimaryCredentialSealApproval",
+      "sealFreshPrimaryCredentialCustody",
+      "FRESH_CREDENTIAL_VERSION_UNKNOWN_DO_NOT_CHANGE_TOKEN"
+    ]),
+    "fresh-primary-provider-controller": Object.freeze([
+      "FreshPrimaryProviderController",
+      "runFreshPrimaryProviderController",
+      "FRESH_PRIMARY_PROVIDER_UNKNOWN_DO_NOT_RETRY"
+    ]),
+    "fresh-recovery-publication-execution": Object.freeze([
+      "createFreshRecoveryPublicationExecution",
+      "executeFreshPublicationProviderAction",
+      "databaseNow",
+      "managedMcpLogicalRequest",
+      "minimum_residual_ms",
+      "sourceAuthorityWindow"
+    ]),
+    "fresh-recovery-source-execution": Object.freeze([
+      "produceFreshRecoverySource",
+      "freshRecoverySourceIdentity",
+      "authorityEvidenceBindingSha256",
+      "proveFreshAdmissibleVectorSnapshot",
+      "Promise.allSettled",
+      "FROM tp_api.g1_spend_authority_v1(",
+      "commitValidatorSequenceMatchedDirectDvi",
+      "outboxCount: finalSnapshot.outbox.length"
+    ]),
+    "fresh-cluster-provider-launcher": Object.freeze([
+      "FRESH_CLUSTER_LAUNCH_IMPORT_GRAPH_REJECTED",
+      "controllerImportGraphSha256: graph.graphSha256",
+      "--approval-sha256",
+      "tideproof.gate2-build.v9",
+      "export async function main"
+    ]),
+    "fresh-bootstrap-collector-binding": Object.freeze([
+      "validateFreshBootstrapCollectorBinding",
+      "prooftoact-bootstrap-",
+      "prooftoact-b0-"
+    ]),
+    "fresh-primary-source-lock": Object.freeze([
+      "prooftoact-fresh-primary-source-lock-v1",
+      "caller_sha != expected_caller_sha",
+      "job_workflow_ref",
+      "job_workflow_sha",
+      "FRESH_PRIMARY_SOURCE_LOCK_REJECTED"
+    ]),
+    "fresh-recovery-publisher-key": Object.freeze([
+      "validateFreshRecoveryPublisherSecret",
+      "generateFreshRecoveryPublisherSecret",
+      "FRESH_RECOVERY_PUBLISHER_SECRET_REJECTED"
+    ]),
+    "private-recovery-query-binding": Object.freeze([
+      "validatePrivateRecoveryQueryBinding",
+      "PRIVATE_RECOVERY_QUERY_BINDING_REJECTED"
+    ]),
+    "fresh-primary-bootstrap-role-plan": Object.freeze([
+      "prepareFreshPrimaryBootstrapRole",
+      "READY_FOR_EXACT_CREATE_ONLY_APPLY",
+      "passRoleExplicitlyAbsent: true"
+    ]),
+    "fresh-primary-credential-custody-plan": Object.freeze([
+      "prepareFreshPrimaryCredentialCustody",
+      "initialVersionContract",
+      "valueActionsExplicitlyAbsent"
+    ]),
+    "release-deployment-plan": Object.freeze([
+      "validateReleaseDeploymentRoleTemplate",
+      "ReadOwnCallerIdentity",
+      "sts:GetCallerIdentity"
+    ]),
+    "fresh-cluster-provider-runner": Object.freeze([
+      "runFreshClusterProvider",
+      "sha256(canonicalBytes(approval)) === authority.approvalSha256",
+      "approval.controllerImportGraphSha256",
+      "approval.callerWorkflowSha === authority.callerWorkflowSha",
+      "authority?.humanAuthorizationSignerSha256",
+      "--human-authorization-signer-sha256",
+      "--receipt-output",
+      "FRESH_CLUSTER_PROVIDER_HOLD_PROVIDER_KEYS_REVOCATION_PENDING"
+    ]),
+    "fresh-primary-credential-sealer-runner": Object.freeze([
+      "runFreshPrimaryCredentialSealer",
+      "buffer.fill(0)",
+      "--secret-arns-file"
+    ]),
+    "fresh-primary-provider-runner": Object.freeze([
+      "runFreshPrimaryProvider",
+      "--receipt-output"
+    ]),
+    "one-time-bootstrap-authority-tests": Object.freeze([
+      "planner rejects 351-cent AWS authority, fabricated cost digests, and inflated item sums",
+      "root AssumeRole rechecks the exact execution deadline immediately before dispatch"
+    ]),
+    "one-time-bootstrap-ceremony-launcher-tests": Object.freeze([
+      "B0 launcher statically imports built-ins only and runner is launcher-only",
+      "authorization must bind the exact runtime snapshot"
+    ]),
+    "one-time-bootstrap-ceremony-runner-tests": Object.freeze([
+      "mutation classes journal before dispatch and converge ACK loss without redispatch",
+      "A1 nested continuation resumes crashes"
+    ]),
+    "b0-a1-human-authorization-tests": Object.freeze([
+      "external evidence finalizes a non-circular receipt",
+      "authorizationSignatureBase64"
+    ]),
+    "b0-a1-imessage-authorization-tests": Object.freeze([
+      "live verifier re-materializes the exact two events",
+      "event materialization rejects key, identity, body, thread, time, and cardinality drift"
+    ]),
+    "b0-a1-human-authorization-fixture": Object.freeze([
+      "buildSyntheticProofToActHumanAuthorization",
+      "humanAuthorizationSignerPublicKeySha256"
+    ]),
+    "fresh-cluster-provider-key-revocation-tests": Object.freeze([
+      "revocation proposal remains fail-closed before any provider access",
+      "HOLD_REQUIRES_SEPARATE_SIGNED_ORGANIZATION_ADMIN_AUTHORIZATION"
+    ])
+  }),
   "actions-checkout-normalizer": Object.freeze([
     "const OFFICIAL_REPOSITORY_ID = \"1317716765\"",
     "const CI_WORKFLOW_NAME = \"CI\"",
@@ -1208,6 +1714,9 @@ const SOURCE_MARKERS = Object.freeze({
     "authorityEvidenceBindingSha256",
     "rankedSequenceSha256",
     "auditorRankMatchesAuthorizer: true",
+    "directDviQueryForcedIndex: true",
+    "directDviResultValidated: true",
+    "commitValidatorSequenceMatchedDirectDvi: true",
     "if (prepared)",
     "remainingExclusionCount: 0",
     "executeVectorPreparation(",
@@ -1956,8 +2465,8 @@ const SOURCE_MARKERS = Object.freeze({
     "Gate One proves resolver cursor closure inside one transaction",
     "assert.deepEqual(stableColumns, [...stableColumns].sort())",
     "const outputAssignments = Object.freeze([",
-    "assert.equal(outputAssignments.length, 23)",
-    "database_now := \\(v_snapshot->>'database_now'\\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$",
+    "assert.equal(outputAssignments.length, 24)",
+    "minimum_residual_ms := \\(v_snapshot->>'minimum_residual_ms'\\)::INT8; database_now := \\(v_snapshot->>'database_now'\\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$",
     "assert.doesNotMatch(wrapper, /\\bRETURN QUERY\\b/u)",
     "privateSnapshotGrant",
     "Cockroach schema closure preserves typed public surfaces and direct denials",
@@ -3254,6 +3763,9 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_provider_dispatch_v2",
     "collectValidatedPosture(",
     "ALTER ROLE ${role} WITH NOLOGIN",
+    "ALTER ROLE root WITH NOLOGIN",
+    "FROM [SHOW USERS]",
+    "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
     "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA tp_private, tp_ledger, tp_api FROM ${principal}",
     "GRANT USAGE ON SCHEMA ${schemaName} TO ${role}",
     "FROM tp_authorizer_role",
@@ -3267,6 +3779,7 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_recovery_audit_event_v1",
     "tp_private.g1_resolve_recovery_source_snapshot_v1",
     "tp_api.g1_resolve_recovery_source_receipt_v2",
+    "tp_api.g1_resolve_recovery_source_receipt_v3",
     "tp_recovery_source_role: ALL_RUNTIME_SCHEMAS,",
     "tp_provider_activate_role: Object.freeze([\"tp_api\", \"tp_ledger\"])",
     "tp_provider_terminalize_role: Object.freeze([\"tp_api\", \"tp_ledger\"])",
@@ -3286,10 +3799,11 @@ const SOURCE_MARKERS = Object.freeze({
     "WHILE v_candidate_conflict_index < jsonb_array_length(v_candidate_conflict_windows) LOOP v_candidate_conflict_window := v_candidate_conflict_windows->v_candidate_conflict_index;",
     "v_candidate_evidence_valid_until <= v_database_now",
     "RETURN jsonb_build_object( 'snapshot_schema', 'g1-recovery-source-snapshot-v1', 'tenant_id', v_candidate_tenant_id::STRING",
+    "'minimum_residual_ms', v_minimum_residual_ms",
     "v_snapshot := tp_private.g1_resolve_recovery_source_snapshot_v1( p_tenant_id, p_run_id, p_incident_id, p_evidence_id, p_resource_id, p_operation_id, p_request_digest );",
     "v_snapshot IS DISTINCT FROM jsonb_build_object( 'snapshot_schema', v_snapshot->'snapshot_schema'",
     "jsonb_typeof(v_snapshot->'reason') IS DISTINCT FROM 'string' AND jsonb_typeof(v_snapshot->'reason') IS DISTINCT FROM 'null'",
-    "tenant_id := (v_snapshot->>'tenant_id')::UUID; run_id := (v_snapshot->>'run_id')::UUID; incident_id := (v_snapshot->>'incident_id')::UUID; evidence_id := (v_snapshot->>'evidence_id')::UUID; operation_id := (v_snapshot->>'operation_id')::UUID; recorded_at := (v_snapshot->>'recorded_at')::TIMESTAMPTZ; request_digest := v_snapshot->>'request_digest'; proposal_digest := v_snapshot->>'proposal_digest'; logical_action_digest := v_snapshot->>'logical_action_digest'; authorization_epoch := (v_snapshot->>'authorization_epoch')::INT8; logical_authority_key_sha256 := v_snapshot->>'logical_authority_key_sha256'; authorization_binding_sha256 := v_snapshot->>'authorization_binding_sha256'; policy_version := v_snapshot->>'policy_version'; agent_id := v_snapshot->>'agent_id'; agency := v_snapshot->>'agency'; outcome := v_snapshot->>'outcome'; reason := v_snapshot->>'reason'; evidence_digest := v_snapshot->>'evidence_digest'; authority_evidence_binding_sha256 := v_snapshot->>'authority_evidence_binding_sha256'; resource_id := v_snapshot->>'resource_id'; has_durable_intent := (v_snapshot->>'has_durable_intent')::BOOL; admissibility := v_snapshot->>'admissibility'; database_now := (v_snapshot->>'database_now')::TIMESTAMPTZ; RETURN NEXT; RETURN;",
+    "minimum_residual_ms := (v_snapshot->>'minimum_residual_ms')::INT8; database_now := (v_snapshot->>'database_now')::TIMESTAMPTZ; RETURN NEXT; RETURN;",
     "tp_private.g1_resolve_recovery_source_snapshot_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tideproof.primary-function-sql-batch.v1",
     "PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED",
@@ -3387,6 +3901,333 @@ const SOURCE_MARKERS = Object.freeze({
     "database-derived authority identity mismatch",
     "authority request identity binding mismatch",
     "tp_authorizer_user"
+  ]),
+  "private-recovery-query-approval-generator": Object.freeze([
+    "prooftoact.private-recovery-query-mcp-secret-binding.v1",
+    "IMMUTABLE_AWSCURRENT_READBACK_BOUND",
+    "validatePrivateRecoveryQueryProviderBinding",
+    "providerBindingSha256",
+    "expectedSourceCommitTs",
+    "PRIVATE_RECOVERY_QUERY_APPROVAL_CLI_HOLD"
+  ]),
+  "private-recovery-query-approval-tests": Object.freeze([
+    "generator copies the exact fresh provider binding with no overrides",
+    "generator rejects stale binding and secret readback source drift",
+    "deployment window check fails closed before the remaining margin"
+  ]),
+  "private-recovery-query-aws-runtime": Object.freeze([
+    "GetSecretValueCommand",
+    "VersionStage: \"AWSCURRENT\"",
+    "ignoreConfiguredEndpointUrls: true",
+    "maxAttempts: 1"
+  ]),
+  "private-recovery-query-aws-store": Object.freeze([
+    "PRIVATE_RECOVERY_QUERY#${command.globalKeySha256}",
+    "ConsistentRead: true",
+    "attribute_not_exists(#pk)",
+    "PRIVATE_RECOVERY_QUERY_DDB_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT",
+    "UNKNOWN_DO_NOT_RETRY"
+  ]),
+  "private-recovery-query-bootstrap-role-stack": Object.freeze([
+    "\"ManagedPolicyName\": \"ProofToActPrivateRecoveryQueryBoundary\"",
+    "ProofToActPrivateRecoveryQueryDeployment",
+    "DeploymentWorkflowCommit",
+    "SecretSealWorkflowCommit",
+    "s3:ListBucketVersions",
+    "iam:PermissionsBoundary",
+    "DenyPublicAndUnrelatedProviders"
+  ]),
+  "private-recovery-query-bootstrap-tests": Object.freeze([
+    "bootstrap stack owns only the isolated boundary, empty secret, and three roles",
+    "dispatcher trust is protected, main-only, and parameter-pinned",
+    "secret sealer copies one exact source version into only the retained target",
+    "service role is exact-resource rollback capable without runtime authority"
+  ]),
+  "private-recovery-query-build": Object.freeze([
+    "entryPoints: [\"infra/aws/lambda/private-recovery-query.js\"]",
+    "archiveEntryCount: 2",
+    "THIRD_PARTY_NOTICES.txt",
+    "packages: \"bundle\"",
+    "PRIVATE_RECOVERY_QUERY_BUILD_CLI_HOLD"
+  ]),
+  "private-recovery-query-core": Object.freeze([
+    "PRIVATE_AWS_MANAGED_MCP_RECOVERY_QUERY",
+    "semantic.toolName === \"select_query\"",
+    "rows.length === 1",
+    "rows[0].source_commit_ts === approval.expectedSourceCommitTs",
+    "status: dispatched ? \"UNKNOWN_DO_NOT_RETRY\" : \"FAILED_NO_PROVIDER_CALL\"",
+    "authorityTransferred: false",
+    "exactKeys(secretPayload, [\"apiKey\"])",
+    "transport.endpointSha256 === sha256(MANAGED_MCP_ENDPOINT)",
+    "transport.protocolVersion === MANAGED_MCP_PROTOCOL_VERSION",
+    "PRIVATE_RECOVERY_QUERY_DISPATCH_STATE_REJECTED",
+    "domain: OPERATION_KEY_DOMAIN",
+    "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED",
+    "SAFE_EXECUTION_FAILURE_CODES.has"
+  ]),
+  "private-recovery-query-core-tests": Object.freeze([
+    "private Lambda performs one fixed Managed MCP query and emits no row",
+    "completion timestamp and row freshness use a fresh post-close clock",
+    "provider-bound source commit timestamp rejects a different signed row",
+    "tool acknowledgement loss becomes durable unknown and never retries",
+    "transport evidence is bound to the exact endpoint cluster and protocol",
+    "dispatch-store contract drift fails before creating an MCP client",
+    "hostile provider errors become fixed durable codes with no secret or identity leakage",
+    "top-level Lambda boundary emits only one fixed response code and no log"
+  ]),
+  "private-recovery-query-deploy-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Deploy",
+    "prooftoact-sealed-private-recovery-deploy.yml@0000000000000000000000000000000000000000",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "secrets: inherit"
+  ]),
+  "private-recovery-query-deploy-preparer": Object.freeze([
+    "minimumRemainingMilliseconds = 15 * 60 * 1_000",
+    "READY_FOR_CREATE_CHANGE_SET",
+    "artifactObjectVersionSha256",
+    "sealedWorkflowCommit",
+    "PRIVATE_RECOVERY_QUERY_DEPLOYMENT_CLI_HOLD"
+  ]),
+  "private-recovery-query-deploy-runner": Object.freeze([
+    "prooftoact-private-recovery-query-create-${sanitizedIntent.intentSha256}",
+    "CreateChangeSetCommand",
+    "ExecuteChangeSetCommand",
+    "REVIEW_IN_PROGRESS",
+    "CREATE_IN_PROGRESS",
+    "CREATE_COMPLETE",
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_EXECUTE_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_PROTECTION_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_CLI_HOLD"
+  ]),
+  "private-recovery-query-deploy-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-deploy",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: deploy",
+    "--validate-token",
+    "--minimum-remaining-seconds 1500",
+    "--minimum-remaining-seconds 900",
+    "artifact-version-census.json",
+    "lexical minimum is a deterministic version choice across reruns",
+    "scripts/deploy-private-recovery-query.js",
+    "sanitized-deployment-receipt.json"
+  ]),
+  "private-recovery-query-evidence": Object.freeze([
+    "signatureAlgorithm: \"Ed25519\"",
+    "[\"PRE_QUERY\", \"POST_QUERY\"]",
+    "value.function.eventSourceCount === 0",
+    "value.function.functionUrlCount === 0",
+    "value.function.vpcAttached === false",
+    "snapshot.workflowCommit === expectation.workflowCommit",
+    "stackParametersSha256"
+  ]),
+  "private-recovery-query-evidence-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Evidence",
+    "prooftoact-sealed-private-recovery-evidence.yml@0000000000000000000000000000000000000000",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "PRE_QUERY",
+    "POST_QUERY"
+  ]),
+  "private-recovery-query-evidence-readback": Object.freeze([
+    "GetCallerIdentityCommand",
+    "ListFunctionUrlConfigsCommand",
+    "ConsistentRead: true",
+    "signPrivateRecoveryDeploymentEvidence",
+    "Object.keys(versions).length === 1",
+    "canonicalJson([\"AWSCURRENT\"])",
+    "decodePolicyDocument",
+    "normalizePolicyDocument",
+    "PermissionsBoundaryType === \"Policy\"",
+    "parameters.SealedWorkflowCommit === expectation.workflowCommit",
+    "functionUrlCount: 0",
+    "vpcAttached: false",
+    "PRIVATE_RECOVERY_QUERY_EVIDENCE_CLI_HOLD"
+  ]),
+  "private-recovery-query-evidence-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-evidence",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: evidence",
+    "Collect and sign exact read-only deployment evidence",
+    "npm run proof:verify",
+    "signed-evidence-receipt.json",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_EVIDENCE_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-evidence-tests": Object.freeze([
+    "signed pre-query deployment evidence binds private exact-version posture",
+    "signed post-query evidence requires the exact terminal receipt and pre-link",
+    "evidence signature and public-trigger posture fail closed on tampering",
+    "deployment evidence accepts only the exact one-version secret posture",
+    "deployment role readback decodes exact IAM policy shapes and rejects drift",
+    "IAM policy normalization is bounded to documented scalar-list fields"
+  ]),
+  "private-recovery-query-deployment-state-tests": Object.freeze([
+    "fresh deployment uses deterministic intent-bound CREATE and converges",
+    "deployment restarts from ${label}",
+    "deployment reconciles ${label} acknowledgement loss",
+    "completed protected stack returns without another provider mutation",
+    "change-set timeout is restartable after exact provider completion",
+    "stack timeout is restartable after exact provider completion",
+    "deployment holds on provider template, parameter, or service-role drift"
+  ]),
+  "private-recovery-query-lambda-entry": Object.freeze([
+    "prooftoact.private-recovery-query-invocation.v1",
+    "privateRecoveryQueryApprovalSha256(event.approval)",
+    "${configuration.functionArn}:${context.functionVersion}",
+    "firstRuntimeClockRead",
+    "runtimePromise ??=",
+    "withTopLevelFailureBoundary",
+    "PRIVATE_RECOVERY_QUERY_LAMBDA_HOLD"
+  ]),
+  "private-recovery-query-operator": Object.freeze([
+    "reservePrivateRecoveryQuery",
+    "invokeExactVersion",
+    "reconcilePrivateRecoveryQuery",
+    "PRIVATE_RECOVERY_QUERY_INVOCATION_ACK_UNKNOWN"
+  ]),
+  "private-recovery-query-operator-aws": Object.freeze([
+    "InvokeCommand",
+    "Qualifier: functionVersion",
+    "InvocationType: \"RequestResponse\"",
+    "maxAttempts: 1",
+    "response.ExecutedVersion === functionVersion"
+  ]),
+  "private-recovery-query-query-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Query",
+    "reconcile-only",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "prooftoact-sealed-private-recovery-query.yml@0000000000000000000000000000000000000000"
+  ]),
+  "private-recovery-query-query-runner": Object.freeze([
+    "[\"execute\", \"reconcile-only\"].includes",
+    "executePrivateRecoveryQueryOnce",
+    "reconcilePrivateRecoveryQuery",
+    "PRIVATE_RECOVERY_QUERY_${receipt.status}",
+    "PRIVATE_RECOVERY_QUERY_CLI_HOLD"
+  ]),
+  "private-recovery-query-query-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-query",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: query",
+    "Execute or reconcile the exact one-shot private query",
+    "--function-version \"$FUNCTION_VERSION\"",
+    "Publish sanitized receipt only",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_OPERATOR_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-secret-seal-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Secret Seal",
+    "prooftoact-sealed-private-recovery-secret-seal.yml@0000000000000000000000000000000000000000",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "secrets: inherit"
+  ]),
+  "private-recovery-query-secret-seal-runner": Object.freeze([
+    "PRIVATE_RECOVERY_QUERY_MCP_SECRET_SEAL",
+    "PutSecretValueCommand",
+    "canonicalJson({ apiKey: sourceApiKey })",
+    "RECONCILED_AFTER_ACK_LOSS",
+    "EXACT_VERSION_ALREADY_PRESENT",
+    "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_UNKNOWN_DO_NOT_RETRY",
+    "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CLI_HOLD"
+  ]),
+  "private-recovery-query-secret-seal-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-deploy",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: secret-seal",
+    "Assume only the one-version private secret sealer",
+    "scripts/seal-private-recovery-query-secret.js",
+    "mcp-secret-binding.json",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_SECRET_SEALER_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-secret-seal-tests": Object.freeze([
+    "secret sealer copies one exact source key into one canonical target version",
+    "secret sealer reconciles PutSecretValue acknowledgement loss without retry",
+    "secret sealer rejects any unexpected target version before writing",
+    "secret sealer rejects missing operator authorization before provider read"
+  ]),
+  "private-recovery-query-source-lock": Object.freeze([
+    "AUDIENCE = \"prooftoact-private-recovery-source-lock-v1\"",
+    "LANES = {",
+    "job_workflow_ref",
+    "job_workflow_sha",
+    "workflow_sha",
+    "validate_endpoint",
+    "validate_token_response",
+    "PRIVATE_RECOVERY_SOURCE_LOCK_REJECTED"
+  ]),
+  "private-recovery-query-source-lock-tests": Object.freeze([
+    "all sealed lanes bind their GitHub-issued reusable identity before secrets",
+    "all callers remain inert until Commit B pins one reviewed Commit A",
+    "source-lock endpoint accepts only the bounded GitHub HTTPS endpoint",
+    "source lock accepts the exact identity of every private recovery lane",
+    "source lock rejects identity, time, structure, and coordinate drift",
+    "source-lock contract fails closed if dispatch or source guards are removed"
+  ]),
+  "private-recovery-query-store-tests": Object.freeze([
+    "AWS store reserves, dispatches, and finalizes one exact item",
+    "conditional write acknowledgement loss converges by strong read only",
+    "unknown terminalization preserves no provider retry authority",
+    "one operation ID occupies one create-only key across approval drift",
+    "one operation ID rejects a different command after restart and final replay",
+    "distinct operation IDs reserve distinct keys while concurrent replays converge"
+  ]),
+  "private-recovery-query-teardown-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Teardown",
+    "confirmation: ${{ inputs.confirmation }}",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "prooftoact-sealed-private-recovery-teardown.yml@0000000000000000000000000000000000000000"
+  ]),
+  "private-recovery-query-teardown-runner": Object.freeze([
+    "DELETE_PROOFTOACT_PRIVATE_RECOVERY_QUERY_AFTER_POST_EVIDENCE",
+    "UpdateTerminationProtectionCommand",
+    "DeleteStackCommand",
+    "ConsistentRead: true",
+    "ClientRequestToken:",
+    "DELETE_IN_PROGRESS",
+    "DELETE_FAILED",
+    "PRIVATE_RECOVERY_QUERY_TEARDOWN_DELETE_FAILED_HOLD",
+    "PRIVATE_RECOVERY_QUERY_TEARDOWN_CLI_HOLD"
+  ]),
+  "private-recovery-query-teardown-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-teardown",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: teardown",
+    "Verify terminal receipt and delete exactly one stack once",
+    "POST_EVIDENCE_RECEIPT_B64",
+    "Publish sanitized teardown receipt only",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_TEARDOWN_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-teardown-tests": Object.freeze([
+    "governed teardown verifies POST evidence and deletes one exact stack once",
+    "teardown rejects wrong confirmation before any provider read",
+    "teardown restarts after protection was already disabled",
+    "teardown resumes DELETE_IN_PROGRESS without another mutation",
+    "teardown timeout preserves DELETE_IN_PROGRESS for a later successful rerun",
+    "DELETE_FAILED is re-protected and held without a delete retry"
+  ]),
+  "private-recovery-query-template": Object.freeze([
+    "ReservedConcurrentExecutions: 1",
+    "\"dynamodb:LeadingKeys\": \"false\"",
+    "functionUrlCount: 0",
+    "publicApiCount: 0",
+    "vpcAttached: false",
+    "resourceCount: Object.keys(template.Resources).length"
+  ]),
+  "private-recovery-query-template-tests": Object.freeze([
+    "mini-stack owns one private exact-version Lambda with no public trigger",
+    "runtime and operator are restricted to one operation key and one secret",
+    "OIDC trust pins protected environment and immutable reusable workflow",
+    "sealed workflow requires a GitHub-bound authority commit and tree"
+  ]),
+  "private-recovery-query-window-check": Object.freeze([
+    "minimumRemainingSeconds >= 60",
+    "remainingMilliseconds >= minimumRemainingSeconds * 1_000",
+    "prooftoact.private-recovery-query-window-check.v1",
+    "PRIVATE_RECOVERY_QUERY_WINDOW_REJECTED",
+    "PRIVATE_RECOVERY_QUERY_WINDOW_CLI_HOLD"
   ]),
   "provider-dispatch-control": Object.freeze([
     "INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_V1_DISABLED",
@@ -3571,7 +4412,7 @@ const SOURCE_MARKERS = Object.freeze({
     "beforeExternalAction(\"AUDIT_RESOLVE_CONNECT\")",
     "beforeExternalAction(\"AUDIT_RESOLVE_QUERY\")",
     "g1_resolve_recovery_audit_event_v1",
-    "g1_resolve_recovery_source_receipt_v2",
+    "g1_resolve_recovery_source_receipt_v3",
     "resolveCommittedRecoverySourceReceipt",
     "row.policy_version !== \"gate1-policy-v2\"",
     "RECOVERY_SOURCE_DVI_BINDING_INVALID",
@@ -3794,12 +4635,6 @@ const SOURCE_MARKERS = Object.freeze({
     "Number.isFinite(Number(match[0]))",
     "members.has(member)",
     "return JSON.parse(text);"
-  ]),
-  "synthetic-authority-proposal": Object.freeze([
-    "dviSelectionBindingSha256For(selection)",
-    "recordDviSelectionReceiptForTest(selection)",
-    "SYNTHETIC_PROPOSAL_AUTHORIZATION_FAILED",
-    "authorizeSyntheticContenders"
   ])
 });
 

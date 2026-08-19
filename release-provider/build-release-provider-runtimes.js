@@ -22,6 +22,44 @@ const SPECS = Object.freeze([
     ])
   }),
   Object.freeze({
+    capability: "EXECUTE_PERMIT_READER",
+    entry: "src/release-provider-execute-permit-entry.js",
+    exports: Object.freeze([
+      "createAwsExecutePermitTransport", "createExecutePermitReader"
+    ]),
+    forbidden: Object.freeze([
+      "CreateChangeSetCommand", "DeleteStackCommand", "ExecuteChangeSetCommand",
+      "InvokeFunctionCommand", "PutObjectCommand", "TransactWriteItemsCommand",
+      "UpdateItemCommand", "UpdateTerminationProtectionCommand"
+    ])
+  }),
+  Object.freeze({
+    capability: "EXECUTE_DISPATCHER",
+    entry: "src/release-provider-execute-dispatch-entry.js",
+    exports: Object.freeze([
+      "createAwsExecuteDispatcherTransport", "createExecuteDispatcher"
+    ]),
+    forbidden: Object.freeze([
+      "AssumeRoleCommand", "CreateChangeSetCommand", "DeleteStackCommand",
+      "DescribeStackEventsCommand", "GetObjectCommand", "InvokeFunctionCommand",
+      "PutItemCommand", "PutObjectCommand", "TransactWriteItemsCommand",
+      "UpdateItemCommand"
+    ])
+  }),
+  Object.freeze({
+    capability: "EXECUTE_READBACK",
+    entry: "src/release-provider-execute-readback-entry.js",
+    exports: Object.freeze([
+      "createAwsExecuteReadbackTransport", "createExecuteReadback"
+    ]),
+    forbidden: Object.freeze([
+      "AssumeRoleCommand", "CreateChangeSetCommand", "DeleteStackCommand",
+      "ExecuteChangeSetCommand", "GetObjectCommand", "InvokeFunctionCommand",
+      "PutItemCommand", "PutObjectCommand", "TransactWriteItemsCommand",
+      "UpdateItemCommand", "UpdateTerminationProtectionCommand"
+    ])
+  }),
+  Object.freeze({
     capability: "PREPARE_DISPATCHER",
     entry: "src/release-provider-prepare-dispatch-entry.js",
     exports: Object.freeze([

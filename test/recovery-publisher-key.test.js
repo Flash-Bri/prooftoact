@@ -211,13 +211,14 @@ test("recovery source principal resolves one current exact authority receipt", a
     has_durable_intent: true,
     admissibility: "admissible",
     recorded_at: new Date("2026-08-03T05:00:00.000Z"),
-    database_now: new Date("2026-08-03T05:01:00.000Z")
+    database_now: new Date("2026-08-03T05:01:00.000Z"),
+    minimum_residual_ms: "1200000"
   };
   const clientFactoryFor = (resolvedRow = row) => () => ({
     async connect() {},
     async end() {},
     async query(text, values) {
-      assert.match(text, /g1_resolve_recovery_source_receipt_v2/u);
+      assert.match(text, /g1_resolve_recovery_source_receipt_v3/u);
       assert.deepEqual(values, [
         binding.tenantId,
         binding.runId,

@@ -1,0 +1,32 @@
+name: ProofToAct Private Recovery Query
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Execute once or perform read-only reconciliation
+        required: true
+        type: choice
+        options:
+          - reconcile-only
+          - execute
+      operation_id:
+        description: Exact approved operation UUID
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  private-recovery-query:
+    permissions:
+      contents: read
+      id-token: write
+    # Activation Commit B replaces these inert sentinels with reviewed Commit A.
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-query.yml@0000000000000000000000000000000000000000
+    with:
+      authority_commit: "0000000000000000000000000000000000000000"
+      authority_tree: "0000000000000000000000000000000000000000"
+      mode: ${{ inputs.mode }}
+      operation_id: ${{ inputs.operation_id }}
+    secrets: inherit

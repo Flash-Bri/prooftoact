@@ -1,7 +1,7 @@
 {
   "schema": "tideproof.release-privacy-manifest.v1",
   "status": "CURRENT_PUBLIC_HISTORY_REVIEWED_FINAL_RELEASE_PENDING",
-  "reviewedOn": "2026-08-18",
+  "reviewedOn": "2026-08-19",
   "allowedFindings": [
     {
       "rule": "aws-access-key",
@@ -173,6 +173,36 @@
     },
     {
       "rule": "email-address",
+      "path": "test/helpers/prooftoact-human-authorization-fixture.js",
+      "matchSha256": "64473cfe74b3d136212dc492d076b1d83b2b3718665244833d6384b01552527c",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/one-time-bootstrap-authority.test.js",
+      "matchSha256": "e7ab0556abf7315609ff6015f8a3769910b42155ba4a3cad2d7ab37babe1f1cb",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/prooftoact-b0-a1-human-authorization.test.js",
+      "matchSha256": "64473cfe74b3d136212dc492d076b1d83b2b3718665244833d6384b01552527c",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/prooftoact-imessage-human-authorization.test.js",
+      "matchSha256": "3cb49190fcd7707611bbb965acb20863c62e2f16c13d18a8d0107330baf29ef4",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
+      "path": "test/prooftoact-imessage-human-authorization.test.js",
+      "matchSha256": "4b68cdf43947a45f1615ac298239d286543234a2e40f431d770855374e88df88",
+      "classification": "SYNTHETIC_TEST_FIXTURE"
+    },
+    {
+      "rule": "email-address",
       "path": "test/recovery-publisher-key.test.js",
       "matchSha256": "660ae5b873e90dfc795b8dac8e65bc2aa564b1808586b3702a5ecf3651bbe769",
       "classification": "SYNTHETIC_TEST_FIXTURE"
@@ -253,6 +283,7 @@
   ],
   "syntheticAwsAccountIds": [
     "111111111111",
+    "123456789012",
     "222222222222"
   ],
   "finalReleaseReady": false

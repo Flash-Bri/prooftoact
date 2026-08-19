@@ -39,16 +39,16 @@ test("locked dependency inventory matches every reviewed package record", () => 
   const receipt = verifyDependencyInventory({ rootDir: ROOT });
 
   assert.equal(receipt.status, "PASS");
-  assert.equal(receipt.packageCount, 76);
-  assert.equal(receipt.runtimeCount, 48);
+  assert.equal(receipt.packageCount, 82);
+  assert.equal(receipt.runtimeCount, 54);
   assert.equal(receipt.developmentOnlyCount, 28);
   assert.equal(receipt.optionalCount, 27);
   assert.equal(receipt.installScriptCount, 1);
   assert.deepEqual(receipt.licenses, {
     "0BSD": 1,
-    "Apache-2.0": 32,
+    "Apache-2.0": 36,
     ISC: 2,
-    MIT: 40,
+    MIT: 42,
     "MPL-2.0": 1
   });
 });

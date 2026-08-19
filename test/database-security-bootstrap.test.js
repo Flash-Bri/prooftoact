@@ -49,6 +49,62 @@ const fullDrillEvidenceUrl = new URL(
   import.meta.url
 );
 
+const LOGIN_POSTURE_RUNTIME_USERS = [
+  "tp_ingest_user",
+  "tp_authorizer_user",
+  "tp_gate2_authorizer_user",
+  "tp_dispatch_user",
+  "tp_recovery_source_user",
+  "tp_recovery_audit_user",
+  "tp_provider_claim_user",
+  "tp_provider_begin_user",
+  "tp_provider_redeem_user",
+  "tp_provider_activate_user",
+  "tp_provider_finalize_user",
+  "tp_provider_terminalize_user",
+  "tp_provider_reconcile_user",
+  "tp_audit_user"
+];
+
+function completeShowUsersPosture() {
+  const databaseNow = "2026-08-19T08:00:14.000Z";
+  return [
+    { username: "admin", options: [], member_of: [], database_now: databaseNow },
+    {
+      username: "prooftoact_bootstrap_admin",
+      options: [],
+      member_of: ["admin"],
+      database_now: databaseNow
+    },
+    {
+      username: "root",
+      options: ["NOLOGIN"],
+      member_of: ["admin"],
+      database_now: databaseNow
+    },
+    {
+      username: "tp_owner",
+      options: ["NOLOGIN"],
+      member_of: [],
+      database_now: databaseNow
+    },
+    ...LOGIN_POSTURE_RUNTIME_USERS.flatMap((username) => {
+      const role = username.replace(/_user$/u, "_role");
+      return [{
+        username: role,
+        options: ["NOLOGIN"],
+        member_of: [],
+        database_now: databaseNow
+      }, {
+        username,
+        options: [],
+        member_of: [role],
+        database_now: databaseNow
+      }];
+    })
+  ];
+}
+
 test("primary bootstrap audits posture before credentials, ownership, or grants", async () => {
   const source = await readFile(primaryUrl, "utf8");
   const bootstrap = source.slice(source.indexOf("export async function bootstrapPrimarySecurity"));
@@ -96,6 +152,52 @@ test("primary bootstrap audits posture before credentials, ownership, or grants"
   );
   assert.ok(schemaDefaultLock > migration);
   assert.ok(bootstrap.indexOf("await createFunctions(client)") > schemaDefaultLock);
+});
+
+test("complete SHOW USERS posture proves root and capability NOLOGIN", async () => {
+  const rows = completeShowUsersPosture();
+  const client = {
+    async query(sql) {
+      assert.match(sql, /FROM \[SHOW USERS\]/u);
+      return { rows, rowCount: rows.length };
+    }
+  };
+  const posture = await primarySecurityContract.collectPrincipalLoginPosture(
+    client,
+    "prooftoact_bootstrap_admin"
+  );
+  assert.equal(posture.schemaVersion,
+    "prooftoact.primary-principal-login-posture.v2");
+  assert.equal(posture.status,
+    "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE");
+  assert.equal(posture.exactPrincipalCount, 32);
+  assert.equal(posture.rootCanLogin, false);
+  assert.deepEqual(posture.rootOptions, ["NOLOGIN"]);
+  assert.equal(posture.capabilityNoLoginCount, 15);
+  assert.equal(posture.runtimeLoginCount, 14);
+  assert.equal(posture.immutableBuiltinAdminRoleExceptionPresent, true);
+  assert.match(posture.fullPrincipalCensusSha256, /^[0-9a-f]{64}$/u);
+});
+
+test("complete SHOW USERS posture rejects root option drift and extra names", async () => {
+  for (const rows of [
+    completeShowUsersPosture().map((row) => row.username === "root"
+      ? { ...row, options: [] }
+      : row),
+    [...completeShowUsersPosture(), {
+      username: "unexpected_user",
+      options: [],
+      member_of: [],
+      database_now: "2026-08-19T08:00:14.000Z"
+    }]
+  ]) {
+    await assert.rejects(
+      primarySecurityContract.collectPrincipalLoginPosture({
+        async query() { return { rows, rowCount: rows.length }; }
+      }, "prooftoact_bootstrap_admin"),
+      /PRIMARY_LOGIN_POSTURE_MISMATCH/u
+    );
+  }
 });
 
 test("snapshot exclusions are exact, bounded, and removed with the snapshot", async () => {
@@ -307,6 +409,7 @@ test("every database SECURITY DEFINER body binds the exact session user", async 
     ["g1_resolve_recovery_audit_event_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_resolve_recovery_source_snapshot_v1", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_source_receipt_v2", /session_user = 'tp_recovery_source_user'/u],
+    ["g1_resolve_recovery_source_receipt_v3", /session_user = 'tp_recovery_source_user'/u],
     ["g1_resolve_recovery_publisher_trust_root_v1", /session_user = 'tp_recovery_audit_user'/u],
     ["g1_record_protected_effect_v1", /session_user <> 'tp_dispatch_user'/u]
   ]);
@@ -687,7 +790,7 @@ test("recovery source resolves through a private scalar snapshot and inert publi
     /CREATE OR REPLACE FUNCTION tp_private\.g1_resolve_recovery_source_snapshot_v1\([\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   )?.[1];
   const wrapperMatch = source.match(
-    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v2\([\s\S]*?RETURNS TABLE\(([\s\S]*?)\)\s*LANGUAGE PLpgSQL[\s\S]*?AS \$\$([\s\S]*?)\$\$/u
+    /CREATE OR REPLACE FUNCTION tp_api\.g1_resolve_recovery_source_receipt_v3\([\s\S]*?RETURNS TABLE\(([\s\S]*?)\)\s*LANGUAGE PLpgSQL[\s\S]*?AS \$\$([\s\S]*?)\$\$/u
   );
   const returnSignature = wrapperMatch?.[1];
   const wrapper = wrapperMatch?.[2];
@@ -753,7 +856,11 @@ test("recovery source resolves through a private scalar snapshot and inert publi
     1
   );
   assert.doesNotMatch(postClockDecision, /\btp_(?:api|private|ledger)\./u);
-  assert.doesNotMatch(postClockDecision, /\b(?:SELECT|FROM)\b/u);
+  const postClockWithoutIntervalExtract = postClockDecision.replace(
+    /extract\(epoch FROM \(/u,
+    "extract(epoch ("
+  );
+  assert.doesNotMatch(postClockWithoutIntervalExtract, /\b(?:SELECT|FROM)\b/u);
   assert.doesNotMatch(snapshot, /statement_timestamp\(\)|transaction_timestamp\(\)/u);
   assert.doesNotMatch(snapshot, /\bRETURN NEXT\b|\bRETURN QUERY\b/u);
 
@@ -781,6 +888,7 @@ test("recovery source resolves through a private scalar snapshot and inert publi
     "resource_id",
     "has_durable_intent",
     "admissibility",
+    "minimum_residual_ms",
     "database_now"
   ]);
   const normalizedSnapshot = snapshot.replace(/\s+/gu, " ");
@@ -868,12 +976,13 @@ test("recovery source resolves through a private scalar snapshot and inert publi
     ["resource_id", "v_snapshot->>'resource_id'"],
     ["has_durable_intent", "(v_snapshot->>'has_durable_intent')::BOOL"],
     ["admissibility", "v_snapshot->>'admissibility'"],
+    ["minimum_residual_ms", "(v_snapshot->>'minimum_residual_ms')::INT8"],
     ["database_now", "(v_snapshot->>'database_now')::TIMESTAMPTZ"]
   ]);
   const returnColumns = [...returnSignature.matchAll(
     /^\s*([a-z][a-z0-9_]*)\s+(?:UUID|STRING|INT8|TIMESTAMPTZ|BOOL),?\s*$/gmu
   )].map((match) => match[1]);
-  assert.equal(outputAssignments.length, 23);
+  assert.equal(outputAssignments.length, 24);
   assert.deepEqual(returnColumns, outputAssignments.map(([output]) => output));
   const normalizedWrapper = wrapper.replace(/\s+/gu, " ").trim();
   let previousAssignment = -1;
@@ -890,7 +999,7 @@ test("recovery source resolves through a private scalar snapshot and inert publi
   }
   assert.match(
     normalizedWrapper,
-    /database_now := \(v_snapshot->>'database_now'\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$/u
+    /minimum_residual_ms := \(v_snapshot->>'minimum_residual_ms'\)::INT8; database_now := \(v_snapshot->>'database_now'\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$/u
   );
   assert.equal(wrapper.match(/\bRETURN NEXT;/gu)?.length, 1);
   assert.doesNotMatch(wrapper, /\bRETURN QUERY\b/u);
@@ -903,7 +1012,7 @@ test("recovery source resolves through a private scalar snapshot and inert publi
   );
   const emittedWrapper = statements.filter((statement) =>
     statement.includes(
-      "CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2"
+      "CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v3"
     )
   );
   assert.equal(emittedSnapshot.length, 1);
@@ -971,7 +1080,7 @@ test("recovery source resolver upgrades by version without destructive DDL", asy
   const gate1Security = await readFile(gate1SecurityUrl, "utf8");
   assert.match(
     recoveryBroker,
-    /tp_api\.g1_resolve_recovery_source_receipt_v2\(/u
+    /tp_api\.g1_resolve_recovery_source_receipt_v3\(/u
   );
   assert.match(
     gate1Security,
@@ -1079,8 +1188,8 @@ test("primary function SQL is digest-pinned before any database query", async ()
   );
   assert.deepEqual(receipt, {
     schema: "tideproof.primary-function-sql-batch.v1",
-    statementCount: 56,
-    sha256: "cf77ee3af31d939c134fd49061c2555d34c3caccb3b3a627807c459b6c0fd6e4"
+    statementCount: 57,
+    sha256: "82de099bcdf1fcf35a51486e6018213885625d11ae0e33de3a6d13ffd5ce8d9c"
   });
   const legacyProviderDrop = statements.find((statement) =>
     statement.includes("DROP FUNCTION IF EXISTS tp_api.g1_transition_provider_dispatch_v1")
@@ -1242,14 +1351,18 @@ test("resolver upgrade preflight admits only the exact installed v1 capability",
     "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
   const currentSignature =
     "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+  const residualSignature =
+    "g1_resolve_recovery_source_receipt_v3(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
   const finalPolicy =
     primarySecurityContract.primaryPostureSpec.roleGrantPolicies
       .tp_recovery_source_role.functions;
   const preflightPolicy =
     primarySecurityContract.primaryPreflightPostureSpec.roleGrantPolicies
       .tp_recovery_source_role.functions;
-  assert.deepEqual(finalPolicy, [currentSignature]);
-  assert.deepEqual(preflightPolicy, [legacySignature, currentSignature]);
+  assert.deepEqual(finalPolicy, [currentSignature, residualSignature]);
+  assert.deepEqual(preflightPolicy, [
+    legacySignature, currentSignature, residualSignature
+  ]);
   assert.deepEqual(
     primarySecurityContract.primaryPostureSpec.roleGrantPolicies
       .tp_recovery_source_role.schemas,
@@ -1686,6 +1799,14 @@ test("authority spend, replay, and protected effects refresh database time", asy
   );
   assert.match(spendBody, /v_proposal_expires_at <= v_database_now/u);
   assert.match(spendBody, /v_holder_expiry > v_database_now/u);
+  assert.match(
+    spendBody,
+    /IF p_lease_ms = 1800000 THEN\s*NULL;\s*ELSE\s*IF p_lease_ms IS NULL OR p_lease_ms < 1000 OR p_lease_ms > 600000 THEN/u
+  );
+  assert.match(
+    spendBody,
+    /IF p_lease_ms > 600000 AND NOT \(\s*p_lease_ms = 1800000\s*AND v_proposal_expires_at - v_proposal_admitted_at =\s*INTERVAL '30 minutes'\s*\) THEN/u
+  );
   assert.match(
     spendBody,
     /lease_expires_at\s*=\s*v_database_now\s*\+\s*\(p_lease_ms \* INTERVAL '1 millisecond'\)/u

@@ -79,9 +79,42 @@ const WORKFLOWS = Object.freeze([
 
 const SOURCE_ONLY_WORKFLOWS = Object.freeze([
   Object.freeze({
+    file: "prooftoact-fresh-primary.yml",
+    jobNames: Object.freeze([
+      "exact-source",
+      "sealed-fresh-cluster-and-primary"
+    ]),
+    name: "ProofToAct Fresh Cluster And Primary"
+  }),
+  Object.freeze({
     file: "prooftoact-hosted-dual-root-verification.yml",
     jobNames: Object.freeze(["verify-dual-root"]),
     name: "ProofToAct Hosted Dual Root Verification"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-deploy.yml",
+    jobNames: Object.freeze(["deploy"]),
+    name: "ProofToAct Private Recovery Deploy"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-evidence.yml",
+    jobNames: Object.freeze(["evidence"]),
+    name: "ProofToAct Private Recovery Evidence"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-query.yml",
+    jobNames: Object.freeze(["private-recovery-query"]),
+    name: "ProofToAct Private Recovery Query"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-secret-seal.yml",
+    jobNames: Object.freeze(["secret-seal"]),
+    name: "ProofToAct Private Recovery Secret Seal"
+  }),
+  Object.freeze({
+    file: "prooftoact-private-recovery-teardown.yml",
+    jobNames: Object.freeze(["teardown"]),
+    name: "ProofToAct Private Recovery Teardown"
   })
 ]);
 
@@ -89,7 +122,13 @@ const SEALED_WORKFLOW_FILES = Object.freeze([
   "prooftoact-sealed-coordinator.yml",
   "prooftoact-sealed-evidence.yml",
   "prooftoact-sealed-execute.yml",
+  "prooftoact-sealed-fresh-primary.yml",
   "prooftoact-sealed-live-drill.yml",
+  "prooftoact-sealed-private-recovery-deploy.yml",
+  "prooftoact-sealed-private-recovery-evidence.yml",
+  "prooftoact-sealed-private-recovery-query.yml",
+  "prooftoact-sealed-private-recovery-secret-seal.yml",
+  "prooftoact-sealed-private-recovery-teardown.yml",
   "prooftoact-sealed-prepare.yml",
   "prooftoact-sealed-teardown.yml",
   "prooftoact-sealed-terminalizer.yml"
@@ -126,6 +165,8 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "control-plane-verification/test-hosted-dual-root-verification-tamper.js",
   "control-plane-verification/verify-hosted-dual-root-verification.js",
   "infra/aws/release-deployment-roles-template.json",
+  "infra/aws/fresh-primary-bootstrap-role-stack.json",
+  "infra/aws/fresh-primary-credential-custody-stack.json",
   "release-control/build-release-control-runtime.js",
   "release-control/DEPENDENCY_INVENTORY.json",
   "release-control/package-lock.json",
@@ -137,6 +178,28 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "release-provider/package.json",
   "release-provider/THIRD_PARTY_NOTICES.txt",
   "scripts/bootstrap-fresh-primary.js",
+  "scripts/fresh-cluster-aws-provider.js",
+  "scripts/fresh-cluster-aws-runtime.js",
+  "scripts/fresh-cluster-cloud-controller.js",
+  "scripts/fresh-cluster-execution-runtime.js",
+  "scripts/fresh-cluster-provider-controller.js",
+  "scripts/fresh-cluster-reconciliation-controller.js",
+  "scripts/fresh-primary-aws-provider.js",
+  "scripts/fresh-primary-aws-runtime.js",
+  "scripts/fresh-primary-bootstrap-role-readback.js",
+  "scripts/fresh-primary-credential-custody-readback.js",
+  "scripts/fresh-primary-credential-sealer-aws-runtime.js",
+  "scripts/fresh-primary-credential-sealer.js",
+  "scripts/fresh-primary-provider-controller.js",
+  "scripts/fresh-recovery-publication-execution.js",
+  "scripts/fresh-recovery-source-execution.js",
+  "scripts/launch-fresh-cluster-provider.js",
+  "scripts/lib/fresh-bootstrap-collector-binding.js",
+  "scripts/lib/fresh-primary-source-lock.py",
+  "scripts/lib/fresh-recovery-publisher-key.js",
+  "scripts/lib/private-recovery-query-binding.js",
+  "scripts/prepare-fresh-primary-bootstrap-role.js",
+  "scripts/prepare-fresh-primary-credential-custody.js",
   "scripts/build-release-credential-seal.js",
   "scripts/normalize-release-control-checkouts.js",
   "scripts/prepare-release-control-bootstrap.js",
@@ -145,6 +208,13 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "scripts/release-provider-bootstrap-readback-collector.sh",
   "scripts/release-provider-controller.js",
   "scripts/release-provider-one-shot-broker.js",
+  "scripts/run-release-execute-common.js",
+  "scripts/run-release-execute-diagnostic.js",
+  "scripts/run-release-execute-phase.js",
+  "scripts/run-release-execute-preflight.js",
+  "scripts/run-fresh-cluster-provider.js",
+  "scripts/run-fresh-primary-credential-sealer.js",
+  "scripts/run-fresh-primary-provider.js",
   "scripts/run-release-prepare-common.js",
   "scripts/run-release-prepare-diagnostic.js",
   "scripts/run-release-prepare-phase.js",
@@ -153,6 +223,8 @@ const REQUIRED_EXACT_PATHS = Object.freeze([
   "test/release-control-bootstrap-plan.test.js",
   "test/hosted-dual-root-verification.test.js",
   "test/release-control-bootstrap-readback.test.js",
+  "test/release-execute-runner.test.js",
+  "test/release-provider-execute-runtime.test.js",
   "test/release-provider-runtime-loader.test.js",
   "test/release-provider-runtime.test.js",
   "test/release-prepare-runner.test.js"
@@ -177,18 +249,18 @@ const DISCOVERY_RULES = Object.freeze([
   Object.freeze({
     directory: "scripts",
     pattern:
-      /^(?:bootstrap-fresh-primary|normalize-release-control-checkouts|prepare-release-control-bootstrap|prepare-release-deployment|release-provider-.*|run-release-.*|sign-release-provider-approval)\.js$/u,
+      /^(?:bootstrap-fresh-primary|fresh-(?:cluster|primary|recovery)-.*|launch-fresh-cluster-provider|normalize-release-control-checkouts|prepare-fresh-primary-.*|prepare-release-control-bootstrap|prepare-release-deployment|release-provider-.*|run-fresh-(?:cluster|primary)-.*|run-release-.*|sign-release-provider-approval)\.js$/u,
     recursive: false
   }),
   Object.freeze({
     directory: "scripts/lib",
-    pattern: /^release-control-.*\.js$/u,
+    pattern: /^(?:(?:fresh-bootstrap-collector-binding|fresh-recovery-publisher-key|private-recovery-query-binding|release-control-.*)\.js|fresh-primary-source-lock\.py)$/u,
     recursive: false
   }),
   Object.freeze({
     directory: "test",
     pattern:
-      /^(?:control-plane-verification|fresh-primary-bootstrap|hosted-dual-root-verification|release-control-.*|release-deployment-plan|release-prepare-.*|release-provider-.*)\.test\.js$/u,
+      /^(?:control-plane-verification|fresh-(?:cluster|primary|recovery)-.*|launch-fresh-cluster-provider|hosted-dual-root-verification|release-control-.*|release-deployment-plan|release-execute-.*|release-prepare-.*|release-provider-.*|run-fresh-(?:cluster|primary)-.*)\.test\.js$/u,
     recursive: false
   }),
   Object.freeze({
@@ -576,7 +648,8 @@ function collectProviderDependencies(root) {
       findings.push("RELEASE_PROVIDER_INVENTORY_DIRECT_SET_REJECTED");
     }
     const capabilities = new Set([
-      "PERMIT_READER", "PREPARE_DISPATCHER", "PREPARE_READBACK"
+      "PERMIT_READER", "EXECUTE_PERMIT_READER", "EXECUTE_DISPATCHER",
+      "EXECUTE_READBACK", "PREPARE_DISPATCHER", "PREPARE_READBACK"
     ]);
     const inventoryRecords = Array.isArray(inventory.packages)
       ? inventory.packages : [];
@@ -1084,7 +1157,7 @@ function collectSecurity(root, inventory) {
       !text.includes("${{ secrets.") && !text.includes("${{ vars.") &&
       (text.match(/actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/gu) ?? [])
         .length === 3 &&
-      (text.match(/\.github\/workflows\/prooftoact-sealed-(?:coordinator|prepare)\.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f/gu) ?? [])
+      (text.match(/\.github\/workflows\/prooftoact-sealed-(?:coordinator|prepare|execute)\.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f/gu) ?? [])
         .length === 3 &&
       !text.includes("configure-aws-credentials");
     workflowChecks.push({
@@ -1108,7 +1181,7 @@ function collectSecurity(root, inventory) {
       (item.file === "prooftoact-release-candidate.yml"
         ? item.phaseWiredDefaultHold
         : item.diagnosticFailClosed && item.idTokenAbsent)),
-  "The release-candidate workflow is phase-wired but defaults to a diagnostic HOLD; the other five workflows remain diagnostic-only. Provider authority is not inferred.");
+  "The PREPARE workflow is sealed and phase-wired but defaults to a diagnostic HOLD; the EXECUTE and later workflows remain diagnostic-only until the exact reusable-workflow trust bootstrap is advanced. Provider authority is not inferred.");
   let hostedDualRootConstrained = false;
   try {
     const hosted = readText(root,
@@ -1180,13 +1253,17 @@ function collectSecurity(root, inventory) {
       builder.includes("RELEASE_PROVIDER_EXTERNAL_IMPORT_REJECTED") &&
       loader.includes("value.externalImports.every") &&
       loader.includes("/^node:[a-z0-9_./-]+$/u") &&
-      loader.includes("receipt.runtimes.length === 3");
+      loader.includes("receipt.runtimes.length === Object.keys(CAPABILITIES).length") &&
+      ["PERMIT_READER", "EXECUTE_PERMIT_READER", "EXECUTE_DISPATCHER",
+        "EXECUTE_READBACK", "PREPARE_DISPATCHER", "PREPARE_READBACK"]
+        .every((capability) => builder.includes(`capability: "${capability}"`) &&
+          loader.includes(`${capability}: Object.freeze`));
   } catch {
     providerBundlesConstrained = false;
   }
   check("PROVIDER_BUNDLES_DENY_CREDENTIAL_CHAIN_AND_EXTERNAL_IMPORTS",
     providerBundlesConstrained,
-    "All three provider capability bundles must reject credential-chain packages and permit only explicit node: builtin external imports.");
+    "All six provider capability bundles must reject credential-chain packages and permit only explicit node: builtin external imports.");
   let tableIdentityBound = false;
   try {
     const template = JSON.parse(readText(root,

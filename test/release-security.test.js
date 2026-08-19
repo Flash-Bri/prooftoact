@@ -122,6 +122,137 @@ test("security manifest binds every AWS provider runtime and template-security c
   }
 });
 
+test("security manifest binds the complete private recovery-query lane", () => {
+  const expected = {
+    "private-recovery-query-approval-generator":
+      "scripts/generate-private-recovery-query-approval.js",
+    "private-recovery-query-approval-tests":
+      "test/private-recovery-query-approval.test.js",
+    "private-recovery-query-aws-runtime":
+      "src/cloud/private-recovery-query-aws-runtime.js",
+    "private-recovery-query-aws-store":
+      "src/cloud/private-recovery-query-aws-store.js",
+    "private-recovery-query-binding":
+      "scripts/lib/private-recovery-query-binding.js",
+    "private-recovery-query-bootstrap-role-stack":
+      "infra/aws/private-recovery-query-bootstrap-role-stack.json",
+    "private-recovery-query-bootstrap-tests":
+      "test/private-recovery-query-bootstrap-role-stack.test.js",
+    "private-recovery-query-build":
+      "scripts/build-private-recovery-query-lambda.js",
+    "private-recovery-query-core": "src/cloud/private-recovery-query.js",
+    "private-recovery-query-core-tests":
+      "test/private-recovery-query.test.js",
+    "private-recovery-query-deploy-caller-workflow":
+      ".github/workflows/prooftoact-private-recovery-deploy.yml",
+    "private-recovery-query-deploy-preparer":
+      "scripts/prepare-private-recovery-query-deployment.js",
+    "private-recovery-query-deploy-runner":
+      "scripts/deploy-private-recovery-query.js",
+    "private-recovery-query-deploy-sealed-workflow":
+      ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
+    "private-recovery-query-deployment-state-tests":
+      "test/private-recovery-query-deployment-state.test.js",
+    "private-recovery-query-evidence":
+      "src/cloud/private-recovery-query-evidence.js",
+    "private-recovery-query-evidence-caller-workflow":
+      ".github/workflows/prooftoact-private-recovery-evidence.yml",
+    "private-recovery-query-evidence-readback":
+      "scripts/readback-private-recovery-query.js",
+    "private-recovery-query-evidence-sealed-workflow":
+      ".github/workflows/prooftoact-sealed-private-recovery-evidence.yml",
+    "private-recovery-query-evidence-tests":
+      "test/private-recovery-query-evidence.test.js",
+    "private-recovery-query-lambda-entry":
+      "infra/aws/lambda/private-recovery-query.js",
+    "private-recovery-query-operator":
+      "src/cloud/private-recovery-query-operator.js",
+    "private-recovery-query-operator-aws":
+      "src/cloud/private-recovery-query-operator-aws.js",
+    "private-recovery-query-query-caller-workflow":
+      ".github/workflows/prooftoact-private-recovery-query.yml",
+    "private-recovery-query-query-runner":
+      "scripts/run-private-recovery-query.js",
+    "private-recovery-query-query-sealed-workflow":
+      ".github/workflows/prooftoact-sealed-private-recovery-query.yml",
+    "private-recovery-query-secret-seal-caller-workflow":
+      ".github/workflows/prooftoact-private-recovery-secret-seal.yml",
+    "private-recovery-query-secret-seal-runner":
+      "scripts/seal-private-recovery-query-secret.js",
+    "private-recovery-query-secret-seal-sealed-workflow":
+      ".github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml",
+    "private-recovery-query-secret-seal-tests":
+      "test/private-recovery-query-secret-seal.test.js",
+    "private-recovery-query-source-lock":
+      "scripts/lib/private-recovery-source-lock.py",
+    "private-recovery-query-source-lock-tests":
+      "test/private-recovery-source-lock.test.js",
+    "private-recovery-query-store-tests":
+      "test/private-recovery-query-aws-store.test.js",
+    "private-recovery-query-teardown-caller-workflow":
+      ".github/workflows/prooftoact-private-recovery-teardown.yml",
+    "private-recovery-query-teardown-runner":
+      "scripts/teardown-private-recovery-query.js",
+    "private-recovery-query-teardown-sealed-workflow":
+      ".github/workflows/prooftoact-sealed-private-recovery-teardown.yml",
+    "private-recovery-query-teardown-tests":
+      "test/private-recovery-query-teardown.test.js",
+    "private-recovery-query-template":
+      "src/cloud/private-recovery-query-template.js",
+    "private-recovery-query-template-tests":
+      "test/private-recovery-query-template.test.js",
+    "private-recovery-query-window-check":
+      "scripts/check-private-recovery-query-window.js"
+  };
+  const actual = Object.fromEntries(Object.entries(__test.EXPECTED_SURFACES)
+    .filter(([id]) => id.startsWith("private-recovery-query-"))
+    .map(([id, surface]) => [id, surface.path]));
+  assert.deepEqual(actual, expected);
+  for (const id of Object.keys(expected)) {
+    assert.equal(__test.SOURCE_MARKERS[id]?.length > 0, true);
+  }
+});
+
+test("security manifest binds the complete B0/A1 authorization and revocation lane", () => {
+  const expected = {
+    "b0-a1-human-authorization-contract":
+      "scripts/lib/prooftoact-b0-a1-human-authorization.js",
+    "b0-a1-human-authorization-fixture":
+      "test/helpers/prooftoact-human-authorization-fixture.js",
+    "b0-a1-human-authorization-materializer":
+      "scripts/materialize-prooftoact-b0-a1-human-authorization.js",
+    "b0-a1-human-authorization-tests":
+      "test/prooftoact-b0-a1-human-authorization.test.js",
+    "b0-a1-imessage-authorization-tests":
+      "test/prooftoact-imessage-human-authorization.test.js",
+    "fresh-cluster-provider-key-revocation-finalizer":
+      "scripts/finalize-fresh-cluster-provider-key-revocation.js",
+    "fresh-cluster-provider-key-revocation-tests":
+      "test/finalize-fresh-cluster-provider-key-revocation.test.js",
+    "one-time-bootstrap-authority-plan":
+      "scripts/prepare-one-time-bootstrap-authority.js",
+    "one-time-bootstrap-authority-tests":
+      "test/one-time-bootstrap-authority.test.js",
+    "one-time-bootstrap-ceremony-launcher":
+      "scripts/launch-one-time-bootstrap-ceremony.js",
+    "one-time-bootstrap-ceremony-launcher-tests":
+      "test/launch-one-time-bootstrap-ceremony.test.js",
+    "one-time-bootstrap-ceremony-runner":
+      "scripts/run-one-time-bootstrap-ceremony.js",
+    "one-time-bootstrap-ceremony-runner-tests":
+      "test/run-one-time-bootstrap-ceremony.test.js",
+    "one-time-bootstrap-root-session":
+      "scripts/assume-one-time-bootstrap-root-session.js"
+  };
+  const actual = Object.fromEntries(Object.entries(__test.EXPECTED_SURFACES)
+    .filter(([id]) => Object.hasOwn(expected, id))
+    .map(([id, surface]) => [id, surface.path]));
+  assert.deepEqual(actual, expected);
+  for (const id of Object.keys(expected)) {
+    assert.equal(__test.SOURCE_MARKERS[id]?.length > 0, true);
+  }
+});
+
 test("security manifest binds local evidence generation and verification code", () => {
   const surfaces = __test.EXPECTED_SURFACES;
   for (const [id, path] of [

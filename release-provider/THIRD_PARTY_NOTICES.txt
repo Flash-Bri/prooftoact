@@ -16,7 +16,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/client-cloudformation/-/client-cloudformation-3.1098.0.tgz
   Integrity: sha512-p92g5KtAu07MCFznbHCYYT36QaZJJvmitVrSjY7XHJsrmrB4XM0TcVUk6HZS4iASL0oKG/CAO6SbM4n5EOglWA==
-  Bundled capabilities: PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_READBACK,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@aws-sdk/client-cloudformation/LICENSE
 
@@ -24,7 +24,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/client-dynamodb/-/client-dynamodb-3.1098.0.tgz
   Integrity: sha512-7o/3jD4/F8fo5BE9uMgsbIoaArlcnCNv6Bu11zUeF4Bgm6hYskQIGTK4UMTJ+qawez+FZ0Sg1E69woGd6gDabA==
-  Bundled capabilities: PERMIT_READER
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@aws-sdk/client-dynamodb/LICENSE
 
@@ -40,7 +40,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/client-sts/-/client-sts-3.1098.0.tgz
   Integrity: sha512-sUJG66pXP6TU7KVReLuoDTXsbpjq8nkF1S8ORg42I2/HGRQKm+r7eXXKA1M2DGBkM6/oaGYusGsR+1RrODkD/Q==
-  Bundled capabilities: PERMIT_READER
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@aws-sdk/client-sts/LICENSE
 
@@ -48,7 +48,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/core/-/core-3.977.8.tgz
   Integrity: sha512-7+Kcrkvrk9lM/m7jRhHpT4jCdvzGHsuaSRbF8TdzzkY1mRzp/Ogwf9c7H29k4gGhey0BBWhCWr16+t0J61gwmg==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: 4186c3f89c23f27b4c0caab574737c49ee5137c36a3c103484feaca4aeec2310
   Source: node_modules/@aws-sdk/core/LICENSE
 
@@ -120,7 +120,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/dynamodb-codec/-/dynamodb-codec-3.973.43.tgz
   Integrity: sha512-5nw01fhFJEKM68n0R65S1DijiSAQWZVbvH7IxTIJpFFbggg816jBVYvhK7W+XISjvtdg0rMkF/gQmuLGH713mg==
-  Bundled capabilities: PERMIT_READER
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@aws-sdk/dynamodb-codec/LICENSE
 
@@ -128,7 +128,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/endpoint-cache/-/endpoint-cache-3.972.11.tgz
   Integrity: sha512-8q1ICxcDjHId3bBryuu/j+1L9y5/3uQnwzLDt5j2ElcjZSoWmFtymdJy7OjLrluSMe0Z4mq5bcH4fxBXvlEHfw==
-  Bundled capabilities: PERMIT_READER
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER
   Text: 95b4b3fda95d1d125d9a15c999baf602df69609462c16943639f36e0de8ca346
   Source: node_modules/@aws-sdk/endpoint-cache/LICENSE
 
@@ -136,7 +136,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/middleware-endpoint-discovery/-/middleware-endpoint-discovery-3.972.29.tgz
   Integrity: sha512-cXW7QNIOhUSfccZmwJEjn9EdCAjzdOtt/+MtO5HWgxIZdhzyC1kNuQKIgGEDkgabxiXymWw0/VFWdqxqeLbgMA==
-  Bundled capabilities: PERMIT_READER
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@aws-sdk/middleware-endpoint-discovery/LICENSE
 
@@ -160,7 +160,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/signature-v4-multi-region/-/signature-v4-multi-region-3.996.45.tgz
   Integrity: sha512-bBuyztukzXq6plzFGHAWiQt0QXo+HL8b8lX5cFTzkez/74PtS1c0qPFCIVuHkyoT+miH2qOjAcm1/yoro2ESPA==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: 84d995af201d926f392ce5d01cacdf17b054a2bfb0ca859e1d450d1af09d5635
   Source: node_modules/@aws-sdk/signature-v4-multi-region/LICENSE
 
@@ -184,7 +184,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws-sdk/xml-builder/-/xml-builder-3.972.39.tgz
   Integrity: sha512-FTti8DS5MMWXNUWiRwXAJeYS+0GHHiMy0+7XOhcwk63ILHmfS2UFy2z/HNpZCSOJJ3P3dnWY6hfYNW3DF0nXUA==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@aws-sdk/xml-builder/LICENSE
 
@@ -192,7 +192,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@aws/lambda-invoke-store/-/lambda-invoke-store-0.3.0.tgz
   Integrity: sha512-sl4Bm6yiMNYrZKkqqDFWN0UfnWhlS8ivKxrYl+6t0gCLrqr8y3B2IqZZbFRkfaVVp7C/baApyh71P+LeE1A2sQ==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: 81932e77fef4cec306da54caf7d4d221dfd0f6fb6da214c712e36cb95ac47906
   Source: node_modules/@aws/lambda-invoke-store/LICENSE
 
@@ -408,7 +408,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@smithy/core/-/core-3.33.2.tgz
   Integrity: sha512-CUGXpnPkVdjUCbix+83sWLW9VFgQOm44MDOx/ihITJMAnOZKvL8YYIc7DR9pP/tZ8CIRvMiON/TucvygqbHO3w==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: 84d995af201d926f392ce5d01cacdf17b054a2bfb0ca859e1d450d1af09d5635
   Source: node_modules/@smithy/core/LICENSE
 
@@ -432,7 +432,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@smithy/node-http-handler/-/node-http-handler-4.9.13.tgz
   Integrity: sha512-Nmd/Nl35zfYrd+a6OO2cDJb3GPh9bgTjIUhcM+JFfjpp8/osCgboDV5nCT1I01Pv6R13eSKDKLSoVa5ZB6Zsfw==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@smithy/node-http-handler/LICENSE
 
@@ -440,7 +440,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@smithy/signature-v4/-/signature-v4-5.7.2.tgz
   Integrity: sha512-P7Ki6px6OOrxVtx8K7nLmyx4SlXUW/uTKDdMG44UHefmPGSRMBKe2v+TM59WdLcpUIrBrnuCsIqiM2MbsZjmhw==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: b659ef9e3ce8fe45329e05916c9c8bb98b436a16f4d4730a8946eec83e3950fe
   Source: node_modules/@smithy/signature-v4/LICENSE
 
@@ -448,7 +448,7 @@ PACKAGE RECORDS
   License: Apache-2.0
   Registry: https://registry.npmjs.org/@smithy/types/-/types-4.17.2.tgz
   Integrity: sha512-FOKpVZob9MPTn2znRzGrnsMHv7BOsKVw3XiP/cOyYLDVZ9qKp4nifIiSCuUU/fIj5Vu0UOAxCFr+qRAtG0NUkA==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: 84d995af201d926f392ce5d01cacdf17b054a2bfb0ca859e1d450d1af09d5635
   Source: node_modules/@smithy/types/LICENSE
 
@@ -456,7 +456,7 @@ bowser@2.14.1
   License: MIT
   Registry: https://registry.npmjs.org/bowser/-/bowser-2.14.1.tgz
   Integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==
-  Bundled capabilities: PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
+  Bundled capabilities: EXECUTE_DISPATCHER,EXECUTE_PERMIT_READER,EXECUTE_READBACK,PERMIT_READER,PREPARE_DISPATCHER,PREPARE_READBACK
   Text: dfde54fedc270c2a305d9a9f993d93f706d34624455a2fd2d2a05ca34d8ae8c3
   Source: node_modules/bowser/LICENSE
 
@@ -472,7 +472,7 @@ mnemonist@0.38.3
   License: MIT
   Registry: https://registry.npmjs.org/mnemonist/-/mnemonist-0.38.3.tgz
   Integrity: sha512-2K9QYubXx/NAjv4VLq1d1Ly8pWNC5L3BrixtdkyTegXWJIqY+zLNDhhX/A+ZwWt70tB1S8H4BE8FLYEFyNoOBw==
-  Bundled capabilities: PERMIT_READER
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER
   Text: dfa5b838b877406f163d57ed736fd6d7f99ed442dfde2152c11d7b34dff3dd81
   Source: node_modules/mnemonist/LICENSE.txt
 
@@ -480,7 +480,7 @@ obliterator@1.6.1
   License: MIT
   Registry: https://registry.npmjs.org/obliterator/-/obliterator-1.6.1.tgz
   Integrity: sha512-9WXswnqINnnhOG/5SLimUlzuU1hFJUc8zkwyD59Sd+dPOMf05PmnYG/d6Q7HZ+KmgkZJa1PxRso6QdM3sTNHig==
-  Bundled capabilities: PERMIT_READER
+  Bundled capabilities: EXECUTE_PERMIT_READER,PERMIT_READER
   Text: 9b8cd2a49c8df91e5f620ded7c58fcefd86ba617a14c0bf576f74b78f3be345a
   Source: node_modules/obliterator/LICENSE.txt
 
