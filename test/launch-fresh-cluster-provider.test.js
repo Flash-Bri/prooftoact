@@ -61,6 +61,24 @@ test("launcher rejects duplicate arguments and computed dynamic imports", () => 
   ), /FRESH_CLUSTER_LAUNCH_IMPORT_GRAPH_REJECTED/u);
 });
 
+test("launcher distinguishes immutable source from the triggering caller", () => {
+  const sourceCommit = "a".repeat(40);
+  const callerCommit = "d".repeat(40);
+  assert.notEqual(sourceCommit, callerCommit);
+  assert.deepEqual(__test.verifyGitHubContext(callerCommit, {
+    GITHUB_ACTIONS: "true",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REPOSITORY: "Flash-Bri/prooftoact",
+    GITHUB_SHA: callerCommit
+  }), { callerCommit });
+  assert.throws(() => __test.verifyGitHubContext(sourceCommit, {
+    GITHUB_ACTIONS: "true",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REPOSITORY: "Flash-Bri/prooftoact",
+    GITHUB_SHA: callerCommit
+  }), /FRESH_CLUSTER_LAUNCH_GITHUB_CONTEXT_REJECTED/u);
+});
+
 test("protected workflow reaches combined runner only through launcher", () => {
   assert.equal((WORKFLOW.match(
     /node scripts\/launch-fresh-cluster-provider\.js/gu

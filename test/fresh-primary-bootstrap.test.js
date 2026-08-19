@@ -519,6 +519,7 @@ function cliArgs(operationDirectory) {
     "--admin-url-file", "/private/admin-url",
     "--approval-file", "/private/one-approval.json",
     "--build-receipt", "/private/build.json",
+    "--caller-workflow-sha", "d".repeat(40),
     "--credential-bundle-file", "/private/credentials.json",
     "--credential-seal-receipt-file", "/private/seal.json",
     "--expected-commit", SOURCE_COMMIT,
@@ -527,6 +528,30 @@ function cliArgs(operationDirectory) {
     "--operation-directory", operationDirectory
   ];
 }
+
+test("fresh source and triggering caller remain independently bound", () => {
+  const sourceCommit = "a".repeat(40);
+  const callerWorkflowSha = "d".repeat(40);
+  assert.notEqual(sourceCommit, callerWorkflowSha);
+  assert.deepEqual(__test.validateFreshPrimaryGithubContext(
+    callerWorkflowSha,
+    {
+      GITHUB_ACTIONS: "true",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_REPOSITORY: "Flash-Bri/prooftoact",
+      GITHUB_SHA: callerWorkflowSha
+    }
+  ), { callerWorkflowSha });
+  assert.throws(() => __test.validateFreshPrimaryGithubContext(
+    sourceCommit,
+    {
+      GITHUB_ACTIONS: "true",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_REPOSITORY: "Flash-Bri/prooftoact",
+      GITHUB_SHA: callerWorkflowSha
+    }
+  ), /FRESH_PRIMARY_GITHUB_CONTEXT_REJECTED/u);
+});
 
 test("fresh-primary credentials require every distinct runtime password", () => {
   const accepted = validateFreshPrimaryCredentialBundle(credentialBundle());

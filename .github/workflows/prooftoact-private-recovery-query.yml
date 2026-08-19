@@ -22,11 +22,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    # Activation Commit B replaces these inert sentinels with reviewed Commit A.
-    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-query.yml@0000000000000000000000000000000000000000
+    # The caller and protected OIDC trust both bind the reviewed Commit A source.
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-query.yml@caf417dd84d899c7407e5ed12f56b60f1b74d32a
     with:
-      authority_commit: "0000000000000000000000000000000000000000"
-      authority_tree: "0000000000000000000000000000000000000000"
+      authority_commit: "caf417dd84d899c7407e5ed12f56b60f1b74d32a"
+      authority_tree: "b01bf525dd47eb7ad6ed412e9557010289c6836b"
       mode: ${{ inputs.mode }}
       operation_id: ${{ inputs.operation_id }}
     secrets: inherit

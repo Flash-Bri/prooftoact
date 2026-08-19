@@ -11,6 +11,9 @@ import {
   privateRecoveryQueryTemplateReceipt
 } from "../src/cloud/private-recovery-query-template.js";
 
+const REVIEWED_COMMIT = "caf417dd84d899c7407e5ed12f56b60f1b74d32a";
+const REVIEWED_TREE = "b01bf525dd47eb7ad6ed412e9557010289c6836b";
+
 test("mini-stack owns one private exact-version Lambda with no public trigger", () => {
   const template = buildPrivateRecoveryQueryTemplate();
   const resources = Object.values(template.Resources);
@@ -133,7 +136,7 @@ test("deterministic builder reproduces identical source bundle and template", as
   }
 });
 
-test("sealed workflow requires a GitHub-bound authority commit and tree", () => {
+test("sealed workflow and caller bind reviewed GitHub authority commit and tree", () => {
   for (const lane of [
     "deploy", "evidence", "query", "secret-seal", "teardown"
   ]) {
@@ -152,9 +155,12 @@ test("sealed workflow requires a GitHub-bound authority commit and tree", () => 
     assert.match(sealed,
       /test "\$AUTHORITY_COMMIT" != "0{40}"/u);
     assert.match(caller, new RegExp(
-      `prooftoact-sealed-private-recovery-${lane}\\.yml@0{40}`, "u"));
-    assert.match(caller, /authority_commit: "0{40}"/u);
-    assert.match(caller, /authority_tree: "0{40}"/u);
+      `prooftoact-sealed-private-recovery-${lane}\\.yml@${REVIEWED_COMMIT}`,
+      "u"));
+    assert.match(caller, new RegExp(
+      `authority_commit: "${REVIEWED_COMMIT}"`, "u"));
+    assert.match(caller, new RegExp(
+      `authority_tree: "${REVIEWED_TREE}"`, "u"));
     assert.match(caller,
       /permissions:\n      contents: read\n      id-token: write/u);
     assert.match(sealed, /ref: \$\{\{ inputs\.authority_commit \}\}/u);

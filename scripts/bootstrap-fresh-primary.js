@@ -1090,11 +1090,14 @@ async function runFreshPrimaryProviderControlledBootstrapWithRuntime({
 
 export async function runFreshPrimaryProviderControlledBootstrap({
   buildReceipt,
+  callerWorkflowSha,
   expectedCommit,
   expectedTree,
   ...input
 }) {
-  const source = preliminaryExactSourceBinding(expectedCommit, expectedTree);
+  const source = preliminaryExactSourceBinding(
+    expectedCommit, expectedTree, callerWorkflowSha
+  );
   const runtime = await loadBoundRuntime({ buildReceipt, source });
   return runFreshPrimaryProviderControlledBootstrapWithRuntime({
     ...input,
@@ -1106,10 +1109,13 @@ export async function runFreshPrimaryProviderControlledBootstrap({
 
 export async function verifyFreshPrimaryProviderPrerequisites({
   buildReceipt,
+  callerWorkflowSha,
   expectedCommit,
   expectedTree
 }) {
-  const source = preliminaryExactSourceBinding(expectedCommit, expectedTree);
+  const source = preliminaryExactSourceBinding(
+    expectedCommit, expectedTree, callerWorkflowSha
+  );
   const runtime = await loadBoundRuntime({ buildReceipt, source });
   return Object.freeze({
     dependencyTreeSha256: runtime.dependencyTreeSha256,
@@ -1126,6 +1132,7 @@ function parseArguments(args) {
     "--admin-url-file",
     "--approval-file",
     "--build-receipt",
+    "--caller-workflow-sha",
     "--credential-bundle-file",
     "--credential-seal-receipt-file",
     "--expected-commit",
@@ -1259,9 +1266,28 @@ function bindPreImportHelperBytes(sourceCommit) {
   return sha256(canonicalBytes(inventory));
 }
 
-function preliminaryExactSourceBinding(expectedCommit, expectedTree) {
+function validateFreshPrimaryGithubContext(
+  callerWorkflowSha, env = process.env
+) {
+  const code = "FRESH_PRIMARY_GITHUB_CONTEXT_REJECTED";
+  requireCondition(HEX_40.test(callerWorkflowSha), code);
+  if (env.GITHUB_ACTIONS === "true") {
+    requireCondition(
+      env.GITHUB_REPOSITORY === "Flash-Bri/prooftoact" &&
+        env.GITHUB_REF === "refs/heads/main" &&
+        env.GITHUB_SHA === callerWorkflowSha,
+      code
+    );
+  }
+  return Object.freeze({ callerWorkflowSha });
+}
+
+function preliminaryExactSourceBinding(
+  expectedCommit, expectedTree, callerWorkflowSha
+) {
   requireCondition(
-    HEX_40.test(expectedCommit) && HEX_40.test(expectedTree),
+    HEX_40.test(expectedCommit) && HEX_40.test(expectedTree) &&
+      HEX_40.test(callerWorkflowSha),
     "FRESH_PRIMARY_SOURCE_ARGUMENT_REJECTED"
   );
   const gitStat = fs.lstatSync(TRUSTED_GIT);
@@ -1289,15 +1315,9 @@ function preliminaryExactSourceBinding(expectedCommit, expectedTree) {
   validateIndexVisibilityOutput(gitValue(["ls-files", "-v"]));
   validateIndexVisibilityOutput(gitValue(["ls-files", "-t"]));
   const preImportHelperBytesSha256 = bindPreImportHelperBytes(sourceCommit);
-  if (process.env.GITHUB_ACTIONS === "true") {
-    requireCondition(
-      process.env.GITHUB_REPOSITORY === "Flash-Bri/prooftoact" &&
-        process.env.GITHUB_REF === "refs/heads/main" &&
-        process.env.GITHUB_SHA === sourceCommit,
-      "FRESH_PRIMARY_GITHUB_CONTEXT_REJECTED"
-    );
-  }
+  validateFreshPrimaryGithubContext(callerWorkflowSha);
   return Object.freeze({
+    callerWorkflowSha,
     sourceCommit,
     treeDigest,
     preImportHelperBytesSha256
@@ -1538,7 +1558,8 @@ export async function main(args = process.argv.slice(2)) {
   reject("FRESH_PRIMARY_PROVIDER_CONTROLLER_REQUIRED");
   const source = preliminaryExactSourceBinding(
     parsed["--expected-commit"],
-    parsed["--expected-tree"]
+    parsed["--expected-tree"],
+    parsed["--caller-workflow-sha"]
   );
   const buildReceiptBytes = readPrivateFile(
     parsed["--build-receipt"],
@@ -1735,6 +1756,7 @@ export const __test = Object.freeze({
   canonicalBytes,
   exactKeys,
   sha256,
+  validateFreshPrimaryGithubContext,
   validateIndexVisibilityOutput,
   ...(typeof process.env.NODE_TEST_CONTEXT === "string" &&
     process.env.NODE_TEST_CONTEXT !== "" ? {

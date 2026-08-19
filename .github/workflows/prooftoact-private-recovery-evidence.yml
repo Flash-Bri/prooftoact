@@ -18,9 +18,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-evidence.yml@0000000000000000000000000000000000000000
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-evidence.yml@caf417dd84d899c7407e5ed12f56b60f1b74d32a
     with:
-      authority_commit: "0000000000000000000000000000000000000000"
-      authority_tree: "0000000000000000000000000000000000000000"
+      authority_commit: "caf417dd84d899c7407e5ed12f56b60f1b74d32a"
+      authority_tree: "b01bf525dd47eb7ad6ed412e9557010289c6836b"
       phase: ${{ inputs.phase }}
     secrets: inherit

@@ -11,6 +11,10 @@ import { __test } from "../scripts/run-fresh-cluster-provider.js";
 import { buildSyntheticProofToActHumanAuthorization } from
   "./helpers/prooftoact-human-authorization-fixture.js";
 
+const RUNNER_SOURCE = fs.readFileSync(new URL(
+  "../scripts/run-fresh-cluster-provider.js", import.meta.url
+), "utf8");
+
 const OPERATION_ID = "123e4567-e89b-42d3-a456-426614174000";
 const SOURCE_COMMIT = "a".repeat(40);
 const TREE_DIGEST = "b".repeat(40);
@@ -124,6 +128,14 @@ function args() {
     "--signer-secret-version-id", "5".repeat(32)
   ];
 }
+
+test("combined runner preserves distinct caller SHA for nested primary", () => {
+  assert.notEqual(SOURCE_COMMIT, CALLER_WORKFLOW_SHA);
+  assert.match(RUNNER_SOURCE,
+    /callerWorkflowSha: parsed\["--caller-workflow-sha"\]/u);
+  assert.match(RUNNER_SOURCE,
+    /"--caller-workflow-sha", parsed\["--caller-workflow-sha"\]/u);
+});
 
 test("combined runner accepts one exact argument set and no duplicates", () => {
   const parsed = __test.parseArguments(args());
