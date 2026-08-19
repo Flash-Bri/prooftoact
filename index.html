@@ -10,7 +10,7 @@
     <meta name="referrer" content="no-referrer">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com; object-src 'none'; base-uri 'none'; form-action 'none'"
     >
     <title>ProofToAct — Admissibility Memory</title>
     <link rel="icon" href="./architecture.svg" type="image/svg+xml">
@@ -150,10 +150,58 @@
           </div>
           <a
             class="text-link"
-            href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/CLAIMS.md"
+            href="https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/CLAIMS.md"
             rel="noreferrer"
           >Open the claims ledger</a>
         </div>
+        <article
+          id="live-provider-proof"
+          class="provider-proof"
+          data-state="idle"
+          aria-labelledby="live-provider-title"
+          aria-describedby="live-provider-copy"
+          aria-busy="false"
+        >
+          <header class="provider-proof__header">
+            <div>
+              <p class="step-label">Live provider receipt</p>
+              <h3 id="live-provider-title">Check the provider path.</h3>
+            </div>
+            <p class="provider-proof__state" aria-hidden="true">
+              <span class="provider-proof__state-mark"></span>
+              <span id="live-provider-state">NOT CHECKED</span>
+            </p>
+          </header>
+          <div class="provider-proof__content">
+            <div>
+              <p id="live-provider-copy" class="provider-proof__copy">
+                Run one bounded read from AWS Lambda through Managed MCP to CockroachDB.
+              </p>
+              <div class="provider-proof__actions">
+                <button id="check-live-provider" type="button">Check live receipt</button>
+                <a
+                  id="open-live-provider-receipt"
+                  href="https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof"
+                  rel="noreferrer"
+                  hidden
+                >Open receipt JSON</a>
+              </div>
+            </div>
+            <dl id="live-provider-facts" class="provider-proof__facts" hidden>
+              <div><dt>AWS</dt><dd id="live-provider-aws">—</dd></div>
+              <div><dt>CockroachDB</dt><dd id="live-provider-cockroach">—</dd></div>
+              <div><dt>Source</dt><dd><code id="live-provider-source">—</code></dd></div>
+              <div><dt>Observed</dt><dd><time id="live-provider-observed">—</time></dd></div>
+            </dl>
+          </div>
+          <p
+            id="live-provider-announcement"
+            class="sr-only"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          ></p>
+        </article>
         <div class="evidence-grid">
           <article>
             <span class="evidence-index">01</span>
@@ -162,7 +210,7 @@
               Current, scoped, provenance-valid evidence enters retrieval.
               Expired, invalid, and out-of-scope records do not.
             </p>
-            <a href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-ambiguity-2026-07-30.md" rel="noreferrer">Inspect ambiguity evidence</a>
+            <a href="https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-ambiguity-2026-07-30.md" rel="noreferrer">Inspect ambiguity evidence</a>
           </article>
           <article>
             <span class="evidence-index">02</span>
@@ -171,7 +219,7 @@
               Models may propose. A separate authority boundary decides which
               bounded operation receives a durable receipt.
             </p>
-            <a href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-authority-2026-07-30.md" rel="noreferrer">Inspect authority evidence</a>
+            <a href="https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-authority-2026-07-30.md" rel="noreferrer">Inspect authority evidence</a>
           </article>
           <article>
             <span class="evidence-index">03</span>
@@ -180,7 +228,7 @@
               A successor can recover signed context while the right to act
               remains absent until independently authorized.
             </p>
-            <a href="https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-recovery-broker-2026-07-30.md" rel="noreferrer">Inspect recovery evidence</a>
+            <a href="https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-recovery-broker-2026-07-30.md" rel="noreferrer">Inspect recovery evidence</a>
           </article>
         </div>
       </section>
@@ -248,7 +296,7 @@
         ProofToAct · A TrustAgentic.ai project · Synthetic Highwater Drill
       </p>
       <a
-        href="https://github.com/Flash-Bri/prooftoact/tree/40e9a3a86c232cedcad81d89b8ca4d84081632ec"
+        href="https://github.com/Flash-Bri/prooftoact/tree/e800a8592ad5dbcdfaf280da097e68121a386d1f"
         rel="noreferrer"
       >Public MIT source</a>
     </footer>

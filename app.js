@@ -134,23 +134,23 @@ const actDefinitions = [
 
 const evidenceForStep = {
   "one-winner-race": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-authority-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-authority-2026-07-30.md",
     label: "Open the source authority document"
   },
   "checkpoint-termination": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-recovery-broker-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-recovery-broker-2026-07-30.md",
     label: "Open the source recovery document"
   },
   "successor-recovery": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-recovery-broker-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-recovery-broker-2026-07-30.md",
     label: "Open the source recovery document"
   },
   "exact-operation-replay": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-authority-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-authority-2026-07-30.md",
     label: "Open the source authority document"
   },
   "changed-operation-rejected": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/evidence/gate1-authority-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-authority-2026-07-30.md",
     label: "Open the source authority document"
   }
 };
@@ -368,7 +368,7 @@ function proofMetadata(mode) {
   return {
     className: "local",
     label: "HIGHWATER DRILL",
-    source: "main@40e9a3a · scenario.json",
+    source: "main@e800a85 · scenario.json",
     limitation: mode === "recorded"
       ? "Bounded event with linked evidence context."
       : "Evidence-governed scenario transition."
@@ -766,5 +766,219 @@ document.addEventListener("visibilitychange", () => {
       "Automatic presentation paused while this page is hidden.";
   }
 });
+
+const LIVE_PROVIDER_ENDPOINT =
+  "https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof";
+const LIVE_PROVIDER_SOURCE =
+  "0321d498b645e10a993808c36a920958370348ed";
+const LIVE_PROVIDER_BUNDLE =
+  "78ad7269424e13785711b5106083a2aac9fbf9f77996f70db4b9e13df869d991";
+const LIVE_PROVIDER_SIGNATURE =
+  "86315d12c864c4184176bb1d8a0ce071c80e7e14cdccc021f56d4b39eb178947";
+
+const livePanel = document.querySelector("#live-provider-proof");
+const liveTitle = document.querySelector("#live-provider-title");
+const liveCopy = document.querySelector("#live-provider-copy");
+const liveState = document.querySelector("#live-provider-state");
+const liveButton = document.querySelector("#check-live-provider");
+const liveFacts = document.querySelector("#live-provider-facts");
+const liveReceiptLink = document.querySelector("#open-live-provider-receipt");
+const liveAnnouncement = document.querySelector("#live-provider-announcement");
+const liveAws = document.querySelector("#live-provider-aws");
+const liveCockroach = document.querySelector("#live-provider-cockroach");
+const liveSource = document.querySelector("#live-provider-source");
+const liveObserved = document.querySelector("#live-provider-observed");
+
+function hasExactKeys(value, keys) {
+  return value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).sort().join("\n") === [...keys].sort().join("\n");
+}
+
+function isSha256(value) {
+  return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
+}
+
+function validateLiveProviderReceipt(value) {
+  const topKeys = [
+    "lambdaVersion",
+    "managedMcp",
+    "observedAt",
+    "proof",
+    "proofSha256",
+    "receiptExpiredContext",
+    "responseSha256",
+    "schemaVersion",
+    "sourceCommit",
+    "status"
+  ];
+  const proofKeys = [
+    "authorityTransferred",
+    "bindingSha256",
+    "bundleDigest",
+    "expiresAt",
+    "publisherKeySha256",
+    "receiptBoundary",
+    "receiptReason",
+    "requiresFreshAuthorization",
+    "schemaVersion",
+    "signatureDigest",
+    "sourceClusterIdSha256",
+    "sourceCommitTs",
+    "sourceDigest"
+  ];
+  const mcpKeys = [
+    "closeHttpStatus",
+    "clusterIdSha256",
+    "endpointAuthority",
+    "initializeHttpStatus",
+    "notificationHttpStatus",
+    "protocolVersion",
+    "redirectPolicy",
+    "responseLimitBytes",
+    "semanticRequestEvidenceSha256",
+    "sessionClosed",
+    "toolCallHttpStatus"
+  ];
+  const observed = Date.parse(value?.observedAt);
+  if (
+    !hasExactKeys(value, topKeys) ||
+    value.schemaVersion !== "prooftoact.public-judge-proof.v1" ||
+    value.status !== "LIVE_MANAGED_MCP_READ" ||
+    value.sourceCommit !== LIVE_PROVIDER_SOURCE ||
+    value.lambdaVersion !== "3" ||
+    typeof value.receiptExpiredContext !== "boolean" ||
+    !Number.isFinite(observed) ||
+    Math.abs(Date.now() - observed) > 5 * 60 * 1_000 ||
+    !hasExactKeys(value.proof, proofKeys) ||
+    value.proof.schemaVersion !== 1 ||
+    value.proof.receiptBoundary !==
+      "HISTORICAL_SIGNED_RECOVERY_CONTEXT_ONLY" ||
+    value.proof.bundleDigest !== LIVE_PROVIDER_BUNDLE ||
+    value.proof.signatureDigest !== LIVE_PROVIDER_SIGNATURE ||
+    value.proof.authorityTransferred !== false ||
+    value.proof.requiresFreshAuthorization !== true ||
+    value.proof.receiptReason !== "transport-proof-only" ||
+    !hasExactKeys(value.managedMcp, mcpKeys) ||
+    value.managedMcp.endpointAuthority !== "cockroachlabs.cloud" ||
+    value.managedMcp.protocolVersion !== "2025-03-26" ||
+    value.managedMcp.initializeHttpStatus !== 200 ||
+    value.managedMcp.notificationHttpStatus !== 202 ||
+    value.managedMcp.toolCallHttpStatus !== 200 ||
+    value.managedMcp.closeHttpStatus !== 204 ||
+    value.managedMcp.sessionClosed !== true ||
+    value.managedMcp.redirectPolicy !== "error" ||
+    value.managedMcp.responseLimitBytes !== 32 * 1024 ||
+    !isSha256(value.proofSha256) ||
+    !isSha256(value.responseSha256) ||
+    !isSha256(value.managedMcp.clusterIdSha256) ||
+    !isSha256(value.managedMcp.semanticRequestEvidenceSha256)
+  ) {
+    throw new Error("LIVE_PROVIDER_RECEIPT_REJECTED");
+  }
+  return value;
+}
+
+function setLiveProviderState(state, receipt) {
+  livePanel.dataset.state = state;
+  livePanel.setAttribute("aria-busy", state === "loading" ? "true" : "false");
+  liveButton.disabled = state === "loading";
+  liveFacts.hidden = state !== "success";
+  liveReceiptLink.hidden = state !== "success";
+  if (state === "loading") {
+    liveState.textContent = "CHECKING";
+    liveTitle.textContent = "Checking the provider path…";
+    liveCopy.textContent =
+      "Requesting one bounded read from AWS Lambda through Managed MCP.";
+    liveButton.textContent = "Checking…";
+    liveAnnouncement.textContent =
+      "Checking the live AWS and CockroachDB Managed MCP path.";
+    return;
+  }
+  if (state === "success") {
+    liveState.textContent = "LIVE READ VERIFIED";
+    liveTitle.textContent = "AWS + CockroachDB responded.";
+    liveCopy.textContent =
+      "A current Lambda invocation completed the fixed Managed MCP read and closed its session. The signed recovery context transferred no authority.";
+    liveButton.textContent = "Check again";
+    liveAws.textContent = `Lambda v${receipt.lambdaVersion} · HTTP 200`;
+    liveCockroach.textContent = "Managed MCP · session closed";
+    liveSource.textContent = `${receipt.sourceCommit.slice(0, 12)}…`;
+    liveObserved.textContent = new Date(receipt.observedAt).toLocaleString();
+    liveObserved.setAttribute("datetime", receipt.observedAt);
+    liveAnnouncement.textContent =
+      "Live AWS and CockroachDB Managed MCP read verified.";
+    return;
+  }
+  liveState.textContent = "UNAVAILABLE";
+  liveTitle.textContent = "Live receipt unavailable.";
+  liveCopy.textContent =
+    "The provider receipt could not be verified just now. The submitted three-act walkthrough remains available.";
+  liveButton.textContent = "Try again";
+  liveAnnouncement.textContent = "Live provider receipt unavailable.";
+}
+
+let liveProviderRequest = null;
+let liveProviderCooldown = null;
+
+function startLiveProviderCooldown() {
+  clearTimeout(liveProviderCooldown);
+  liveButton.disabled = true;
+  liveButton.textContent =
+    livePanel.dataset.state === "success"
+      ? "Verified just now"
+      : "Retry in 10 seconds";
+  liveProviderCooldown = setTimeout(() => {
+    if (livePanel.dataset.state !== "loading") {
+      liveButton.disabled = false;
+      liveButton.textContent =
+        livePanel.dataset.state === "success" ? "Check again" : "Try again";
+    }
+  }, 10_000);
+}
+
+async function checkLiveProvider() {
+  if (liveProviderRequest !== null) return liveProviderRequest;
+  setLiveProviderState("loading");
+  liveProviderRequest = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 24_000);
+    try {
+      const response = await fetch(LIVE_PROVIDER_ENDPOINT, {
+        method: "GET",
+        headers: { accept: "application/json" },
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error",
+        signal: controller.signal
+      });
+      if (!response.ok || response.url !== LIVE_PROVIDER_ENDPOINT) {
+        throw new Error("LIVE_PROVIDER_RESPONSE_REJECTED");
+      }
+      const receipt = validateLiveProviderReceipt(await response.json());
+      setLiveProviderState("success", receipt);
+    } catch (error) {
+      setLiveProviderState("error");
+      console.error(error);
+    } finally {
+      clearTimeout(timeout);
+      startLiveProviderCooldown();
+      liveProviderRequest = null;
+    }
+  })();
+  return liveProviderRequest;
+}
+
+liveButton.addEventListener("click", checkLiveProvider);
+if ("IntersectionObserver" in window) {
+  const liveObserver = new IntersectionObserver((entries, observer) => {
+    if (entries.some((entry) => entry.isIntersecting)) {
+      observer.disconnect();
+      checkLiveProvider();
+    }
+  }, { rootMargin: "160px" });
+  liveObserver.observe(livePanel);
+}
 
 loadScenario();

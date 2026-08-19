@@ -1,18 +1,27 @@
 {
   "schemaVersion": "prooftoact.judge-experience-source.v2",
-  "assembledAt": "2026-08-19T12:09:16Z",
+  "assembledAt": "2026-08-19T14:12:58Z",
   "publicationMode": "JUDGE_EXPERIENCE",
   "source": {
     "repository": "https://github.com/Flash-Bri/prooftoact",
-    "commit": "40e9a3a86c232cedcad81d89b8ca4d84081632ec",
-    "tree": "b47b8c23e1ad4435bf038cbdbdc2a16d0872e9db",
+    "commit": "e800a8592ad5dbcdfaf280da097e68121a386d1f",
+    "tree": "dc6e23e223b68c110e0e021594bda8e33eab3a53",
     "refAtAssembly": "refs/heads/main",
-    "commitTimestamp": "2026-08-18T11:34:46-04:00"
+    "commitTimestamp": "2026-08-19T10:12:39-04:00"
   },
   "presentation": {
     "name": "Synthetic Highwater Drill",
     "scenario": "scenario.json",
-    "claimsLedger": "https://github.com/Flash-Bri/prooftoact/blob/40e9a3a86c232cedcad81d89b8ca4d84081632ec/CLAIMS.md",
+    "claimsLedger": "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/CLAIMS.md",
     "artifactHashes": "SHA256SUMS.txt"
+  },
+  "liveProvider": {
+    "endpoint": "https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof",
+    "status": "LIVE_MANAGED_MCP_READ",
+    "sourceCommit": "0321d498b645e10a993808c36a920958370348ed",
+    "lambdaVersion": "3",
+    "bundleDigest": "78ad7269424e13785711b5106083a2aac9fbf9f77996f70db4b9e13df869d991",
+    "signatureDigest": "86315d12c864c4184176bb1d8a0ce071c80e7e14cdccc021f56d4b39eb178947",
+    "claimBoundary": "One current public AWS Lambda invocation performs one fixed Managed MCP read of one P-256-signed historical recovery context row and closes the MCP session. It transfers no authority."
   }
 }
