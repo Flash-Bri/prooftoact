@@ -1446,13 +1446,49 @@
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
       "role": "RECOVERY_MCP_CLIENT",
-      "sha256": "bb98dbdab730abb4ed4f7632df18fdc65646fe3175220f25fbe68a472321af71"
+      "sha256": "d0e0e9312b37c4c64d87c9cb18e03c8d9034c8aa92a62d8c280eb4e14c758169"
     },
     {
       "id": "managed-mcp-client-tests",
       "path": "test/managed-mcp-client.test.js",
       "role": "RECOVERY_MCP_STRICT_TRANSPORT_VERIFICATION",
       "sha256": "7ccfe7729cb37afea6983b5ab45ab18c8c9cbd18212203dbc830b66cdc42b9b7"
+    },
+    {
+      "id": "judge-proof-lambda",
+      "path": "infra/aws/lambda/judge-proof.js",
+      "role": "AWS_FIXED_PUBLIC_JUDGE_PROOF_RUNTIME",
+      "sha256": "fcf3fd2c58e130f770feb6734b67f0f16654c8943e3cc091910487bbe6285923"
+    },
+    {
+      "id": "judge-proof-mcp-tests",
+      "path": "test/judge-managed-mcp-client.test.js",
+      "role": "PUBLIC_JUDGE_MCP_TRANSPORT_VERIFICATION",
+      "sha256": "313467f8bdade3fcdfbc2a26bc890881299fca3636e42d4ae9cbf0527f9a2bfa"
+    },
+    {
+      "id": "judge-proof-query",
+      "path": "src/cloud/judge-proof-query.js",
+      "role": "SIGNED_FIXED_JUDGE_QUERY_CONTRACT",
+      "sha256": "4ae769e3c7ce2a202ef5edecafb891f80f98a9729063098c00abb3faadf5b451"
+    },
+    {
+      "id": "judge-proof-query-tests",
+      "path": "test/judge-proof-query.test.js",
+      "role": "SIGNED_FIXED_JUDGE_QUERY_VERIFICATION",
+      "sha256": "00b2c701ab25e0465ea0547f2897c754cf9a0f23a338715f8ffbea41684bd706"
+    },
+    {
+      "id": "public-judge-proof-runtime",
+      "path": "src/cloud/public-judge-proof.js",
+      "role": "SANITIZED_PUBLIC_JUDGE_PROOF_BOUNDARY",
+      "sha256": "3957f2b3ef568ad89a95f7c091b07e1a0ddbbd0a113bd651d516490036e01488"
+    },
+    {
+      "id": "public-judge-proof-tests",
+      "path": "test/public-judge-proof.test.js",
+      "role": "PUBLIC_JUDGE_PROOF_BOUNDARY_VERIFICATION",
+      "sha256": "db99b0befff79df51fd20781fd41949a6bb434c9fc6c239ffcc2add012855ca7"
     },
     {
       "id": "managed-mcp-recovery-grant-repair",
