@@ -1,5 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "./canonical-json.js";
+import {
+  JUDGE_PROOF_DATABASE,
+  JUDGE_PROOF_RESPONSE_LIMIT_BYTES,
+  judgeProofQueryBindingsFor,
+  judgeProofQueryTemplateSha256,
+  judgeProofResultSha256,
+  renderJudgeProofQuery,
+  sanitizeJudgeProofMcpResult
+} from "./judge-proof-query.js";
 import { parseStrictJson } from "./strict-json.js";
 import {
   recoveryQueryBindingsFor,
@@ -10,6 +19,7 @@ const MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 const RECOVERY_DATABASE = "tideproof_recovery";
 export const RECOVERY_MCP_RESPONSE_LIMIT_BYTES = 256 * 1024;
+export const JUDGE_MANAGED_MCP_TOTAL_DEADLINE_MS = 22_000;
 const JSON_DUPLICATE_MEMBER_CODE =
   "RECOVERY_MCP_RESPONSE_JSON_DUPLICATE_MEMBER";
 
@@ -44,6 +54,21 @@ export function managedMcpLogicalRequest({ clusterId, query }) {
     sourceDigest: bindings.sourceDigest,
     subjectBindingSha256: bindings.subjectBindingHash,
     tenantId: bindings.tenantId,
+    toolNameSha256: sha256("select_query")
+  });
+}
+
+export function judgeManagedMcpLogicalRequest({ clusterId, query }) {
+  const bindings = judgeProofQueryBindingsFor(query);
+  return Object.freeze({
+    schemaVersion: "prooftoact.judge-managed-mcp-logical-request.v1",
+    boundInputSha256: sha256(canonicalJson(bindings)),
+    clusterIdSha256: sha256(requireUuid(clusterId, "clusterId")),
+    databaseNameSha256: sha256(JUDGE_PROOF_DATABASE),
+    queryTemplateSha256: judgeProofQueryTemplateSha256(),
+    sourceDigest: bindings.sourceDigest,
+    renderedQuerySha256: sha256(query),
+    queryBindingSha256: sha256(canonicalJson(bindings)),
     toolNameSha256: sha256("select_query")
   });
 }
@@ -272,27 +297,74 @@ export async function readBoundedUtf8Response(
   }
 }
 
-export class CockroachManagedMcpRecoveryClient {
+class CockroachManagedMcpFixedSelectTransport {
   #apiKey;
+  #clientInfoName;
   #clusterId;
+  #deadlineAt;
   #fetch;
   #nextId = 1;
+  #now;
+  #responseLimitBytes;
   #sessionId = null;
   #rpcEvidence = [];
   #notificationEvidence = [];
   #closeEvidence = null;
   #semanticRequestEvidence = null;
 
-  constructor({ apiKey, clusterId, fetchImpl = globalThis.fetch } = {}) {
+  constructor({
+    apiKey,
+    clientInfoName,
+    clusterId,
+    fetchImpl = globalThis.fetch,
+    now = Date.now,
+    responseLimitBytes = RECOVERY_MCP_RESPONSE_LIMIT_BYTES,
+    totalDeadlineMs = null
+  } = {}) {
     this.#apiKey = requireText(apiKey, "apiKey");
     if (this.#apiKey.length < 24) {
       throw new TypeError("apiKey is too short");
     }
     this.#clusterId = requireUuid(clusterId, "clusterId");
-    if (typeof fetchImpl !== "function") {
-      throw new TypeError("fetchImpl must be a function");
+    this.#clientInfoName = requireText(clientInfoName, "clientInfoName");
+    if (
+      typeof fetchImpl !== "function" ||
+      typeof now !== "function" ||
+      !Number.isSafeInteger(responseLimitBytes) ||
+      responseLimitBytes < 1 ||
+      (totalDeadlineMs !== null &&
+        (!Number.isSafeInteger(totalDeadlineMs) || totalDeadlineMs < 1_000))
+    ) {
+      throw new TypeError("Managed MCP transport configuration is invalid");
     }
     this.#fetch = fetchImpl;
+    this.#now = now;
+    this.#responseLimitBytes = responseLimitBytes;
+    const startedAt = now();
+    if (!Number.isSafeInteger(startedAt) || startedAt < 0) {
+      throw new TypeError("Managed MCP clock is invalid");
+    }
+    this.#deadlineAt = totalDeadlineMs === null
+      ? null
+      : startedAt + totalDeadlineMs;
+    if (
+      this.#deadlineAt !== null &&
+      !Number.isSafeInteger(this.#deadlineAt)
+    ) {
+      throw new TypeError("Managed MCP deadline is invalid");
+    }
+  }
+
+  #signal(maximumMs) {
+    let timeoutMs = maximumMs;
+    if (this.#deadlineAt !== null) {
+      const remaining = this.#deadlineAt - this.#now();
+      if (!Number.isSafeInteger(remaining) || remaining < 1) {
+        throw new Error("MANAGED_MCP_DEADLINE_EXPIRED");
+      }
+      timeoutMs = Math.min(maximumMs, remaining);
+    }
+    return AbortSignal.timeout(timeoutMs);
   }
 
   async close({ beforeExternalAction = null } = {}) {
@@ -329,7 +401,7 @@ export class CockroachManagedMcpRecoveryClient {
         method: "DELETE",
         headers: this.#headers(),
         redirect: "error",
-        signal: AbortSignal.timeout(10_000)
+        signal: this.#signal(10_000)
       });
       const received = response.headers.get("mcp-session-id");
       if (received && sessionId(received) !== expectedSessionId) {
@@ -369,7 +441,7 @@ export class CockroachManagedMcpRecoveryClient {
         this.#rpcEvidence.at(-1)?.sessionIdSha256 ?? null,
       close: this.#closeEvidence,
       redirectPolicy: "error",
-      boundedResponseBytes: RECOVERY_MCP_RESPONSE_LIMIT_BYTES
+      boundedResponseBytes: this.#responseLimitBytes
     });
   }
 
@@ -385,7 +457,7 @@ export class CockroachManagedMcpRecoveryClient {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: {
-        name: "tideproof-deterministic-recovery-broker",
+        name: this.#clientInfoName,
         version: "0.1.0"
       }
     }, { beforeExternalAction });
@@ -426,7 +498,7 @@ export class CockroachManagedMcpRecoveryClient {
       headers: this.#headers(),
       body,
       redirect: "error",
-      signal: AbortSignal.timeout(20_000)
+      signal: this.#signal(20_000)
     });
     const received = response.headers.get("mcp-session-id");
     if (received && sessionId(received) !== outboundSessionId) {
@@ -490,7 +562,7 @@ export class CockroachManagedMcpRecoveryClient {
       headers: this.#headers(),
       body,
       redirect: "error",
-      signal: AbortSignal.timeout(30_000)
+      signal: this.#signal(30_000)
     });
     const receivedSessionId = response.headers.get("mcp-session-id");
     if (receivedSessionId) {
@@ -515,7 +587,9 @@ export class CockroachManagedMcpRecoveryClient {
     const contentType = normalizedMcpContentType(
       response.headers.get("content-type")
     );
-    const responseText = await readBoundedUtf8Response(response);
+    const responseText = await readBoundedUtf8Response(response, {
+      limitBytes: this.#responseLimitBytes
+    });
     let message;
     if (contentType === "application/json") {
       message = parseManagedMcpJson(
@@ -560,23 +634,22 @@ export class CockroachManagedMcpRecoveryClient {
     return message.result;
   }
 
-  async selectQuery({
-    clusterId,
+  async selectFixed({
     database,
+    logicalRequest,
     query,
     beforeExternalAction = null,
     beforeToolCall = null
   }) {
-    if (requireUuid(clusterId, "clusterId") !== this.#clusterId) {
-      throw new Error("RECOVERY_MCP_CLUSTER_MISMATCH");
+    const selectedDatabase = requireText(database, "database");
+    const selectedQuery = requireText(query, "query");
+    if (
+      logicalRequest === null ||
+      typeof logicalRequest !== "object" ||
+      Array.isArray(logicalRequest)
+    ) {
+      throw new Error("RECOVERY_MCP_LOGICAL_REQUEST_INVALID");
     }
-    if (requireText(database, "database") !== RECOVERY_DATABASE) {
-      throw new Error("RECOVERY_MCP_DATABASE_MISMATCH");
-    }
-    const logicalRequest = managedMcpLogicalRequest({
-      clusterId: this.#clusterId,
-      query
-    });
     if (beforeToolCall !== null && typeof beforeToolCall !== "function") {
       throw new Error("RECOVERY_MCP_TOOL_CALL_GUARD_INVALID");
     }
@@ -593,13 +666,135 @@ export class CockroachManagedMcpRecoveryClient {
     const result = await this.#rpc("tools/call", {
       name: "select_query",
       arguments: {
-        database: RECOVERY_DATABASE,
-        query
+        database: selectedDatabase,
+        query: selectedQuery
       }
     }, { beforeExternalAction, logicalRequest });
     if (result?.isError === true) {
       throw new Error("RECOVERY_MCP_TOOL_REJECTED");
     }
     return result;
+  }
+}
+
+export class CockroachManagedMcpRecoveryClient {
+  #clusterId;
+  #transport;
+
+  constructor({ apiKey, clusterId, fetchImpl = globalThis.fetch } = {}) {
+    this.#clusterId = requireUuid(clusterId, "clusterId");
+    this.#transport = new CockroachManagedMcpFixedSelectTransport({
+      apiKey,
+      clientInfoName: "tideproof-deterministic-recovery-broker",
+      clusterId: this.#clusterId,
+      fetchImpl
+    });
+  }
+
+  close(options) {
+    return this.#transport.close(options);
+  }
+
+  transportEvidence() {
+    return this.#transport.transportEvidence();
+  }
+
+  semanticRequestEvidence() {
+    return this.#transport.semanticRequestEvidence();
+  }
+
+  async selectQuery({
+    clusterId,
+    database,
+    query,
+    beforeExternalAction = null,
+    beforeToolCall = null
+  }) {
+    if (requireUuid(clusterId, "clusterId") !== this.#clusterId) {
+      throw new Error("RECOVERY_MCP_CLUSTER_MISMATCH");
+    }
+    if (requireText(database, "database") !== RECOVERY_DATABASE) {
+      throw new Error("RECOVERY_MCP_DATABASE_MISMATCH");
+    }
+    return this.#transport.selectFixed({
+      database: RECOVERY_DATABASE,
+      logicalRequest: managedMcpLogicalRequest({
+        clusterId: this.#clusterId,
+        query
+      }),
+      query,
+      beforeExternalAction,
+      beforeToolCall
+    });
+  }
+}
+
+export class CockroachManagedMcpJudgeProofClient {
+  #logicalRequest;
+  #now;
+  #query;
+  #transport;
+
+  constructor({
+    apiKey,
+    clusterId,
+    fetchImpl = globalThis.fetch,
+    now = Date.now
+  } = {}) {
+    const acceptedClusterId = requireUuid(clusterId, "clusterId");
+    this.#now = now;
+    this.#query = renderJudgeProofQuery();
+    this.#transport = new CockroachManagedMcpFixedSelectTransport({
+      apiKey,
+      clientInfoName: "prooftoact-public-judge-proof",
+      clusterId: acceptedClusterId,
+      fetchImpl,
+      now,
+      responseLimitBytes: JUDGE_PROOF_RESPONSE_LIMIT_BYTES,
+      totalDeadlineMs: JUDGE_MANAGED_MCP_TOTAL_DEADLINE_MS
+    });
+    this.#logicalRequest = Object.freeze(
+      judgeManagedMcpLogicalRequest({
+        clusterId: acceptedClusterId,
+        query: this.#query
+      })
+    );
+  }
+
+  async readPinnedJudgeProof() {
+    let result;
+    try {
+      result = await this.#transport.selectFixed({
+        database: JUDGE_PROOF_DATABASE,
+        logicalRequest: this.#logicalRequest,
+        query: this.#query
+      });
+    } finally {
+      await this.#transport.close();
+    }
+    const transport = this.#transport.transportEvidence();
+    if (
+      transport.close === null ||
+      transport.close.attempted !== true ||
+      transport.close.sessionContinuous !== true
+    ) {
+      throw new Error("JUDGE_MCP_SESSION_CLOSE_REJECTED");
+    }
+    const observedAt = this.#now();
+    if (!Number.isSafeInteger(observedAt) || observedAt < 0) {
+      throw new Error("JUDGE_MCP_CLOCK_REJECTED");
+    }
+    const proof = sanitizeJudgeProofMcpResult(result);
+    const semantic = this.#transport.semanticRequestEvidence();
+    return Object.freeze({
+      schemaVersion: "prooftoact.public-judge-proof-read.v1",
+      status: "LIVE_MANAGED_MCP_READ",
+      observedAt: new Date(observedAt).toISOString(),
+      receiptExpiredContext: Date.parse(proof.expiresAt) <= observedAt,
+      proof,
+      proofSha256: judgeProofResultSha256(proof),
+      semanticRequestEvidenceSha256: semantic?.evidenceSha256 ?? null,
+      transport
+    });
   }
 }

@@ -780,6 +780,30 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "test/managed-mcp-client.test.js",
     role: "RECOVERY_MCP_STRICT_TRANSPORT_VERIFICATION"
   }),
+  "judge-proof-lambda": Object.freeze({
+    path: "infra/aws/lambda/judge-proof.js",
+    role: "AWS_FIXED_PUBLIC_JUDGE_PROOF_RUNTIME"
+  }),
+  "judge-proof-mcp-tests": Object.freeze({
+    path: "test/judge-managed-mcp-client.test.js",
+    role: "PUBLIC_JUDGE_MCP_TRANSPORT_VERIFICATION"
+  }),
+  "judge-proof-query": Object.freeze({
+    path: "src/cloud/judge-proof-query.js",
+    role: "SIGNED_FIXED_JUDGE_QUERY_CONTRACT"
+  }),
+  "judge-proof-query-tests": Object.freeze({
+    path: "test/judge-proof-query.test.js",
+    role: "SIGNED_FIXED_JUDGE_QUERY_VERIFICATION"
+  }),
+  "public-judge-proof-runtime": Object.freeze({
+    path: "src/cloud/public-judge-proof.js",
+    role: "SANITIZED_PUBLIC_JUDGE_PROOF_BOUNDARY"
+  }),
+  "public-judge-proof-tests": Object.freeze({
+    path: "test/public-judge-proof.test.js",
+    role: "PUBLIC_JUDGE_PROOF_BOUNDARY_VERIFICATION"
+  }),
   "managed-mcp-recovery-grant-repair": Object.freeze({
     path: "scripts/repair-managed-mcp-recovery-grants.js",
     role: "MANAGED_MCP_RECOVERY_EXISTING_CLUSTER_REPAIR"
@@ -3714,7 +3738,7 @@ const SOURCE_MARKERS = Object.freeze({
   "managed-mcp-client": Object.freeze([
     "https://cockroachlabs.cloud/mcp",
     "redirect: \"error\"",
-    "AbortSignal.timeout(30_000)",
+    "signal: this.#signal(30_000)",
     "RECOVERY_MCP_RESPONSE_TOO_LARGE",
     "TextDecoder(\"utf-8\", { fatal: true })",
     "RECOVERY_MCP_RESPONSE_ID_MISMATCH",
@@ -3739,6 +3763,45 @@ const SOURCE_MARKERS = Object.freeze({
     "Managed MCP client rejects non-normalized or ambiguous content types",
     "Managed MCP SSE rejects malformed, duplicate, or uncorrelated response data",
     "RECOVERY_MCP_RESPONSE_SSE_AMBIGUOUS"
+  ]),
+  "judge-proof-lambda": Object.freeze([
+    "GetSecretValueCommand",
+    "VersionStage: \"AWSCURRENT\"",
+    "AWS_LAMBDA_FUNCTION_VERSION",
+    "ignoreConfiguredEndpointUrls: true",
+    "maxAttempts: 1"
+  ]),
+  "judge-proof-mcp-tests": Object.freeze([
+    "one no-argument fixed proof operation",
+    "closes before rejecting an invalid row",
+    "fails closed when session cleanup fails",
+    "enforces one total deadline"
+  ]),
+  "judge-proof-query": Object.freeze([
+    "FROM mcp_public.recovery_bundle_v2",
+    "verifyRecoveryBundleSourceSignature",
+    "HISTORICAL_SIGNED_RECOVERY_CONTEXT_ONLY",
+    "AND bundle_digest =",
+    "LIMIT 2"
+  ]),
+  "judge-proof-query-tests": Object.freeze([
+    "one no-argument exact recovery-view read",
+    "rejects any text substitution",
+    "verifies the real pinned P-256 row",
+    "rejects ambiguity, drift, and signature tampering"
+  ]),
+  "public-judge-proof-runtime": Object.freeze([
+    "https://flash-bri.github.io",
+    "cross-origin-resource-policy\": \"cross-origin",
+    "status: JUDGE_PROOF_STATUS",
+    "sessionClosed: true",
+    "proof_unavailable"
+  ]),
+  "public-judge-proof-tests": Object.freeze([
+    "accepts only exact parameter-free GET",
+    "browser CORS permits only the exact GitHub Pages origin",
+    "rejects body, query, route, and API substitution before secret read",
+    "validates the exact secret and hides failures"
   ]),
   "managed-mcp-recovery-grant-repair": Object.freeze([
     "--preflight",

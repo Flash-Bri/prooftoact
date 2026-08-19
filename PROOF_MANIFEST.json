@@ -799,7 +799,7 @@
     {
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
-      "sha256": "bb98dbdab730abb4ed4f7632df18fdc65646fe3175220f25fbe68a472321af71",
+      "sha256": "d0e0e9312b37c4c64d87c9cb18e03c8d9034c8aa92a62d8c280eb4e14c758169",
       "kind": "verification-code"
     },
     {
@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "03040dba7b18a79b6c7c1375ab34a96bcb02c159435154ec88bcbbca1953065d",
+      "sha256": "387fb9d6301d47b582a37ac94003c9db9d8995ea14777d931bd19fbb1ea946a8",
       "kind": "boundary-ledger"
     },
     {
@@ -1105,7 +1105,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "12de3f5d8ccf2c95e419938221ed964bd57fbe477180008aa8d06cc8d819348a",
+      "sha256": "0b49af1a68bb8b09fb271e66c026369264a09d9f5d80a7be913a4159dee3b64a",
       "kind": "verification-code"
     },
     {
