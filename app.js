@@ -134,23 +134,23 @@ const actDefinitions = [
 
 const evidenceForStep = {
   "one-winner-race": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-authority-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/7966422e95ebcb97d91f9779d16e9a2e7e146bbb/evidence/gate1-authority-2026-07-30.md",
     label: "Open the source authority document"
   },
   "checkpoint-termination": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-recovery-broker-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/7966422e95ebcb97d91f9779d16e9a2e7e146bbb/evidence/gate1-recovery-broker-2026-07-30.md",
     label: "Open the source recovery document"
   },
   "successor-recovery": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-recovery-broker-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/7966422e95ebcb97d91f9779d16e9a2e7e146bbb/evidence/gate1-recovery-broker-2026-07-30.md",
     label: "Open the source recovery document"
   },
   "exact-operation-replay": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-authority-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/7966422e95ebcb97d91f9779d16e9a2e7e146bbb/evidence/gate1-authority-2026-07-30.md",
     label: "Open the source authority document"
   },
   "changed-operation-rejected": {
-    href: "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/evidence/gate1-authority-2026-07-30.md",
+    href: "https://github.com/Flash-Bri/prooftoact/blob/7966422e95ebcb97d91f9779d16e9a2e7e146bbb/evidence/gate1-authority-2026-07-30.md",
     label: "Open the source authority document"
   }
 };
@@ -368,7 +368,7 @@ function proofMetadata(mode) {
   return {
     className: "local",
     label: "HIGHWATER DRILL",
-    source: "main@e800a85 · scenario.json",
+    source: "main@7966422 · scenario.json",
     limitation: mode === "recorded"
       ? "Bounded event with linked evidence context."
       : "Evidence-governed scenario transition."

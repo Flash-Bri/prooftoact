@@ -1,18 +1,18 @@
 {
   "schemaVersion": "prooftoact.judge-experience-source.v2",
-  "assembledAt": "2026-08-19T14:12:58Z",
+  "assembledAt": "2026-08-19T14:46:49Z",
   "publicationMode": "JUDGE_EXPERIENCE",
   "source": {
     "repository": "https://github.com/Flash-Bri/prooftoact",
-    "commit": "e800a8592ad5dbcdfaf280da097e68121a386d1f",
-    "tree": "dc6e23e223b68c110e0e021594bda8e33eab3a53",
+    "commit": "7966422e95ebcb97d91f9779d16e9a2e7e146bbb",
+    "tree": "f65922b725b67f21082010873b1935127726fc5c",
     "refAtAssembly": "refs/heads/main",
-    "commitTimestamp": "2026-08-19T10:12:39-04:00"
+    "commitTimestamp": "2026-08-19T10:46:17-04:00"
   },
   "presentation": {
     "name": "Synthetic Highwater Drill",
     "scenario": "scenario.json",
-    "claimsLedger": "https://github.com/Flash-Bri/prooftoact/blob/e800a8592ad5dbcdfaf280da097e68121a386d1f/CLAIMS.md",
+    "claimsLedger": "https://github.com/Flash-Bri/prooftoact/blob/7966422e95ebcb97d91f9779d16e9a2e7e146bbb/CLAIMS.md",
     "artifactHashes": "SHA256SUMS.txt"
   },
   "liveProvider": {
