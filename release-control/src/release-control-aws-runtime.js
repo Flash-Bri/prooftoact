@@ -126,6 +126,11 @@ export async function createReleaseControlAwsRuntime({
       "RELEASE_CONTROL_AWS_TABLE_ARN_REJECTED");
       return client.send(new dynamodb.ListTagsOfResourceCommand(input));
     },
+    async putReleaseControlItem(input) {
+      return client.send(new dynamodb.PutItemCommand(
+        requireExactTable(input, tableName)
+      ));
+    },
     async transactReleaseControlItems(input) {
       return client.send(new dynamodb.TransactWriteItemsCommand(
         requireExactTransaction(input, tableName)

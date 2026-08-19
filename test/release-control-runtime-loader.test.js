@@ -144,6 +144,7 @@ test("content-addressed release-control provider bundle builds and loads exact b
         "arn:aws:dynamodb:us-east-1:111111111111:table/prooftoact-release-controller"
     });
     assert.equal(typeof runtime.transactReleaseControlItems, "function");
+    assert.equal(typeof runtime.putReleaseControlItem, "function");
     assert.equal(typeof runtime.getReleaseControlCallerIdentity, "function");
     const filePath = path.join(outputRoot, receipt.path);
     fs.appendFileSync(filePath, "\n");

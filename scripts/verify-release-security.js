@@ -21,7 +21,70 @@ const EXPECTED_FINAL_RELEASE_REQUIREMENTS = Object.freeze([
   "Separate private human security and abuse review of the exact deployed application, repository metadata, CloudFormation change set, IAM policies, database grants, logs, receipts, media, public URLs, and submission fields."
 ]);
 
+const FRESH_PRIMARY_SURFACES = Object.freeze(Object.fromEntries([
+  ["fresh-primary-caller-workflow", ".github/workflows/prooftoact-fresh-primary.yml", "EXACT_MAIN_FRESH_PRIMARY_CALLER"],
+  ["fresh-primary-sealed-workflow", ".github/workflows/prooftoact-sealed-fresh-primary.yml", "PROTECTED_FRESH_PRIMARY_PROVIDER_EXECUTION"],
+  ["fresh-primary-oidc-boundary", "docs/RELEASE_OIDC_BOUNDARY.md", "FRESH_PRIMARY_OIDC_AND_CREDENTIAL_BOUNDARY"],
+  ["fresh-primary-bootstrap-role-template", "infra/aws/fresh-primary-bootstrap-role-stack.json", "FRESH_PRIMARY_EXACT_OIDC_ROLE_TEMPLATE"],
+  ["fresh-primary-credential-custody-template", "infra/aws/fresh-primary-credential-custody-stack.json", "CREATE_ONLY_SEVEN_SECRET_CUSTODY_TEMPLATE"],
+  ["release-control-aws-runtime", "release-control/src/release-control-aws-runtime.js", "FRESH_PROVIDER_DURABLE_CONTROL_RUNTIME"],
+  ["fresh-primary-bootstrap", "scripts/bootstrap-fresh-primary.js", "FRESH_PRIMARY_DATABASE_BOOTSTRAP"],
+  ["fresh-cluster-aws-provider", "scripts/fresh-cluster-aws-provider.js", "FRESH_CLUSTER_AWS_PROVIDER_CLIENT"],
+  ["fresh-cluster-aws-runtime", "scripts/fresh-cluster-aws-runtime.js", "FRESH_CLUSTER_AWS_PROVIDER_RUNTIME"],
+  ["fresh-cluster-cloud-controller", "scripts/fresh-cluster-cloud-controller.js", "FRESH_CLUSTER_CLOUD_API_CONTROLLER"],
+  ["fresh-cluster-execution-runtime", "scripts/fresh-cluster-execution-runtime.js", "FRESH_CLUSTER_JOINED_EXECUTION_RUNTIME"],
+  ["fresh-cluster-provider-controller", "scripts/fresh-cluster-provider-controller.js", "FRESH_CLUSTER_PROVIDER_EFFECT_CONTROLLER"],
+  ["fresh-cluster-reconciliation-controller", "scripts/fresh-cluster-reconciliation-controller.js", "FRESH_CLUSTER_READ_ONLY_RECONCILIATION"],
+  ["fresh-primary-aws-provider", "scripts/fresh-primary-aws-provider.js", "FRESH_PRIMARY_AWS_PROVIDER_CLIENT"],
+  ["fresh-primary-aws-runtime", "scripts/fresh-primary-aws-runtime.js", "FRESH_PRIMARY_AWS_PROVIDER_RUNTIME"],
+  ["fresh-primary-bootstrap-role-readback", "scripts/fresh-primary-bootstrap-role-readback.js", "FRESH_PRIMARY_ROLE_PROVIDER_READBACK"],
+  ["fresh-primary-credential-custody-readback", "scripts/fresh-primary-credential-custody-readback.js", "SEVEN_SECRET_CUSTODY_PROVIDER_READBACK"],
+  ["fresh-primary-credential-sealer-aws-runtime", "scripts/fresh-primary-credential-sealer-aws-runtime.js", "FIVE_VERSION_SECRET_SEAL_AWS_RUNTIME"],
+  ["fresh-primary-credential-sealer", "scripts/fresh-primary-credential-sealer.js", "FIVE_VERSION_SECRET_SEAL_CONTROLLER"],
+  ["fresh-primary-provider-controller", "scripts/fresh-primary-provider-controller.js", "FRESH_PRIMARY_PROVIDER_CONTROLLER"],
+  ["fresh-recovery-publication-execution", "scripts/fresh-recovery-publication-execution.js", "FRESH_RECOVERY_PUBLICATION_EXECUTION"],
+  ["fresh-recovery-source-execution", "scripts/fresh-recovery-source-execution.js", "FRESH_RECOVERY_SOURCE_EXECUTION"],
+  ["fresh-cluster-provider-launcher", "scripts/launch-fresh-cluster-provider.js", "EXACT_SOURCE_FRESH_PROVIDER_LAUNCHER"],
+  ["fresh-bootstrap-collector-binding", "scripts/lib/fresh-bootstrap-collector-binding.js", "EXACT_B0_COLLECTOR_IDENTITY_BINDING"],
+  ["fresh-primary-source-lock", "scripts/lib/fresh-primary-source-lock.py", "PRE_CHECKOUT_REUSABLE_OIDC_SOURCE_LOCK"],
+  ["fresh-recovery-publisher-key", "scripts/lib/fresh-recovery-publisher-key.js", "FRESH_RECOVERY_SIGNER_KEY_CUSTODY"],
+  ["private-recovery-query-binding", "scripts/lib/private-recovery-query-binding.js", "PRIVATE_MANAGED_MCP_QUERY_BINDING"],
+  ["fresh-primary-bootstrap-role-plan", "scripts/prepare-fresh-primary-bootstrap-role.js", "FRESH_PRIMARY_ROLE_CREATE_ONLY_PLAN"],
+  ["fresh-primary-credential-custody-plan", "scripts/prepare-fresh-primary-credential-custody.js", "SEVEN_SECRET_CUSTODY_CREATE_ONLY_PLAN"],
+  ["release-deployment-plan", "scripts/prepare-release-deployment.js", "FRESH_PRIMARY_RELEASE_DEPLOYMENT_PLAN"],
+  ["fresh-cluster-provider-runner", "scripts/run-fresh-cluster-provider.js", "FRESH_CLUSTER_PRIVATE_PROVIDER_RUNNER"],
+  ["fresh-primary-credential-sealer-runner", "scripts/run-fresh-primary-credential-sealer.js", "PRIVATE_FIVE_VERSION_SEAL_RUNNER"],
+  ["fresh-primary-provider-runner", "scripts/run-fresh-primary-provider.js", "FRESH_PRIMARY_PRIVATE_PROVIDER_RUNNER"],
+  ["fresh-primary-bootstrap-role-stack-tests", "test/fresh-primary-bootstrap-role-stack.test.js", "FRESH_PRIMARY_ROLE_TEMPLATE_VERIFICATION"],
+  ["fresh-primary-bootstrap-tests", "test/fresh-primary-bootstrap.test.js", "FRESH_PRIMARY_BOOTSTRAP_VERIFICATION"],
+  ["fresh-primary-provider-controller-tests", "test/fresh-primary-provider-controller.test.js", "FRESH_PRIMARY_CONTROLLER_VERIFICATION"],
+  ["release-control-aws-runtime-tests", "test/release-control-aws-runtime.test.js", "FRESH_PROVIDER_CONTROL_RUNTIME_VERIFICATION"],
+  ["release-control-runtime-loader-tests", "test/release-control-runtime-loader.test.js", "FRESH_PROVIDER_CONTROL_LOADER_VERIFICATION"],
+  ["fresh-cluster-aws-provider-tests", "test/fresh-cluster-aws-provider.test.js", "FRESH_CLUSTER_AWS_PROVIDER_VERIFICATION"],
+  ["fresh-cluster-aws-runtime-tests", "test/fresh-cluster-aws-runtime.test.js", "FRESH_CLUSTER_AWS_RUNTIME_VERIFICATION"],
+  ["fresh-cluster-cloud-controller-tests", "test/fresh-cluster-cloud-controller.test.js", "FRESH_CLUSTER_CLOUD_CONTROLLER_VERIFICATION"],
+  ["fresh-cluster-execution-runtime-tests", "test/fresh-cluster-execution-runtime.test.js", "FRESH_CLUSTER_EXECUTION_VERIFICATION"],
+  ["fresh-cluster-provider-controller-tests", "test/fresh-cluster-provider-controller.test.js", "FRESH_CLUSTER_PROVIDER_CONTROLLER_VERIFICATION"],
+  ["fresh-cluster-reconciliation-controller-tests", "test/fresh-cluster-reconciliation-controller.test.js", "FRESH_CLUSTER_RECONCILIATION_VERIFICATION"],
+  ["fresh-primary-aws-provider-tests", "test/fresh-primary-aws-provider.test.js", "FRESH_PRIMARY_AWS_PROVIDER_VERIFICATION"],
+  ["fresh-primary-aws-runtime-tests", "test/fresh-primary-aws-runtime.test.js", "FRESH_PRIMARY_AWS_RUNTIME_VERIFICATION"],
+  ["fresh-primary-bootstrap-role-plan-tests", "test/fresh-primary-bootstrap-role-plan.test.js", "FRESH_PRIMARY_ROLE_PLAN_VERIFICATION"],
+  ["fresh-primary-bootstrap-role-readback-tests", "test/fresh-primary-bootstrap-role-readback.test.js", "FRESH_PRIMARY_ROLE_READBACK_VERIFICATION"],
+  ["fresh-primary-credential-custody-plan-tests", "test/fresh-primary-credential-custody-plan.test.js", "SEVEN_SECRET_CUSTODY_PLAN_VERIFICATION"],
+  ["fresh-primary-credential-custody-readback-tests", "test/fresh-primary-credential-custody-readback.test.js", "SEVEN_SECRET_CUSTODY_READBACK_VERIFICATION"],
+  ["fresh-primary-credential-sealer-runtime-tests", "test/fresh-primary-credential-sealer-runtime.test.js", "FIVE_VERSION_SEAL_RUNTIME_VERIFICATION"],
+  ["fresh-primary-credential-sealer-tests", "test/fresh-primary-credential-sealer.test.js", "FIVE_VERSION_SEAL_CONTROLLER_VERIFICATION"],
+  ["fresh-primary-workflow-tests", "test/fresh-primary-workflow.test.js", "FRESH_PRIMARY_WORKFLOW_VERIFICATION"],
+  ["fresh-recovery-publication-execution-tests", "test/fresh-recovery-publication-execution.test.js", "FRESH_RECOVERY_PUBLICATION_VERIFICATION"],
+  ["fresh-recovery-publisher-key-tests", "test/fresh-recovery-publisher-key.test.js", "FRESH_RECOVERY_SIGNER_VERIFICATION"],
+  ["fresh-recovery-source-execution-tests", "test/fresh-recovery-source-execution.test.js", "FRESH_RECOVERY_SOURCE_VERIFICATION"],
+  ["fresh-cluster-provider-launcher-tests", "test/launch-fresh-cluster-provider.test.js", "FRESH_PROVIDER_LAUNCHER_VERIFICATION"],
+  ["fresh-cluster-provider-runner-tests", "test/run-fresh-cluster-provider.test.js", "FRESH_CLUSTER_RUNNER_VERIFICATION"],
+  ["fresh-primary-provider-runner-tests", "test/run-fresh-primary-provider.test.js", "FRESH_PRIMARY_RUNNER_VERIFICATION"]
+].map(([id, path, role]) => [id, Object.freeze({ path, role })])));
+
 const EXPECTED_SURFACES = Object.freeze({
+  ...FRESH_PRIMARY_SURFACES,
   "actions-checkout-normalizer": Object.freeze({
     path: "scripts/normalize-actions-checkout.js",
     role: "GITHUB_ACTIONS_EXACT_CHECKOUT_NORMALIZATION"
@@ -1129,6 +1192,176 @@ const REQUIRED_DENY_ACTIONS = Object.freeze({
 });
 
 const SOURCE_MARKERS = Object.freeze({
+  ...Object.freeze({
+    ...Object.fromEntries(Object.keys(FRESH_PRIMARY_SURFACES).map((id) =>
+      [id, Object.freeze([])])),
+    "fresh-primary-caller-workflow": Object.freeze([
+      "name: ProofToAct Fresh Cluster And Primary",
+      "github.ref == 'refs/heads/main'",
+      "cancel-in-progress: false",
+      "id-token: write"
+    ]),
+    "fresh-primary-sealed-workflow": Object.freeze([
+      "name: ProofToAct Sealed Fresh Cluster And Primary",
+      "environment: aws-release-database-bootstrap",
+      "timeout-minutes: 45",
+      "--mode reconcile-only"
+    ]),
+    "fresh-primary-oidc-boundary": Object.freeze([
+      "credential custody boundary",
+      "exactly seven empty retained Secrets Manager containers",
+      "exactly five one-version containers"
+    ]),
+    "fresh-primary-bootstrap-role-template": Object.freeze([
+      "ProofToActFreshPrimaryBootstrap",
+      "token.actions.githubusercontent.com:job_workflow_ref",
+      "DenyUnrelatedProviderCapabilities"
+    ]),
+    "fresh-primary-credential-custody-template": Object.freeze([
+      "FreshPrimaryCredentialWriterRole",
+      "SealAndReadExactFiveCredentialVersions",
+      "DenySecretLifecycleMutation"
+    ]),
+    "release-control-aws-runtime": Object.freeze([
+      "putReleaseControlItem",
+      "new dynamodb.PutItemCommand",
+      "requireExactTable(input, tableName)",
+      "maxAttempts: 1"
+    ]),
+    "fresh-primary-bootstrap": Object.freeze([
+      "validateFreshPrimaryCredentialBundle",
+      "runFreshPrimaryProviderControlledBootstrap",
+      "freshPrimaryIntent"
+    ]),
+    "fresh-cluster-aws-provider": Object.freeze([
+      "createFreshClusterAwsProvider",
+      "readFreshClusterSecretMaterial",
+      "normalizeFreshClusterAdminSealReadback"
+    ]),
+    "fresh-cluster-aws-runtime": Object.freeze([
+      "createFreshClusterAwsRuntime",
+      "FRESH_CLUSTER_AWS_CONFIGURATION_REJECTED",
+      "maxAttempts: 1"
+    ]),
+    "fresh-cluster-cloud-controller": Object.freeze([
+      "createFreshClusterCloudRuntime",
+      "reconcileFreshClusterInventory",
+      "FRESH_CLUSTER_CLOUD_REQUEST_FAILED_NO_RETRY"
+    ]),
+    "fresh-cluster-execution-runtime": Object.freeze([
+      "createFreshClusterExecutionRuntime",
+      "createFreshClusterCleanupRuntime",
+      "FRESH_CLUSTER_EXECUTION_CONFIGURATION_REJECTED"
+    ]),
+    "fresh-cluster-provider-controller": Object.freeze([
+      "FreshClusterProviderController",
+      "UNKNOWN_DO_NOT_RETRY"
+    ]),
+    "fresh-cluster-reconciliation-controller": Object.freeze([
+      "reconcileFreshClusterProviderAccess",
+      "AUTHENTICATED_PROVIDER_READBACK",
+      "FRESH_CLUSTER_CLEANUP_PENDING_RETRY_REQUIRED"
+    ]),
+    "fresh-primary-aws-provider": Object.freeze([
+      "createFreshPrimaryAwsProvider",
+      "putRecoverySignerSecret",
+      "FRESH_PRIMARY_AWS_SIGNER_SECRET_UNKNOWN_DO_NOT_RETRY"
+    ]),
+    "fresh-primary-aws-runtime": Object.freeze([
+      "createFreshPrimaryAwsRuntime",
+      "FRESH_PRIMARY_AWS_RUNTIME_CONFIGURATION_REJECTED",
+      "maxAttempts: 1"
+    ]),
+    "fresh-primary-bootstrap-role-readback": Object.freeze([
+      "verifyFreshPrimaryBootstrapRoleReadback",
+      "permissionsBoundaryArn",
+      "validateFreshBootstrapCollectorCaller"
+    ]),
+    "fresh-primary-credential-custody-readback": Object.freeze([
+      "verifyFreshPrimaryCredentialCustodyReadback",
+      "freshPrimaryCredentialSecretArnsFromStackOutputs",
+      "EXACT_FIVE_SEALED_TWO_EMPTY_CREATOR_LIFECYCLE_ACCEPTED"
+    ]),
+    "fresh-primary-credential-sealer-aws-runtime": Object.freeze([
+      "createFreshPrimaryCredentialSealerAwsRuntime",
+      "IncludeDeprecated: true",
+      "maxAttempts: 1"
+    ]),
+    "fresh-primary-credential-sealer": Object.freeze([
+      "buildFreshPrimaryCredentialSealApproval",
+      "sealFreshPrimaryCredentialCustody",
+      "FRESH_CREDENTIAL_VERSION_UNKNOWN_DO_NOT_CHANGE_TOKEN"
+    ]),
+    "fresh-primary-provider-controller": Object.freeze([
+      "FreshPrimaryProviderController",
+      "runFreshPrimaryProviderController",
+      "FRESH_PRIMARY_PROVIDER_UNKNOWN_DO_NOT_RETRY"
+    ]),
+    "fresh-recovery-publication-execution": Object.freeze([
+      "createFreshRecoveryPublicationExecution",
+      "executeFreshPublicationProviderAction",
+      "databaseNow",
+      "managedMcpLogicalRequest"
+    ]),
+    "fresh-recovery-source-execution": Object.freeze([
+      "produceFreshRecoverySource",
+      "freshRecoverySourceIdentity",
+      "authorityEvidenceBindingSha256"
+    ]),
+    "fresh-cluster-provider-launcher": Object.freeze([
+      "FRESH_CLUSTER_LAUNCH_IMPORT_GRAPH_REJECTED",
+      "tideproof.gate2-build.v9",
+      "export async function main"
+    ]),
+    "fresh-bootstrap-collector-binding": Object.freeze([
+      "validateFreshBootstrapCollectorBinding",
+      "prooftoact-bootstrap-",
+      "prooftoact-b0-"
+    ]),
+    "fresh-primary-source-lock": Object.freeze([
+      "prooftoact-fresh-primary-source-lock-v1",
+      "job_workflow_ref",
+      "job_workflow_sha",
+      "FRESH_PRIMARY_SOURCE_LOCK_REJECTED"
+    ]),
+    "fresh-recovery-publisher-key": Object.freeze([
+      "validateFreshRecoveryPublisherSecret",
+      "generateFreshRecoveryPublisherSecret",
+      "FRESH_RECOVERY_PUBLISHER_SECRET_REJECTED"
+    ]),
+    "private-recovery-query-binding": Object.freeze([
+      "validatePrivateRecoveryQueryBinding",
+      "PRIVATE_RECOVERY_QUERY_BINDING_REJECTED"
+    ]),
+    "fresh-primary-bootstrap-role-plan": Object.freeze([
+      "prepareFreshPrimaryBootstrapRole",
+      "READY_FOR_EXACT_CREATE_ONLY_APPLY",
+      "passRoleExplicitlyAbsent: true"
+    ]),
+    "fresh-primary-credential-custody-plan": Object.freeze([
+      "prepareFreshPrimaryCredentialCustody",
+      "initialVersionContract",
+      "valueActionsExplicitlyAbsent"
+    ]),
+    "release-deployment-plan": Object.freeze([
+      "validateReleaseDeploymentRoleTemplate",
+      "ReadOwnCallerIdentity",
+      "sts:GetCallerIdentity"
+    ]),
+    "fresh-cluster-provider-runner": Object.freeze([
+      "runFreshClusterProvider",
+      "--receipt-output"
+    ]),
+    "fresh-primary-credential-sealer-runner": Object.freeze([
+      "runFreshPrimaryCredentialSealer",
+      "buffer.fill(0)",
+      "--secret-arns-file"
+    ]),
+    "fresh-primary-provider-runner": Object.freeze([
+      "runFreshPrimaryProvider",
+      "--receipt-output"
+    ])
+  }),
   "actions-checkout-normalizer": Object.freeze([
     "const OFFICIAL_REPOSITORY_ID = \"1317716765\"",
     "const CI_WORKFLOW_NAME = \"CI\"",

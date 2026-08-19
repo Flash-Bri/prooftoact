@@ -3,32 +3,208 @@ name: ProofToAct Sealed Execute Credential Boundary
 on:
   workflow_call:
     inputs:
-      artifact_name: { required: true, type: string }
+      command_base64: { required: true, type: string }
       authority_commit: { required: true, type: string }
       authority_tree: { required: true, type: string }
       command_sha256: { required: true, type: string }
+      manifest_base64: { required: true, type: string }
       manifest_sha256: { required: true, type: string }
+      lookup_base64: { required: true, type: string }
 
 permissions: {}
 
 jobs:
   sealed-credential-boundary:
-    permissions: {}
+    permissions:
+      contents: read
+      id-token: write
     environment: aws-release-execution
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Reject activation until a reviewed sealed EXECUTE runtime exists
+      - name: Validate immutable artifact coordinates
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
-          ARTIFACT_NAME: ${{ inputs.artifact_name }}
           AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
           AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          COMMAND_BASE64: ${{ inputs.command_base64 }}
           COMMAND_SHA256: ${{ inputs.command_sha256 }}
+          MANIFEST_BASE64: ${{ inputs.manifest_base64 }}
           MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          LOOKUP_BASE64: ${{ inputs.lookup_base64 }}
         run: |
-          [[ "$ARTIFACT_NAME" =~ ^prooftoact-sealed-execute-[0-9]+-[0-9]+$ ]]
-          [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ && "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$COMMAND_SHA256" =~ ^[0-9a-f]{64}$ && "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
-          echo 'HOLD:SEALED_EXECUTE_RUNTIME_NOT_IMPLEMENTED' >&2
-          exit 1
+          [[ "$AUTHORITY_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AUTHORITY_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$COMMAND_BASE64" =~ ^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$ ]]
+          [[ "$COMMAND_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$MANIFEST_BASE64" =~ ^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$ ]]
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$LOOKUP_BASE64" =~ ^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$ ]]
+          [[ "${#COMMAND_BASE64}" -le 8192 && "${#MANIFEST_BASE64}" -le 8192 ]]
+          [[ "${#LOOKUP_BASE64}" -le 32768 ]]
+      - name: Verify exact executable coordinates and manifest bytes
+        shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+        env:
+          AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          COMMAND_BASE64: ${{ inputs.command_base64 }}
+          COMMAND_SHA256: ${{ inputs.command_sha256 }}
+          MANIFEST_BASE64: ${{ inputs.manifest_base64 }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          SEALED_ROOT: ${{ runner.temp }}/prooftoact-sealed-input
+        run: |
+          umask 077
+          mkdir "$SEALED_ROOT"
+          [[ -d "$SEALED_ROOT" && ! -L "$SEALED_ROOT" ]]
+          printf '%s' "$COMMAND_BASE64" | base64 --decode > "$SEALED_ROOT/command.json"
+          printf '%s' "$MANIFEST_BASE64" | base64 --decode > "$SEALED_ROOT/manifest.json"
+          mapfile -d '' sealed_files < <(find "$SEALED_ROOT" -mindepth 1 -maxdepth 1 -print0)
+          [[ "${#sealed_files[@]}" -eq 2 ]]
+          for file in "$SEALED_ROOT/command.json" "$SEALED_ROOT/manifest.json"; do
+            [[ -f "$file" && ! -L "$file" && "$(stat -c '%h' "$file")" == "1" ]]
+            [[ "$(stat -c '%s' "$file")" -le 4096 ]]
+          done
+          [[ "$(base64 < "$SEALED_ROOT/command.json" | tr -d '\n')" == "$COMMAND_BASE64" ]]
+          [[ "$(base64 < "$SEALED_ROOT/manifest.json" | tr -d '\n')" == "$MANIFEST_BASE64" ]]
+          [[ "$(sha256sum "$SEALED_ROOT/command.json" | cut -d' ' -f1)" == "$COMMAND_SHA256" ]]
+          [[ "$(sha256sum "$SEALED_ROOT/manifest.json" | cut -d' ' -f1)" == "$MANIFEST_SHA256" ]]
+          jq -e --arg commit "$AUTHORITY_COMMIT" --arg tree "$AUTHORITY_TREE" --arg command "$COMMAND_SHA256" '
+            (keys | sort) == ["authorityCommit","authorityTree","commandSha256","environment","lane","phase","schemaVersion","status"] and
+            .schemaVersion == "prooftoact.sealed-credential-manifest.v1" and .status == "HASH_BOUND_EXECUTABLE_COORDINATES" and
+            .lane == "EXECUTE" and .environment == "aws-release-execution" and .phase == "dispatch" and
+            .authorityCommit == $commit and .authorityTree == $tree and .commandSha256 == $command
+          ' "$SEALED_ROOT/manifest.json" >/dev/null
+          jq -e --arg commit "$AUTHORITY_COMMIT" --arg tree "$AUTHORITY_TREE" '
+            (keys | sort) == ["action","authorityCommit","authorityTree","lane","phase","schemaVersion"] and
+            .schemaVersion == "prooftoact.sealed-credential-command.v1" and .action == "ACTIVATE_SIGNED_EXECUTE_PHASE" and
+            .lane == "EXECUTE" and .phase == "dispatch" and .authorityCommit == $commit and .authorityTree == $tree
+          ' "$SEALED_ROOT/command.json" >/dev/null
+
+      - name: Check out exact control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: control-plane
+          persist-credentials: false
+          ref: ${{ inputs.authority_commit }}
+          show-progress: false
+          submodules: false
+
+      - name: Check out frozen application source separately
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 0
+          lfs: false
+          path: frozen-application
+          persist-credentials: false
+          ref: 963937a9873f0199b91897fe88da1b91bc84b5e3
+          show-progress: false
+          submodules: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          check-latest: false
+          node-version: 22.23.1
+
+      - name: Verify and normalize exact separate checkouts before OIDC
+        working-directory: control-plane
+        env:
+          EXPECTED_AUTHORITY_TREE: ${{ inputs.authority_tree }}
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.authority_commit }}
+          GIT_OPTIONAL_LOCKS: "0"
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+          PROOFTOACT_RELEASE_CALLER_JOB: provider-dispatch
+          PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          PROOFTOACT_RELEASE_SEALED_WORKFLOW: prooftoact-sealed-execute.yml
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_OFFICIAL_MAIN_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_AUTHORITY_TREE"
+          node scripts/normalize-release-control-checkouts.js
+
+      - name: Verify frozen application identity and directory separation
+        working-directory: frozen-application
+        env:
+          EXPECTED_APP_COMMIT: 963937a9873f0199b91897fe88da1b91bc84b5e3
+          EXPECTED_APP_TREE: a330e0d57328e63a568be73c523b2cae6338f26c
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_APP_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_APP_TREE"
+          test "$GITHUB_WORKSPACE/frozen-application" != "$GITHUB_WORKSPACE/control-plane"
+
+      - name: Install exact hermetic executable dependencies before OIDC
+        working-directory: control-plane
+        env:
+          NODE_COMPILE_CACHE: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+        run: |
+          npm ci --ignore-scripts --prefix release-control
+          npm ci --ignore-scripts --prefix release-provider
+
+      - name: Verify signed EXECUTE manifest and protected bootstrap before OIDC
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.authority_commit }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
+          PROOFTOACT_RELEASE_CALLER_JOB: provider-dispatch
+          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
+          PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64 }}
+          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-execution
+          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_EXECUTION_ROLE_ARN }}
+          PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          PROOFTOACT_RELEASE_SEALED_WORKFLOW: prooftoact-sealed-execute.yml
+        run: node scripts/run-release-execute-preflight.js dispatch
+
+      - name: Assume only the exact release execution role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          disable-retry: true
+          mask-aws-account-id: true
+          output-env-credentials: true
+          role-duration-seconds: 900
+          role-session-name: pta-${{ github.run_id }}-1-provider-dispatch
+          role-to-assume: ${{ secrets.PROOFTOACT_RELEASE_EXECUTION_ROLE_ARN }}
+          unset-current-credentials: true
+
+      - name: Strongly reread intent and execute the exact change set once
+        working-directory: control-plane
+        env:
+          EXPECTED_OFFICIAL_MAIN_COMMIT: ${{ inputs.authority_commit }}
+          NODE_COMPILE_CACHE: ""
+          NODE_EXTRA_CA_CERTS: ""
+          NODE_OPTIONS: ""
+          NODE_PATH: ""
+          NODE_REPL_EXTERNAL_MODULE: ""
+          NODE_V8_COVERAGE: ""
+          PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_RECEIPT_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STACK_ID_SHA256 }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_STATUS: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_STATUS }}
+          PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256: ${{ vars.PROOFTOACT_RELEASE_BOOTSTRAP_TEMPLATE_SHA256 }}
+          PROOFTOACT_RELEASE_CALLER_JOB: provider-dispatch
+          PROOFTOACT_RELEASE_CONTROL_TABLE_ID: ${{ vars.PROOFTOACT_RELEASE_CONTROL_TABLE_ID }}
+          PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64: ${{ secrets.PROOFTOACT_RELEASE_EXECUTE_APPROVAL_B64 }}
+          PROOFTOACT_RELEASE_EXECUTE_LOOKUP_B64: ${{ inputs.lookup_base64 }}
+          PROOFTOACT_RELEASE_PHASE_ENVIRONMENT: aws-release-execution
+          PROOFTOACT_RELEASE_ROLE_ARN: ${{ secrets.PROOFTOACT_RELEASE_EXECUTION_ROLE_ARN }}
+          PROOFTOACT_RELEASE_SEALED_AUTHORITY_COMMIT: ${{ inputs.authority_commit }}
+          PROOFTOACT_RELEASE_SEALED_WORKFLOW: prooftoact-sealed-execute.yml
+        run: node scripts/run-release-execute-phase.js dispatch

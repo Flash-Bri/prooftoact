@@ -1,0 +1,234 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create-only, inert-until-pinned GitHub OIDC role for the bounded ProofToAct fresh CockroachDB primary bootstrap. This stack adopts no existing resource and cannot deploy the application.",
+  "Parameters": {
+    "GitHubOidcProviderArn": {
+      "Type": "String",
+      "Description": "Existing GitHub Actions OIDC provider in the approved AWS account.",
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$"
+    }
+  },
+  "Resources": {
+    "FreshPrimaryBootstrapRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProofToActFreshPrimaryBootstrap",
+        "Description": "Credential-isolated GitHub OIDC role for one approved fresh CockroachDB cluster and primary bootstrap. It can journal only fresh-cluster and fresh-primary records and access only the exact bootstrap secret families.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GitHubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:Flash-Bri@252500266/prooftoact@1317716765:environment:aws-release-database-bootstrap",
+                  "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
+                  "token.actions.githubusercontent.com:repository_id": "1317716765",
+                  "token.actions.githubusercontent.com:repository_owner_id": "252500266",
+                  "token.actions.githubusercontent.com:ref": "refs/heads/main",
+                  "token.actions.githubusercontent.com:environment": "aws-release-database-bootstrap",
+                  "token.actions.githubusercontent.com:job_workflow_ref": "Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-fresh-primary.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f",
+                  "token.actions.githubusercontent.com:workflow": "ProofToAct Fresh Cluster And Primary"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [],
+        "Policies": [
+          {
+            "PolicyName": "ProofToActFreshPrimaryBootstrapOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadReleaseControlTableIdentity",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:DescribeTable",
+                    "dynamodb:ListTagsOfResource"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:us-east-1:${AWS::AccountId}:table/prooftoact-release-controller"
+                  }
+                },
+                {
+                  "Sid": "JournalOneFreshClusterAndPrimaryEffect",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:dynamodb:us-east-1:${AWS::AccountId}:table/prooftoact-release-controller"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "dynamodb:LeadingKeys": [
+                        "FRESH_CLUSTER#*",
+                        "FRESH_PRIMARY#*"
+                      ]
+                    },
+                    "Null": {
+                      "dynamodb:LeadingKeys": "false"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadExactNameFreshPrimarySecretVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetResourcePolicy",
+                    "secretsmanager:GetSecretValue"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/admin-????????-????-????-????-????????????-??????"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-cluster/auditor-??????"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/cloud-api-??????"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/runtime-credentials-??????"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/recovery-signer-????????-????-????-????-????????????-??????"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadExactRecoveryPublicationSecretVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetSecretValue"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/gate2/managed-mcp-??????"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/gate2/recovery-publisher-??????"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "SealOperationBoundAdminAndRecoverySignerVersions",
+                  "Effect": "Allow",
+                  "Action": "secretsmanager:PutSecretValue",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/admin-????????-????-????-????-????????????-??????"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/recovery-signer-????????-????-????-????-????????????-??????"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "DenyWritingAnyOtherSecret",
+                  "Effect": "Deny",
+                  "Action": "secretsmanager:PutSecretValue",
+                  "NotResource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/admin-????????-????-????-????-????????????-??????"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:us-east-1:${AWS::AccountId}:secret:prooftoact/fresh-primary/recovery-signer-????????-????-????-????-????????????-??????"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ReadOwnCallerIdentity",
+                  "Effect": "Allow",
+                  "Action": "sts:GetCallerIdentity",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyUnsafeReleaseControlOperations",
+                  "Effect": "Deny",
+                  "Action": [
+                    "dynamodb:BatchGetItem",
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DeleteTable",
+                    "dynamodb:PartiQL*",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:TransactWriteItems",
+                    "dynamodb:UpdateTable"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "DenyUnrelatedProviderCapabilities",
+                  "Effect": "Deny",
+                  "Action": [
+                    "apigateway:*",
+                    "bedrock:*",
+                    "cloudformation:*",
+                    "execute-api:Invoke",
+                    "iam:*",
+                    "kms:*",
+                    "lambda:*",
+                    "s3:*",
+                    "secretsmanager:BatchGetSecretValue",
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:GetRandomPassword",
+                    "secretsmanager:ListSecrets",
+                    "secretsmanager:RemoveRegionsFromReplication",
+                    "secretsmanager:ReplicateSecretToRegions",
+                    "secretsmanager:RestoreSecret",
+                    "secretsmanager:RotateSecret",
+                    "secretsmanager:StopReplicationToReplica",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:UpdateSecretVersionStage",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "ProofToAct"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "FreshPrimaryBootstrapOnly"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "FreshPrimaryBootstrapRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "FreshPrimaryBootstrapRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

@@ -7,12 +7,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OFFICIAL_REMOTE = "https://github.com/Flash-Bri/prooftoact.git";
 const DATABASE_NAME = "tideproof";
+const FRESH_BOOTSTRAP_USERNAME = "prooftoact_bootstrap_admin";
+const FRESH_SQL_PORT = "26257";
 const TRUSTED_GIT = "/usr/bin/git";
 const FRESH_DATABASES = Object.freeze(["defaultdb", "postgres", "system"]);
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const COCKROACH_SQL_CLUSTER_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const STATEFUL_TRANSITION_JOURNAL = Symbol(
   "prooftoact.stateful-transition-journal"
 );
@@ -20,6 +24,17 @@ const PREIMPORT_BOUND_FILES = Object.freeze([
   "package-lock.json",
   "package.json",
   "scripts/bootstrap-fresh-primary.js",
+  "scripts/fresh-cluster-aws-provider.js",
+  "scripts/fresh-cluster-aws-runtime.js",
+  "scripts/fresh-cluster-cloud-controller.js",
+  "scripts/fresh-cluster-execution-runtime.js",
+  "scripts/fresh-cluster-provider-controller.js",
+  "scripts/fresh-primary-aws-provider.js",
+  "scripts/fresh-primary-aws-runtime.js",
+  "scripts/fresh-primary-provider-controller.js",
+  "scripts/run-fresh-primary-provider.js",
+  "scripts/run-fresh-cluster-provider.js",
+  "scripts/lib/fresh-recovery-publisher-key.js",
   "scripts/gate2-aws-readiness.js",
   "scripts/lib/dependency-snapshot.js",
   "scripts/lib/exact-git-source.js",
@@ -156,14 +171,10 @@ export function validateFreshPrimaryCredentialBundle(value) {
   requireCondition(
     exactKeys(value, [
       "passwords",
-      "recoveryPublisherKeySetDigest",
-      "recoveryPublisherTrustRootCommitment",
       "schemaVersion"
     ]) &&
-      value.schemaVersion === "prooftoact.fresh-primary-credentials.v1" &&
-      exactKeys(value.passwords, FRESH_PRIMARY_RUNTIME_USERS) &&
-      HEX_64.test(value.recoveryPublisherKeySetDigest ?? "") &&
-      HEX_64.test(value.recoveryPublisherTrustRootCommitment ?? ""),
+      value.schemaVersion === "prooftoact.fresh-primary-credentials.v2" &&
+      exactKeys(value.passwords, FRESH_PRIMARY_RUNTIME_USERS),
     code
   );
   const passwords = Object.values(value.passwords);
@@ -178,10 +189,7 @@ export function validateFreshPrimaryCredentialBundle(value) {
   );
   return Object.freeze({
     schemaVersion: value.schemaVersion,
-    passwords: Object.freeze({ ...value.passwords }),
-    recoveryPublisherKeySetDigest: value.recoveryPublisherKeySetDigest,
-    recoveryPublisherTrustRootCommitment:
-      value.recoveryPublisherTrustRootCommitment
+    passwords: Object.freeze({ ...value.passwords })
   });
 }
 
@@ -279,7 +287,7 @@ export function validateFreshPrimaryApproval(value, binding, now = Date.now()) {
       value.credentialSealReceiptSha256 ===
         binding.credentialSealReceiptSha256 &&
       UUID.test(value.approvalId ?? "") &&
-      UUID.test(value.expectedClusterId ?? "") &&
+      COCKROACH_SQL_CLUSTER_ID.test(value.expectedClusterId ?? "") &&
       HEX_64.test(value.clusterHostSha256 ?? "") &&
       HEX_64.test(value.credentialSealReceiptSha256 ?? "") &&
       Number.isFinite(value.maximumProjectedTotalUsd) &&
@@ -317,10 +325,10 @@ export function validateFreshClusterAdminConnectionString(value) {
   }
   requireCondition(
     ["postgres:", "postgresql:"].includes(parsed.protocol) &&
-      parsed.username.length > 0 &&
+      decodeURIComponent(parsed.username) === FRESH_BOOTSTRAP_USERNAME &&
       parsed.password.length > 0 &&
       parsed.hostname.endsWith(".cockroachlabs.cloud") &&
-      /^[1-9][0-9]{0,4}$/u.test(parsed.port) &&
+      parsed.port === FRESH_SQL_PORT &&
       ["/defaultdb", "/postgres"].includes(parsed.pathname) &&
       parsed.hash === "" &&
       [...parsed.searchParams.keys()].join("\n") === "sslmode" &&
@@ -354,7 +362,7 @@ export function freshPrimaryIntent({
 }) {
   requireCondition(
     UUID.test(approvalId ?? "") &&
-      UUID.test(expectedClusterId ?? "") &&
+      COCKROACH_SQL_CLUSTER_ID.test(expectedClusterId ?? "") &&
       UUID.test(operationId ?? "") &&
       HEX_40.test(sourceCommit ?? "") &&
       HEX_40.test(treeDigest ?? "") &&
@@ -429,6 +437,7 @@ async function runFreshPrimaryBootstrap({
   discardAdminCredential,
   localCredentialDiscarded,
   operationId,
+  recoveryPublisherTrustRoot,
   runtimeDatabaseConfig,
   sourceCommit,
   transitionJournal,
@@ -447,6 +456,20 @@ async function runFreshPrimaryBootstrap({
     "FRESH_PRIMARY_BOUND_DEPENDENCIES_REJECTED"
   );
   const bundle = validateFreshPrimaryCredentialBundle(credentialBundle);
+  requireCondition(
+    exactKeys(recoveryPublisherTrustRoot, [
+      "publisherKeyIdSha256",
+      "publisherKeySetDigest",
+      "signerSecretArnSha256",
+      "signerSecretSealReceiptSha256",
+      "signerSecretValueSha256",
+      "signerSecretVersionIdSha256",
+      "trustRootCommitment",
+      "trustRootJsonSha256"
+    ]) && Object.values(recoveryPublisherTrustRoot).every((value) =>
+      HEX_64.test(value ?? "")),
+    "FRESH_PRIMARY_RECOVERY_PUBLISHER_TRUST_ROOT_REJECTED"
+  );
   requireCondition(
     HEX_64.test(credentialBundleRawSha256 ?? "") &&
       HEX_64.test(credentialBundleSha256 ?? "") &&
@@ -603,8 +626,9 @@ async function runFreshPrimaryBootstrap({
       adminConnectionString: admin.connectionString,
       passwords: bundle.passwords,
       recoveryPublisherTrustRootCommitment:
-        bundle.recoveryPublisherTrustRootCommitment,
-      recoveryPublisherKeySetDigest: bundle.recoveryPublisherKeySetDigest
+        recoveryPublisherTrustRoot.trustRootCommitment,
+      recoveryPublisherKeySetDigest:
+        recoveryPublisherTrustRoot.publisherKeySetDigest
     });
     requireCondition(
       exactKeys(bootstrapResult, [
@@ -697,7 +721,7 @@ async function runFreshPrimaryBootstrap({
   }
 
   return Object.freeze({
-    schemaVersion: "prooftoact.fresh-primary-bootstrap-receipt.v2",
+    schemaVersion: "prooftoact.fresh-primary-bootstrap-receipt.v3",
     status: "PASS",
     approvalId: acceptedApproval.approvalId,
     operationId,
@@ -710,6 +734,7 @@ async function runFreshPrimaryBootstrap({
       credentialBundleSha256,
       localCopyDiscardedBeforeMutation: true,
       callerSuppliedSealReceiptSha256: sha256(canonicalBytes(seal)),
+      recoveryPublisher: Object.freeze({ ...recoveryPublisherTrustRoot }),
       providerReadbackAuthenticatedByThisModule: false,
       providerRevocationValidatedByThisModule: false
     }),
@@ -743,7 +768,196 @@ async function runFreshPrimaryBootstrap({
     partialFailureDisposition:
       "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD",
     claimBoundary:
-      "This receipt proves one caller-supplied fresh-cluster census, one exact managed-principal bootstrap result, local credential-file discard, and one least-privilege Gate Two runtime identity check for the bound source and dependency closure. This module structurally binds but does not independently authenticate a Secrets Manager receipt/readback or validate provider revocation. Provider execution remains HOLD until the separate controller performs those provider checks, exact change-set binding, IAM and cost census, one-shot execution approval, and partial-failure reconciliation. It does not prove DVI execution, Lambda deployment or overlap, Managed MCP, an integrated live drill, public availability, teardown, or final release acceptance."
+      "This receipt proves one caller-supplied fresh-cluster census, one exact managed-principal bootstrap result, local credential-file discard, a separately sealed fresh recovery-publisher trust-root binding, and one least-privilege Gate Two runtime identity check for the bound source and dependency closure. The nested provider controller independently authenticates the exact Secrets Manager versions and the fresh signer seal. This receipt does not prove DVI execution, Lambda deployment or overlap, Managed MCP, an integrated live drill, public availability, teardown, or final release acceptance."
+  });
+}
+
+function createProviderTransitionJournal(recordTransition) {
+  requireCondition(
+    typeof recordTransition === "function",
+    "FRESH_PRIMARY_PROVIDER_TRANSITION_REJECTED"
+  );
+  return Object.freeze({
+    [STATEFUL_TRANSITION_JOURNAL]: true,
+    record: recordTransition
+  });
+}
+
+async function runFreshPrimaryProviderControlledBootstrapWithRuntime({
+  adminConnectionString,
+  approval,
+  approvalNow = Date.now(),
+  clock = Date.now,
+  command,
+  credentialBundle,
+  credentialBundleRawSha256,
+  credentialBundleSha256,
+  credentialSeal,
+  databaseEnvironment = process.env,
+  discardAdminCredential,
+  localCredentialDiscarded,
+  operationId,
+  provider,
+  recoveryPublisherSecret,
+  runtime,
+  sourceCommit,
+  treeDigest
+}) {
+  requireCondition(
+    command?.sourceCommit === sourceCommit &&
+      command?.treeDigest === treeDigest &&
+      command?.operationId === operationId &&
+      command?.approvalId === approval?.approvalId &&
+      command?.sqlClusterId === approval?.expectedClusterId &&
+      command?.approvalSha256 === sha256(canonicalBytes(approval)) &&
+      command?.adminSecretValueSha256 === sha256(adminConnectionString) &&
+      command?.credentialBundleRawSha256 === credentialBundleRawSha256 &&
+      command?.credentialBundleSha256 === credentialBundleSha256 &&
+      command?.credentialBundleSha256 ===
+        sha256(canonicalBytes(credentialBundle)) &&
+      command?.credentialSealReceiptSha256 ===
+        sha256(canonicalBytes(credentialSeal)) &&
+      command?.credentialSecretArnSha256 === credentialSeal?.secretArnSha256 &&
+      command?.credentialSecretVersionIdSha256 ===
+        credentialSeal?.secretVersionIdSha256 &&
+      command?.credentialBundleRawSha256 ===
+        credentialSeal?.credentialBundleRawSha256 &&
+      command?.credentialBundleSha256 ===
+        credentialSeal?.credentialBundleSha256 &&
+      recoveryPublisherSecret?.secretBytesSha256 ===
+        command?.signerSecretValueSha256 &&
+      recoveryPublisherSecret?.trustRootJsonSha256 ===
+        command?.trustRootJsonSha256 &&
+      recoveryPublisherSecret?.trustRootCommitment ===
+        command?.recoveryPublisherTrustRootCommitment &&
+      recoveryPublisherSecret?.publisherKeySetDigest ===
+        command?.recoveryPublisherKeySetDigest &&
+      typeof provider?.sealRecoveryPublisherSecret === "function" &&
+      runtime && [
+        "bootstrap",
+        "bootstrapDatabaseConfig",
+        "clientFactory",
+        "connectionStringForUser",
+        "runtimeDatabaseConfig"
+      ].every((name) => typeof runtime[name] === "function"),
+    "FRESH_PRIMARY_PROVIDER_BINDING_REJECTED"
+  );
+  // This controller is imported only after the public entry point has bound
+  // its exact bytes with the rest of the pre-import helper closure. Tests use
+  // the same path with injected non-provider dependencies.
+  const { runFreshPrimaryProviderController } = await import(
+    "./fresh-primary-provider-controller.js"
+  );
+  return runFreshPrimaryProviderController({
+    clock,
+    command,
+    provider,
+    dispatch: async ({ recordTransition }) => {
+      await recordTransition("SIGNER_SECRET_DISPATCHING", {
+        mutationDispatched: true,
+        signerSecretArnSha256: command.signerSecretArnSha256,
+        signerSecretVersionIdSha256: command.signerSecretVersionIdSha256
+      });
+      const signerSeal = await provider.sealRecoveryPublisherSecret({
+        command,
+        secret: recoveryPublisherSecret
+      });
+      requireCondition(
+        exactKeys(signerSeal, [
+          "createdAt",
+          "immutableVersion",
+          "provider",
+          "providerBacked",
+          "schemaVersion",
+          "secretArnSha256",
+          "secretValueSha256",
+          "secretVersionIdSha256",
+          "status"
+        ]) &&
+          signerSeal.schemaVersion ===
+            "prooftoact.fresh-recovery-publisher-secret-seal.v1" &&
+          signerSeal.status === "SEALED" &&
+          signerSeal.provider === "AWS_SECRETS_MANAGER" &&
+          signerSeal.providerBacked === true &&
+          signerSeal.immutableVersion === true &&
+          signerSeal.secretArnSha256 === command.signerSecretArnSha256 &&
+          signerSeal.secretVersionIdSha256 ===
+            command.signerSecretVersionIdSha256 &&
+          signerSeal.secretValueSha256 === command.signerSecretValueSha256,
+        "FRESH_PRIMARY_RECOVERY_PUBLISHER_SEAL_REJECTED"
+      );
+      const signerSecretSealReceiptSha256 = sha256(canonicalBytes(signerSeal));
+      await recordTransition("SIGNER_SECRET_SEALED", {
+        mutationDispatched: true,
+        signerSecretSealReceiptSha256
+      });
+      return runFreshPrimaryBootstrap({
+        adminConnectionString,
+        approval,
+        approvalNow,
+        bootstrap: runtime.bootstrap,
+        bootstrapDatabaseConfig: runtime.bootstrapDatabaseConfig,
+        clientFactory: runtime.clientFactory,
+        connectionStringForUser: runtime.connectionStringForUser,
+        credentialBundle,
+        credentialBundleRawSha256,
+        credentialBundleSha256,
+        credentialSeal,
+        databaseEnvironment,
+        discardAdminCredential,
+        localCredentialDiscarded,
+        operationId,
+        recoveryPublisherTrustRoot: {
+          publisherKeyIdSha256: sha256(recoveryPublisherSecret.publisherKeyId),
+          publisherKeySetDigest:
+            recoveryPublisherSecret.publisherKeySetDigest,
+          signerSecretArnSha256: command.signerSecretArnSha256,
+          signerSecretSealReceiptSha256,
+          signerSecretValueSha256: command.signerSecretValueSha256,
+          signerSecretVersionIdSha256: command.signerSecretVersionIdSha256,
+          trustRootCommitment:
+            recoveryPublisherSecret.trustRootCommitment,
+          trustRootJsonSha256: recoveryPublisherSecret.trustRootJsonSha256
+        },
+        runtimeDatabaseConfig: runtime.runtimeDatabaseConfig,
+        sourceCommit,
+        transitionJournal: createProviderTransitionJournal(recordTransition),
+        treeDigest
+      });
+    }
+  });
+}
+
+export async function runFreshPrimaryProviderControlledBootstrap({
+  buildReceipt,
+  expectedCommit,
+  expectedTree,
+  ...input
+}) {
+  const source = preliminaryExactSourceBinding(expectedCommit, expectedTree);
+  const runtime = await loadBoundRuntime({ buildReceipt, source });
+  return runFreshPrimaryProviderControlledBootstrapWithRuntime({
+    ...input,
+    runtime,
+    sourceCommit: source.sourceCommit,
+    treeDigest: source.treeDigest
+  });
+}
+
+export async function verifyFreshPrimaryProviderPrerequisites({
+  buildReceipt,
+  expectedCommit,
+  expectedTree
+}) {
+  const source = preliminaryExactSourceBinding(expectedCommit, expectedTree);
+  const runtime = await loadBoundRuntime({ buildReceipt, source });
+  return Object.freeze({
+    dependencyTreeSha256: runtime.dependencyTreeSha256,
+    packageLockSha256: runtime.packageLockSha256,
+    preImportHelperBytesSha256: runtime.preImportHelperBytesSha256,
+    runtimeNodeSha256: runtime.runtimeNodeSha256,
+    sourceCommit: source.sourceCommit,
+    treeDigest: source.treeDigest
   });
 }
 
@@ -1358,6 +1572,7 @@ export const __test = Object.freeze({
     process.env.NODE_TEST_CONTEXT !== "" ? {
       createStatefulTestTransitionJournal,
       openFreshOperationJournal,
+      runFreshPrimaryProviderControlledBootstrapWithRuntime,
       runFreshPrimaryBootstrap
     } : {})
 });

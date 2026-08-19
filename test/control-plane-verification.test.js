@@ -278,9 +278,9 @@ test("candidate deterministically binds the complete control-plane surface", () 
       file);
   }
   assert.equal(
-    CONTROL_PLANE_VERIFICATION_CONSTANTS.SEALED_WORKFLOW_FILES.length, 7);
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SEALED_WORKFLOW_FILES.length, 8);
   assert.equal(
-    CONTROL_PLANE_VERIFICATION_CONSTANTS.SOURCE_ONLY_WORKFLOWS.length, 1);
+    CONTROL_PLANE_VERIFICATION_CONSTANTS.SOURCE_ONLY_WORKFLOWS.length, 2);
   for (const exactPath of [
     ".github/workflows/prooftoact-hosted-dual-root-verification.yml",
     "config/prooftoact-release-operator-public.pub",
@@ -301,6 +301,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     "release-provider/build-release-provider-runtimes.js",
     "release-provider/generate-release-provider-metadata.js",
     "scripts/bootstrap-fresh-primary.js",
+    "scripts/fresh-primary-provider-controller.js",
     "scripts/build-release-credential-seal.js",
     "scripts/normalize-release-control-checkouts.js",
     "scripts/prepare-release-control-bootstrap.js",
@@ -315,6 +316,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     "scripts/run-release-prepare-preflight.js",
     "scripts/sign-release-provider-approval.js",
     "test/control-plane-verification.test.js",
+    "test/fresh-primary-provider-controller.test.js",
     "test/hosted-dual-root-verification.test.js",
     "test/release-control-bootstrap-plan.test.js",
     "test/release-control-bootstrap-readback.test.js",
@@ -348,7 +350,7 @@ test("candidate deterministically binds the complete control-plane surface", () 
     item.status === "VERIFIED"), true);
   assert.equal(candidate.body.security.checks.find(({ id }) =>
     id === "HOSTED_DUAL_ROOT_NO_OIDC_COMPLETE_EVIDENCE")?.passed, true);
-  assert.equal(candidate.body.policy.requiredWorkflowCount, 14);
+  assert.equal(candidate.body.policy.requiredWorkflowCount, 16);
   assert.equal(candidate.body.inventory.files.every((item) =>
     typeof item.gitTracked === "boolean" &&
     typeof item.gitMatchesHead === "boolean"), true);

@@ -16,6 +16,8 @@ import {
   validateFreshPrimaryCredentialBundle,
   validateFreshPrimaryCredentialSeal
 } from "../scripts/bootstrap-fresh-primary.js";
+import { buildFreshPrimaryProviderCommand } from
+  "../scripts/fresh-primary-provider-controller.js";
 
 const runFreshPrimaryBootstrap = __test.runFreshPrimaryBootstrap;
 
@@ -27,19 +29,42 @@ const APPROVAL_ID = "223e4567-e89b-42d3-a456-426614174001";
 const CLUSTER_ID = "323e4567-e89b-42d3-a456-426614174002";
 const NOW = Date.parse("2026-08-17T18:00:00.000Z");
 const ADMIN_URL =
-  "postgresql://bootstrap-admin:private-password@blue-moon-1234.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full";
+  "postgresql://prooftoact_bootstrap_admin:private-password" +
+  "@blue-moon-1234.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full";
 
 function credentialBundle() {
   return {
-    schemaVersion: "prooftoact.fresh-primary-credentials.v1",
+    schemaVersion: "prooftoact.fresh-primary-credentials.v2",
     passwords: Object.fromEntries(
       FRESH_PRIMARY_RUNTIME_USERS.map((name, index) => [
         name,
         `credential-${String(index).padStart(2, "0")}-${"x".repeat(32)}`
       ])
-    ),
-    recoveryPublisherKeySetDigest: "3".repeat(64),
-    recoveryPublisherTrustRootCommitment: "4".repeat(64)
+    )
+  };
+}
+
+function recoveryPublisherSecret() {
+  return {
+    publisherKeyId: `prooftoact-gate2-${OPERATION_ID}`,
+    publisherKeySetDigest: "3".repeat(64),
+    secretBytesSha256: "4".repeat(64),
+    trustRootCommitment: "5".repeat(64),
+    trustRootJsonSha256: "6".repeat(64)
+  };
+}
+
+function recoveryPublisherTrustRoot() {
+  const signer = recoveryPublisherSecret();
+  return {
+    publisherKeyIdSha256: __test.sha256(signer.publisherKeyId),
+    publisherKeySetDigest: signer.publisherKeySetDigest,
+    signerSecretArnSha256: "7".repeat(64),
+    signerSecretSealReceiptSha256: "8".repeat(64),
+    signerSecretValueSha256: signer.secretBytesSha256,
+    signerSecretVersionIdSha256: "9".repeat(64),
+    trustRootCommitment: signer.trustRootCommitment,
+    trustRootJsonSha256: signer.trustRootJsonSha256
   };
 }
 
@@ -110,7 +135,7 @@ function bootstrapReceipt(roleNames = __test.MANAGED_PRINCIPALS) {
 function clients({
   clusterId = CLUSTER_ID,
   databases = ["defaultdb", "postgres", "system"],
-  users = ["bootstrap-admin", "root"],
+  users = ["prooftoact_bootstrap_admin", "root"],
   defaultTables = [],
   postgresTables = [],
   directTableDenied = true
@@ -135,7 +160,7 @@ function clients({
         return {
           rows: [{
             cluster_id: clusterId,
-            current_user_name: "bootstrap-admin",
+            current_user_name: "prooftoact_bootstrap_admin",
             database_name: "defaultdb"
           }]
         };
@@ -214,11 +239,186 @@ function runInput(state = clients(), overrides = {}) {
     },
     localCredentialDiscarded: true,
     operationId: OPERATION_ID,
+    recoveryPublisherTrustRoot: recoveryPublisherTrustRoot(),
     runtimeDatabaseConfig: (value) => value,
     sourceCommit: SOURCE_COMMIT,
     transitionJournal: __test.createStatefulTestTransitionJournal(),
     treeDigest: TREE_DIGEST,
     ...overrides
+  };
+}
+
+function providerControlledInput(state = clients()) {
+  const input = runInput(state);
+  const signer = recoveryPublisherSecret();
+  const command = buildFreshPrimaryProviderCommand({
+    adminSecretArnSha256: "c".repeat(64),
+    adminSecretVersionIdSha256: "d".repeat(64),
+    adminSecretValueSha256: __test.sha256(input.adminConnectionString),
+    approvalId: input.approval.approvalId,
+    approvalSha256: __test.sha256(__test.canonicalBytes(input.approval)),
+    cloudApiSecretArnSha256: "e".repeat(64),
+    cloudApiSecretVersionIdSha256: "f".repeat(64),
+    cloudApiSecretValueSha256: "a".repeat(64),
+    controllerTableArn:
+      "arn:aws:dynamodb:us-east-1:111111111111:table/" +
+      "prooftoact-release-controller",
+    credentialSecretArnSha256: input.credentialSeal.secretArnSha256,
+    credentialSecretVersionIdSha256:
+      input.credentialSeal.secretVersionIdSha256,
+    credentialBundleRawSha256: input.credentialBundleRawSha256,
+    credentialBundleSha256: input.credentialBundleSha256,
+    credentialSealReceiptSha256:
+      __test.sha256(__test.canonicalBytes(input.credentialSeal)),
+    operationId: input.operationId,
+    providerClusterId: "523e4567-e89b-42d3-a456-426614174004",
+    recoveryPublisherKeySetDigest: signer.publisherKeySetDigest,
+    recoveryPublisherTrustRootCommitment: signer.trustRootCommitment,
+    recoverySecurityPostureReceiptSha256: "9".repeat(64),
+    signerSecretArnSha256: "7".repeat(64),
+    signerSecretValueSha256: signer.secretBytesSha256,
+    signerSecretVersionIdSha256: "9".repeat(64),
+    sourceCommit: input.sourceCommit,
+    sqlClusterId: input.approval.expectedClusterId,
+    treeDigest: input.treeDigest,
+    trustRootJsonSha256: signer.trustRootJsonSha256
+  });
+  let version = 0;
+  const provider = {
+    async authenticate() {
+      return {
+        schemaVersion:
+          "prooftoact.fresh-primary-provider-authentication.v3",
+        status: "AUTHENTICATED_PROVIDER_READBACK",
+        callerIdentitySha256: "0".repeat(64),
+        cloud: command.cloud,
+        clusterInventorySha256: "1".repeat(64),
+        namespaceArn: command.controllerTableArn,
+        observedAt: new Date(NOW).toISOString(),
+        providerBacked: true,
+        providerClusterId: command.providerClusterId,
+        readOnly: true,
+        region: command.region,
+        secretReadbacks: {
+          admin: {
+            immutableVersion: true,
+            secretArnSha256: command.adminSecretArnSha256,
+            secretValueSha256: command.adminSecretValueSha256,
+            secretVersionIdSha256: command.adminSecretVersionIdSha256,
+            versionStage: "AWSCURRENT"
+          },
+          cloudApi: {
+            immutableVersion: true,
+            secretArnSha256: command.cloudApiSecretArnSha256,
+            secretValueSha256: command.cloudApiSecretValueSha256,
+            secretVersionIdSha256: command.cloudApiSecretVersionIdSha256,
+            versionStage: "AWSCURRENT"
+          },
+          credential: {
+            immutableVersion: true,
+            secretArnSha256: command.credentialSecretArnSha256,
+            secretValueSha256: command.credentialBundleRawSha256,
+            secretVersionIdSha256: command.credentialSecretVersionIdSha256,
+            versionStage: "AWSCURRENT"
+          },
+          recoverySigner: {
+            secretArnSha256: command.signerSecretArnSha256,
+            targetVersionAbsent: true,
+            targetVersionIdSha256: command.signerSecretVersionIdSha256
+          }
+        },
+        stronglyConsistent: true
+      };
+    },
+    async authenticateRecovery() {
+      return this.authenticate();
+    },
+    async readStrong() { return null; },
+    async consumeOnce() {
+      version = 1;
+      return {
+        schemaVersion: "prooftoact.fresh-primary-provider-consumption.v1",
+        status: "CONSUMED",
+        approvalId: command.approvalId,
+        commandSha256: command.commandSha256,
+        consumedAt: new Date(NOW).toISOString(),
+        durable: true,
+        globallyAuthoritative: true,
+        globalKeySha256: command.globalKeySha256,
+        namespaceArn: command.controllerTableArn,
+        oneShot: true,
+        operationId: command.operationId,
+        version
+      };
+    },
+    async appendIntent({ authentication, consumption }) {
+      version = 2;
+      return {
+        schemaVersion: "prooftoact.fresh-primary-provider-intent.v3",
+        status: "DURABLE",
+        commandSha256: command.commandSha256,
+        durable: true,
+        event: "BEFORE_SIGNER_OR_DATABASE_PROVIDER_DISPATCH",
+        globallyAuthoritative: true,
+        globalKeySha256: command.globalKeySha256,
+        namespaceArn: command.controllerTableArn,
+        operationId: command.operationId,
+        previousReceiptSha256:
+          __test.sha256(__test.canonicalBytes(consumption)),
+        providerAuthenticationReceiptSha256:
+          __test.sha256(__test.canonicalBytes(authentication)),
+        version
+      };
+    },
+    async appendTransition({ transition }) {
+      version = transition.version;
+      return transition;
+    },
+    async sealRecoveryPublisherSecret() {
+      return {
+        schemaVersion:
+          "prooftoact.fresh-recovery-publisher-secret-seal.v1",
+        status: "SEALED",
+        provider: "AWS_SECRETS_MANAGER",
+        providerBacked: true,
+        immutableVersion: true,
+        createdAt: new Date(NOW).toISOString(),
+        secretArnSha256: command.signerSecretArnSha256,
+        secretValueSha256: command.signerSecretValueSha256,
+        secretVersionIdSha256: command.signerSecretVersionIdSha256
+      };
+    },
+    async finalize({ outcome, previousReceiptSha256, transitionCount }) {
+      version += 1;
+      return {
+        schemaVersion: "prooftoact.fresh-primary-provider-terminal.v1",
+        status: "TERMINAL",
+        commandSha256: command.commandSha256,
+        operationId: command.operationId,
+        namespaceArn: command.controllerTableArn,
+        outcomeSha256: __test.sha256(__test.canonicalBytes(outcome)),
+        previousReceiptSha256,
+        durable: true,
+        globallyAuthoritative: true,
+        globalKeySha256: command.globalKeySha256,
+        transitionCount,
+        version
+      };
+    }
+  };
+  return {
+    ...input,
+    clock: () => NOW,
+    command,
+    provider,
+    recoveryPublisherSecret: signer,
+    runtime: {
+      bootstrap: input.bootstrap,
+      bootstrapDatabaseConfig: input.bootstrapDatabaseConfig,
+      clientFactory: input.clientFactory,
+      connectionStringForUser: input.connectionStringForUser,
+      runtimeDatabaseConfig: input.runtimeDatabaseConfig
+    }
   };
 }
 
@@ -260,7 +460,7 @@ test("fresh-primary credentials require every distinct runtime password", () => 
 test("fresh-primary admin URL is a verify-full Cockroach Cloud admin route", () => {
   const accepted = validateFreshClusterAdminConnectionString(ADMIN_URL);
   assert.equal(accepted.sourceDatabase, "defaultdb");
-  assert.equal(accepted.username, "bootstrap-admin");
+  assert.equal(accepted.username, "prooftoact_bootstrap_admin");
   assert.equal(accepted.port, "26257");
   for (const rejected of [
     ADMIN_URL.replace("verify-full", "require"),
@@ -430,7 +630,7 @@ test("fresh-primary exact census rejects extra database, user, or table before m
   for (const [state, code] of [
     [clients({ databases: ["defaultdb", "postgres", "system", "customer-prod"] }),
       "FRESH_PRIMARY_DATABASE_CENSUS_REJECTED"],
-    [clients({ users: ["bootstrap-admin", "root", "alice"] }),
+    [clients({ users: ["prooftoact_bootstrap_admin", "root", "alice"] }),
       "FRESH_PRIMARY_PRINCIPAL_CENSUS_REJECTED"],
     [clients({ defaultTables: [{ schema_name: "public", table_name: "orders" }] }),
       "FRESH_PRIMARY_USER_TABLE_CENSUS_REJECTED"]
@@ -499,6 +699,47 @@ test("fresh-primary bootstrap creates one database and validates exact roles", a
     "POSTFLIGHT_STARTED",
     "ACCEPTED"
   ]);
+});
+
+test("provider controller wraps the real bootstrap core in durable global transitions", async () => {
+  const state = clients();
+  const receipt = await __test
+    .runFreshPrimaryProviderControlledBootstrapWithRuntime(
+      providerControlledInput(state)
+    );
+  assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.globallyAuthoritativeOneShot, true);
+  assert.equal(receipt.providerClusterId,
+    "523e4567-e89b-42d3-a456-426614174004");
+  assert.equal(receipt.sqlClusterId, CLUSTER_ID);
+  assert.equal(receipt.transitionCount, 12);
+  assert.equal(
+    state.calls.filter((call) => call === "admin:CREATE DATABASE tideproof")
+      .length,
+    1
+  );
+});
+
+test("provider controller binds authenticated secret values to bootstrap inputs", async () => {
+  for (const drift of [
+    { adminConnectionString: ADMIN_URL.replace("private-password", "drifted") },
+    {
+      recoveryPublisherSecret: {
+        ...recoveryPublisherSecret(),
+        secretBytesSha256: "0".repeat(64)
+      }
+    }
+  ]) {
+    const state = clients();
+    await assert.rejects(
+      __test.runFreshPrimaryProviderControlledBootstrapWithRuntime({
+        ...providerControlledInput(state),
+        ...drift
+      }),
+      /FRESH_PRIMARY_PROVIDER_BINDING_REJECTED/u
+    );
+    assert.equal(state.calls.length, 0);
+  }
 });
 
 test("fresh-primary recomputes canonical credential digest before connect", async () => {
@@ -627,6 +868,17 @@ test("database-capable imports occur only after exact runtime/dependency binding
     "package-lock.json",
     "package.json",
     "scripts/bootstrap-fresh-primary.js",
+    "scripts/fresh-cluster-aws-provider.js",
+    "scripts/fresh-cluster-aws-runtime.js",
+    "scripts/fresh-cluster-cloud-controller.js",
+    "scripts/fresh-cluster-execution-runtime.js",
+    "scripts/fresh-cluster-provider-controller.js",
+    "scripts/fresh-primary-aws-provider.js",
+    "scripts/fresh-primary-aws-runtime.js",
+    "scripts/fresh-primary-provider-controller.js",
+    "scripts/run-fresh-primary-provider.js",
+    "scripts/run-fresh-cluster-provider.js",
+    "scripts/lib/fresh-recovery-publisher-key.js",
     "scripts/gate2-aws-readiness.js",
     "scripts/lib/dependency-snapshot.js",
     "scripts/lib/exact-git-source.js",

@@ -506,6 +506,79 @@ test("Managed MCP client initializes and invokes only fixed select_query", async
   }
 });
 
+test("Managed MCP awaits every durable dispatch guard including session close", async () => {
+  const guarded = [];
+  const fetched = [];
+  const expectedAction = (options) => {
+    if (options.method === "DELETE") return "MCP_SESSION_DELETE";
+    const payload = JSON.parse(options.body);
+    if (payload.method === "initialize") return "MCP_INITIALIZE";
+    if (payload.method === "notifications/initialized") {
+      return "MCP_INITIALIZED_NOTIFICATION";
+    }
+    return "MCP_TOOLS_CALL";
+  };
+  const client = new CockroachManagedMcpRecoveryClient({
+    apiKey: API_KEY,
+    clusterId: CLUSTER_ID,
+    fetchImpl: async (_url, options) => {
+      const action = expectedAction(options);
+      assert.equal(guarded.at(-1), action);
+      fetched.push(action);
+      if (options.method === "DELETE") {
+        return new Response(null, { status: 200 });
+      }
+      const payload = JSON.parse(options.body);
+      if (payload.method === "initialize") {
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: payload.id,
+          result: {
+            protocolVersion: "2025-03-26",
+            capabilities: {}
+          }
+        }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "mcp-session-id": "synthetic-session"
+          }
+        });
+      }
+      if (payload.method === "notifications/initialized") {
+        return new Response(null, { status: 202 });
+      }
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { rows: [] }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  });
+  const beforeExternalAction = async (action) => {
+    await new Promise((resolve) => setImmediate(resolve));
+    guarded.push(action);
+  };
+  await client.selectQuery({
+    clusterId: CLUSTER_ID,
+    database: "tideproof_recovery",
+    query: fixedQuery(),
+    beforeExternalAction
+  });
+  await client.close({ beforeExternalAction });
+  assert.deepEqual(fetched, [
+    "MCP_INITIALIZE",
+    "MCP_INITIALIZED_NOTIFICATION",
+    "MCP_TOOLS_CALL",
+    "MCP_SESSION_DELETE"
+  ]);
+  assert.equal(client.transportEvidence().close.attempted, true);
+  assert.equal(client.transportEvidence().close.httpStatus, 200);
+});
+
 test("Managed MCP client rejects a missing or replaced negotiated session", async () => {
   for (const mode of ["missing", "replaced"]) {
     const client = new CockroachManagedMcpRecoveryClient({

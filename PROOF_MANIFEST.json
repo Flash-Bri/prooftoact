@@ -799,13 +799,13 @@
     {
       "id": "managed-mcp-client",
       "path": "src/cloud/managed-mcp-client.js",
-      "sha256": "3b671005ab48a5bbfb76b00c8963f7b188d31ff3df7fa72f9d8d9a996b181243",
+      "sha256": "bb98dbdab730abb4ed4f7632df18fdc65646fe3175220f25fbe68a472321af71",
       "kind": "verification-code"
     },
     {
       "id": "managed-mcp-client-tests",
       "path": "test/managed-mcp-client.test.js",
-      "sha256": "6a1a6c05e6e5baf0afc092daf562fbd0049c824eafe56db40ec0f77e4d231705",
+      "sha256": "7ccfe7729cb37afea6983b5ab45ab18c8c9cbd18212203dbc830b66cdc42b9b7",
       "kind": "verification-code"
     },
     {
@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "bf269d944f82fdcc7511ee4f988940f067a28d0861c2fb4ecc45f1e90704e314",
+      "sha256": "33c5e106f79432f563924a122f93c7a195f127767c3b975fb2457aac373a4e18",
       "kind": "boundary-ledger"
     },
     {
@@ -1105,7 +1105,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "e9b336e90613d942a783ef49eab5ef0a72f9d6ee40b5a23e31a809ae407bee0f",
+      "sha256": "b7abbe3c73e078d85d739b314f8b16b5a9fb9af903411b18ca61ccc85893617a",
       "kind": "verification-code"
     },
     {

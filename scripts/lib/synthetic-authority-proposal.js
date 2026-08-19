@@ -20,7 +20,9 @@ export async function authorizeSyntheticProposal(
     allowDenied = false,
     proposalAuthorizer = null,
     requestedSelectedEvidenceId = request.evidenceId,
-    requestedSelectedEvidenceDigest = null
+    requestedSelectedEvidenceDigest = null,
+    sourceCommit = "0".repeat(40),
+    treeDigest = "1".repeat(40)
   } = {}
 ) {
   const snapshot = evidenceDigest
@@ -35,8 +37,8 @@ export async function authorizeSyntheticProposal(
     throw new Error("SYNTHETIC_PROPOSAL_EVIDENCE_DIGEST_MISSING");
   }
   const selection = {
-    sourceCommit: "0".repeat(40),
-    treeDigest: "1".repeat(40),
+    sourceCommit,
+    treeDigest,
     specSha256: sha256(canonicalJson({
       schemaVersion: "tideproof.synthetic-dvi-spec.v1",
       tenantId: request.tenantId,

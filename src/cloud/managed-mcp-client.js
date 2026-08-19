@@ -295,20 +295,36 @@ export class CockroachManagedMcpRecoveryClient {
     this.#fetch = fetchImpl;
   }
 
-  async close() {
+  async close({ beforeExternalAction = null } = {}) {
+    if (
+      beforeExternalAction !== null &&
+      typeof beforeExternalAction !== "function"
+    ) {
+      throw new Error("RECOVERY_MCP_EXTERNAL_ACTION_GUARD_INVALID");
+    }
     if (!this.#sessionId) {
       return;
     }
     const expectedSessionId = this.#sessionId;
     const expectedSessionIdSha256 = sha256(expectedSessionId);
     this.#closeEvidence = Object.freeze({
-      attempted: true,
+      attempted: false,
       httpStatus: null,
       outboundSessionIdSha256: expectedSessionIdSha256,
       responseSessionIdSha256: null,
       sessionContinuous: false
     });
     try {
+      if (beforeExternalAction !== null) {
+        await beforeExternalAction("MCP_SESSION_DELETE");
+      }
+      this.#closeEvidence = Object.freeze({
+        attempted: true,
+        httpStatus: null,
+        outboundSessionIdSha256: expectedSessionIdSha256,
+        responseSessionIdSha256: null,
+        sessionContinuous: false
+      });
       const response = await this.#fetch(MCP_ENDPOINT, {
         method: "DELETE",
         headers: this.#headers(),
@@ -319,6 +335,10 @@ export class CockroachManagedMcpRecoveryClient {
       if (received && sessionId(received) !== expectedSessionId) {
         await cancelResponseBody(response);
         throw new Error("RECOVERY_MCP_SESSION_CHANGED");
+      }
+      if (!response.ok) {
+        await cancelResponseBody(response);
+        throw new Error(`RECOVERY_MCP_HTTP_${response.status}`);
       }
       this.#closeEvidence = Object.freeze({
         attempted: true,
@@ -399,7 +419,7 @@ export class CockroachManagedMcpRecoveryClient {
     const outboundSessionId = sessionId(this.#sessionId);
     const body = JSON.stringify({ jsonrpc: "2.0", method, params });
     if (beforeExternalAction !== null) {
-      beforeExternalAction("MCP_INITIALIZED_NOTIFICATION");
+      await beforeExternalAction("MCP_INITIALIZED_NOTIFICATION");
     }
     const response = await this.#fetch(MCP_ENDPOINT, {
       method: "POST",
@@ -461,7 +481,7 @@ export class CockroachManagedMcpRecoveryClient {
       });
     }
     if (beforeExternalAction !== null) {
-      beforeExternalAction(
+      await beforeExternalAction(
         method === "initialize" ? "MCP_INITIALIZE" : "MCP_TOOLS_CALL"
       );
     }
@@ -568,7 +588,7 @@ export class CockroachManagedMcpRecoveryClient {
     }
     await this.#initialize(beforeExternalAction);
     if (beforeToolCall !== null) {
-      beforeToolCall();
+      await beforeToolCall();
     }
     const result = await this.#rpc("tools/call", {
       name: "select_query",

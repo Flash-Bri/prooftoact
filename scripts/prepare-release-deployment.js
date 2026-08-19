@@ -1131,7 +1131,9 @@ export function validateReleaseDeploymentRoleTemplate(
         actions(statement).join("\n") ===
           "cloudformation:DescribeStackDriftDetectionStatus") ||
       (statement.Sid === "ReadLambdaEventSourceCensus" &&
-        actions(statement).join("\n") === "lambda:ListEventSourceMappings");
+        actions(statement).join("\n") === "lambda:ListEventSourceMappings") ||
+      (statement.Sid === "ReadOwnCallerIdentity" &&
+        actions(statement).join("\n") === "sts:GetCallerIdentity");
     requireCondition(
       exactReadOnlyWildcard ||
         (["CreateTaggedReceiptKey", "ManageTaggedReceiptKey"].includes(

@@ -2783,6 +2783,26 @@ export class RecoveryPublisher {
     );
   }
 
+  async databaseNow() {
+    const client = new Client(runtimeDatabaseConfig({
+      connectionString: this.#connectionString,
+      max: 1,
+      applicationName: "tideproof-recovery-publisher-clock"
+    }));
+    try {
+      await client.connect();
+      const result = await client.query(
+        "SELECT statement_timestamp() AS database_now"
+      );
+      if (result.rowCount !== 1 || result.rows.length !== 1) {
+        throw new Error("RECOVERY_PUBLISHER_DATABASE_CLOCK_REJECTED");
+      }
+      return databaseTimestampFromDriver(result.rows[0]?.database_now);
+    } finally {
+      await client.end().catch(() => {});
+    }
+  }
+
   async appendSignedBundle(input) {
     const bundle = normalizedRecoveryBundleFor(input);
     const client = new Client(runtimeDatabaseConfig({
