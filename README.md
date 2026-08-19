@@ -1,6 +1,7 @@
 # ProofToAct
 
-**Public clean-room source. Not yet a contest submission or live AWS claim.**
+**Public clean-room source with a live, signed-out AWS Lambda → CockroachDB
+Managed MCP judge receipt.**
 
 ProofToAct is an admissibility-memory demonstration for high-stakes agents.
 Its “Highwater Drill” is a synthetic multi-agency response exercise: shared
@@ -13,6 +14,28 @@ The thesis is deliberately narrower than “AI remembers better”:
 
 > Most memory systems optimize what an agent should remember. ProofToAct governs
 > what an agent is still allowed to believe and act upon.
+
+## Live judge proof
+
+The submitted judge experience remains at
+[`https://flash-bri.github.io/prooftoact/`](https://flash-bri.github.io/prooftoact/).
+Its **Check live receipt** control invokes a parameter-free public route that
+runs one fixed read through AWS Lambda and CockroachDB Cloud Managed MCP,
+validates one provider-bound P-256-signed recovery-context row, closes the MCP
+session, and returns a minimized receipt with a fresh observation time:
+
+[`GET https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof`](https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof)
+
+A successful current call reports `LIVE_MANAGED_MCP_READ` and the exact
+initialize, notification, tool-call, and close statuses.
+
+The immutable deployed Lambda version reports source commit
+`0321d498b645e10a993808c36a920958370348ed`, now present on `main` through
+[PR #116](https://github.com/Flash-Bri/prooftoact/pull/116). The receipt proves
+the current transport and exact signed-row read only. The recovered context is
+historical, transfers no authority, and requires fresh authorization before
+any action. The public deployment receipt and reproduction notes are in
+[`evidence/live-judge-provider-read-2026-08-19.md`](evidence/live-judge-provider-read-2026-08-19.md).
 
 ![ProofToAct trust boundaries: evidence is admitted before vector ranking, agents propose without authority, CockroachDB commits one fenced receipt, and Managed MCP returns context only.](docs/media/architecture.svg)
 
@@ -47,6 +70,10 @@ Final23 compatibility gate, and a locally tested AWS Gate Two candidate:
   mechanics separately from the new admissible-snapshot integration;
 - an isolated CockroachDB recovery cluster and deterministic Managed MCP
   fixed-query broker with signed context-only bundles;
+- a live signed-out judge route whose immutable AWS Lambda version performs
+  one parameter-free fixed Managed MCP read, accepts exactly one pinned
+  P-256-signed historical recovery-context row, closes the provider session,
+  and emits a minimized no-store receipt without granting authority;
 - an isolated private AWS recovery-query candidate: one outside-VPC Lambda
   numeric version can issue one fixed CockroachDB Cloud Managed MCP
   `select_query`, accept exactly one provider-bound P-256-signed recovery row,
@@ -93,11 +120,10 @@ Final23 compatibility gate, and a locally tested AWS Gate Two candidate:
   proof-state labels, exact evidence details, receipt links, safe reset, and
   deterministic unit tests.
 
-It does **not** yet contain or claim:
+The live judge receipt does **not** claim:
 
-- a deployed public AWS judge URL;
-- live AWS deployment, Bedrock inference, KMS signatures, or IAM denial
-  evidence;
+- a complete live Gate Two deployment, Bedrock inference, KMS signatures, or
+  IAM-denial evidence;
 - a live CockroachDB-to-AWS handoff or overlapping Lambda authority race;
 - exactly-once external effects, regional survival, or disaster readiness;
 - production security, availability, or suitability for real emergencies.
@@ -153,7 +179,8 @@ The implementation uses or is planned to use:
 4. AWS Lambda/API Gateway for a capability-free signed-out judge surface plus
    separated IAM-authenticated proposal roles, KMS, and Amazon Bedrock, and a
    separate private exact-version Lambda for the fixed Managed MCP recovery
-   read; the local candidates are not live-cloud claims.
+   read. The narrow fixed-read judge route is live; the broader Gate Two
+   candidates remain separately gated and are not implied by that receipt.
 
 The machine-checked [`PROOF_MANIFEST.json`](PROOF_MANIFEST.json) maps every
 current claims-ledger row to exact evidence bytes and leaves incomplete live
