@@ -1123,7 +1123,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "b993a4ab9fc12cc9e850d7b08206aea084749ffac0927054b1c2989d5f1033fc",
+      "sha256": "62e56e8f490e1c4ee58571dd3f02980dbec59a726706197ee0de1b9340bd34d2",
       "kind": "boundary-ledger"
     },
     {
