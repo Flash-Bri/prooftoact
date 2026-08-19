@@ -546,6 +546,7 @@ export async function main(
   ), "FRESH_CLUSTER_RUNNER_BUILD_RECEIPT_REJECTED");
   const source = await verifyFreshPrimaryProviderPrerequisites({
     buildReceipt,
+    callerWorkflowSha: parsed["--caller-workflow-sha"],
     expectedCommit: parsed["--expected-commit"],
     expectedTree: parsed["--expected-tree"]
   });
@@ -874,6 +875,7 @@ export async function main(
         "--admin-secret-version-id", coordinates.admin.versionId,
         "--approval-file", derivedPath,
         "--build-receipt", parsed["--build-receipt"],
+        "--caller-workflow-sha", parsed["--caller-workflow-sha"],
         "--cloud-api-secret-arn", coordinates.cloudApi.arn,
         "--cloud-api-secret-version-id", coordinates.cloudApi.versionId,
         "--controller-table-arn", parsed["--controller-table-arn"],

@@ -14,6 +14,8 @@ const EXPECTED_COMMIT = "a".repeat(40);
 const EXPECTED_TREE = "b".repeat(40);
 const CALLER_COMMIT = "c".repeat(40);
 const ZERO = "0".repeat(40);
+const REVIEWED_COMMIT = "caf417dd84d899c7407e5ed12f56b60f1b74d32a";
+const REVIEWED_TREE = "b01bf525dd47eb7ad6ed412e9557010289c6836b";
 const AUDIENCE = "prooftoact-private-recovery-source-lock-v1";
 const LANES = Object.freeze({
   deploy: Object.freeze({
@@ -157,7 +159,7 @@ test("all sealed lanes bind their GitHub-issued reusable identity before secrets
   }
 });
 
-test("all callers remain inert until Commit B pins one reviewed Commit A", () => {
+test("all callers pin one reviewed Commit A and its exact tree", () => {
   for (const identity of Object.values(LANES)) {
     const caller = workflow(identity.caller);
     assert.match(caller, /permissions: \{\}/u);
@@ -166,16 +168,27 @@ test("all callers remain inert until Commit B pins one reviewed Commit A", () =>
     assert.match(caller, new RegExp(
       `uses: Flash-Bri/prooftoact/\\.github/workflows/${identity.sealed.replace(
         ".", "\\."
-      )}@${ZERO}`, "u"
+      )}@${REVIEWED_COMMIT}`, "u"
     ));
     assert.match(caller, new RegExp(
-      `authority_commit: "${ZERO}"`, "u"
+      `authority_commit: "${REVIEWED_COMMIT}"`, "u"
     ));
     assert.match(caller, new RegExp(
-      `authority_tree: "${ZERO}"`, "u"
+      `authority_tree: "${REVIEWED_TREE}"`, "u"
     ));
     assert.doesNotMatch(caller, /pull_request_target|repository_dispatch/u);
+
+    const committedSource = spawnSync(
+      "git", ["show", `${REVIEWED_COMMIT}:.github/workflows/${identity.sealed}`],
+      { cwd: ROOT, encoding: "utf8" }
+    );
+    assert.equal(committedSource.status, 0, committedSource.stderr);
+    assert.equal(committedSource.stdout, workflow(identity.sealed), identity.sealed);
   }
+  assert.equal(spawnSync(
+    "git", ["show", "-s", "--format=%T", REVIEWED_COMMIT],
+    { cwd: ROOT, encoding: "utf8" }
+  ).stdout.trim(), REVIEWED_TREE);
 });
 
 test("source-lock endpoint accepts only the bounded GitHub HTTPS endpoint", () => {

@@ -90,7 +90,7 @@
       "id": "fresh-primary-bootstrap",
       "path": "scripts/bootstrap-fresh-primary.js",
       "role": "FRESH_PRIMARY_DATABASE_BOOTSTRAP",
-      "sha256": "7021acc2fe589a74557e3d31bef4d66708003b8cd97881fdaa602f93926cf15c"
+      "sha256": "acc1607adf5b55994cde061b77a60b0a0fb78841abca2bed5a1d4bda4cf4274a"
     },
     {
       "id": "fresh-cluster-aws-provider",
@@ -186,7 +186,7 @@
       "id": "fresh-cluster-provider-launcher",
       "path": "scripts/launch-fresh-cluster-provider.js",
       "role": "EXACT_SOURCE_FRESH_PROVIDER_LAUNCHER",
-      "sha256": "58a0057fb1a8d6bd65a7a70f7933be234755c5a5e2bc4a103c41edfefaf6312b"
+      "sha256": "2de4e18f3c27495320e2bd38ca25a9b188292fedd6ee70afa973916fbcf1cf66"
     },
     {
       "id": "fresh-bootstrap-collector-binding",
@@ -234,7 +234,7 @@
       "id": "fresh-cluster-provider-runner",
       "path": "scripts/run-fresh-cluster-provider.js",
       "role": "FRESH_CLUSTER_PRIVATE_PROVIDER_RUNNER",
-      "sha256": "b8f2c870871b0bd210e4340000fe3d9b78bfddf9fa3276150e84562bd865742e"
+      "sha256": "15e1d196997fa383b536bce275e5ecb3f4f225298fc4f5abfe432f7e17c4b0ca"
     },
     {
       "id": "fresh-primary-credential-sealer-runner",
@@ -246,7 +246,7 @@
       "id": "fresh-primary-provider-runner",
       "path": "scripts/run-fresh-primary-provider.js",
       "role": "FRESH_PRIMARY_PRIVATE_PROVIDER_RUNNER",
-      "sha256": "f10005ecefbd67e477d8ba5a0068b34dc77d55e6aaad5f24ad0ac186e725c733"
+      "sha256": "94459cb97bf7aebbf255706c8d61f367f2aa6bfc87075067bfb45a89c85c355f"
     },
     {
       "id": "fresh-primary-bootstrap-role-stack-tests",
@@ -258,7 +258,7 @@
       "id": "fresh-primary-bootstrap-tests",
       "path": "test/fresh-primary-bootstrap.test.js",
       "role": "FRESH_PRIMARY_BOOTSTRAP_VERIFICATION",
-      "sha256": "ba705075ea56d9235da8bc5e3fb0a108fbba39188b3a35e9c8e3fc10104623bf"
+      "sha256": "5c262e0091d21387d642fb6bec31892564fe599d5fe0c78a797782628f11ee5f"
     },
     {
       "id": "fresh-primary-provider-controller-tests",
@@ -390,19 +390,19 @@
       "id": "fresh-cluster-provider-launcher-tests",
       "path": "test/launch-fresh-cluster-provider.test.js",
       "role": "FRESH_PROVIDER_LAUNCHER_VERIFICATION",
-      "sha256": "758c07a94ca495f9fe32c255c75c8d69d3405fd1a9ca90c4e583a33762d28cc1"
+      "sha256": "5560baa4b29463f9d3687876f396131683c3694e64294048f678728daf5d307b"
     },
     {
       "id": "fresh-cluster-provider-runner-tests",
       "path": "test/run-fresh-cluster-provider.test.js",
       "role": "FRESH_CLUSTER_RUNNER_VERIFICATION",
-      "sha256": "540d06852a3caf6139cb43233a958b63d1c6e7808de27de03d0953cc06a0762a"
+      "sha256": "d961e1894436947e09f6c1ffb7e1b779ead671e87f1491529fd54cc88a4f19db"
     },
     {
       "id": "fresh-primary-provider-runner-tests",
       "path": "test/run-fresh-primary-provider.test.js",
       "role": "FRESH_PRIMARY_RUNNER_VERIFICATION",
-      "sha256": "868c85416f5d65f7852f7c143525c8f5b4fd7dce51991a7f913791725714d7b2"
+      "sha256": "14bc4c46d1ce2091d9fa69cc5beff6d1a33a473dc79ce94a6fea587618bdbc57"
     },
     {
       "id": "one-time-bootstrap-authority-tests",
@@ -1530,7 +1530,7 @@
       "id": "private-recovery-query-deploy-caller-workflow",
       "path": ".github/workflows/prooftoact-private-recovery-deploy.yml",
       "role": "PRIVATE_RECOVERY_QUERY_DEPLOY_CALLER",
-      "sha256": "20507573ec177e2c8db50f399307a3019013d6f5e106681b61828db4b1ec2bd9"
+      "sha256": "9bb67f298ed76f23d07c1dcb8ddce0b8e390b073295caa086579a8c3df6d4842"
     },
     {
       "id": "private-recovery-query-deploy-preparer",
@@ -1560,7 +1560,7 @@
       "id": "private-recovery-query-evidence-caller-workflow",
       "path": ".github/workflows/prooftoact-private-recovery-evidence.yml",
       "role": "PRIVATE_RECOVERY_QUERY_EVIDENCE_CALLER",
-      "sha256": "5558a0898ae9686b07ee6507a4206da01ca354d153780bd3cf349c40df18df0b"
+      "sha256": "475d5a022d17fcd10d4a9e6d0bb184ae12299faf76b5c007bff7edcf2a430d65"
     },
     {
       "id": "private-recovery-query-evidence-readback",
@@ -1608,7 +1608,7 @@
       "id": "private-recovery-query-query-caller-workflow",
       "path": ".github/workflows/prooftoact-private-recovery-query.yml",
       "role": "PRIVATE_RECOVERY_QUERY_EXECUTION_CALLER",
-      "sha256": "ee4a79c9452703901a11181b0ad3eaaadd8a8d1255ef06bf24caeeb87adf6899"
+      "sha256": "33941e9187754e3e4937278d72a414ecf1f512cebc4242d4788de61de89c1f3a"
     },
     {
       "id": "private-recovery-query-query-runner",
@@ -1626,7 +1626,7 @@
       "id": "private-recovery-query-secret-seal-caller-workflow",
       "path": ".github/workflows/prooftoact-private-recovery-secret-seal.yml",
       "role": "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CALLER",
-      "sha256": "0b836b671ac1f29706a430409feb4b0e38f9894036fc77e94d4a5fd4774a0dc5"
+      "sha256": "359eda0232f7f169b47ee78d7244b4c27ba29705168c5426a2ee3ea56c766a45"
     },
     {
       "id": "private-recovery-query-secret-seal-runner",
@@ -1656,7 +1656,7 @@
       "id": "private-recovery-query-source-lock-tests",
       "path": "test/private-recovery-source-lock.test.js",
       "role": "PRIVATE_RECOVERY_QUERY_REUSABLE_SOURCE_LOCK_VERIFICATION",
-      "sha256": "3bfe7fc7ed606d7049c357951e47a04c0e3d4e27dfde25e8b093e0ed39078657"
+      "sha256": "461624254b31be80932c180db23f937d4f12aa85a64468b6853c3e530bb5fda0"
     },
     {
       "id": "private-recovery-query-store-tests",
@@ -1668,7 +1668,7 @@
       "id": "private-recovery-query-teardown-caller-workflow",
       "path": ".github/workflows/prooftoact-private-recovery-teardown.yml",
       "role": "PRIVATE_RECOVERY_QUERY_TEARDOWN_CALLER",
-      "sha256": "1e557a56d07f4e763abe6ed6501ecf8fd0ec3e7958a2183293d27ab7c9c6144b"
+      "sha256": "3802383efe4ac76ebebc7abbb35c3176cb35ed229af52629236008a2f41358ae"
     },
     {
       "id": "private-recovery-query-teardown-runner",
@@ -1698,7 +1698,7 @@
       "id": "private-recovery-query-template-tests",
       "path": "test/private-recovery-query-template.test.js",
       "role": "PRIVATE_RECOVERY_QUERY_TEMPLATE_AND_WORKFLOW_VERIFICATION",
-      "sha256": "6fbad2ad0a18498f7368384b24939bb550424807d4937ec83ed2015d45e1c90c"
+      "sha256": "b6d87bd95dfcb2c9757b4d56e544b32b30828fc286af6b1a0f6c6335bd80d4f5"
     },
     {
       "id": "private-recovery-query-window-check",

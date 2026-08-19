@@ -77,6 +77,7 @@ function parseArguments(args) {
     "--admin-secret-version-id",
     "--approval-file",
     "--build-receipt",
+    "--caller-workflow-sha",
     "--cloud-api-secret-arn",
     "--cloud-api-secret-version-id",
     "--controller-table-arn",
@@ -107,7 +108,8 @@ function parseArguments(args) {
     "FRESH_PRIMARY_RUNNER_ARGUMENTS_REJECTED");
     values[name] = args[index + 1];
   }
-  requireCondition(HEX_40.test(values["--expected-commit"]) &&
+  requireCondition(HEX_40.test(values["--caller-workflow-sha"]) &&
+    HEX_40.test(values["--expected-commit"]) &&
     HEX_40.test(values["--expected-tree"]) &&
     UUID.test(values["--operation-id"]) &&
     HEX_64.test(values["--outer-authentication-receipt-sha256"]) &&
@@ -265,6 +267,7 @@ export async function main(
   ), "FRESH_PRIMARY_RUNNER_APPROVAL_REJECTED");
   const source = await verifyFreshPrimaryProviderPrerequisites({
     buildReceipt,
+    callerWorkflowSha: parsed["--caller-workflow-sha"],
     expectedCommit: parsed["--expected-commit"],
     expectedTree: parsed["--expected-tree"]
   });
@@ -417,6 +420,7 @@ export async function main(
     adminConnectionString: admin.connectionString,
     approval: acceptedApproval,
     buildReceipt,
+    callerWorkflowSha: parsed["--caller-workflow-sha"],
     command,
     credentialBundle,
     credentialBundleRawSha256,

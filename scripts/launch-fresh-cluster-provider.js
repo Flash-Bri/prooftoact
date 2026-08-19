@@ -141,7 +141,19 @@ function gitValue(args) {
   return gitBytes(args).toString("utf8").trim();
 }
 
-function verifyExactSource(expectedCommit, expectedTree) {
+function verifyGitHubContext(expectedCallerCommit, env = process.env) {
+  const code = "FRESH_CLUSTER_LAUNCH_GITHUB_CONTEXT_REJECTED";
+  requireCondition(HEX_40.test(expectedCallerCommit), code);
+  if (env.GITHUB_ACTIONS === "true") {
+    requireCondition(env.GITHUB_REPOSITORY === "Flash-Bri/prooftoact" &&
+      env.GITHUB_REF === "refs/heads/main" &&
+      env.GITHUB_SHA === expectedCallerCommit,
+    code);
+  }
+  return Object.freeze({ callerCommit: expectedCallerCommit });
+}
+
+function verifyExactSource(expectedCommit, expectedTree, expectedCallerCommit) {
   const code = "FRESH_CLUSTER_LAUNCH_SOURCE_REJECTED";
   const gitStat = fs.lstatSync(TRUSTED_GIT);
   requireCondition(fs.realpathSync(TRUSTED_GIT) === TRUSTED_GIT &&
@@ -156,14 +168,12 @@ function verifyExactSource(expectedCommit, expectedTree) {
       "" &&
     gitValue(["status", "--porcelain=v1", "--untracked-files=all"]) === "",
   code);
-  if (process.env.GITHUB_ACTIONS === "true") {
-    requireCondition(process.env.GITHUB_REPOSITORY ===
-        "Flash-Bri/prooftoact" &&
-      process.env.GITHUB_REF === "refs/heads/main" &&
-      process.env.GITHUB_SHA === expectedCommit,
-    "FRESH_CLUSTER_LAUNCH_GITHUB_CONTEXT_REJECTED");
-  }
-  return Object.freeze({ sourceCommit: expectedCommit, treeDigest: expectedTree });
+  const context = verifyGitHubContext(expectedCallerCommit);
+  return Object.freeze({
+    callerCommit: context.callerCommit,
+    sourceCommit: expectedCommit,
+    treeDigest: expectedTree
+  });
 }
 
 function readPrivateJson(filePath, maximumBytes, code) {
@@ -395,7 +405,9 @@ function validateBuildReceipt(receipt, source) {
 export async function main(args = process.argv.slice(2)) {
   const parsed = parseArguments(args);
   const source = verifyExactSource(
-    parsed["--expected-commit"], parsed["--expected-tree"]
+    parsed["--expected-commit"],
+    parsed["--expected-tree"],
+    parsed["--caller-workflow-sha"]
   );
   const graph = executableGraph(source.sourceCommit);
   const build = readPrivateJson(
@@ -437,5 +449,6 @@ export const __test = Object.freeze({
   parseArguments,
   parseImportSpecifiers,
   sha256,
-  validateBuildReceipt
+  validateBuildReceipt,
+  verifyGitHubContext
 });

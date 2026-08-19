@@ -1445,6 +1445,7 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-primary-bootstrap": Object.freeze([
       "validateFreshPrimaryCredentialBundle",
+      "env.GITHUB_SHA === callerWorkflowSha",
       "runFreshPrimaryProviderControlledBootstrap",
       "freshPrimaryIntent",
       "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
@@ -1546,6 +1547,7 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-cluster-provider-launcher": Object.freeze([
       "FRESH_CLUSTER_LAUNCH_IMPORT_GRAPH_REJECTED",
+      "env.GITHUB_SHA === expectedCallerCommit",
       "controllerImportGraphSha256: graph.graphSha256",
       "--approval-sha256",
       "tideproof.gate2-build.v9",
@@ -1589,6 +1591,7 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-cluster-provider-runner": Object.freeze([
       "runFreshClusterProvider",
+      "callerWorkflowSha: parsed[\"--caller-workflow-sha\"]",
       "sha256(canonicalBytes(approval)) === authority.approvalSha256",
       "approval.controllerImportGraphSha256",
       "approval.callerWorkflowSha === authority.callerWorkflowSha",
@@ -1604,7 +1607,21 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-primary-provider-runner": Object.freeze([
       "runFreshPrimaryProvider",
+      "--caller-workflow-sha",
+      "callerWorkflowSha: parsed[\"--caller-workflow-sha\"]",
       "--receipt-output"
+    ]),
+    "fresh-primary-bootstrap-tests": Object.freeze([
+      "fresh source and triggering caller remain independently bound"
+    ]),
+    "fresh-cluster-provider-launcher-tests": Object.freeze([
+      "launcher distinguishes immutable source from the triggering caller"
+    ]),
+    "fresh-cluster-provider-runner-tests": Object.freeze([
+      "combined runner preserves distinct caller SHA for nested primary"
+    ]),
+    "fresh-primary-provider-runner-tests": Object.freeze([
+      "runner accepts one exact coordinate set and rejects duplicates or ID aliasing"
     ]),
     "one-time-bootstrap-authority-tests": Object.freeze([
       "planner rejects 351-cent AWS authority, fabricated cost digests, and inflated item sums",
@@ -3978,9 +3995,9 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "private-recovery-query-deploy-caller-workflow": Object.freeze([
     "name: ProofToAct Private Recovery Deploy",
-    "prooftoact-sealed-private-recovery-deploy.yml@0000000000000000000000000000000000000000",
-    "authority_commit: \"0000000000000000000000000000000000000000\"",
-    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "prooftoact-sealed-private-recovery-deploy.yml@caf417dd84d899c7407e5ed12f56b60f1b74d32a",
+    "authority_commit: \"caf417dd84d899c7407e5ed12f56b60f1b74d32a\"",
+    "authority_tree: \"b01bf525dd47eb7ad6ed412e9557010289c6836b\"",
     "secrets: inherit"
   ]),
   "private-recovery-query-deploy-preparer": Object.freeze([
@@ -4024,9 +4041,9 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "private-recovery-query-evidence-caller-workflow": Object.freeze([
     "name: ProofToAct Private Recovery Evidence",
-    "prooftoact-sealed-private-recovery-evidence.yml@0000000000000000000000000000000000000000",
-    "authority_commit: \"0000000000000000000000000000000000000000\"",
-    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "prooftoact-sealed-private-recovery-evidence.yml@caf417dd84d899c7407e5ed12f56b60f1b74d32a",
+    "authority_commit: \"caf417dd84d899c7407e5ed12f56b60f1b74d32a\"",
+    "authority_tree: \"b01bf525dd47eb7ad6ed412e9557010289c6836b\"",
     "PRE_QUERY",
     "POST_QUERY"
   ]),
@@ -4096,9 +4113,9 @@ const SOURCE_MARKERS = Object.freeze({
   "private-recovery-query-query-caller-workflow": Object.freeze([
     "name: ProofToAct Private Recovery Query",
     "reconcile-only",
-    "authority_commit: \"0000000000000000000000000000000000000000\"",
-    "authority_tree: \"0000000000000000000000000000000000000000\"",
-    "prooftoact-sealed-private-recovery-query.yml@0000000000000000000000000000000000000000"
+    "authority_commit: \"caf417dd84d899c7407e5ed12f56b60f1b74d32a\"",
+    "authority_tree: \"b01bf525dd47eb7ad6ed412e9557010289c6836b\"",
+    "prooftoact-sealed-private-recovery-query.yml@caf417dd84d899c7407e5ed12f56b60f1b74d32a"
   ]),
   "private-recovery-query-query-runner": Object.freeze([
     "[\"execute\", \"reconcile-only\"].includes",
@@ -4118,9 +4135,9 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "private-recovery-query-secret-seal-caller-workflow": Object.freeze([
     "name: ProofToAct Private Recovery Secret Seal",
-    "prooftoact-sealed-private-recovery-secret-seal.yml@0000000000000000000000000000000000000000",
-    "authority_commit: \"0000000000000000000000000000000000000000\"",
-    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "prooftoact-sealed-private-recovery-secret-seal.yml@caf417dd84d899c7407e5ed12f56b60f1b74d32a",
+    "authority_commit: \"caf417dd84d899c7407e5ed12f56b60f1b74d32a\"",
+    "authority_tree: \"b01bf525dd47eb7ad6ed412e9557010289c6836b\"",
     "secrets: inherit"
   ]),
   "private-recovery-query-secret-seal-runner": Object.freeze([
@@ -4159,7 +4176,7 @@ const SOURCE_MARKERS = Object.freeze({
   ]),
   "private-recovery-query-source-lock-tests": Object.freeze([
     "all sealed lanes bind their GitHub-issued reusable identity before secrets",
-    "all callers remain inert until Commit B pins one reviewed Commit A",
+    "all callers pin one reviewed Commit A and its exact tree",
     "source-lock endpoint accepts only the bounded GitHub HTTPS endpoint",
     "source lock accepts the exact identity of every private recovery lane",
     "source lock rejects identity, time, structure, and coordinate drift",
@@ -4176,9 +4193,9 @@ const SOURCE_MARKERS = Object.freeze({
   "private-recovery-query-teardown-caller-workflow": Object.freeze([
     "name: ProofToAct Private Recovery Teardown",
     "confirmation: ${{ inputs.confirmation }}",
-    "authority_commit: \"0000000000000000000000000000000000000000\"",
-    "authority_tree: \"0000000000000000000000000000000000000000\"",
-    "prooftoact-sealed-private-recovery-teardown.yml@0000000000000000000000000000000000000000"
+    "authority_commit: \"caf417dd84d899c7407e5ed12f56b60f1b74d32a\"",
+    "authority_tree: \"b01bf525dd47eb7ad6ed412e9557010289c6836b\"",
+    "prooftoact-sealed-private-recovery-teardown.yml@caf417dd84d899c7407e5ed12f56b60f1b74d32a"
   ]),
   "private-recovery-query-teardown-runner": Object.freeze([
     "DELETE_PROOFTOACT_PRIVATE_RECOVERY_QUERY_AFTER_POST_EVIDENCE",
@@ -4220,7 +4237,7 @@ const SOURCE_MARKERS = Object.freeze({
     "mini-stack owns one private exact-version Lambda with no public trigger",
     "runtime and operator are restricted to one operation key and one secret",
     "OIDC trust pins protected environment and immutable reusable workflow",
-    "sealed workflow requires a GitHub-bound authority commit and tree"
+    "sealed workflow and caller bind reviewed GitHub authority commit and tree"
   ]),
   "private-recovery-query-window-check": Object.freeze([
     "minimumRemainingSeconds >= 60",

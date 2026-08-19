@@ -14,6 +14,7 @@ const BASE_ARGS = Object.freeze([
   "--admin-secret-version-id", "1".repeat(32),
   "--approval-file", "/private/approval.json",
   "--build-receipt", "/private/build.json",
+  "--caller-workflow-sha", "d".repeat(40),
   "--cloud-api-secret-arn",
   `arn:aws:secretsmanager:us-east-1:${ACCOUNT}:secret:` +
     "prooftoact/fresh-primary/cloud-api-Ef34Gh",
@@ -47,6 +48,7 @@ const BASE_ARGS = Object.freeze([
 test("runner accepts one exact coordinate set and rejects duplicates or ID aliasing", () => {
   const parsed = __test.parseArguments([...BASE_ARGS]);
   assert.equal(parsed["--expected-commit"], "a".repeat(40));
+  assert.equal(parsed["--caller-workflow-sha"], "d".repeat(40));
   assert.equal(parsed["--sql-cluster-id"],
     "323e4567-e89b-42d3-a456-426614174002");
   assert.throws(() => __test.parseArguments([
