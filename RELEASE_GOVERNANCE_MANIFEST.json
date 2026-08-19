@@ -53,7 +53,7 @@
       "id": "public-readme",
       "path": "README.md",
       "role": "PUBLIC_PROJECT_SURFACE",
-      "sha256": "bca5751ad3c10d57d59437d291a756a125e30a8e2054709aa1e458c50a0a59fc"
+      "sha256": "4228cd33ccbe6248d88037c05759aa856a2160edb61ee86013d52429b1aa6396"
     },
     {
       "id": "security-policy",

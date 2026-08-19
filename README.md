@@ -17,24 +17,23 @@ The thesis is deliberately narrower than “AI remembers better”:
 
 ## Live judge proof
 
-The submitted judge experience remains at
-[`https://flash-bri.github.io/prooftoact/`](https://flash-bri.github.io/prooftoact/).
-Its **Check live receipt** control invokes a parameter-free public route that
-runs one fixed read through AWS Lambda and CockroachDB Cloud Managed MCP,
-validates one provider-bound P-256-signed recovery-context row, closes the MCP
-session, and returns a minimized receipt with a fresh observation time:
-
-[`GET https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof`](https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof)
+The unchanged submitted judge experience is at
+`flash-bri.github.io/prooftoact/`. Its **Check live receipt** control invokes a
+parameter-free public route that runs one fixed read through AWS Lambda and
+CockroachDB Cloud Managed MCP, validates one provider-bound P-256-signed
+recovery-context row, closes the MCP session, and returns a minimized receipt
+with a fresh observation time. The exact clickable site and API URLs are in
+the public deployment receipt linked below.
 
 A successful current call reports `LIVE_MANAGED_MCP_READ` and the exact
 initialize, notification, tool-call, and close statuses.
 
 The immutable deployed Lambda version reports source commit
 `0321d498b645e10a993808c36a920958370348ed`, now present on `main` through
-[PR #116](https://github.com/Flash-Bri/prooftoact/pull/116). The receipt proves
-the current transport and exact signed-row read only. The recovered context is
-historical, transfers no authority, and requires fresh authorization before
-any action. The public deployment receipt and reproduction notes are in
+PR #116. The receipt proves the current transport and exact signed-row read
+only. The recovered context is historical, transfers no authority, and
+requires fresh authorization before any action. The public deployment receipt
+and reproduction notes are in
 [`evidence/live-judge-provider-read-2026-08-19.md`](evidence/live-judge-provider-read-2026-08-19.md).
 
 ![ProofToAct trust boundaries: evidence is admitted before vector ranking, agents propose without authority, CockroachDB commits one fenced receipt, and Managed MCP returns context only.](docs/media/architecture.svg)

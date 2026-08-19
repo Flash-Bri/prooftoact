@@ -183,11 +183,8 @@ const ALLOWED_ABSOLUTE_URLS = new Set([
   "https://cockroachdb-ai.devpost.com/",
   "https://cockroachdb-ai.devpost.com/resources",
   "https://cockroachdb-ai.devpost.com/rules",
-  "https://flash-bri.github.io/prooftoact/",
   "https://github.com/Flash-Bri/prooftoact",
-  "https://github.com/Flash-Bri/prooftoact.git",
-  "https://github.com/Flash-Bri/prooftoact/pull/116",
-  "https://ug5abyn4lg.execute-api.us-east-1.amazonaws.com/api/judge-proof"
+  "https://github.com/Flash-Bri/prooftoact.git"
 ]);
 
 export const RELEASE_CLAIMS_SURFACE_COUNT =

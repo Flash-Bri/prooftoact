@@ -847,7 +847,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "86dcd7d30709b1bc70b8b846fe177f834f3c9fb373e990d3d0d551f87aa36f8e",
+      "sha256": "9d595794e97983ce2bf359d47c28225d6d32a5335f13fcf499c3a5cb8521ff34",
       "kind": "verification-code"
     },
     {
@@ -961,7 +961,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "9df9ba0efc48c85f4c3cc9b4938fb779bc7692ae9055e025ac6be5104f8d9f07",
+      "sha256": "c73602b7db3cc49d7551482e556f73ebce6d92ebeef75d34583c0da5581f774e",
       "kind": "boundary-ledger"
     },
     {
@@ -973,7 +973,7 @@
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "e546cc6e59899a261e2840ec489475ece3aad707eb001d4d9b4cb075f76e8bf8",
+      "sha256": "65fbf19a3935d03993a0c3106f7b7641521853f01740e0f3f7a449c6bdfb9885",
       "kind": "verification-code"
     },
     {
@@ -1009,7 +1009,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "1dc2fdd1e45059f20a0304d7df95664eaf82f149ce4221a2c190d7227b5963f6",
+      "sha256": "af675379eb537a5f107eb5e2c46c2d2d2af269c571505843b03c7ed7eaff5935",
       "kind": "boundary-ledger"
     },
     {
@@ -1075,7 +1075,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "709da63f857722ab1fbc51410ff21fb9b6ecc13cae6331a90fb3e9d5eb6425f8",
+      "sha256": "0958e6b63785e557af5a6b02756d4160d7576c0c7dc5c2d7f057acfca566d825",
       "kind": "boundary-ledger"
     },
     {
@@ -1123,7 +1123,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "62e56e8f490e1c4ee58571dd3f02980dbec59a726706197ee0de1b9340bd34d2",
+      "sha256": "31868795ca8779a47d51d7cead4a039cba132ce801e1d38874dc13f5ca4f152e",
       "kind": "boundary-ledger"
     },
     {
