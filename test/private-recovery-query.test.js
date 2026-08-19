@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import crypto, { generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
+import { __test as lambdaTest } from
+  "../infra/aws/lambda/private-recovery-query.js";
 import { canonicalJson } from "../src/cloud/canonical-json.js";
 import { CockroachManagedMcpRecoveryClient } from
   "../src/cloud/managed-mcp-client.js";
@@ -30,6 +32,7 @@ const SECRET_ARN =
 const SECRET_VERSION = "v".repeat(32);
 const API_KEY = ["synthetic", "managed", "mcp", "credential", "fixture"]
   .join("-");
+const HOSTILE_ACCOUNT_ID = ["222222", "222222"].join("");
 const SECRET_VALUE = canonicalJson({ apiKey: API_KEY });
 
 function sha256(value) {
@@ -244,7 +247,10 @@ function memoryStore() {
   };
 }
 
-function mcpClientFor(row, calls, { failTools = false } = {}) {
+function mcpClientFor(row, calls, {
+  failTools = false,
+  failureMessage = "synthetic response acknowledgement loss"
+} = {}) {
   const session = "synthetic-mcp-session";
   const fetchImpl = async (_url, options) => {
     const body = options.body === undefined ? null : JSON.parse(options.body);
@@ -272,7 +278,7 @@ function mcpClientFor(row, calls, { failTools = false } = {}) {
     }
     assert.equal(body?.method, "tools/call");
     calls.push("tools/call");
-    if (failTools) throw new Error("synthetic response acknowledgement loss");
+    if (failTools) throw new Error(failureMessage);
     return Response.json({
       jsonrpc: "2.0",
       id: body.id,
@@ -494,6 +500,84 @@ test("tool acknowledgement loss becomes durable unknown and never retries", asyn
   const second = await runPrivateRecoveryQuery(options);
   assert.deepEqual(second, first);
   assert.equal(calls.filter((entry) => entry === "tools/call").length, 1);
+});
+
+test("hostile provider errors become fixed durable codes with no secret or identity leakage", async () => {
+  const hostileRequestId = "deadbeef-dead-4eef-8ead-deadbeefdead";
+  const hostileArn =
+    `arn:aws:iam::${HOSTILE_ACCOUNT_ID}:role/hostile-provider-role`;
+  const hostile = `${API_KEY} ${hostileArn} ${hostileRequestId}\nsecond-line`;
+  const forbidden = [
+    API_KEY,
+    hostileArn,
+    HOSTILE_ACCOUNT_ID,
+    hostileRequestId,
+    "second-line"
+  ];
+
+  const beforeDispatch = invocationOptions();
+  await reservePrivateRecoveryQuery({
+    command: beforeDispatch.command,
+    store: beforeDispatch.store
+  });
+  beforeDispatch.store.read = async () => {
+    throw new Error(hostile);
+  };
+  const failed = await runPrivateRecoveryQuery(beforeDispatch);
+  assert.equal(failed.status, "FAILED_NO_PROVIDER_CALL");
+  assert.equal(failed.errorCode, "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED");
+  const failedText = canonicalJson(failed);
+  assert.equal(failedText.includes("\n"), false);
+  for (const value of forbidden) assert.equal(failedText.includes(value), false);
+
+  const calls = [];
+  const afterDispatch = invocationOptions();
+  afterDispatch.createMcpClient = mcpClientFor(afterDispatch.row, calls, {
+    failTools: true,
+    failureMessage: hostile
+  });
+  await reservePrivateRecoveryQuery({
+    command: afterDispatch.command,
+    store: afterDispatch.store
+  });
+  const unknown = await runPrivateRecoveryQuery(afterDispatch);
+  assert.equal(unknown.status, "UNKNOWN_DO_NOT_RETRY");
+  assert.equal(unknown.errorCode, "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED");
+  const unknownText = canonicalJson(unknown);
+  assert.equal(unknownText.includes("\n"), false);
+  for (const value of forbidden) assert.equal(unknownText.includes(value), false);
+  assert.deepEqual(await runPrivateRecoveryQuery(afterDispatch), unknown);
+  assert.equal(calls.filter((entry) => entry === "tools/call").length, 1);
+});
+
+test("top-level Lambda boundary emits only one fixed response code and no log", async () => {
+  const hostile = `${API_KEY} arn:aws:iam::${HOSTILE_ACCOUNT_ID}:role/hostile ` +
+    "deadbeef-dead-4eef-8ead-deadbeefdead\nsecond-line";
+  const observedLogs = [];
+  const originalError = console.error;
+  console.error = (...values) => observedLogs.push(values.join(" "));
+  try {
+    const wrapped = lambdaTest.withTopLevelFailureBoundary(async () => {
+      throw new Error(hostile);
+    });
+    await assert.rejects(wrapped(), (error) => {
+      assert.equal(error.message, "PRIVATE_RECOVERY_QUERY_LAMBDA_HOLD");
+      assert.equal(error.cause, undefined);
+      assert.equal(String(error).includes(hostile), false);
+      return true;
+    });
+  } finally {
+    console.error = originalError;
+  }
+  assert.deepEqual(observedLogs, []);
+  assert.equal(privateRecoveryTest.errorCodeFor(new Error(hostile)),
+    "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED");
+  assert.equal(privateRecoveryTest.errorCodeFor(Object.defineProperty({},
+    "message", { get() { throw new Error(hostile); } })),
+  "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED");
+  assert.equal(privateRecoveryTest.errorCodeFor(new Error(
+    "PRIVATE_RECOVERY_QUERY_CLOCK_REJECTED"
+  )), "PRIVATE_RECOVERY_QUERY_CLOCK_REJECTED");
 });
 
 test("secret drift fails before any provider dispatch", async () => {

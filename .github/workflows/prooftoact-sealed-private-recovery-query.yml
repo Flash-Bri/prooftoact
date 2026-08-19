@@ -68,8 +68,8 @@ jobs:
           import sys
           import time
           import urllib.parse
-          
-          
+
+
           AUDIENCE = "prooftoact-private-recovery-source-lock-v1"
           REPOSITORY = "Flash-Bri/prooftoact"
           REPOSITORY_ID = "1317716765"
@@ -116,16 +116,16 @@ jobs:
           )
           SAFE_PATH = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$")
           SAFE_JTI = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
-          
-          
+
+
           class Rejected(Exception):
               pass
-          
-          
+
+
           def reject():
               raise Rejected()
-          
-          
+
+
           def unique_object(pairs):
               result = {}
               for key, value in pairs:
@@ -133,8 +133,8 @@ jobs:
                       reject()
                   result[key] = value
               return result
-          
-          
+
+
           def strict_json(raw, maximum):
               if not isinstance(raw, bytes) or not raw or len(raw) > maximum:
                   reject()
@@ -143,8 +143,8 @@ jobs:
                   return json.loads(text, object_pairs_hook=unique_object)
               except (UnicodeDecodeError, json.JSONDecodeError, Rejected):
                   reject()
-          
-          
+
+
           def decode_base64url(segment, maximum):
               if (
                   not isinstance(segment, str)
@@ -165,13 +165,13 @@ jobs:
               if canonical != segment:
                   reject()
               return decoded
-          
-          
+
+
           def validate_audience(value):
               if value != AUDIENCE:
                   reject()
-          
-          
+
+
           def validate_endpoint(audience, value):
               validate_audience(audience)
               if not isinstance(value, str) or not 1 <= len(value) <= 2048:
@@ -214,8 +214,8 @@ jobs:
               if query != [("api-version", "2.0")]:
                   reject()
               return value + "&audience=" + urllib.parse.quote(audience, safe="")
-          
-          
+
+
           def validate_token_response(audience, lane, expected_commit, expected_tree, raw):
               validate_audience(audience)
               if lane not in LANES:
@@ -305,8 +305,8 @@ jobs:
                   if not isinstance(name, str) or isinstance(value, (dict, list)):
                       reject()
               return "SOURCE_LOCKED:" + lane + ":" + expected_commit + ":" + expected_tree
-          
-          
+
+
           def main():
               if len(sys.argv) == 4 and sys.argv[1] == "--validate-endpoint":
                   output = validate_endpoint(sys.argv[2], sys.argv[3])
@@ -318,8 +318,8 @@ jobs:
               else:
                   reject()
               sys.stdout.write(output + "\n")
-          
-          
+
+
           try:
               main()
           except (Rejected, BrokenPipeError):

@@ -246,7 +246,7 @@
       "id": "aws-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
       "role": "EXACT_CHECKOUT_READINESS_VERIFICATION",
-      "sha256": "9ba122781f46b4fc762281f1b0c17ed48f940f28f66031c632499d4643c2d97d"
+      "sha256": "ebe8a71809961b45b2b08a53deece4d49550799839a9fa67a0afdf682fcae046"
     },
     {
       "id": "aws-security-tests",
@@ -1038,7 +1038,7 @@
       "id": "private-recovery-query-approval-generator",
       "path": "scripts/generate-private-recovery-query-approval.js",
       "role": "PRIVATE_RECOVERY_QUERY_PROVIDER_BOUND_APPROVAL_GENERATOR",
-      "sha256": "4fc15cc62cf9d1454f12f2c303f6d0d9fd560561201e14396edca66e8a351aa9"
+      "sha256": "c5c6c8a8ad64dedf4398d3228a5a6803783baf832be9d41617d4c43e5334d956"
     },
     {
       "id": "private-recovery-query-approval-tests",
@@ -1056,7 +1056,7 @@
       "id": "private-recovery-query-aws-store",
       "path": "src/cloud/private-recovery-query-aws-store.js",
       "role": "PRIVATE_RECOVERY_QUERY_DURABLE_ONE_SHOT_STORE",
-      "sha256": "0fbad7095c9de7cd2b5bdde021ea293028c99462de4edb9a2f73ec225abc031d"
+      "sha256": "2f5e2ad1053e956ccbcb1e6a08d6ec9ab2a323db01e47ce67e0893294ba630c8"
     },
     {
       "id": "private-recovery-query-bootstrap-role-stack",
@@ -1074,19 +1074,19 @@
       "id": "private-recovery-query-build",
       "path": "scripts/build-private-recovery-query-lambda.js",
       "role": "PRIVATE_RECOVERY_QUERY_DETERMINISTIC_BUILD",
-      "sha256": "09b08bd4373c5a520b8daeddd5240c6a7d45d006473aa0dd079efb59fa881d2b"
+      "sha256": "6ea73ddffe0f704058bc943df681946bdb46c022916d58120264cd905442ca87"
     },
     {
       "id": "private-recovery-query-core",
       "path": "src/cloud/private-recovery-query.js",
       "role": "PRIVATE_RECOVERY_QUERY_FIXED_MCP_RUNTIME_CONTRACT",
-      "sha256": "b02f7ac5563e98daa499ca6089cf3ef95a30ad32fe30b367b99b3df8ee59d393"
+      "sha256": "ae7521ba8cd9ee782d03b0d4c7742d810159622748351f2c1132b80e68731896"
     },
     {
       "id": "private-recovery-query-core-tests",
       "path": "test/private-recovery-query.test.js",
       "role": "PRIVATE_RECOVERY_QUERY_RUNTIME_VERIFICATION",
-      "sha256": "08f9f7947e7fe146895a0a328e8cf74bec91028dc69d1430f93683c2443b15a6"
+      "sha256": "3e8ea7802628334ce2f197e72b064f3e11abb88ae4b74c04e5df96d1468a8b0c"
     },
     {
       "id": "private-recovery-query-deploy-caller-workflow",
@@ -1098,19 +1098,19 @@
       "id": "private-recovery-query-deploy-preparer",
       "path": "scripts/prepare-private-recovery-query-deployment.js",
       "role": "PRIVATE_RECOVERY_QUERY_CREATE_ONLY_DEPLOYMENT_PREPARER",
-      "sha256": "bffe0f5fd910e6d9b29dca3099f97b77fafce81e9f3a83a957f6fb7db5ef6d6f"
+      "sha256": "d1a2be59a2aeb64dc4d2858a9c29a659a99f592555679709a6540f4f9d2ea820"
     },
     {
       "id": "private-recovery-query-deploy-runner",
       "path": "scripts/deploy-private-recovery-query.js",
       "role": "PRIVATE_RECOVERY_QUERY_RESTART_CONVERGENT_DEPLOYMENT",
-      "sha256": "f61f21fa96297d853d01d88374dbb4a63f95ff9e33c01232a140533229c9acb2"
+      "sha256": "8de5e026bab325863a039ce4f1596ffca3784986d78b87e58bb2daa3f49969c9"
     },
     {
       "id": "private-recovery-query-deploy-sealed-workflow",
       "path": ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
       "role": "PRIVATE_RECOVERY_QUERY_SEALED_CREATE_ONLY_DEPLOYMENT",
-      "sha256": "62cea467572e5243a3e9f0a1dc6b90fb9404bf0d3e6ebc8122f7b7f21f6f5c30"
+      "sha256": "8471f0f43da383011052e2cc7e6cf9a7e8c18e11653714e98a7b5d9b900c6d85"
     },
     {
       "id": "private-recovery-query-evidence",
@@ -1128,13 +1128,13 @@
       "id": "private-recovery-query-evidence-readback",
       "path": "scripts/readback-private-recovery-query.js",
       "role": "PRIVATE_RECOVERY_QUERY_PROVIDER_READBACK_COLLECTOR",
-      "sha256": "489b5978418d3cfb3cf3d948fbd3bff95bf3c4c93cbae9e32d86ca9eae82e647"
+      "sha256": "1c2b12148e0963c352303d129d2aa237b8cab7c33ce13d2574f2628ce2954302"
     },
     {
       "id": "private-recovery-query-evidence-sealed-workflow",
       "path": ".github/workflows/prooftoact-sealed-private-recovery-evidence.yml",
       "role": "PRIVATE_RECOVERY_QUERY_SEALED_SIGNED_EVIDENCE",
-      "sha256": "5f7d32b9e05085fcb176ab0160e4feb874ddcb627c48671c38869b07c61c7145"
+      "sha256": "31852e1eb1129efc27ef01f052afc4aa0c2f9af49dfe8f1003886655e8d2eea8"
     },
     {
       "id": "private-recovery-query-evidence-tests",
@@ -1152,7 +1152,7 @@
       "id": "private-recovery-query-lambda-entry",
       "path": "infra/aws/lambda/private-recovery-query.js",
       "role": "PRIVATE_RECOVERY_QUERY_LAMBDA_ENTRY",
-      "sha256": "df66b8aaf37e902150ef3231569df17207e30310f5e6e148ad68376a6089c4d8"
+      "sha256": "8ad55257d11fbfef6457a963f3d3c751280289f85d661529a6e7069c7309410c"
     },
     {
       "id": "private-recovery-query-operator",
@@ -1176,13 +1176,13 @@
       "id": "private-recovery-query-query-runner",
       "path": "scripts/run-private-recovery-query.js",
       "role": "PRIVATE_RECOVERY_QUERY_EXECUTE_OR_RECONCILE_RUNNER",
-      "sha256": "ac0a924c2d7c232035d686d50d2c39d139b841853594afa306a255777971b04c"
+      "sha256": "c2cc4b9eaa5df002f9ea36bdd38b389f13506d0494ab199159e5626ad8f1c9e3"
     },
     {
       "id": "private-recovery-query-query-sealed-workflow",
       "path": ".github/workflows/prooftoact-sealed-private-recovery-query.yml",
       "role": "PRIVATE_RECOVERY_QUERY_SEALED_EXECUTION",
-      "sha256": "017065a4202d35a396cdeee84bf07285e5d4f3dacddeb726b14181973dfaccd0"
+      "sha256": "74317638fe1438e621f3ff6fcdb9b22acc386ce1cd1580e694c77f237869d2be"
     },
     {
       "id": "private-recovery-query-secret-seal-caller-workflow",
@@ -1194,13 +1194,13 @@
       "id": "private-recovery-query-secret-seal-runner",
       "path": "scripts/seal-private-recovery-query-secret.js",
       "role": "PRIVATE_RECOVERY_QUERY_ONE_VERSION_SECRET_SEAL",
-      "sha256": "bb59bc2b1e9a14aa55b6e0f8a77f31d1913d2f3d2d879d38b1d8445ca0e51d2b"
+      "sha256": "b4d0d1a201b7c9d4e0c5ef8cf500d601457bbfa044046f8936cae3d0ab7d2756"
     },
     {
       "id": "private-recovery-query-secret-seal-sealed-workflow",
       "path": ".github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml",
       "role": "PRIVATE_RECOVERY_QUERY_SEALED_SECRET_SEAL",
-      "sha256": "b977203c7e7d3fafd1e3043e055dd654368574f9a09e91d098759779b558f78e"
+      "sha256": "4e0d6391f9c12372838d5c5e63ea68023e05a586cccf8fbecdccb6bc3e00e27b"
     },
     {
       "id": "private-recovery-query-secret-seal-tests",
@@ -1224,7 +1224,7 @@
       "id": "private-recovery-query-store-tests",
       "path": "test/private-recovery-query-aws-store.test.js",
       "role": "PRIVATE_RECOVERY_QUERY_DURABLE_STORE_VERIFICATION",
-      "sha256": "c5ad0c0587b0444d6bd857e243535e8f8fcdacc7b4ce7de789ed6994b7791cbe"
+      "sha256": "f2775a6cd23d33eaf32c4a1e3d32b48401087b7b2b53357609c3a371860c2b81"
     },
     {
       "id": "private-recovery-query-teardown-caller-workflow",
@@ -1236,13 +1236,13 @@
       "id": "private-recovery-query-teardown-runner",
       "path": "scripts/teardown-private-recovery-query.js",
       "role": "PRIVATE_RECOVERY_QUERY_EVIDENCE_GATED_TEARDOWN",
-      "sha256": "3c1079fe778b418d94f7c58c5073a72f9eb753e692e536ebe001df96c622a751"
+      "sha256": "f9494563923b2f89235cec2187dfb3ba833c01b8cc69d6687c085202481915ec"
     },
     {
       "id": "private-recovery-query-teardown-sealed-workflow",
       "path": ".github/workflows/prooftoact-sealed-private-recovery-teardown.yml",
       "role": "PRIVATE_RECOVERY_QUERY_SEALED_TEARDOWN",
-      "sha256": "3b7925bef00a13d82391a2f723ad460150204d6831be9c27e3929673c53921fd"
+      "sha256": "df68a34ae8c23e25dd43921e79aaf21ef4f2ea940659a012810a3ae9c9493c17"
     },
     {
       "id": "private-recovery-query-teardown-tests",
@@ -1266,7 +1266,7 @@
       "id": "private-recovery-query-window-check",
       "path": "scripts/check-private-recovery-query-window.js",
       "role": "PRIVATE_RECOVERY_QUERY_REMAINING_WINDOW_GATE",
-      "sha256": "2f0f6763765f9be5aa9a5c407bc1df1a1531420d6f5994c211ecd07ce625b57b"
+      "sha256": "895f46900ee7b0d24a36d077aa4c777b903ad0d525f153be8458d0f0564522aa"
     },
     {
       "id": "provider-dispatch-control",

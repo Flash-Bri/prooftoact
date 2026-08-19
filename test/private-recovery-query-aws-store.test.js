@@ -69,37 +69,46 @@ function fixture() {
     tenantId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     treeDigest: "c".repeat(40)
   };
-  const command = buildPrivateRecoveryQueryCommand({
-    approval,
-    codeZipSha256: "d".repeat(64),
-    configSha256: "e".repeat(64),
-    functionArn:
-      "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-private-recovery-query",
-    functionVersion: "3",
-    mcpSecretArn: secretArn,
-    mcpSecretVersionId: version,
-    releaseControlTableArn:
-      "arn:aws:dynamodb:us-east-1:111111111111:table/prooftoact-release-controller",
-    now: new Date("2026-08-19T02:00:00.000Z")
-  });
-  return { command };
+  const commandFor = (nextApproval = approval, overrides = {}) =>
+    buildPrivateRecoveryQueryCommand({
+      approval: nextApproval,
+      codeZipSha256: "d".repeat(64),
+      configSha256: "e".repeat(64),
+      functionArn:
+        "arn:aws:lambda:us-east-1:111111111111:function:prooftoact-private-recovery-query",
+      functionVersion: "3",
+      mcpSecretArn: secretArn,
+      mcpSecretVersionId: version,
+      releaseControlTableArn:
+        "arn:aws:dynamodb:us-east-1:111111111111:table/prooftoact-release-controller",
+      now: new Date("2026-08-19T02:00:00.000Z"),
+      ...overrides
+    });
+  return { approval, command: commandFor(), commandFor };
 }
 
 function fakeRuntime() {
-  let item;
+  const items = new Map();
   const calls = [];
   let loseNextAck = false;
   const runtime = {
     calls,
+    itemCount() { return items.size; },
     loseAck() { loseNextAck = true; },
     async getReleaseControlItem(input) {
       calls.push({ action: "get", input });
-      return { Item: item };
+      return { Item: items.get(input.Key.pk.S) };
     },
     async updateReleaseControlItem(input) {
       calls.push({ action: "update", input });
+      const key = input.Key.pk.S;
+      if (input.ConditionExpression === "attribute_not_exists(#pk)" &&
+          items.has(key)) {
+        throw new Error("ConditionalCheckFailedException");
+      }
       const values = input.ExpressionAttributeValues;
       const status = values[":status"].S;
+      let item = items.get(key);
       if (status === "RESERVED") {
         item = {
           pk: input.Key.pk,
@@ -129,6 +138,7 @@ function fakeRuntime() {
           version: values[":version"]
         };
       }
+      items.set(key, item);
       if (loseNextAck) {
         loseNextAck = false;
         throw new Error("synthetic acknowledgement loss");
@@ -250,4 +260,72 @@ test("unknown terminalization preserves no provider retry authority", async () =
   );
   assert.equal(terminal.status, "UNKNOWN");
   assert.equal(terminal.receipt.providerCallPossible, true);
+});
+
+test("one operation ID occupies one create-only key across approval drift", async () => {
+  const { approval, command, commandFor } = fixture();
+  const changedApproval = {
+    ...approval,
+    billingAuthorizationSha256: "f".repeat(64)
+  };
+  const changed = commandFor(changedApproval);
+  assert.notEqual(changed.approvalSha256, command.approvalSha256);
+  assert.notEqual(changed.commandSha256, command.commandSha256);
+  assert.equal(changed.globalKeySha256, command.globalKeySha256);
+  const runtime = fakeRuntime();
+  const store = createPrivateRecoveryQueryAwsStore({ runtime });
+  assert.equal((await store.reserve(command)).status, "RESERVED");
+  await assert.rejects(
+    store.reserve(changed),
+    /PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT/u
+  );
+  assert.equal(runtime.itemCount(), 1);
+});
+
+test("one operation ID rejects a different command after restart and final replay", async () => {
+  const { command, commandFor } = fixture();
+  const changed = commandFor(undefined, { codeZipSha256: "0".repeat(64) });
+  assert.equal(changed.globalKeySha256, command.globalKeySha256);
+  assert.notEqual(changed.commandSha256, command.commandSha256);
+  const runtime = fakeRuntime();
+  const firstStore = createPrivateRecoveryQueryAwsStore({ runtime });
+  await firstStore.reserve(command);
+  const dispatch = {
+    lambdaRequestIdSha256: "1".repeat(64),
+    logicalRequestSha256: command.logicalRequestSha256,
+    querySha256: command.querySha256,
+    secretValueSha256: "2".repeat(64)
+  };
+  await firstStore.markDispatch(command, dispatch);
+  await firstStore.finalize(command, dispatch, receipt(command, "PASS"));
+  const restartedStore = createPrivateRecoveryQueryAwsStore({ runtime });
+  assert.equal((await restartedStore.read(command)).receipt.status, "PASS");
+  await assert.rejects(
+    restartedStore.read(changed),
+    /PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT/u
+  );
+  await assert.rejects(
+    restartedStore.reserve(changed),
+    /PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT/u
+  );
+});
+
+test("distinct operation IDs reserve distinct keys while concurrent replays converge", async () => {
+  const { approval, command, commandFor } = fixture();
+  const other = commandFor({
+    ...approval,
+    operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+  });
+  assert.notEqual(other.globalKeySha256, command.globalKeySha256);
+  const runtime = fakeRuntime();
+  const store = createPrivateRecoveryQueryAwsStore({ runtime });
+  const [left, replay, right] = await Promise.all([
+    store.reserve(command),
+    store.reserve(command),
+    store.reserve(other)
+  ]);
+  assert.equal(left.status, "RESERVED");
+  assert.equal(replay.status, "RESERVED");
+  assert.equal(right.status, "RESERVED");
+  assert.equal(runtime.itemCount(), 2);
 });

@@ -20,8 +20,9 @@ and short-retention CloudWatch logs.
   `tideproof.net` registration
 - Remaining total-project envelope before AWS or any other new spend:
   **$13.14**
-- CockroachDB: two Basic clusters, each configured with a **$5 monthly cap**,
-  currently covered by trial credit
+- Private-recovery CockroachDB: one Basic cluster capped at **$1.50 per
+  month**. Any legacy or separately retained cluster remains outside this
+  lane's forecast until an exact provider inventory prices it.
 
 The domain purchase is a sunk project cost and is included in the $25 total
 ceiling. Auto-renew is owner-reported as disabled. The sanitized owner record
@@ -51,6 +52,41 @@ Sources:
 - https://aws.amazon.com/lambda/pricing/
 - https://aws.amazon.com/api-gateway/pricing/
 - https://aws.amazon.com/bedrock/pricing/
+
+## Private recovery lane retained-cost posture
+
+The private AWS-to-Managed-MCP recovery lane has a narrower recurring-cost
+forecast that is source-bound here but is not yet provider-observed or
+authorized for activation:
+
+- A1 defines seven retained Secrets Manager secrets and A2 defines one, for
+  eight retained secrets before any separately governed cleanup. At the
+  current planning input of **$0.40 per secret-month**, that is **$3.20 per
+  month**.
+- One CockroachDB Basic cluster is capped at **$1.50 per month**.
+- The recurring base before cleanup is therefore **$4.70 per month**. A
+  proposed **$5.00 monthly** private-recovery ceiling would leave only
+  **$0.30** for bounded Lambda calls, one-day CloudWatch logs, DynamoDB and
+  Secrets Manager requests, and retained S3 object storage. That proposed
+  ceiling remains pending explicit authorization and fresh provider price
+  readback; it is not granted by this document.
+- The application stack owns one 256 MiB Lambda with reserved concurrency one
+  and one one-day log group. Governed teardown deletes that exact stack and
+  log group only after signed POST evidence and a durable terminal receipt.
+- Deployment stores one content-addressed, versioned ZIP in the retained
+  artifact bucket. Application-stack teardown does not delete that object
+  version. The bucket expires noncurrent versions after 45 days, but a current
+  version can remain and must be included in observed variable spend.
+- The A2 Managed MCP secret is intentionally retained by its bootstrap stack.
+  The seven A1 secrets likewise remain retained unless an independent,
+  reviewed deletion workflow produces exact deletion and absence receipts.
+  Only after those seven receipts exist does the modeled recurring base fall
+  to **$1.90 per month**: one A2 secret plus the CockroachDB Basic cap. That is
+  a conditional target, not the current source-proven posture.
+
+Open-source users supply and pay for their own AWS and CockroachDB accounts,
+credentials, protected environments, and provider usage. The repository does
+not provide shared paid-service access or a public provider proxy.
 
 ## Operator stop conditions
 

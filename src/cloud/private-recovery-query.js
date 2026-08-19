@@ -31,6 +31,28 @@ const SECRET_ARN =
   /^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:prooftoact\/private-recovery-query\/managed-mcp-[A-Za-z0-9]{6}$/u;
 const MANAGED_MCP_ENDPOINT = "https://cockroachlabs.cloud/mcp";
 const MANAGED_MCP_PROTOCOL_VERSION = "2025-03-26";
+const OPERATION_KEY_DOMAIN = "PRIVATE_AWS_MANAGED_MCP_RECOVERY_QUERY";
+const GENERIC_EXECUTION_FAILURE = "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED";
+const SAFE_EXECUTION_FAILURE_CODES = new Set([
+  "PRIVATE_RECOVERY_QUERY_APPROVAL_BINDING_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_APPROVAL_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_CLOCK_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_DISPATCH_STATE_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_EXTERNAL_ACTION_SEQUENCE_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_FINALIZATION_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_LAMBDA_CONTEXT_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_MCP_CLIENT_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_MCP_RESULT_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_OPERATION_ALREADY_DISPATCHED",
+  "PRIVATE_RECOVERY_QUERY_REQUEST_BINDING_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_RESULT_CARDINALITY_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_SECRET_READBACK_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_SECRET_READER_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_SIGNED_ROW_BINDING_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_STORED_STATE_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_STORE_REJECTED",
+  "PRIVATE_RECOVERY_QUERY_TRANSPORT_EVIDENCE_REJECTED"
+]);
 
 function reject(code, cause) {
   throw new Error(code, cause === undefined ? undefined : { cause });
@@ -263,9 +285,8 @@ export function privateRecoveryQueryApprovalSha256(value) {
 export function privateRecoveryQueryOperationGlobalKeySha256(value) {
   const approval = validatePrivateRecoveryQueryApproval(value);
   return digest({
-    approvalSha256: digest(approval),
+    domain: OPERATION_KEY_DOMAIN,
     operationId: approval.operationId,
-    purpose: "PRIVATE_AWS_MANAGED_MCP_RECOVERY_QUERY"
   });
 }
 
@@ -358,9 +379,8 @@ export function validatePrivateRecoveryQueryCommand(value) {
   const { commandSha256, globalKeySha256, ...base } = value;
   requireCondition(commandSha256 === digest(base) &&
     globalKeySha256 === digest({
-      approvalSha256: value.approvalSha256,
+      domain: OPERATION_KEY_DOMAIN,
       operationId: value.operationId,
-      purpose: "PRIVATE_AWS_MANAGED_MCP_RECOVERY_QUERY"
     }), code);
   return Object.freeze({ ...value });
 }
@@ -449,14 +469,14 @@ function validateTransportEvidence({
 }
 
 function errorCodeFor(cause) {
-  const raw = typeof cause?.message === "string"
-    ? cause.message
-    : "PRIVATE_RECOVERY_QUERY_UNKNOWN";
-  const normalized = raw.replace(/[^A-Z0-9_]/giu, "_")
-    .toUpperCase().slice(0, 128);
-  return /^[A-Z][A-Z0-9_]{2,127}$/u.test(normalized)
-    ? normalized
-    : "PRIVATE_RECOVERY_QUERY_UNKNOWN";
+  let message = null;
+  try {
+    message = typeof cause?.message === "string" ? cause.message : null;
+  } catch {
+    return GENERIC_EXECUTION_FAILURE;
+  }
+  return SAFE_EXECUTION_FAILURE_CODES.has(message)
+    ? message : GENERIC_EXECUTION_FAILURE;
 }
 
 function receiptWithDigest(body) {
@@ -597,19 +617,18 @@ export async function runPrivateRecoveryQuery({
       `${command.functionArn}:${command.functionVersion}`,
   "PRIVATE_RECOVERY_QUERY_LAMBDA_CONTEXT_REJECTED");
   const lambdaRequestIdSha256 = sha256(lambdaContext.awsRequestId);
-  const existing = validateStoredState(await store.read(command), command);
-  if (["FINAL", "FAILED", "UNKNOWN"].includes(existing.status)) {
-    return validatePrivateRecoveryQueryReceipt(existing.receipt);
-  }
-  requireCondition(existing.status === "RESERVED",
-    "PRIVATE_RECOVERY_QUERY_OPERATION_ALREADY_DISPATCHED");
-  requireCondition(invocationStartedAt instanceof Date &&
-    Number.isFinite(invocationStartedAt.getTime()),
-  "PRIVATE_RECOVERY_QUERY_CLOCK_REJECTED");
-
   let dispatched = false;
   let client = null;
   try {
+    const existing = validateStoredState(await store.read(command), command);
+    if (["FINAL", "FAILED", "UNKNOWN"].includes(existing.status)) {
+      return validatePrivateRecoveryQueryReceipt(existing.receipt);
+    }
+    requireCondition(existing.status === "RESERVED",
+      "PRIVATE_RECOVERY_QUERY_OPERATION_ALREADY_DISPATCHED");
+    requireCondition(invocationStartedAt instanceof Date &&
+      Number.isFinite(invocationStartedAt.getTime()),
+    "PRIVATE_RECOVERY_QUERY_CLOCK_REJECTED");
     validatePrivateRecoveryQueryApproval(approval, invocationStartedAt);
     const secret = await secretReader.readExactVersion();
     requireCondition(exactKeys(secret, [

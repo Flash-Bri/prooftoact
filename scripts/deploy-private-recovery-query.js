@@ -503,11 +503,8 @@ export async function main(args = process.argv.slice(2), environment = process.e
 const isDirect = process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
 if (isDirect) {
-  main().catch((cause) => {
-    const code = /^PRIVATE_RECOVERY_QUERY_[A-Z0-9_]{1,120}$/u.test(
-      cause?.message ?? ""
-    ) ? cause.message : "PRIVATE_RECOVERY_QUERY_DEPLOY_UNKNOWN_HOLD";
-    process.stderr.write(`${code}\n`);
+  main().catch(() => {
+    process.stderr.write("PRIVATE_RECOVERY_QUERY_DEPLOY_CLI_HOLD\n");
     process.exitCode = 1;
   });
 }

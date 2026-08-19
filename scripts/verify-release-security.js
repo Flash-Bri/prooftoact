@@ -3549,7 +3549,8 @@ const SOURCE_MARKERS = Object.freeze({
     "IMMUTABLE_AWSCURRENT_READBACK_BOUND",
     "validatePrivateRecoveryQueryProviderBinding",
     "providerBindingSha256",
-    "expectedSourceCommitTs"
+    "expectedSourceCommitTs",
+    "PRIVATE_RECOVERY_QUERY_APPROVAL_CLI_HOLD"
   ]),
   "private-recovery-query-approval-tests": Object.freeze([
     "generator copies the exact fresh provider binding with no overrides",
@@ -3567,6 +3568,7 @@ const SOURCE_MARKERS = Object.freeze({
     "ConsistentRead: true",
     "attribute_not_exists(#pk)",
     "PRIVATE_RECOVERY_QUERY_DDB_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT",
     "UNKNOWN_DO_NOT_RETRY"
   ]),
   "private-recovery-query-bootstrap-role-stack": Object.freeze([
@@ -3588,7 +3590,8 @@ const SOURCE_MARKERS = Object.freeze({
     "entryPoints: [\"infra/aws/lambda/private-recovery-query.js\"]",
     "archiveEntryCount: 2",
     "THIRD_PARTY_NOTICES.txt",
-    "packages: \"bundle\""
+    "packages: \"bundle\"",
+    "PRIVATE_RECOVERY_QUERY_BUILD_CLI_HOLD"
   ]),
   "private-recovery-query-core": Object.freeze([
     "PRIVATE_AWS_MANAGED_MCP_RECOVERY_QUERY",
@@ -3600,7 +3603,10 @@ const SOURCE_MARKERS = Object.freeze({
     "exactKeys(secretPayload, [\"apiKey\"])",
     "transport.endpointSha256 === sha256(MANAGED_MCP_ENDPOINT)",
     "transport.protocolVersion === MANAGED_MCP_PROTOCOL_VERSION",
-    "PRIVATE_RECOVERY_QUERY_DISPATCH_STATE_REJECTED"
+    "PRIVATE_RECOVERY_QUERY_DISPATCH_STATE_REJECTED",
+    "domain: OPERATION_KEY_DOMAIN",
+    "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED",
+    "SAFE_EXECUTION_FAILURE_CODES.has"
   ]),
   "private-recovery-query-core-tests": Object.freeze([
     "private Lambda performs one fixed Managed MCP query and emits no row",
@@ -3608,7 +3614,9 @@ const SOURCE_MARKERS = Object.freeze({
     "provider-bound source commit timestamp rejects a different signed row",
     "tool acknowledgement loss becomes durable unknown and never retries",
     "transport evidence is bound to the exact endpoint cluster and protocol",
-    "dispatch-store contract drift fails before creating an MCP client"
+    "dispatch-store contract drift fails before creating an MCP client",
+    "hostile provider errors become fixed durable codes with no secret or identity leakage",
+    "top-level Lambda boundary emits only one fixed response code and no log"
   ]),
   "private-recovery-query-deploy-caller-workflow": Object.freeze([
     "name: ProofToAct Private Recovery Deploy",
@@ -3621,7 +3629,8 @@ const SOURCE_MARKERS = Object.freeze({
     "minimumRemainingMilliseconds = 15 * 60 * 1_000",
     "READY_FOR_CREATE_CHANGE_SET",
     "artifactObjectVersionSha256",
-    "sealedWorkflowCommit"
+    "sealedWorkflowCommit",
+    "PRIVATE_RECOVERY_QUERY_DEPLOYMENT_CLI_HOLD"
   ]),
   "private-recovery-query-deploy-runner": Object.freeze([
     "prooftoact-private-recovery-query-create-${sanitizedIntent.intentSha256}",
@@ -3631,7 +3640,8 @@ const SOURCE_MARKERS = Object.freeze({
     "CREATE_IN_PROGRESS",
     "CREATE_COMPLETE",
     "PRIVATE_RECOVERY_QUERY_DEPLOY_EXECUTE_ACK_UNKNOWN",
-    "PRIVATE_RECOVERY_QUERY_DEPLOY_PROTECTION_ACK_UNKNOWN"
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_PROTECTION_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_CLI_HOLD"
   ]),
   "private-recovery-query-deploy-sealed-workflow": Object.freeze([
     "environment: aws-private-recovery-deploy",
@@ -3674,7 +3684,8 @@ const SOURCE_MARKERS = Object.freeze({
     "PermissionsBoundaryType === \"Policy\"",
     "parameters.SealedWorkflowCommit === expectation.workflowCommit",
     "functionUrlCount: 0",
-    "vpcAttached: false"
+    "vpcAttached: false",
+    "PRIVATE_RECOVERY_QUERY_EVIDENCE_CLI_HOLD"
   ]),
   "private-recovery-query-evidence-sealed-workflow": Object.freeze([
     "environment: aws-private-recovery-evidence",
@@ -3707,7 +3718,9 @@ const SOURCE_MARKERS = Object.freeze({
     "privateRecoveryQueryApprovalSha256(event.approval)",
     "${configuration.functionArn}:${context.functionVersion}",
     "firstRuntimeClockRead",
-    "runtimePromise ??="
+    "runtimePromise ??=",
+    "withTopLevelFailureBoundary",
+    "PRIVATE_RECOVERY_QUERY_LAMBDA_HOLD"
   ]),
   "private-recovery-query-operator": Object.freeze([
     "reservePrivateRecoveryQuery",
@@ -3733,7 +3746,8 @@ const SOURCE_MARKERS = Object.freeze({
     "[\"execute\", \"reconcile-only\"].includes",
     "executePrivateRecoveryQueryOnce",
     "reconcilePrivateRecoveryQuery",
-    "PRIVATE_RECOVERY_QUERY_${receipt.status}"
+    "PRIVATE_RECOVERY_QUERY_${receipt.status}",
+    "PRIVATE_RECOVERY_QUERY_CLI_HOLD"
   ]),
   "private-recovery-query-query-sealed-workflow": Object.freeze([
     "environment: aws-private-recovery-query",
@@ -3757,7 +3771,8 @@ const SOURCE_MARKERS = Object.freeze({
     "canonicalJson({ apiKey: sourceApiKey })",
     "RECONCILED_AFTER_ACK_LOSS",
     "EXACT_VERSION_ALREADY_PRESENT",
-    "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_UNKNOWN_DO_NOT_RETRY"
+    "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_UNKNOWN_DO_NOT_RETRY",
+    "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CLI_HOLD"
   ]),
   "private-recovery-query-secret-seal-sealed-workflow": Object.freeze([
     "environment: aws-private-recovery-deploy",
@@ -3795,7 +3810,10 @@ const SOURCE_MARKERS = Object.freeze({
   "private-recovery-query-store-tests": Object.freeze([
     "AWS store reserves, dispatches, and finalizes one exact item",
     "conditional write acknowledgement loss converges by strong read only",
-    "unknown terminalization preserves no provider retry authority"
+    "unknown terminalization preserves no provider retry authority",
+    "one operation ID occupies one create-only key across approval drift",
+    "one operation ID rejects a different command after restart and final replay",
+    "distinct operation IDs reserve distinct keys while concurrent replays converge"
   ]),
   "private-recovery-query-teardown-caller-workflow": Object.freeze([
     "name: ProofToAct Private Recovery Teardown",
@@ -3812,7 +3830,8 @@ const SOURCE_MARKERS = Object.freeze({
     "ClientRequestToken:",
     "DELETE_IN_PROGRESS",
     "DELETE_FAILED",
-    "PRIVATE_RECOVERY_QUERY_TEARDOWN_DELETE_FAILED_HOLD"
+    "PRIVATE_RECOVERY_QUERY_TEARDOWN_DELETE_FAILED_HOLD",
+    "PRIVATE_RECOVERY_QUERY_TEARDOWN_CLI_HOLD"
   ]),
   "private-recovery-query-teardown-sealed-workflow": Object.freeze([
     "environment: aws-private-recovery-teardown",
@@ -3849,7 +3868,8 @@ const SOURCE_MARKERS = Object.freeze({
     "minimumRemainingSeconds >= 60",
     "remainingMilliseconds >= minimumRemainingSeconds * 1_000",
     "prooftoact.private-recovery-query-window-check.v1",
-    "PRIVATE_RECOVERY_QUERY_WINDOW_REJECTED"
+    "PRIVATE_RECOVERY_QUERY_WINDOW_REJECTED",
+    "PRIVATE_RECOVERY_QUERY_WINDOW_CLI_HOLD"
   ]),
   "provider-dispatch-control": Object.freeze([
     "INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_V1_DISABLED",

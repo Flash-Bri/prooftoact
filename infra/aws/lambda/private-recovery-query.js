@@ -112,10 +112,27 @@ export function createPrivateRecoveryQueryHandler({
   };
 }
 
-let productionHandler = null;
-export async function handler(event, context) {
-  productionHandler ??= createPrivateRecoveryQueryHandler();
-  return productionHandler(event, context);
+function withTopLevelFailureBoundary(target) {
+  if (typeof target !== "function") {
+    throw new Error("PRIVATE_RECOVERY_QUERY_LAMBDA_HOLD");
+  }
+  return async (...args) => {
+    try {
+      return await target(...args);
+    } catch {
+      throw new Error("PRIVATE_RECOVERY_QUERY_LAMBDA_HOLD");
+    }
+  };
 }
 
-export const __test = Object.freeze({ EVENT_SCHEMA, readConfiguration });
+let productionHandler = null;
+export const handler = withTopLevelFailureBoundary(async (event, context) => {
+  productionHandler ??= createPrivateRecoveryQueryHandler();
+  return productionHandler(event, context);
+});
+
+export const __test = Object.freeze({
+  EVENT_SCHEMA,
+  readConfiguration,
+  withTopLevelFailureBoundary
+});

@@ -87,14 +87,18 @@ function decodeItem(item, command) {
   requireCondition(exactKeys(item, expectedKeys) &&
     stringAttribute(item, "pk", code) === stateKey(command) &&
     stringAttribute(item, "schemaVersion", code) === ITEM_SCHEMA &&
-    stringAttribute(item, "commandSha256", code) === command.commandSha256 &&
     stringAttribute(item, "operationId", code) === command.operationId &&
     ["RESERVED", "DISPATCHING", "FINAL", "FAILED", "UNKNOWN"]
       .includes(status), code);
   const storedCommand = validatePrivateRecoveryQueryCommand(
     decodeCanonical(item.command, code)
   );
-  requireCondition(canonicalJson(storedCommand) === canonicalJson(command), code);
+  requireCondition(storedCommand.operationId === command.operationId &&
+    storedCommand.globalKeySha256 === command.globalKeySha256, code);
+  requireCondition(stringAttribute(item, "commandSha256", code) ===
+      command.commandSha256 &&
+    canonicalJson(storedCommand) === canonicalJson(command),
+  "PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT");
   const version = integerAttribute(item, "version", code);
   if (status === "RESERVED") {
     requireCondition(version === 0, code);
@@ -181,6 +185,10 @@ export function createPrivateRecoveryQueryAwsStore({ runtime }) {
       try {
         observed = await read(command);
       } catch (readCause) {
+        if (readCause?.message ===
+            "PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT") {
+          reject("PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT");
+        }
         reject("PRIVATE_RECOVERY_QUERY_DDB_ACK_UNKNOWN", {
           cause,
           readCause

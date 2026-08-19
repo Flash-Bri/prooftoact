@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { AWS_GATE2_PREFLIGHT_DEFAULTS } from "../src/cloud/aws-gate2-preflight.js";
+import { buildPrivateRecoveryQueryTemplate } from
+  "../src/cloud/private-recovery-query-template.js";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MANIFEST_PATH = "RELEASE_COST_MANIFEST.json";
@@ -14,19 +16,28 @@ const RECEIPT_SCHEMA = "tideproof.release-cost-verification.v1";
 const HEX_64 = /^[0-9a-f]{64}$/;
 
 const EXPECTED_LIMITS = Object.freeze({
+  a1RetainedSecretCountBeforeGovernedCleanup: 7,
+  a2RetainedSecretCount: 1,
   awsBudgetLimitUsd: 15,
+  cockroachBasicMonthlyCapUsd: 1.5,
   dailyStopUsd: 5,
   effectiveAwsSpendCeilingUsd: 13.14,
   expectedMeteredSpendHighUsd: 12,
   expectedMeteredSpendLowUsd: 3,
   minimumBudgetCoverageEnd: "2026-09-16T00:00:00.000Z",
+  pendingPrivateRecoveryMonthlyAuthorizationUsd: 5,
+  postGovernedA1CleanupRecurringBaseUsd: 1.9,
   preflightAllowanceReserveUsd: 0.02,
   preflightObservedAwsRejectAtUsd: 13.12,
   projectCostWindowStart: "2026-07-01",
   recordedNonAwsSpendUsd: 11.86,
+  recurringBaseBeforeGovernedCleanupUsd: 4.7,
   releaseHorizonEnd: "2026-09-15",
+  retainedSecretsMonthlyUsdBeforeGovernedCleanup: 3.2,
+  secretsManagerSecretMonthlyUsd: 0.4,
   totalProjectExposureCeilingUsd: 25,
-  unexplainedSpendStopUsd: 3
+  unexplainedSpendStopUsd: 3,
+  variableServiceHeadroomUsd: 0.3
 });
 
 const EXPECTED_BUDGET_ALERTS = Object.freeze([
@@ -143,6 +154,22 @@ const EXPECTED_SURFACES = Object.freeze({
   "gate2-console-stop-receipt": Object.freeze({
     path: "evidence/gate2-console-stop-receipt-2026-07-30.md",
     role: "SANITIZED_FAIL_CLOSED_STOP_RECEIPT"
+  }),
+  "private-recovery-bootstrap-template": Object.freeze({
+    path: "infra/aws/private-recovery-query-bootstrap-role-stack.json",
+    role: "PRIVATE_RECOVERY_RETAINED_SECRET_INVENTORY"
+  }),
+  "private-recovery-deploy-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
+    role: "PRIVATE_RECOVERY_VERSIONED_ARTIFACT_RETENTION"
+  }),
+  "private-recovery-stack-template": Object.freeze({
+    path: "src/cloud/private-recovery-query-template.js",
+    role: "PRIVATE_RECOVERY_TEMPORARY_RUNTIME_AND_LOG_RETENTION"
+  }),
+  "private-recovery-teardown-runner": Object.freeze({
+    path: "scripts/teardown-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_EXACT_STACK_CLEANUP"
   })
 });
 
@@ -188,6 +215,7 @@ const RELEASE_COST_CHECK_KEYS = Object.freeze([
   "fixedChargeResourcesAbsent",
   "liveSpendClaimAbsent",
   "preflightCostCeilingsFailClosed",
+  "privateRecoveryCostPostureBounded",
   "recordedSpendArithmeticExact",
   "runtimeAndLogBoundsExact",
   "unapprovedPurchasesRemainBlocked"
@@ -367,6 +395,29 @@ export function validateManifest(manifest) {
           manifest.limits.preflightAllowanceReserveUsd
         ).toFixed(2)
       ) === manifest.limits.preflightObservedAwsRejectAtUsd &&
+      manifest.limits.a1RetainedSecretCountBeforeGovernedCleanup +
+          manifest.limits.a2RetainedSecretCount === 8 &&
+      Number((
+        (manifest.limits.a1RetainedSecretCountBeforeGovernedCleanup +
+          manifest.limits.a2RetainedSecretCount) *
+          manifest.limits.secretsManagerSecretMonthlyUsd
+      ).toFixed(2)) ===
+        manifest.limits.retainedSecretsMonthlyUsdBeforeGovernedCleanup &&
+      Number((
+        manifest.limits.retainedSecretsMonthlyUsdBeforeGovernedCleanup +
+          manifest.limits.cockroachBasicMonthlyCapUsd
+      ).toFixed(2)) ===
+        manifest.limits.recurringBaseBeforeGovernedCleanupUsd &&
+      Number((
+        manifest.limits.pendingPrivateRecoveryMonthlyAuthorizationUsd -
+          manifest.limits.recurringBaseBeforeGovernedCleanupUsd
+      ).toFixed(2)) === manifest.limits.variableServiceHeadroomUsd &&
+      Number((
+        manifest.limits.a2RetainedSecretCount *
+          manifest.limits.secretsManagerSecretMonthlyUsd +
+          manifest.limits.cockroachBasicMonthlyCapUsd
+      ).toFixed(2)) ===
+        manifest.limits.postGovernedA1CleanupRecurringBaseUsd &&
       sameJson(manifest.budgetAlerts, EXPECTED_BUDGET_ALERTS) &&
       sameJson(
         manifest.forbiddenResourceTypes,
@@ -575,6 +626,62 @@ export function assertGate2TemplateContract(template) {
   };
 }
 
+export function assertPrivateRecoveryBootstrapCostContract(template) {
+  const resources = template?.Resources;
+  assert(resources && typeof resources === "object" &&
+    !Array.isArray(resources),
+  "RELEASE_COST_PRIVATE_RECOVERY_BOOTSTRAP_RESOURCES");
+  const secrets = Object.values(resources).filter(
+    (resource) => resource?.Type === "AWS::SecretsManager::Secret"
+  );
+  assert(secrets.length === 1,
+    "RELEASE_COST_PRIVATE_RECOVERY_SECRET_COUNT");
+  const secret = secrets[0];
+  assert(secret.DeletionPolicy === "Retain" &&
+    secret.UpdateReplacePolicy === "Retain" &&
+    secret.Properties?.Name ===
+      "prooftoact/private-recovery-query/managed-mcp" &&
+    secret.Properties?.KmsKeyId === undefined &&
+    secret.Properties?.GenerateSecretString === undefined &&
+    secret.Properties?.SecretString === undefined,
+  "RELEASE_COST_PRIVATE_RECOVERY_SECRET_POSTURE");
+  const types = Object.values(resources).map((resource) => resource?.Type);
+  assert(EXPECTED_FORBIDDEN_RESOURCE_TYPES.every(
+    (resourceType) => !types.includes(resourceType)
+  ), "RELEASE_COST_PRIVATE_RECOVERY_BOOTSTRAP_FIXED_CHARGE");
+  return true;
+}
+
+export function assertPrivateRecoveryStackCostContract(template) {
+  const resources = template?.Resources;
+  assert(resources && typeof resources === "object" &&
+    !Array.isArray(resources),
+  "RELEASE_COST_PRIVATE_RECOVERY_STACK_RESOURCES");
+  const types = Object.values(resources).map((resource) => resource?.Type);
+  assert(EXPECTED_FORBIDDEN_RESOURCE_TYPES.every(
+    (resourceType) => !types.includes(resourceType)
+  ), "RELEASE_COST_PRIVATE_RECOVERY_STACK_FIXED_CHARGE");
+  const functions = Object.values(resources).filter(
+    (resource) => resource?.Type === "AWS::Lambda::Function"
+  );
+  const logs = Object.values(resources).filter(
+    (resource) => resource?.Type === "AWS::Logs::LogGroup"
+  );
+  assert(functions.length === 1 &&
+    functions[0].Properties?.MemorySize === 256 &&
+    functions[0].Properties?.Timeout === 120 &&
+    functions[0].Properties?.ReservedConcurrentExecutions === 1,
+  "RELEASE_COST_PRIVATE_RECOVERY_FUNCTION_BOUNDS");
+  assert(logs.length === 1 && logs[0].Properties?.RetentionInDays === 1 &&
+    logs[0].DeletionPolicy === "Delete" &&
+    logs[0].UpdateReplacePolicy === "Delete",
+  "RELEASE_COST_PRIVATE_RECOVERY_LOG_POSTURE");
+  assert(Object.values(resources).every(
+    (resource) => resource?.Type !== "AWS::SecretsManager::Secret"
+  ), "RELEASE_COST_PRIVATE_RECOVERY_STACK_SECRET_ABSENT");
+  return true;
+}
+
 export function assertBudgetReceipt(receipt) {
   const alerts = receipt?.budget?.alerts;
   assert(
@@ -777,6 +884,27 @@ function assertSourceContracts(sources) {
     ],
     "RELEASE_COST_READINESS_MARKERS"
   );
+  assertMarkers(
+    sources.get("private-recovery-deploy-workflow"),
+    [
+      'artifact_key="private-recovery-query/$AUTHORITY_COMMIT/private-recovery-query-$artifact_sha.zip"',
+      "aws s3api list-object-versions",
+      "aws s3api put-object",
+      "--server-side-encryption AES256",
+      "retention-days: 14"
+    ],
+    "RELEASE_COST_PRIVATE_RECOVERY_ARTIFACT_MARKERS"
+  );
+  assertMarkers(
+    sources.get("private-recovery-teardown-runner"),
+    [
+      "DeleteStackCommand",
+      'status: "STACK_ABSENT"',
+      "PRIVATE_RECOVERY_QUERY_TEARDOWN_DELETE_TIMEOUT",
+      "validateExactStack"
+    ],
+    "RELEASE_COST_PRIVATE_RECOVERY_TEARDOWN_MARKERS"
+  );
   return true;
 }
 
@@ -813,7 +941,12 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       "no accepted AWS read-only preflight receipt exists",
       "main-stack deployment, DNS change",
       "semantic-failure alarms",
-      "stack/service custom"
+      "stack/service custom",
+      "pre-cleanup inventory is eight",
+      "Adding the CockroachDB Basic `$1.50` monthly cap",
+      "variable-service headroom",
+      "pending explicit authorization",
+      "modeled base becomes `$1.90` monthly"
     ],
     "RELEASE_COST_LEDGER_MARKERS"
   );
@@ -825,7 +958,13 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       "**$13.14**",
       "daily cost exceeds $5",
       "unexplained spend exceeds $3",
-      "introduces NAT Gateway"
+      "introduces NAT Gateway",
+      "eight retained secrets before any separately governed cleanup",
+      "**$4.70 per month**",
+      "**$0.30** for bounded Lambda calls",
+      "remains pending explicit authorization",
+      "Only after those seven receipts exist",
+      "**$1.90 per month**"
     ],
     "RELEASE_COST_BOUNDARY_MARKERS"
   );
@@ -868,6 +1007,13 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       "RELEASE_COST_GATE2_JSON"
     )
   );
+  assertPrivateRecoveryBootstrapCostContract(
+    parseJson(
+      Buffer.from(sources.get("private-recovery-bootstrap-template")),
+      "RELEASE_COST_PRIVATE_RECOVERY_BOOTSTRAP_JSON"
+    )
+  );
+  assertPrivateRecoveryStackCostContract(buildPrivateRecoveryQueryTemplate());
   assertPreflightDefaults();
   assertSourceContracts(sources);
 
@@ -894,6 +1040,7 @@ export function verifyReleaseCost({ rootDir = DEFAULT_ROOT } = {}) {
       liveSpendClaimAbsent: true,
       deploymentStopPreserved: true,
       preflightCostCeilingsFailClosed: true,
+      privateRecoveryCostPostureBounded: true,
       fixedChargeResourcesAbsent: true,
       runtimeAndLogBoundsExact: true,
       unapprovedPurchasesRemainBlocked: true
