@@ -1,0 +1,26 @@
+name: ProofToAct Private Recovery Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Exact deployment evidence phase
+        required: true
+        type: choice
+        options:
+          - PRE_QUERY
+          - POST_QUERY
+
+permissions: {}
+
+jobs:
+  evidence:
+    permissions:
+      contents: read
+      id-token: write
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-private-recovery-evidence.yml@0000000000000000000000000000000000000000
+    with:
+      authority_commit: "0000000000000000000000000000000000000000"
+      authority_tree: "0000000000000000000000000000000000000000"
+      phase: ${{ inputs.phase }}
+    secrets: inherit

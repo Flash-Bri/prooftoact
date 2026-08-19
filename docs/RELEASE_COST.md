@@ -64,6 +64,32 @@ resource, provisioned capacity, another paid domain, a renewal or auto-renew
 change, a paid DNS/hosting add-on, or other unnecessary persistent
 infrastructure requires fresh approval.
 
+The private recovery lane has its own exact retained-resource forecast. Its A1
+custody/bootstrap contract defines seven retained Secrets Manager secrets and
+its A2 bootstrap defines one, so the pre-cleanup inventory is eight. Using the
+current planning input of `$0.40` per secret-month yields `$3.20` monthly.
+Adding the CockroachDB Basic `$1.50` monthly cap produces a `$4.70` recurring
+base before request, log, DynamoDB, and S3 charges. The contemplated `$5.00`
+monthly boundary leaves `$0.30` of variable-service headroom and remains
+pending explicit authorization and live price/readback evidence; this source
+ledger does not authorize it.
+
+A2's application stack contains one 256 MiB, reserved-concurrency-one Lambda
+and one CloudWatch log group with one-day retention. Its signed, exact-stack
+teardown deletes that stack and log group. The bootstrap secret remains
+retained, and the content-addressed code ZIP remains as a version in the
+existing artifact bucket; neither is deleted by application-stack teardown.
+The bucket's 45-day rule applies to noncurrent versions, so observed variable
+storage remains part of the required headroom calculation. The deployment
+workflow's sanitized GitHub artifact uses 14-day retention.
+
+Deleting the seven A1 secrets is a separate governed operation, not an implied
+teardown side effect. If and only if exact deletion and absence receipts exist,
+the modeled base becomes `$1.90` monthly: one A2 secret plus CockroachDB Basic.
+Until then, `$4.70` plus variable usage is the bound posture. Open-source users
+must provide their own paid AWS and CockroachDB accounts and credentials; the
+project exposes no shared provider entitlement.
+
 ## Current evidence boundary
 
 The sanitized budget receipt records the prerequisite budget and four alerts

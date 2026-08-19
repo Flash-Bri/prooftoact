@@ -19,6 +19,7 @@ const BUNDLED_COMPONENTS = Object.freeze({
   demo: "infra/aws/lambda/demo.js",
   evidenceProvider: "scripts/lib/aws-provider-bundle-entry.js",
   probe: "infra/aws/lambda/probe.cjs",
+  privateRecoveryQuery: "infra/aws/lambda/private-recovery-query.js",
   signer: "infra/aws/lambda/signer.cjs",
   runtimeAuthorityRace:
     "scripts/runtime-entries/integrated-live-drill-authority-race.js",

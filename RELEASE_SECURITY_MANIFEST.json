@@ -468,7 +468,7 @@
       "id": "aws-boundary-ledger",
       "path": "docs/AWS_GATE2.md",
       "role": "AWS_SECURITY_BOUNDARY",
-      "sha256": "d18dff59e753b7013ea5f612bcd85abf5964946440b7ed06b129ff353c4fa991"
+      "sha256": "40e76d0d1eb7358393f66391c9d5c7abd0445b2012e6572f67afc21c7dabd75b"
     },
     {
       "id": "aws-deployment-attestation",
@@ -552,7 +552,7 @@
       "id": "aws-provider-runtime",
       "path": "scripts/lib/aws-provider-runtime.js",
       "role": "AWS_ATTESTATION_PROVIDER_RUNTIME",
-      "sha256": "c0088da767c3429a9cca4f1599e529c0aa1ef9346279592722f6115c17ba30db"
+      "sha256": "755af11f2480bb45ed04330746770cdcbe157b05bda7193161165d11397248ca"
     },
     {
       "id": "aws-provider-runtime-loader",
@@ -600,7 +600,7 @@
       "id": "aws-readiness-tests",
       "path": "test/aws-gate2-readiness.test.js",
       "role": "EXACT_CHECKOUT_READINESS_VERIFICATION",
-      "sha256": "9ba122781f46b4fc762281f1b0c17ed48f940f28f66031c632499d4643c2d97d"
+      "sha256": "ebe8a71809961b45b2b08a53deece4d49550799839a9fa67a0afdf682fcae046"
     },
     {
       "id": "aws-security-tests",
@@ -1387,6 +1387,240 @@
       "path": "scripts/gate1-security.js",
       "role": "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER",
       "sha256": "c4f9398a497efdd9edfff1da62a28afebb0318276221e40a0f468cd7cf4440c9"
+    },
+    {
+      "id": "private-recovery-query-approval-generator",
+      "path": "scripts/generate-private-recovery-query-approval.js",
+      "role": "PRIVATE_RECOVERY_QUERY_PROVIDER_BOUND_APPROVAL_GENERATOR",
+      "sha256": "c5c6c8a8ad64dedf4398d3228a5a6803783baf832be9d41617d4c43e5334d956"
+    },
+    {
+      "id": "private-recovery-query-approval-tests",
+      "path": "test/private-recovery-query-approval.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_APPROVAL_AND_WINDOW_VERIFICATION",
+      "sha256": "05de6ddd57abb0e3e05016da2445b0bac79112568361be670bedd982a14d7502"
+    },
+    {
+      "id": "private-recovery-query-aws-runtime",
+      "path": "src/cloud/private-recovery-query-aws-runtime.js",
+      "role": "PRIVATE_RECOVERY_QUERY_AWS_RUNTIME",
+      "sha256": "28c3cff1f455657eb93f4adf11f7d0a11981c84a86516f6eb650cdd5c5576ff4"
+    },
+    {
+      "id": "private-recovery-query-aws-store",
+      "path": "src/cloud/private-recovery-query-aws-store.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DURABLE_ONE_SHOT_STORE",
+      "sha256": "2f5e2ad1053e956ccbcb1e6a08d6ec9ab2a323db01e47ce67e0893294ba630c8"
+    },
+    {
+      "id": "private-recovery-query-bootstrap-role-stack",
+      "path": "infra/aws/private-recovery-query-bootstrap-role-stack.json",
+      "role": "PRIVATE_RECOVERY_QUERY_DEDICATED_DEPLOYMENT_BOUNDARY",
+      "sha256": "fdf8abc83bc0843170c774505d164cef5edbb0163e8219a3cd370bfcdf6dc41c"
+    },
+    {
+      "id": "private-recovery-query-bootstrap-tests",
+      "path": "test/private-recovery-query-bootstrap-role-stack.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_BOOTSTRAP_IAM_VERIFICATION",
+      "sha256": "81408da1dd69e354d547ddf2f03da270b6854ca69e669f355890d916ba307f71"
+    },
+    {
+      "id": "private-recovery-query-build",
+      "path": "scripts/build-private-recovery-query-lambda.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DETERMINISTIC_BUILD",
+      "sha256": "6ea73ddffe0f704058bc943df681946bdb46c022916d58120264cd905442ca87"
+    },
+    {
+      "id": "private-recovery-query-core",
+      "path": "src/cloud/private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_FIXED_MCP_RUNTIME_CONTRACT",
+      "sha256": "ae7521ba8cd9ee782d03b0d4c7742d810159622748351f2c1132b80e68731896"
+    },
+    {
+      "id": "private-recovery-query-core-tests",
+      "path": "test/private-recovery-query.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_RUNTIME_VERIFICATION",
+      "sha256": "3e8ea7802628334ce2f197e72b064f3e11abb88ae4b74c04e5df96d1468a8b0c"
+    },
+    {
+      "id": "private-recovery-query-deploy-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-deploy.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_DEPLOY_CALLER",
+      "sha256": "20507573ec177e2c8db50f399307a3019013d6f5e106681b61828db4b1ec2bd9"
+    },
+    {
+      "id": "private-recovery-query-deploy-preparer",
+      "path": "scripts/prepare-private-recovery-query-deployment.js",
+      "role": "PRIVATE_RECOVERY_QUERY_CREATE_ONLY_DEPLOYMENT_PREPARER",
+      "sha256": "d1a2be59a2aeb64dc4d2858a9c29a659a99f592555679709a6540f4f9d2ea820"
+    },
+    {
+      "id": "private-recovery-query-deploy-runner",
+      "path": "scripts/deploy-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_RESTART_CONVERGENT_DEPLOYMENT",
+      "sha256": "8de5e026bab325863a039ce4f1596ffca3784986d78b87e58bb2daa3f49969c9"
+    },
+    {
+      "id": "private-recovery-query-deploy-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_CREATE_ONLY_DEPLOYMENT",
+      "sha256": "8471f0f43da383011052e2cc7e6cf9a7e8c18e11653714e98a7b5d9b900c6d85"
+    },
+    {
+      "id": "private-recovery-query-evidence",
+      "path": "src/cloud/private-recovery-query-evidence.js",
+      "role": "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_CONTRACT",
+      "sha256": "96c9e81ed3fd589b6f42f33f036a6cc6bc1bce15d417affe6fab949db45cb18e"
+    },
+    {
+      "id": "private-recovery-query-evidence-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-evidence.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_EVIDENCE_CALLER",
+      "sha256": "5558a0898ae9686b07ee6507a4206da01ca354d153780bd3cf349c40df18df0b"
+    },
+    {
+      "id": "private-recovery-query-evidence-readback",
+      "path": "scripts/readback-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_PROVIDER_READBACK_COLLECTOR",
+      "sha256": "1c2b12148e0963c352303d129d2aa237b8cab7c33ce13d2574f2628ce2954302"
+    },
+    {
+      "id": "private-recovery-query-evidence-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-evidence.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_SIGNED_EVIDENCE",
+      "sha256": "31852e1eb1129efc27ef01f052afc4aa0c2f9af49dfe8f1003886655e8d2eea8"
+    },
+    {
+      "id": "private-recovery-query-evidence-tests",
+      "path": "test/private-recovery-query-evidence.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_VERIFICATION",
+      "sha256": "94547f9c0944cd2af96df189dc563014f8eaf6c784ef48a8517d628f2e8abff9"
+    },
+    {
+      "id": "private-recovery-query-deployment-state-tests",
+      "path": "test/private-recovery-query-deployment-state.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DEPLOYMENT_RESTART_VERIFICATION",
+      "sha256": "42e3c1898abac6c618926c37f02e425ce2b8ea6cc2c9002e225725695ed128ca"
+    },
+    {
+      "id": "private-recovery-query-lambda-entry",
+      "path": "infra/aws/lambda/private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_LAMBDA_ENTRY",
+      "sha256": "8ad55257d11fbfef6457a963f3d3c751280289f85d661529a6e7069c7309410c"
+    },
+    {
+      "id": "private-recovery-query-operator",
+      "path": "src/cloud/private-recovery-query-operator.js",
+      "role": "PRIVATE_RECOVERY_QUERY_ONE_SHOT_OPERATOR",
+      "sha256": "194bdeb7a7022d66fb834a9d8ed3c4e0b76c58aba81e6f429db5221d1e2b989e"
+    },
+    {
+      "id": "private-recovery-query-operator-aws",
+      "path": "src/cloud/private-recovery-query-operator-aws.js",
+      "role": "PRIVATE_RECOVERY_QUERY_AWS_EXACT_VERSION_INVOKER",
+      "sha256": "87478b947a559db0a440af843cb13d76e624974479ca116db7b0cd4e869423a0"
+    },
+    {
+      "id": "private-recovery-query-query-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-query.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_EXECUTION_CALLER",
+      "sha256": "ee4a79c9452703901a11181b0ad3eaaadd8a8d1255ef06bf24caeeb87adf6899"
+    },
+    {
+      "id": "private-recovery-query-query-runner",
+      "path": "scripts/run-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_EXECUTE_OR_RECONCILE_RUNNER",
+      "sha256": "c2cc4b9eaa5df002f9ea36bdd38b389f13506d0494ab199159e5626ad8f1c9e3"
+    },
+    {
+      "id": "private-recovery-query-query-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-query.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_EXECUTION",
+      "sha256": "74317638fe1438e621f3ff6fcdb9b22acc386ce1cd1580e694c77f237869d2be"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-secret-seal.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CALLER",
+      "sha256": "0b836b671ac1f29706a430409feb4b0e38f9894036fc77e94d4a5fd4774a0dc5"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-runner",
+      "path": "scripts/seal-private-recovery-query-secret.js",
+      "role": "PRIVATE_RECOVERY_QUERY_ONE_VERSION_SECRET_SEAL",
+      "sha256": "b4d0d1a201b7c9d4e0c5ef8cf500d601457bbfa044046f8936cae3d0ab7d2756"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_SECRET_SEAL",
+      "sha256": "4e0d6391f9c12372838d5c5e63ea68023e05a586cccf8fbecdccb6bc3e00e27b"
+    },
+    {
+      "id": "private-recovery-query-secret-seal-tests",
+      "path": "test/private-recovery-query-secret-seal.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_SECRET_CUSTODY_VERIFICATION",
+      "sha256": "72965e6e0be9532b8c492672a6f215dce34bb23442230471dbaf3f161a94297c"
+    },
+    {
+      "id": "private-recovery-query-source-lock",
+      "path": "scripts/lib/private-recovery-source-lock.py",
+      "role": "PRIVATE_RECOVERY_QUERY_REUSABLE_WORKFLOW_SOURCE_LOCK",
+      "sha256": "58340e3362677848df88573675c5a2e31ed54f75595b177fcb5a7c2a1389608a"
+    },
+    {
+      "id": "private-recovery-query-source-lock-tests",
+      "path": "test/private-recovery-source-lock.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_REUSABLE_SOURCE_LOCK_VERIFICATION",
+      "sha256": "3bfe7fc7ed606d7049c357951e47a04c0e3d4e27dfde25e8b093e0ed39078657"
+    },
+    {
+      "id": "private-recovery-query-store-tests",
+      "path": "test/private-recovery-query-aws-store.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_DURABLE_STORE_VERIFICATION",
+      "sha256": "f2775a6cd23d33eaf32c4a1e3d32b48401087b7b2b53357609c3a371860c2b81"
+    },
+    {
+      "id": "private-recovery-query-teardown-caller-workflow",
+      "path": ".github/workflows/prooftoact-private-recovery-teardown.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_TEARDOWN_CALLER",
+      "sha256": "1e557a56d07f4e763abe6ed6501ecf8fd0ec3e7958a2183293d27ab7c9c6144b"
+    },
+    {
+      "id": "private-recovery-query-teardown-runner",
+      "path": "scripts/teardown-private-recovery-query.js",
+      "role": "PRIVATE_RECOVERY_QUERY_EVIDENCE_GATED_TEARDOWN",
+      "sha256": "f9494563923b2f89235cec2187dfb3ba833c01b8cc69d6687c085202481915ec"
+    },
+    {
+      "id": "private-recovery-query-teardown-sealed-workflow",
+      "path": ".github/workflows/prooftoact-sealed-private-recovery-teardown.yml",
+      "role": "PRIVATE_RECOVERY_QUERY_SEALED_TEARDOWN",
+      "sha256": "df68a34ae8c23e25dd43921e79aaf21ef4f2ea940659a012810a3ae9c9493c17"
+    },
+    {
+      "id": "private-recovery-query-teardown-tests",
+      "path": "test/private-recovery-query-teardown.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_TEARDOWN_VERIFICATION",
+      "sha256": "9ec45e8fb58419b18034701be792c62d22871283d53717386980634420aab119"
+    },
+    {
+      "id": "private-recovery-query-template",
+      "path": "src/cloud/private-recovery-query-template.js",
+      "role": "PRIVATE_RECOVERY_QUERY_MINI_STACK_SOURCE",
+      "sha256": "1bae17a5c27e792316cee0c6e9462b4a229b16930ee449abb28b00a3b172319c"
+    },
+    {
+      "id": "private-recovery-query-template-tests",
+      "path": "test/private-recovery-query-template.test.js",
+      "role": "PRIVATE_RECOVERY_QUERY_TEMPLATE_AND_WORKFLOW_VERIFICATION",
+      "sha256": "6fbad2ad0a18498f7368384b24939bb550424807d4937ec83ed2015d45e1c90c"
+    },
+    {
+      "id": "private-recovery-query-window-check",
+      "path": "scripts/check-private-recovery-query-window.js",
+      "role": "PRIVATE_RECOVERY_QUERY_REMAINING_WINDOW_GATE",
+      "sha256": "895f46900ee7b0d24a36d077aa4c777b903ad0d525f153be8458d0f0564522aa"
     },
     {
       "id": "provider-dispatch-control",

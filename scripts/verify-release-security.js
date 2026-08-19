@@ -778,6 +778,162 @@ const EXPECTED_SURFACES = Object.freeze({
     path: "scripts/gate1-security.js",
     role: "PRIMARY_DATABASE_SECURITY_EVIDENCE_RUNNER"
   }),
+  "private-recovery-query-approval-generator": Object.freeze({
+    path: "scripts/generate-private-recovery-query-approval.js",
+    role: "PRIVATE_RECOVERY_QUERY_PROVIDER_BOUND_APPROVAL_GENERATOR"
+  }),
+  "private-recovery-query-approval-tests": Object.freeze({
+    path: "test/private-recovery-query-approval.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_APPROVAL_AND_WINDOW_VERIFICATION"
+  }),
+  "private-recovery-query-aws-runtime": Object.freeze({
+    path: "src/cloud/private-recovery-query-aws-runtime.js",
+    role: "PRIVATE_RECOVERY_QUERY_AWS_RUNTIME"
+  }),
+  "private-recovery-query-aws-store": Object.freeze({
+    path: "src/cloud/private-recovery-query-aws-store.js",
+    role: "PRIVATE_RECOVERY_QUERY_DURABLE_ONE_SHOT_STORE"
+  }),
+  "private-recovery-query-bootstrap-role-stack": Object.freeze({
+    path: "infra/aws/private-recovery-query-bootstrap-role-stack.json",
+    role: "PRIVATE_RECOVERY_QUERY_DEDICATED_DEPLOYMENT_BOUNDARY"
+  }),
+  "private-recovery-query-bootstrap-tests": Object.freeze({
+    path: "test/private-recovery-query-bootstrap-role-stack.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_BOOTSTRAP_IAM_VERIFICATION"
+  }),
+  "private-recovery-query-build": Object.freeze({
+    path: "scripts/build-private-recovery-query-lambda.js",
+    role: "PRIVATE_RECOVERY_QUERY_DETERMINISTIC_BUILD"
+  }),
+  "private-recovery-query-core": Object.freeze({
+    path: "src/cloud/private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_FIXED_MCP_RUNTIME_CONTRACT"
+  }),
+  "private-recovery-query-core-tests": Object.freeze({
+    path: "test/private-recovery-query.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_RUNTIME_VERIFICATION"
+  }),
+  "private-recovery-query-deploy-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-deploy.yml",
+    role: "PRIVATE_RECOVERY_QUERY_DEPLOY_CALLER"
+  }),
+  "private-recovery-query-deploy-preparer": Object.freeze({
+    path: "scripts/prepare-private-recovery-query-deployment.js",
+    role: "PRIVATE_RECOVERY_QUERY_CREATE_ONLY_DEPLOYMENT_PREPARER"
+  }),
+  "private-recovery-query-deploy-runner": Object.freeze({
+    path: "scripts/deploy-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_RESTART_CONVERGENT_DEPLOYMENT"
+  }),
+  "private-recovery-query-deploy-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-deploy.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_CREATE_ONLY_DEPLOYMENT"
+  }),
+  "private-recovery-query-evidence": Object.freeze({
+    path: "src/cloud/private-recovery-query-evidence.js",
+    role: "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_CONTRACT"
+  }),
+  "private-recovery-query-evidence-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-evidence.yml",
+    role: "PRIVATE_RECOVERY_QUERY_EVIDENCE_CALLER"
+  }),
+  "private-recovery-query-evidence-readback": Object.freeze({
+    path: "scripts/readback-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_PROVIDER_READBACK_COLLECTOR"
+  }),
+  "private-recovery-query-evidence-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-evidence.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_SIGNED_EVIDENCE"
+  }),
+  "private-recovery-query-evidence-tests": Object.freeze({
+    path: "test/private-recovery-query-evidence.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_SIGNED_EVIDENCE_VERIFICATION"
+  }),
+  "private-recovery-query-deployment-state-tests": Object.freeze({
+    path: "test/private-recovery-query-deployment-state.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_DEPLOYMENT_RESTART_VERIFICATION"
+  }),
+  "private-recovery-query-lambda-entry": Object.freeze({
+    path: "infra/aws/lambda/private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_LAMBDA_ENTRY"
+  }),
+  "private-recovery-query-operator": Object.freeze({
+    path: "src/cloud/private-recovery-query-operator.js",
+    role: "PRIVATE_RECOVERY_QUERY_ONE_SHOT_OPERATOR"
+  }),
+  "private-recovery-query-operator-aws": Object.freeze({
+    path: "src/cloud/private-recovery-query-operator-aws.js",
+    role: "PRIVATE_RECOVERY_QUERY_AWS_EXACT_VERSION_INVOKER"
+  }),
+  "private-recovery-query-query-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-query.yml",
+    role: "PRIVATE_RECOVERY_QUERY_EXECUTION_CALLER"
+  }),
+  "private-recovery-query-query-runner": Object.freeze({
+    path: "scripts/run-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_EXECUTE_OR_RECONCILE_RUNNER"
+  }),
+  "private-recovery-query-query-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-query.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_EXECUTION"
+  }),
+  "private-recovery-query-secret-seal-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-secret-seal.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CALLER"
+  }),
+  "private-recovery-query-secret-seal-runner": Object.freeze({
+    path: "scripts/seal-private-recovery-query-secret.js",
+    role: "PRIVATE_RECOVERY_QUERY_ONE_VERSION_SECRET_SEAL"
+  }),
+  "private-recovery-query-secret-seal-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-secret-seal.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_SECRET_SEAL"
+  }),
+  "private-recovery-query-secret-seal-tests": Object.freeze({
+    path: "test/private-recovery-query-secret-seal.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_SECRET_CUSTODY_VERIFICATION"
+  }),
+  "private-recovery-query-source-lock": Object.freeze({
+    path: "scripts/lib/private-recovery-source-lock.py",
+    role: "PRIVATE_RECOVERY_QUERY_REUSABLE_WORKFLOW_SOURCE_LOCK"
+  }),
+  "private-recovery-query-source-lock-tests": Object.freeze({
+    path: "test/private-recovery-source-lock.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_REUSABLE_SOURCE_LOCK_VERIFICATION"
+  }),
+  "private-recovery-query-store-tests": Object.freeze({
+    path: "test/private-recovery-query-aws-store.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_DURABLE_STORE_VERIFICATION"
+  }),
+  "private-recovery-query-teardown-caller-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-private-recovery-teardown.yml",
+    role: "PRIVATE_RECOVERY_QUERY_TEARDOWN_CALLER"
+  }),
+  "private-recovery-query-teardown-runner": Object.freeze({
+    path: "scripts/teardown-private-recovery-query.js",
+    role: "PRIVATE_RECOVERY_QUERY_EVIDENCE_GATED_TEARDOWN"
+  }),
+  "private-recovery-query-teardown-sealed-workflow": Object.freeze({
+    path: ".github/workflows/prooftoact-sealed-private-recovery-teardown.yml",
+    role: "PRIVATE_RECOVERY_QUERY_SEALED_TEARDOWN"
+  }),
+  "private-recovery-query-teardown-tests": Object.freeze({
+    path: "test/private-recovery-query-teardown.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_TEARDOWN_VERIFICATION"
+  }),
+  "private-recovery-query-template": Object.freeze({
+    path: "src/cloud/private-recovery-query-template.js",
+    role: "PRIVATE_RECOVERY_QUERY_MINI_STACK_SOURCE"
+  }),
+  "private-recovery-query-template-tests": Object.freeze({
+    path: "test/private-recovery-query-template.test.js",
+    role: "PRIVATE_RECOVERY_QUERY_TEMPLATE_AND_WORKFLOW_VERIFICATION"
+  }),
+  "private-recovery-query-window-check": Object.freeze({
+    path: "scripts/check-private-recovery-query-window.js",
+    role: "PRIVATE_RECOVERY_QUERY_REMAINING_WINDOW_GATE"
+  }),
   "provider-dispatch-control": Object.freeze({
     path: "src/cloud/provider-dispatch-control.js",
     role: "DISABLED_LEGACY_PROVIDER_DISPATCH_INTERFACE"
@@ -3620,6 +3776,333 @@ const SOURCE_MARKERS = Object.freeze({
     "database-derived authority identity mismatch",
     "authority request identity binding mismatch",
     "tp_authorizer_user"
+  ]),
+  "private-recovery-query-approval-generator": Object.freeze([
+    "prooftoact.private-recovery-query-mcp-secret-binding.v1",
+    "IMMUTABLE_AWSCURRENT_READBACK_BOUND",
+    "validatePrivateRecoveryQueryProviderBinding",
+    "providerBindingSha256",
+    "expectedSourceCommitTs",
+    "PRIVATE_RECOVERY_QUERY_APPROVAL_CLI_HOLD"
+  ]),
+  "private-recovery-query-approval-tests": Object.freeze([
+    "generator copies the exact fresh provider binding with no overrides",
+    "generator rejects stale binding and secret readback source drift",
+    "deployment window check fails closed before the remaining margin"
+  ]),
+  "private-recovery-query-aws-runtime": Object.freeze([
+    "GetSecretValueCommand",
+    "VersionStage: \"AWSCURRENT\"",
+    "ignoreConfiguredEndpointUrls: true",
+    "maxAttempts: 1"
+  ]),
+  "private-recovery-query-aws-store": Object.freeze([
+    "PRIVATE_RECOVERY_QUERY#${command.globalKeySha256}",
+    "ConsistentRead: true",
+    "attribute_not_exists(#pk)",
+    "PRIVATE_RECOVERY_QUERY_DDB_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DDB_OPERATION_COMMAND_CONFLICT",
+    "UNKNOWN_DO_NOT_RETRY"
+  ]),
+  "private-recovery-query-bootstrap-role-stack": Object.freeze([
+    "\"ManagedPolicyName\": \"ProofToActPrivateRecoveryQueryBoundary\"",
+    "ProofToActPrivateRecoveryQueryDeployment",
+    "DeploymentWorkflowCommit",
+    "SecretSealWorkflowCommit",
+    "s3:ListBucketVersions",
+    "iam:PermissionsBoundary",
+    "DenyPublicAndUnrelatedProviders"
+  ]),
+  "private-recovery-query-bootstrap-tests": Object.freeze([
+    "bootstrap stack owns only the isolated boundary, empty secret, and three roles",
+    "dispatcher trust is protected, main-only, and parameter-pinned",
+    "secret sealer copies one exact source version into only the retained target",
+    "service role is exact-resource rollback capable without runtime authority"
+  ]),
+  "private-recovery-query-build": Object.freeze([
+    "entryPoints: [\"infra/aws/lambda/private-recovery-query.js\"]",
+    "archiveEntryCount: 2",
+    "THIRD_PARTY_NOTICES.txt",
+    "packages: \"bundle\"",
+    "PRIVATE_RECOVERY_QUERY_BUILD_CLI_HOLD"
+  ]),
+  "private-recovery-query-core": Object.freeze([
+    "PRIVATE_AWS_MANAGED_MCP_RECOVERY_QUERY",
+    "semantic.toolName === \"select_query\"",
+    "rows.length === 1",
+    "rows[0].source_commit_ts === approval.expectedSourceCommitTs",
+    "status: dispatched ? \"UNKNOWN_DO_NOT_RETRY\" : \"FAILED_NO_PROVIDER_CALL\"",
+    "authorityTransferred: false",
+    "exactKeys(secretPayload, [\"apiKey\"])",
+    "transport.endpointSha256 === sha256(MANAGED_MCP_ENDPOINT)",
+    "transport.protocolVersion === MANAGED_MCP_PROTOCOL_VERSION",
+    "PRIVATE_RECOVERY_QUERY_DISPATCH_STATE_REJECTED",
+    "domain: OPERATION_KEY_DOMAIN",
+    "PRIVATE_RECOVERY_QUERY_EXECUTION_FAILED",
+    "SAFE_EXECUTION_FAILURE_CODES.has"
+  ]),
+  "private-recovery-query-core-tests": Object.freeze([
+    "private Lambda performs one fixed Managed MCP query and emits no row",
+    "completion timestamp and row freshness use a fresh post-close clock",
+    "provider-bound source commit timestamp rejects a different signed row",
+    "tool acknowledgement loss becomes durable unknown and never retries",
+    "transport evidence is bound to the exact endpoint cluster and protocol",
+    "dispatch-store contract drift fails before creating an MCP client",
+    "hostile provider errors become fixed durable codes with no secret or identity leakage",
+    "top-level Lambda boundary emits only one fixed response code and no log"
+  ]),
+  "private-recovery-query-deploy-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Deploy",
+    "prooftoact-sealed-private-recovery-deploy.yml@0000000000000000000000000000000000000000",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "secrets: inherit"
+  ]),
+  "private-recovery-query-deploy-preparer": Object.freeze([
+    "minimumRemainingMilliseconds = 15 * 60 * 1_000",
+    "READY_FOR_CREATE_CHANGE_SET",
+    "artifactObjectVersionSha256",
+    "sealedWorkflowCommit",
+    "PRIVATE_RECOVERY_QUERY_DEPLOYMENT_CLI_HOLD"
+  ]),
+  "private-recovery-query-deploy-runner": Object.freeze([
+    "prooftoact-private-recovery-query-create-${sanitizedIntent.intentSha256}",
+    "CreateChangeSetCommand",
+    "ExecuteChangeSetCommand",
+    "REVIEW_IN_PROGRESS",
+    "CREATE_IN_PROGRESS",
+    "CREATE_COMPLETE",
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_EXECUTE_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_PROTECTION_ACK_UNKNOWN",
+    "PRIVATE_RECOVERY_QUERY_DEPLOY_CLI_HOLD"
+  ]),
+  "private-recovery-query-deploy-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-deploy",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: deploy",
+    "--validate-token",
+    "--minimum-remaining-seconds 1500",
+    "--minimum-remaining-seconds 900",
+    "artifact-version-census.json",
+    "lexical minimum is a deterministic version choice across reruns",
+    "scripts/deploy-private-recovery-query.js",
+    "sanitized-deployment-receipt.json"
+  ]),
+  "private-recovery-query-evidence": Object.freeze([
+    "signatureAlgorithm: \"Ed25519\"",
+    "[\"PRE_QUERY\", \"POST_QUERY\"]",
+    "value.function.eventSourceCount === 0",
+    "value.function.functionUrlCount === 0",
+    "value.function.vpcAttached === false",
+    "snapshot.workflowCommit === expectation.workflowCommit",
+    "stackParametersSha256"
+  ]),
+  "private-recovery-query-evidence-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Evidence",
+    "prooftoact-sealed-private-recovery-evidence.yml@0000000000000000000000000000000000000000",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "PRE_QUERY",
+    "POST_QUERY"
+  ]),
+  "private-recovery-query-evidence-readback": Object.freeze([
+    "GetCallerIdentityCommand",
+    "ListFunctionUrlConfigsCommand",
+    "ConsistentRead: true",
+    "signPrivateRecoveryDeploymentEvidence",
+    "Object.keys(versions).length === 1",
+    "canonicalJson([\"AWSCURRENT\"])",
+    "decodePolicyDocument",
+    "normalizePolicyDocument",
+    "PermissionsBoundaryType === \"Policy\"",
+    "parameters.SealedWorkflowCommit === expectation.workflowCommit",
+    "functionUrlCount: 0",
+    "vpcAttached: false",
+    "PRIVATE_RECOVERY_QUERY_EVIDENCE_CLI_HOLD"
+  ]),
+  "private-recovery-query-evidence-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-evidence",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: evidence",
+    "Collect and sign exact read-only deployment evidence",
+    "npm run proof:verify",
+    "signed-evidence-receipt.json",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_EVIDENCE_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-evidence-tests": Object.freeze([
+    "signed pre-query deployment evidence binds private exact-version posture",
+    "signed post-query evidence requires the exact terminal receipt and pre-link",
+    "evidence signature and public-trigger posture fail closed on tampering",
+    "deployment evidence accepts only the exact one-version secret posture",
+    "deployment role readback decodes exact IAM policy shapes and rejects drift",
+    "IAM policy normalization is bounded to documented scalar-list fields"
+  ]),
+  "private-recovery-query-deployment-state-tests": Object.freeze([
+    "fresh deployment uses deterministic intent-bound CREATE and converges",
+    "deployment restarts from ${label}",
+    "deployment reconciles ${label} acknowledgement loss",
+    "completed protected stack returns without another provider mutation",
+    "change-set timeout is restartable after exact provider completion",
+    "stack timeout is restartable after exact provider completion",
+    "deployment holds on provider template, parameter, or service-role drift"
+  ]),
+  "private-recovery-query-lambda-entry": Object.freeze([
+    "prooftoact.private-recovery-query-invocation.v1",
+    "privateRecoveryQueryApprovalSha256(event.approval)",
+    "${configuration.functionArn}:${context.functionVersion}",
+    "firstRuntimeClockRead",
+    "runtimePromise ??=",
+    "withTopLevelFailureBoundary",
+    "PRIVATE_RECOVERY_QUERY_LAMBDA_HOLD"
+  ]),
+  "private-recovery-query-operator": Object.freeze([
+    "reservePrivateRecoveryQuery",
+    "invokeExactVersion",
+    "reconcilePrivateRecoveryQuery",
+    "PRIVATE_RECOVERY_QUERY_INVOCATION_ACK_UNKNOWN"
+  ]),
+  "private-recovery-query-operator-aws": Object.freeze([
+    "InvokeCommand",
+    "Qualifier: functionVersion",
+    "InvocationType: \"RequestResponse\"",
+    "maxAttempts: 1",
+    "response.ExecutedVersion === functionVersion"
+  ]),
+  "private-recovery-query-query-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Query",
+    "reconcile-only",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "prooftoact-sealed-private-recovery-query.yml@0000000000000000000000000000000000000000"
+  ]),
+  "private-recovery-query-query-runner": Object.freeze([
+    "[\"execute\", \"reconcile-only\"].includes",
+    "executePrivateRecoveryQueryOnce",
+    "reconcilePrivateRecoveryQuery",
+    "PRIVATE_RECOVERY_QUERY_${receipt.status}",
+    "PRIVATE_RECOVERY_QUERY_CLI_HOLD"
+  ]),
+  "private-recovery-query-query-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-query",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: query",
+    "Execute or reconcile the exact one-shot private query",
+    "--function-version \"$FUNCTION_VERSION\"",
+    "Publish sanitized receipt only",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_OPERATOR_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-secret-seal-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Secret Seal",
+    "prooftoact-sealed-private-recovery-secret-seal.yml@0000000000000000000000000000000000000000",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "secrets: inherit"
+  ]),
+  "private-recovery-query-secret-seal-runner": Object.freeze([
+    "PRIVATE_RECOVERY_QUERY_MCP_SECRET_SEAL",
+    "PutSecretValueCommand",
+    "canonicalJson({ apiKey: sourceApiKey })",
+    "RECONCILED_AFTER_ACK_LOSS",
+    "EXACT_VERSION_ALREADY_PRESENT",
+    "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_UNKNOWN_DO_NOT_RETRY",
+    "PRIVATE_RECOVERY_QUERY_SECRET_SEAL_CLI_HOLD"
+  ]),
+  "private-recovery-query-secret-seal-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-deploy",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: secret-seal",
+    "Assume only the one-version private secret sealer",
+    "scripts/seal-private-recovery-query-secret.js",
+    "mcp-secret-binding.json",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_SECRET_SEALER_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-secret-seal-tests": Object.freeze([
+    "secret sealer copies one exact source key into one canonical target version",
+    "secret sealer reconciles PutSecretValue acknowledgement loss without retry",
+    "secret sealer rejects any unexpected target version before writing",
+    "secret sealer rejects missing operator authorization before provider read"
+  ]),
+  "private-recovery-query-source-lock": Object.freeze([
+    "AUDIENCE = \"prooftoact-private-recovery-source-lock-v1\"",
+    "LANES = {",
+    "job_workflow_ref",
+    "job_workflow_sha",
+    "workflow_sha",
+    "validate_endpoint",
+    "validate_token_response",
+    "PRIVATE_RECOVERY_SOURCE_LOCK_REJECTED"
+  ]),
+  "private-recovery-query-source-lock-tests": Object.freeze([
+    "all sealed lanes bind their GitHub-issued reusable identity before secrets",
+    "all callers remain inert until Commit B pins one reviewed Commit A",
+    "source-lock endpoint accepts only the bounded GitHub HTTPS endpoint",
+    "source lock accepts the exact identity of every private recovery lane",
+    "source lock rejects identity, time, structure, and coordinate drift",
+    "source-lock contract fails closed if dispatch or source guards are removed"
+  ]),
+  "private-recovery-query-store-tests": Object.freeze([
+    "AWS store reserves, dispatches, and finalizes one exact item",
+    "conditional write acknowledgement loss converges by strong read only",
+    "unknown terminalization preserves no provider retry authority",
+    "one operation ID occupies one create-only key across approval drift",
+    "one operation ID rejects a different command after restart and final replay",
+    "distinct operation IDs reserve distinct keys while concurrent replays converge"
+  ]),
+  "private-recovery-query-teardown-caller-workflow": Object.freeze([
+    "name: ProofToAct Private Recovery Teardown",
+    "confirmation: ${{ inputs.confirmation }}",
+    "authority_commit: \"0000000000000000000000000000000000000000\"",
+    "authority_tree: \"0000000000000000000000000000000000000000\"",
+    "prooftoact-sealed-private-recovery-teardown.yml@0000000000000000000000000000000000000000"
+  ]),
+  "private-recovery-query-teardown-runner": Object.freeze([
+    "DELETE_PROOFTOACT_PRIVATE_RECOVERY_QUERY_AFTER_POST_EVIDENCE",
+    "UpdateTerminationProtectionCommand",
+    "DeleteStackCommand",
+    "ConsistentRead: true",
+    "ClientRequestToken:",
+    "DELETE_IN_PROGRESS",
+    "DELETE_FAILED",
+    "PRIVATE_RECOVERY_QUERY_TEARDOWN_DELETE_FAILED_HOLD",
+    "PRIVATE_RECOVERY_QUERY_TEARDOWN_CLI_HOLD"
+  ]),
+  "private-recovery-query-teardown-sealed-workflow": Object.freeze([
+    "environment: aws-private-recovery-teardown",
+    "Bind immutable reusable source before protected material",
+    "SOURCE_LOCK_LANE: teardown",
+    "Verify terminal receipt and delete exactly one stack once",
+    "POST_EVIDENCE_RECEIPT_B64",
+    "Publish sanitized teardown receipt only",
+    "role-to-assume: ${{ secrets.PROOFTOACT_PRIVATE_RECOVERY_TEARDOWN_ROLE_ARN }}"
+  ]),
+  "private-recovery-query-teardown-tests": Object.freeze([
+    "governed teardown verifies POST evidence and deletes one exact stack once",
+    "teardown rejects wrong confirmation before any provider read",
+    "teardown restarts after protection was already disabled",
+    "teardown resumes DELETE_IN_PROGRESS without another mutation",
+    "teardown timeout preserves DELETE_IN_PROGRESS for a later successful rerun",
+    "DELETE_FAILED is re-protected and held without a delete retry"
+  ]),
+  "private-recovery-query-template": Object.freeze([
+    "ReservedConcurrentExecutions: 1",
+    "\"dynamodb:LeadingKeys\": \"false\"",
+    "functionUrlCount: 0",
+    "publicApiCount: 0",
+    "vpcAttached: false",
+    "resourceCount: Object.keys(template.Resources).length"
+  ]),
+  "private-recovery-query-template-tests": Object.freeze([
+    "mini-stack owns one private exact-version Lambda with no public trigger",
+    "runtime and operator are restricted to one operation key and one secret",
+    "OIDC trust pins protected environment and immutable reusable workflow",
+    "sealed workflow requires a GitHub-bound authority commit and tree"
+  ]),
+  "private-recovery-query-window-check": Object.freeze([
+    "minimumRemainingSeconds >= 60",
+    "remainingMilliseconds >= minimumRemainingSeconds * 1_000",
+    "prooftoact.private-recovery-query-window-check.v1",
+    "PRIVATE_RECOVERY_QUERY_WINDOW_REJECTED",
+    "PRIVATE_RECOVERY_QUERY_WINDOW_CLI_HOLD"
   ]),
   "provider-dispatch-control": Object.freeze([
     "INTEGRATED_LIVE_DRILL_PROVIDER_CONTROL_V1_DISABLED",

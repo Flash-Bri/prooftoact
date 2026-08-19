@@ -9,6 +9,8 @@ import {
   assertBootstrapContract,
   assertBudgetReceipt,
   assertGate2TemplateContract,
+  assertPrivateRecoveryBootstrapCostContract,
+  assertPrivateRecoveryStackCostContract,
   validateReleaseCostReceipt,
   validateManifest,
   verifyReleaseCost
@@ -53,7 +55,7 @@ test("current source cost guards match the reviewed non-final boundary", () => {
   const receipt = verifyReleaseCost({ rootDir: ROOT });
   assert.equal(receipt.status, "CURRENT_COST_GUARDS_PASS");
   assert.equal(receipt.finalReleaseReady, false);
-  assert.equal(receipt.surfaceCount, 16);
+  assert.equal(receipt.surfaceCount, 20);
   assert.equal(receipt.budgetAlertCount, 4);
   assert.equal(receipt.forbiddenResourceTypeCount, 5);
   assert.equal(receipt.unapprovedPurchaseClassCount, 5);
@@ -200,6 +202,35 @@ test("Gate Two template contract rejects fixed-charge or expanded runtime resour
   assert.throws(
     () => assertGate2TemplateContract(expanded),
     /RELEASE_COST_GATE2_FUNCTION_DemoFunction/
+  );
+});
+
+test("private recovery forecast binds retained secret, bounded runtime, and one-day logs", async () => {
+  const bootstrap = readJson(
+    "infra/aws/private-recovery-query-bootstrap-role-stack.json"
+  );
+  assert.equal(assertPrivateRecoveryBootstrapCostContract(bootstrap), true);
+  const { buildPrivateRecoveryQueryTemplate } = await import(
+    "../src/cloud/private-recovery-query-template.js"
+  );
+  const stack = buildPrivateRecoveryQueryTemplate();
+  assert.equal(assertPrivateRecoveryStackCostContract(stack), true);
+
+  const extraSecret = structuredClone(bootstrap);
+  extraSecret.Resources.UnreviewedSecret = {
+    Type: "AWS::SecretsManager::Secret",
+    Properties: { Name: "unreviewed" }
+  };
+  assert.throws(
+    () => assertPrivateRecoveryBootstrapCostContract(extraSecret),
+    /RELEASE_COST_PRIVATE_RECOVERY_SECRET_COUNT/
+  );
+
+  const longLogs = structuredClone(stack);
+  longLogs.Resources.PrivateRecoveryLogGroup.Properties.RetentionInDays = 30;
+  assert.throws(
+    () => assertPrivateRecoveryStackCostContract(longLogs),
+    /RELEASE_COST_PRIVATE_RECOVERY_LOG_POSTURE/
   );
 });
 

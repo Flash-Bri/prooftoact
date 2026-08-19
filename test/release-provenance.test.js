@@ -252,6 +252,7 @@ function costReceipt() {
       liveSpendClaimAbsent: true,
       deploymentStopPreserved: true,
       preflightCostCeilingsFailClosed: true,
+      privateRecoveryCostPostureBounded: true,
       fixedChargeResourcesAbsent: true,
       runtimeAndLogBoundsExact: true,
       unapprovedPurchasesRemainBlocked: true
