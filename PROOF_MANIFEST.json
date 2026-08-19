@@ -241,7 +241,7 @@
     {
       "id": "claims-ledger",
       "path": "CLAIMS.md",
-      "sha256": "20e4b19d6e629db707d3f9579006e58c275a8a2e4210bd6f9de2840764c34d8c",
+      "sha256": "e1f5e752a8a327f51431b06ed185b18d0f4b8b3f4927447c3638efa0705c20be",
       "kind": "boundary-ledger"
     },
     {
@@ -761,6 +761,12 @@
       "kind": "verification-code"
     },
     {
+      "id": "live-judge-provider-evidence",
+      "path": "evidence/live-judge-provider-read-2026-08-19.md",
+      "sha256": "f819156c3877aad4418cab8d357bcedf69446c23d1c3287d36a79480e8b10cd3",
+      "kind": "accepted-evidence"
+    },
+    {
       "id": "local-full-drill-harness",
       "path": "src/local-full-drill.js",
       "sha256": "0ab8e5270a1ee07af0f424c4ee47361607a1c83693f4cc9ec634652c8df0fedc",
@@ -841,7 +847,7 @@
     {
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
-      "sha256": "86dcd7d30709b1bc70b8b846fe177f834f3c9fb373e990d3d0d551f87aa36f8e",
+      "sha256": "9d595794e97983ce2bf359d47c28225d6d32a5335f13fcf499c3a5cb8521ff34",
       "kind": "verification-code"
     },
     {
@@ -955,7 +961,7 @@
     {
       "id": "release-claims-manifest",
       "path": "RELEASE_CLAIMS_MANIFEST.json",
-      "sha256": "09158cee5935cef9630262d40f7ca77c665f24272cd0885350f4f4a2a1287b9d",
+      "sha256": "c73602b7db3cc49d7551482e556f73ebce6d92ebeef75d34583c0da5581f774e",
       "kind": "boundary-ledger"
     },
     {
@@ -967,7 +973,7 @@
     {
       "id": "release-claims-verifier",
       "path": "scripts/verify-release-claims.js",
-      "sha256": "3d33321e3f421b6c2c9390acbf42082e2bb2aa6fa8cba88beb2556041a426188",
+      "sha256": "65fbf19a3935d03993a0c3106f7b7641521853f01740e0f3f7a449c6bdfb9885",
       "kind": "verification-code"
     },
     {
@@ -1003,7 +1009,7 @@
     {
       "id": "release-governance-manifest",
       "path": "RELEASE_GOVERNANCE_MANIFEST.json",
-      "sha256": "7031b4635307158e9a525dd6bed2969f56aa670f875da1fa24cb4e00f89bccbc",
+      "sha256": "af675379eb537a5f107eb5e2c46c2d2d2af269c571505843b03c7ed7eaff5935",
       "kind": "boundary-ledger"
     },
     {
@@ -1027,7 +1033,7 @@
     {
       "id": "release-governance-verifier",
       "path": "scripts/verify-release-governance.js",
-      "sha256": "9acf6ee4828e172c9364d3c27c4fa969c4b72915c9f89844332845e9b0515f02",
+      "sha256": "c8b741b46d605ef61c305432508f244ce10751f4359106f273b6d6da3ff2cbcd",
       "kind": "verification-code"
     },
     {
@@ -1069,7 +1075,7 @@
     {
       "id": "release-rights-manifest",
       "path": "docs/media/RIGHTS_MANIFEST.json",
-      "sha256": "79f862f176f8d594ac27b70701dd97af115887ad4f462dcc15d12a756642d9a5",
+      "sha256": "0958e6b63785e557af5a6b02756d4160d7576c0c7dc5c2d7f057acfca566d825",
       "kind": "boundary-ledger"
     },
     {
@@ -1093,7 +1099,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "387fb9d6301d47b582a37ac94003c9db9d8995ea14777d931bd19fbb1ea946a8",
+      "sha256": "dcb396534e4168e4c9224e7335111981c135134658415002c1e01938e829cc49",
       "kind": "boundary-ledger"
     },
     {
@@ -1117,7 +1123,7 @@
     {
       "id": "release-submission-manifest",
       "path": "RELEASE_SUBMISSION_MANIFEST.json",
-      "sha256": "b993a4ab9fc12cc9e850d7b08206aea084749ffac0927054b1c2989d5f1033fc",
+      "sha256": "31868795ca8779a47d51d7cead4a039cba132ce801e1d38874dc13f5ca4f152e",
       "kind": "boundary-ledger"
     },
     {
@@ -1170,13 +1176,14 @@
     {
       "id": "managed-mcp-recovery",
       "claim": "CockroachDB Managed MCP can inspect sanitized recovery state without transferring operational authority.",
-      "currentStatus": "Gate One verified, synthetic scope",
-      "claimsLedgerRowSha256": "9482ea86057f9d1ae52022aa05d8285399ae0300d40e884f728c35f9856c0cff",
+      "currentStatus": "Gate One verified; live signed-out fixed-read transport verified on a synthetic signed context",
+      "claimsLedgerRowSha256": "b49d627e8b20d740255aacfc7575ceff8a503b017efea7fc65e2bea1e6cbdb91",
       "proofState": "VERIFIED",
       "artifacts": [
-        "gate1-recovery-evidence"
+        "gate1-recovery-evidence",
+        "live-judge-provider-evidence"
       ],
-      "acceptanceBoundary": "The accepted fixed-query broker receipt proves signed, fresh, audited context release without an operation ID, effect key, or fence in the synthetic gate.",
+      "acceptanceBoundary": "The accepted Gate One broker evidence and the current live judge receipt prove that one fixed Managed MCP read can return a pinned P-256-signed historical context without an operation ID, effect key, fence, or transferred authority. They do not authorize a present action or prove the complete Gate Two drill.",
       "remainingRequirements": []
     },
     {
@@ -1345,17 +1352,18 @@
     {
       "id": "signed-out-aws-judge-surface",
       "claim": "A signed-out AWS judge surface can remain separate from proposal and authority capabilities.",
-      "currentStatus": "Hardened local Gate Two candidate verified; live hosting pending",
-      "claimsLedgerRowSha256": "c09bda31375462e281dd8547dd2a3685e8d7e78961fc393854886218be317af2",
+      "currentStatus": "Narrow fixed-read judge route live; broader Gate Two surface remains separately gated",
+      "claimsLedgerRowSha256": "bc2c69b21219e1e08d53c7b509904cc9c7e6e5da3e6de93b2ab80226ef17bd78",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
         "gate2-local-validation",
+        "live-judge-provider-evidence",
         "local-judge-path-evidence"
       ],
-      "acceptanceBoundary": "The exact local candidate and judge path are validated, but no public URL, AWS routing, live role enforcement, throttling, or availability is proven.",
+      "acceptanceBoundary": "The accepted live receipt proves the narrow parameter-free fixed-read route is publicly reachable through immutable Lambda version 3, completes its Managed MCP session, and emits a minimized no-store response without transferring authority. It does not prove the broader Bedrock, KMS, IAM-denial, authority-race, or deployment-attestation gates.",
       "remainingRequirements": [
-        "Accepted exact-head public-demo verifier receipt and separate signed-out desktop and mobile review at the final AWS URL."
+        "Separate accepted live receipts remain required before attributing Bedrock, KMS, IAM-denial, authority-race, or wider Gate Two behavior to this fixed-read surface."
       ]
     },
     {

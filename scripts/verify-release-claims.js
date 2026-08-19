@@ -136,11 +136,13 @@ const REQUIRED_MARKERS = Object.freeze({
     "ProofToAct makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim."
   ]),
   "readme-surface": Object.freeze([
-    "**Public clean-room source. Not yet a contest submission or live AWS claim.**",
+    "live, signed-out AWS Lambda → CockroachDB",
+    "## Live judge proof",
+    "LIVE_MANAGED_MCP_READ",
     "historical accepted CockroachDB Cloud Gate One receipts",
     "one narrow local exact-version Final23 compatibility gate",
-    "It does **not** yet contain or claim:",
-    "a deployed public AWS judge URL;",
+    "The live judge receipt does **not** claim:",
+    "a complete live Gate Two deployment",
     "monitored aliases are not invocation authority",
     "ProofToAct is a synthetic demonstration, not operational emergency software."
   ]),

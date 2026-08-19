@@ -42,7 +42,7 @@
       "id": "claims-ledger",
       "path": "CLAIMS.md",
       "role": "CLAIMS_LEDGER",
-      "sha256": "20e4b19d6e629db707d3f9579006e58c275a8a2e4210bd6f9de2840764c34d8c"
+      "sha256": "e1f5e752a8a327f51431b06ed185b18d0f4b8b3f4927447c3638efa0705c20be"
     },
     {
       "id": "contest-matrix",
@@ -72,7 +72,7 @@
       "id": "readme-surface",
       "path": "README.md",
       "role": "PUBLIC_SOURCE",
-      "sha256": "0ac5a530a50deda0ec65bf0f1a14aa634ce98965c61a9f8eb01e6cc5a456b403"
+      "sha256": "4228cd33ccbe6248d88037c05759aa856a2160edb61ee86013d52429b1aa6396"
     },
     {
       "id": "release-claims-ledger",

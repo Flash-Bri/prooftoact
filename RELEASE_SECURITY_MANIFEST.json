@@ -1830,7 +1830,7 @@
       "id": "proof-manifest-tests",
       "path": "test/proof-manifest.test.js",
       "role": "PROOF_MANIFEST_EVIDENCE_VERIFICATION",
-      "sha256": "86dcd7d30709b1bc70b8b846fe177f834f3c9fb373e990d3d0d551f87aa36f8e"
+      "sha256": "9d595794e97983ce2bf359d47c28225d6d32a5335f13fcf499c3a5cb8521ff34"
     },
     {
       "id": "proof-manifest-verifier",

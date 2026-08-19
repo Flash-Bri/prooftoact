@@ -569,7 +569,7 @@ export function verifyReleaseGovernance({ rootDir = DEFAULT_ROOT } = {}) {
   assertMarkers(
     readme,
     [
-      "Public clean-room source. Not yet a contest submission or live AWS claim.",
+      "live, signed-out AWS Lambda → CockroachDB",
       "npm run governance:verify",
       "CURRENT_REPOSITORY_GOVERNANCE_PASS",
       "not current GitHub state or final release approval",
