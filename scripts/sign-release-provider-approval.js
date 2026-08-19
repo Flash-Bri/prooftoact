@@ -22,6 +22,10 @@ const TRUSTED_PUBLIC_KEY_FINGERPRINT =
   "9c4e4c9bdade64461547c8e511d525d8fc2e53ae0fc44642e52cf01978a08889";
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const SYSTEM_DATE = Date;
+const SYSTEM_DATE_NOW = Date.now.bind(Date);
+const SYSTEM_DATE_PARSE = Date.parse.bind(Date);
+const SYSTEM_DATE_TO_ISO = Date.prototype.toISOString;
 
 function reject(code, cause) {
   throw new Error(code, cause === undefined ? undefined : { cause });
@@ -37,6 +41,12 @@ function plainObject(value) {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function exactKeys(value, keys) {
+  return plainObject(value) &&
+    JSON.stringify(Object.keys(value).sort()) ===
+      JSON.stringify([...keys].sort());
 }
 
 function publicDer(key) {
@@ -62,21 +72,41 @@ function validatePrivateKey(privateKeyPem, trustedPublicKeyPem) {
   return privateKey;
 }
 
-export function signProviderBrokerApproval({
-  claims,
-  expiresAt,
-  issuedAt,
-  privateKeyPem,
-  trustedPublicKeyPem
-}) {
+function systemIso(timestamp) {
+  return SYSTEM_DATE_TO_ISO.call(new SYSTEM_DATE(timestamp));
+}
+
+export function deriveProviderApprovalWindowAt(expiresAt, issued) {
   const code = "PROVIDER_APPROVAL_SIGNER_INPUT_REJECTED";
-  const issued = Date.parse(issuedAt);
-  const expires = Date.parse(expiresAt);
+  const issuedAt = Number.isFinite(issued) ? systemIso(issued) : null;
+  const expires = typeof expiresAt === "string"
+    ? SYSTEM_DATE_PARSE(expiresAt)
+    : Number.NaN;
+  requireCondition(Number.isFinite(issued) && Number.isFinite(expires) &&
+    issued < expires && expires - issued <= 30 * 60 * 1000 &&
+    systemIso(expires) === expiresAt, code);
+  return Object.freeze({ expires, issued, issuedAt });
+}
+
+export function deriveProviderApprovalWindow(expiresAt) {
+  return deriveProviderApprovalWindowAt(expiresAt, SYSTEM_DATE_NOW());
+}
+
+export function signProviderBrokerApproval(options) {
+  const code = "PROVIDER_APPROVAL_SIGNER_INPUT_REJECTED";
+  requireCondition(exactKeys(options, [
+    "claims", "expiresAt", "privateKeyPem", "trustedPublicKeyPem"
+  ]), code);
+  const {
+    claims,
+    expiresAt,
+    privateKeyPem,
+    trustedPublicKeyPem
+  } = options;
+  const { expires, issued, issuedAt } =
+    deriveProviderApprovalWindow(expiresAt);
   requireCondition(plainObject(claims) && UUID.test(claims.approvalId ?? "") &&
-    Number.isFinite(issued) && Number.isFinite(expires) && issued < expires &&
-    expires - issued <= 30 * 60 * 1000 &&
-    new Date(issued).toISOString() === issuedAt &&
-    new Date(expires).toISOString() === expiresAt, code);
+    Number.isFinite(issued) && Number.isFinite(expires), code);
   const fingerprint = brokerPublicKeyFingerprint(trustedPublicKeyPem);
   const privateKey = validatePrivateKey(privateKeyPem, trustedPublicKeyPem);
   const unsigned = {
@@ -152,7 +182,7 @@ function readPrivateKeyFd(fd) {
 function parseArguments(args) {
   const code = "PROVIDER_APPROVAL_SIGNER_ARGUMENTS_REJECTED";
   const allowed = new Set([
-    "--claims", "--expires-at", "--issued-at", "--key-fd", "--output-root"
+    "--claims", "--expires-at", "--key-fd", "--output-root"
   ]);
   requireCondition(args.length === allowed.size * 2, code);
   const parsed = {};
@@ -198,7 +228,6 @@ export async function main(args = process.argv.slice(2), environment = process.e
   const envelope = signProviderBrokerApproval({
     claims,
     expiresAt: parsed["--expires-at"],
-    issuedAt: parsed["--issued-at"],
     privateKeyPem: readPrivateKeyFd(Number(parsed["--key-fd"])),
     trustedPublicKeyPem: publicKeyBytes
   });
