@@ -21,7 +21,8 @@ const SOURCE_LOCK_VALIDATOR_PATH = path.join(
 const SOURCE_LOCK_VALIDATOR = fs.existsSync(SOURCE_LOCK_VALIDATOR_PATH)
   ? fs.readFileSync(SOURCE_LOCK_VALIDATOR_PATH, "utf8")
   : "";
-const PIN = "50d0cd261b8597fe74c80b84c49be0adde5bdf6f";
+const PIN = "b8f993a4a9a898673c89dbd8218ec7eb591f1f10";
+const PIN_TREE = "4615e7bea235f1c4ddf7f680d125cad6d355fecf";
 const EXPECTED_COMMIT = "a".repeat(40);
 const CALLER_COMMIT = "b".repeat(40);
 const EXPECTED_TREE = "c".repeat(40);
@@ -123,7 +124,7 @@ function assertImmutableSourceLockContract(workflow) {
     /(?:mktemp|RUNNER_TEMP|GITHUB_OUTPUT|upload-artifact|oidc-(?:token|response|payload)\.)/u);
 }
 
-test("fresh-primary caller is main-only, protected, and two-commit inert", () => {
+test("fresh-primary caller is main-only and pins immutable authority bytes", () => {
   assert.match(CALLER,
     /^name: ProofToAct Fresh Cluster And Primary$/mu);
   assert.match(CALLER, /\non:\n  workflow_dispatch:\n/u);
@@ -138,6 +139,10 @@ test("fresh-primary caller is main-only, protected, and two-commit inert", () =>
   ));
   assert.match(CALLER,
     /test "\$\(git rev-parse HEAD\)" = "\$EXPECTED_COMMIT"/u);
+  assert.match(CALLER, new RegExp(`EXPECTED_COMMIT: ${PIN}`, "u"));
+  assert.match(CALLER, new RegExp(`EXPECTED_TREE: ${PIN_TREE}`, "u"));
+  assert.match(CALLER,
+    /test "\$authority_tree" = "\$EXPECTED_TREE"/u);
   assert.match(CALLER,
     /test -z "\$\(git status --porcelain=v1 --untracked-files=all\)"/u);
   assert.doesNotMatch(CALLER, /environment:/u);

@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Create-only, inert-until-pinned GitHub OIDC role for the bounded ProofToAct fresh CockroachDB primary bootstrap. This stack adopts no existing resource and cannot deploy the application.",
+  "Description": "Create-only, exact-source-pinned GitHub OIDC role for the bounded ProofToAct fresh CockroachDB primary bootstrap. This stack adopts no existing resource and cannot deploy the application.",
   "Parameters": {
     "GitHubOidcProviderArn": {
       "Type": "String",
@@ -35,7 +35,7 @@
                   "token.actions.githubusercontent.com:repository_owner_id": "252500266",
                   "token.actions.githubusercontent.com:ref": "refs/heads/main",
                   "token.actions.githubusercontent.com:environment": "aws-release-database-bootstrap",
-                  "token.actions.githubusercontent.com:job_workflow_ref": "Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-fresh-primary.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f",
+                  "token.actions.githubusercontent.com:job_workflow_ref": "Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-fresh-primary.yml@b8f993a4a9a898673c89dbd8218ec7eb591f1f10",
                   "token.actions.githubusercontent.com:workflow": "ProofToAct Fresh Cluster And Primary"
                 }
               }

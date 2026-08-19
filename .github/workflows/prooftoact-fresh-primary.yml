@@ -27,14 +27,14 @@ jobs:
       authority_tree: ${{ steps.identity.outputs.authority_tree }}
       operation_id: ${{ steps.identity.outputs.operation_id }}
     steps:
-      - name: Check out the exact dispatched main commit
+      - name: Check out the exact immutable fresh-primary authority
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: true
           fetch-depth: 0
           lfs: false
           persist-credentials: false
-          ref: ${{ github.sha }}
+          ref: b8f993a4a9a898673c89dbd8218ec7eb591f1f10
           show-progress: false
           submodules: false
 
@@ -42,18 +42,21 @@ jobs:
         id: identity
         shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
         env:
-          EXPECTED_COMMIT: ${{ github.sha }}
+          EXPECTED_COMMIT: b8f993a4a9a898673c89dbd8218ec7eb591f1f10
+          EXPECTED_TREE: 4615e7bea235f1c4ddf7f680d125cad6d355fecf
           OPERATION_ID: ${{ inputs.operation_id }}
         run: |
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           [[ "$GITHUB_WORKFLOW" == "ProofToAct Fresh Cluster And Primary" ]]
           [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
           test "$(git remote get-url origin)" = "https://github.com/Flash-Bri/prooftoact"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
           authority_tree="$(git rev-parse 'HEAD^{tree}')"
           [[ "$authority_tree" =~ ^[0-9a-f]{40}$ ]]
+          test "$authority_tree" = "$EXPECTED_TREE"
           printf '%s\n' \
             "authority_commit=$EXPECTED_COMMIT" \
             "authority_tree=$authority_tree" \
@@ -65,7 +68,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-fresh-primary.yml@50d0cd261b8597fe74c80b84c49be0adde5bdf6f
+    uses: Flash-Bri/prooftoact/.github/workflows/prooftoact-sealed-fresh-primary.yml@b8f993a4a9a898673c89dbd8218ec7eb591f1f10
     with:
       authority_commit: ${{ needs.exact-source.outputs.authority_commit }}
       authority_tree: ${{ needs.exact-source.outputs.authority_tree }}

@@ -1,22 +1,28 @@
 # Release OIDC credential boundary
 
-Status: **SOURCE-BOUND HOLD — NO PROVIDER AUTHORITY ACTIVATED**
+Status: **IMMUTABLE SOURCE PINS MERGED — LIVE PROVIDER READBACK REQUIRED**
 
 The release roles no longer trust a mutable workflow name alone. Every
 GitHub OIDC trust statement retains the exact repository, immutable repository
 and owner IDs, `main` ref, protected environment, audience, subject, and caller
-workflow condition. It also requires one exact `job_workflow_ref` naming a
-role-specific reusable workflow at bootstrap commit
-`50d0cd261b8597fe74c80b84c49be0adde5bdf6f`.
+workflow condition. Each role-specific caller and IAM template requires one
+exact `job_workflow_ref` naming reviewed reusable-workflow bytes. The private
+recovery lanes remain bound to bootstrap commit
+`caf417dd84d899c7407e5ed12f56b60f1b74d32a`; the fresh-primary lane is bound
+to activation-source commit
+`b8f993a4a9a898673c89dbd8218ec7eb591f1f10` and tree
+`4615e7bea235f1c4ddf7f680d125cad6d355fecf`.
 
-This uses a deliberate two-commit sequence:
+This uses a deliberate immutable-source sequence:
 
-1. Credential-boundary bootstrap commit `50d0cd26…` sealed the final reusable
-   workflow bytes. The commit cannot bind its own SHA without changing that
-   SHA. Its earlier parent contains untrusted scaffolding and is not named by
-   any source IAM trust or caller.
-2. Its child binding commit pins caller `uses:` references and the source IAM
-   trusts to the now-known bootstrap SHA.
+1. Bootstrap commit `caf417dd…` sealed and reviewed the private recovery and
+   fresh-primary reusable workflow bytes.
+2. Activation-source commit `b8f993a4…` pinned the five private recovery
+   callers to `caf417dd…` and separated immutable source identity from the
+   GitHub-issued caller workflow SHA for fresh-primary execution.
+3. This child binds the fresh-primary caller and standalone IAM template to
+   the now-known `b8f993a4…` source. Its own caller SHA remains a separate
+   GitHub-issued identity and cannot change the executable source bytes.
 
 The direct release-candidate workflow has no `id-token: write` permission and
 no AWS credential configuration. Checkout, dependency installation, frozen
@@ -26,21 +32,19 @@ coordinator and PREPARE reusable workflows still decode only two small
 canonical Base64 values, verify their hashes and exact schemas, and stop at the
 reviewed HOLD boundary.
 
-The source now also contains activation-ready successor coordinator and EXECUTE
+The source now also contains source-pinned successor coordinator and EXECUTE
 reusable-workflow bytes. Those successors check out the exact authority commit
 and frozen application separately, bind the signed approval and protected
 bootstrap readback before OIDC, install only the two isolated runtime dependency
 trees, assume one phase-specific role, and perform reserve, dispatch, or
 finalize through capability-separated runtimes. They are not reachable from the
-current diagnostic-only top-level EXECUTE workflow, and the live IAM trusts are
-not authorized to their as-yet-unbound commit SHA. Activating them requires the
-same two-commit sequence: first merge and verify these reusable bytes; then pin
-the caller and IAM `job_workflow_ref` conditions to that immutable commit in a
-separate reviewed child, apply the exact IAM update, and capture a fresh
-provider readback. The drill, evidence, teardown, and terminalizer reusable
-workflows remain hard HOLDs.
+current diagnostic-only top-level EXECUTE workflow. The five private recovery
+callers now pin their reviewed reusable bytes, but source pinning alone does not
+prove that the corresponding live IAM trusts, environment values, or provider
+resources have been applied. Those claims require exact provider readback. The
+drill and terminalizer reusable workflows remain hard HOLDs.
 
-The same inert successor commit contains a separate fresh-primary reusable
+The same reviewed source contains a separate fresh-primary reusable
 workflow and standalone `infra/aws/fresh-primary-bootstrap-role-stack.json`.
 Before that reusable workflow reads a protected secret, checks out
 caller-selected bytes, or exchanges a token for AWS credentials, its immutable
@@ -107,17 +111,17 @@ those provider grants.
 The legacy coordinator and PREPARE seals deliberately contain only the fixed
 action `HOLD_NO_PROVIDER_EXECUTION`. The successor EXECUTE seals contain only
 hash-bound executable coordinates; they contain no credential, approval, role,
-provider receipt, or authority by themselves. The source-bound IAM template
-has not been advanced to the successor workflow bytes, and no environment,
-secret, role, workflow run, AWS resource, database, deployment, publication, or
-submission state is implied by this source. Until the child pin, applied IAM
-update, fresh bootstrap readback, fresh signed approval, and exact provider
-receipts all exist, the only truthful result is `NO PROVIDER MUTATION`.
+provider receipt, or authority by themselves. The source-bound IAM templates
+and callers now name their reviewed immutable workflow bytes. No environment
+value, secret, role, workflow run, AWS resource, database mutation, deployment,
+publication, or submission state is implied by source alone. Applied IAM
+updates, fresh bootstrap readback, signed approval, and exact provider receipts
+remain required before any live execution claim.
 
 The reviewed retained deployment IAM template SHA-256 after this source change
 is `5f72ab835c93e6c8739405ed953d5c340dd13497a83eb1efff40fd70ba144da9`.
 The standalone fresh-primary stack SHA-256 is
-`ced2992afdbce22188672235d12c613fbea941d2d502b56ddf00df78a5dbeb06`.
+`0ecab5c430720c7ec030dbd49e48abab3b9554cf2820368f17a3a8f89c13d08b`.
 The standalone credential-custody stack SHA-256 is
 `0d23509291626d7e3d91d1454e581e36bb6721166e84747791ce5a3c7d6bb474`.
 Any bootstrap readback captured against an earlier template is historical

@@ -98,7 +98,7 @@ test("fresh-primary bootstrap role stack is create-only and self-contained", () 
   );
 });
 
-test("trust is exact, protected, main-only, and inert until Commit B", () => {
+test("trust is exact, protected, main-only, and source pinned", () => {
   const trust = ROLE.Properties.AssumeRolePolicyDocument;
   assert.equal(trust.Version, "2012-10-17");
   assert.equal(trust.Statement.length, 1);
@@ -115,7 +115,7 @@ test("trust is exact, protected, main-only, and inert until Commit B", () => {
     "token.actions.githubusercontent.com:job_workflow_ref":
       "Flash-Bri/prooftoact/.github/workflows/" +
       "prooftoact-sealed-fresh-primary.yml@" +
-      "50d0cd261b8597fe74c80b84c49be0adde5bdf6f",
+      "b8f993a4a9a898673c89dbd8218ec7eb591f1f10",
     "token.actions.githubusercontent.com:ref": "refs/heads/main",
     "token.actions.githubusercontent.com:repository": "Flash-Bri/prooftoact",
     "token.actions.githubusercontent.com:repository_id": "1317716765",

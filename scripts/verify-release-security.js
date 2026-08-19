@@ -1365,7 +1365,9 @@ const SOURCE_MARKERS = Object.freeze({
       "name: ProofToAct Fresh Cluster And Primary",
       "github.ref == 'refs/heads/main'",
       "cancel-in-progress: false",
-      "id-token: write"
+      "id-token: write",
+      "b8f993a4a9a898673c89dbd8218ec7eb591f1f10",
+      "4615e7bea235f1c4ddf7f680d125cad6d355fecf"
     ]),
     "fresh-primary-sealed-workflow": Object.freeze([
       "name: ProofToAct Sealed Fresh Cluster And Primary",
@@ -1380,12 +1382,15 @@ const SOURCE_MARKERS = Object.freeze({
     "fresh-primary-oidc-boundary": Object.freeze([
       "credential custody boundary",
       "exactly seven empty retained Secrets Manager containers",
-      "exactly five one-version containers"
+      "exactly five one-version containers",
+      "b8f993a4a9a898673c89dbd8218ec7eb591f1f10",
+      "4615e7bea235f1c4ddf7f680d125cad6d355fecf"
     ]),
     "fresh-primary-bootstrap-role-template": Object.freeze([
       "ProofToActFreshPrimaryBootstrap",
       "token.actions.githubusercontent.com:job_workflow_ref",
-      "DenyUnrelatedProviderCapabilities"
+      "DenyUnrelatedProviderCapabilities",
+      "b8f993a4a9a898673c89dbd8218ec7eb591f1f10"
     ]),
     "fresh-primary-credential-custody-template": Object.freeze([
       "FreshPrimaryCredentialWriterRole",
@@ -1577,7 +1582,8 @@ const SOURCE_MARKERS = Object.freeze({
     "fresh-primary-bootstrap-role-plan": Object.freeze([
       "prepareFreshPrimaryBootstrapRole",
       "READY_FOR_EXACT_CREATE_ONLY_APPLY",
-      "passRoleExplicitlyAbsent: true"
+      "passRoleExplicitlyAbsent: true",
+      "0ecab5c430720c7ec030dbd49e48abab3b9554cf2820368f17a3a8f89c13d08b"
     ]),
     "fresh-primary-credential-custody-plan": Object.freeze([
       "prepareFreshPrimaryCredentialCustody",
