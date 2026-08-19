@@ -206,6 +206,10 @@ test("DVI ranking is restricted to exact snapshot prefix columns", () => {
     rank,
     /FROM tp_private\.g1_vector_candidates AS candidate[\s\S]*WHERE candidate\.tenant_id = p_tenant_id[\s\S]*AND candidate\.retrieval_id = p_retrieval_id[\s\S]*ORDER BY[\s\S]*candidate\.embedding <=> p_query_embedding::VECTOR\(3\),[\s\S]*candidate\.evidence_id/
   );
+  assert.doesNotMatch(rank, /FORCE_INDEX/u);
+  assert.doesNotMatch(security, /g1_vector_ann_candidates_v1/u);
+  assert.match(retrieval,
+    /FROM tp_private\.g1_vector_candidates@\{[\s\S]*FORCE_INDEX=\$\{VECTOR_INDEX_NAME\}[\s\S]*ORDER BY embedding <=> \$3::VECTOR\(3\)[\s\S]*LIMIT 10[\s\S]*ORDER BY distance, evidence_id/u);
   assert.match(
     rank,
     /p_limit IS NULL OR p_limit < 1 OR p_limit > 100/

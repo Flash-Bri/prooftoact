@@ -11,6 +11,8 @@ import {
   runFreshClusterProviderController,
   validateFinalRuntimePrincipalCensus
 } from "../scripts/fresh-cluster-provider-controller.js";
+import { freshRecoverySourceIdentity } from
+  "../scripts/fresh-recovery-source-execution.js";
 import {
   generateFreshRecoveryPublisherSecret
 } from "../scripts/lib/fresh-recovery-publisher-key.js";
@@ -141,7 +143,7 @@ function authentication(input) {
 }
 
 function bootstrapReceipt(input) {
-  return {
+  const value = {
     schemaVersion: "prooftoact.fresh-primary-bootstrap-receipt.v3",
     status: "PASS",
     approvalId: APPROVAL_ID,
@@ -152,6 +154,12 @@ function bootstrapReceipt(input) {
     credentialLifecycle: {
       adminUrlLocalCopyDiscardedBeforeMutation: true,
       providerReadbackAuthenticatedByThisModule: false,
+      rootCredentialLifecycle: {
+        connectionStringCreated: false,
+        connectionStringUsed: false,
+        passwordCreated: false,
+        secretStored: false
+      },
       recoveryPublisher: {
         publisherKeyIdSha256:
           __test.textDigest(QUERY_TRUST_ROOT.publisherKeyId),
@@ -164,9 +172,42 @@ function bootstrapReceipt(input) {
         trustRootJsonSha256: QUERY_SIGNER.trustRootJsonSha256
       }
     },
+    preflight: {
+      principalPosture: {
+        schemaVersion:
+          "prooftoact.fresh-primary-preflight-principal-posture.v1",
+        status: "EXACT_SHOW_USERS_PRESTATE",
+        builtinAdminRolePresent: true,
+        exactPrincipalCount: 3,
+        fullPrincipalCensusSha256: "4".repeat(64),
+        rootCanLogin: true,
+        rootOptions: [],
+        rootOptionsSha256: __test.digest([])
+      }
+    },
     bootstrap: {
       finalPostureDigest: "3".repeat(64),
-      managedRoleCount: 29
+      managedRoleCount: 29,
+      principalLoginPosture: {
+        schemaVersion: "prooftoact.primary-principal-login-posture.v2",
+        status: "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
+        builtinAdminOptionsSha256: __test.digest([]),
+        builtinAdminRolePresent: true,
+        bootstrapPrincipal: "prooftoact_bootstrap_admin",
+        bootstrapPrincipalCanLogin: true,
+        bootstrapPrincipalOptionsSha256: __test.digest([]),
+        capabilityNoLoginCount: 15,
+        databaseObservedAt: "2026-08-19T08:00:14.000Z",
+        exactPrincipalCount: 32,
+        fullPrincipalCensusSha256: "7".repeat(64),
+        immutableBuiltinAdminRoleExceptionPresent: true,
+        rootCanLogin: false,
+        rootMemberOfSha256: __test.digest(["admin"]),
+        rootNoLoginProvedFromShowUsers: true,
+        rootOptions: ["NOLOGIN"],
+        rootOptionsSha256: __test.digest(["NOLOGIN"]),
+        runtimeLoginCount: 14
+      }
     },
     postflight: {
       directPrivateTableAccessDenied: true,
@@ -176,6 +217,11 @@ function bootstrapReceipt(input) {
       "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD",
     inputSha256: input.commandSha256
   };
+  value.preflight.principalPostureSha256 =
+    __test.digest(value.preflight.principalPosture);
+  value.bootstrap.principalLoginPostureSha256 =
+    __test.digest(value.bootstrap.principalLoginPosture);
+  return value;
 }
 
 function recoveryCommit(bundleDigest, observation = "direct_ack") {
@@ -193,28 +239,129 @@ function recoveryCommit(bundleDigest, observation = "direct_ack") {
 }
 
 function recoveryPreparation(primaryClusterMapping, input) {
+  const sourceIdentity = freshRecoverySourceIdentity(
+    OPERATION_ID,
+    SOURCE_COMMIT,
+    TREE_DIGEST
+  );
+  const winnerOperationId = sourceIdentity.contenders[0].operationId;
+  const admittedAt = "2026-08-19T08:00:00.000Z";
+  const expiresAt = "2026-08-19T08:30:00.000Z";
   const sourceBinding = {
     authorityEvidenceBindingSha256: "a".repeat(64),
-    evidenceId: "823e4567-e89b-42d3-a456-426614174007",
-    incidentId: "923e4567-e89b-42d3-a456-426614174008",
-    operationId: OPERATION_ID,
+    evidenceId: sourceIdentity.evidenceId,
+    incidentId: sourceIdentity.incidentId,
+    operationId: winnerOperationId,
     requestDigest: "b".repeat(64),
-    resourceId: `prooftoact-fresh-recovery-${OPERATION_ID}`,
-    runId: "a23e4567-e89b-42d3-a456-426614174009",
+    resourceId: sourceIdentity.resourceId,
+    runId: sourceIdentity.runId,
     selectedEvidenceBindingSha256: "c".repeat(64),
-    tenantId: "b23e4567-e89b-42d3-a456-42661417400a"
+    tenantId: sourceIdentity.tenantId
+  };
+  const dviProof = {
+    schemaVersion: "prooftoact.fresh-recovery-admissible-vector-proof.v1",
+    status: "PASS",
+    sourceCommit: SOURCE_COMMIT,
+    treeDigest: TREE_DIGEST,
+    drill: {
+      durableSelectionCommitted: true,
+      runId: sourceBinding.runId,
+      authorityEvidenceBindingSha256:
+        sourceBinding.authorityEvidenceBindingSha256,
+      selectedEvidenceBindingSha256:
+        sourceBinding.selectedEvidenceBindingSha256
+    },
+    fixture: {
+      candidateCount: 11,
+      exclusionCaseCount: 1,
+      exclusionReasons: { out_of_scope: 1 }
+    },
+    snapshot: { admittedAt, expiresAt, ttlMs: 30 * 60 * 1_000 },
+    ranking: {
+      directDviQueryForcedIndex: true,
+      directDviResultValidated: true,
+      commitValidatorSequenceMatchedDirectDvi: true,
+      vectorSearchUsed: true,
+      exactPrefixSpansUsed: true
+    },
+    cleanup: { snapshotRetired: true },
+    claimBoundary:
+      "This bounded fresh-recovery DVI snapshot does not prove provider-key revocation."
+  };
+  const dviWindow = {
+    admittedAt,
+    expiresAt,
+    databaseObservedAt: "2026-08-19T08:01:00.000Z",
+    minimumRequiredMs: 10 * 60 * 1_000,
+    minimumResidualMs: 29 * 60 * 1_000,
+    source: "COCKROACHDB_CLOCK"
+  };
+  const raceProof = {
+    schemaVersion: "prooftoact.fresh-recovery-authority-race.v1",
+    status: "PASS",
+    contenderCount: 2,
+    contenderIdentitySetSha256: __test.textDigest(`${sourceIdentity.contenders
+      .map(({ effectKey, intentNonce, operationId }) =>
+        `${operationId}:${effectKey}:${intentNonce}`)
+      .sort().join("\n")}\n`),
+    deterministicOuterSourceBindingSha256: __test.textDigest(
+      __test.canonicalJson({
+        operationId: OPERATION_ID,
+        sourceCommit: SOURCE_COMMIT,
+        treeDigest: TREE_DIGEST
+      })
+    ),
+    distinctAuthorizationSessionCount: 2,
+    distinctLogicalActionCount: 2,
+    distinctSpendSessionCount: 2,
+    durableReceiptCount: 2,
+    durableDenialCount: 1,
+    outboxCount: 1,
+    protectedEffectCount: 0,
+    winnerFence: "1",
+    winnerOperationIdSha256: __test.textDigest(winnerOperationId),
+    winnerRequestDigest: sourceBinding.requestDigest,
+    deniedReplayOutcome: "resource_held_denied",
+    deniedReplayKind: "operation_replay",
+    changedInputMismatchDenied: true,
+    serializable: true,
+    promiseAllSettled: true
   };
   const sourceReceipt = {
-    schemaVersion: "prooftoact.fresh-recovery-source-receipt.v1",
+    schemaVersion: "prooftoact.fresh-recovery-source-receipt.v2",
     status: "PASS",
     operationId: OPERATION_ID,
     sourceCommit: SOURCE_COMMIT,
     treeDigest: TREE_DIGEST,
     authorityOutcome: "resource_reserved",
+    dviAuthorityWindow: {
+      beforeAuthorization: dviWindow,
+      beforeSpend: dviWindow
+    },
     dviPolicyVersion: "g1-admissibility-v2",
+    dviProof,
+    dviProofSha256: __test.digest(dviProof),
     durableAuthorityReceipt: true,
     evidenceDigest: "d".repeat(64),
     evidenceVerified: true,
+    raceProof,
+    raceProofSha256: __test.digest(raceProof),
+    recoverySemantics: {
+      outerReleaseOperationIdSha256: __test.textDigest(OPERATION_ID),
+      winnerAuthorityOperationIdSha256:
+        __test.textDigest(winnerOperationId),
+      signedRecoveryMustBindExactWinner: true,
+      crossRunRecoveryScope: "CLEANUP_ONLY",
+      successfulPhaseContinuation: false,
+      boundedOneShotAvailabilityRiskPresent: true,
+      safetyPreservedByFreshAuthorityRequirement: true
+    },
+    residualAuthority: {
+      databaseObservedAt: "2026-08-19T08:01:00.000Z",
+      minimumRequiredMs: 10 * 60 * 1_000,
+      minimumResidualMs: 29 * 60 * 1_000,
+      source: "COCKROACHDB_CLOCK"
+    },
     sourceBinding,
     sourceBindingSha256: __test.digest(sourceBinding)
   };
@@ -224,13 +371,33 @@ function recoveryPreparation(primaryClusterMapping, input) {
     status: "PREPARED",
     authorityTransferred: false,
     bundleDigest: "e".repeat(64),
+    expiresAt: "2026-08-19T08:45:00.000Z",
+    expiryPolicy: {
+      schemaVersion:
+        "prooftoact.fresh-recovery-publication-expiry-policy.v1",
+      status: "FRESH_PUBLICATION_ONLY",
+      canonicalRecoveryTtlMs: 30 * 60 * 1_000,
+      freshPublicationTtlMs: 45 * 60 * 1_000,
+      primaryMinimumRemainingMs: 10 * 60 * 1_000,
+      providerMinimumRemainingMs: 5 * 60 * 1_000
+    },
     persistenceReceiptSha256: "f".repeat(64),
     publisherKeySetDigest: QUERY_SIGNER.publisherKeySetDigest,
+    primaryDatabaseObservedAt: "2026-08-19T08:00:17.000Z",
+    primaryRemainingWindowMs: 44 * 60 * 1_000,
     recoverySessionId: "c23e4567-e89b-42d3-a456-42661417400b",
     requiresFreshAuthorization: true,
     sourceDigest: "0".repeat(64),
+    sourceAuthorityWindow: {
+      databaseObservedAt: "2026-08-19T08:01:00.000Z",
+      minimumRequiredMs: 10 * 60 * 1_000,
+      minimumResidualMs: 29 * 60 * 1_000,
+      source: "COCKROACHDB_CLOCK"
+    },
     sourceReceiptSha256: "1".repeat(64)
   };
+  preparationReceipt.expiryPolicySha256 =
+    __test.digest(preparationReceipt.expiryPolicy);
   preparationReceipt.privateRecoveryQueryBinding =
     buildPrivateRecoveryQueryBinding({
       billingAuthorizationSha256: input.billingAuthorizationSha256,
@@ -294,7 +461,8 @@ function createHarness({
   bootstrapFailure = false,
   cleanupFailure = false,
   ingressReadbackFailureAfterCreate = false,
-  mcpFailure = false
+  mcpFailure = false,
+  recoveryPreparationMutator = null
 } = {}) {
   const input = command(adopt ? {
     adoptedAdminPasswordSha256: "7".repeat(64),
@@ -306,7 +474,9 @@ function createHarness({
   const transitions = [];
   const calls = [];
   let allowlist = [];
-  let users = adopt ? ["prooftoact_bootstrap_admin"] : [];
+  let users = adopt
+    ? ["root", "prooftoact_bootstrap_admin"]
+    : ["root"];
   let terminal;
   let sealedAdmin;
   let ingressReadbackFailed = false;
@@ -506,6 +676,9 @@ function createHarness({
         "RECOVERY_SOURCE_AND_PREPARATION_DISPATCHING"
       ), true);
       preparedRecovery = recoveryPreparation(primaryClusterMapping, input);
+      if (recoveryPreparationMutator) {
+        preparedRecovery = recoveryPreparationMutator(preparedRecovery);
+      }
       return preparedRecovery;
     },
     async appendFreshRecoveryPublication() {
@@ -615,7 +788,16 @@ function createHarness({
 test("fresh cluster lifecycle journals every mutation and cleans temporary access", async () => {
   const harness = createHarness();
   const receipt = await runFreshClusterProviderController(harness);
-  assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.status, "PROVIDER_KEYS_REVOCATION_PENDING");
+  assert.equal(receipt.coreStatus, "PASS");
+  assert.equal(receipt.publicDisposition, "HOLD");
+  assert.equal(receipt.providerKeysRevoked, false);
+  assert.equal(receipt.providerKeyRevocationCeremony.status,
+    "PENDING_ORGANIZATION_ADMIN");
+  assert.equal(receipt.providerKeyRevocationCeremony.creator.serviceAccountId,
+    CREATOR_ID);
+  assert.equal(receipt.providerKeyRevocationCeremony.auditor.serviceAccountId,
+    AUDITOR_ID);
   assert.equal(receipt.adminCredentialAbsent, true);
   assert.equal(receipt.adminSecretVersionRetained, true);
   assert.equal(receipt.adminSecretCredentialRevokedByPrincipalDeletion, true);
@@ -651,7 +833,7 @@ test("fresh cluster lifecycle journals every mutation and cleans temporary acces
 test("acknowledgement loss reconciles exact inventory and never retries mutation", async () => {
   const harness = createHarness({ ackLoss: true });
   const receipt = await runFreshClusterProviderController(harness);
-  assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.status, "PROVIDER_KEYS_REVOCATION_PENDING");
   for (const name of [
     "createCluster",
     "addTemporaryIngress",
@@ -672,7 +854,7 @@ test("acknowledgement loss reconciles exact inventory and never retries mutation
 test("verified existing cluster is adopted without replaying create or admin create", async () => {
   const harness = createHarness({ adopt: true });
   const receipt = await runFreshClusterProviderController(harness);
-  assert.equal(receipt.status, "PASS");
+  assert.equal(receipt.status, "PROVIDER_KEYS_REVOCATION_PENDING");
   assert.equal(receipt.clusterMode, "ADOPT_VERIFIED_EXISTING");
   assert.equal(receipt.manualClusterReceiptSha256, "8".repeat(64));
   assert.equal(harness.calls.includes("createCluster"), false);
@@ -785,4 +967,76 @@ test("final provider census is exactly the fourteen runtime users", () => {
     observedAt: "2026-08-19T08:00:20.000Z",
     providerBacked: true
   }), /FRESH_CLUSTER_FINAL_PRINCIPAL_CENSUS_REJECTED/u);
+});
+
+test("controller rejects internally rehashed cross-mixed winner identity", async () => {
+  const mixed = freshRecoverySourceIdentity(
+    OPERATION_ID,
+    SOURCE_COMMIT,
+    "c".repeat(40)
+  );
+  const value = createHarness({
+    recoveryPreparationMutator(preparation) {
+      const sourceBinding = {
+        ...preparation.sourceReceipt.sourceBinding,
+        operationId: mixed.contenders[0].operationId
+      };
+      const raceProof = {
+        ...preparation.sourceReceipt.raceProof,
+        contenderIdentitySetSha256: __test.textDigest(`${mixed.contenders
+          .map(({ effectKey, intentNonce, operationId }) =>
+            `${operationId}:${effectKey}:${intentNonce}`)
+          .sort().join("\n")}\n`),
+        winnerOperationIdSha256:
+          __test.textDigest(sourceBinding.operationId)
+      };
+      const recoverySemantics = {
+        ...preparation.sourceReceipt.recoverySemantics,
+        winnerAuthorityOperationIdSha256:
+          __test.textDigest(sourceBinding.operationId)
+      };
+      const sourceReceipt = {
+        ...preparation.sourceReceipt,
+        sourceBinding,
+        sourceBindingSha256: __test.digest(sourceBinding),
+        raceProof,
+        raceProofSha256: __test.digest(raceProof),
+        recoverySemantics
+      };
+      return {
+        ...preparation,
+        sourceReceipt,
+        sourceReceiptSha256: __test.digest(sourceReceipt)
+      };
+    }
+  });
+  await assert.rejects(
+    runFreshClusterProviderController(value),
+    /FRESH_CLUSTER_RECOVERY_PREPARATION_REJECTED/u
+  );
+});
+
+test("controller rejects a rehashed DVI proof from another source tree", async () => {
+  const value = createHarness({
+    recoveryPreparationMutator(preparation) {
+      const dviProof = {
+        ...preparation.sourceReceipt.dviProof,
+        treeDigest: "c".repeat(40)
+      };
+      const sourceReceipt = {
+        ...preparation.sourceReceipt,
+        dviProof,
+        dviProofSha256: __test.digest(dviProof)
+      };
+      return {
+        ...preparation,
+        sourceReceipt,
+        sourceReceiptSha256: __test.digest(sourceReceipt)
+      };
+    }
+  });
+  await assert.rejects(
+    runFreshClusterProviderController(value),
+    /FRESH_CLUSTER_RECOVERY_PREPARATION_REJECTED/u
+  );
 });

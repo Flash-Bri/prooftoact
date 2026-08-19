@@ -34,7 +34,8 @@ const AMBIGUOUS_TRANSACTION_CODE = "40003";
 const DEFAULT_MAX_RETRIES = 20;
 const DEFAULT_RETRY_DEADLINE_MS = 30_000;
 const MIN_LEASE_MS = 1_000;
-const MAX_LEASE_MS = 10 * 60_000;
+const STANDARD_MAX_LEASE_MS = 10 * 60_000;
+const MAX_LEASE_MS = 30 * 60_000;
 const POLICY_VERSION = "gate1-policy-v2";
 const ACTION_KIND = "dispatch_rescue_unit";
 const DVI_PROPOSAL_INPUT_FIELDS = Object.freeze([
@@ -435,6 +436,18 @@ function normalizeRequest(input) {
     dviAuthorization.dviProposal,
     logicalAction
   );
+  if (normalized.leaseMs > STANDARD_MAX_LEASE_MS) {
+    const admittedAt = Date.parse(proposal.dviProposal.admittedAt);
+    const expiresAt = Date.parse(proposal.dviProposal.expiresAt);
+    if (
+      normalized.leaseMs !== MAX_LEASE_MS ||
+      expiresAt - admittedAt !== MAX_LEASE_MS
+    ) {
+      throw new RangeError(
+        "extended lease is reserved for the exact fresh recovery window"
+      );
+    }
+  }
   if (
     proposal.dviProposal.runId !== normalized.runId ||
     proposal.dviProposal.tenantId !== normalized.tenantId ||

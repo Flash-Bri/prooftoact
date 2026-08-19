@@ -195,3 +195,12 @@ test("wrong adopted admin password is rejected before provider setup", () => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("provider runner reports the unreconciled key-revocation hold", () => {
+  const source = fs.readFileSync(path.join(
+    process.cwd(), "scripts/run-fresh-cluster-provider.js"
+  ), "utf8");
+  assert.match(source,
+    /FRESH_CLUSTER_PROVIDER_HOLD_PROVIDER_KEYS_REVOCATION_PENDING:/u);
+  assert.doesNotMatch(source, /FRESH_CLUSTER_PROVIDER_PASS:/u);
+});

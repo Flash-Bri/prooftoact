@@ -2,7 +2,7 @@
   "schema": "tideproof.release-cost-manifest.v1",
   "status": "CURRENT_SOURCE_COST_GUARDS_REVIEWED_LIVE_SPEND_PENDING",
   "reviewedOn": "2026-08-19",
-  "claimBoundary": "This manifest binds current source cost guards, recorded spend inputs, budget prerequisites, and stop conditions. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize deployment, or approve publication or submission.",
+  "claimBoundary": "This manifest binds current source cost guards, the exact retained A1/A2 monthly posture, recorded spend inputs, budget prerequisites, and stop conditions. The retained monthly activation authorization is requested but not evidenced as approved. It does not assert current AWS spend, independently verify a registrar receipt or renewal state, authorize activation or deployment, or approve publication or submission.",
   "limits": {
     "a1RetainedSecretCountBeforeGovernedCleanup": 7,
     "a2RetainedSecretCount": 1,
@@ -26,6 +26,30 @@
     "totalProjectExposureCeilingUsd": 25,
     "unexplainedSpendStopUsd": 3,
     "variableServiceHeadroomUsd": 0.3
+  },
+  "retainedMonthlyCost": {
+    "activationAuthorizationStatus": "REQUESTED_NOT_EVIDENCED_AS_APPROVED",
+    "activationBlockedUntilAuthorization": true,
+    "a1RetainedSecretCount": 7,
+    "a1RetainedSecretPurposes": [
+      "admin",
+      "auditor",
+      "cloudApi",
+      "credential",
+      "mcp",
+      "publisher",
+      "signer"
+    ],
+    "a1RetainedSecretsMustRemain": true,
+    "a2RetainedSecretCount": 1,
+    "cockroachBasicMonthlyCapUsd": 1.5,
+    "explicitHeadroomUsd": 0.3,
+    "maximumMonthlyExposureUsd": 5,
+    "publicOssLifecycleAdditionalMonthlyUsd": 0,
+    "publicOssLifecycleCostNeutral": true,
+    "secretsManagerMonthlyEstimateUsd": 3.2,
+    "secretsManagerMonthlyUnitUsd": 0.4,
+    "totalRetainedSecretCount": 8
   },
   "budgetAlerts": [
     {
@@ -138,13 +162,13 @@
       "id": "cost-boundary-ledger",
       "path": "docs/COST_GATES.md",
       "role": "COST_AND_RESOURCE_BOUNDARY",
-      "sha256": "6ce5833c8fb61c96bc0976c5ff3d4d20ee2f2ad3cacb0336e244794850cf230d"
+      "sha256": "33cdf86cef3da42f8f39ca591af022826865e956e82f84b133168c54f8a7bb57"
     },
     {
       "id": "cost-control-ledger",
       "path": "docs/RELEASE_COST.md",
       "role": "RELEASE_COST_CONTROL_LEDGER",
-      "sha256": "5748f2d3a668f855482cd57697f8bcdddb8c99b12c16f5c147bfc0b5ce9d9c6b"
+      "sha256": "1c3f7d20afb7b8f78a9ea383d54d66c17369dca9f211cce78682bf6e2b2c9365"
     },
     {
       "id": "cost-guard-receipt",
@@ -190,6 +214,7 @@
     }
   ],
   "finalReleaseRequirements": [
+    "Explicit owner authorization for the retained A1/A2 monthly maximum of 5.00 USD before activation; the current authorization is requested but not evidenced as approved.",
     "Machine-verifiable preflight PASS from the exact clean authenticated checkout, with the greater of budget-reported spend and conservative account-wide positive record-type exposure plus the full 0.02 USD allowance strictly below both effective ceilings and the main stack absent.",
     "Exact-release price and conservative forecast review for AWS, CockroachDB, Bedrock, Secrets Manager, DNS, and logging, bound to the final architecture and deployed hashes.",
     "Private registrar receipt and dated auto-renew-off evidence reviewed with personal and payment data protected.",

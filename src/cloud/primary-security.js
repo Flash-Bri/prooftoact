@@ -54,13 +54,15 @@ const CLUSTER_PRINCIPAL_DATABASES = Object.freeze(Object.fromEntries([
 ]));
 const LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
   "g1_resolve_recovery_source_receipt_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
-const CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
+const COMPATIBLE_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
   "g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
+const CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE =
+  "g1_resolve_recovery_source_receipt_v3(UUID, UUID, UUID, UUID, STRING, UUID, STRING)";
 const PRIMARY_FUNCTION_SQL_BATCH_SCHEMA =
   "tideproof.primary-function-sql-batch.v1";
-const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 56;
+const PRIMARY_FUNCTION_SQL_STATEMENT_COUNT = 57;
 const PRIMARY_FUNCTION_SQL_BATCH_SHA256 =
-  "cf77ee3af31d939c134fd49061c2555d34c3caccb3b3a627807c459b6c0fd6e4";
+  "82de099bcdf1fcf35a51486e6018213885625d11ae0e33de3a6d13ffd5ce8d9c";
 const PRIMARY_ROLE_FUNCTION_POLICIES = Object.freeze({
   tp_ingest_role: Object.freeze({
     functions: Object.freeze([
@@ -100,6 +102,7 @@ const PRIMARY_ROLE_FUNCTION_POLICIES = Object.freeze({
   }),
   tp_recovery_source_role: Object.freeze({
     functions: Object.freeze([
+      COMPATIBLE_RECOVERY_SOURCE_RESOLVER_SIGNATURE,
       CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
     ])
   }),
@@ -192,6 +195,7 @@ const PRIMARY_PREFLIGHT_ROLE_GRANT_POLICIES = Object.freeze({
     schemas: ALL_RUNTIME_SCHEMAS,
     functions: Object.freeze([
       LEGACY_RECOVERY_SOURCE_RESOLVER_SIGNATURE,
+      COMPATIBLE_RECOVERY_SOURCE_RESOLVER_SIGNATURE,
       CURRENT_RECOVERY_SOURCE_RESOLVER_SIGNATURE
     ])
   }),
@@ -282,6 +286,7 @@ async function scrubManagedMemberships(client) {
 }
 
 async function enforcePrincipalCredentials(client, passwords) {
+  await client.query("ALTER ROLE root WITH NOLOGIN");
   for (const role of CAPABILITY_ROLES) {
     await client.query(`ALTER ROLE ${role} WITH NOLOGIN`);
     await client.query(`ALTER ROLE ${role} WITH PASSWORD NULL`);
@@ -289,6 +294,127 @@ async function enforcePrincipalCredentials(client, passwords) {
   for (const user of RUNTIME_USERS) {
     await client.query(`ALTER USER ${user} WITH PASSWORD $1`, [passwords[user]]);
   }
+}
+
+function normalizedShowUsersArray(value) {
+  let items;
+  if (Array.isArray(value)) {
+    items = value;
+  } else if (typeof value === "string" && value === "{}") {
+    items = [];
+  } else if (typeof value === "string" && /^\{[^{}]*\}$/u.test(value)) {
+    items = value.slice(1, -1).split(",").filter((item) => item !== "");
+  } else {
+    throw new Error("PRIMARY_LOGIN_POSTURE_SHOW_USERS_ARRAY_REJECTED");
+  }
+  if (items.some((item) => typeof item !== "string" ||
+      !/^[A-Za-z_][A-Za-z0-9_=-]{0,127}$/u.test(item)) ||
+      new Set(items).size !== items.length) {
+    throw new Error("PRIMARY_LOGIN_POSTURE_SHOW_USERS_ARRAY_REJECTED");
+  }
+  return Object.freeze([...items].sort());
+}
+
+function principalPostureCanonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(principalPostureCanonicalJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) =>
+        `${JSON.stringify(key)}:${principalPostureCanonicalJson(nested)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function principalPostureDigest(value) {
+  return createHash("sha256")
+    .update(`${principalPostureCanonicalJson(value)}\n`, "utf8")
+    .digest("hex");
+}
+
+async function collectPrincipalLoginPosture(client, bootstrapPrincipal) {
+  if (typeof bootstrapPrincipal !== "string" ||
+      !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(bootstrapPrincipal) ||
+      bootstrapPrincipal === "root" ||
+      MANAGED_PRINCIPALS.includes(bootstrapPrincipal)) {
+    throw new Error("PRIMARY_LOGIN_POSTURE_BOOTSTRAP_REJECTED");
+  }
+  const result = await client.query(`
+    SELECT
+      username,
+      options,
+      member_of,
+      transaction_timestamp()::STRING AS database_now
+    FROM [SHOW USERS]
+    ORDER BY username
+  `);
+  const rows = result.rows.map((row) => Object.freeze({
+    roleName: row.username,
+    options: normalizedShowUsersArray(row.options),
+    memberOf: normalizedShowUsersArray(row.member_of)
+  })).sort((left, right) => left.roleName.localeCompare(right.roleName));
+  const expectedNames = [
+    "admin",
+    "root",
+    bootstrapPrincipal,
+    ...CAPABILITY_ROLES,
+    ...RUNTIME_USERS
+  ].sort();
+  const byName = new Map(rows.map((row) => [row.roleName, row]));
+  const root = byName.get("root");
+  const builtinAdmin = byName.get("admin");
+  const bootstrap = byName.get(bootstrapPrincipal);
+  const runtimeRoleFor = new Map(ROLE_BINDINGS.map(([role, user]) => [
+    user, role
+  ]));
+  const databaseNow = result.rows?.[0]?.database_now;
+  if (rows.length !== expectedNames.length ||
+      JSON.stringify(rows.map(({ roleName }) => roleName)) !==
+        JSON.stringify(expectedNames) ||
+      JSON.stringify(root?.options) !== JSON.stringify(["NOLOGIN"]) ||
+      JSON.stringify(root?.memberOf) !== JSON.stringify(["admin"]) ||
+      JSON.stringify(builtinAdmin?.options) !== JSON.stringify([]) ||
+      JSON.stringify(builtinAdmin?.memberOf) !== JSON.stringify([]) ||
+      JSON.stringify(bootstrap?.options) !== JSON.stringify([]) ||
+      JSON.stringify(bootstrap?.memberOf) !== JSON.stringify(["admin"]) ||
+      CAPABILITY_ROLES.some((name) =>
+        JSON.stringify(byName.get(name)?.options) !==
+          JSON.stringify(["NOLOGIN"]) ||
+        JSON.stringify(byName.get(name)?.memberOf) !== JSON.stringify([])) ||
+      RUNTIME_USERS.some((name) =>
+        JSON.stringify(byName.get(name)?.options) !== JSON.stringify([]) ||
+        JSON.stringify(byName.get(name)?.memberOf) !==
+          JSON.stringify([runtimeRoleFor.get(name)])) ||
+      !Number.isFinite(Date.parse(databaseNow)) ||
+      result.rows.some((row) => row.database_now !== databaseNow)) {
+    throw new Error("PRIMARY_LOGIN_POSTURE_MISMATCH");
+  }
+  const fullPrincipalCensusSha256 = principalPostureDigest(rows);
+  const rootOptionsSha256 = principalPostureDigest(root.options);
+  return Object.freeze({
+    schemaVersion: "prooftoact.primary-principal-login-posture.v2",
+    status: "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
+    builtinAdminOptionsSha256: principalPostureDigest(builtinAdmin.options),
+    builtinAdminRolePresent: true,
+    bootstrapPrincipal,
+    bootstrapPrincipalCanLogin: true,
+    bootstrapPrincipalOptionsSha256:
+      principalPostureDigest(bootstrap.options),
+    capabilityNoLoginCount: CAPABILITY_ROLES.length,
+    databaseObservedAt: new Date(Date.parse(databaseNow)).toISOString(),
+    exactPrincipalCount: rows.length,
+    fullPrincipalCensusSha256,
+    immutableBuiltinAdminRoleExceptionPresent: true,
+    rootCanLogin: false,
+    rootMemberOfSha256: principalPostureDigest(root.memberOf),
+    rootOptions: Object.freeze([...root.options]),
+    rootOptionsSha256,
+    rootNoLoginProvedFromShowUsers: true,
+    runtimeLoginCount: RUNTIME_USERS.length
+  });
 }
 
 async function grantExactMemberships(client) {
@@ -1671,6 +1797,7 @@ async function emitPrimaryFunctionSql(client) {
     DECLARE
       v_candidate_count INT8;
       v_exclusion_count INT8;
+      v_out_of_scope_count INT8;
       v_admitted_at TIMESTAMPTZ;
       v_expires_at TIMESTAMPTZ;
     BEGIN
@@ -1686,9 +1813,40 @@ async function emitPrimaryFunctionSql(client) {
         RAISE EXCEPTION 'agency outside policy'
           USING ERRCODE = '22023';
       END IF;
-      IF p_ttl_ms < 1000 OR p_ttl_ms > 300000 THEN
-        RAISE EXCEPTION 'retrieval TTL outside policy'
-          USING ERRCODE = '22023';
+      IF p_ttl_ms = 1800000 THEN
+        SELECT count(*)::INT8
+        INTO v_candidate_count
+        FROM tp_private.g1_list_admissibility_internal_v1(
+          p_tenant_id,
+          p_incident_id,
+          p_agency
+        ) AS listed
+        WHERE listed.admissibility = 'admissible';
+        SELECT
+          count(*) FILTER (
+            WHERE listed.admissibility <> 'admissible'
+          )::INT8,
+          count(*) FILTER (
+            WHERE listed.admissibility = 'out_of_scope'
+          )::INT8
+        INTO v_exclusion_count, v_out_of_scope_count
+        FROM tp_private.g1_list_admissibility_internal_v1(
+          p_tenant_id,
+          p_incident_id,
+          p_agency
+        ) AS listed;
+        IF p_agency <> 'rescue'
+          OR v_candidate_count <> 11
+          OR v_exclusion_count <> 1
+          OR v_out_of_scope_count <> 1 THEN
+          RAISE EXCEPTION 'fresh recovery retrieval TTL boundary mismatch'
+            USING ERRCODE = '22023';
+        END IF;
+      ELSE
+        IF p_ttl_ms < 1000 OR p_ttl_ms > 300000 THEN
+          RAISE EXCEPTION 'retrieval TTL outside policy'
+            USING ERRCODE = '22023';
+        END IF;
       END IF;
       IF EXISTS (
         SELECT 1
@@ -3385,6 +3543,7 @@ async function emitPrimaryFunctionSql(client) {
       v_existing_logical_authority_key_sha256 STRING;
       v_existing_authorization_binding_sha256 STRING;
       v_existing_authority_current BOOL;
+      v_proposal_admitted_at TIMESTAMPTZ;
       v_proposal_expires_at TIMESTAMPTZ;
       v_database_now TIMESTAMPTZ := clock_timestamp();
     BEGIN
@@ -3408,9 +3567,13 @@ async function emitPrimaryFunctionSql(client) {
         RAISE EXCEPTION 'digest must be SHA-256 hex'
           USING ERRCODE = '22023';
       END IF;
-      IF p_lease_ms IS NULL OR p_lease_ms < 1000 OR p_lease_ms > 600000 THEN
-        RAISE EXCEPTION 'lease duration outside policy'
-          USING ERRCODE = '22023';
+      IF p_lease_ms = 1800000 THEN
+        NULL;
+      ELSE
+        IF p_lease_ms IS NULL OR p_lease_ms < 1000 OR p_lease_ms > 600000 THEN
+          RAISE EXCEPTION 'lease duration outside policy'
+            USING ERRCODE = '22023';
+        END IF;
       END IF;
       IF p_request_payload IS NULL
         OR jsonb_typeof(p_request_payload) IS DISTINCT FROM 'object'
@@ -3458,12 +3621,14 @@ async function emitPrimaryFunctionSql(client) {
         proposal.logical_authority_key_sha256,
         proposal.authorization_binding_sha256,
         proposal.payload_canonical,
+        proposal.admitted_at,
         proposal.expires_at
       INTO
         v_authorization_epoch,
         v_logical_authority_key_sha256,
         v_authorization_binding_sha256,
         v_payload_canonical,
+        v_proposal_admitted_at,
         v_proposal_expires_at
       FROM tp_ledger.g1_dvi_proposal_receipts AS proposal
       WHERE proposal.tenant_id = p_tenant_id
@@ -3496,6 +3661,14 @@ async function emitPrimaryFunctionSql(client) {
           false,
           v_database_now;
         RETURN;
+      END IF;
+      IF p_lease_ms > 600000 AND NOT (
+          p_lease_ms = 1800000
+          AND v_proposal_expires_at - v_proposal_admitted_at =
+            INTERVAL '30 minutes'
+        ) THEN
+        RAISE EXCEPTION 'lease duration outside fresh recovery policy'
+          USING ERRCODE = '22023';
       END IF;
 
       v_expected_payload_digest := sha256(v_payload_canonical::BYTES);
@@ -6570,6 +6743,7 @@ async function emitPrimaryFunctionSql(client) {
       v_candidate_conflict_snapshot_valid BOOL;
       v_candidate_count INT8;
       v_database_now TIMESTAMPTZ;
+      v_minimum_residual_ms INT8;
     BEGIN
       IF NOT (session_user = 'tp_recovery_source_user') THEN
         RAISE EXCEPTION 'recovery source database session required'
@@ -6833,6 +7007,14 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
       END IF;
 
       v_database_now := clock_timestamp();
+      v_minimum_residual_ms := floor(extract(epoch FROM (
+        least(
+          v_candidate_receipt_lease_expires_at,
+          v_candidate_resource_lease_expires_at,
+          v_candidate_proposal_expires_at,
+          v_candidate_evidence_valid_until
+        ) - v_database_now
+      )) * 1000)::INT8;
       IF v_candidate_recorded_at <=
           v_database_now - INTERVAL '50 minutes'
         OR v_candidate_receipt_lease_expires_at <= v_database_now
@@ -6888,6 +7070,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
         'resource_id', v_candidate_resource_id,
         'has_durable_intent', v_candidate_has_durable_intent,
         'admissibility', v_candidate_admissibility,
+        'minimum_residual_ms', v_minimum_residual_ms,
         'database_now', v_database_now::STRING
       );
     END
@@ -6895,7 +7078,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
   `);
 
   await client.query(`
-    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2(
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v3(
       p_tenant_id UUID,
       p_run_id UUID,
       p_incident_id UUID,
@@ -6927,6 +7110,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
       resource_id STRING,
       has_durable_intent BOOL,
       admissibility STRING,
+      minimum_residual_ms INT8,
       database_now TIMESTAMPTZ
     )
     LANGUAGE PLpgSQL
@@ -6979,6 +7163,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
           'resource_id', v_snapshot->'resource_id',
           'has_durable_intent', v_snapshot->'has_durable_intent',
           'admissibility', v_snapshot->'admissibility',
+          'minimum_residual_ms', v_snapshot->'minimum_residual_ms',
           'database_now', v_snapshot->'database_now'
         )
         OR v_snapshot->>'snapshot_schema' IS DISTINCT FROM
@@ -7015,6 +7200,8 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
         OR jsonb_typeof(v_snapshot->'has_durable_intent') IS DISTINCT FROM
           'boolean'
         OR jsonb_typeof(v_snapshot->'admissibility') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(v_snapshot->'minimum_residual_ms') IS DISTINCT FROM
+          'number'
         OR jsonb_typeof(v_snapshot->'database_now') IS DISTINCT FROM 'string'
         OR v_snapshot->>'tenant_id' IS DISTINCT FROM p_tenant_id::STRING
         OR v_snapshot->>'run_id' IS DISTINCT FROM p_run_id::STRING
@@ -7028,6 +7215,7 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
         OR v_snapshot->>'has_durable_intent' IS DISTINCT FROM 'true'
         OR v_snapshot->>'admissibility' IS DISTINCT FROM 'admissible'
         OR v_snapshot->>'authorization_epoch' !~ '^[1-9][0-9]{0,17}$'
+        OR v_snapshot->>'minimum_residual_ms' !~ '^[1-9][0-9]{0,17}$'
       THEN
         RETURN;
       END IF;
@@ -7057,9 +7245,91 @@ ${RECOVERY_SOURCE_CANDIDATE_RELATION_SQL}
       resource_id := v_snapshot->>'resource_id';
       has_durable_intent := (v_snapshot->>'has_durable_intent')::BOOL;
       admissibility := v_snapshot->>'admissibility';
+      minimum_residual_ms := (v_snapshot->>'minimum_residual_ms')::INT8;
       database_now := (v_snapshot->>'database_now')::TIMESTAMPTZ;
       RETURN NEXT;
       RETURN;
+    END
+    $$
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION tp_api.g1_resolve_recovery_source_receipt_v2(
+      p_tenant_id UUID,
+      p_run_id UUID,
+      p_incident_id UUID,
+      p_evidence_id UUID,
+      p_resource_id STRING,
+      p_operation_id UUID,
+      p_request_digest STRING
+    )
+    RETURNS TABLE(
+      tenant_id UUID,
+      run_id UUID,
+      incident_id UUID,
+      evidence_id UUID,
+      operation_id UUID,
+      recorded_at TIMESTAMPTZ,
+      request_digest STRING,
+      proposal_digest STRING,
+      logical_action_digest STRING,
+      authorization_epoch INT8,
+      logical_authority_key_sha256 STRING,
+      authorization_binding_sha256 STRING,
+      policy_version STRING,
+      agent_id STRING,
+      agency STRING,
+      outcome STRING,
+      reason STRING,
+      evidence_digest STRING,
+      authority_evidence_binding_sha256 STRING,
+      resource_id STRING,
+      has_durable_intent BOOL,
+      admissibility STRING,
+      database_now TIMESTAMPTZ
+    )
+    LANGUAGE PLpgSQL
+    SECURITY DEFINER
+    AS $$
+    BEGIN
+      IF NOT (session_user = 'tp_recovery_source_user') THEN
+        RAISE EXCEPTION 'recovery source database session required'
+          USING ERRCODE = '42501';
+      END IF;
+      RETURN QUERY
+      SELECT
+        resolved.tenant_id,
+        resolved.run_id,
+        resolved.incident_id,
+        resolved.evidence_id,
+        resolved.operation_id,
+        resolved.recorded_at,
+        resolved.request_digest,
+        resolved.proposal_digest,
+        resolved.logical_action_digest,
+        resolved.authorization_epoch,
+        resolved.logical_authority_key_sha256,
+        resolved.authorization_binding_sha256,
+        resolved.policy_version,
+        resolved.agent_id,
+        resolved.agency,
+        resolved.outcome,
+        resolved.reason,
+        resolved.evidence_digest,
+        resolved.authority_evidence_binding_sha256,
+        resolved.resource_id,
+        resolved.has_durable_intent,
+        resolved.admissibility,
+        resolved.database_now
+      FROM tp_api.g1_resolve_recovery_source_receipt_v3(
+        p_tenant_id,
+        p_run_id,
+        p_incident_id,
+        p_evidence_id,
+        p_resource_id,
+        p_operation_id,
+        p_request_digest
+      ) AS resolved;
     END
     $$
   `);
@@ -7422,6 +7692,7 @@ async function transferOwnership(client) {
     "tp_api.g1_resolve_recovery_audit_event_v1(UUID, UUID, STRING)",
     "tp_private.g1_resolve_recovery_source_snapshot_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tp_api.g1_resolve_recovery_source_receipt_v2(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
+    "tp_api.g1_resolve_recovery_source_receipt_v3(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tp_api.g1_resolve_recovery_publisher_trust_root_v1(STRING, STRING, STRING)",
     "tp_api.g1_record_protected_effect_v1(UUID, UUID, UUID, STRING, UUID, UUID, STRING, STRING, INT8, STRING)"
   ];
@@ -7469,6 +7740,9 @@ async function applyGrants(client, bootstrapOwner) {
   await client.query(`
     GRANT EXECUTE ON FUNCTION
       tp_api.g1_resolve_recovery_source_receipt_v2(
+        UUID, UUID, UUID, UUID, STRING, UUID, STRING
+      ),
+      tp_api.g1_resolve_recovery_source_receipt_v3(
         UUID, UUID, UUID, UUID, STRING, UUID, STRING
       )
     TO tp_recovery_source_role
@@ -7795,6 +8069,10 @@ export async function bootstrapPrimarySecurity({
       adminConnectionString,
       principalDatabases: CLUSTER_PRINCIPAL_DATABASES
     });
+    const principalLoginPosture = await collectPrincipalLoginPosture(
+      client,
+      bootstrapOwner
+    );
     return {
       roles: attested.posture.principals.filter((row) =>
         MANAGED_PRINCIPALS.includes(row.username)
@@ -7802,7 +8080,8 @@ export async function bootstrapPrimarySecurity({
       preflightPostureDigest: preflight.summary.postureDigest,
       finalPostureDigest: attested.summary.postureDigest,
       clusterPreflightPostureDigest: clusterPreflight.postureDigest,
-      clusterFinalPostureDigest: clusterAttested.postureDigest
+      clusterFinalPostureDigest: clusterAttested.postureDigest,
+      principalLoginPosture
     };
   } finally {
     if (store) {
@@ -7820,6 +8099,7 @@ export const __test = Object.freeze({
   executePrimaryFunctionSqlStatements,
   primaryFunctionSqlBatchSha256,
   primaryFunctionSqlStatements,
+  collectPrincipalLoginPosture,
   reconcileProviderEffectOccupancy,
   primaryPostureSpec: PRIMARY_POSTURE_SPEC,
   primaryPreflightPostureSpec: PRIMARY_PREFLIGHT_POSTURE_SPEC,

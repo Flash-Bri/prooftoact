@@ -352,6 +352,59 @@ function rowValue(row, names) {
   return null;
 }
 
+function normalizedShowUsersArray(value) {
+  let items;
+  if (Array.isArray(value)) {
+    items = value;
+  } else if (value === "{}") {
+    items = [];
+  } else if (typeof value === "string" && /^\{[^{}]*\}$/u.test(value)) {
+    items = value.slice(1, -1).split(",").filter((item) => item !== "");
+  } else {
+    reject("FRESH_PRIMARY_SHOW_USERS_POSTURE_REJECTED");
+  }
+  requireCondition(items.every((item) => typeof item === "string" &&
+    /^[A-Za-z_][A-Za-z0-9_=-]{0,127}$/u.test(item)) &&
+    new Set(items).size === items.length,
+  "FRESH_PRIMARY_SHOW_USERS_POSTURE_REJECTED");
+  return Object.freeze([...items].sort());
+}
+
+function validateFreshPreflightPrincipalPosture(rows, bootstrapPrincipal) {
+  const posture = rows.map((row) => Object.freeze({
+    roleName: rowValue(row, ["username", "user_name", "name"]),
+    options: normalizedShowUsersArray(row.options),
+    memberOf: normalizedShowUsersArray(row.member_of)
+  })).sort((left, right) => left.roleName.localeCompare(right.roleName));
+  const expectedNames = ["admin", bootstrapPrincipal, "root"].sort();
+  const byName = new Map(posture.map((row) => [row.roleName, row]));
+  requireCondition(
+    posture.length === expectedNames.length &&
+      JSON.stringify(posture.map(({ roleName }) => roleName)) ===
+        JSON.stringify(expectedNames) &&
+      JSON.stringify(byName.get("admin")?.options) === JSON.stringify([]) &&
+      JSON.stringify(byName.get("admin")?.memberOf) === JSON.stringify([]) &&
+      JSON.stringify(byName.get("root")?.options) === JSON.stringify([]) &&
+      JSON.stringify(byName.get("root")?.memberOf) ===
+        JSON.stringify(["admin"]) &&
+      JSON.stringify(byName.get(bootstrapPrincipal)?.options) ===
+        JSON.stringify([]) &&
+      JSON.stringify(byName.get(bootstrapPrincipal)?.memberOf) ===
+        JSON.stringify(["admin"]),
+    "FRESH_PRIMARY_SHOW_USERS_POSTURE_REJECTED"
+  );
+  return Object.freeze({
+    schemaVersion: "prooftoact.fresh-primary-preflight-principal-posture.v1",
+    status: "EXACT_SHOW_USERS_PRESTATE",
+    builtinAdminRolePresent: true,
+    exactPrincipalCount: posture.length,
+    fullPrincipalCensusSha256: sha256(canonicalBytes(posture)),
+    rootCanLogin: true,
+    rootOptions: Object.freeze([]),
+    rootOptionsSha256: sha256(canonicalBytes([]))
+  });
+}
+
 export function freshPrimaryIntent({
   approvalId,
   expectedClusterId,
@@ -512,6 +565,7 @@ async function runFreshPrimaryBootstrap({
   let phase = "PREFLIGHT_NOT_STARTED";
   let clusterId;
   let serverVersion;
+  let preflightPrincipalPosture;
   let adminCredentialDiscarded = false;
   const transition = (phaseName, payload) =>
     transitionJournal.record(phaseName, payload);
@@ -553,15 +607,9 @@ async function runFreshPrimaryBootstrap({
     );
 
     const usersResult = await adminClient.query("SHOW USERS");
-    const users = usersResult.rows.map((row) =>
-      rowValue(row, ["username", "user_name", "name"])
-    );
-    const expectedUsers = admin.username === "root"
-      ? ["root"]
-      : ["root", admin.username];
-    requireCondition(
-      exactStringSet(users, expectedUsers),
-      "FRESH_PRIMARY_PRINCIPAL_CENSUS_REJECTED"
+    preflightPrincipalPosture = validateFreshPreflightPrincipalPosture(
+      usersResult.rows,
+      admin.username
     );
 
     for (const database of ["defaultdb", "postgres"]) {
@@ -576,7 +624,10 @@ async function runFreshPrimaryBootstrap({
       clusterIdSha256: sha256(clusterId),
       databaseCensusSha256: sha256(canonicalBytes(databases.sort())),
       mutationDispatched: false,
-      principalCensusSha256: sha256(canonicalBytes(users.sort()))
+      principalCensusSha256:
+        preflightPrincipalPosture.fullPrincipalCensusSha256,
+      preflightPrincipalPostureSha256:
+        sha256(canonicalBytes(preflightPrincipalPosture))
     });
 
     phase = "ADMIN_CREDENTIAL_DISCARDING";
@@ -635,6 +686,7 @@ async function runFreshPrimaryBootstrap({
         "clusterFinalPostureDigest",
         "clusterPreflightPostureDigest",
         "finalPostureDigest",
+        "principalLoginPosture",
         "preflightPostureDigest",
         "roles"
       ]) &&
@@ -646,6 +698,44 @@ async function runFreshPrimaryBootstrap({
         ].every((digest) => HEX_64.test(digest ?? "")),
       "FRESH_PRIMARY_BOOTSTRAP_RESULT_REJECTED"
     );
+    requireCondition(exactKeys(bootstrapResult.principalLoginPosture, [
+      "builtinAdminOptionsSha256", "builtinAdminRolePresent",
+      "bootstrapPrincipal",
+      "bootstrapPrincipalCanLogin", "bootstrapPrincipalOptionsSha256",
+      "capabilityNoLoginCount", "databaseObservedAt", "exactPrincipalCount",
+      "fullPrincipalCensusSha256", "immutableBuiltinAdminRoleExceptionPresent",
+      "rootCanLogin", "rootMemberOfSha256", "rootNoLoginProvedFromShowUsers",
+      "rootOptions", "rootOptionsSha256", "runtimeLoginCount",
+      "schemaVersion", "status"
+    ]) && bootstrapResult.principalLoginPosture.schemaVersion ===
+        "prooftoact.primary-principal-login-posture.v2" &&
+      bootstrapResult.principalLoginPosture.status ===
+        "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE" &&
+      bootstrapResult.principalLoginPosture.bootstrapPrincipal ===
+        admin.username &&
+      bootstrapResult.principalLoginPosture.bootstrapPrincipalCanLogin ===
+        true && bootstrapResult.principalLoginPosture.rootCanLogin === false &&
+      bootstrapResult.principalLoginPosture.rootNoLoginProvedFromShowUsers ===
+        true &&
+      bootstrapResult.principalLoginPosture.builtinAdminRolePresent === true &&
+      bootstrapResult.principalLoginPosture
+        .immutableBuiltinAdminRoleExceptionPresent === true &&
+      JSON.stringify(bootstrapResult.principalLoginPosture.rootOptions) ===
+        JSON.stringify(["NOLOGIN"]) &&
+      bootstrapResult.principalLoginPosture.runtimeLoginCount ===
+        FRESH_PRIMARY_RUNTIME_USERS.length &&
+      bootstrapResult.principalLoginPosture.capabilityNoLoginCount === 15 &&
+      bootstrapResult.principalLoginPosture.exactPrincipalCount === 32 &&
+      [
+        bootstrapResult.principalLoginPosture.builtinAdminOptionsSha256,
+        bootstrapResult.principalLoginPosture.bootstrapPrincipalOptionsSha256,
+        bootstrapResult.principalLoginPosture.fullPrincipalCensusSha256,
+        bootstrapResult.principalLoginPosture.rootMemberOfSha256,
+        bootstrapResult.principalLoginPosture.rootOptionsSha256
+      ].every((value) => HEX_64.test(value ?? "")) &&
+      Number.isFinite(Date.parse(
+        bootstrapResult.principalLoginPosture.databaseObservedAt)),
+    "FRESH_PRIMARY_LOGIN_POSTURE_REJECTED");
     validateManagedRoleResult(bootstrapResult.roles);
     phase = "SECURITY_BOOTSTRAPPED";
     await transition(phase, {
@@ -736,7 +826,13 @@ async function runFreshPrimaryBootstrap({
       callerSuppliedSealReceiptSha256: sha256(canonicalBytes(seal)),
       recoveryPublisher: Object.freeze({ ...recoveryPublisherTrustRoot }),
       providerReadbackAuthenticatedByThisModule: false,
-      providerRevocationValidatedByThisModule: false
+      providerRevocationValidatedByThisModule: false,
+      rootCredentialLifecycle: Object.freeze({
+        connectionStringCreated: false,
+        connectionStringUsed: false,
+        passwordCreated: false,
+        secretStored: false
+      })
     }),
     provider: Object.freeze({
       database: DATABASE_NAME,
@@ -748,6 +844,10 @@ async function runFreshPrimaryBootstrap({
     preflight: Object.freeze({
       exactDatabaseCensus: FRESH_DATABASES,
       managedPrincipalCount: 0,
+      principalPosture: preflightPrincipalPosture,
+      principalPostureSha256: sha256(canonicalBytes(
+        preflightPrincipalPosture
+      )),
       userTableCount: 0
     }),
     bootstrap: Object.freeze({
@@ -757,7 +857,10 @@ async function runFreshPrimaryBootstrap({
         bootstrapResult.clusterPreflightPostureDigest,
       clusterFinalPostureDigest: bootstrapResult.clusterFinalPostureDigest,
       managedRoleCount: bootstrapResult.roles.length,
-      managedRoleSetSha256: sha256(canonicalBytes([...MANAGED_PRINCIPALS].sort()))
+      managedRoleSetSha256: sha256(canonicalBytes([...MANAGED_PRINCIPALS].sort())),
+      principalLoginPosture: bootstrapResult.principalLoginPosture,
+      principalLoginPostureSha256:
+        sha256(canonicalBytes(bootstrapResult.principalLoginPosture))
     }),
     postflight: Object.freeze({
       databaseTime: identity.database_now,
@@ -768,7 +871,7 @@ async function runFreshPrimaryBootstrap({
     partialFailureDisposition:
       "UNKNOWN_DO_NOT_RETRY_RECONCILE_OR_DISCARD",
     claimBoundary:
-      "This receipt proves one caller-supplied fresh-cluster census, one exact managed-principal bootstrap result, local credential-file discard, a separately sealed fresh recovery-publisher trust-root binding, and one least-privilege Gate Two runtime identity check for the bound source and dependency closure. The nested provider controller independently authenticates the exact Secrets Manager versions and the fresh signer seal. This receipt does not prove DVI execution, Lambda deployment or overlap, Managed MCP, an integrated live drill, public availability, teardown, or final release acceptance."
+      "This receipt proves one caller-supplied fresh-cluster census, the exact complete SHOW USERS prestate, one exact 32-row SHOW USERS post-bootstrap posture with root plus 15 ProofToAct capability roles set NOLOGIN and 14 runtime users LOGIN, no ProofToAct root password, secret, or connection string created or used, local credential-file discard, a separately sealed fresh recovery-publisher trust-root binding, and one least-privilege Gate Two runtime identity check for the bound source and dependency closure. CockroachDB's immutable built-in admin role remains a provider-managed exception; the claim is no application-retained SQL administrator after the nested controller deletes the bootstrap principal, not no administrative control path. The nested provider controller independently authenticates the exact Secrets Manager versions and fresh signer seal. This receipt does not prove DVI execution, Lambda deployment or overlap, Managed MCP, an integrated live drill, public availability, teardown, provider-key revocation, or final release acceptance."
   });
 }
 

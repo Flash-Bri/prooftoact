@@ -1105,10 +1105,6 @@ const EXPECTED_SURFACES = Object.freeze({
   "strict-json-contract": Object.freeze({
     path: "src/cloud/strict-json.js",
     role: "STRICT_JSON_DUPLICATE_MEMBER_REJECTION"
-  }),
-  "synthetic-authority-proposal": Object.freeze({
-    path: "scripts/lib/synthetic-authority-proposal.js",
-    role: "SYNTHETIC_AUTHORITY_PROPOSAL_FIXTURE"
   })
 });
 
@@ -1387,7 +1383,11 @@ const SOURCE_MARKERS = Object.freeze({
     "fresh-primary-bootstrap": Object.freeze([
       "validateFreshPrimaryCredentialBundle",
       "runFreshPrimaryProviderControlledBootstrap",
-      "freshPrimaryIntent"
+      "freshPrimaryIntent",
+      "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
+      "rootNoLoginProvedFromShowUsers",
+      "rootCredentialLifecycle",
+      "immutable built-in admin role remains a provider-managed exception"
     ]),
     "fresh-cluster-aws-provider": Object.freeze([
       "createFreshClusterAwsProvider",
@@ -1411,7 +1411,11 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-cluster-provider-controller": Object.freeze([
       "FreshClusterProviderController",
-      "UNKNOWN_DO_NOT_RETRY"
+      "UNKNOWN_DO_NOT_RETRY",
+      "PROVIDER_KEYS_REVOCATION_PENDING",
+      "providerKeyRevocationCeremony",
+      "completeShowUsersPrincipalCensusSha256",
+      "commitValidatorSequenceMatchedDirectDvi"
     ]),
     "fresh-cluster-reconciliation-controller": Object.freeze([
       "reconcileFreshClusterProviderAccess",
@@ -1457,12 +1461,19 @@ const SOURCE_MARKERS = Object.freeze({
       "createFreshRecoveryPublicationExecution",
       "executeFreshPublicationProviderAction",
       "databaseNow",
-      "managedMcpLogicalRequest"
+      "managedMcpLogicalRequest",
+      "minimum_residual_ms",
+      "sourceAuthorityWindow"
     ]),
     "fresh-recovery-source-execution": Object.freeze([
       "produceFreshRecoverySource",
       "freshRecoverySourceIdentity",
-      "authorityEvidenceBindingSha256"
+      "authorityEvidenceBindingSha256",
+      "proveFreshAdmissibleVectorSnapshot",
+      "Promise.allSettled",
+      "FROM tp_api.g1_spend_authority_v1(",
+      "commitValidatorSequenceMatchedDirectDvi",
+      "outboxCount: finalSnapshot.outbox.length"
     ]),
     "fresh-cluster-provider-launcher": Object.freeze([
       "FRESH_CLUSTER_LAUNCH_IMPORT_GRAPH_REJECTED",
@@ -1506,7 +1517,8 @@ const SOURCE_MARKERS = Object.freeze({
     ]),
     "fresh-cluster-provider-runner": Object.freeze([
       "runFreshClusterProvider",
-      "--receipt-output"
+      "--receipt-output",
+      "FRESH_CLUSTER_PROVIDER_HOLD_PROVIDER_KEYS_REVOCATION_PENDING"
     ]),
     "fresh-primary-credential-sealer-runner": Object.freeze([
       "runFreshPrimaryCredentialSealer",
@@ -1597,6 +1609,9 @@ const SOURCE_MARKERS = Object.freeze({
     "authorityEvidenceBindingSha256",
     "rankedSequenceSha256",
     "auditorRankMatchesAuthorizer: true",
+    "directDviQueryForcedIndex: true",
+    "directDviResultValidated: true",
+    "commitValidatorSequenceMatchedDirectDvi: true",
     "if (prepared)",
     "remainingExclusionCount: 0",
     "executeVectorPreparation(",
@@ -2345,8 +2360,8 @@ const SOURCE_MARKERS = Object.freeze({
     "Gate One proves resolver cursor closure inside one transaction",
     "assert.deepEqual(stableColumns, [...stableColumns].sort())",
     "const outputAssignments = Object.freeze([",
-    "assert.equal(outputAssignments.length, 23)",
-    "database_now := \\(v_snapshot->>'database_now'\\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$",
+    "assert.equal(outputAssignments.length, 24)",
+    "minimum_residual_ms := \\(v_snapshot->>'minimum_residual_ms'\\)::INT8; database_now := \\(v_snapshot->>'database_now'\\)::TIMESTAMPTZ; RETURN NEXT; RETURN; END$",
     "assert.doesNotMatch(wrapper, /\\bRETURN QUERY\\b/u)",
     "privateSnapshotGrant",
     "Cockroach schema closure preserves typed public surfaces and direct denials",
@@ -3643,6 +3658,9 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_provider_dispatch_v2",
     "collectValidatedPosture(",
     "ALTER ROLE ${role} WITH NOLOGIN",
+    "ALTER ROLE root WITH NOLOGIN",
+    "FROM [SHOW USERS]",
+    "EXACT_COMPLETE_SHOW_USERS_LOGIN_POSTURE",
     "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA tp_private, tp_ledger, tp_api FROM ${principal}",
     "GRANT USAGE ON SCHEMA ${schemaName} TO ${role}",
     "FROM tp_authorizer_role",
@@ -3656,6 +3674,7 @@ const SOURCE_MARKERS = Object.freeze({
     "tp_api.g1_resolve_recovery_audit_event_v1",
     "tp_private.g1_resolve_recovery_source_snapshot_v1",
     "tp_api.g1_resolve_recovery_source_receipt_v2",
+    "tp_api.g1_resolve_recovery_source_receipt_v3",
     "tp_recovery_source_role: ALL_RUNTIME_SCHEMAS,",
     "tp_provider_activate_role: Object.freeze([\"tp_api\", \"tp_ledger\"])",
     "tp_provider_terminalize_role: Object.freeze([\"tp_api\", \"tp_ledger\"])",
@@ -3675,10 +3694,11 @@ const SOURCE_MARKERS = Object.freeze({
     "WHILE v_candidate_conflict_index < jsonb_array_length(v_candidate_conflict_windows) LOOP v_candidate_conflict_window := v_candidate_conflict_windows->v_candidate_conflict_index;",
     "v_candidate_evidence_valid_until <= v_database_now",
     "RETURN jsonb_build_object( 'snapshot_schema', 'g1-recovery-source-snapshot-v1', 'tenant_id', v_candidate_tenant_id::STRING",
+    "'minimum_residual_ms', v_minimum_residual_ms",
     "v_snapshot := tp_private.g1_resolve_recovery_source_snapshot_v1( p_tenant_id, p_run_id, p_incident_id, p_evidence_id, p_resource_id, p_operation_id, p_request_digest );",
     "v_snapshot IS DISTINCT FROM jsonb_build_object( 'snapshot_schema', v_snapshot->'snapshot_schema'",
     "jsonb_typeof(v_snapshot->'reason') IS DISTINCT FROM 'string' AND jsonb_typeof(v_snapshot->'reason') IS DISTINCT FROM 'null'",
-    "tenant_id := (v_snapshot->>'tenant_id')::UUID; run_id := (v_snapshot->>'run_id')::UUID; incident_id := (v_snapshot->>'incident_id')::UUID; evidence_id := (v_snapshot->>'evidence_id')::UUID; operation_id := (v_snapshot->>'operation_id')::UUID; recorded_at := (v_snapshot->>'recorded_at')::TIMESTAMPTZ; request_digest := v_snapshot->>'request_digest'; proposal_digest := v_snapshot->>'proposal_digest'; logical_action_digest := v_snapshot->>'logical_action_digest'; authorization_epoch := (v_snapshot->>'authorization_epoch')::INT8; logical_authority_key_sha256 := v_snapshot->>'logical_authority_key_sha256'; authorization_binding_sha256 := v_snapshot->>'authorization_binding_sha256'; policy_version := v_snapshot->>'policy_version'; agent_id := v_snapshot->>'agent_id'; agency := v_snapshot->>'agency'; outcome := v_snapshot->>'outcome'; reason := v_snapshot->>'reason'; evidence_digest := v_snapshot->>'evidence_digest'; authority_evidence_binding_sha256 := v_snapshot->>'authority_evidence_binding_sha256'; resource_id := v_snapshot->>'resource_id'; has_durable_intent := (v_snapshot->>'has_durable_intent')::BOOL; admissibility := v_snapshot->>'admissibility'; database_now := (v_snapshot->>'database_now')::TIMESTAMPTZ; RETURN NEXT; RETURN;",
+    "minimum_residual_ms := (v_snapshot->>'minimum_residual_ms')::INT8; database_now := (v_snapshot->>'database_now')::TIMESTAMPTZ; RETURN NEXT; RETURN;",
     "tp_private.g1_resolve_recovery_source_snapshot_v1(UUID, UUID, UUID, UUID, STRING, UUID, STRING)",
     "tideproof.primary-function-sql-batch.v1",
     "PRIMARY_FUNCTION_SQL_BATCH_UNREVIEWED",
@@ -4287,7 +4307,7 @@ const SOURCE_MARKERS = Object.freeze({
     "beforeExternalAction(\"AUDIT_RESOLVE_CONNECT\")",
     "beforeExternalAction(\"AUDIT_RESOLVE_QUERY\")",
     "g1_resolve_recovery_audit_event_v1",
-    "g1_resolve_recovery_source_receipt_v2",
+    "g1_resolve_recovery_source_receipt_v3",
     "resolveCommittedRecoverySourceReceipt",
     "row.policy_version !== \"gate1-policy-v2\"",
     "RECOVERY_SOURCE_DVI_BINDING_INVALID",
@@ -4510,12 +4530,6 @@ const SOURCE_MARKERS = Object.freeze({
     "Number.isFinite(Number(match[0]))",
     "members.has(member)",
     "return JSON.parse(text);"
-  ]),
-  "synthetic-authority-proposal": Object.freeze([
-    "dviSelectionBindingSha256For(selection)",
-    "recordDviSelectionReceiptForTest(selection)",
-    "SYNTHETIC_PROPOSAL_AUTHORIZATION_FAILED",
-    "authorizeSyntheticContenders"
   ])
 });
 

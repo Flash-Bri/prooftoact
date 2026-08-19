@@ -901,7 +901,7 @@
     {
       "id": "recovery-broker",
       "path": "src/cloud/recovery-broker.js",
-      "sha256": "a082914bcb63ea74945732144d31079d2be93b448a2754eb93927cd2ea49e114",
+      "sha256": "5ce9dfcc4907b96b403d32deb8b3c61ac8d0daf3b3a3ecf4b6bb88b4570f7cd2",
       "kind": "verification-code"
     },
     {
@@ -973,25 +973,25 @@
     {
       "id": "release-cost-ledger",
       "path": "docs/RELEASE_COST.md",
-      "sha256": "5748f2d3a668f855482cd57697f8bcdddb8c99b12c16f5c147bfc0b5ce9d9c6b",
+      "sha256": "1c3f7d20afb7b8f78a9ea383d54d66c17369dca9f211cce78682bf6e2b2c9365",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-manifest",
       "path": "RELEASE_COST_MANIFEST.json",
-      "sha256": "263c0855506ab836e9aa21294e4a31dc23ea96eb6f00de92531b50503e0df5c1",
+      "sha256": "29bbe2ace4b262b5c1489cd14a1787d48ae9c5e7a958b0e0e47f0a370fae745d",
       "kind": "boundary-ledger"
     },
     {
       "id": "release-cost-tests",
       "path": "test/release-cost.test.js",
-      "sha256": "8875e26f42578bd778e5a7809dd7056ec1685a48eb781d315d17fa86bab55763",
+      "sha256": "a299bd0d65ae2bbbc781dbc5c3abd0108bc1a7c43fdce2406f23583b7b1cbc87",
       "kind": "verification-code"
     },
     {
       "id": "release-cost-verifier",
       "path": "scripts/verify-release-cost.js",
-      "sha256": "c94f2ba6615e0928753c8b2dc65deeece7c6a7d576490c0fc2889a7639aae9d1",
+      "sha256": "e42048e42020041f0d663fd88c1290b3f80d8b0fa8baaccbcd2802d2ff70fa75",
       "kind": "verification-code"
     },
     {
@@ -1093,7 +1093,7 @@
     {
       "id": "release-security-manifest",
       "path": "RELEASE_SECURITY_MANIFEST.json",
-      "sha256": "eccbc3ded48a87ed53a0037858a9b5be776df7199ae0afe701a1af390e083553",
+      "sha256": "b686198c1e7bac88f8178d3974640d0f0f6123329d5ce8f8b6ffba161681d424",
       "kind": "boundary-ledger"
     },
     {
@@ -1105,7 +1105,7 @@
     {
       "id": "release-security-verifier",
       "path": "scripts/verify-release-security.js",
-      "sha256": "db06bece6f8e149f58d774febedb6b1fa60e43244ff4397f07265577a1857179",
+      "sha256": "09a825c509d70c414bc059b51592385c5538803d4eb6d581fec82f3e84942846",
       "kind": "verification-code"
     },
     {

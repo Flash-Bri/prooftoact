@@ -69,6 +69,7 @@ const MAX_SECRET_BYTES = 64 * 1024;
 const FRESH_PUBLICATION_TTL_MS = 45 * 60 * 1_000;
 const PRIMARY_MINIMUM_REMAINING_MS = 10 * 60 * 1_000;
 const PROVIDER_MINIMUM_REMAINING_MS = 5 * 60 * 1_000;
+const SOURCE_AUTHORITY_MINIMUM_REMAINING_MS = 10 * 60 * 1_000;
 
 export function freshRecoveryPublicationProviderBinding() {
   return Object.freeze({
@@ -85,6 +86,23 @@ function reject(code, cause) {
 
 function requireCondition(condition, code) {
   if (!condition) reject(code);
+}
+
+function validateSourceAuthorityWindow(rawSourceReceipt) {
+  const databaseObservedAt = new Date(rawSourceReceipt?.database_now);
+  requireCondition(
+    Number.isFinite(databaseObservedAt.getTime()) &&
+      Number.isSafeInteger(rawSourceReceipt?.minimum_residual_ms) &&
+      rawSourceReceipt.minimum_residual_ms >=
+        SOURCE_AUTHORITY_MINIMUM_REMAINING_MS,
+    "FRESH_RECOVERY_PUBLICATION_SOURCE_AUTHORITY_TTL_REJECTED"
+  );
+  return Object.freeze({
+    databaseObservedAt: databaseObservedAt.toISOString(),
+    minimumRequiredMs: SOURCE_AUTHORITY_MINIMUM_REMAINING_MS,
+    minimumResidualMs: rawSourceReceipt.minimum_residual_ms,
+    source: "COCKROACHDB_CLOCK"
+  });
 }
 
 function plainObject(value) {
@@ -634,6 +652,9 @@ export function createFreshRecoveryPublicationExecution({
       });
       const recoverySourceReceipt =
         normalizedRecoverySourceReceiptForContinuity(rawSourceReceipt);
+      const sourceAuthorityWindow = validateSourceAuthorityWindow(
+        rawSourceReceipt
+      );
       const signer = createCommittedRecoveryPublisherSigner({
         privateKeyPkcs8Base64: material.signer.privateKeyPkcs8Base64,
         trustRootCommitment: material.signer.trustRootCommitment,
@@ -764,6 +785,7 @@ export function createFreshRecoveryPublicationExecution({
         publisherConnectionString: material.publisherConnectionString,
         privateRecoveryQueryBinding,
         primaryDatabaseClock: primaryClock,
+        sourceAuthorityWindow,
         recoverySourceReceipt,
         signer,
         sourceDigest,
@@ -784,6 +806,7 @@ export function createFreshRecoveryPublicationExecution({
         publisherKeySetDigest,
         primaryDatabaseObservedAt: primaryClock.databaseObservedAt,
         primaryRemainingWindowMs: primaryClock.remainingWindowMs,
+        sourceAuthorityWindow,
         recoverySessionId: attempt.recoverySessionId,
         requiresFreshAuthorization: true,
         sourceDigest,
@@ -1035,5 +1058,6 @@ export const __test = Object.freeze({
   rowsFromManagedMcpResult,
   sha256,
   sourceBinding,
+  validateSourceAuthorityWindow,
   validatePublisherConnectionString
 });
