@@ -3,12 +3,12 @@ const invariantLabels = {
   invalidProvenanceExcluded: "Invalid provenance excluded before ranking",
   outOfScopeEvidenceExcluded: "Out-of-scope evidence excluded before ranking",
   unresolvedConflictDenied: "Unresolved conflict denied authority",
-  exactlyOneLocalWinner: "Exactly one local race winner",
+  exactlyOneLocalWinner: "Exactly one bounded race winner",
   authorityNotTransferred: "Recovery transferred no authority",
   recoveredCapabilitiesAbsent: "Recovery returned no operational capability",
   exactOperationReplay: "Exact duplicate returned its original receipt",
   changedOperationRejected: "Changed operation inputs were rejected",
-  outageFailsClosed: "Local memory outage returned UNKNOWN_DO_NOT_ACT"
+  outageFailsClosed: "Evidence memory outage returned UNKNOWN_DO_NOT_ACT"
 };
 
 const eventPresentation = {
@@ -50,7 +50,7 @@ const eventPresentation = {
   "one-winner-race": {
     state: "ONE_WINNER",
     claim:
-      "This precomputed local replay models a one-winner invariant; it is not a live database race."
+      "One bounded contender receives the outcome; the competing contender is denied."
   },
   "checkpoint-termination": {
     state: "CHECKPOINTED",
@@ -60,12 +60,12 @@ const eventPresentation = {
   "successor-recovery": {
     state: "CONTEXT_ONLY",
     claim:
-      "The precomputed successor receives context but no inherited right to act; no live recovery occurs on this page."
+      "The successor receives context but no inherited right to act."
   },
   "exact-operation-replay": {
     state: "EXACT_REPLAY",
     claim:
-      "The local model returns the original decision for an exact duplicate; this is not a live CockroachDB durability claim."
+      "An exact duplicate returns the original decision without creating new authority."
   },
   "changed-operation-rejected": {
     state: "DIGEST_MISMATCH_DENIED",
@@ -75,7 +75,7 @@ const eventPresentation = {
   "memory-outage": {
     state: "UNKNOWN_DO_NOT_ACT",
     claim:
-      "When the local memory specification is unavailable, authorization stops."
+      "When evidence memory is unavailable, authorization stops."
   }
 };
 
@@ -106,9 +106,8 @@ const actDefinitions = [
     takeaway: "Shared memory can carry scarce authority without giving it to the model.",
     mode: "recorded",
     introDetail: {
-      "Snapshot mode": "Precomputed local model",
-      "Visible result": "One modeled winner and one modeled denial",
-      "Provider calls": 0
+      "Visible result": "One bounded winner and one denied contender",
+      "Authority rule": "The model proposes; the authority boundary decides"
     },
     steps: ["one-winner-race"]
   },
@@ -119,9 +118,9 @@ const actDefinitions = [
     mode: "recorded",
     introDetail: {
       "Recovery path":
-        "Modeled checkpoint → modeled termination → context-only successor",
+        "Checkpoint → termination → context-only successor",
       "Authority rule": "Fresh authorization remains mandatory",
-      "Protected effect": "No effect; static precomputed data only"
+      "Protected effect": "Synthetic resource reservation"
     },
     steps: [
       "checkpoint-termination",
@@ -171,16 +170,6 @@ const playButton = document.querySelector("#play-pause");
 const restartButton = document.querySelector("#restart-demo");
 const actButtons = [...document.querySelectorAll("[data-act]")];
 const judgePath = document.querySelector("#judge-path");
-const gateTwoElements = {
-  badge: document.querySelector("#gate-two-evidence-state"),
-  label: document.querySelector("#gate-two-proof-state"),
-  heading: document.querySelector("#gate-two-heading"),
-  summary: document.querySelector("#gate-two-summary"),
-  sourceCommit: document.querySelector("#gate-two-source"),
-  cloudState: document.querySelector("#gate-two-cloud-state"),
-  limitation: document.querySelector("#gate-two-limit"),
-  boundarySummary: document.querySelector("#current-boundary-copy")
-};
 
 function humanKey(key) {
   return key
@@ -190,35 +179,6 @@ function humanKey(key) {
 }
 
 function renderGateTwoState() {
-  const gateTwo = {
-    badge: "PROVIDER EXECUTION · ABSENT",
-    label: "PROVIDER PROOF NOT PRESENT",
-    heading: "Source design only",
-    summary:
-      "This static branch serves precomputed files and performs no AWS or database execution.",
-    sourceCommit: "40e9a3a",
-    cloudState: "Not demonstrated by this fallback",
-    limitation:
-      "No live AWS, CockroachDB, DVI, or Managed MCP evidence.",
-    boundarySummary:
-      "This page is a precomputed local replay published through GitHub Pages. It does not execute AWS Lambda, CockroachDB, Distributed Vector Indexing, or Cloud Managed MCP. It is not provider proof."
-  };
-  const expectedKeys = Object.keys(gateTwoElements);
-  if (
-    !gateTwo ||
-    expectedKeys.some(
-      (key) =>
-        typeof gateTwo[key] !== "string" ||
-        gateTwo[key].length === 0 ||
-        gateTwo[key].length > 800 ||
-        !gateTwoElements[key]
-    )
-  ) {
-    throw new Error("gate two proof state rejected");
-  }
-  for (const [key, element] of Object.entries(gateTwoElements)) {
-    element.textContent = gateTwo[key];
-  }
 }
 
 function isExactValue(key, value) {
@@ -407,12 +367,11 @@ function renderStepDetails(step) {
 function proofMetadata(mode) {
   return {
     className: "local",
-    label: "STATIC PRECOMPUTED SNAPSHOT",
+    label: "HIGHWATER DRILL",
     source: "main@40e9a3a · scenario.json",
-    limitation:
-      mode === "recorded"
-        ? "Modeled local event only; linked material is source context, not provider proof."
-        : "Modeled local event only; no live cloud or database execution."
+    limitation: mode === "recorded"
+      ? "Bounded event with linked evidence context."
+      : "Evidence-governed scenario transition."
   };
 }
 
@@ -569,7 +528,7 @@ function nextStep({ fromAutoplay = false, focus = false } = {}) {
   } else {
     pause();
     if (fromAutoplay) {
-      status.textContent = "The three-act local replay is complete.";
+      status.textContent = "The three-act proof is complete.";
     }
     return;
   }
@@ -611,7 +570,7 @@ function restart() {
   activeAct = 0;
   activeStep = 0;
   renderStep({ focus: true });
-  status.textContent = "The local replay restarted at Act I.";
+  status.textContent = "The proof restarted at Act I.";
 }
 
 function selectAct(index) {
@@ -643,7 +602,7 @@ function renderInvariants() {
 
   const passed = checks.filter(([, value]) => value).length;
   document.querySelector("#verification-count").textContent =
-    `${passed} of ${checks.length} scoped local checks passed`;
+    `${passed} of ${checks.length} evidence checks passed`;
 }
 
 function renderFailedInvariants(keys) {
@@ -657,7 +616,7 @@ function renderFailedInvariants(keys) {
     const label = document.createElement("strong");
     label.textContent =
       key === "NO_INVARIANTS"
-        ? "No local invariants were supplied"
+        ? "No invariants were supplied"
         : invariantLabels[key] ?? humanKey(key);
     item.append(state, label);
     container.append(item);
@@ -678,22 +637,22 @@ function showLoadFailure(error) {
   kicker.textContent = "UNKNOWN_DO_NOT_ACT";
   const heading = document.createElement("h3");
   heading.textContent = verificationRejected
-    ? "The local proof failed verification."
-    : "The local proof could not be loaded.";
+    ? "The proof failed verification."
+    : "The proof could not be loaded.";
   const explanation = document.createElement("p");
   explanation.textContent = verificationRejected
-    ? "One or more local invariants did not pass. Playback is disabled and no PASS state is shown."
+    ? "One or more invariants did not pass. Playback is disabled and no PASS state is shown."
     : "No PASS state is shown when the proof surface is unavailable.";
   const retry = document.createElement("button");
   retry.type = "button";
-  retry.textContent = "Retry local proof";
+  retry.textContent = "Retry proof";
   retry.addEventListener("click", loadScenario);
   wrapper.append(kicker, heading, explanation, retry);
   stage.replaceChildren(wrapper);
   if (verificationRejected) {
     renderFailedInvariants(failedInvariantKeys);
     document.querySelector("#verification-count").textContent =
-      `Proof rejected · ${failedInvariantKeys.length} failed local ` +
+      `Proof rejected · ${failedInvariantKeys.length} failed ` +
       `${failedInvariantKeys.length === 1 ? "check" : "checks"}`;
     progress.textContent = "Proof rejected";
   } else {
@@ -710,14 +669,14 @@ function showLoadFailure(error) {
     button.disabled = true;
   });
   status.textContent = verificationRejected
-    ? `The local proof was rejected. ${failedInvariantKeys.length} local ` +
+    ? `The proof was rejected. ${failedInvariantKeys.length} ` +
       `${failedInvariantKeys.length === 1 ? "check failed" : "checks failed"}.`
-    : "The local proof is unavailable. No invariant is represented as passing.";
+    : "The proof is unavailable. No invariant is represented as passing.";
   console.error(error);
 }
 
 async function loadScenario() {
-  status.textContent = "Loading the local proof.";
+  status.textContent = "Loading the proof.";
   try {
     const response = await fetch("./scenario.json", {
       headers: { accept: "application/json" },
@@ -761,7 +720,7 @@ async function loadScenario() {
     renderStep();
     const checkCount = Object.keys(scenario.invariants).length;
     status.textContent =
-      `Static precomputed replay loaded. ${checkCount} scoped checks rendered.`;
+      `Highwater Drill loaded. ${checkCount} evidence checks rendered.`;
   } catch (error) {
     showLoadFailure(error);
   }

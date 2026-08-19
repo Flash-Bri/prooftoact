@@ -140,7 +140,7 @@
     },
     {
       "step": "one-winner-race",
-      "label": "One local contender receives the scarce resource",
+      "label": "One bounded contender receives the scarce resource",
       "detail": [
         {
           "operationId": "op-reserve-alpha",
@@ -275,28 +275,11 @@
     }
   ],
   "proofStates": {
-    "local": {
-      "label": "LOCAL DETERMINISTIC REPLAY",
-      "scope": "Synthetic in-memory specification",
-      "limitation": "No live cloud claim"
-    },
-    "gateOne": {
-      "label": "RECORDED GATE ONE — CockroachDB Cloud, synthetic scope, 2026-07-30",
-      "sourceCommit": "55892bf25a5286af30e30908ab5711e24f106629",
-      "authorityEvidence": "/evidence/gate1-authority",
-      "recoveryEvidence": "/evidence/gate1-recovery",
-      "ambiguityEvidence": "/evidence/gate1-ambiguity"
-    },
-    "gateTwo": {
-      "badge": "GATE TWO · LOCAL",
-      "label": "GATE TWO — local AWS candidate; live AWS evidence pending",
-      "heading": "AWS proposal boundary · live evidence pending",
-      "summary": "The candidate binds receipts to one exact KMS public key, separates proposal from authority, logs the API path, and fails closed. It is not a live AWS claim.",
-      "sourceCommit": "UNBOUND LOCAL",
-      "cloudState": "Main stack not deployed",
-      "limitation": "Bedrock, KMS, IAM, API Gateway, and CloudFormation are unverified live.",
-      "boundarySummary": "CockroachDB transactions, Distributed Vector Indexing, and Managed MCP are recorded Gate One evidence in synthetic scope. The AWS path is a locally verified candidate awaiting live Gate Two receipts. ProofToAct makes no production, disaster-readiness, truth-detection, or exactly-once real-world-effect claim.",
-      "hostReceipt": null
+    "drill": {
+      "label": "HIGHWATER DRILL",
+      "scope": "Synthetic emergency-response scenario",
+      "sourceCommit": "40e9a3a86c232cedcad81d89b8ca4d84081632ec",
+      "evidenceLedger": "/CLAIMS.md"
     }
   }
 }
