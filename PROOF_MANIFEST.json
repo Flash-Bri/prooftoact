@@ -761,6 +761,12 @@
       "kind": "verification-code"
     },
     {
+      "id": "live-judge-provider-evidence",
+      "path": "evidence/live-judge-provider-read-2026-08-19.md",
+      "sha256": "f819156c3877aad4418cab8d357bcedf69446c23d1c3287d36a79480e8b10cd3",
+      "kind": "accepted-evidence"
+    },
+    {
       "id": "local-full-drill-harness",
       "path": "src/local-full-drill.js",
       "sha256": "0ab8e5270a1ee07af0f424c4ee47361607a1c83693f4cc9ec634652c8df0fedc",
@@ -1170,13 +1176,14 @@
     {
       "id": "managed-mcp-recovery",
       "claim": "CockroachDB Managed MCP can inspect sanitized recovery state without transferring operational authority.",
-      "currentStatus": "Gate One verified, synthetic scope",
-      "claimsLedgerRowSha256": "9482ea86057f9d1ae52022aa05d8285399ae0300d40e884f728c35f9856c0cff",
+      "currentStatus": "Gate One verified; live signed-out fixed-read transport verified on a synthetic signed context",
+      "claimsLedgerRowSha256": "b49d627e8b20d740255aacfc7575ceff8a503b017efea7fc65e2bea1e6cbdb91",
       "proofState": "VERIFIED",
       "artifacts": [
-        "gate1-recovery-evidence"
+        "gate1-recovery-evidence",
+        "live-judge-provider-evidence"
       ],
-      "acceptanceBoundary": "The accepted fixed-query broker receipt proves signed, fresh, audited context release without an operation ID, effect key, or fence in the synthetic gate.",
+      "acceptanceBoundary": "The accepted Gate One broker evidence and the current live judge receipt prove that one fixed Managed MCP read can return a pinned P-256-signed historical context without an operation ID, effect key, fence, or transferred authority. They do not authorize a present action or prove the complete Gate Two drill.",
       "remainingRequirements": []
     },
     {
@@ -1345,17 +1352,18 @@
     {
       "id": "signed-out-aws-judge-surface",
       "claim": "A signed-out AWS judge surface can remain separate from proposal and authority capabilities.",
-      "currentStatus": "Hardened local Gate Two candidate verified; live hosting pending",
-      "claimsLedgerRowSha256": "c09bda31375462e281dd8547dd2a3685e8d7e78961fc393854886218be317af2",
+      "currentStatus": "Narrow fixed-read judge route live; broader Gate Two surface remains separately gated",
+      "claimsLedgerRowSha256": "bc2c69b21219e1e08d53c7b509904cc9c7e6e5da3e6de93b2ab80226ef17bd78",
       "proofState": "PARTIAL",
       "artifacts": [
         "aws-gate2-design",
         "gate2-local-validation",
+        "live-judge-provider-evidence",
         "local-judge-path-evidence"
       ],
-      "acceptanceBoundary": "The exact local candidate and judge path are validated, but no public URL, AWS routing, live role enforcement, throttling, or availability is proven.",
+      "acceptanceBoundary": "The accepted live receipt proves the narrow parameter-free fixed-read route is publicly reachable through immutable Lambda version 3, completes its Managed MCP session, and emits a minimized no-store response without transferring authority. It does not prove the broader Bedrock, KMS, IAM-denial, authority-race, or deployment-attestation gates.",
       "remainingRequirements": [
-        "Accepted exact-head public-demo verifier receipt and separate signed-out desktop and mobile review at the final AWS URL."
+        "Separate accepted live receipts remain required before attributing Bedrock, KMS, IAM-denial, authority-race, or wider Gate Two behavior to this fixed-read surface."
       ]
     },
     {
